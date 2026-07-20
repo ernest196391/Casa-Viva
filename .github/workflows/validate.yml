@@ -1,0 +1,37 @@
+name: Validar aplicación
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Ejecutar lint
+        run: npm run lint
+
+      - name: Comprobar TypeScript
+        run: npm run typecheck
+
+      - name: Compilar aplicación
+        run: npm run build
