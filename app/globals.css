@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  background: #f4ead8;
+  background: #f7efdf;
   color: #173f2a;
 }
 
@@ -17,4 +17,12 @@ body {
   min-height: 100vh;
   margin: 0;
   font-family: Arial, Helvetica, sans-serif;
+  background: #f7efdf;
+}
+
+button,
+a,
+input,
+summary {
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
 }
