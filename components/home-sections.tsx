@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 import {
   customerProblems,
   demoProducts,
@@ -29,16 +31,15 @@ export function HeroSection() {
         </div>
         <p className="mt-6 text-sm font-light tracking-wide text-[#004042]">Fotos reales · Precios visibles · Atención directa · Pedido organizado</p>
       </div>
-      <div className="rounded-[2rem] border border-[#E0E0E0] bg-white p-4">
-        <div className="flex min-h-[24rem] flex-col justify-between rounded-[1.5rem] bg-[#FAFAF7] p-6">
-          <span className="text-xs font-light uppercase tracking-[0.28em] text-[#006068]">Fotografía comercial futura</span>
-          <div className="grid grid-cols-3 gap-3" aria-hidden="true">
-            <div className="h-32 rounded-3xl bg-[#F2E9DC]" />
-            <div className="h-44 rounded-3xl bg-[#E5D6BD]" />
-            <div className="h-28 self-end rounded-3xl bg-[#006068]" />
-          </div>
-          <p className="max-w-sm text-sm leading-6 text-[#555555]">Espacio limpio para una imagen propia: producto real, contexto de uso y composición sobria.</p>
-        </div>
+      <div className="relative min-h-[24rem] overflow-hidden rounded-[2rem] border border-[#E0E0E0] bg-white">
+        <Image
+          src="/images/casa-viva-hero.webp"
+          alt="Sala moderna y acogedora de Casa Viva"
+          fill
+          priority
+          sizes="(min-width: 1024px) 46vw, (min-width: 640px) 92vw, 100vw"
+          className="object-cover"
+        />
       </div>
     </section>
   );
