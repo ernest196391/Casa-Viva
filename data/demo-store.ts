@@ -1,55 +1,93 @@
 export const featuredCategories = [
-  "Habitación",
   "Cocina",
   "Baño",
+  "Habitación",
+  "Sala",
   "Organización",
-  "Eléctricos",
+  "Electrodomésticos",
+  "Ferretería",
+  "Soluciones para apagones",
+  "Tecnología",
+  "Cosméticos",
   "Bebés",
 ];
 
 export const demoProducts = [
   {
-    name: "Juego de sábanas suave",
-    price: "Precio demo: CUP 3 950",
-    availability: "Disponibilidad demo: en tienda",
-    accent: "bg-[#e7d7b8]",
+    name: "Set organizador para cocina",
+    price: "Precio demo: CUP 3 200",
+    availability: "Disponibilidad demo: disponible",
+    feature: "Incluye piezas apilables para gavetas y estantes.",
+    accent: "bg-[#F2E9DC]",
   },
   {
-    name: "Set de utensilios de cocina",
-    price: "Precio demo: CUP 2 400",
+    name: "Ventilador recargable de mesa",
+    price: "Precio demo: CUP 8 900",
     availability: "Disponibilidad demo: pocas unidades",
-    accent: "bg-[#d9c49c]",
+    feature: "Útil para apagones y espacios pequeños.",
+    accent: "bg-[#E5D6BD]",
   },
   {
-    name: "Organizador multiuso",
-    price: "Precio demo: CUP 1 250",
-    availability: "Disponibilidad demo: disponible",
-    accent: "bg-[#c7d0b4]",
-  },
-  {
-    name: "Toallas de baño premium",
-    price: "Precio demo: CUP 2 900",
+    name: "Juego de toallas para baño",
+    price: "Precio demo: CUP 4 500",
     availability: "Disponibilidad demo: en tienda",
-    accent: "bg-[#efe3cb]",
+    feature: "Textura suave con medidas visibles en la ficha.",
+    accent: "bg-[#FAFAF7]",
   },
   {
-    name: "Lámpara auxiliar LED",
-    price: "Precio demo: CUP 4 600",
+    name: "Lámpara LED de emergencia",
+    price: "Precio demo: CUP 5 750",
     availability: "Disponibilidad demo: consultar",
-    accent: "bg-[#b9c6a2]",
+    feature: "Recargable y pensada para uso diario en casa.",
+    accent: "bg-[#E9EFEA]",
   },
   {
-    name: "Manta ligera para bebé",
-    price: "Precio demo: CUP 1 800",
+    name: "Repisa multiuso para sala",
+    price: "Precio demo: CUP 6 300",
     availability: "Disponibilidad demo: disponible",
-    accent: "bg-[#ead8c5]",
+    feature: "Ideal para ordenar sin recargar el espacio.",
+    accent: "bg-[#F5F5F5]",
+  },
+  {
+    name: "Kit básico de ferretería hogar",
+    price: "Precio demo: CUP 3 850",
+    availability: "Disponibilidad demo: en tienda",
+    feature: "Herramientas prácticas para arreglos pequeños.",
+    accent: "bg-[#F2E9DC]",
   },
 ];
 
-export const benefits = [
-  "Productos seleccionados",
-  "Información clara",
-  "Recogida en tienda",
-  "Entrega en La Habana",
-  "Diferentes formas de pago",
+export const customerProblems = [
+  "Publicaciones sin precio.",
+  "Fotografías que no explican bien el producto.",
+  "Medidas incompletas.",
+  "Productos agotados que siguen anunciados.",
+  "Demasiadas conversaciones para confirmar una compra.",
+  "Entregas sin seguimiento.",
+];
+
+export const steps = [
+  "Encuentra lo que necesitas.",
+  "Añade los productos a tu pedido.",
+  "Confirma por WhatsApp.",
+  "Recoge o recibe y consulta el estado.",
+];
+
+export const differentiators = [
+  "Fotos y videos útiles.",
+  "Medidas claras.",
+  "Precios visibles.",
+  "Orientación antes de confirmar.",
+  "Seguimiento del pedido.",
+  "Atención postventa.",
+];
+
+export const productContent = [
+  "Foto comercial.",
+  "Fotos reales.",
+  "Video de uso.",
+  "Video de ensamblaje.",
+  "Medidas.",
+  "Variantes.",
+  "Compatibilidad.",
 ];
