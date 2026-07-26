@@ -1,0 +1,1598 @@
+{
+  "source_url": "https://biznecubano.com/account/products/qty-mass-update",
+  "exported_at": "2026-07-25",
+  "scope": "published products visible in BizneCubano mass inventory screen",
+  "product_count": 159,
+  "products": [
+    {
+      "source": "biznecubano",
+      "source_product_id": "73346",
+      "name": "Alfombra de chenilla",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/73346/OY8-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 1
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "73358",
+      "name": "Juego de cortina tapa sol -CRTN",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/73358/2y1-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 2
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "82193",
+      "name": "Juego de sabanas Queen Majestic imperial",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/82193/nRo-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 3
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "82194",
+      "name": "Juego de Sábanas Majestic King",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/82194/2Dj-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 4
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "85096",
+      "name": "Juego de Sábanas Majestic Imperial – TWIN",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/85096/IVt-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 5
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "85429",
+      "name": "Colcha 180x220",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/85429/bnZ-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 6
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "85532",
+      "name": "Tendedero Plegable Azul",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/85532/5ku-product-cover.jpeg",
+      "regular_price": "26",
+      "sale_price": "",
+      "stock_quantity": "3",
+      "source_order": 7
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "87485",
+      "name": "Almohada Majestic Imperial",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/87485/H6t-product-cover.jpeg",
+      "regular_price": "17",
+      "sale_price": "",
+      "stock_quantity": "4",
+      "source_order": 8
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "89044",
+      "name": "Asiento de Inodoro",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/89044/ml6-product-cover.jpeg",
+      "regular_price": "15",
+      "sale_price": "",
+      "stock_quantity": "13",
+      "source_order": 9
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "90449",
+      "name": "Organizador de 4 niveles rectangular",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/90449/g9X-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 10
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "90452",
+      "name": "Alfombra de Cocina engomada CPTK-234",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/90452/E65-product-cover.jpeg",
+      "regular_price": "11",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 11
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "93942",
+      "name": "Espejo de Cuerpo Completo de Pie",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/93942/dtG-product-cover.jpeg",
+      "regular_price": "37",
+      "sale_price": "",
+      "stock_quantity": "5",
+      "source_order": 12
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "98378",
+      "name": "Doyle Individual Metalizado (6 piezas)",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/98378/0N2-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 13
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "98412",
+      "name": "Sobrecama lisa full",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/98412/2X0-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 14
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "98583",
+      "name": "Sobrecama lisa king",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/98583/jJp-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 15
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "98586",
+      "name": "Toallas pequeña",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/98586/TEF-product-cover.jpeg",
+      "regular_price": "10",
+      "sale_price": "",
+      "stock_quantity": "10",
+      "source_order": 16
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "98927",
+      "name": "Doyle Elegante Rectangular (6 piezas)",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/98927/tlM-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 17
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "98933",
+      "name": "Alfombra Peluche 58x40",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/98933/PIJ-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 18
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "98935",
+      "name": "Alfombra Peluche 77x50",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/98935/2YD-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 19
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "99361",
+      "name": "Juego de Edredón 5 piezas Queen",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/99361/5Rt-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 20
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "99363",
+      "name": "Juego de Edredón 5 piezas Full",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/99363/53p-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 21
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "99366",
+      "name": "Lámpara recargable portátil",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/99366/zYj-product-cover.jpeg",
+      "regular_price": "25",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 22
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "100508",
+      "name": "Cortinero Expandible plateado",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/100508/0iU-product-cover.jpeg",
+      "regular_price": "10",
+      "sale_price": "7",
+      "stock_quantity": "9",
+      "source_order": 23
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "100628",
+      "name": "Bata de baño",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/100628/TMh-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 24
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "100764",
+      "name": "Colcha navideña 180x220",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/100764/tbE-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 25
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "100779",
+      "name": "Juego de cortina tapa sol Royale",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/100779/Z3s-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 26
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "100780",
+      "name": "Juego de cortina tapa sol Royale con diseño",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/100780/SuN-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 27
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "102236",
+      "name": "Shampoo Matizador Oggy Ultra Blonde",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/102236/C5O-product-cover.jpeg",
+      "regular_price": "6",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 28
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "102290",
+      "name": "Botella térmica 1",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/102290/FoT-product-cover.jpeg",
+      "regular_price": "18",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 29
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "102294",
+      "name": "Botella térmica 4",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/102294/PiG-product-cover.jpeg",
+      "regular_price": "18",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 30
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "102295",
+      "name": "Botella térmica 3",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/102295/pg2-product-cover.jpeg",
+      "regular_price": "18",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 31
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "102299",
+      "name": "Sobrecama tiwn",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/102299/Gvt-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 32
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "103153",
+      "name": "Estante Multiuso 2 niveles blanco",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/103153/NHH-product-cover.jpeg",
+      "regular_price": "20",
+      "sale_price": "",
+      "stock_quantity": "0",
+      "source_order": 33
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "104720",
+      "name": "Utensilios de silicona con cuchillos",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/104720/mky-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 34
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "105154",
+      "name": "Colchón de resorte 180x200cm Dawang",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/105154/AoQ-product-cover.jpeg",
+      "regular_price": "320",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 35
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "105164",
+      "name": "Exprimidor simple",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/105164/rGx-product-cover.jpeg",
+      "regular_price": "4",
+      "sale_price": "",
+      "stock_quantity": "3",
+      "source_order": 36
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "105173",
+      "name": "Ramo de girasoles",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/105173/B2X-product-cover.jpeg",
+      "regular_price": "8",
+      "sale_price": "",
+      "stock_quantity": "5",
+      "source_order": 37
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "105178",
+      "name": "Alfombra suave Rombo 50 x 80",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/105178/6md-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 38
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "105181",
+      "name": "Rallador",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/105181/KSN-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 39
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "105235",
+      "name": "Helecho hoja fina",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/105235/fby-product-cover.jpeg",
+      "regular_price": "8",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 40
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "107259",
+      "name": "Bucaro blanco",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/107259/nX8-product-cover.jpeg",
+      "regular_price": "17",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 41
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "107264",
+      "name": "Termo térmico 1L",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/107264/Dwd-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 42
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "107265",
+      "name": "Forro para 6 sillas + mesa rectangular",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/107265/Gco-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 43
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "107266",
+      "name": "Mantel cuadrado",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/107266/9IK-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 44
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "107267",
+      "name": "Mantel circular",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/107267/BwG-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 45
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "107268",
+      "name": "Cojin decorativo",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/107268/zW3-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 46
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "107269",
+      "name": "Cojín decorativo",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/107269/Pwe-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 47
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "107282",
+      "name": "Vasos de vidrio (altos)",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/107282/d0c-product-cover.jpeg",
+      "regular_price": "7",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 48
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "107283",
+      "name": "Vasos de vidrio (medianos)",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/107283/cI9-product-cover.jpeg",
+      "regular_price": "7",
+      "sale_price": "",
+      "stock_quantity": "3",
+      "source_order": 49
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "107285",
+      "name": "Maceta con suculenta",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/107285/NlU-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 50
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "107288",
+      "name": "Set para baño completo (15 piezas)",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/107288/pc0-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 51
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "107314",
+      "name": "Cojín decorativo",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/107314/Ze9-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 52
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "107353",
+      "name": "Cesta tipo mimbre redonda",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/107353/lMo-product-cover.jpeg",
+      "regular_price": "10",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 53
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "107355",
+      "name": "Cesta tipo mimbre rectangular",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/107355/ocy-product-cover.jpeg",
+      "regular_price": "10",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 54
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "107505",
+      "name": "Colchón 180x200cm Dawang + 2 almohadas hoteleras",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/107505/PyL-product-cover.jpeg",
+      "regular_price": "340",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 55
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "108063",
+      "name": "Shampo + Acondicionador Oggy de Romero",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/108063/hFF-product-cover.jpeg",
+      "regular_price": "7",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 56
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "108754",
+      "name": "Colchón - EDSM A - 3/4",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/108754/Dff-product-cover.jpeg",
+      "regular_price": "275",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 57
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "108755",
+      "name": "Colchón - EDSM A - Camero",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/108755/jkj-product-cover.jpeg",
+      "regular_price": "290",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 58
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "108756",
+      "name": "Colchón - EDSM A - Queen",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/108756/1bR-product-cover.jpeg",
+      "regular_price": "310",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 59
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "108757",
+      "name": "Colchón - EDSM A - King",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/108757/pnc-product-cover.jpeg",
+      "regular_price": "340",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 60
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "108758",
+      "name": "Colchón 3/4 + Almohada - EDSM A",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/108758/kCV-product-cover.jpeg",
+      "regular_price": "290",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 61
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "108759",
+      "name": "Colchón Camero + Almohada - EDSM A",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/108759/sBB-product-cover.jpeg",
+      "regular_price": "310",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 62
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "108760",
+      "name": "Colchón Queen + Almohada - EDSM A",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/108760/C1K-product-cover.jpeg",
+      "regular_price": "330",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 63
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "108761",
+      "name": "Colchón King + Almohada - EDSM A",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/108761/Q2u-product-cover.jpeg",
+      "regular_price": "365",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 64
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "108824",
+      "name": "Set de Jarra con Vasos",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/108824/tOp-product-cover.jpeg",
+      "regular_price": "14",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 65
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "108854",
+      "name": "Alfombra decorativa 80x120cm",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/108854/CXR-product-cover.jpeg",
+      "regular_price": "25",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 66
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "108913",
+      "name": "Mesita infantil",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/108913/JUO-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 67
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "109261",
+      "name": "Limpiador facial blanqueador con vitamina C",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/109261/ulO-product-cover.jpeg",
+      "regular_price": "8",
+      "sale_price": "",
+      "stock_quantity": "3",
+      "source_order": 68
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "109793",
+      "name": "Protector de colchón Queen",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/109793/iPQ-product-cover.jpeg",
+      "regular_price": "36",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 69
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "109794",
+      "name": "Protector de colchón Personal",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/109794/sc4-product-cover.jpeg",
+      "regular_price": "23",
+      "sale_price": "",
+      "stock_quantity": "4",
+      "source_order": 70
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "109862",
+      "name": "Alfombra Circular Decorativa – 180 cm",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/109862/RlU-product-cover.jpeg",
+      "regular_price": "60",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 71
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "109864",
+      "name": "Alfombra Circular Decorativa – 180 cm",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/109864/DvG-product-cover.jpeg",
+      "regular_price": "60",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 72
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "109865",
+      "name": "Alfombra Circular Decorativa – 180 cm",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/109865/Gh3-product-cover.jpeg",
+      "regular_price": "60",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 73
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "109866",
+      "name": "Alfombra Circular Decorativa – 180 cm",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/109866/oMc-product-cover.jpeg",
+      "regular_price": "60",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 74
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "109868",
+      "name": "Alfombra Decorativa Moderna – 180 x 200 cm",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/109868/PCS-product-cover.jpeg",
+      "regular_price": "70",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 75
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "109870",
+      "name": "Cortina de baño",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/109870/Jwb-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 76
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "109873",
+      "name": "Cortina blackout moderna (2 paneles)",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/109873/3mg-product-cover.jpeg",
+      "regular_price": "36",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 77
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "109876",
+      "name": "Set de alfombras para baño (3 piezas)",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/109876/0Vf-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 78
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "109878",
+      "name": "Tazas con platillos",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/109878/y8R-product-cover.jpeg",
+      "regular_price": "14",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 79
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "109879",
+      "name": "Tazas con platillos",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/109879/34c-product-cover.jpeg",
+      "regular_price": "14",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 80
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "109880",
+      "name": "Edredón + Juego de Sábanas Queen",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/109880/b0y-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 81
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "110866",
+      "name": "Jarra de cristal 1.3 Litros",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/110866/317-product-cover.jpeg",
+      "regular_price": "10",
+      "sale_price": "",
+      "stock_quantity": "4",
+      "source_order": 82
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "110869",
+      "name": "Colador metálico de cocina (set 3 piezas)",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/110869/Pub-product-cover.jpeg",
+      "regular_price": "5",
+      "sale_price": "",
+      "stock_quantity": "4",
+      "source_order": 83
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "110871",
+      "name": "Toalla de Baño Majestic Imperial Gris Clara",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/110871/QCg-product-cover.jpeg",
+      "regular_price": "18",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 84
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "111551",
+      "name": "Set de 5 pozuelos cuadrados (Rojo)",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/111551/MeQ-product-cover.jpeg",
+      "regular_price": "10",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 85
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "111553",
+      "name": "Protector de Colchón Acolchado FULL",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/111553/D2o-product-cover.jpeg",
+      "regular_price": "34",
+      "sale_price": "",
+      "stock_quantity": "3",
+      "source_order": 86
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "111554",
+      "name": "Cortinero decorativo",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/111554/Llu-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 87
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "111555",
+      "name": "Cortinero decorativo",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/111555/Rel-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 88
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "111556",
+      "name": "Cortinero decorativo",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/111556/FRy-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 89
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "111682",
+      "name": "Cesto de 12L",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/111682/kKK-product-cover.jpeg",
+      "regular_price": "7",
+      "sale_price": "",
+      "stock_quantity": "12",
+      "source_order": 90
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "111683",
+      "name": "Cesto de 12L",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/111683/iR0-product-cover.jpeg",
+      "regular_price": "7",
+      "sale_price": "",
+      "stock_quantity": "6",
+      "source_order": 91
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "111684",
+      "name": "Cesto de 12L",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/111684/Q4g-product-cover.jpeg",
+      "regular_price": "7",
+      "sale_price": "",
+      "stock_quantity": "12",
+      "source_order": 92
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "112434",
+      "name": "Licuadora MLD 999",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/112434/SAF-product-cover.jpeg",
+      "regular_price": "35",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 93
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "112435",
+      "name": "Licuadora ML 602",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/112435/1j4-product-cover.jpeg",
+      "regular_price": "45",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 94
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "112438",
+      "name": "Azulejo INCEFRA",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/112438/3QY-product-cover.jpeg",
+      "regular_price": "35",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 95
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "112525",
+      "name": "Sartén 16 cm",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/112525/0jw-product-cover.jpeg",
+      "regular_price": "14",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 96
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "112531",
+      "name": "Espumadera",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/112531/m5w-product-cover.jpeg",
+      "regular_price": "6",
+      "sale_price": "",
+      "stock_quantity": "4",
+      "source_order": 97
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "112532",
+      "name": "Cortina decorativa Vienna",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/112532/IEW-product-cover.jpeg",
+      "regular_price": "24",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 98
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "112533",
+      "name": "Juego de ollas",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/112533/WCp-product-cover.jpeg",
+      "regular_price": "50",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 99
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "112572",
+      "name": "Grifo para fregadero doble cuello de cisne GP 1322",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/112572/7YI-product-cover.jpeg",
+      "regular_price": "15",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 100
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "112637",
+      "name": "Grifo para fregadero doble GP 1311",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/112637/rpo-product-cover.jpeg",
+      "regular_price": "14",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 101
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "112639",
+      "name": "Grifo fregadero doble cuello flexible GP 1220",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/112639/Tk9-product-cover.jpeg",
+      "regular_price": "15",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 102
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "112704",
+      "name": "Grifo fregadero doble cuello cisne negro GP 1013",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/112704/Eal-product-cover.jpeg",
+      "regular_price": "18",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 103
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "112707",
+      "name": "Cerradura de pomo en blíster MP 001",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/112707/Dtx-product-cover.jpeg",
+      "regular_price": "7",
+      "sale_price": "",
+      "stock_quantity": "6",
+      "source_order": 104
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "112710",
+      "name": "Válvula de paso mini HH 1/2 \" GPLP83 (hembra)",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/112710/3DC-product-cover.jpeg",
+      "regular_price": "4",
+      "sale_price": "",
+      "stock_quantity": "4",
+      "source_order": 105
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "112711",
+      "name": "Válvula de paso miniHH 1/2\" GPLP83 (hembra-macho))",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/112711/Zos-product-cover.jpeg",
+      "regular_price": "4",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 106
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "112712",
+      "name": "Válvula para jardin 1/2 \" GPLC012",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/112712/NGb-product-cover.jpeg",
+      "regular_price": "4",
+      "sale_price": "",
+      "stock_quantity": "7",
+      "source_order": 107
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "113205",
+      "name": "Protector Solar SPF 30",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/113205/04x-product-cover.jpeg",
+      "regular_price": "8",
+      "sale_price": "",
+      "stock_quantity": "3",
+      "source_order": 108
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "113689",
+      "name": "Bocina parlante",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/113689/Arf-product-cover.jpeg",
+      "regular_price": "170",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 109
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "113690",
+      "name": "Cocina de Gas 2 quemadores",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/113690/YbK-product-cover.jpeg",
+      "regular_price": "35",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 110
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "113934",
+      "name": "Toallas Cisne Blanco 40x70",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/113934/Jsv-product-cover.jpeg",
+      "regular_price": "",
+      "sale_price": "",
+      "stock_quantity": "",
+      "source_order": 111
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "114040",
+      "name": "Silla de playa DX",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/114040/Bk7-product-cover.jpeg",
+      "regular_price": "35",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 112
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "114041",
+      "name": "Carretón negro",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/114041/KxH-product-cover.jpeg",
+      "regular_price": "80",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 113
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "114042",
+      "name": "Mesita de cafe sencilla",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/114042/I7Z-product-cover.jpeg",
+      "regular_price": "30",
+      "sale_price": "",
+      "stock_quantity": "6",
+      "source_order": 114
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "114274",
+      "name": "Escritorio de 1 gavetas",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/114274/jAJ-product-cover.jpeg",
+      "regular_price": "140",
+      "sale_price": "",
+      "stock_quantity": "0",
+      "source_order": 115
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "114275",
+      "name": "Tabla de planchar",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/114275/Qpj-product-cover.jpeg",
+      "regular_price": "45",
+      "sale_price": "",
+      "stock_quantity": "0",
+      "source_order": 116
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "114278",
+      "name": "Tabla de planchar",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/114278/Ugl-product-cover.jpeg",
+      "regular_price": "45",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 117
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "114280",
+      "name": "Base para electrodomésticos",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/114280/er8-product-cover.jpeg",
+      "regular_price": "23",
+      "sale_price": "",
+      "stock_quantity": "8",
+      "source_order": 118
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "114281",
+      "name": "Cesta con tapa rosada",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/114281/zRr-product-cover.jpeg",
+      "regular_price": "12",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 119
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "114285",
+      "name": "Carrito metálico negro 4 Niveles",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/114285/MUZ-product-cover.jpeg",
+      "regular_price": "35",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 120
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "114292",
+      "name": "Carrito metálico plegable blanco 3 Niveles",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/114292/SvP-product-cover.jpeg",
+      "regular_price": "35",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 121
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "115478",
+      "name": "Juego de sábanas full (camera)",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/115478/iVj-product-cover.jpeg",
+      "regular_price": "23",
+      "sale_price": "",
+      "stock_quantity": "0",
+      "source_order": 122
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "115479",
+      "name": "Soporte TV 14”-42”",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/115479/Ko2-product-cover.jpeg",
+      "regular_price": "12",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 123
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "115480",
+      "name": "Soporte TV 14”-55”",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/115480/W6t-product-cover.jpeg",
+      "regular_price": "20",
+      "sale_price": "",
+      "stock_quantity": "9",
+      "source_order": 124
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "115751",
+      "name": "Toalla Cisne Blanco 70x140 cm (gris)",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/115751/pGq-product-cover.jpeg",
+      "regular_price": "18",
+      "sale_price": "",
+      "stock_quantity": "11",
+      "source_order": 125
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "115752",
+      "name": "Toalla Cisne Blanco 70x140 cm (beige)",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/115752/nyt-product-cover.jpeg",
+      "regular_price": "18",
+      "sale_price": "",
+      "stock_quantity": "4",
+      "source_order": 126
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "115753",
+      "name": "Toalla 100% algodón 70x130 cm",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/115753/3h4-product-cover.jpeg",
+      "regular_price": "18",
+      "sale_price": "",
+      "stock_quantity": "5",
+      "source_order": 127
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116018",
+      "name": "Corral cuna de bebé",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116018/Di1-product-cover.jpeg",
+      "regular_price": "170",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 128
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116019",
+      "name": "Corral cuna de bebé",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116019/abQ-product-cover.jpeg",
+      "regular_price": "170",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 129
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116315",
+      "name": "Aceite capilar de batana HOEGOA",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116315/0Rc-product-cover.jpeg",
+      "regular_price": "13",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 130
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116316",
+      "name": "Balsamo facial de miel hidratante",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116316/JEt-product-cover.jpeg",
+      "regular_price": "9",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 131
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116317",
+      "name": "Aceite de oliva antiestrias",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116317/bfq-product-cover.jpeg",
+      "regular_price": "13",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 132
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116318",
+      "name": "Crema correctora para el cabello Luminoliss",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116318/JZ0-product-cover.jpeg",
+      "regular_price": "8",
+      "sale_price": "",
+      "stock_quantity": "5",
+      "source_order": 133
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116319",
+      "name": "Crema blanqueadora de zonas sensibles",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116319/Oml-product-cover.jpeg",
+      "regular_price": "10",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 134
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116320",
+      "name": "Crema facial de colágeno retinol hialuronico",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116320/Jn9-product-cover.jpeg",
+      "regular_price": "10",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 135
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116321",
+      "name": "Crema facial arcilla, vit. C y curcuma",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116321/egX-product-cover.jpeg",
+      "regular_price": "10",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 136
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116322",
+      "name": "Aceite capilar batana",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116322/iAR-product-cover.jpeg",
+      "regular_price": "10",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 137
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116323",
+      "name": "Cera en barra para el cabello",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116323/mW1-product-cover.jpeg",
+      "regular_price": "8",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 138
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116324",
+      "name": "Parche para ojos 24K",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116324/Vlb-product-cover.jpeg",
+      "regular_price": "8",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 139
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116325",
+      "name": "Serum capilar EELHOE con keratina y proteina",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116325/aHE-product-cover.jpeg",
+      "regular_price": "10",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 140
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116326",
+      "name": "Crema blanqueadora para muslos y axila",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116326/D9O-product-cover.jpeg",
+      "regular_price": "8",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 141
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116327",
+      "name": "Crema HOYGY vit.C curcuma y 5% hialuronico",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116327/bal-product-cover.jpeg",
+      "regular_price": "9",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 142
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116328",
+      "name": "Crema aclaradora intensa hiperpigmentacion",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116328/O2c-product-cover.jpeg",
+      "regular_price": "10",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 143
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116443",
+      "name": "Tendedero Plegable Rosa",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116443/5pt-product-cover.jpeg",
+      "regular_price": "26",
+      "sale_price": "",
+      "stock_quantity": "7",
+      "source_order": 144
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116444",
+      "name": "Sartén Grande (Wok)",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116444/QQP-product-cover.jpeg",
+      "regular_price": "25",
+      "sale_price": "",
+      "stock_quantity": "10",
+      "source_order": 145
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116492",
+      "name": "Carrito de Mandado Plegable Rojo",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116492/hhP-product-cover.jpeg",
+      "regular_price": "25",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 146
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116496",
+      "name": "Carrito de Mandado Plegable Rojo Vino",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116496/XHc-product-cover.jpeg",
+      "regular_price": "25",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 147
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116497",
+      "name": "Carrito de Mandado Plegable Negro",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116497/HpH-product-cover.jpeg",
+      "regular_price": "25",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 148
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116498",
+      "name": "Carrito de Mandado Plegable Azul",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116498/iAZ-product-cover.jpeg",
+      "regular_price": "25",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 149
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116502",
+      "name": "Carrito de Mandado Plegable Azul oscuro",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116502/lwx-product-cover.jpeg",
+      "regular_price": "25",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 150
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116521",
+      "name": "Ventilador Recargable MILEXUS 16\" NEGRO",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116521/ur6-product-cover.jpeg",
+      "regular_price": "55",
+      "sale_price": "",
+      "stock_quantity": "5",
+      "source_order": 151
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116522",
+      "name": "Ventilador Recargable MILEXUS 16\" BLANCO",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116522/Fl4-product-cover.jpeg",
+      "regular_price": "55",
+      "sale_price": "",
+      "stock_quantity": "3",
+      "source_order": 152
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116744",
+      "name": "Sartén 24 cm",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116744/vgu-product-cover.jpeg",
+      "regular_price": "19",
+      "sale_price": "",
+      "stock_quantity": "6",
+      "source_order": 153
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116745",
+      "name": "Cesto con Pedal SLIM 15LT Blanco",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116745/5MD-product-cover.jpeg",
+      "regular_price": "16",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 154
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116746",
+      "name": "Cesto con Pedal SLIM 15LT beige",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116746/SAv-product-cover.jpeg",
+      "regular_price": "16",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 155
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116747",
+      "name": "Cesto con Pedal SLIM 15LT Gris",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116747/tqi-product-cover.jpeg",
+      "regular_price": "16",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 156
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116748",
+      "name": "Zapatera de tela gris",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116748/QbS-product-cover.jpeg",
+      "regular_price": "35",
+      "sale_price": "",
+      "stock_quantity": "1",
+      "source_order": 157
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116749",
+      "name": "Zapatera de tela negro",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116749/nUS-product-cover.jpeg",
+      "regular_price": "35",
+      "sale_price": "",
+      "stock_quantity": "2",
+      "source_order": 158
+    },
+    {
+      "source": "biznecubano",
+      "source_product_id": "116750",
+      "name": "Organizador Colgante de Tela – 5 Niveles",
+      "image_url": "https://biznecubano.com/images/small/tenants/1410/products/116750/bzh-product-cover.jpeg",
+      "regular_price": "15",
+      "sale_price": "",
+      "stock_quantity": "6",
+      "source_order": 159
+    }
+  ]
+}
