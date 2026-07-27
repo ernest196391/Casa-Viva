@@ -1,37 +1,39 @@
-# Reglas de trabajo para Casa Viva
+# Reglas de trabajo para Casa Viva Commerce OS
 
 Estas instrucciones se aplican a todo el repositorio.
 
-## Forma de trabajo
+## Contexto
 
-- Trabaja una sola tarea funcional por vez.
-- Revisa el código existente antes de modificarlo.
-- No implementes funciones no solicitadas.
-- Explica brevemente los cambios realizados, los archivos modificados y las pruebas ejecutadas.
-- No elimines ni reestructures partes importantes sin explicar primero la razón.
+Casa Viva es el primer caso real de una plataforma reutilizable para otras tiendas. El objetivo ya no es solo una tienda Next.js: el proyecto incluye WordPress, WooCommerce, un tema visual reutilizable y un plugin operativo modular.
 
-## Base técnica
+## Antes de modificar código
 
-- Mantén Next.js con App Router, TypeScript y Tailwind CSS.
-- Prioriza componentes pequeños, reutilizables y bien organizados.
-- No instales dependencias nuevas sin justificar su necesidad.
-- Ejecuta `npm run lint`, `npm run typecheck` y `npm run build` después de cambios funcionales cuando el entorno lo permita.
-- No inventes resultados de pruebas que no pudieron ejecutarse.
+1. Lee `docs/README.md`.
+2. Lee únicamente los documentos del módulo solicitado.
+3. Revisa el código existente antes de modificarlo.
+4. Trabaja una sola tarea funcional por vez.
+5. Si detectas contradicciones entre código y documentación, detente y enuméralas antes de programar.
 
-## Alcance actual
+## Reglas obligatorias
 
-- La primera versión es una tienda propia de Casa Viva, no un marketplace multivendedor.
-- No agregues base de datos, autenticación, pagos, inventario, tracking, gestores, comisiones, integraciones externas o despliegues sin una tarea específica.
-- Usa datos de demostración claramente identificados mientras no exista una base de datos real.
+- No cambies reglas de negocio cerradas sin aprobación.
+- No publiques en producción ni fusiones ramas sin aprobación.
+- Mantén separado el tema visual del plugin operativo.
+- Toda acción sobre inventario, dinero, atribución, pedidos o permisos debe auditarse.
+- No almacenes secretos, contraseñas, tokens ni claves API.
+- No hardcodees precios, tasas, porcentajes, WhatsApp, monedas ni reglas configurables.
+- No elimines historial comercial; archiva y audita.
+- No inventes resultados de pruebas.
+- Usa staging, pruebas y rollback antes de producción.
 
-## Reglas comerciales y datos
+## Calidad
 
-- No fijes directamente en el código precios, tasas de cambio, comisiones, horarios, tarifas o reglas comerciales que deban ser configurables.
-- No incluyas secretos, contraseñas, tokens ni credenciales en el repositorio.
+- Mobile-first y optimizado para conexiones lentas.
+- Componentes pequeños y reutilizables.
+- Operaciones idempotentes para evitar duplicados.
+- Validación, sanitización, autorización por rol y logs.
+- Ejecuta las pruebas disponibles antes de dar una tarea por terminada.
 
-## Experiencia y diseño
+## Orden de desarrollo
 
-- Usa español para los textos visibles al cliente y para la documentación principal.
-- Prioriza diseño mobile-first, responsive, accesible y navegable con teclado.
-- Optimiza para conexiones lentas y dispositivos de recursos limitados.
-- Mantén la identidad de Casa Viva: minimalista, cálida, beige y verde oscuro, con estética de lujo silencioso accesible.
+Auditoría -> núcleo -> centro operativo -> gestora -> dependienta -> mensajería -> proveedores -> tienda pública -> economía -> IA -> empaquetado comercial.
