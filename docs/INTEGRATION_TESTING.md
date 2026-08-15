@@ -147,7 +147,8 @@ Cada llamada `delivery` se ejecuta en un proceso WP-CLI independiente porque el 
   evento delivery/payment/operation/commission/order y los dos receipts;
 - un retry posterior simula respuesta HTTP perdida y no repite ledger, comisión,
   WooCommerce ni eventos;
-- pedidos separados fuerzan fallos después de ledger, comisión y WooCommerce: cada
+- pedidos separados fuerzan fallos antes/después de payment y después de ledger,
+  comisión y WooCommerce: cada
   transacción vuelve a `cash_returned/payment=returned`, comisión pendiente,
   WooCommerce processing y cero ledger.
 
