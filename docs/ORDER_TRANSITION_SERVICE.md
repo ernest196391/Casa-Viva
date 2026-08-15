@@ -138,8 +138,9 @@ acredita saldos.
 2. payment `returned → verified`;
 3. operation → `delivered`, solo si cambia;
 4. ganancia del mensajero `approved`;
-5. `INSERT IGNORE` del único ledger `earning`, validado por
-   `UNIQUE(order_id,entry_type)`;
+5. si la ganancia es positiva, `INSERT IGNORE` del único ledger `earning`, validado
+   por `UNIQUE(order_id,entry_type)`; una tarifa histórica igual a cero no genera un
+   asiento artificial;
 6. comisión `pending → approved` cuando existe propietaria elegible, reutilizando el
    cálculo y snapshots existentes;
 7. WooCommerce → `completed` si todavía no lo está;

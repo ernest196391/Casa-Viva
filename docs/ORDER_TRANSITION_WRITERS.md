@@ -151,7 +151,7 @@ El inventario histórico se conserva. Desde 1C.3 dejan de ser autoridad legacy:
 | `CVD_Delivery::change_status()` | `delivered → cash_returned` y payment `pending_return → returned` | Wrapper migrado; conserva capability, actor, timestamps, historial y revisión lista |
 | `CVD_Delivery::change_status()` | `cash_returned → closed` y payment `returned → verified` | Wrapper migrado; cierre solo admin en la acción manual |
 | `CVD_Delivery::close_after_cash_received()` | ambas transiciones anteriores | Adaptador migrado; admite dependienta desde el flujo operativo ya autorizado y recupera timeout desde `cash_returned`/`closed` |
-| `CVD_Messenger_Accounting::credit_order()` | asiento `earning` del cierre | La inserción del tramo migrado ocurre dentro de la transacción central; `UNIQUE(order_id,entry_type)` sigue siendo defensa final |
+| `CVD_Messenger_Accounting::credit_order()` | asiento `earning` del cierre | Con importe positivo, la inserción ocurre dentro de la transacción central y `UNIQUE(order_id,entry_type)` sigue siendo defensa final; una tarifa histórica cero conserva la ausencia de asiento |
 | `CVD_Commissions::mark_approved()` | `pending → approved` al cerrar | El cierre usa `approve_for_closeout()` dentro de la transacción sin cambiar cálculo, snapshots ni estados de payout |
 | `WC_Order::update_status(completed)` desde delivery | `processing/on-hold → completed` | El servicio persiste `completed` una vez dentro del cierre; el hook canónico WooCommerce se conserva |
 | sincronización operativa de cierre | `with_courier → delivered`, si cambia | El servicio es dueño del historial/evento acoplado durante `closed` |
