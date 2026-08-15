@@ -63,6 +63,21 @@ case "$command_name" in
 	if [[ "$accept_failed" != 0 ]]; then echo "La aceptación concurrente falló de forma insegura." >&2; exit 1; fi
 	wp eval-file /var/www/html/integration-tests/logistics-finish.php
 	wp eval-file /var/www/html/integration-tests/logistics-verify.php
+	wp eval-file /var/www/html/integration-tests/custody-bootstrap.php
+	wp eval-file /var/www/html/integration-tests/custody-pickup.php clerk_id & first_pickup_pid=$!
+	wp eval-file /var/www/html/integration-tests/custody-pickup.php admin_id & second_pickup_pid=$!
+	pickup_failed=0
+	wait "$first_pickup_pid" || pickup_failed=1
+	wait "$second_pickup_pid" || pickup_failed=1
+	if [[ "$pickup_failed" != 0 ]]; then echo "La custodia concurrente falló." >&2; exit 1; fi
+	wp eval-file /var/www/html/integration-tests/custody-finish.php
+	wp eval-file /var/www/html/integration-tests/custody-result.php delivered & delivered_result_pid=$!
+	wp eval-file /var/www/html/integration-tests/custody-result.php failed & failed_result_pid=$!
+	result_failed=0
+	wait "$delivered_result_pid" || result_failed=1
+	wait "$failed_result_pid" || result_failed=1
+	if [[ "$result_failed" != 0 ]]; then echo "La carrera de resultados falló de forma insegura." >&2; exit 1; fi
+	wp eval-file /var/www/html/integration-tests/custody-verify.php
 	concurrent_sql="INSERT IGNORE INTO cvt_cvd_order_events (event_id,idempotency_key,order_id,event_type,domain,from_state,to_state,actor_user_id,actor_role,occurred_at,source,metadata,created_at) VALUES ('cv_evt_concurrency_probe','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',999998,'order.concurrent_probe','order','','',0,'system',UTC_TIMESTAMP(),'integration','{}',UTC_TIMESTAMP());"
 	"${compose[@]}" exec -T db mariadb -ucasa_viva_test -pcasa_viva_test_only casa_viva_test -e "$concurrent_sql" & first_pid=$!
 	"${compose[@]}" exec -T db mariadb -ucasa_viva_test -pcasa_viva_test_only casa_viva_test -e "$concurrent_sql" & second_pid=$!

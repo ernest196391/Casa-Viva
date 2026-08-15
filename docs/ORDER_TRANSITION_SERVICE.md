@@ -99,3 +99,28 @@ Un pedido sin `_cvd_operation_status` se interpreta como `new` y sin
 actuales. No existe migración masiva. Pedidos terminales WooCommerce se rechazan antes
 de escribir. El wrapper `CVD_Sales::change_status()` conserva firma, endpoint,
 capabilities y payload; solo deriva el subconjunto aprobado al servicio.
+
+## Extensión 1C.2
+
+El catálogo incorpora `accepted|to_store → picked_up`, `picked_up → handed_over` y
+`handed_over → delivered|failed|returned`.
+
+Para `picked_up`, el servicio es dueño de una unidad atómica compuesta:
+
+1. estado, timestamp e historial de delivery;
+2. operación `with_courier`, historial y nota solo si cambia;
+3. evento canónico delivery;
+4. evento canónico operation solo si cambia;
+5. receipt común;
+6. commit o rollback conjunto.
+
+Así no puede persistir custodia con operación atrasada. QR, Centro de ventas y acción
+manual llegan a la misma autoridad y al mismo `cvd_transition_{order_id}`.
+
+`delivered` acopla únicamente `_cvd_cash_status=pending_return` y su evento payment.
+La reconciliación, cierre, WooCommerce, comisión y ledger permanecen fuera. Correo,
+push y reputación siguen siendo consecuencias posteriores al commit.
+
+Los estados terminales logísticos incompatibles se serializan: si uno de
+`delivered|failed|returned` ya ganó, otro destino devuelve `CONFLICT`. `failed`
+logístico nunca se proyecta ni escribe como `failed` de WooCommerce.

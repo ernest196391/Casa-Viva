@@ -120,6 +120,20 @@ Cada llamada `delivery` se ejecuta en un proceso WP-CLI independiente porque el 
 - MariaDB se consulta directamente para estado operativo/logístico, mensajero,
   invitados, historial, eventos canónicos y receipts de idempotencia.
 
+### Fase 1C.2
+
+- dos procesos reales (dependienta y administración) confirman simultáneamente
+  `to_store → picked_up` mediante el wrapper público;
+- se comprueba una sola custodia, un solo historial y sincronización atómica de
+  operación a `with_courier`;
+- el mensajero ejecuta `picked_up → handed_over → delivered` y se verifica
+  `pending_return` sin cierre WooCommerce, ledger o ganancia aprobada;
+- pedidos separados prueban `handed_over → failed` y `handed_over → returned`;
+- dos procesos compiten por `handed_over → delivered` y `handed_over → failed`, con
+  un único resultado/evento ganador;
+- MariaDB se consulta directamente para estados, mensajero, timestamps, historiales,
+  eventos, receipts, efectivo pendiente y ausencia de efectos contables finales.
+
 ## Clasificación de pruebas
 
 - `artifacts/tests/test-canonical-*.php`: **unit tests**, sin WordPress.
