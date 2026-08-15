@@ -46,6 +46,9 @@ final class CVD_Order_Transition_Service {
 			$order=self::fresh_order($order_id); if(!$order){return self::failure(self::ORDER_NOT_FOUND);}
 			$current=self::state($order,$domain); $receipts=self::receipts($order);
 			if($receipt_hash&&isset($receipts[$receipt_hash])){return self::replay($receipts[$receipt_hash],$domain,$target_state);}
+			// El pedido ya aceptado por otro mensajero es una carrera perdida, no
+			// una fuga de autorización ni un replay aplicable al segundo actor.
+			if('delivery'===$domain&&'accepted'===$current&&'accepted'===$target_state&&$actor->ID!==absint($order->get_meta('_cvd_messenger_user_id',true))){return self::failure(self::CONFLICT,$current);}
 			if(!self::authorized($order,$domain,$current,$target_state,$actor)){return self::failure(self::UNAUTHORIZED,$current);}
 			if(isset($context['precondition'])&&is_callable($context['precondition'])){
 				$checked=call_user_func($context['precondition'],$order,$current,$target_state,$actor);
