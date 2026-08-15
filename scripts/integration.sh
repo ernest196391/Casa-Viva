@@ -5,7 +5,7 @@ repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 compose=(docker compose -f "$repo_dir/integration/compose.yml")
 command_name="${1:-help}"
 
-wp() { "${compose[@]}" run --rm --no-deps cli "$@"; }
+wp() { "${compose[@]}" run --rm --no-deps cli wp "$@"; }
 
 case "$command_name" in
   up)
