@@ -67,6 +67,14 @@ final class CVD_Order_Transition_Service {
 			// Otro actor pudo avanzar el pedido mientras se esperaba el lock.
 			$order = wc_get_order( $order_id );
 			if ( ! $order ) { return self::failure( self::ORDER_NOT_FOUND ); }
+			// wc_get_order() puede devolver el objeto que se cargó antes de esperar el
+			// lock. Fuerza una lectura del datastore para observar la transición del
+			// actor que obtuvo el lock primero.
+			if ( method_exists( $order, 'get_data_store' ) ) {
+				$data_store = $order->get_data_store();
+				if ( is_object( $data_store ) && method_exists( $data_store, 'read' ) ) { $data_store->read( $order ); }
+			}
+			if ( method_exists( $order, 'read_meta_data' ) ) { $order->read_meta_data( true ); }
 			$current = self::operation_state( $order );
 			$receipts = self::receipts( $order );
 			if ( $receipt_hash && isset( $receipts[ $receipt_hash ] ) ) {
