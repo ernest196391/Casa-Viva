@@ -11,7 +11,7 @@ case "$command_name" in
   up)
     "${compose[@]}" up -d db wordpress
     for attempt in $(seq 1 60); do
-      if wp core version >/dev/null 2>&1; then break; fi
+      if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:8889/wp-admin/install.php >/dev/null; then break; fi
       if [[ "$attempt" == 60 ]]; then echo "WordPress no quedó disponible." >&2; exit 1; fi
       sleep 2
     done
