@@ -146,7 +146,8 @@ $order=cvt_reset();$order->meta['_cvd_operation_status']='ready';$order->meta['_
 $pickup_context=array('actor_user_id'=>10,'idempotency_key'=>'pickup-accepted','coupled_operation_state'=>'with_courier','precondition'=>static fn($o)=>absint($o->get_meta('_cvd_messenger_user_id',true))?true:CVD_Order_Transition_Service::PRECONDITION_FAILED,'atomic_mutation'=>static function($o,$from,$to,$actor,$at){$o->update_meta_data('_cvd_handed_over_by',$actor->ID);$o->update_meta_data('_cvd_handed_over_at',$at);},'after_commit'=>static function()use(&$external){$external++;});
 $pickup=CVD_Order_Transition_Service::transition(459,'delivery','picked_up',$pickup_context);$pickup_retry=CVD_Order_Transition_Service::transition(459,'delivery','picked_up',$pickup_context);
 cvt_check($pickup['success']&&$pickup_retry['idempotent_replay']&&$pickup['event_id']===$pickup_retry['event_id']&&1===$external,'accepted → picked_up y doble pickup idempotente');
-cvt_check('with_courier'===$order->get_meta('_cvd_operation_status',true)&&1===count(CVD_Order_Event_Timeline::read(459,array('domain'=>'operation'),1,20)['events']),'operation → with_courier sincronizado exactamente una vez');
+$pickup_events=CVD_Order_Event_Timeline::read(459,array(),1,20)['events'];
+cvt_check('with_courier'===$order->get_meta('_cvd_operation_status',true)&&1===count(array_filter($pickup_events,fn($e)=>'operation'===$e['domain']&&'with_courier'===$e['to_state'])),'operation → with_courier sincronizado exactamente una vez');
 
 $order=cvt_reset();$order->meta['_cvd_operation_status']='ready';$order->meta['_cvd_delivery_status']='to_store';$order->meta['_cvd_messenger_user_id']=20;
 cvt_check(CVD_Order_Transition_Service::transition(459,'delivery','picked_up',array('actor_user_id'=>11,'idempotency_key'=>'pickup-to-store','coupled_operation_state'=>'with_courier'))['success'],'to_store → picked_up');
@@ -156,7 +157,7 @@ cvt_check($route['success']&&$route_retry['idempotent_replay']&&$order->get_meta
 $delivered=CVD_Order_Transition_Service::transition(459,'delivery','delivered',array('actor_user_id'=>20,'idempotency_key'=>'delivered-1','coupled_payment_state'=>'pending_return','atomic_mutation'=>static function($o,$f,$t,$a,$at){$o->update_meta_data('_cvd_delivered_by',$a->ID);$o->update_meta_data('_cvd_delivered_at',$at);}));$delivered_retry=CVD_Order_Transition_Service::transition(459,'delivery','delivered',array('actor_user_id'=>20,'idempotency_key'=>'delivered-1'));
 cvt_check($delivered['success']&&$delivered_retry['idempotent_replay']&&'pending_return'===$order->get_meta('_cvd_cash_status',true),'handed_over → delivered sin cierre y doble delivered');
 $late_failed=CVD_Order_Transition_Service::transition(459,'delivery','failed',array('actor_user_id'=>20));cvt_check(!$late_failed['success']&&CVD_Order_Transition_Service::CONFLICT===$late_failed['error_code'],'delivered vs failed: solo un resultado gana');
-cvt_check(1===count(CVD_Order_Event_Timeline::read(459,array('domain'=>'payment'),1,20)['events']),'pending_return produce un evento de pago');
+$delivered_events=CVD_Order_Event_Timeline::read(459,array(),1,20)['events'];cvt_check(1===count(array_filter($delivered_events,fn($e)=>'payment'===$e['domain']&&'pending_return'===$e['to_state'])),'pending_return produce un evento de pago');
 
 foreach(array('failed','returned')as$result_state){$order=cvt_reset();$order->meta['_cvd_delivery_status']='handed_over';$order->meta['_cvd_messenger_user_id']=20;$result=CVD_Order_Transition_Service::transition(459,'delivery',$result_state,array('actor_user_id'=>20,'idempotency_key'=>'result-'.$result_state));cvt_check($result['success']&&$result_state===$order->get_meta('_cvd_delivery_status',true),'handed_over → '.$result_state);}
 
