@@ -24,7 +24,10 @@ final class CVD_Messenger_Accounting {
 		if ( 'closed' !== sanitize_key( (string) $order->get_meta( '_cvd_delivery_status', true ) ) || 'verified' !== $order->get_meta( '_cvd_cash_status', true ) ) { throw new RuntimeException( 'closeout_not_verified' ); }
 		$messenger_id = absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
 		$amount = (float) $order->get_meta( '_cvd_shipping_courier_amount_cup', true );
-		if ( ! $messenger_id || $amount <= 0 ) { throw new RuntimeException( 'invalid_messenger_earning' ); }
+		if ( ! $messenger_id ) { throw new RuntimeException( 'invalid_messenger_earning' ); }
+		// El flujo histórico permite tarifas de mensajería en cero. En ese caso no
+		// existe ganancia que acreditar y, por tanto, no corresponde crear asiento.
+		if ( $amount <= 0 ) { return false; }
 		$created = $wpdb->query( $wpdb->prepare(
 			"INSERT IGNORE INTO {$wpdb->prefix}cvd_messenger_ledger (entry_uuid,order_id,messenger_user_id,entry_type,amount,currency,status,created_at,created_by,metadata) VALUES (%s,%d,%d,'earning',%f,'CUP','available',%s,%d,%s)",
 			wp_generate_uuid4(), $order->get_id(), $messenger_id, $amount, $at, $actor_id, wp_json_encode( array( 'platform_amount' => (float) $order->get_meta( '_cvd_shipping_platform_amount_cup', true ), 'rate_snapshot' => (float) $order->get_meta( '_cvd_shipping_platform_rate', true ) ) )
