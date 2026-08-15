@@ -132,25 +132,31 @@ final class CVD_Delivery {
 	}
 
 	private static function assign( int $order_id, int $messenger_id ): void {
-		$order = wc_get_order( $order_id ); if ( ! $order ) { return; }
-		$previous = absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
-		$order->update_meta_data( '_cvd_messenger_user_id', $messenger_id );
-		self::transition( $order, $messenger_id ? 'assigned' : 'unassigned', array( 'previous_messenger' => $previous, 'messenger' => $messenger_id ) );
-		if ( $messenger_id ) {
-			$user = get_userdata( $messenger_id );
-			$order->add_order_note( 'Entrega asignada a ' . $user->display_name . '.' ); $order->save();
-			if ( $user->user_email ) { wp_mail( $user->user_email, 'Nueva entrega Casa Viva · Pedido #' . $order->get_order_number(), "Tienes una entrega asignada.\n\nRevisar:\n" . home_url( '/area-mensajeros/' ) ); }
-		}
+		// La desasignación no forma parte del mapa 1C.1; conserva exactamente su
+		// escritor legacy en vez de inventar una transición central nueva.
+		if ( ! $messenger_id ) { $order=wc_get_order($order_id); if(!$order){return;} $previous=absint($order->get_meta('_cvd_messenger_user_id',true)); $order->update_meta_data('_cvd_messenger_user_id',0); self::transition($order,'unassigned',array('previous_messenger'=>$previous,'messenger'=>0)); return; }
+		if ( ! class_exists( 'CVD_Order_Transition_Service' ) ) { return; }
+		$user = get_userdata( $messenger_id );
+		$result = CVD_Order_Transition_Service::transition( $order_id, 'delivery', 'assigned', array(
+			'actor_user_id'=>get_current_user_id(), 'source'=>'cvd_delivery_assign',
+			'metadata'=>array( 'messenger'=>$messenger_id ),
+			'precondition'=>static function( WC_Order $order ) use ( $messenger_id, $user ) {
+				if ( ! $user || ! in_array( 'cvd_messenger', (array) $user->roles, true ) || 'approved' !== get_user_meta( $messenger_id, '_cvd_account_status', true ) ) { return CVD_Order_Transition_Service::PRECONDITION_FAILED; }
+				$existing=absint($order->get_meta('_cvd_messenger_user_id',true)); return $existing && $existing!==$messenger_id ? CVD_Order_Transition_Service::CONFLICT : true;
+			},
+			'atomic_mutation'=>static function( WC_Order $order ) use ( $messenger_id, $user ): void { $order->update_meta_data('_cvd_messenger_user_id',$messenger_id); $order->add_order_note('Entrega asignada a '.$user->display_name.'.'); },
+			'after_commit'=>static function( WC_Order $order, array $transition ) use ( $user ): void { self::centralized_after_commit($order,'assigned'); if(empty($transition['idempotent_replay'])&&$user->user_email){wp_mail($user->user_email,'Nueva entrega Casa Viva · Pedido #'.$order->get_order_number(),"Tienes una entrega asignada.\n\nRevisar:\n".home_url('/area-mensajeros/'));} },
+		) );
+		if ( empty( $result['success'] ) ) { return; }
 	}
 
 	/** Publish a prepared home-delivery order to every eligible, available messenger. */
 	public static function publish_offer( WC_Order $order ): bool {
-		if ( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) || 'unassigned' !== self::status( $order ) ) { return false; }
-		$order->update_meta_data( '_cvd_delivery_offered_at', current_time( 'mysql', true ) );
-		$order->delete_meta_data( '_cvd_messenger_user_id' );
+		if ( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return false; }
+		if ( 'offered' === self::status( $order ) ) { return true; }
+		if ( 'unassigned' !== self::status( $order ) ) { return false; }
 		$eligible = self::eligible_messengers( $order );
 		if ( ! $eligible ) {
-			$order->delete_meta_data( '_cvd_delivery_offered_at' );
 			self::append_event( $order, 'unassigned', 'unassigned', array( 'reason' => 'no_available_messengers' ) );
 			$order->add_order_note( 'Mensajería: no hay mensajeros disponibles. El pedido continúa por ofertar.' );
 			$order->save();
@@ -158,12 +164,13 @@ final class CVD_Delivery {
 		}
 		$wave_size = max( 1, absint( get_option( 'cvd_dispatch_first_wave_size', 2 ) ) );
 		$first_wave = array_slice( $eligible, 0, $wave_size );
-		$order->update_meta_data( '_cvd_delivery_invited_messengers', wp_list_pluck( $first_wave, 'ID' ) );
-		$order->update_meta_data( '_cvd_delivery_rank_snapshot', self::rank_snapshot( $eligible, $order ) );
-		self::transition( $order, 'offered', array( 'eligible_messengers' => count( $eligible ), 'first_wave' => count( $first_wave ) ) );
-		self::notify_offer( $order, $first_wave );
-		if ( count( $eligible ) > count( $first_wave ) ) { wp_schedule_single_event( time() + max( 30, absint( get_option( 'cvd_dispatch_wave_delay_seconds', 90 ) ) ), 'cvd_expand_delivery_offer', array( $order->get_id() ) ); }
-		return true;
+		$metadata=array('eligible_messengers'=>count($eligible),'first_wave'=>count($first_wave));
+		$result=CVD_Order_Transition_Service::transition($order->get_id(),'delivery','offered',array(
+			'actor_user_id'=>get_current_user_id(),'source'=>'cvd_delivery_publish_offer','metadata'=>$metadata,
+			'atomic_mutation'=>static function(WC_Order $locked_order)use($first_wave,$eligible):void{$locked_order->update_meta_data('_cvd_delivery_offered_at',current_time('mysql',true));$locked_order->delete_meta_data('_cvd_messenger_user_id');$locked_order->update_meta_data('_cvd_delivery_invited_messengers',wp_list_pluck($first_wave,'ID'));$locked_order->update_meta_data('_cvd_delivery_rank_snapshot',self::rank_snapshot($eligible,$locked_order));},
+			'after_commit'=>static function(WC_Order $saved_order)use($first_wave,$eligible):void{self::centralized_after_commit($saved_order,'offered');self::notify_offer($saved_order,$first_wave);if(count($eligible)>count($first_wave)&&!wp_next_scheduled('cvd_expand_delivery_offer',array($saved_order->get_id()))){wp_schedule_single_event(time()+max(30,absint(get_option('cvd_dispatch_wave_delay_seconds',90))),'cvd_expand_delivery_offer',array($saved_order->get_id()));}},
+		));
+		return !empty($result['success']);
 	}
 
 	private static function notify_offer( WC_Order $order, array $messengers ): void {
@@ -231,26 +238,23 @@ final class CVD_Delivery {
 		$user = wp_get_current_user();
 		if ( 'mensajero' !== CVD_Registration::program_type( $user ) || 'approved' !== get_user_meta( $user->ID, '_cvd_account_status', true ) ) { wp_die( 'Esta cuenta no es un mensajero aprobado.' ); }
 		if ( ! in_array( $decision, array( 'accept', 'decline' ), true ) ) { wp_die( 'Decisión no válida.' ); }
+		if ( 'accept' === $decision ) {
+			$transition=CVD_Order_Transition_Service::transition($order_id,'delivery','accepted',array(
+				'actor_user_id'=>$user->ID,'idempotency_key'=>sanitize_text_field((string)($_GET['idempotency_key']??'')),'source'=>'cvd_delivery_offer_decision','metadata'=>array('messenger'=>$user->ID,'source'=>'open_offer'),
+				'precondition'=>static function(WC_Order $order,string $current)use($user){$assigned=absint($order->get_meta('_cvd_messenger_user_id',true));if($assigned&&$assigned!==$user->ID){return CVD_Order_Transition_Service::CONFLICT;}if('offered'!==$current){return CVD_Order_Transition_Service::CONFLICT;}$invited=array_map('absint',(array)$order->get_meta('_cvd_delivery_invited_messengers',true));return in_array($user->ID,$invited,true)&&'yes'===get_user_meta($user->ID,'_cvd_messenger_available',true)?true:CVD_Order_Transition_Service::PRECONDITION_FAILED;},
+				'atomic_mutation'=>static function(WC_Order $order,$from,$to,$actor,$at)use($user):void{$order->update_meta_data('_cvd_messenger_user_id',$user->ID);$order->update_meta_data('_cvd_delivery_accepted_at',$at);$order->add_order_note('Carrera aceptada por '.$user->display_name.'.');update_user_meta($user->ID,'_cvd_last_delivery_accepted_at',time());},
+				'after_commit'=>static function(WC_Order $order):void{self::centralized_after_commit($order,'accepted');},
+			));
+			$result=!empty($transition['success'])?'accepted':'unavailable';
+			wp_safe_redirect(add_query_arg('oferta',$result,home_url('/area-mensajeros/'))); exit;
+		}
 		$result = self::with_order_lock( $order_id, static function () use ( $order_id, $decision, $user ): string {
 			$order = wc_get_order( $order_id );
 			if ( ! $order || 'offered' !== self::status( $order ) || absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { return 'unavailable'; }
 			$invited = array_map( 'absint', (array) $order->get_meta( '_cvd_delivery_invited_messengers', true ) );
 			if ( ! in_array( $user->ID, $invited, true ) ) { return 'unavailable'; }
-			if ( 'decline' === $decision ) {
-				$rejected = array_values( array_unique( array_merge( array_map( 'absint', (array) $order->get_meta( '_cvd_delivery_rejected_by', true ) ), array( $user->ID ) ) ) );
-				$order->update_meta_data( '_cvd_delivery_rejected_by', $rejected );
-				self::append_event( $order, 'offered', 'offered', array( 'decision' => 'declined', 'messenger' => $user->ID ) );
-				$order->save();
-				return 'declined';
-			}
-			if ( 'yes' !== get_user_meta( $user->ID, '_cvd_messenger_available', true ) ) { return 'unavailable'; }
-			$order->update_meta_data( '_cvd_messenger_user_id', $user->ID );
-			$order->update_meta_data( '_cvd_delivery_accepted_at', current_time( 'mysql', true ) );
-			update_user_meta( $user->ID, '_cvd_last_delivery_accepted_at', time() );
-			self::transition( $order, 'accepted', array( 'messenger' => $user->ID, 'source' => 'open_offer' ) );
-			$order->add_order_note( 'Carrera aceptada por ' . $user->display_name . '.' );
-			$order->save();
-			return 'accepted';
+			$rejected = array_values( array_unique( array_merge( array_map( 'absint', (array) $order->get_meta( '_cvd_delivery_rejected_by', true ) ), array( $user->ID ) ) ) );
+			$order->update_meta_data( '_cvd_delivery_rejected_by', $rejected ); self::append_event( $order, 'offered', 'offered', array( 'decision' => 'declined', 'messenger' => $user->ID ) ); $order->save(); return 'declined';
 		} );
 		wp_safe_redirect( add_query_arg( 'oferta', $result ?: 'unavailable', home_url( '/area-mensajeros/' ) ) );
 		exit;
@@ -318,6 +322,16 @@ final class CVD_Delivery {
 		}
 		$note = isset( $_POST['note'] ) ? sanitize_textarea_field( wp_unslash( $_POST['note'] ) ) : '';
 		if ( 'incident' === $next && '' === trim( $note ) ) { wp_die( 'Describe brevemente la incidencia para poder registrarla.' ); }
+		if ( class_exists('CVD_Order_Transition_Service') && CVD_Order_Transition_Service::governs('delivery',$current,$next) ) {
+			$result=CVD_Order_Transition_Service::transition($order_id,'delivery',$next,array(
+				'actor_user_id'=>$user->ID,'idempotency_key'=>sanitize_text_field((string)($_REQUEST['idempotency_key']??'')),'source'=>'cvd_delivery_change_status','metadata'=>array('note'=>$note),
+				'precondition'=>static function(WC_Order $locked_order)use($next){return in_array($next,array('accepted','to_store'),true)&&!absint($locked_order->get_meta('_cvd_messenger_user_id',true))?CVD_Order_Transition_Service::PRECONDITION_FAILED:true;},
+				'atomic_mutation'=>static function(WC_Order $locked_order,$from,$to,WP_User $actor,string $at):void{if('accepted'===$to){$locked_order->update_meta_data('_cvd_delivery_accepted_at',$at);update_user_meta($actor->ID,'_cvd_last_delivery_accepted_at',time());}if('to_store'===$to){$locked_order->update_meta_data('_cvd_to_store_at',$at);}},
+				'after_commit'=>static function(WC_Order $saved_order)use($next):void{self::centralized_after_commit($saved_order,$next);},
+			));
+			if(empty($result['success'])){wp_die('No se pudo actualizar la entrega.');}
+			$destination=in_array('cvd_messenger',(array)$user->roles,true)?'/area-mensajeros/':'/mensajeria/'; wp_safe_redirect(home_url($destination.'?actualizado=1')); exit;
+		}
 		self::transition( $order, $next, array( 'note' => $note ) );
 		if ( 'accepted' === $next ) { $order->update_meta_data( '_cvd_delivery_accepted_at', current_time( 'mysql', true ) ); update_user_meta( $user->ID, '_cvd_last_delivery_accepted_at', time() ); }
 		if ( 'to_store' === $next ) { $order->update_meta_data( '_cvd_to_store_at', current_time( 'mysql', true ) ); }
@@ -386,6 +400,12 @@ final class CVD_Delivery {
 		$order->add_order_note( 'Mensajería: ' . self::label( $current ) . ' → ' . self::label( $next ) . '.' ); $order->save();
 		$history = $order->get_meta( '_cvd_delivery_history', true ); $last_event = is_array( $history ) ? end( $history ) : array();
 		do_action( 'cvd_order_transition_observed', $order->get_id(), 'delivery', $current, $next, 'cvd_delivery_transition', $data, (string) ( $last_event['data']['_canonical_event_anchor'] ?? $last_event['at'] ?? '' ) );
+		if ( class_exists( 'CVD_Web_Push' ) ) { CVD_Web_Push::send_delivery_update( $order, $next ); }
+		if ( class_exists( 'CVD_Messenger_Reputation' ) ) { $messenger_id=absint($order->get_meta('_cvd_messenger_user_id',true)); if($messenger_id){CVD_Messenger_Reputation::invalidate($messenger_id);} }
+	}
+
+	/** Consecuencias posteriores; nunca se ejecutan durante la transacción SQL. */
+	private static function centralized_after_commit( WC_Order $order, string $next ): void {
 		if ( class_exists( 'CVD_Web_Push' ) ) { CVD_Web_Push::send_delivery_update( $order, $next ); }
 		if ( class_exists( 'CVD_Messenger_Reputation' ) ) { $messenger_id=absint($order->get_meta('_cvd_messenger_user_id',true)); if($messenger_id){CVD_Messenger_Reputation::invalidate($messenger_id);} }
 	}

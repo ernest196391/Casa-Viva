@@ -95,3 +95,27 @@ Son representativas (autorización, precondición, idempotencia, concurrencia y 
 incluida incidencia), pero no ejecutan oferta, WooCommerce, efectivo, comisión, ledger,
 stock ni notificaciones externas. Todos los demás escritores permanecen legacy y se
 enumeran arriba para migración posterior.
+
+## Migración Fase 1C.1 — logística previa a custodia
+
+El inventario histórico anterior se conserva. Desde 1C.1, estas rutas dejaron de ser
+autoridad legacy y actúan como wrappers de `CVD_Order_Transition_Service`:
+
+| Escritor histórico | Transiciones centralizadas | Estado 1C.1 |
+|---|---|---|
+| `CVD_Sales::change_status()` | `preparing → ready`, `incident → ready` | Migrado; tras commit intenta publicar la oferta compatible |
+| `CVD_Delivery::publish_offer()` | `unassigned → offered` | Migrado; elegibilidad/ranking/invitados son atómicos; push, correo y cron son posteriores |
+| `CVD_Delivery::assign()` | `unassigned|offered → assigned` | Migrado para asignaciones positivas; valida cuenta aprobada y bloquea reasignación incoherente |
+| `CVD_Delivery::offer_decision(accept)` | `offered → accepted` | Migrado; un único `GET_LOCK` del servicio decide el ganador |
+| `CVD_Delivery::change_status()` | `assigned → accepted`, `accepted → to_store` | Migrado; conserva permisos, timestamps, push y reputación |
+
+`delivery vacío → unassigned` no se migró: `initialize_order()` calcula reparto de
+tarifa e inicializa ganancia, por lo que centralizarlo en esta fase alteraría el límite
+expreso de no tocar contabilidad. También siguen legacy el rechazo y ampliación de
+oleadas (no cambian estado), incidencias logísticas, custodia desde `picked_up`, entrega,
+efectivo, cierre, cancelación, comisión, ledger y payouts.
+
+La contradicción de `assign()` se resolvió sin ampliar el mapa: el servicio solo admite
+origen `unassigned|offered`; una cuenta no aprobada falla y una asignación concurrente
+a otro mensajero devuelve `CONFLICT`. La desasignación histórica con valor `0` no se
+centraliza ni se convierte en una transición nueva.

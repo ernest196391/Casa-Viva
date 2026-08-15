@@ -108,6 +108,11 @@ final class CVD_Sales {
 				$status = in_array( $result['error_code'], array( CVD_Order_Transition_Service::UNAUTHORIZED ), true ) ? 403 : ( CVD_Order_Transition_Service::ORDER_NOT_FOUND === $result['error_code'] ? 404 : 409 );
 				return new WP_Error( 'cvd_transition_' . strtolower( $result['error_code'] ), 'No se pudo actualizar el pedido.', array( 'status' => $status, 'transition' => $result ) );
 			}
+			// También en replay: publish_offer() reconoce una oferta compatible ya
+			// existente y permite recuperar un fallo externo sin duplicar avisos.
+			if ( 'ready' === $next && 'pickup' !== $order->get_meta( '_cvd_fulfillment_type', true ) && class_exists( 'CVD_Delivery' ) ) {
+				CVD_Delivery::publish_offer( wc_get_order( $order->get_id() ) );
+			}
 			return rest_ensure_response( array( 'message' => 'Pedido actualizado.', 'order' => self::payload( wc_get_order( $order->get_id() ) ), 'transition' => $result ) );
 		}
 		$allowed = self::allowed_transitions( $current );
