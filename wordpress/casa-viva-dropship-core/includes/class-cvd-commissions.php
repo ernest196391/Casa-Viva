@@ -31,6 +31,37 @@ final class CVD_Commissions {
 		self::store( $order_id, 'approved', true );
 	}
 
+	/** Aplica la aprobación al objeto bloqueado; el servicio guarda y registra el evento. */
+	public static function approve_for_closeout( WC_Order $order, int $actor_id, string $at, string $anchor ): ?array {
+		$owner_user_id = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
+		$owner_type = sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) );
+		if ( ! $owner_user_id || 'organic' === $owner_type ) { return null; }
+		$current = sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ?: 'pending';
+		if ( in_array( $current, array( 'approved', 'paid', 'cancelled' ), true ) ) { return null; }
+		$calculation = self::calculate( $order, $owner_user_id );
+		$order->update_meta_data( '_cvd_commission_status', 'approved' );
+		$order->update_meta_data( '_cvd_commission_amount', $calculation['amount'] );
+		$order->update_meta_data( '_cvd_base_commission_amount', $calculation['commission_amount'] );
+		$order->update_meta_data( '_cvd_margin_amount', $calculation['margin_amount'] );
+		$order->update_meta_data( '_cvd_commission_base_amount', $calculation['base_amount'] );
+		$order->update_meta_data( '_cvd_commission_rate', $calculation['effective_rate'] );
+		$order->update_meta_data( '_cvd_commission_breakdown', $calculation['breakdown'] );
+		$order->update_meta_data( '_cvd_commission_currency', $order->get_currency() );
+		$order->update_meta_data( '_cvd_commission_updated_at', $at );
+		$order->update_meta_data( 'comision_estado', 'approved' );
+		$order->update_meta_data( 'comision_base', $calculation['commission_amount'] );
+		$order->update_meta_data( 'comision_tasa', $calculation['effective_rate'] );
+		$order->update_meta_data( 'comision_tipo', $calculation['margin_amount'] > 0 ? 'Comisión base + ganancia de precio' : 'Comisión base' );
+		$order->update_meta_data( 'ganancia_precio', $calculation['margin_amount'] );
+		$order->update_meta_data( 'precio_original', $calculation['base_amount'] );
+		$order->update_meta_data( 'precio_gestora', $calculation['sale_amount'] );
+		$history = $order->get_meta( '_cvd_commission_history', true ); $history = is_array( $history ) ? $history : array();
+		$history[] = array( 'from'=>$current, 'to'=>'approved', 'user_id'=>$actor_id, 'at'=>$at, 'event_anchor'=>$anchor );
+		$order->update_meta_data( '_cvd_commission_history', array_slice( $history, -50 ) );
+		$order->add_order_note( sprintf( 'Comisión Casa Viva: %s → aprobada.', $current ) );
+		return array( 'domain'=>'commission', 'from'=>$current, 'to'=>'approved' );
+	}
+
 	public static function mark_paid( int $order_id ): void {
 		self::store( $order_id, 'paid', true );
 	}

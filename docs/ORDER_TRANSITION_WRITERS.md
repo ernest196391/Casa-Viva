@@ -141,3 +141,28 @@ al cliente” y `_cvd_to_customer_at`. `delivered` solo inicia efectivo
 Las incidencias logísticas siguen legacy en 1C.2. Recuperar limpiamente su etapa exige
 demostrar el origen desde historial potencialmente truncado; centralizarlas ahora
 ampliaría el modelo y violaría la regla de no inventar estado subyacente.
+
+## Migración Fase 1C.3 — efectivo, cierre y contabilidad
+
+El inventario histórico se conserva. Desde 1C.3 dejan de ser autoridad legacy:
+
+| Escritor histórico | Transiciones/efectos centralizados | Estado 1C.3 |
+|---|---|---|
+| `CVD_Delivery::change_status()` | `delivered → cash_returned` y payment `pending_return → returned` | Wrapper migrado; conserva capability, actor, timestamps, historial y revisión lista |
+| `CVD_Delivery::change_status()` | `cash_returned → closed` y payment `returned → verified` | Wrapper migrado; cierre solo admin en la acción manual |
+| `CVD_Delivery::close_after_cash_received()` | ambas transiciones anteriores | Adaptador migrado; admite dependienta desde el flujo operativo ya autorizado y recupera timeout desde `cash_returned`/`closed` |
+| `CVD_Messenger_Accounting::credit_order()` | asiento `earning` del cierre | La inserción del tramo migrado ocurre dentro de la transacción central; `UNIQUE(order_id,entry_type)` sigue siendo defensa final |
+| `CVD_Commissions::mark_approved()` | `pending → approved` al cerrar | El cierre usa `approve_for_closeout()` dentro de la transacción sin cambiar cálculo, snapshots ni estados de payout |
+| `WC_Order::update_status(completed)` desde delivery | `processing/on-hold → completed` | El servicio persiste `completed` una vez dentro del cierre; el hook canónico WooCommerce se conserva |
+| sincronización operativa de cierre | `with_courier → delivered`, si cambia | El servicio es dueño del historial/evento acoplado durante `closed` |
+
+La unidad atómica de `closed` incluye delivery, payment, operation, timestamps,
+earning aprobado, comisión aplicable, asiento ledger, WooCommerce, eventos y receipt.
+Un error en ledger, comisión o WooCommerce revierte la unidad y mantiene el pedido en
+`cash_returned/payment=returned`.
+
+Siguen legacy: `operation with_courier → delivered` iniciado por el formulario de
+cobro de ventas (solo sus efectos financieros delegan al servicio), inicialización de
+ganancia, edición administrativa de comisión, payouts/liquidaciones, cancelaciones,
+refunds, void de ledger e incidencias. Las cancelaciones se dejan para 1C.4 porque hoy
+son una cascada de hooks separados entre operación, delivery, comisión y ledger.

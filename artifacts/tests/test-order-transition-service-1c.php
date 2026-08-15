@@ -29,6 +29,8 @@ class WC_Order {
 	public function __construct( int $id ) { $this->id=$id; }
 	public function get_id(): int { return $this->id; }
 	public function get_status(): string { return $this->status; }
+	public function has_status( $status ): bool { return is_array($status)?in_array($this->status,$status,true):$this->status===$status; }
+	public function set_status( $status, $note = '', $manual = false ): void { $this->status=$status; if($note){$this->notes[]=$note;} }
 	public function get_meta( $key, $single = true ) { return $this->meta[$key] ?? ''; }
 	public function update_meta_data( $key, $value ): void { $this->meta[$key]=$value; }
 	public function delete_meta_data( $key ): void { unset($this->meta[$key]); }
@@ -39,6 +41,7 @@ class WC_Order {
 }
 
 class CVT_WPDB {
+	public string $prefix = 'cvt_';
 	public bool $lock_available = true;
 	private array $snapshots = array();
 	public function prepare( $query, ...$args ): string { return $query . '|' . implode('|',$args); }
@@ -165,4 +168,33 @@ $order=cvt_reset();$order->meta['_cvd_delivery_status']='accepted';$order->meta[
 $pickup_unauthorized=CVD_Order_Transition_Service::transition(459,'delivery','picked_up',array('actor_user_id'=>20));cvt_check(!$pickup_unauthorized['success']&&CVD_Order_Transition_Service::UNAUTHORIZED===$pickup_unauthorized['error_code'],'solo Casa Viva transfiere custodia');
 $rollback=CVD_Order_Transition_Service::transition(459,'delivery','picked_up',array('actor_user_id'=>10,'coupled_operation_state'=>'with_courier','atomic_mutation'=>static function(){throw new RuntimeException('pickup write failed');}));cvt_check(!$rollback['success']&&CVD_Order_Transition_Service::SIDE_EFFECT_FAILED===$rollback['error_code']&&'accepted'===$order->get_meta('_cvd_delivery_status',true)&&'new'===(sanitize_key((string)$order->get_meta('_cvd_operation_status',true))?:'new'),'fallo atómico revierte custodia y operación');
 
-echo "FASE 1C.2: pruebas unitarias completadas.\n";
+// Fase 1C.3: efectivo, cierre y contabilidad exactly-once.
+$order=cvt_reset();$order->meta['_cvd_delivery_status']='delivered';$order->meta['_cvd_cash_status']='pending_return';$order->meta['_cvd_messenger_user_id']=20;
+$cash_context=array('actor_user_id'=>10,'idempotency_key'=>'cash-returned-1','coupled_payment_state'=>'returned','atomic_mutation'=>static function($o,$f,$t,$a,$at){$o->update_meta_data('_cvd_cash_returned_by',$a->ID);$o->update_meta_data('_cvd_cash_returned_at',$at);});
+$cash=CVD_Order_Transition_Service::transition(459,'delivery','cash_returned',$cash_context);$cash_retry=CVD_Order_Transition_Service::transition(459,'delivery','cash_returned',$cash_context);
+cvt_check($cash['success']&&$cash_retry['idempotent_replay']&&'returned'===$order->get_meta('_cvd_cash_status',true)&&$order->get_meta('_cvd_cash_returned_at',true),'pending_return → returned y delivered → cash_returned exactly-once');
+$wrong_key=CVD_Order_Transition_Service::transition(459,'delivery','closed',array('actor_user_id'=>11,'idempotency_key'=>'cash-returned-1'));
+cvt_check(!$wrong_key['success']&&CVD_Order_Transition_Service::CONFLICT===$wrong_key['error_code'],'clave reutilizada para otro destino produce CONFLICT');
+
+$counts=array('commission'=>0,'earning'=>0,'ledger'=>0,'woocommerce'=>0);
+$close_context=array('actor_user_id'=>11,'idempotency_key'=>'closed-1','coupled_operation_state'=>'delivered','coupled_payment_state'=>'verified','precondition'=>static fn($o)=>'returned'===$o->get_meta('_cvd_cash_status',true),'atomic_mutation'=>static function($o,$f,$t,$a,$at){$o->update_meta_data('_cvd_cash_verified_at',$at);},'atomic_after_state'=>static function($o,$f,$t,$a,$at,$anchor)use(&$counts){$o->update_meta_data('_cvd_messenger_earning_status','approved');$o->update_meta_data('_cvd_messenger_ledger_status','available');$o->update_meta_data('_cvd_commission_status','approved');$o->set_status('completed');foreach($counts as $key=>$value){$counts[$key]++;}return array('events'=>array(array('domain'=>'commission','from'=>'pending','to'=>'approved')));});
+$closed=CVD_Order_Transition_Service::transition(459,'delivery','closed',$close_context);$closed_retry=CVD_Order_Transition_Service::transition(459,'delivery','closed',$close_context);
+cvt_check($closed['success']&&$closed_retry['idempotent_replay']&&'closed'===$order->get_meta('_cvd_delivery_status',true)&&'verified'===$order->get_meta('_cvd_cash_status',true)&&'delivered'===$order->get_meta('_cvd_operation_status',true),'returned → verified y cash_returned → closed');
+cvt_check(array('commission'=>1,'earning'=>1,'ledger'=>1,'woocommerce'=>1)===$counts,'commission, earning, ledger y WooCommerce exactly-once');
+$close_events=CVD_Order_Event_Timeline::read(459,array(),1,30)['events'];foreach(array('delivery'=>'closed','payment'=>'verified','operation'=>'delivered','commission'=>'approved')as$domain=>$to){cvt_check(1===count(array_filter($close_events,fn($e)=>$domain===$e['domain']&&$to===$e['to_state'])),'evento exactly-once '.$domain.' → '.$to);}
+
+$order=cvt_reset();$order->meta['_cvd_delivery_status']='delivered';$order->meta['_cvd_cash_status']='pending_return';$order->meta['_cvd_messenger_user_id']=20;
+$cash_unauthorized=CVD_Order_Transition_Service::transition(459,'delivery','cash_returned',array('actor_user_id'=>12,'coupled_payment_state'=>'returned'));
+cvt_check(!$cash_unauthorized['success']&&CVD_Order_Transition_Service::UNAUTHORIZED===$cash_unauthorized['error_code'],'actor no autorizado no devuelve efectivo');
+$wrong_state=CVD_Order_Transition_Service::transition(459,'delivery','closed',array('actor_user_id'=>11));
+cvt_check(!$wrong_state['success']&&CVD_Order_Transition_Service::INVALID_TRANSITION===$wrong_state['error_code'],'estado incorrecto no puede cerrar');
+
+$order=cvt_reset();$order->meta['_cvd_delivery_status']='cash_returned';$order->meta['_cvd_cash_status']='returned';$order->meta['_cvd_operation_status']='with_courier';$order->meta['_cvd_messenger_user_id']=20;
+$failed_close=CVD_Order_Transition_Service::transition(459,'delivery','closed',array('actor_user_id'=>11,'idempotency_key'=>'failed-close','coupled_operation_state'=>'delivered','coupled_payment_state'=>'verified','atomic_after_state'=>static function($o){$o->update_meta_data('_cvd_messenger_earning_status','approved');throw new RuntimeException('ledger failed');}));
+cvt_check(!$failed_close['success']&&CVD_Order_Transition_Service::SIDE_EFFECT_FAILED===$failed_close['error_code']&&'cash_returned'===$order->get_meta('_cvd_delivery_status',true)&&'returned'===$order->get_meta('_cvd_cash_status',true)&&'with_courier'===$order->get_meta('_cvd_operation_status',true)&&'processing'===$order->get_status(),'fallo financiero revierte closed, verified, operation y WooCommerce');
+
+$order=cvt_reset();$order->meta['_cvd_delivery_status']='delivered';$order->meta['_cvd_messenger_user_id']=20;unset($order->meta['_cvd_cash_status']);
+$legacy_cash=CVD_Order_Transition_Service::transition(459,'delivery','cash_returned',array('actor_user_id'=>10,'idempotency_key'=>'legacy-cash','coupled_payment_state'=>'returned'));
+cvt_check($legacy_cash['success']&&'returned'===$order->get_meta('_cvd_cash_status',true),'pedido legacy sin payment puede reconciliarse sin migración masiva');
+
+echo "FASE 1C.3: pruebas unitarias completadas.\n";

@@ -134,6 +134,23 @@ Cada llamada `delivery` se ejecuta en un proceso WP-CLI independiente porque el 
 - MariaDB se consulta directamente para estados, mensajero, timestamps, historiales,
   eventos, receipts, efectivo pendiente y ausencia de efectos contables finales.
 
+### Fase 1C.3
+
+- el pedido real entregado ejecuta dos procesos (dependienta y administración) que
+  compiten por `delivered → cash_returned`; ambos reciben resultado seguro y solo se
+  persiste una devolución/evento;
+- un cierre manual y el adaptador automático compiten por `cash_returned → closed`
+  usando el lock y receipt comunes;
+- se verifica directamente delivery `closed`, payment `verified`, operation
+  `delivered`, WooCommerce `completed`, comisión y earning `approved`;
+- MariaDB debe contener exactamente un ledger `earning`, un historial por etapa, un
+  evento delivery/payment/operation/commission/order y los dos receipts;
+- un retry posterior simula respuesta HTTP perdida y no repite ledger, comisión,
+  WooCommerce ni eventos;
+- pedidos separados fuerzan fallos después de ledger, comisión y WooCommerce: cada
+  transacción vuelve a `cash_returned/payment=returned`, comisión pendiente,
+  WooCommerce processing y cero ledger.
+
 ## Clasificación de pruebas
 
 - `artifacts/tests/test-canonical-*.php`: **unit tests**, sin WordPress.

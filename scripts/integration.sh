@@ -78,6 +78,21 @@ case "$command_name" in
 	wait "$failed_result_pid" || result_failed=1
 	if [[ "$result_failed" != 0 ]]; then echo "La carrera de resultados falló de forma insegura." >&2; exit 1; fi
 	wp eval-file /var/www/html/integration-tests/custody-verify.php
+	wp eval-file /var/www/html/integration-tests/closeout-bootstrap.php
+	wp eval-file /var/www/html/integration-tests/closeout-cash.php clerk_id & first_cash_pid=$!
+	wp eval-file /var/www/html/integration-tests/closeout-cash.php admin_id & second_cash_pid=$!
+	cash_failed=0
+	wait "$first_cash_pid" || cash_failed=1
+	wait "$second_cash_pid" || cash_failed=1
+	if [[ "$cash_failed" != 0 ]]; then echo "La devolución concurrente de efectivo falló." >&2; exit 1; fi
+	wp eval-file /var/www/html/integration-tests/closeout-close.php manual & manual_close_pid=$!
+	wp eval-file /var/www/html/integration-tests/closeout-close.php automatic & automatic_close_pid=$!
+	close_failed=0
+	wait "$manual_close_pid" || close_failed=1
+	wait "$automatic_close_pid" || close_failed=1
+	if [[ "$close_failed" != 0 ]]; then echo "El cierre manual/automático concurrente falló." >&2; exit 1; fi
+	wp eval-file /var/www/html/integration-tests/closeout-verify.php
+	wp eval-file /var/www/html/integration-tests/closeout-failures.php
 	concurrent_sql="INSERT IGNORE INTO cvt_cvd_order_events (event_id,idempotency_key,order_id,event_type,domain,from_state,to_state,actor_user_id,actor_role,occurred_at,source,metadata,created_at) VALUES ('cv_evt_concurrency_probe','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',999998,'order.concurrent_probe','order','','',0,'system',UTC_TIMESTAMP(),'integration','{}',UTC_TIMESTAMP());"
 	"${compose[@]}" exec -T db mariadb -ucasa_viva_test -pcasa_viva_test_only casa_viva_test -e "$concurrent_sql" & first_pid=$!
 	"${compose[@]}" exec -T db mariadb -ucasa_viva_test -pcasa_viva_test_only casa_viva_test -e "$concurrent_sql" & second_pid=$!

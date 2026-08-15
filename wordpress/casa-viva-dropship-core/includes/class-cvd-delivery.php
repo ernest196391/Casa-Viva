@@ -318,10 +318,12 @@ final class CVD_Delivery {
 		if ( 'incident' === $next && '' === trim( $note ) ) { wp_die( 'Describe brevemente la incidencia para poder registrarla.' ); }
 		if ( class_exists('CVD_Order_Transition_Service') && CVD_Order_Transition_Service::governs('delivery',$current,$next) ) {
 			$idempotency_key=sanitize_text_field((string)($_REQUEST['idempotency_key']??''))?:'delivery:'.$order_id.':'.$current.':'.$next;
+			$payment_target='delivered'===$next?'pending_return':('cash_returned'===$next?'returned':('closed'===$next?'verified':''));
 			$result=CVD_Order_Transition_Service::transition($order_id,'delivery',$next,array(
-				'actor_user_id'=>$user->ID,'idempotency_key'=>$idempotency_key,'source'=>'cvd_delivery_change_status','metadata'=>array('note'=>$note),'coupled_operation_state'=>'picked_up'===$next?'with_courier':'','coupled_payment_state'=>'delivered'===$next?'pending_return':'',
-				'precondition'=>static function(WC_Order $locked_order){return absint($locked_order->get_meta('_cvd_messenger_user_id',true))?true:CVD_Order_Transition_Service::PRECONDITION_FAILED;},
-				'atomic_mutation'=>static function(WC_Order $locked_order,$from,$to,WP_User $actor,string $at):void{if('accepted'===$to){$locked_order->update_meta_data('_cvd_delivery_accepted_at',$at);update_user_meta($actor->ID,'_cvd_last_delivery_accepted_at',time());}if('to_store'===$to){$locked_order->update_meta_data('_cvd_to_store_at',$at);}if('picked_up'===$to){$locked_order->update_meta_data('_cvd_handed_over_by',$actor->ID);$locked_order->update_meta_data('_cvd_handed_over_at',$at);}if('handed_over'===$to){$locked_order->update_meta_data('_cvd_to_customer_at',$at);}if('delivered'===$to){$locked_order->update_meta_data('_cvd_delivered_by',$actor->ID);$locked_order->update_meta_data('_cvd_delivered_at',$at);}},
+				'actor_user_id'=>$user->ID,'idempotency_key'=>$idempotency_key,'source'=>'cvd_delivery_change_status','metadata'=>array('note'=>$note),'coupled_operation_state'=>'picked_up'===$next?'with_courier':('closed'===$next?'delivered':''),'coupled_payment_state'=>$payment_target,
+				'precondition'=>static function(WC_Order $locked_order,$from,$to){if(!absint($locked_order->get_meta('_cvd_messenger_user_id',true))){return CVD_Order_Transition_Service::PRECONDITION_FAILED;}$cash=sanitize_key((string)$locked_order->get_meta('_cvd_cash_status',true));if('cash_returned'===$to&&!in_array($cash,array('','pending_return'),true)){return CVD_Order_Transition_Service::PRECONDITION_FAILED;}if('closed'===$to&&!in_array($cash,array('','returned'),true)){return CVD_Order_Transition_Service::PRECONDITION_FAILED;}return true;},
+				'atomic_mutation'=>static function(WC_Order $locked_order,$from,$to,WP_User $actor,string $at):void{if('accepted'===$to){$locked_order->update_meta_data('_cvd_delivery_accepted_at',$at);update_user_meta($actor->ID,'_cvd_last_delivery_accepted_at',time());}if('to_store'===$to){$locked_order->update_meta_data('_cvd_to_store_at',$at);}if('picked_up'===$to){$locked_order->update_meta_data('_cvd_handed_over_by',$actor->ID);$locked_order->update_meta_data('_cvd_handed_over_at',$at);}if('handed_over'===$to){$locked_order->update_meta_data('_cvd_to_customer_at',$at);}if('delivered'===$to){$locked_order->update_meta_data('_cvd_delivered_by',$actor->ID);$locked_order->update_meta_data('_cvd_delivered_at',$at);}if('cash_returned'===$to){$locked_order->update_meta_data('_cvd_cash_returned_by',$actor->ID);$locked_order->update_meta_data('_cvd_cash_returned_at',$at);$locked_order->update_meta_data('_cvd_commission_review_ready','yes');}if('closed'===$to){self::maybe_fail_closeout('before_payment');$locked_order->update_meta_data('_cvd_cash_verified_by',$actor->ID);$locked_order->update_meta_data('_cvd_cash_verified_at',$at);}},
+				'atomic_after_state'=>'closed'===$next?array(__CLASS__,'atomic_closeout'):null,
 				'after_commit'=>static function(WC_Order $saved_order)use($next):void{self::centralized_after_commit($saved_order,$next);},
 			));
 			if(empty($result['success'])){wp_die('No se pudo actualizar la entrega.');}
@@ -348,25 +350,32 @@ final class CVD_Delivery {
 
 	/** Cierra la custodia cuando la tienda confirma el dinero y deja las comisiones aprobadas, no pagadas. */
 	public static function close_after_cash_received( WC_Order $order ): bool {
-		if ( 'delivered' !== self::status( $order ) ) { return false; }
+		$current=self::status($order);
+		if('closed'===$current){return 'verified'===$order->get_meta('_cvd_cash_status',true)&&$order->has_status('completed');}
+		if(!in_array($current,array('delivered','cash_returned'),true)){return false;}
 		$user_id = get_current_user_id();
-		self::transition( $order, 'cash_returned', array( 'source' => 'sales_money_confirmation' ) );
-		$order->update_meta_data( '_cvd_cash_status', 'returned' );
-		$order->update_meta_data( '_cvd_cash_returned_by', $user_id );
-		$order->update_meta_data( '_cvd_cash_returned_at', current_time( 'mysql', true ) );
-		$order->update_meta_data( '_cvd_commission_review_ready', 'yes' );
-		$order->save();
-		do_action( 'cvd_order_transition_observed', $order->get_id(), 'payment', 'pending_return', 'returned', 'cvd_delivery_cash_status', array(), (string) $order->get_meta( '_cvd_cash_returned_at', true ) );
-		self::transition( $order, 'closed', array( 'source' => 'automatic_after_money_confirmation' ) );
-		$order->update_meta_data( '_cvd_cash_status', 'verified' );
-		$order->update_meta_data( '_cvd_cash_verified_by', $user_id );
-		$order->update_meta_data( '_cvd_cash_verified_at', current_time( 'mysql', true ) );
-		$order->update_meta_data( '_cvd_messenger_earning_status', 'approved' );
-		$order->save();
-		do_action( 'cvd_order_transition_observed', $order->get_id(), 'payment', 'returned', 'verified', 'cvd_delivery_cash_status', array(), (string) $order->get_meta( '_cvd_cash_verified_at', true ) );
-		if ( class_exists( 'CVD_Messenger_Accounting' ) ) { CVD_Messenger_Accounting::credit_order( $order ); }
-		if ( class_exists( 'CVD_Commissions' ) ) { CVD_Commissions::mark_approved( $order->get_id() ); }
-		return true;
+		if('delivered'===$current){$cash=CVD_Order_Transition_Service::transition($order->get_id(),'delivery','cash_returned',array('actor_user_id'=>$user_id,'idempotency_key'=>'closeout:'.$order->get_id().':cash_returned','source'=>'sales_money_confirmation','coupled_payment_state'=>'returned','precondition'=>static function(WC_Order $locked){$cash=sanitize_key((string)$locked->get_meta('_cvd_cash_status',true));return absint($locked->get_meta('_cvd_messenger_user_id',true))&&in_array($cash,array('','pending_return'),true)?true:CVD_Order_Transition_Service::PRECONDITION_FAILED;},'atomic_mutation'=>static function(WC_Order $locked,$from,$to,WP_User $actor,string $at):void{$locked->update_meta_data('_cvd_cash_returned_by',$actor->ID);$locked->update_meta_data('_cvd_cash_returned_at',$at);$locked->update_meta_data('_cvd_commission_review_ready','yes');}));if(empty($cash['success'])){return false;}}
+		$closed=CVD_Order_Transition_Service::transition($order->get_id(),'delivery','closed',array('actor_user_id'=>$user_id,'idempotency_key'=>'closeout:'.$order->get_id().':closed','source'=>'automatic_after_money_confirmation','allow_staff_closeout'=>true,'coupled_operation_state'=>'delivered','coupled_payment_state'=>'verified','precondition'=>static function(WC_Order $locked){$cash=sanitize_key((string)$locked->get_meta('_cvd_cash_status',true));return absint($locked->get_meta('_cvd_messenger_user_id',true))&&in_array($cash,array('','returned'),true)?true:CVD_Order_Transition_Service::PRECONDITION_FAILED;},'atomic_mutation'=>static function(WC_Order $locked,$from,$to,WP_User $actor,string $at):void{self::maybe_fail_closeout('before_payment');$locked->update_meta_data('_cvd_cash_verified_by',$actor->ID);$locked->update_meta_data('_cvd_cash_verified_at',$at);},'atomic_after_state'=>array(__CLASS__,'atomic_closeout'),'after_commit'=>static function(WC_Order $saved):void{self::centralized_after_commit($saved,'closed');}));
+		return !empty($closed['success']);
+	}
+
+	/** Persistencia financiera interna del cierre, todavía dentro de MariaDB. */
+	public static function atomic_closeout( WC_Order $order, string $from, string $to, WP_User $actor, string $at, string $anchor ): array {
+		self::maybe_fail_closeout('after_payment');
+		$order->update_meta_data('_cvd_messenger_earning_status','approved');
+		if(!class_exists('CVD_Messenger_Accounting')){throw new RuntimeException('messenger_accounting_unavailable');}
+		CVD_Messenger_Accounting::credit_order_atomic($order,$actor->ID,$at);
+		self::maybe_fail_closeout('after_ledger');
+		$events=array();
+		if(class_exists('CVD_Commissions')){$commission=CVD_Commissions::approve_for_closeout($order,$actor->ID,$at,$anchor.':commission');if($commission){$events[]=$commission;}}
+		self::maybe_fail_closeout('after_commission');
+		if(!$order->has_status('completed')){$order->set_status('completed','Operación verificada y cerrada por Casa Viva.');}
+		self::maybe_fail_closeout('after_woocommerce');
+		return array('events'=>$events);
+	}
+
+	private static function maybe_fail_closeout(string $stage):void{
+		if(function_exists('apply_filters')&&$stage===(string)apply_filters('cvd_order_closeout_failure_stage','')){throw new RuntimeException('closeout_failure_'.$stage);}
 	}
 
 	private static function allowed_for_user( WC_Order $order, WP_User $user, string $current, string $next ): bool {
