@@ -1,0 +1,60 @@
+name: casa-viva-integration
+
+services:
+  db:
+    image: mariadb:10.11.8
+    environment:
+      MARIADB_DATABASE: casa_viva_test
+      MARIADB_USER: casa_viva_test
+      MARIADB_PASSWORD: casa_viva_test_only
+      MARIADB_ROOT_PASSWORD: root_test_only
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    volumes:
+      - db_data:/var/lib/mysql
+
+  wordpress:
+    image: wordpress:6.5.5-php8.1-apache
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8889:80"
+    environment: &wordpress-environment
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: casa_viva_test
+      WORDPRESS_DB_PASSWORD: casa_viva_test_only
+      WORDPRESS_DB_NAME: casa_viva_test
+      WORDPRESS_TABLE_PREFIX: cvt_
+      WORDPRESS_DEBUG: "1"
+      WORDPRESS_CONFIG_EXTRA: |
+        define( 'WP_ENVIRONMENT_TYPE', 'local' );
+        define( 'WP_DEBUG_LOG', true );
+        define( 'WP_DEBUG_DISPLAY', false );
+        define( 'DISALLOW_FILE_MODS', false );
+    volumes:
+      - wordpress_data:/var/www/html
+      - ../wordpress/casa-viva-dropship-core:/var/www/html/wp-content/plugins/casa-viva-dropship-core:ro
+      - ./tests:/var/www/html/integration-tests:ro
+
+  cli:
+    image: wordpress:cli-php8.1
+    depends_on:
+      db:
+        condition: service_healthy
+      wordpress:
+        condition: service_started
+    environment: *wordpress-environment
+    user: "33:33"
+    volumes:
+      - wordpress_data:/var/www/html
+      - ../wordpress/casa-viva-dropship-core:/var/www/html/wp-content/plugins/casa-viva-dropship-core:ro
+      - ./tests:/var/www/html/integration-tests:ro
+    working_dir: /var/www/html
+
+volumes:
+  db_data:
+  wordpress_data:

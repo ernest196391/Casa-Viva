@@ -1,0 +1,181 @@
+@font-face {
+  font-family: CVManrope;
+  src: url("pwa/manrope-400.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: CVManrope;
+  src: url("pwa/manrope-700.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: CVManrope;
+  src: url("pwa/manrope-800.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+}
+.cvd-app-entry,
+.cvd-operations {
+  --clay: #a8746b;
+  --cocoa: #432d2d;
+  --cream: #f5e7dc;
+  --sand: #d7b6a3;
+  --gold: #c39a62;
+  color: var(--cocoa);
+  font-family: CVManrope, Manrope, system-ui, sans-serif;
+  margin: 28px auto 80px;
+  max-width: 980px;
+  padding: clamp(24px, 6vw, 64px);
+}
+.cvd-app-entry {
+  background: linear-gradient(145deg, var(--cream), #fff);
+  border: 1px solid #ead8cc;
+  border-radius: 30px;
+  box-shadow: 0 24px 70px rgba(67, 45, 45, 0.1);
+  max-width: 620px;
+  text-align: center;
+}
+.cvd-app-entry > img {
+  border-radius: 24px;
+  margin-inline:auto;
+}
+.cvd-app-kicker {
+  color: var(--clay);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.cvd-app-entry h1,
+.cvd-operations h1 {
+  font-size: clamp(34px, 6vw, 58px);
+  letter-spacing: -0.05em;
+  line-height: 1.03;
+  margin: 14px 0 8px;
+}
+.cvd-app-entry > p {
+  color: #6c5552;
+  line-height: 1.6;
+  margin: 0;
+}
+.cvd-app-login {
+  background: #fff;
+  border: 1px solid #ead8cc;
+  border-radius: 20px;
+  margin-top: 20px;
+  padding: 22px;
+  text-align: left;
+}
+.cvd-app-login label {
+  display: block;
+  font-size: 13px;
+  font-weight: 750;
+  margin-top: 12px;
+}
+.cvd-app-login input[type="text"],
+.cvd-app-login input[type="password"] {
+  border: 1px solid #cdb8ad;
+  border-radius: 12px;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 10px 12px;
+  width: 100%;
+}
+.cvd-app-login input[type="submit"],
+.cvd-app-button {
+  background: var(--cocoa);
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 800;
+  margin-top: 14px;
+  min-height: 46px;
+  padding: 10px 20px;
+}
+.cvd-app-login input[type="submit"]{display:block;margin-inline:auto;min-width:180px}
+.cvd-app-recovery{text-align:center}.cvd-app-recovery a{color:var(--cocoa);font-weight:800}
+.cvd-install-app {
+  background: #432d2d;
+  border: 0;
+  border-radius: 999px;
+  bottom: 84px;
+  box-shadow: 0 12px 34px rgba(67, 45, 45, 0.28);
+  color: #fff;
+  font-weight: 800;
+  min-height: 48px;
+  padding: 10px 18px;
+  position: fixed;
+  right: 18px;
+  z-index: 999;
+}
+.cvd-operations header {
+  background: var(--cocoa);
+  border-radius: 26px;
+  color: #fff;
+  padding: 30px;
+}
+.cvd-operations header{align-items:center;display:flex;justify-content:space-between}.cvd-operations header h1{margin:0}.cvd-operations header>div{display:flex;gap:9px}.cvd-operations header a,.cvd-operations header button{background:#fff;border:0;border-radius:999px;color:var(--cocoa);font:inherit;font-weight:800;padding:10px 16px;text-decoration:none}
+.cvd-operations header .cvd-app-kicker {
+  color: #e8c7b8;
+}
+.cvd-operation-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 20px;
+}
+.cvd-operation-grid article,
+.cvd-operation-grid > a {
+  background: var(--cream);
+  border: 1px solid #ead8cc;
+  border-radius: 20px;
+  padding: 22px;
+}
+.cvd-operation-grid > a {
+  color: inherit;
+  position:relative;
+  text-decoration: none;
+}
+.cvd-operation-badge{align-items:center;background:#a43d2c;border-radius:999px;color:#fff;display:flex;font-size:12px;height:28px;justify-content:center;position:absolute;right:14px;top:14px;min-width:28px;padding:0 8px}
+.cvd-operation-grid article > span,
+.cvd-operation-grid > a > span {
+  color: var(--gold);
+  font-size: 28px;
+  font-weight: 900;
+}
+.cvd-operation-grid h2 {
+  font-size: 20px;
+}
+.cvd-operation-grid p {
+  color: #6c5552;
+  line-height: 1.5;
+}
+.cvd-app-denied {
+  background: #fff0f0;
+  border: 1px solid #e1b6b6;
+  border-radius: 14px;
+  margin: 40px auto;
+  max-width: 620px;
+  padding: 22px;
+}
+@media (max-width: 700px) {
+  .cvd-app-entry,
+  .cvd-operations {
+    border-radius: 0;
+    margin-top: 0;
+    padding: 28px 16px 80px;
+  }
+  .cvd-operation-grid {
+    grid-template-columns: 1fr;
+  }
+  .cvd-operations header{align-items:stretch;display:grid;gap:18px;text-align:center}.cvd-operations header>div{display:grid;grid-template-columns:1fr 1fr}
+  .cvd-install-app {
+    bottom: 82px;
+    right: 14px;
+  }
+}

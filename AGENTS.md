@@ -2,10 +2,18 @@
 
 Estas instrucciones se aplican a todo el repositorio.
 
+Antes de cualquier cambio funcional en pedidos, mensajería, gestoras, comisiones, pagos, cliente o administración, consultar `docs/CASA_VIVA_BLUEPRINT.md`.
+
 ## Forma de trabajo
 
 - Trabaja una sola tarea funcional por vez.
 - Revisa el código existente antes de modificarlo.
+- Convierte cada petición informal en requisitos verificables antes de programar: objetivo, actor, flujo, estados, permisos y criterio de aceptación.
+- Resuelve cada tarea en este orden: lógica de producto, arquitectura y seguridad, experiencia móvil, diseño visual, copy y pruebas.
+- Reutiliza las decisiones ya validadas y consulta los errores anteriores para no reintroducir duplicaciones, accesos ambiguos, textos inflados ni soluciones parciales.
+- Trata el copy como parte del producto: elimina redundancias, usa frases breves y conserva texto adicional solo cuando ayude a decidir o evite un error.
+- Cuando una corrección revele el mismo problema evidente en componentes equivalentes, aplícala también dentro del mismo alcance y documéntala en la entrega.
+- No consideres terminada una función solo porque exista: revisa coherencia visual, estados vacíos, acceso móvil, permisos y navegación de salida.
 - No implementes funciones no solicitadas.
 - Explica brevemente los cambios realizados, los archivos modificados y las pruebas ejecutadas.
 - No elimines ni reestructures partes importantes sin explicar primero la razón.

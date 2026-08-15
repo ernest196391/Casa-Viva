@@ -1,0 +1,355 @@
+﻿municipio,zona,tarifa_cup,activo,origen
+Arroyo Naranjo,,2700,yes,Tarifa general
+Boyeros,,3000,yes,Tarifa general
+Centro Habana,,1600,yes,Tarifa general
+Cerro,,1700,yes,Tarifa general
+Cotorro,,2900,yes,Tarifa general
+Diez de Octubre,,1700,yes,Tarifa general
+Guanabacoa,,2600,yes,Tarifa general
+Habana del Este,,3000,yes,Tarifa general
+Habana Vieja,,1800,yes,Tarifa general
+La Lisa,,3000,yes,Tarifa general
+Marianao,,2000,yes,Tarifa general
+Playa,,1800,yes,Tarifa general
+Plaza de la Revolución,,1500,yes,Tarifa general
+Regla,,2100,yes,Tarifa general
+San Miguel del Padrón,,3500,yes,Tarifa general
+Arroyo Naranjo,Poey,2000,yes,"Actual + 1,000"
+Arroyo Naranjo,Santa Amalia,1900,yes,"Actual + 1,000"
+Arroyo Naranjo,Mantilla,2500,yes,"Actual + 1,000"
+Arroyo Naranjo,La Palma,2000,yes,"Actual + 1,000"
+Arroyo Naranjo,Víbora Park,1900,yes,"Actual + 1,000"
+Arroyo Naranjo,Los Pinos,1900,yes,"Actual + 1,000"
+Arroyo Naranjo,Managua,3900,yes,"Actual + 1,000"
+Arroyo Naranjo,Calvario,2500,yes,"Actual + 1,000"
+Arroyo Naranjo,Güinera,2500,yes,"Actual + 1,000"
+Arroyo Naranjo,Eléctrico,2700,yes,"Actual + 1,000"
+Arroyo Naranjo,Párraga,2400,yes,"Actual + 1,000"
+Arroyo Naranjo,Arroyo Apolo,2000,yes,"Actual + 1,000"
+Arroyo Naranjo,Porvenir,2300,yes,"Actual + 1,000"
+Arroyo Naranjo,Montejo,2300,yes,"Actual + 1,000"
+Arroyo Naranjo,Callejas,2000,yes,"Actual + 1,000"
+Arroyo Naranjo,Vieja Linda,2300,yes,"Actual + 1,000"
+Arroyo Naranjo,Rosario,2400,yes,"Actual + 1,000"
+Arroyo Naranjo,Capri,2400,yes,"Actual + 1,000"
+Arroyo Naranjo,Comodoro,2500,yes,"Actual + 1,000"
+Arroyo Naranjo,El Retiro,2500,yes,"Actual + 1,000"
+Arroyo Naranjo,Parcelación Moderna,2900,yes,"Actual + 1,000"
+Arroyo Naranjo,Gavilán,3500,yes,"Actual + 1,000"
+Arroyo Naranjo,El Moro,2300,yes,"Actual + 1,000"
+Arroyo Naranjo,Reparto La Solita,2300,yes,"Actual + 1,000"
+Arroyo Naranjo,Las Guásimas,3300,yes,"Actual + 1,000"
+Arroyo Naranjo,Café Colón,2400,yes,Completada
+Arroyo Naranjo,Naranjito,1700,yes,"Actual + 1,000"
+Arroyo Naranjo,Las Lajas,2400,yes,"Actual + 1,000"
+Arroyo Naranjo,Reparto Eléctrico,2700,yes,"Actual + 1,000"
+Arroyo Naranjo,La Fortuna,2300,yes,"Actual + 1,000"
+Arroyo Naranjo,Arroyo Naranjo,2700,yes,"Actual + 1,000"
+Boyeros,Santiago de las Vegas,3300,yes,"Actual + 1,000"
+Boyeros,Rancho Boyeros,2700,yes,"Actual + 1,000"
+Boyeros,Calabazar,2700,yes,"Actual + 1,000"
+Boyeros,Abel Santamaría,2700,yes,"Actual + 1,000"
+Boyeros,Fontanar,2600,yes,"Actual + 1,000"
+Boyeros,Wajay,2900,yes,"Actual + 1,000"
+Boyeros,Altahabana,1900,yes,"Actual + 1,000"
+Boyeros,Capdevila,2000,yes,"Actual + 1,000"
+Boyeros,Aldabó,2000,yes,"Actual + 1,000"
+Boyeros,Trébol,2600,yes,"Actual + 1,000"
+Boyeros,Mulgoba,3200,yes,"Actual + 1,000"
+Boyeros,Los Cocos,3600,yes,"Actual + 1,000"
+Boyeros,La Catalina,3200,yes,"Actual + 1,000"
+Boyeros,Lídice,2700,yes,Completada
+Boyeros,El Chico,3100,yes,"Actual + 1,000"
+Boyeros,Juan Manuel Márquez,2700,yes,Completada
+Boyeros,Alturas de La Habana,2600,yes,"Actual + 1,000"
+Boyeros,Sierra Maestra,3500,yes,"Actual + 1,000"
+Boyeros,El Globo,3000,yes,"Actual + 1,000"
+Boyeros,Nuevo Santiago,2900,yes,"Actual + 1,000"
+Boyeros,La Fortuna,2300,yes,"Actual + 1,000"
+Boyeros,Miraflores Viejos,1800,yes,"Actual + 1,000"
+Boyeros,Cepero Bonilla,2700,yes,Completada
+Boyeros,El Trigal,2400,yes,"Actual + 1,000"
+Boyeros,José Antonio Saco,2700,yes,Completada
+Boyeros,Ampliación de Mulgoba,3200,yes,"Actual + 1,000"
+Boyeros,Villa Nueva,2700,yes,Completada
+Boyeros,Aurora,2700,yes,Completada
+Boyeros,Nueva Aurora,2700,yes,Completada
+Boyeros,El Especial,2700,yes,Completada
+Boyeros,Armada-Aldabó,2700,yes,Completada
+Boyeros,Embil,1800,yes,"Actual + 1,000"
+Boyeros,Río Verde,2600,yes,"Actual + 1,000"
+Boyeros,Mazorra,2600,yes,"Actual + 1,000"
+Boyeros,Panamérica,2700,yes,"Actual + 1,000"
+Boyeros,Baluarte,2700,yes,"Actual + 1,000"
+Boyeros,Berenguer,2900,yes,"Actual + 1,000"
+Boyeros,Nazareno,2700,yes,"Actual + 1,000"
+Boyeros,Las Cañas,2600,yes,"Actual + 1,000"
+Boyeros,El Rincón,3800,yes,"Actual + 1,000"
+Boyeros,Bejucal,4000,yes,"Actual + 1,000"
+Boyeros,Reloj Club,1900,yes,"Actual + 1,000"
+Boyeros,Río Cristal,2400,yes,"Actual + 1,000"
+Boyeros,Aeropuerto Terminal 1,3000,yes,Completada
+Boyeros,Aeropuerto Terminal 2,3000,yes,Completada
+Boyeros,Aeropuerto Terminal 3,3000,yes,Completada
+Boyeros,Aeropuerto Terminal 5,3000,yes,Completada
+Boyeros,Aerovaradero,3000,yes,Completada
+Boyeros,1ro. de Mayo,2700,yes,Completada
+Boyeros,Lugardita,2900,yes,"Actual + 1,000"
+Boyeros,Cacahual,2800,yes,Completada
+Boyeros,María del Carmen,2300,yes,"Actual + 1,000"
+Boyeros,Boyeros,3000,yes,Completada
+Centro Habana,Cayo Hueso,1600,yes,"Actual + 1,000"
+Centro Habana,Dragones,1600,yes,"Actual + 1,000"
+Centro Habana,Colón,1700,yes,"Actual + 1,000"
+Centro Habana,Los Sitios,1600,yes,"Actual + 1,000"
+Centro Habana,Pueblo Nuevo,1600,yes,"Actual + 1,000"
+Centro Habana,Centro Habana,1600,yes,"Actual + 1,000"
+Cerro,El Cerro,1700,yes,"Actual + 1,000"
+Cerro,Casino Deportivo,1650,yes,"Actual + 1,000"
+Cerro,Las Cañas,1700,yes,"Actual + 1,000"
+Cerro,Palatino,1650,yes,"Actual + 1,000"
+Cerro,El Canal,1650,yes,"Actual + 1,000"
+Cerro,Esquina de Tejas,1650,yes,"Actual + 1,000"
+Cerro,Reparto Martí,1700,yes,"Actual + 1,000"
+Cerro,Atarés,1650,yes,"Actual + 1,000"
+Cerro,Puentes Grandes,1600,yes,"Actual + 1,000"
+Cerro,20 de Mayo,1600,yes,"Actual + 1,000"
+Cerro,Ayestarán,1600,yes,"Actual + 1,000"
+Cotorro,Santa María del Rosario,2900,yes,"Actual + 1,000"
+Cotorro,Cotorro,2900,yes,Completada
+Cotorro,Cuatro Caminos,3900,yes,"Actual + 1,000"
+Cotorro,Alberro,3600,yes,"Actual + 1,000"
+Cotorro,Magdalena,3200,yes,"Actual + 1,000"
+Cotorro,Vedado Cotorro,3300,yes,"Actual + 1,000"
+Cotorro,Residencial América,3100,yes,"Actual + 1,000"
+Cotorro,Residencial Paraíso,3000,yes,"Actual + 1,000"
+Cotorro,Bello Palmar,3300,yes,"Actual + 1,000"
+Cotorro,Lotería,3500,yes,"Actual + 1,000"
+Cotorro,La Portada,3600,yes,"Actual + 1,000"
+Cotorro,La Guarapeta,3700,yes,"Actual + 1,000"
+Cotorro,El Cafetal,3500,yes,Completada
+Cotorro,La Gomera,3000,yes,"Actual + 1,000"
+Cotorro,Loma de Tierra,3600,yes,"Actual + 1,000"
+Cotorro,Alberro Nuevo,3600,yes,"Actual + 1,000"
+Cotorro,Alberro Viejo,3600,yes,"Actual + 1,000"
+Cotorro,Alturas de Lotería,3500,yes,"Actual + 1,000"
+Cotorro,Cruz Verde,3500,yes,Completada
+Cotorro,Dulce Nombre,3500,yes,Completada
+Cotorro,El Dique,3500,yes,Completada
+Cotorro,Finca Los Espiritistas,3500,yes,Completada
+Cotorro,La Caridad,3500,yes,Completada
+Cotorro,La Coubre,3500,yes,Completada
+Cotorro,La Granada,3500,yes,Completada
+Cotorro,La Purísima,3500,yes,Completada
+Cotorro,La Torre,3500,yes,Completada
+Cotorro,Las Delicias,3500,yes,Completada
+Cotorro,Las Granjas,3500,yes,Completada
+Cotorro,Magdalena-Torriente,3500,yes,Completada
+Cotorro,Modelo,3500,yes,Completada
+Cotorro,Paraíso,3500,yes,Completada
+Cotorro,San Pedro,3500,yes,Completada
+Cotorro,San Pedro-Centro Cotorro,3500,yes,Completada
+Cotorro,Santa Ana,3500,yes,Completada
+Cotorro,Torriente,3500,yes,Completada
+Cotorro,Vista Alegre,3500,yes,Completada
+Cotorro,Parajón,3500,yes,Completada
+Cotorro,Blanco,3500,yes,Completada
+Cotorro,La Lima,3500,yes,Completada
+Diez de Octubre,Víbora,1700,yes,"Actual + 1,000"
+Diez de Octubre,Santos Suárez,1600,yes,"Actual + 1,000"
+Diez de Octubre,Lawton,2000,yes,"Actual + 1,000"
+Diez de Octubre,Luyanó,1700,yes,"Actual + 1,000"
+Diez de Octubre,Sevillano,1800,yes,"Actual + 1,000"
+Diez de Octubre,Vista Alegre,2000,yes,"Actual + 1,000"
+Diez de Octubre,Tamarindo,1600,yes,"Actual + 1,000"
+Diez de Octubre,Mónaco,1650,yes,"Actual + 1,000"
+Diez de Octubre,La Lira,1650,yes,"Actual + 1,000"
+Guanabacoa,Guanabacoa,2600,yes,"Actual + 1,000"
+Guanabacoa,Chibás,2600,yes,"Actual + 1,000"
+Guanabacoa,D'Beche,2600,yes,"Actual + 1,000"
+Guanabacoa,Minas,3400,yes,"Actual + 1,000"
+Guanabacoa,Barreras,3800,yes,"Actual + 1,000"
+Guanabacoa,La Jata,2400,yes,"Actual + 1,000"
+Guanabacoa,Villa María,2500,yes,"Actual + 1,000"
+Guanabacoa,Repollo,2700,yes,"Actual + 1,000"
+Guanabacoa,Bacuranao,2900,yes,"Actual + 1,000"
+Guanabacoa,La Gallega,3200,yes,"Actual + 1,000"
+Guanabacoa,Aranguito,3700,yes,"Actual + 1,000"
+Guanabacoa,Arango,3300,yes,"Actual + 1,000"
+Guanabacoa,La Sepultura,2600,yes,Completada
+Guanabacoa,Naranjo,2400,yes,"Actual + 1,000"
+Guanabacoa,Santa Fe,2700,yes,"Actual + 1,000"
+Guanabacoa,El Roble,2400,yes,"Actual + 1,000"
+Guanabacoa,Reparto Mañana,2000,yes,"Actual + 1,000"
+Guanabacoa,Nalón,2400,yes,"Actual + 1,000"
+Guanabacoa,Cruz de Piedra,2200,yes,"Actual + 1,000"
+Guanabacoa,Campo Florido,3200,yes,Completada
+Guanabacoa,Reparto Vía Blanca,2600,yes,Completada
+Guanabacoa,Balero,2600,yes,Completada
+Guanabacoa,Rotonda de Shell,2600,yes,Completada
+Guanabacoa,Semáforo de Guanabacoa,2600,yes,Completada
+Guanabacoa,Habana Nueva,2100,yes,"Actual + 1,000"
+Guanabacoa,Azotea,2100,yes,"Actual + 1,000"
+Guanabacoa,Altura de Vía Blanca,2600,yes,"Actual + 1,000"
+Guanabacoa,El Mikito,2600,yes,Completada
+Guanabacoa,La Lima,2600,yes,Completada
+Guanabacoa,Ricobar,2600,yes,Completada
+Guanabacoa,La Federal,2600,yes,Completada
+Habana del Este,Alamar,3500,yes,"Actual + 1,000"
+Habana del Este,Camilo Cienfuegos,2300,yes,"Actual + 1,000"
+Habana del Este,Guiteras,2400,yes,"Actual + 1,000"
+Habana del Este,Villa Panamericana,2500,yes,"Actual + 1,000"
+Habana del Este,Cojímar,2700,yes,"Actual + 1,000"
+Habana del Este,Guanabo,6000,yes,"Actual + 1,000"
+Habana del Este,Boca Ciega,4000,yes,"Actual + 1,000"
+Habana del Este,Celimar,3200,yes,"Actual + 1,000"
+Habana del Este,Campo Florido,4200,yes,"Actual + 1,000"
+Habana del Este,Tarará,3600,yes,"Actual + 1,000"
+Habana del Este,Bahía,2400,yes,"Actual + 1,000"
+Habana del Este,Alamar Zona 1,3500,yes,Completada
+Habana del Este,Alamar Zona 2,3500,yes,Completada
+Habana del Este,Alamar Zona 3,3500,yes,Completada
+Habana del Este,Alamar Zona 4,3500,yes,Completada
+Habana del Este,Alamar Zona 5,3500,yes,Completada
+Habana del Este,Alamar Zona 6,3500,yes,Completada
+Habana del Este,Alamar Zona 7,3500,yes,Completada
+Habana del Este,Alamar Zona 8,3500,yes,Completada
+Habana del Este,Alamar Zona 9,3500,yes,Completada
+Habana del Este,Alamar Zona 10,3500,yes,Completada
+Habana del Este,Alamar Zona 11,3500,yes,Completada
+Habana del Este,Alamar Zona 12,3500,yes,Completada
+Habana del Este,Alamar Zona 13,3500,yes,Completada
+Habana del Este,Alamar Zona 14,3500,yes,Completada
+Habana del Este,Alamar Zona 15,3500,yes,Completada
+Habana del Este,Alamar Zona 16,3500,yes,Completada
+Habana del Este,Alamar Zona 17,3500,yes,Completada
+Habana del Este,Alamar Zona 18,3500,yes,Completada
+Habana del Este,Alamar Zona 19,3500,yes,Completada
+Habana del Este,Alamar Zona 20,3500,yes,Completada
+Habana del Este,Alamar Zona 21,3500,yes,Completada
+Habana del Este,Alamar Zona 22,3500,yes,Completada
+Habana del Este,Alamar Zona 23,3500,yes,Completada
+Habana del Este,Alamar Zona 24,3500,yes,Completada
+Habana del Este,Bajurayabo,3200,yes,Completada
+Habana del Este,Peñas Altas,3000,yes,Completada
+Habana del Este,Santa María,3800,yes,Completada
+Habana del Este,Casa Blanca,2500,yes,Completada
+Habana del Este,Bacuranao,3000,yes,Completada
+Habana del Este,Mégano,3500,yes,Completada
+Habana del Este,Ampliación de Marbella,3200,yes,Completada
+Habana del Este,Alturas de Marbella,3200,yes,Completada
+Habana del Este,Jústiz,3000,yes,Completada
+Habana del Este,Guanabo Viejo,6000,yes,"Actual + 1,000"
+Habana del Este,Sibalimar,4300,yes,"Actual + 1,000"
+Habana Vieja,La Habana Vieja,1800,yes,"Actual + 1,000"
+Habana Vieja,Atarés,1600,yes,"Actual + 1,000"
+Habana Vieja,Jesús María,1700,yes,"Actual + 1,000"
+Habana Vieja,Casco Histórico,1900,yes,"Actual + 1,000"
+La Lisa,La Lisa,2700,yes,Completada
+La Lisa,Alturas de La Lisa,2300,yes,"Actual + 1,000"
+La Lisa,Arroyo Arenas,2500,yes,"Actual + 1,000"
+La Lisa,Punta Brava,3200,yes,"Actual + 1,000"
+La Lisa,Arimao,2400,yes,"Actual + 1,000"
+La Lisa,El Cano,2700,yes,"Actual + 1,000"
+La Lisa,San Agustín,2500,yes,"Actual + 1,000"
+La Lisa,La Coronela,2400,yes,"Actual + 1,000"
+La Lisa,El Hueco,2000,yes,"Actual + 1,000"
+La Lisa,El Pedregal,2100,yes,"Actual + 1,000"
+La Lisa,Juan de Dios,2700,yes,"Actual + 1,000"
+La Lisa,La Concepción,2900,yes,"Actual + 1,000"
+La Lisa,XX Aniversario,3000,yes,"Actual + 1,000"
+La Lisa,Valle Grande,3100,yes,"Actual + 1,000"
+La Lisa,El Guatao,3300,yes,"Actual + 1,000"
+La Lisa,Bello,2400,yes,"Actual + 1,000"
+La Lisa,UCI,3100,yes,"Actual + 1,000"
+La Lisa,Versalles,2000,yes,"Actual + 1,000"
+La Lisa,La Vereda,2100,yes,"Actual + 1,000"
+La Lisa,Novia del Mediodía,3300,yes,"Actual + 1,000"
+La Lisa,El Morado,3300,yes,"Actual + 1,000"
+Marianao,Los Quemados,1800,yes,"Actual + 1,000"
+Marianao,Pogolotti,1700,yes,"Actual + 1,000"
+Marianao,Los Pocitos,1900,yes,"Actual + 1,000"
+Marianao,Santa Felicia,1700,yes,"Actual + 1,000"
+Marianao,El Palmar,2000,yes,"Actual + 1,000"
+Marianao,Belén,1900,yes,"Actual + 1,000"
+Marianao,Zamora,1800,yes,"Actual + 1,000"
+Marianao,Coco Solo,1900,yes,"Actual + 1,000"
+Marianao,Finlay,1700,yes,"Actual + 1,000"
+Marianao,Los Ángeles,1900,yes,"Actual + 1,000"
+Marianao,Ceiba (Puentes Grandes),1800,yes,Completada
+Marianao,CUJAE,2000,yes,"Actual + 1,000"
+Marianao,Marianao,2000,yes,Completada
+Marianao,Avenida 35,1900,yes,Completada
+Marianao,Avenida 25,1900,yes,Completada
+Playa,Miramar,1800,yes,"Actual + 1,000"
+Playa,Buenavista,1600,yes,"Actual + 1,000"
+Playa,La Ceiba,1600,yes,"Actual + 1,000"
+Playa,La Sierra,1600,yes,"Actual + 1,000"
+Playa,Kholy,1600,yes,"Actual + 1,000"
+Playa,Siboney,2300,yes,"Actual + 1,000"
+Playa,Atabey,2300,yes,"Actual + 1,000"
+Playa,Santa Fe,2800,yes,"Actual + 1,000"
+Playa,Jaimanitas,2500,yes,"Actual + 1,000"
+Playa,Flores,2200,yes,"Actual + 1,000"
+Playa,Almendares,1600,yes,"Actual + 1,000"
+Playa,El Bosque,1600,yes,"Actual + 1,000"
+Playa,Paradero de Playa,2000,yes,"Actual + 1,000"
+Playa,Náutico,2100,yes,"Actual + 1,000"
+Playa,Puentes Grandes,1600,yes,"Actual + 1,000"
+Playa,ELAM,3000,yes,"Actual + 1,000"
+Playa,Barbosa,2700,yes,"Actual + 1,000"
+Playa,Cubanacán,1900,yes,"Actual + 1,000"
+Playa,El Basurero,2000,yes,Completada
+Playa,Los Sitios,2000,yes,Completada
+Playa,Romerillo,1800,yes,"Actual + 1,000"
+Playa,Jesús María,2000,yes,Completada
+Playa,Reparto Juan Manuel Márquez,2800,yes,"Actual + 1,000"
+Playa,Loma Tanque,2200,yes,Completada
+Playa,Ramirito,2000,yes,Completada
+Playa,Marina Hemingway,2400,yes,"Actual + 1,000"
+Playa,El Bote,2300,yes,Completada
+Playa,El Náutico,2000,yes,"Actual + 1,000"
+Playa,Fanguito,1800,yes,Completada
+Playa,Lido,1700,yes,"Actual + 1,000"
+Playa,Playa,1800,yes,Completada
+Playa,Reparto Cubanacán,1900,yes,"Actual + 1,000"
+Playa,Cangrejera,2800,yes,Completada
+Plaza de la Revolución,El Vedado,1500,yes,Completada
+Plaza de la Revolución,Nuevo Vedado,1000,yes,Completada
+Plaza de la Revolución,Príncipe,1700,yes,Completada
+Plaza de la Revolución,Plaza,1600,yes,Completada
+Plaza de la Revolución,Puentes Grandes,1700,yes,Completada
+Regla,Regla,2100,yes,"Actual + 1,000"
+Regla,Casablanca,2500,yes,"Actual + 1,000"
+San Miguel del Padrón,San Miguel del Padrón,3500,yes,Completada
+San Miguel del Padrón,Diezmero,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Alturas de Luyanó,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Rocafort,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,San Francisco de Paula,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Jacomino,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,California,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Juanelo,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,La Rosalía,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,La Fernanda,3500,yes,Completada
+San Miguel del Padrón,María Luisa,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Bella Vista,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,La Prosperidad,3500,yes,Completada
+San Miguel del Padrón,Reboledo,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Tejas,3500,yes,Completada
+San Miguel del Padrón,La Cuevita,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Virgen del Camino,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Barrio Obrero,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Balear,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,La Cumbre,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Caballo Blanco,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Monterrey,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Ciudamar,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Ruta 12,3500,yes,Completada
+San Miguel del Padrón,Doble Vía,3500,yes,Completada
+San Miguel del Padrón,San Matías,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Dolores,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,La Corea,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Vista Hermosa,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Mirta,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,Las Palmas,3500,yes,"Actual + 1,000"
+San Miguel del Padrón,La Rosita,3500,yes,"Actual + 1,000"

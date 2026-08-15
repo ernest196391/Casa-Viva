@@ -19,6 +19,20 @@ jobs:
       - name: Descargar repositorio
         uses: actions/checkout@v4
 
+      - name: Configurar PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+
+      - name: Validar lector canónico de pedidos
+        run: |
+          php artifacts/tests/test-canonical-order-reader-1a.php
+          php artifacts/tests/test-canonical-order-reader-history-truncation-1a.php
+
+      - name: Validar historial canónico de eventos
+        run: php artifacts/tests/test-canonical-order-events-1b.php
+
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
@@ -35,3 +49,24 @@ jobs:
 
       - name: Compilar aplicación
         run: npm run build
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Ejecutar integración WordPress y MariaDB
+        run: scripts/integration.sh test
+
+      - name: Mostrar diagnóstico si falla
+        if: failure()
+        run: scripts/integration.sh logs
+
+      - name: Eliminar entorno desechable
+        if: always()
+        run: scripts/integration.sh down
