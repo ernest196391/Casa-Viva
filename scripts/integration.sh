@@ -54,6 +54,15 @@ case "$command_name" in
 	wait "$second_transition_pid" || transition_failed=1
 	if [[ "$transition_failed" != 0 ]]; then echo "Una transición concurrente falló." >&2; exit 1; fi
 	wp eval-file /var/www/html/integration-tests/transition-verify.php
+	wp eval-file /var/www/html/integration-tests/logistics-bootstrap.php
+	wp eval-file /var/www/html/integration-tests/logistics-accept.php messenger_one & first_accept_pid=$!
+	wp eval-file /var/www/html/integration-tests/logistics-accept.php messenger_two & second_accept_pid=$!
+	accept_failed=0
+	wait "$first_accept_pid" || accept_failed=1
+	wait "$second_accept_pid" || accept_failed=1
+	if [[ "$accept_failed" != 0 ]]; then echo "La aceptación concurrente falló de forma insegura." >&2; exit 1; fi
+	wp eval-file /var/www/html/integration-tests/logistics-finish.php
+	wp eval-file /var/www/html/integration-tests/logistics-verify.php
 	concurrent_sql="INSERT IGNORE INTO cvt_cvd_order_events (event_id,idempotency_key,order_id,event_type,domain,from_state,to_state,actor_user_id,actor_role,occurred_at,source,metadata,created_at) VALUES ('cv_evt_concurrency_probe','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',999998,'order.concurrent_probe','order','','',0,'system',UTC_TIMESTAMP(),'integration','{}',UTC_TIMESTAMP());"
 	"${compose[@]}" exec -T db mariadb -ucasa_viva_test -pcasa_viva_test_only casa_viva_test -e "$concurrent_sql" & first_pid=$!
 	"${compose[@]}" exec -T db mariadb -ucasa_viva_test -pcasa_viva_test_only casa_viva_test -e "$concurrent_sql" & second_pid=$!

@@ -1,0 +1,10 @@
+<?php
+if(!defined('ABSPATH')){exit(1);} $base=get_option('cvt_integration_fixture');
+$second_id=username_exists('cvt_messenger_two')?:wp_create_user('cvt_messenger_two','Synthetic-Messenger-Only-2!','messenger2@example.invalid');
+$second=new WP_User($second_id);$second->set_role('cvd_messenger');update_user_meta($second_id,'_cvd_account_status','approved');update_user_meta($second_id,'_cvd_program_type','mensajero');update_user_meta($second_id,'_cvd_messenger_available','yes');update_user_meta($second_id,'_cvd_zone','Zona Sintética');
+foreach(array(absint($base['messenger_id']),$second_id)as$id){update_user_meta($id,'_cvd_messenger_available','yes');}
+$order=wc_create_order();$order->set_address(array('first_name'=>'Logística','last_name'=>'Sintética','email'=>'logistics@example.invalid','address_1'=>'Dirección sintética','city'=>'Zona Sintética','country'=>'CU'),'billing');$order->update_meta_data('_cvd_fulfillment_type','delivery');$order->set_status('processing');$order->save();CVD_Delivery::initialize_order($order);CVD_Sales::initialize_order($order);
+wp_set_current_user(absint($base['clerk_id']));
+foreach(array('preparing','ready')as$status){$request=new WP_REST_Request('POST');$request->set_param('status',$status);$request->set_param('idempotencyKey','logistics-'.$status);$request->set_url_params(array('id'=>$order->get_id()));$response=CVD_Sales::change_status($request);if(is_wp_error($response)){throw new RuntimeException($response->get_error_message());}}
+$direct=wc_create_order();$direct->update_meta_data('_cvd_fulfillment_type','delivery');$direct->set_status('processing');$direct->save();CVD_Delivery::initialize_order($direct);CVD_Sales::initialize_order($direct);$direct->update_meta_data('_cvd_operation_status','ready');$direct->save();
+update_option('cvt_logistics_fixture',array('order_id'=>$order->get_id(),'direct_order_id'=>$direct->get_id(),'clerk_id'=>absint($base['clerk_id']),'admin_id'=>absint($base['admin_id']),'messenger_one'=>absint($base['messenger_id']),'messenger_two'=>$second_id));echo wp_json_encode(get_option('cvt_logistics_fixture')).PHP_EOL;

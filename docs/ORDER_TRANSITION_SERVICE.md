@@ -42,12 +42,17 @@ expone excepciones ni SQL.
 5. Validar origen/destino y estado WooCommerce no terminal.
 6. Abrir transacción MariaDB.
 7. Escribir metadato, fecha, historial y nota legacy una sola vez.
-8. Ejecutar el único side effect registrado para el subconjunto.
+8. Ejecutar la mutación atómica registrada para el subconjunto.
 9. Insertar directamente exactamente un evento canónico.
 10. Guardar receipt, confirmar transacción y liberar lock.
 
-Si cualquier escritura o side effect falla, se hace `ROLLBACK`; el servicio devuelve
+Si cualquier escritura o mutación atómica falla, se hace `ROLLBACK`; el servicio devuelve
 `SIDE_EFFECT_FAILED` y no considera aplicada la transición.
+
+Correo, push y cron no mantienen abierta la transacción. Se invocan mediante
+`after_commit` solo tras una aplicación nueva; un receipt/replay nunca vuelve a
+ejecutarlos. Sus fallos se notifican con `cvd_order_transition_after_commit_failed`
+sin revertir un estado ya confirmado.
 
 ## Idempotencia y concurrencia
 
@@ -74,9 +79,23 @@ publicación de oferta, cambio de custodia, WooCommerce, stock, efectivo, comisi
 ledger, asignación, cierre ni notificación externa. Esos efectos siguen ejecutándose
 una sola vez en sus escritores legacy y no se duplican desde el servicio.
 
+## Extensión 1C.1
+
+El catálogo incorpora `preparing|incident → ready`, `unassigned → offered`,
+`unassigned|offered → assigned`, `offered|assigned → accepted` y
+`accepted → to_store`. El servicio valida internamente capabilities, relación con el
+mensajero y origen; adaptadores privados aportan elegibilidad/invitación y mutaciones
+específicas sin convertirse en otra autoridad.
+
+Oferta, asignación y aceptación comparten `cvd_transition_{order_id}`. Por ello dos
+mensajeros no pueden adquirir simultáneamente un pedido: después del lock el perdedor
+relee `accepted` y el mensajero ganador y recibe `CONFLICT`. `picked_up` y posteriores
+continúan fuera del catálogo, de modo que 1C.1 no transfiere custodia.
+
 ## Compatibilidad
 
-Un pedido sin `_cvd_operation_status` se interpreta como `new`, igual que el escritor
-actual. No existe migración masiva. Pedidos terminales WooCommerce se rechazan antes
+Un pedido sin `_cvd_operation_status` se interpreta como `new` y sin
+`_cvd_delivery_status` como `unassigned`, igual que los escritores
+actuales. No existe migración masiva. Pedidos terminales WooCommerce se rechazan antes
 de escribir. El wrapper `CVD_Sales::change_status()` conserva firma, endpoint,
 capabilities y payload; solo deriva el subconjunto aprobado al servicio.

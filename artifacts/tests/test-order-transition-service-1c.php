@@ -61,6 +61,8 @@ function cvt_reset(): WC_Order {
 		10=>new WP_User(10,array('cvd_clerk'),array('cvd_manage_sales'=>true)),
 		11=>new WP_User(11,array('administrator'),array('manage_woocommerce'=>true)),
 		12=>new WP_User(12,array('customer'),array()),
+		20=>new WP_User(20,array('cvd_messenger'),array()),
+		21=>new WP_User(21,array('cvd_messenger'),array()),
 	);
 	$order=new WC_Order(459); $order->meta['_cvd_operation_status']='new';
 	$GLOBALS['cvt_orders']=array(459=>$order);
@@ -98,7 +100,7 @@ cvt_check(2===count(array_filter($events,fn($e)=>'incident.opened'===$e['event_t
 cvt_check(1===count(array_filter($events,fn($e)=>'incident.resolved'===$e['event_type'])) && 'incident'===$order->get_meta('_cvd_operation_status',true),'incidencia independiente con apertura y resolución');
 
 $order=cvt_reset();
-$failed=CVD_Order_Transition_Service::transition(459,'operation','preparing',array('actor_user_id'=>10,'side_effect'=>static function(){throw new RuntimeException('boom');}));
+$failed=CVD_Order_Transition_Service::transition(459,'operation','preparing',array('actor_user_id'=>10,'atomic_mutation'=>static function(){throw new RuntimeException('boom');}));
 cvt_check(!$failed['success'] && CVD_Order_Transition_Service::SIDE_EFFECT_FAILED===$failed['error_code'] && 'new'===$order->get_meta('_cvd_operation_status',true),'fallo de side effect revierte estado');
 cvt_check(0===CVD_Order_Event_Timeline::read(459,array(),1,20)['total'],'fallo de side effect no deja evento');
 
@@ -110,4 +112,33 @@ $order=cvt_reset(); $GLOBALS['wpdb']->lock_available=false;
 $conflict=CVD_Order_Transition_Service::transition(459,'operation','preparing',array('actor_user_id'=>11));
 cvt_check(!$conflict['success'] && CVD_Order_Transition_Service::CONFLICT===$conflict['error_code'] && 'new'===$order->get_meta('_cvd_operation_status',true),'dos actores concurrentes: segundo recibe conflicto');
 
-echo "FASE 1C: pruebas unitarias completadas.\n";
+// Fase 1C.1: ready y logística previa a custodia.
+$order=cvt_reset(); $order->meta['_cvd_operation_status']='preparing';
+$ready=CVD_Order_Transition_Service::transition(459,'operation','ready',array('actor_user_id'=>10,'idempotency_key'=>'ready-1'));
+$ready_retry=CVD_Order_Transition_Service::transition(459,'operation','ready',array('actor_user_id'=>10,'idempotency_key'=>'ready-1'));
+cvt_check($ready['success']&&$ready_retry['idempotent_replay']&&$ready['event_id']===$ready_retry['event_id'],'preparing → ready y retry estable');
+
+$order=cvt_reset(); $order->meta['_cvd_operation_status']='incident';
+cvt_check(CVD_Order_Transition_Service::transition(459,'operation','ready',array('actor_user_id'=>11))['success'],'incident → ready según mapa legacy');
+
+$order=cvt_reset(); $order->meta['_cvd_delivery_status']='unassigned'; $external=0;
+$offered=CVD_Order_Transition_Service::transition(459,'delivery','offered',array('actor_user_id'=>10,'idempotency_key'=>'offer-1','atomic_mutation'=>static function($order){$order->update_meta_data('_cvd_delivery_invited_messengers',array(20,21));},'after_commit'=>static function()use(&$external){$external++;}));
+$offered_retry=CVD_Order_Transition_Service::transition(459,'delivery','offered',array('actor_user_id'=>10,'idempotency_key'=>'offer-1','after_commit'=>static function()use(&$external){$external++;}));
+cvt_check($offered['success']&&$offered_retry['idempotent_replay']&&1===$external,'oferta y notificación exactamente una vez');
+
+$winner=CVD_Order_Transition_Service::transition(459,'delivery','accepted',array('actor_user_id'=>20,'idempotency_key'=>'accept-20','precondition'=>static function($order) { return in_array(20,(array)$order->get_meta('_cvd_delivery_invited_messengers',true),true); },'atomic_mutation'=>static function($order){$order->update_meta_data('_cvd_messenger_user_id',20);}));
+$loser=CVD_Order_Transition_Service::transition(459,'delivery','accepted',array('actor_user_id'=>21,'idempotency_key'=>'accept-21','precondition'=>static function($order){return absint($order->get_meta('_cvd_messenger_user_id',true))===21?true:CVD_Order_Transition_Service::CONFLICT;}));
+cvt_check($winner['success']&&!$loser['success']&&CVD_Order_Transition_Service::CONFLICT===$loser['error_code']&&20===absint($order->get_meta('_cvd_messenger_user_id',true)),'dos mensajeros: un solo ganador seguro');
+$to_store=CVD_Order_Transition_Service::transition(459,'delivery','to_store',array('actor_user_id'=>20,'atomic_mutation'=>static function($order,$from,$to,$actor,$at){$order->update_meta_data('_cvd_to_store_at',$at);}));
+cvt_check($to_store['success']&&$order->get_meta('_cvd_to_store_at',true),'accepted → to_store conserva mensajero y timestamp');
+
+$order=cvt_reset(); $order->meta['_cvd_delivery_status']='unassigned';
+$direct=CVD_Order_Transition_Service::transition(459,'delivery','assigned',array('actor_user_id'=>11,'precondition'=>static fn()=>true,'atomic_mutation'=>static function($order){$order->update_meta_data('_cvd_messenger_user_id',20);}));
+cvt_check($direct['success']&&20===absint($order->get_meta('_cvd_messenger_user_id',true)),'asignación directa autorizada');
+$bad_actor=CVD_Order_Transition_Service::transition(459,'delivery','accepted',array('actor_user_id'=>12));
+cvt_check(!$bad_actor['success']&&CVD_Order_Transition_Service::UNAUTHORIZED===$bad_actor['error_code'],'actor no autorizado en logística');
+
+$delivery_events=CVD_Order_Event_Timeline::read(459,array('domain'=>'delivery'),1,20)['events'];
+cvt_check(1===count(array_filter($delivery_events,fn($e)=>'assigned'===$e['to_state'])),'evento logístico exactamente una vez');
+
+echo "FASE 1C.1: pruebas unitarias completadas.\n";

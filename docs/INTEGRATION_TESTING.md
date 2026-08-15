@@ -109,6 +109,17 @@ Cada llamada `delivery` se ejecuta en un proceso WP-CLI independiente porque el 
 - tabla de eventos ausente: rollback del estado, sin transición parcial;
 - todas las pruebas 1A y 1B permanecen en la misma ejecución.
 
+### Fase 1C.1
+
+- pedido sintético `preparing → ready → offered` con invitados y ranking reales;
+- dos procesos WP-CLI, cada uno como mensajero aprobado e invitado, compiten por
+  `offered → accepted` usando el lock único del servicio;
+- se verifica un ganador, un solo mensajero, un evento de aceptación y un historial;
+- el ganador ejecuta `accepted → to_store` con timestamp;
+- un segundo pedido ejecuta asignación directa `unassigned → assigned`;
+- MariaDB se consulta directamente para estado operativo/logístico, mensajero,
+  invitados, historial, eventos canónicos y receipts de idempotencia.
+
 ## Clasificación de pruebas
 
 - `artifacts/tests/test-canonical-*.php`: **unit tests**, sin WordPress.
