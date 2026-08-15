@@ -281,15 +281,10 @@ final class CVD_Delivery {
 		if ( ! is_user_logged_in() || ( ! current_user_can( 'cvd_manage_sales' ) && ! current_user_can( 'manage_woocommerce' ) ) ) { wp_die( 'Solo Casa Viva puede confirmar la recogida.' ); }
 		$order_id = absint( $_GET['order_id'] ?? 0 );
 		$provided = sanitize_text_field( wp_unslash( $_GET['token'] ?? '' ) );
-		$result = self::with_order_lock( $order_id, static function () use ( $order_id, $provided ): string {
-			$order = wc_get_order( $order_id );
-			if ( ! $order || ! in_array( self::status( $order ), array( 'accepted', 'to_store' ), true ) ) { return 'invalid'; }
-			$expected_url = self::pickup_url( $order );
-			$expected = (string) wp_parse_url( $expected_url, PHP_URL_QUERY );
-			parse_str( $expected, $query );
-			if ( ! $provided || ! hash_equals( (string) ( $query['token'] ?? '' ), $provided ) ) { return 'invalid'; }
-			return self::handover_by_staff( $order, get_current_user_id(), 'pickup_qr' ) ? 'confirmed' : 'invalid';
-		} );
+		$order = wc_get_order( $order_id );
+		$expected_url = $order ? self::pickup_url( $order ) : '';
+		$expected = (string) wp_parse_url( $expected_url, PHP_URL_QUERY ); parse_str( $expected, $query );
+		$result = $order && $provided && hash_equals( (string) ( $query['token'] ?? '' ), $provided ) && self::handover_by_staff( $order, get_current_user_id(), 'pickup_qr' ) ? 'confirmed' : 'invalid';
 		wp_safe_redirect( add_query_arg( array( 'recogida' => $result, 'order' => $order_id ), home_url( '/mensajeria/' ) ) );
 		exit;
 	}
@@ -298,15 +293,14 @@ final class CVD_Delivery {
 	public static function handover_by_staff( WC_Order $order, int $user_id, string $source = 'manual' ): bool {
 		$user = get_userdata( $user_id );
 		if ( ! $user || ( ! user_can( $user, 'cvd_manage_sales' ) && ! user_can( $user, 'manage_woocommerce' ) ) ) { return false; }
-		if ( ! in_array( self::status( $order ), array( 'accepted', 'to_store' ), true ) ) { return false; }
-		if ( ! absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { return false; }
-		self::transition( $order, 'picked_up', array( 'verified_by' => $user_id, 'method' => sanitize_key( $source ) ) );
-		$order->update_meta_data( '_cvd_handed_over_by', $user_id );
-		$order->update_meta_data( '_cvd_handed_over_at', current_time( 'mysql', true ) );
-		$operation_event = self::sync_operation( $order, 'with_courier' );
-		$order->save();
-		do_action( 'cvd_order_transition_observed', $order->get_id(), 'operation', $operation_event['from'], $operation_event['to'], 'cvd_delivery_sync_operation', array(), $operation_event['event_anchor'] );
-		return true;
+		$method=sanitize_key($source)?:'manual';
+		$result=CVD_Order_Transition_Service::transition($order->get_id(),'delivery','picked_up',array(
+			'actor_user_id'=>$user_id,'idempotency_key'=>'pickup:'.$order->get_id().':'.$method,'source'=>'cvd_delivery_handover_by_staff','metadata'=>array('verified_by'=>$user_id,'method'=>$method),'coupled_operation_state'=>'with_courier',
+			'precondition'=>static fn(WC_Order $locked_order)=>absint($locked_order->get_meta('_cvd_messenger_user_id',true))?true:CVD_Order_Transition_Service::PRECONDITION_FAILED,
+			'atomic_mutation'=>static function(WC_Order $locked_order,$from,$to,$actor,$at)use($user_id):void{$locked_order->update_meta_data('_cvd_handed_over_by',$user_id);$locked_order->update_meta_data('_cvd_handed_over_at',$at);},
+			'after_commit'=>static function(WC_Order $saved_order):void{self::centralized_after_commit($saved_order,'picked_up');},
+		));
+		return !empty($result['success']);
 	}
 
 	public static function change_status(): void {
@@ -323,10 +317,11 @@ final class CVD_Delivery {
 		$note = isset( $_POST['note'] ) ? sanitize_textarea_field( wp_unslash( $_POST['note'] ) ) : '';
 		if ( 'incident' === $next && '' === trim( $note ) ) { wp_die( 'Describe brevemente la incidencia para poder registrarla.' ); }
 		if ( class_exists('CVD_Order_Transition_Service') && CVD_Order_Transition_Service::governs('delivery',$current,$next) ) {
+			$idempotency_key=sanitize_text_field((string)($_REQUEST['idempotency_key']??''))?:'delivery:'.$order_id.':'.$current.':'.$next;
 			$result=CVD_Order_Transition_Service::transition($order_id,'delivery',$next,array(
-				'actor_user_id'=>$user->ID,'idempotency_key'=>sanitize_text_field((string)($_REQUEST['idempotency_key']??'')),'source'=>'cvd_delivery_change_status','metadata'=>array('note'=>$note),
-				'precondition'=>static function(WC_Order $locked_order)use($next){return in_array($next,array('accepted','to_store'),true)&&!absint($locked_order->get_meta('_cvd_messenger_user_id',true))?CVD_Order_Transition_Service::PRECONDITION_FAILED:true;},
-				'atomic_mutation'=>static function(WC_Order $locked_order,$from,$to,WP_User $actor,string $at):void{if('accepted'===$to){$locked_order->update_meta_data('_cvd_delivery_accepted_at',$at);update_user_meta($actor->ID,'_cvd_last_delivery_accepted_at',time());}if('to_store'===$to){$locked_order->update_meta_data('_cvd_to_store_at',$at);}},
+				'actor_user_id'=>$user->ID,'idempotency_key'=>$idempotency_key,'source'=>'cvd_delivery_change_status','metadata'=>array('note'=>$note),'coupled_operation_state'=>'picked_up'===$next?'with_courier':'','coupled_payment_state'=>'delivered'===$next?'pending_return':'',
+				'precondition'=>static function(WC_Order $locked_order){return absint($locked_order->get_meta('_cvd_messenger_user_id',true))?true:CVD_Order_Transition_Service::PRECONDITION_FAILED;},
+				'atomic_mutation'=>static function(WC_Order $locked_order,$from,$to,WP_User $actor,string $at):void{if('accepted'===$to){$locked_order->update_meta_data('_cvd_delivery_accepted_at',$at);update_user_meta($actor->ID,'_cvd_last_delivery_accepted_at',time());}if('to_store'===$to){$locked_order->update_meta_data('_cvd_to_store_at',$at);}if('picked_up'===$to){$locked_order->update_meta_data('_cvd_handed_over_by',$actor->ID);$locked_order->update_meta_data('_cvd_handed_over_at',$at);}if('handed_over'===$to){$locked_order->update_meta_data('_cvd_to_customer_at',$at);}if('delivered'===$to){$locked_order->update_meta_data('_cvd_delivered_by',$actor->ID);$locked_order->update_meta_data('_cvd_delivered_at',$at);}},
 				'after_commit'=>static function(WC_Order $saved_order)use($next):void{self::centralized_after_commit($saved_order,$next);},
 			));
 			if(empty($result['success'])){wp_die('No se pudo actualizar la entrega.');}

@@ -1,0 +1,2 @@
+<?php
+if(!defined('ABSPATH')){exit(1);}$f=get_option('cvt_custody_fixture');$actor_key=sanitize_key($args[0]??'clerk_id');$actor=absint($f[$actor_key]);wp_set_current_user($actor);$order=wc_get_order(absint($f['order_id']));$ok=CVD_Delivery::handover_by_staff($order,$actor,'integration_concurrent_pickup');if(!$ok){throw new RuntimeException('Pickup concurrente no fue replay seguro.');}echo "pickup={$actor}\n";

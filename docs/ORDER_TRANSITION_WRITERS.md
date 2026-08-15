@@ -119,3 +119,25 @@ La contradicción de `assign()` se resolvió sin ampliar el mapa: el servicio so
 origen `unassigned|offered`; una cuenta no aprobada falla y una asignación concurrente
 a otro mensajero devuelve `CONFLICT`. La desasignación histórica con valor `0` no se
 centraliza ni se convierte en una transición nueva.
+
+## Migración Fase 1C.2 — custodia, ruta y resultado
+
+| Escritor histórico | Transiciones centralizadas | Estado 1C.2 |
+|---|---|---|
+| `CVD_Delivery::handover_by_staff()` | `accepted|to_store → picked_up` | Wrapper migrado; el servicio es dueño de custodia y de la sincronización operativa |
+| `CVD_Delivery::confirm_pickup()` | mismas, mediante QR | Migrado al mismo lock central; se eliminó el lock exterior específico de QR |
+| `CVD_Delivery::change_status()` | `accepted|to_store → picked_up`, `picked_up → handed_over`, `handed_over → delivered|failed|returned` | Wrapper migrado; conserva mapa y permisos legacy |
+| `CVD_Delivery::sync_operation()` | operación activa → `with_courier`, solo por pickup real | Deja de ejecutarse en el tramo migrado; la escritura y evento son acoplados por el servicio |
+
+`picked_up` conserva la transferencia física por dependienta/admin y los metadatos
+históricos `_cvd_handed_over_by/_at`. `handed_over` conserva el significado “en ruta
+al cliente” y `_cvd_to_customer_at`. `delivered` solo inicia efectivo
+`pending_return`; no cierra WooCommerce ni aprueba ganancia, comisión o ledger.
+
+`delivery=failed` significa entrega logística no completada y no escribe
+`WooCommerce=failed`. `returned` significa devolución a tienda. Solo uno de
+`delivered|failed|returned` puede ganar desde `handed_over`.
+
+Las incidencias logísticas siguen legacy en 1C.2. Recuperar limpiamente su etapa exige
+demostrar el origen desde historial potencialmente truncado; centralizarlas ahora
+ampliaría el modelo y violaría la regla de no inventar estado subyacente.
