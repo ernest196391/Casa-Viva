@@ -97,8 +97,17 @@ Cada llamada `delivery` se ejecuta en un proceso WP-CLI independiente porque el 
 - Pedido legacy más evento canónico posterior.
 - 250 eventos y lectura paginada.
 - inspección de metadata.
-- tabla ausente, transición preservada, diagnóstico y restauración.
+- tabla ausente: el servicio 1C revierte la transición centralizada y restaura la tabla;
 - `SHOW CREATE TABLE cvt_cvd_order_events` real.
+
+### Fase 1C
+
+- transición operativa migrada ejecutada por el endpoint legacy y el servicio único;
+- dos procesos WP-CLI concurrentes (dependienta y administración) con la misma clave;
+- estado, actor, historial y evento inspeccionados directamente en MariaDB;
+- exactamente un evento y un historial ante el reintento concurrente;
+- tabla de eventos ausente: rollback del estado, sin transición parcial;
+- todas las pruebas 1A y 1B permanecen en la misma ejecución.
 
 ## Clasificación de pruebas
 

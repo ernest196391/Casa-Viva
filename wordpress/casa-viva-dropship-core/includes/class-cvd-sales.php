@@ -97,6 +97,19 @@ final class CVD_Sales {
 			return rest_ensure_response( array( 'message' => 'Pedido entregado al mensajero.', 'order' => self::payload( wc_get_order( $order->get_id() ) ) ) );
 		}
 		$current = self::operation_status( $order );
+		if ( class_exists( 'CVD_Order_Transition_Service' ) && CVD_Order_Transition_Service::governs( 'operation', $current, $next ) ) {
+			$idempotency_key = sanitize_text_field( (string) ( $request->get_header( 'X-CVD-Idempotency-Key' ) ?: $request->get_param( 'idempotencyKey' ) ) );
+			$result = CVD_Order_Transition_Service::transition( $order->get_id(), 'operation', $next, array(
+				'actor_user_id' => get_current_user_id(),
+				'idempotency_key' => $idempotency_key,
+				'source' => 'cvd_sales_change_status',
+			) );
+			if ( empty( $result['success'] ) ) {
+				$status = in_array( $result['error_code'], array( CVD_Order_Transition_Service::UNAUTHORIZED ), true ) ? 403 : ( CVD_Order_Transition_Service::ORDER_NOT_FOUND === $result['error_code'] ? 404 : 409 );
+				return new WP_Error( 'cvd_transition_' . strtolower( $result['error_code'] ), 'No se pudo actualizar el pedido.', array( 'status' => $status, 'transition' => $result ) );
+			}
+			return rest_ensure_response( array( 'message' => 'Pedido actualizado.', 'order' => self::payload( wc_get_order( $order->get_id() ) ), 'transition' => $result ) );
+		}
 		$allowed = self::allowed_transitions( $current );
 		if ( ! in_array( $next, $allowed, true ) ) {
 			return new WP_Error( 'cvd_invalid_transition', 'Ese cambio de estado no está permitido.', array( 'status' => 409 ) );
