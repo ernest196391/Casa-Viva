@@ -211,28 +211,46 @@ final class CVD_Attribution {
 
 	private static function find_existing_owner( array $identities ): ?array {
 		foreach ( $identities as $identity ) {
-			$orders = wc_get_orders(
-				array(
-					'limit'      => 1,
-					'orderby'    => 'date',
-					'order'      => 'ASC',
-					// Un pedido cancelado o fallido no vincula permanentemente al cliente.
-					'status'     => array( 'pending', 'processing', 'on-hold', 'completed' ),
-					'meta_query' => array(
-						array( 'key' => '_cvd_identity_' . $identity['type'], 'value' => $identity['hash'] ),
-						array( 'key' => '_cvd_owner_user_id', 'value' => 0, 'compare' => '>', 'type' => 'NUMERIC' ),
-					),
-				)
-			);
-			if ( $orders ) {
-				$order = $orders[0];
-				return array(
-					'owner_user_id' => absint( $order->get_meta( '_cvd_owner_user_id', true ) ),
-					'owner_type'    => sanitize_key( $order->get_meta( '_cvd_owner_type', true ) ),
-					'referral_code' => self::sanitize_code( (string) $order->get_meta( '_cvd_referral_code', true ) ),
-					'source'        => 'linked_customer',
+			$page = 1;
+			do {
+				$result = wc_get_orders(
+					array(
+						'limit'      => 20,
+						'page'       => $page,
+						'paginate'   => true,
+						'orderby'    => 'date',
+						'order'      => 'ASC',
+						// Un pedido cancelado o fallido no vincula permanentemente al cliente.
+						'status'     => array( 'pending', 'processing', 'on-hold', 'completed' ),
+						// WooCommerce 8.2 no filtra de forma fiable el meta_query compuesto
+						// en todos los motores de almacenamiento. La identidad exacta se
+						// consulta como meta_key/meta_value y el owner se valida abajo.
+						'meta_key'   => '_cvd_identity_' . $identity['type'],
+						'meta_value' => $identity['hash'],
+					)
 				);
-			}
+
+				$orders = is_object( $result ) && isset( $result->orders ) ? $result->orders : (array) $result;
+				foreach ( $orders as $order ) {
+					if ( ! $order instanceof WC_Order ) { continue; }
+					// Defensa adicional: aunque el data store ignore accidentalmente el
+					// filtro, nunca aceptar una identidad distinta a la solicitada.
+					$stored_hash = (string) $order->get_meta( '_cvd_identity_' . $identity['type'], true );
+					if ( ! $stored_hash || ! hash_equals( $identity['hash'], $stored_hash ) ) { continue; }
+					$owner_user_id = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
+					$owner_type = sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) );
+					if ( ! $owner_user_id || 'organic' === $owner_type ) { continue; }
+					return array(
+						'owner_user_id' => $owner_user_id,
+						'owner_type'    => $owner_type,
+						'referral_code' => self::sanitize_code( (string) $order->get_meta( '_cvd_referral_code', true ) ),
+						'source'        => 'linked_customer',
+					);
+				}
+
+				$max_pages = is_object( $result ) && isset( $result->max_num_pages ) ? max( 1, (int) $result->max_num_pages ) : 1;
+				$page++;
+			} while ( $page <= $max_pages );
 		}
 		return null;
 	}
