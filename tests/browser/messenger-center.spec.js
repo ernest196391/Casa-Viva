@@ -58,8 +58,8 @@ test('mensajero ve una entrega activa con acciones operativas directas', async (
   await expect(card.locator('[data-confirm-delivery="delivered"]')).toContainText('Entregado');
 
   const layout = await page.evaluate(() => {
-    const shell = document.querySelector('.cvd-messenger-center');
-    return shell ? { present: true, width: shell.clientWidth, scrollWidth: shell.scrollWidth } : { present: false, width: 0, scrollWidth: 0 };
+    const center = document.getElementById('entregas');
+    return center ? { present: true, width: center.clientWidth, scrollWidth: center.scrollWidth } : { present: false, width: 0, scrollWidth: 0 };
   });
   expect(layout.present).toBeTruthy();
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width + 1);
