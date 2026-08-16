@@ -160,3 +160,30 @@ devuelve éxito sin repetir efectos. Push y reputación continúan post-commit.
 Los fallos internos de ledger, comisión o WooCommerce devuelven
 `SIDE_EFFECT_FAILED` y dejan `cash_returned/payment=returned`. Cancelaciones,
 refunds, ledger void, payout e incidencias siguen fuera del catálogo de 1C.3.
+
+## Extensión 1C.4
+
+Las incidencias nuevas son aditivas: `_cvd_{operation|delivery}_incident_active`
+indica actividad y `_cvd_*_incident_stage` conserva la etapa demostrada. El metadato
+de estado no se sustituye por `incident`. `open_incident()` y `resolve_incident()`
+usan el mismo `cvd_transition_{order_id}`, receipt, transacción e event store. El
+historial legacy conserva entradas `etapa → incident → etapa` marcadas como dimensión,
+pero la etapa persistida continúa siendo la original.
+
+Un pedido legacy cuyo estado sí es `incident` solo puede resolverse si la última
+entrada de su historial demuestra exactamente `etapa → incident`. Si esa entrada fue
+truncada, el servicio devuelve `CONFLICT` y no escribe una etapa supuesta. El lector
+canónico acepta simultáneamente el formato aditivo y el formato legacy.
+
+`cancel()` es la autoridad de la cascada WooCommerce `cancelled`, `refunded` y
+`failed`. Bajo el lock y una transacción única escribe operation/delivery cancelled,
+earning cancelled, comisión cancelled, void de un ledger todavía `available`,
+eventos y receipt. Los tres estados WooCommerce no se normalizan: el estado WC
+original se conserva en el pedido y en metadata de eventos. `delivery=failed` no
+invoca esta API y continúa significando únicamente entrega logística fallida.
+
+Los hooks de ventas, delivery y comisión son adaptadores idempotentes de la misma
+autoridad. Un guard de reentrada evita el ciclo Casa Viva → WooCommerce → hook Casa
+Viva. Un ledger `reserved` o `paid`, o un pedido ya `closed/verified`, produce
+`CONFLICT`: 1C.4 no inventa reversión de liquidaciones. Stock queda exclusivamente
+bajo los hooks normales de WooCommerce; el servicio no reduce ni repone inventario.

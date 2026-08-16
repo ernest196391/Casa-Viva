@@ -12,6 +12,8 @@ final class CVD_Order_Transition_Service {
 	public const ORDER_NOT_FOUND = 'ORDER_NOT_FOUND';
 	public const SIDE_EFFECT_FAILED = 'SIDE_EFFECT_FAILED';
 	private const RECEIPTS_META = '_cvd_transition_receipts';
+	private const INCIDENT_ACTIVE_SUFFIX = '_incident_active';
+	private static array $cancellation_in_progress=array();
 	private const OPERATION_TRANSITIONS = array(
 		'new'=>array('preparing','incident'), 'confirmed'=>array('preparing','incident'),
 		'preparing'=>array('ready','incident'), 'incident'=>array('confirmed','preparing','ready'),
@@ -27,6 +29,72 @@ final class CVD_Order_Transition_Service {
 	public static function governs( string $domain, string $from, string $to ): bool {
 		$map = 'operation' === $domain ? self::OPERATION_TRANSITIONS : ( 'delivery' === $domain ? self::DELIVERY_TRANSITIONS : array() );
 		return in_array( $to, $map[$from] ?? array(), true );
+	}
+
+	/** Abre una incidencia sin sustituir la etapa logística u operativa. */
+	public static function open_incident( int $order_id, string $affected_domain, array $context=array() ): array {
+		return self::incident($order_id,$affected_domain,true,$context);
+	}
+
+	/** Resuelve hacia la misma etapa demostrada; nunca adivina un origen legacy. */
+	public static function resolve_incident( int $order_id, string $affected_domain, array $context=array() ): array {
+		return self::incident($order_id,$affected_domain,false,$context);
+	}
+
+	/** Cascada única para estados terminales WooCommerce. */
+	public static function cancel( int $order_id, string $woocommerce_status, array $context=array() ): array {
+		$woocommerce_status=sanitize_key($woocommerce_status);
+		if(!in_array($woocommerce_status,array('cancelled','refunded','failed'),true)){return self::failure(self::INVALID_TRANSITION);}
+		$order=wc_get_order($order_id);if(!$order){return self::failure(self::ORDER_NOT_FOUND);}if(!empty(self::$cancellation_in_progress[$order_id])){return self::success('',$woocommerce_status,'',true,self::ALREADY_APPLIED);}
+		$actor_id=array_key_exists('actor_user_id',$context)?absint($context['actor_user_id']):get_current_user_id();
+		$actor=$actor_id?get_userdata($actor_id):null;
+		if(empty($context['system'])&&(!$actor||!user_can($actor,'manage_woocommerce'))){return self::failure(self::UNAUTHORIZED);}
+		$idempotency_key=trim((string)($context['idempotency_key']??('woocommerce:'.$order_id.':'.$woocommerce_status)));
+		$hash=hash('sha256',$idempotency_key);$receipt=self::receipts($order)[$hash]??null;
+		if(is_array($receipt)){return self::replay($receipt,'cancellation',$woocommerce_status);}
+		global $wpdb;$lock_key='cvd_transition_'.$order_id;if(!self::acquire_lock($wpdb,$lock_key)){return self::failure(self::CONFLICT);}
+		$started=false;
+		try{
+			$order=self::fresh_order($order_id);$receipts=self::receipts($order);if(isset($receipts[$hash])){return self::replay($receipts[$hash],'cancellation',$woocommerce_status);}
+			$delivery=self::state($order,'delivery');$operation=self::state($order,'operation');
+			if('closed'===$delivery||'verified'===sanitize_key((string)$order->get_meta('_cvd_cash_status',true))){return self::failure(self::CONFLICT,$delivery);}
+			if(class_exists('CVD_Messenger_Accounting')&&!CVD_Messenger_Accounting::can_void_order($order)){return self::failure(self::CONFLICT,$delivery);}
+			$wpdb->query('START TRANSACTION');$started=true;$at=current_time('mysql',true);$anchor=$idempotency_key;
+			if('cancelled'!==$operation){self::write_state_and_history($order,'operation',$operation,'cancelled',$actor_id,$at,$anchor.':operation',array('suppress_note'=>true));}self::maybe_fail_cancellation($context,'after_operation');
+			if('cancelled'!==$delivery){self::write_state_and_history($order,'delivery',$delivery,'cancelled',$actor_id,$at,$anchor.':delivery',array('reason'=>'woocommerce_'.$woocommerce_status));}self::maybe_fail_cancellation($context,'after_delivery');
+			$order->update_meta_data('_cvd_messenger_earning_status','cancelled');
+			self::maybe_fail_cancellation($context,'before_commission');$events=array();if(class_exists('CVD_Commissions')){$commission=CVD_Commissions::cancel_for_order($order,$actor_id,$at,$anchor.':commission');if($commission){$events[]=$commission;}}
+			if(class_exists('CVD_Messenger_Accounting')){CVD_Messenger_Accounting::void_order_atomic($order);}self::maybe_fail_cancellation($context,'after_ledger');
+			if(!$order->has_status($woocommerce_status)){self::$cancellation_in_progress[$order_id]=true;$order->set_status($woocommerce_status,'Estado sincronizado por Casa Viva.');}self::maybe_fail_cancellation($context,'during_woocommerce');
+			$order->save();
+			$primary='';
+			foreach(array(array('operation',$operation,'cancelled'),array('delivery',$delivery,'cancelled')) as $index=>$change){if($change[1]===$change[2]){continue;}$event=self::record_event($order_id,$change[0].'.state_changed',$change[0],$change[1],$change[2],$actor,$actor_id,$at,'cvd_order_transition_service',array('centralized'=>true,'woocommerce_status'=>$woocommerce_status),$anchor.':'.$index);if(!$primary){$primary=(string)$event['event_id'];}}
+			foreach($events as $index=>$extra){self::record_event($order_id,$extra['domain'].'.state_changed',$extra['domain'],$extra['from'],$extra['to'],$actor,$actor_id,$at,'cvd_order_transition_service',array('centralized'=>true,'woocommerce_status'=>$woocommerce_status),$anchor.':extra:'.$index);}
+			$receipts[$hash]=array('domain'=>'cancellation','from'=>$operation,'to'=>$woocommerce_status,'event_id'=>$primary);$order->update_meta_data(self::RECEIPTS_META,array_slice($receipts,-50,null,true));$order->save();
+			$wpdb->query('COMMIT');$started=false;
+			if(class_exists('CVD_Live_Tracking')){CVD_Live_Tracking::reverse_cancelled_rating($order);}
+			return self::success($operation,$woocommerce_status,$primary);
+		}catch(Throwable $error){if($started){$wpdb->query('ROLLBACK');}return self::failure(self::SIDE_EFFECT_FAILED);}
+		finally{unset(self::$cancellation_in_progress[$order_id]);self::release_lock($wpdb,$lock_key);}
+	}
+	private static function maybe_fail_cancellation(array $context,string $stage):void{if($stage===(string)($context['failure_stage']??'')){throw new RuntimeException('cancellation_failure_'.$stage);}}
+
+	private static function incident(int $order_id,string $domain,bool $opening,array $context):array{
+		$domain=sanitize_key($domain);if(!in_array($domain,array('operation','delivery'),true)){return self::failure(self::INVALID_TRANSITION);}
+		$order=wc_get_order($order_id);if(!$order){return self::failure(self::ORDER_NOT_FOUND);}$actor_id=array_key_exists('actor_user_id',$context)?absint($context['actor_user_id']):get_current_user_id();$actor=$actor_id?get_userdata($actor_id):null;if(!$actor){return self::failure(self::UNAUTHORIZED);}
+		$note=sanitize_textarea_field((string)($context['note']??''));if('delivery'===$domain&&$opening&&''===trim($note)){return self::failure(self::PRECONDITION_FAILED);}
+		$idempotency_key=trim((string)($context['idempotency_key']??''));$hash=$idempotency_key?hash('sha256',$idempotency_key):'';$receipt=$hash?(self::receipts($order)[$hash]??null):null;$target=$opening?'open':'resolved';if(is_array($receipt)){return self::replay($receipt,'incident.'.$domain,$target);}
+		global $wpdb;$lock_key='cvd_transition_'.$order_id;if(!self::acquire_lock($wpdb,$lock_key)){return self::failure(self::CONFLICT);}$started=false;
+		try{$order=self::fresh_order($order_id);$active='yes'===$order->get_meta('_cvd_'.$domain.self::INCIDENT_ACTIVE_SUFFIX,true);$stage=self::state($order,$domain);$legacy='incident'===$stage;
+			if(!$opening&&!$active&&$legacy){$stage=self::legacy_incident_stage($order,$domain);if(!$stage){return self::failure(self::CONFLICT,'incident');}}
+			if($opening&&($active||$legacy)){return self::success($stage,$stage,'',true,self::ALREADY_APPLIED);}if(!$opening&&!$active&&!$legacy){return self::success($stage,$stage,'',true,self::ALREADY_APPLIED);}
+			if(!self::incident_authorized($order,$domain,$stage,$opening,$actor)){return self::failure(self::UNAUTHORIZED,$stage);}
+			$receipts=self::receipts($order);if($hash&&isset($receipts[$hash])){return self::replay($receipts[$hash],'incident.'.$domain,$target);}$wpdb->query('START TRANSACTION');$started=true;$at=current_time('mysql',true);$anchor=$idempotency_key?:wp_generate_uuid4();
+			if($opening){$order->update_meta_data('_cvd_'.$domain.self::INCIDENT_ACTIVE_SUFFIX,'yes');$order->update_meta_data('_cvd_'.$domain.'_incident_stage',$stage);$order->update_meta_data('_cvd_'.$domain.'_incident_opened_at',$at);$order->update_meta_data('_cvd_'.$domain.'_incident_opened_by',$actor_id);$order->update_meta_data('_cvd_'.$domain.'_incident_note',$note);self::append_incident_history($order,$domain,$stage,'incident',$actor_id,$at,$anchor,$note);}
+			else{$preserved=sanitize_key((string)$order->get_meta('_cvd_'.$domain.'_incident_stage',true))?:$stage;if($legacy){$key='operation'===$domain?'_cvd_operation_status':'_cvd_delivery_status';$order->update_meta_data($key,$preserved);} $order->update_meta_data('_cvd_'.$domain.self::INCIDENT_ACTIVE_SUFFIX,'no');$order->update_meta_data('_cvd_'.$domain.'_incident_resolved_at',$at);$order->update_meta_data('_cvd_'.$domain.'_incident_resolved_by',$actor_id);self::append_incident_history($order,$domain,'incident',$preserved,$actor_id,$at,$anchor,$note);$stage=$preserved;}
+			$order->save();$event=self::record_event($order_id,$opening?'incident.opened':'incident.resolved','incident',$opening?$stage:'incident',$opening?'incident':$stage,$actor,$actor_id,$at,'cvd_order_transition_service',array('centralized'=>true,'affected_domain'=>$domain,'preserved_stage'=>$stage,'note'=>$note),$anchor);
+			if($hash){$receipts[$hash]=array('domain'=>'incident.'.$domain,'from'=>$stage,'to'=>$target,'event_id'=>$event['event_id']);$order->update_meta_data(self::RECEIPTS_META,array_slice($receipts,-50,null,true));$order->save();}$wpdb->query('COMMIT');$started=false;return self::success($stage,$stage,(string)$event['event_id']);
+		}catch(Throwable $error){if($started){$wpdb->query('ROLLBACK');}return self::failure(self::SIDE_EFFECT_FAILED);}finally{self::release_lock($wpdb,$lock_key);}
 	}
 
 	/**
@@ -104,6 +172,20 @@ final class CVD_Order_Transition_Service {
 		$is_assigned=$actor->ID===absint($order->get_meta('_cvd_messenger_user_id',true)); $is_messenger=in_array('cvd_messenger',(array)$actor->roles,true);
 		if('accepted'===$to&&'offered'===$from){return $is_messenger;}
 		return $is_admin||($is_messenger&&$is_assigned);
+	}
+	private static function incident_authorized(WC_Order $order,string $domain,string $stage,bool $opening,WP_User $actor):bool{
+		$is_admin=user_can($actor,'manage_woocommerce');$is_staff=user_can($actor,'cvd_manage_sales');if('operation'===$domain){return $is_admin||$is_staff;}
+		$is_messenger=in_array('cvd_messenger',(array)$actor->roles,true)&&$actor->ID===absint($order->get_meta('_cvd_messenger_user_id',true));
+		if($is_admin){return true;}if($is_staff){return $opening||in_array($stage,array('unassigned','offered','accepted','to_store','picked_up','delivered','cash_returned'),true);}return $is_messenger;
+	}
+	private static function legacy_incident_stage(WC_Order $order,string $domain):string{
+		$key='operation'===$domain?'_cvd_operation_history':'_cvd_delivery_history';$history=$order->get_meta($key,true);if(!is_array($history)||!$history){return '';}$last=end($history);if(!is_array($last)||'incident'!==sanitize_key((string)($last['to']??''))){return '';}$from=sanitize_key((string)($last['from']??''));$catalog='operation'===$domain?array('new','confirmed','preparing','ready','with_courier'):array('unassigned','offered','assigned','accepted','to_store','picked_up','handed_over','delivered','cash_returned','failed','returned');return in_array($from,$catalog,true)?$from:'';
+	}
+	private static function append_incident_history(WC_Order $order,string $domain,string $from,string $to,int $actor_id,string $at,string $anchor,string $note):void{
+		$key='operation'===$domain?'_cvd_operation_history':'_cvd_delivery_history';$history=$order->get_meta($key,true);$history=is_array($history)?$history:array();$entry='operation'===$domain?array('from'=>$from,'to'=>$to,'user_id'=>$actor_id,'at'=>$at,'event_anchor'=>$anchor,'incident_dimension'=>true):array('from'=>$from,'to'=>$to,'actor_user_id'=>$actor_id,'at'=>$at,'data'=>array('_canonical_event_anchor'=>$anchor,'note'=>$note,'incident_dimension'=>true));$history[]=$entry;$order->update_meta_data($key,array_slice($history,'operation'===$domain?-100:-150));$order->add_order_note(($opening='incident'===$to)?'Incidencia abierta sin alterar la etapa '.$from.'.':'Incidencia resuelta; continúa en '.$to.'.');
+	}
+	private static function record_event(int $order_id,string $type,string $domain,string $from,string $to,$actor,int $actor_id,string $at,string $source,array $metadata,string $anchor):array{
+		$event=CVD_Order_Events::record(array('order_id'=>$order_id,'event_type'=>$type,'domain'=>$domain,'from_state'=>$from,'to_state'=>$to,'actor_user_id'=>$actor_id,'actor_role'=>$actor instanceof WP_User?self::actor_role($actor):'system','timestamp'=>$at,'source'=>$source,'metadata'=>$metadata,'idempotency_key'=>CVD_Order_Events::transition_key($order_id,$domain,$from,$to,$source,$anchor)));if(empty($event['created'])){throw new RuntimeException('canonical_event_not_created');}return $event;
 	}
 
 	private static function write_state_and_history(WC_Order $order,string $domain,string $from,string $to,int $actor_id,string $at,string $anchor,array $metadata):void{

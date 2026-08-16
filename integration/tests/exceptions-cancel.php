@@ -1,0 +1,2 @@
+<?php
+if(!defined('ABSPATH')){exit(1);}$f=get_option('cvt_exceptions_fixture');wp_set_current_user(absint($f['admin_id']));$result=CVD_Order_Transition_Service::cancel(absint($f['race']),'cancelled',array('actor_user_id'=>absint($f['admin_id']),'idempotency_key'=>'exceptions-race-cancel'));if(empty($result['success'])&&CVD_Order_Transition_Service::CONFLICT!==$result['error_code']){throw new RuntimeException('Resultado inseguro de cancelación concurrente');}echo wp_json_encode($result).PHP_EOL;

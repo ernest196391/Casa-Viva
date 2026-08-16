@@ -152,6 +152,19 @@ Cada llamada `delivery` se ejecuta en un proceso WP-CLI independiente porque el 
   transacción vuelve a `cash_returned/payment=returned`, comisión pendiente,
   WooCommerce processing y cero ledger.
 
+### Fase 1C.4
+
+- abre y resuelve una incidencia logística manteniendo `delivery=handed_over`, con
+  un solo `incident.opened` y un solo `incident.resolved`;
+- conserva sin resolver un pedido legacy `delivery=incident` cuyo evento de entrada
+  fue truncado;
+- ejecuta cancelaciones en `unassigned`, `offered` y `assigned`, además de
+  WooCommerce `refunded` y `failed`, conservando cada estado WooCommerce;
+- dos procesos compiten por la misma cancelación y se comprueban una sola cascada,
+  receipts y eventos exactly-once directamente en MariaDB;
+- valida operation/delivery/commission/earning cancelados y mantiene separado
+  `delivery=failed` de `WooCommerce=failed`.
+
 ## Clasificación de pruebas
 
 - `artifacts/tests/test-canonical-*.php`: **unit tests**, sin WordPress.
