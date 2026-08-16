@@ -8,21 +8,28 @@ final class CVD_Customer_Orders {
 	public static function register(): void {
 		remove_action( 'woocommerce_account_orders_endpoint', 'woocommerce_account_orders', 10 );
 		add_action( 'woocommerce_account_orders_endpoint', array( __CLASS__, 'render' ), 10 );
+		remove_action( 'woocommerce_account_view-order_endpoint', 'woocommerce_account_view_order', 10 );
+		add_action( 'woocommerce_account_view-order_endpoint', array( __CLASS__, 'render_detail' ), 10 );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 35 );
 	}
 
 	public static function assets(): void {
-		if ( function_exists( 'is_account_page' ) && is_account_page() && function_exists( 'is_wc_endpoint_url' ) && is_wc_endpoint_url( 'orders' ) ) {
+		if ( function_exists( 'is_account_page' ) && is_account_page() && function_exists( 'is_wc_endpoint_url' ) && ( is_wc_endpoint_url( 'orders' ) || is_wc_endpoint_url( 'view-order' ) ) ) {
 			wp_enqueue_style( 'cvd-customer-orders', CVD_URL . 'assets/customer-orders.css', array(), CVD_VERSION );
 		}
 	}
 
-	private static function canonical_stage( WC_Order $order ): string {
+	private static function canonical_state( WC_Order $order ): array {
 		if ( class_exists( 'CVD_Canonical_Order_Reader' ) ) {
 			$state = CVD_Canonical_Order_Reader::read( $order );
-			return (string) ( $state['canonical_stage'] ?? '' );
+			return is_array( $state ) ? $state : array();
 		}
-		return '';
+		return array();
+	}
+
+	private static function canonical_stage( WC_Order $order ): string {
+		$state = self::canonical_state( $order );
+		return (string) ( $state['canonical_stage'] ?? '' );
 	}
 
 	private static function is_terminal( WC_Order $order ): bool {
@@ -33,7 +40,7 @@ final class CVD_Customer_Orders {
 		return $order->has_status( array( 'completed', 'cancelled', 'refunded', 'failed' ) );
 	}
 
-	private static function customer_stage( WC_Order $order ): string {
+	private static function stage_label( string $stage, string $fallback = '' ): string {
 		$labels = array(
 			'CREATED' => 'Pedido recibido', 'CONFIRMED' => 'Pedido confirmado', 'PREPARING' => 'Preparando pedido',
 			'READY_FOR_COURIER' => 'Listo para mensajería', 'READY_FOR_PICKUP' => 'Listo para recoger',
@@ -42,8 +49,12 @@ final class CVD_Customer_Orders {
 			'PAYMENT_RECONCILED' => 'Entrega conciliada', 'COMPLETED' => 'Completado', 'CANCELLED' => 'Cancelado',
 			'DELIVERY_FAILED' => 'Entrega no completada', 'CONFLICT' => 'En revisión',
 		);
+		return $labels[ $stage ] ?? $fallback;
+	}
+
+	private static function customer_stage( WC_Order $order ): string {
 		$stage = self::canonical_stage( $order );
-		return $labels[ $stage ] ?? wc_get_order_status_name( $order->get_status() );
+		return self::stage_label( $stage, wc_get_order_status_name( $order->get_status() ) );
 	}
 
 	private static function fulfillment_label( WC_Order $order ): string {
@@ -60,6 +71,40 @@ final class CVD_Customer_Orders {
 			<a class="cvd-customer-order-card__action" href="<?php echo esc_url( $url ); ?>"><?php echo esc_html( $active ? 'Ver pedido' : 'Ver detalles' ); ?></a>
 		</article>
 		<?php return (string) ob_get_clean();
+	}
+
+	private static function customer_timeline( WC_Order $order ): array {
+		if ( ! class_exists( 'CVD_Order_Event_Timeline' ) ) { return array(); }
+		try {
+			$timeline = CVD_Order_Event_Timeline::for_wc_order( $order, 1, 50 );
+		} catch ( Throwable $error ) {
+			return array();
+		}
+		$events = array();
+		$allowed_domains = array( 'order', 'operation', 'delivery', 'incident' );
+		foreach ( (array) ( $timeline['events'] ?? array() ) as $event ) {
+			$domain = (string) ( $event['domain'] ?? '' );
+			if ( ! in_array( $domain, $allowed_domains, true ) ) { continue; }
+			$to = strtoupper( (string) ( $event['to_state'] ?? '' ) );
+			$label = self::stage_label( $to );
+			if ( ! $label ) {
+				$legacy_map = array(
+					'NEW' => 'Pedido recibido', 'CONFIRMED' => 'Pedido confirmado', 'PREPARING' => 'Preparando pedido', 'READY' => 'Listo para mensajería',
+					'OFFERED' => 'Buscando mensajero', 'ASSIGNED' => 'Mensajero asignado', 'ACCEPTED' => 'Mensajero asignado', 'TO_STORE' => 'Mensajero va a recoger',
+					'PICKED_UP' => 'Pedido recogido', 'HANDED_OVER' => 'En camino', 'DELIVERED' => 'Entregado', 'CLOSED' => 'Completado',
+					'CANCELLED' => 'Cancelado', 'FAILED' => 'Entrega no completada', 'RETURNED' => 'Entrega no completada', 'INCIDENT' => 'Pedido en revisión',
+				);
+				$label = $legacy_map[ $to ] ?? '';
+			}
+			if ( ! $label ) { continue; }
+			$events[] = array( 'label' => $label, 'timestamp' => (string) ( $event['timestamp'] ?? '' ) );
+		}
+		$deduped = array();
+		foreach ( $events as $event ) {
+			$key = $event['label'] . '|' . $event['timestamp'];
+			$deduped[ $key ] = $event;
+		}
+		return array_slice( array_values( $deduped ), -8 );
 	}
 
 	public static function active_count(): int {
@@ -90,5 +135,36 @@ final class CVD_Customer_Orders {
 		echo '</section><section class="cvd-customer-orders__section"><div class="cvd-customer-orders__section-title"><h3>Terminados</h3><span>' . esc_html( (string) count( $finished ) ) . '</span></div>';
 		if ( $finished ) { foreach ( $finished as $order ) { echo self::card( $order, false ); } } else { echo '<p class="cvd-customer-orders__empty">Aquí aparecerán tus pedidos terminados.</p>'; }
 		echo '</section></div>';
+	}
+
+	public static function render_detail( $order_id ): void {
+		$order = wc_get_order( absint( $order_id ) );
+		if ( ! $order instanceof WC_Order || (int) $order->get_customer_id() !== get_current_user_id() ) {
+			wc_print_notice( 'No pudimos encontrar ese pedido en tu cuenta.', 'error' );
+			return;
+		}
+		$date = $order->get_date_created();
+		$state = self::canonical_state( $order );
+		$stage = (string) ( $state['canonical_stage'] ?? '' );
+		$timeline = self::customer_timeline( $order );
+		$orders_url = wc_get_account_endpoint_url( 'orders' );
+		?>
+		<div class="cvd-customer-order-detail" data-cvd-customer-order-detail="<?php echo esc_attr( (string) $order->get_id() ); ?>">
+			<a class="cvd-customer-order-detail__back" href="<?php echo esc_url( $orders_url ); ?>">← Mis pedidos</a>
+			<header class="cvd-customer-order-detail__hero">
+				<div><p>Pedido #<?php echo esc_html( (string) $order->get_order_number() ); ?></p><h2><?php echo esc_html( self::stage_label( $stage, self::customer_stage( $order ) ) ); ?></h2><span><?php echo esc_html( $date ? wc_format_datetime( $date, 'j M Y · H:i' ) : '' ); ?></span></div>
+				<strong><?php echo wp_kses_post( $order->get_formatted_order_total() ); ?></strong>
+			</header>
+			<section class="cvd-customer-order-detail__card"><h3>Tu compra</h3><div class="cvd-customer-order-detail__items">
+			<?php foreach ( $order->get_items() as $item ) : $product = $item->get_product(); ?>
+				<div class="cvd-customer-order-detail__item"><div><?php echo $product ? $product->get_image( 'woocommerce_thumbnail' ) : ''; ?></div><p><strong><?php echo esc_html( $item->get_name() ); ?></strong><span>Cantidad: <?php echo esc_html( (string) $item->get_quantity() ); ?></span></p><b><?php echo wp_kses_post( $order->get_formatted_line_subtotal( $item ) ); ?></b></div>
+			<?php endforeach; ?>
+			</div></section>
+			<section class="cvd-customer-order-detail__card"><h3>Entrega</h3><div class="cvd-customer-order-detail__delivery"><strong><?php echo esc_html( self::fulfillment_label( $order ) ); ?></strong><?php if ( 'pickup' !== (string) $order->get_meta( '_cvd_fulfillment_type', true ) && $order->get_formatted_shipping_address() ) : ?><p><?php echo wp_kses_post( $order->get_formatted_shipping_address() ); ?></p><?php endif; ?></div></section>
+			<section class="cvd-customer-order-detail__card"><h3>Seguimiento</h3>
+			<?php if ( $timeline ) : ?><ol class="cvd-customer-order-detail__timeline"><?php foreach ( $timeline as $index => $event ) : ?><li class="<?php echo $index === array_key_last( $timeline ) ? 'is-current' : ''; ?>"><i></i><div><strong><?php echo esc_html( $event['label'] ); ?></strong><?php if ( $event['timestamp'] ) : ?><span><?php echo esc_html( wp_date( 'j M · H:i', strtotime( $event['timestamp'] . ' UTC' ) ) ); ?></span><?php endif; ?></div></li><?php endforeach; ?></ol><?php else : ?><p class="cvd-customer-order-detail__quiet">Estamos preparando la información de seguimiento.</p><?php endif; ?>
+			</section>
+		</div>
+		<?php
 	}
 }
