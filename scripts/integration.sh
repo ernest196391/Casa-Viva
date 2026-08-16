@@ -101,6 +101,16 @@ case "$command_name" in
 	wp eval-file /var/www/html/integration-tests/order-center.php
 	wp eval-file /var/www/html/integration-tests/gestora-attribution-4a.php
 	wp eval-file /var/www/html/integration-tests/gestora-commissions-4b.php
+	wp eval-file /var/www/html/integration-tests/gestora-payout-bootstrap-4c.php
+	wp eval-file /var/www/html/integration-tests/gestora-payout-request-4c.php & first_payout_request_pid=$!
+	wp eval-file /var/www/html/integration-tests/gestora-payout-request-4c.php & second_payout_request_pid=$!
+	wait "$first_payout_request_pid" "$second_payout_request_pid"
+	wp eval-file /var/www/html/integration-tests/gestora-payout-prepare-4c.php
+	wp eval-file /var/www/html/integration-tests/gestora-payout-terminal-4c.php pay & payout_pay_pid=$!
+	wp eval-file /var/www/html/integration-tests/gestora-payout-terminal-4c.php reject & payout_reject_pid=$!
+	wait "$payout_pay_pid" "$payout_reject_pid"
+	wp eval-file /var/www/html/integration-tests/gestora-payout-verify-4c.php
+	wp eval-file /var/www/html/integration-tests/gestora-payout-rollback-4c.php
 	concurrent_sql="INSERT IGNORE INTO cvt_cvd_order_events (event_id,idempotency_key,order_id,event_type,domain,from_state,to_state,actor_user_id,actor_role,occurred_at,source,metadata,created_at) VALUES ('cv_evt_concurrency_probe','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',999998,'order.concurrent_probe','order','','',0,'system',UTC_TIMESTAMP(),'integration','{}',UTC_TIMESTAMP());"
 	"${compose[@]}" exec -T db mariadb -ucasa_viva_test -pcasa_viva_test_only casa_viva_test -e "$concurrent_sql" & first_pid=$!
 	"${compose[@]}" exec -T db mariadb -ucasa_viva_test -pcasa_viva_test_only casa_viva_test -e "$concurrent_sql" & second_pid=$!
