@@ -36,11 +36,36 @@ function assertNoInternalData(text) {
 }
 
 async function assertNoPageOverflow(page) {
-  const width = await page.evaluate(() => ({
-    scroll: document.documentElement.scrollWidth,
-    client: document.documentElement.clientWidth,
-  }));
-  expect(width.scroll).toBeLessThanOrEqual(width.client + 1);
+  const diagnosis = await page.evaluate(() => {
+    const client = document.documentElement.clientWidth;
+    const scroll = document.documentElement.scrollWidth;
+    const offenders = [...document.querySelectorAll('body *')]
+      .map((el) => {
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return {
+          tag: el.tagName.toLowerCase(),
+          id: el.id || '',
+          className: typeof el.className === 'string' ? el.className : '',
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          width: Math.round(rect.width),
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+          overflowX: style.overflowX,
+          text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 90),
+        };
+      })
+      .filter((item) => item.right > client + 1 || item.left < -1)
+      .sort((a, b) => b.right - a.right)
+      .slice(0, 20);
+    return { client, scroll, offenders };
+  });
+
+  expect(
+    diagnosis.scroll,
+    `Desbordamiento móvil. Elementos fuera del viewport: ${JSON.stringify(diagnosis.offenders)}`,
+  ).toBeLessThanOrEqual(diagnosis.client + 1);
 }
 
 async function assertFinancialMobileLabels(page) {
