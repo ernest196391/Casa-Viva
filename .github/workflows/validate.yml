@@ -42,6 +42,9 @@ jobs:
       - name: Validar contrato del Centro Operativo del Mensajero
         run: node artifacts/tests/test-messenger-center-2d.mjs
 
+      - name: Validar contrato de navegación móvil del cliente
+        run: node artifacts/tests/test-customer-navigation-3a.mjs
+
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
@@ -109,13 +112,15 @@ jobs:
           set -euo pipefail
           scripts/integration.sh up
           compose=(docker compose -f integration/compose.yml)
-          "${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/bootstrap.php >/dev/null
+          bootstrap_json="$("${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/bootstrap.php | tail -n 1)"
           fixture_json="$("${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/order-center-browser.php | tail -n 1)"
           messenger_json="$("${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/messenger-center-browser.php | tail -n 1)"
+          echo "$bootstrap_json" | jq -e . >/dev/null
           echo "$fixture_json" | jq -e . >/dev/null
           echo "$messenger_json" | jq -e . >/dev/null
           {
             echo "ORDER_CENTER_BASE_URL=http://localhost:8889"
+            echo "CUSTOMER_NAV_PRODUCT_ID=$(echo "$bootstrap_json" | jq -r .product_id)"
             echo "ORDER_CENTER_PAGE_ID=$(echo "$fixture_json" | jq -r .page_id)"
             echo "ORDER_CENTER_NEW_ID=$(echo "$fixture_json" | jq -r .new_id)"
             echo "ORDER_CENTER_READY_ID=$(echo "$fixture_json" | jq -r .ready_id)"
