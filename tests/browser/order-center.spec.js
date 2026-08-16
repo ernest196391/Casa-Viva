@@ -20,15 +20,16 @@ async function login(page, credentials) {
   await page.locator('#user_login').fill(credentials.user);
   await page.locator('#user_pass').fill(credentials.pass);
   await Promise.all([
-    page.waitForLoadState('domcontentloaded'),
+    page.waitForURL((url) => !url.pathname.includes('wp-login.php'), { timeout: 15000 }),
     page.locator('#wp-submit').click(),
   ]);
-  await expect(page.locator('#wpadminbar')).toBeVisible();
+  expect(new URL(page.url()).pathname).not.toContain('wp-login.php');
 }
 
 async function openOrder(page, id) {
   const response = await page.goto(`${baseURL}/centro-pedido/?order_id=${id}`, { waitUntil: 'domcontentloaded' });
   expect(response && response.ok()).toBeTruthy();
+  expect(new URL(page.url()).pathname).not.toContain('wp-login.php');
   await expect(page.locator('.cvd-oc-head')).toBeVisible({ timeout: 15000 });
   await expect(page.locator('.cvd-oc-stage')).not.toHaveText('');
   await expect(page.locator('.cvd-oc-card').filter({ hasText: 'Productos' })).toBeVisible();
