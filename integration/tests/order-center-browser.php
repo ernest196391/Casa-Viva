@@ -35,7 +35,7 @@ $make_order = static function ( string $operation, string $delivery ) use ( $fix
 	$order->set_address( array(
 		'first_name' => 'Cliente',
 		'last_name'  => 'Visual',
-		'phone'      => '0000000000',
+		'phone'      => '+5355550101',
 		'address_1'  => 'Dirección sintética',
 		'city'       => 'Zona sintética',
 		'country'    => 'CU',
@@ -43,6 +43,7 @@ $make_order = static function ( string $operation, string $delivery ) use ( $fix
 	$order->update_meta_data( '_cvd_fulfillment_type', 'delivery' );
 	$order->update_meta_data( '_cvd_operation_status', $operation );
 	$order->update_meta_data( '_cvd_delivery_status', $delivery );
+	$order->update_meta_data( '_cvd_location_url', 'https://maps.google.com/?q=23.1136,-82.3666' );
 	$order->update_meta_data( '_cvd_owner_user_id', absint( $fixture['gestora_id'] ) );
 	$order->update_meta_data( '_cvd_owner_type', 'gestora' );
 	$order->update_meta_data( 'gestora_nombre', 'Gestora sintética' );

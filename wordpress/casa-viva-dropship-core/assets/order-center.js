@@ -5,15 +5,23 @@
   var root = document.getElementById("cvd-order-center-root"), status = document.getElementById("cvd-order-center-status");
   var orderId = Number(app.dataset.orderId), timer = null, fingerprint = "";
   function esc(v) { var d=document.createElement("div"); d.textContent=v==null?"":String(v); return d.innerHTML; }
+  function safeHref(v) { var value=String(v||""); return /^(https?:\/\/|tel:)/i.test(value)?esc(value):""; }
   function api(method, body) { return fetch(cvdOrderCenter.url + orderId, {method:method,credentials:"same-origin",headers:{"Content-Type":"application/json","X-WP-Nonce":cvdOrderCenter.nonce,"X-CVD-Idempotency-Key":"center-"+orderId+"-"+Date.now()},body:body?JSON.stringify(body):undefined}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.message||"No se pudo actualizar.");return j;});}); }
   function card(title, body) { return '<section class="cvd-oc-card"><h2>'+esc(title)+'</h2>'+body+'</section>'; }
+  function contactActions(p) {
+    var actions=(p.customer&&p.customer.actions)||{}, links=[];
+    if(actions.whatsapp_url) links.push('<a class="cvd-oc-contact is-whatsapp" href="'+safeHref(actions.whatsapp_url)+'" target="_blank" rel="noopener noreferrer" data-contact="whatsapp">WhatsApp</a>');
+    if(actions.call_url) links.push('<a class="cvd-oc-contact" href="'+safeHref(actions.call_url)+'" data-contact="call">Llamar</a>');
+    if(actions.navigation_url) links.push('<a class="cvd-oc-contact" href="'+safeHref(actions.navigation_url)+'" target="_blank" rel="noopener noreferrer" data-contact="navigate">Navegar</a>');
+    return links.length?'<nav class="cvd-oc-contacts" aria-label="Acciones con el cliente">'+links.join('')+'</nav>':'';
+  }
   function render(p) {
     var action=p.available_actions.find(function(a){return !a.blocked;});
     var warning=p.consistency.level!=="OK"?'<div class="cvd-oc-alert is-'+esc(p.consistency.level.toLowerCase())+'">'+(p.consistency.review_required?'Revisión requerida':'Revisar coherencia del pedido')+'</div>':'';
     var items=p.items.map(function(i){return '<article class="cvd-oc-item">'+(i.image?'<img src="'+esc(i.image)+'" alt="">':'')+'<div><strong>'+esc(i.name)+'</strong><small>'+esc(i.variation)+'</small><span>'+i.quantity+' × '+esc(i.price)+'</span></div></article>';}).join("");
     var timeline=p.timeline.events.map(function(e){return '<li><strong>'+esc(e.to_state||e.event_type)+'</strong><span>'+esc(e.timestamp)+' · '+esc(e.actor_role)+'</span></li>';}).join("");
     root.innerHTML='<header class="cvd-oc-head"><div><small>Pedido</small><h1>#'+esc(p.order.number)+'</h1></div><span class="cvd-oc-stage">'+esc(p.canonical_stage)+'</span></header>'+warning+
-      '<div class="cvd-oc-grid">'+card('Cliente','<p><strong>'+esc(p.customer.name)+'</strong><br><a href="tel:'+esc(p.customer.phone)+'">'+esc(p.customer.phone)+'</a></p><p>'+esc(p.delivery.mode)+' · '+esc(p.delivery.address)+'</p>')+
+      '<div class="cvd-oc-grid">'+card('Cliente','<p><strong>'+esc(p.customer.name)+'</strong><br><a href="tel:'+esc(p.customer.phone)+'">'+esc(p.customer.phone)+'</a></p><p>'+esc(p.delivery.mode)+' · '+esc(p.delivery.address)+'</p>'+contactActions(p))+
       card('Productos',items)+card('Operación','<p>Etapa: <strong>'+esc(p.operation.status)+'</strong></p>')+
       card('Mensajería','<p>'+esc(p.delivery.status||'No iniciada')+'</p><p>Mensajero: '+esc(p.courier.name||'Sin asignar')+'</p><p>Tarifa: '+esc(p.pricing.shipping_cup)+' CUP</p>')+
       card('Dinero','<p>Estado: <strong>'+esc(p.payment.status)+'</strong></p><p>Método: '+esc(p.payment.method||'Sin registrar')+'</p>')+
