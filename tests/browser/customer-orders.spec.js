@@ -76,7 +76,12 @@ test('Detalle actualiza estado y ubicación sin recargar', async ({ page }) => {
   const detailHref = await active.getByRole('link', { name: 'Ver pedido' }).getAttribute('href');
   expect(detailHref).toBeTruthy();
 
-  await page.route('**/wp-json/casa-viva/v1/customer/orders/*/tracking', async (route) => {
+  const detailUrl = new URL(detailHref, baseURL).toString();
+  await page.goto(detailUrl, { waitUntil: 'domcontentloaded' });
+  const trackingUrl = await page.evaluate(() => window.cvdCustomerOrderLive && window.cvdCustomerOrderLive.url);
+  expect(trackingUrl).toBeTruthy();
+
+  await page.route(trackingUrl, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -95,7 +100,7 @@ test('Detalle actualiza estado y ubicación sin recargar', async ({ page }) => {
     });
   });
 
-  await page.goto(new URL(detailHref, baseURL).toString(), { waitUntil: 'domcontentloaded' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   const detail = page.locator(`[data-cvd-customer-order-detail="${activeId}"]`);
   await expect(detail.locator('[data-cvd-customer-stage]')).toHaveText('En camino');
   await expect(detail.locator('[data-cvd-live-status]')).toHaveText('En camino al cliente');
