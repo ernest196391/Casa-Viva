@@ -9,7 +9,7 @@ const checks = [
   ['usa lector canónico', /canonical_state/.test(orders) && /CVD_Canonical_Order_Reader::read/.test(orders)],
   ['reutiliza timeline canónico', /CVD_Order_Event_Timeline::for_wc_order/.test(orders)],
   ['filtra dominios internos', /allowed_domains/.test(orders) && !/allowed_domains[^;]+commission/.test(orders)],
-  ['muestra compra entrega seguimiento', />Tu compra</.test(orders) && />Entrega</.test(orders) && />Seguimiento</.test(orders)],
+  ['muestra compra entrega seguimiento', />Tu compra</.test(orders) && />Entrega</.test(orders) && />Seguimiento(?: del pedido)?</.test(orders)],
   ['mantiene URL real de pedidos', /wc_get_account_endpoint_url\( 'orders' \)/.test(orders)],
   ['no escribe estados', !/update_meta_data|set_status|save\(\)/.test(orders)],
   ['estilos mobile-first del detalle', /cvd-customer-order-detail/.test(css) && /@media\(max-width:820px\)/.test(css)],
