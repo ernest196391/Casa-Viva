@@ -41,3 +41,29 @@ test('Pedidos separa activos y terminados y abre el pedido', async ({ page }) =>
   const width = await center.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
   expect(width.scroll).toBeLessThanOrEqual(width.client + 1);
 });
+
+test('Detalle del pedido reúne compra, entrega y seguimiento sin datos internos', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page);
+  await page.goto(new URL(ordersRelative, baseURL).toString(), { waitUntil: 'domcontentloaded' });
+
+  const active = page.locator(`[data-cvd-customer-order="${activeId}"]`);
+  const detailHref = await active.getByRole('link', { name: 'Ver pedido' }).getAttribute('href');
+  expect(detailHref).toBeTruthy();
+  await page.goto(new URL(detailHref, baseURL).toString(), { waitUntil: 'domcontentloaded' });
+
+  const detail = page.locator(`[data-cvd-customer-order-detail="${activeId}"]`);
+  await expect(detail).toBeVisible();
+  await expect(detail.getByRole('heading', { name: 'Preparando pedido' })).toBeVisible();
+  await expect(detail.getByRole('heading', { name: 'Tu compra' })).toBeVisible();
+  await expect(detail.getByRole('heading', { name: 'Entrega' })).toBeVisible();
+  await expect(detail.getByRole('heading', { name: 'Seguimiento' })).toBeVisible();
+  await expect(detail).toContainText('Entrega a domicilio');
+  await expect(detail.getByRole('link', { name: '← Mis pedidos' })).toBeVisible();
+  await expect(detail).not.toContainText('commission');
+  await expect(detail).not.toContainText('actor_role');
+  await expect(detail).not.toContainText('idempotency');
+
+  const width = await detail.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+  expect(width.scroll).toBeLessThanOrEqual(width.client + 1);
+});
