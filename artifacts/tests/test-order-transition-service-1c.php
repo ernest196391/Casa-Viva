@@ -4,6 +4,7 @@ define( 'ABSPATH', __DIR__ );
 
 function absint( $value ): int { return abs( (int) $value ); }
 function sanitize_key( $value ): string { return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $value ) ); }
+function sanitize_textarea_field($value):string{return trim((string)$value);}
 function current_time( $type, $gmt = false ): string { return '2026-08-15 22:00:00'; }
 function wp_generate_uuid4(): string { static $i = 0; return 'uuid-' . ++$i; }
 function wp_json_encode( $value ): string { return json_encode( $value ); }
@@ -53,6 +54,9 @@ class CVT_WPDB {
 		return 1;
 	}
 }
+
+class CVD_Commissions{public static int $cancelled=0;public static function cancel_for_order($order,$actor,$at,$anchor){$from=sanitize_key((string)$order->get_meta('_cvd_commission_status',true))?:'pending';if('cancelled'===$from){return null;}$order->update_meta_data('_cvd_commission_status','cancelled');self::$cancelled++;return array('domain'=>'commission','from'=>$from,'to'=>'cancelled');}}
+class CVD_Messenger_Accounting{public static int $voided=0;public static bool $can_void=true;public static function can_void_order($order):bool{return self::$can_void;}public static function void_order_atomic($order):bool{$order->update_meta_data('_cvd_messenger_ledger_status','void');self::$voided++;return true;}}
 
 require_once __DIR__ . '/../../wordpress/casa-viva-dropship-core/includes/class-cvd-order-events.php';
 require_once __DIR__ . '/../../wordpress/casa-viva-dropship-core/includes/class-cvd-order-transition-service.php';
@@ -197,4 +201,25 @@ $order=cvt_reset();$order->meta['_cvd_delivery_status']='delivered';$order->meta
 $legacy_cash=CVD_Order_Transition_Service::transition(459,'delivery','cash_returned',array('actor_user_id'=>10,'idempotency_key'=>'legacy-cash','coupled_payment_state'=>'returned'));
 cvt_check($legacy_cash['success']&&'returned'===$order->get_meta('_cvd_cash_status',true),'pedido legacy sin payment puede reconciliarse sin migración masiva');
 
-echo "FASE 1C.3: pruebas unitarias completadas.\n";
+// Fase 1C.4: incidencia separada y cancelación coherente.
+$order=cvt_reset();$order->meta['_cvd_operation_status']='with_courier';$order->meta['_cvd_delivery_status']='handed_over';$order->meta['_cvd_messenger_user_id']=20;
+$opened=CVD_Order_Transition_Service::open_incident(459,'delivery',array('actor_user_id'=>20,'note'=>'No localiza al cliente','idempotency_key'=>'incident-open'));$opened_retry=CVD_Order_Transition_Service::open_incident(459,'delivery',array('actor_user_id'=>20,'note'=>'No localiza al cliente','idempotency_key'=>'incident-open'));
+cvt_check($opened['success']&&$opened_retry['idempotent_replay']&&'handed_over'===$order->get_meta('_cvd_delivery_status',true)&&'yes'===$order->get_meta('_cvd_delivery_incident_active',true),'incidencia abierta conserva etapa y replay');
+$resolved=CVD_Order_Transition_Service::resolve_incident(459,'delivery',array('actor_user_id'=>20,'idempotency_key'=>'incident-resolve'));$resolved_retry=CVD_Order_Transition_Service::resolve_incident(459,'delivery',array('actor_user_id'=>20,'idempotency_key'=>'incident-resolve'));
+cvt_check($resolved['success']&&$resolved_retry['idempotent_replay']&&'handed_over'===$order->get_meta('_cvd_delivery_status',true)&&'no'===$order->get_meta('_cvd_delivery_incident_active',true),'incidencia resuelta vuelve a etapa demostrada');
+$incident_events=CVD_Order_Event_Timeline::read(459,array('domain'=>'incident'),1,20)['events'];cvt_check(1===count(array_filter($incident_events,fn($e)=>'incident.opened'===$e['event_type']))&&1===count(array_filter($incident_events,fn($e)=>'incident.resolved'===$e['event_type'])),'eventos de incidencia exactly-once');
+
+$order=cvt_reset();$order->meta['_cvd_delivery_status']='incident';$order->meta['_cvd_delivery_history']=array(array('from'=>'picked_up','to'=>'handed_over'),array('from'=>'handed_over','to'=>'incident'));
+$legacy_incident=CVD_Order_Transition_Service::resolve_incident(459,'delivery',array('actor_user_id'=>11,'idempotency_key'=>'legacy-incident'));cvt_check($legacy_incident['success']&&'handed_over'===$order->get_meta('_cvd_delivery_status',true),'incidencia legacy con historial válido');
+$order=cvt_reset();$order->meta['_cvd_delivery_status']='incident';$order->meta['_cvd_delivery_history']=array(array('from'=>'accepted','to'=>'to_store'));
+$truncated=CVD_Order_Transition_Service::resolve_incident(459,'delivery',array('actor_user_id'=>11));cvt_check(!$truncated['success']&&CVD_Order_Transition_Service::CONFLICT===$truncated['error_code']&&'incident'===$order->get_meta('_cvd_delivery_status',true),'historial truncado no inventa etapa');
+
+$order=cvt_reset();$order->meta['_cvd_operation_status']='ready';$order->meta['_cvd_delivery_status']='offered';$order->meta['_cvd_commission_status']='pending';CVD_Commissions::$cancelled=0;CVD_Messenger_Accounting::$voided=0;
+$cancel=CVD_Order_Transition_Service::cancel(459,'cancelled',array('actor_user_id'=>11,'idempotency_key'=>'cancel-1'));$cancel_retry=CVD_Order_Transition_Service::cancel(459,'cancelled',array('actor_user_id'=>11,'idempotency_key'=>'cancel-1'));
+cvt_check($cancel['success']&&$cancel_retry['idempotent_replay']&&'cancelled'===$order->get_meta('_cvd_operation_status',true)&&'cancelled'===$order->get_meta('_cvd_delivery_status',true),'cancelación y replay coherentes');
+cvt_check(1===CVD_Commissions::$cancelled&&1===CVD_Messenger_Accounting::$voided&&'cancelled'===$order->get_meta('_cvd_commission_status',true)&&'void'===$order->get_meta('_cvd_messenger_ledger_status',true),'commission cancelled y ledger void exactly-once');
+$order=cvt_reset();$order->meta['_cvd_delivery_status']='closed';$order->meta['_cvd_cash_status']='verified';$blocked=CVD_Order_Transition_Service::cancel(459,'refunded',array('actor_user_id'=>11));cvt_check(!$blocked['success']&&CVD_Order_Transition_Service::CONFLICT===$blocked['error_code'],'cancelación versus closed produce CONFLICT');
+$order=cvt_reset();$order->meta['_cvd_operation_status']='ready';$order->meta['_cvd_delivery_status']='offered';$rollback_cancel=CVD_Order_Transition_Service::cancel(459,'cancelled',array('actor_user_id'=>11,'failure_stage'=>'after_ledger'));cvt_check(!$rollback_cancel['success']&&'ready'===$order->get_meta('_cvd_operation_status',true)&&'offered'===$order->get_meta('_cvd_delivery_status',true)&&'processing'===$order->get_status(),'rollback de cancelación no deja dominios parciales');
+$order=cvt_reset();$order->meta['_cvd_delivery_status']='failed';cvt_check('processing'===$order->get_status(),'delivery failed no equivale a WooCommerce failed');
+
+echo "FASE 1C.4: pruebas unitarias completadas.\n";

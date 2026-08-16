@@ -166,3 +166,34 @@ cobro de ventas (solo sus efectos financieros delegan al servicio), inicializaci
 ganancia, edición administrativa de comisión, payouts/liquidaciones, cancelaciones,
 refunds, void de ledger e incidencias. Las cancelaciones se dejan para 1C.4 porque hoy
 son una cascada de hooks separados entre operación, delivery, comisión y ledger.
+
+## Migración Fase 1C.4 — incidencias y excepciones
+
+| Escritor histórico | Transiciones/efectos centralizados | Estado 1C.4 |
+|---|---|---|
+| `CVD_Sales::change_status()` | abrir/resolver incidencia operativa | Wrapper; etapa preservada en metadata aditiva |
+| `CVD_Delivery::change_status()` | abrir/resolver incidencia logística | Wrapper; nota, actor, timestamps e historial conservados |
+| `CVD_Sales::sync_cancelled()` | Woo `cancelled|refunded|failed` → operation cancelled | Wrapper idempotente del servicio |
+| `CVD_Delivery::sync_cancelled()` | cascada → delivery/earning cancelled | Wrapper idempotente; ya no escribe por separado |
+| `CVD_Commissions::mark_cancelled()` | comisión → cancelled | Wrapper; mutación atómica `cancel_for_order()` |
+| `CVD_Messenger_Accounting::void_order()` | ledger `available → void` | Mutación atómica y replay seguro; `reserved|paid` bloquea la cascada |
+
+### Matriz real de cancelación
+
+| Origen | Actor / estado permitido observado | operation | delivery | comisión / earning / ledger | WooCommerce / stock | eventos y avisos |
+|---|---|---|---|---|---|---|
+| Centro de ventas → cancelled | admin `manage_woocommerce`; operación cancelable | `cancelled` | `cancelled` | comisión y earning canceladas; ledger available → void | WC `cancelled`; stock solo por Woo | eventos operation, delivery y commission; rating se invalida después |
+| Hook WC cancelled | sistema; estado WC ya cancelado | igual | igual | igual | conserva `cancelled`; hooks WC deciden stock | misma cascada/receipt, sin duplicados |
+| Hook WC refunded | sistema; reembolso WC | igual | igual | igual | conserva `refunded`; reglas WC de refund/stock intactas | metadata de evento conserva origen refunded |
+| Hook WC failed | sistema; fallo de pago/orden | `cancelled` | `cancelled` | comisión y earning canceladas; ledger available → void | conserva `failed`; no se convierte en delivery failed | metadata conserva origen failed |
+| delivery handed_over → failed | mensajero asignado/admin | no cambia (`with_courier`) | `failed` | no ejecuta cancelación contable global | WooCommerce no cambia; stock no cambia | solo `delivery.state_changed` |
+
+La diferencia histórica demostrada era que `failed` de WooCommerce solo cancelaba
+comisión y el lector proyectaba operación cancelada sin persistirla, dejando delivery
+activo. 1C.4 corrige esa incoherencia estructural mediante la misma cascada terminal,
+sin renombrar ni equiparar el resultado logístico `delivery=failed`.
+
+La edición administrativa de comisiones, desasignación manual, ampliación/rechazo de
+ofertas, payouts y settlements permanecen legacy. Cancelar un ledger ya reservado o
+pagado también queda pendiente de una regla financiera explícita: el servicio devuelve
+`CONFLICT` y no crea un asiento inverso artificial.

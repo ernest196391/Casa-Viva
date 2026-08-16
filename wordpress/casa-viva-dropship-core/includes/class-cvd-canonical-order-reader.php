@@ -30,6 +30,10 @@ final class CVD_Canonical_Order_Reader {
 				'messenger_user_id' => (int) $order->get_meta( '_cvd_messenger_user_id', true ),
 				'operation_history' => $order->get_meta( '_cvd_operation_history', true ),
 				'delivery_history'  => $order->get_meta( '_cvd_delivery_history', true ),
+				'operation_incident_active' => 'yes' === $order->get_meta('_cvd_operation_incident_active',true),
+				'delivery_incident_active' => 'yes' === $order->get_meta('_cvd_delivery_incident_active',true),
+				'operation_incident_stage' => (string)$order->get_meta('_cvd_operation_incident_stage',true),
+				'delivery_incident_stage' => (string)$order->get_meta('_cvd_delivery_incident_stage',true),
 			)
 		);
 	}
@@ -60,13 +64,15 @@ final class CVD_Canonical_Order_Reader {
 		$incident_sources = array();
 		$operation_effective = $raw['operation'];
 		$delivery_effective = $raw['delivery'];
+		if(!empty($facts['operation_incident_active'])){$incident_sources[]='operation';$preserved=self::key($facts['operation_incident_stage']??'');if($preserved&&in_array($preserved,self::OPERATION_STATES,true)&&'incident'!==$preserved){$operation_effective=$preserved;}else{self::reason($reasons,$severity,'WARNING','INCIDENT_OPERATION_STAGE_UNKNOWN','La incidencia operativa separada no conserva una etapa válida.');}}
+		if(!empty($facts['delivery_incident_active'])){$incident_sources[]='delivery';$preserved=self::key($facts['delivery_incident_stage']??'');if($preserved&&in_array($preserved,self::DELIVERY_STATES,true)&&'incident'!==$preserved){$delivery_effective=$preserved;}else{self::reason($reasons,$severity,'WARNING','INCIDENT_DELIVERY_STAGE_UNKNOWN','La incidencia logística separada no conserva una etapa válida.');}}
 		if ( 'incident' === $raw['operation'] ) {
-			$incident_sources[] = 'operation';
+			if(!in_array('operation',$incident_sources,true)){$incident_sources[] = 'operation';}
 			$operation_effective = self::previous_stage( $operation_history, 'incident', self::OPERATION_STATES );
 			if ( '' === $operation_effective ) { self::reason( $reasons, $severity, 'WARNING', 'INCIDENT_OPERATION_STAGE_UNKNOWN', 'La incidencia operativa no conserva una etapa previa recuperable.' ); }
 		}
 		if ( 'incident' === $raw['delivery'] ) {
-			$incident_sources[] = 'delivery';
+			if(!in_array('delivery',$incident_sources,true)){$incident_sources[] = 'delivery';}
 			$delivery_effective = self::previous_stage( $delivery_history, 'incident', self::DELIVERY_STATES );
 			if ( '' === $delivery_effective ) { self::reason( $reasons, $severity, 'WARNING', 'INCIDENT_DELIVERY_STAGE_UNKNOWN', 'La incidencia de mensajería no conserva una etapa previa recuperable.' ); }
 		}

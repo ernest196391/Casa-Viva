@@ -67,7 +67,15 @@ final class CVD_Commissions {
 	}
 
 	public static function mark_cancelled( int $order_id ): void {
+		if(class_exists('CVD_Order_Transition_Service')){CVD_Order_Transition_Service::cancel($order_id,sanitize_key((string)(wc_get_order($order_id)?wc_get_order($order_id)->get_status():'cancelled')),array('actor_user_id'=>get_current_user_id(),'system'=>true));return;}
 		self::store( $order_id, 'cancelled', true );
+	}
+
+	/** Mutación de comisión dentro de la cascada transaccional de cancelación. */
+	public static function cancel_for_order(WC_Order $order,int $actor_id,string $at,string $anchor):?array{
+		if(!absint($order->get_meta('_cvd_owner_user_id',true))||'organic'===sanitize_key((string)$order->get_meta('_cvd_owner_type',true))){return null;}
+		$current=sanitize_key((string)$order->get_meta('_cvd_commission_status',true))?:'pending';if('cancelled'===$current){return null;}
+		$order->update_meta_data('_cvd_commission_status','cancelled');$order->update_meta_data('_cvd_commission_updated_at',$at);$order->update_meta_data('comision_estado','cancelled');$history=$order->get_meta('_cvd_commission_history',true);$history=is_array($history)?$history:array();$history[]=array('from'=>$current,'to'=>'cancelled','user_id'=>$actor_id,'at'=>$at,'event_anchor'=>$anchor);$order->update_meta_data('_cvd_commission_history',array_slice($history,-50));$order->add_order_note(sprintf('Comisión Casa Viva: %s → cancelada.',$current));return array('domain'=>'commission','from'=>$current,'to'=>'cancelled');
 	}
 
 	public static function admin_order_fields( WC_Order $order ): void {

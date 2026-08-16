@@ -43,10 +43,16 @@ final class CVD_Messenger_Accounting {
 
 	/** Una cancelación nunca borra historia: anula solo un asiento aún no pagado. */
 	public static function void_order( WC_Order $order ): void {
-		global $wpdb;
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}cvd_messenger_ledger SET status='void' WHERE order_id=%d AND entry_type='earning' AND status='available'", $order->get_id() ) );
-		$order->update_meta_data( '_cvd_messenger_ledger_status', 'void' );
-		$order->save();
+		try{self::void_order_atomic($order);$order->save();}catch(Throwable $error){}
+	}
+
+	public static function can_void_order(WC_Order $order):bool{
+		global $wpdb;$status=$wpdb->get_var($wpdb->prepare("SELECT status FROM {$wpdb->prefix}cvd_messenger_ledger WHERE order_id=%d AND entry_type='earning'",$order->get_id()));return !in_array($status,array('reserved','paid'),true);
+	}
+
+	/** Anula exactamente una ganancia disponible dentro de la transacción central. */
+	public static function void_order_atomic(WC_Order $order):bool{
+		global $wpdb;if(!self::can_void_order($order)){throw new RuntimeException('settled_ledger_cannot_be_voided');}$changed=$wpdb->query($wpdb->prepare("UPDATE {$wpdb->prefix}cvd_messenger_ledger SET status='void' WHERE order_id=%d AND entry_type='earning' AND status='available'",$order->get_id()));if(false===$changed){throw new RuntimeException('ledger_void_failed');}$existing=(int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$wpdb->prefix}cvd_messenger_ledger WHERE order_id=%d AND entry_type='earning'",$order->get_id()));if($existing){$order->update_meta_data('_cvd_messenger_ledger_status','void');}return 1===(int)$changed;
 	}
 
 	public static function balances( int $messenger_id ): array {

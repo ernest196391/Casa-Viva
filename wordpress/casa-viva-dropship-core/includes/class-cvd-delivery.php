@@ -22,6 +22,7 @@ final class CVD_Delivery {
 		add_action( 'woocommerce_email_after_order_table', array( __CLASS__, 'render_email_tracking' ), 25, 4 );
 		add_action( 'woocommerce_order_status_cancelled', array( __CLASS__, 'sync_cancelled' ), 40 );
 		add_action( 'woocommerce_order_status_refunded', array( __CLASS__, 'sync_cancelled' ), 40 );
+		add_action( 'woocommerce_order_status_failed', array( __CLASS__, 'sync_cancelled' ), 40 );
 		add_action( 'cvd_expand_delivery_offer', array( __CLASS__, 'expand_offer' ) );
 	}
 
@@ -75,19 +76,7 @@ final class CVD_Delivery {
 	public static function sync_cancelled( int $order_id ): void {
 		$order = wc_get_order( $order_id );
 		if ( ! $order ) { return; }
-		$current = self::status( $order );
-		$cancel_event = null;
-		if ( 'cancelled' !== $current ) {
-			self::append_event( $order, $current, 'cancelled', array( 'reason' => 'woocommerce_order_cancelled' ) );
-			$history = $order->get_meta( '_cvd_delivery_history', true ); $cancel_event = is_array( $history ) ? end( $history ) : null;
-			$order->update_meta_data( '_cvd_delivery_status', 'cancelled' );
-			$order->update_meta_data( '_cvd_delivery_updated_at', current_time( 'mysql', true ) );
-		}
-		$order->update_meta_data( '_cvd_messenger_earning_status', 'cancelled' );
-		$order->save();
-		if ( $cancel_event ) { do_action( 'cvd_order_transition_observed', $order->get_id(), 'delivery', $current, 'cancelled', 'cvd_delivery_sync_cancelled', array( 'reason' => 'woocommerce_order_cancelled' ), (string) ( $cancel_event['data']['_canonical_event_anchor'] ?? $cancel_event['at'] ?? '' ) ); }
-		if ( class_exists( 'CVD_Messenger_Accounting' ) ) { CVD_Messenger_Accounting::void_order( $order ); }
-		if ( class_exists( 'CVD_Live_Tracking' ) ) { CVD_Live_Tracking::reverse_cancelled_rating( $order ); }
+		if(class_exists('CVD_Order_Transition_Service')){CVD_Order_Transition_Service::cancel($order_id,$order->get_status(),array('system'=>true,'source'=>'woocommerce_hook'));}
 	}
 
 	public static function initialize_order( WC_Order $order ): void {
@@ -316,6 +305,7 @@ final class CVD_Delivery {
 		}
 		$note = isset( $_POST['note'] ) ? sanitize_textarea_field( wp_unslash( $_POST['note'] ) ) : '';
 		if ( 'incident' === $next && '' === trim( $note ) ) { wp_die( 'Describe brevemente la incidencia para poder registrarla.' ); }
+		if(class_exists('CVD_Order_Transition_Service')&&('incident'===$next||'incident'===$current)){$key=sanitize_text_field((string)($_REQUEST['idempotency_key']??''));$result='incident'===$next?CVD_Order_Transition_Service::open_incident($order_id,'delivery',array('actor_user_id'=>$user->ID,'idempotency_key'=>$key,'note'=>$note)):CVD_Order_Transition_Service::resolve_incident($order_id,'delivery',array('actor_user_id'=>$user->ID,'idempotency_key'=>$key,'note'=>$note));if(empty($result['success'])||('incident'===$current&&$next!==$result['new_state'])){wp_die('No se pudo actualizar la incidencia sin inventar una etapa.');}$destination=in_array('cvd_messenger',(array)$user->roles,true)?'/area-mensajeros/':'/mensajeria/';wp_safe_redirect(home_url($destination.'?actualizado=1'));exit;}
 		if ( class_exists('CVD_Order_Transition_Service') && CVD_Order_Transition_Service::governs('delivery',$current,$next) ) {
 			$idempotency_key=sanitize_text_field((string)($_REQUEST['idempotency_key']??''))?:'delivery:'.$order_id.':'.$current.':'.$next;
 			$payment_target='delivered'===$next?'pending_return':('cash_returned'===$next?'returned':('closed'===$next?'verified':''));
@@ -433,7 +423,7 @@ final class CVD_Delivery {
 	}
 
 	public static function action_url( int $order_id, string $status ): string { return wp_nonce_url( admin_url( 'admin-post.php?action=cvd_delivery_status&order_id=' . $order_id . '&status=' . $status ), 'cvd_delivery_' . $order_id . '_' . $status ); }
-	public static function status( WC_Order $order ): string { $value = sanitize_key( (string) $order->get_meta( '_cvd_delivery_status', true ) ); return in_array( $value, self::STATUSES, true ) ? $value : 'unassigned'; }
+	public static function status( WC_Order $order ): string { if('yes'===$order->get_meta('_cvd_delivery_incident_active',true)){return 'incident';}$value = sanitize_key( (string) $order->get_meta( '_cvd_delivery_status', true ) ); return in_array( $value, self::STATUSES, true ) ? $value : 'unassigned'; }
 	public static function label( string $status ): string { $labels = array( 'unassigned'=>'Por ofertar','offered'=>'Oferta abierta','assigned'=>'Asignada','accepted'=>'Aceptada','to_store'=>'Va a recoger','picked_up'=>'Entregado al mensajero','handed_over'=>'En camino al cliente','delivered'=>'Entregada · dinero pendiente','cash_returned'=>'Dinero recibido','closed'=>'Cerrada','incident'=>'Con incidencia','failed'=>'No entregada','returned'=>'Devuelta a tienda','cancelled'=>'Cancelada' ); return $labels[ $status ] ?? ucfirst( $status ); }
 	private static function messengers(): array { return get_users( array( 'role' => 'cvd_messenger', 'orderby' => 'display_name', 'meta_key' => '_cvd_account_status', 'meta_value' => 'approved' ) ); }
 	private static function eligible_messengers( WC_Order $order ): array {

@@ -15,6 +15,7 @@ final class CVD_Sales {
 		add_action( 'woocommerce_store_api_checkout_order_processed', array( __CLASS__, 'initialize_order' ), 50 );
 		add_action( 'woocommerce_order_status_cancelled', array( __CLASS__, 'sync_cancelled' ), 50 );
 		add_action( 'woocommerce_order_status_refunded', array( __CLASS__, 'sync_cancelled' ), 50 );
+		add_action( 'woocommerce_order_status_failed', array( __CLASS__, 'sync_cancelled' ), 50 );
 	}
 
 	public static function can_view(): bool {
@@ -35,12 +36,7 @@ final class CVD_Sales {
 	public static function sync_cancelled( int $order_id ): void {
 		$order = wc_get_order( $order_id );
 		if ( ! $order ) { return; }
-		$current = self::operation_status( $order );
-		$order->update_meta_data( self::STATUS_META, 'cancelled' );
-		$at = current_time( 'mysql', true );
-		$order->update_meta_data( '_cvd_operation_updated_at', $at );
-		$order->save();
-		if ( 'cancelled' !== $current ) { do_action( 'cvd_order_transition_observed', $order->get_id(), 'operation', $current, 'cancelled', 'cvd_sales_sync_cancelled', array(), $at ); }
+		if(class_exists('CVD_Order_Transition_Service')){CVD_Order_Transition_Service::cancel($order_id,$order->get_status(),array('system'=>true,'source'=>'woocommerce_hook'));}
 	}
 
 	public static function routes(): void {
@@ -97,6 +93,10 @@ final class CVD_Sales {
 			return rest_ensure_response( array( 'message' => 'Pedido entregado al mensajero.', 'order' => self::payload( wc_get_order( $order->get_id() ) ) ) );
 		}
 		$current = self::operation_status( $order );
+		if(class_exists('CVD_Order_Transition_Service')&&('incident'===$next||'incident'===$current)){
+			$key=sanitize_text_field((string)($request->get_header('X-CVD-Idempotency-Key')?:$request->get_param('idempotencyKey')));$result='incident'===$next?CVD_Order_Transition_Service::open_incident($order->get_id(),'operation',array('actor_user_id'=>get_current_user_id(),'idempotency_key'=>$key,'note'=>sanitize_textarea_field((string)$request->get_param('note')))):CVD_Order_Transition_Service::resolve_incident($order->get_id(),'operation',array('actor_user_id'=>get_current_user_id(),'idempotency_key'=>$key,'note'=>sanitize_textarea_field((string)$request->get_param('note'))));
+			if(empty($result['success'])||('incident'===$current&&$next!==$result['new_state'])){return new WP_Error('cvd_incident_conflict','No se pudo actualizar la incidencia sin inventar una etapa.',array('status'=>409,'transition'=>$result));}return rest_ensure_response(array('message'=>'Pedido actualizado.','order'=>self::payload(wc_get_order($order->get_id())),'transition'=>$result));
+		}
 		if ( class_exists( 'CVD_Order_Transition_Service' ) && CVD_Order_Transition_Service::governs( 'operation', $current, $next ) ) {
 			$idempotency_key = sanitize_text_field( (string) ( $request->get_header( 'X-CVD-Idempotency-Key' ) ?: $request->get_param( 'idempotencyKey' ) ) );
 			$result = CVD_Order_Transition_Service::transition( $order->get_id(), 'operation', $next, array(
@@ -122,6 +122,7 @@ final class CVD_Sales {
 		if ( 'cancelled' === $next && ! current_user_can( 'manage_woocommerce' ) ) {
 			return new WP_Error( 'cvd_admin_confirmation_required', 'La cancelación debe confirmarla administración.', array( 'status' => 403 ) );
 		}
+		if('cancelled'===$next){$order->update_status('cancelled','Cancelado por administración desde el Centro de ventas.');$fresh=wc_get_order($order->get_id());$coherent=$fresh&&'cancelled'===sanitize_key((string)$fresh->get_meta(self::STATUS_META,true));if(!$coherent){return new WP_Error('cvd_cancellation_failed','No se pudo cancelar el pedido de forma coherente.',array('status'=>409));}return rest_ensure_response(array('message'=>'Pedido actualizado.','order'=>self::payload($fresh)));}
 		if ( 'delivered' === $next ) {
 			$payment_method = sanitize_key( (string) $request->get_param( 'collectionMethod' ) );
 			if ( ! in_array( $payment_method, array( 'cash_usd', 'cash_cup', 'transfer', 'mixed', 'other' ), true ) || ! rest_sanitize_boolean( $request->get_param( 'moneyConfirmed' ) ) ) {
@@ -158,8 +159,6 @@ final class CVD_Sales {
 			if ( ! $delivery_closed && class_exists( 'CVD_Commissions' ) ) { CVD_Commissions::mark_approved( $order->get_id() ); }
 			$order = wc_get_order( $order->get_id() );
 			if ( $order && ! $order->has_status( 'completed' ) ) { $order->update_status( 'completed', 'Dinero recibido y operación completada.' ); }
-		} elseif ( 'cancelled' === $next ) {
-			$order->update_status( 'cancelled', 'Cancelado por administración desde el Centro de ventas.' );
 		}
 		return rest_ensure_response( array( 'message' => 'Pedido actualizado.', 'order' => self::payload( wc_get_order( $order->get_id() ) ) ) );
 	}
@@ -182,7 +181,7 @@ final class CVD_Sales {
 		$status = sanitize_key( (string) $order->get_meta( self::STATUS_META, true ) );
 		if ( 'cancelled' === $order->get_status() || in_array( $order->get_status(), array( 'refunded', 'failed' ), true ) ) { return 'cancelled'; }
 		if ( 'completed' === $order->get_status() ) { return 'delivered'; }
-		return in_array( $status, self::STATUSES, true ) ? $status : 'new';
+		if('yes'===$order->get_meta('_cvd_operation_incident_active',true)){return 'incident';}return in_array( $status, self::STATUSES, true ) ? $status : 'new';
 	}
 
 	private static function payload( WC_Order $order ): array {
