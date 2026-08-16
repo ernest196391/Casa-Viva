@@ -161,7 +161,7 @@ final class CVD_Customer_Orders {
 			<?php endforeach; ?>
 			</div></section>
 			<section class="cvd-customer-order-detail__card"><h3>Entrega</h3><div class="cvd-customer-order-detail__delivery"><strong><?php echo esc_html( self::fulfillment_label( $order ) ); ?></strong><?php if ( 'pickup' !== (string) $order->get_meta( '_cvd_fulfillment_type', true ) && $order->get_formatted_shipping_address() ) : ?><p><?php echo wp_kses_post( $order->get_formatted_shipping_address() ); ?></p><?php endif; ?></div></section>
-			<section class="cvd-customer-order-detail__card"><h3>Seguimiento</h3>
+			<section class="cvd-customer-order-detail__card"><h3>Seguimiento del pedido</h3>
 			<?php if ( $timeline ) : ?><ol class="cvd-customer-order-detail__timeline"><?php foreach ( $timeline as $index => $event ) : ?><li class="<?php echo $index === array_key_last( $timeline ) ? 'is-current' : ''; ?>"><i></i><div><strong><?php echo esc_html( $event['label'] ); ?></strong><?php if ( $event['timestamp'] ) : ?><span><?php echo esc_html( wp_date( 'j M · H:i', strtotime( $event['timestamp'] . ' UTC' ) ) ); ?></span><?php endif; ?></div></li><?php endforeach; ?></ol><?php else : ?><p class="cvd-customer-order-detail__quiet">Estamos preparando la información de seguimiento.</p><?php endif; ?>
 			</section>
 		</div>
