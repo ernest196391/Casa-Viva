@@ -62,13 +62,21 @@ final class CVD_Order_Center {
 		$owner_id = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
 		$incident_domain = ! empty( $canonical['incident']['sources'] ) ? (string) reset( $canonical['incident']['sources'] ) : '';
 		$incident_prefix = $incident_domain ? '_cvd_' . $incident_domain . '_incident_' : '';
+		$phone = preg_replace( '/[^0-9+]/', '', $order->get_billing_phone() );
+		$location = esc_url_raw( (string) $order->get_meta( '_cvd_location_url', true ), array( 'http', 'https' ) );
+		$phone_digits = preg_replace( '/\D+/', '', $phone );
+		$contact_actions = array(
+			'call_url' => $phone ? 'tel:' . $phone : '',
+			'whatsapp_url' => $phone_digits ? 'https://wa.me/' . $phone_digits . '?text=' . rawurlencode( 'Hola, le contactamos de Casa Viva por su pedido #' . $order->get_order_number() . '.' ) : '',
+			'navigation_url' => 'delivery' === $fulfillment ? $location : '',
+		);
 		$projection = array(
 			'order' => array( 'id' => $order->get_id(), 'number' => $order->get_order_number(), 'created_at' => $order->get_date_created() ? $order->get_date_created()->date_i18n( DATE_ATOM ) : '', 'woocommerce_status' => $order->get_status() ),
-			'customer' => array( 'name' => $order->get_formatted_billing_full_name(), 'phone' => preg_replace( '/[^0-9+]/', '', $order->get_billing_phone() ) ),
+			'customer' => array( 'name' => $order->get_formatted_billing_full_name(), 'phone' => $phone, 'actions' => $contact_actions ),
 			'items' => $items,
 			'pricing' => array( 'total' => wp_strip_all_tags( $order->get_formatted_order_total() ), 'shipping_cup' => class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_fee( $order ) : absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) ) ),
 			'operation' => array( 'status' => $canonical['operation_status'], 'updated_at' => (string) $order->get_meta( '_cvd_operation_updated_at', true ) ),
-			'delivery' => array( 'mode' => $fulfillment, 'status' => $canonical['delivery_status'], 'address' => 'pickup' === $fulfillment ? get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ) : trim( $order->get_billing_address_1() . ', ' . $order->get_meta( '_cvd_locality', true ) . ', ' . $order->get_billing_city() ), 'location' => (string) $order->get_meta( '_cvd_location_url', true ) ),
+			'delivery' => array( 'mode' => $fulfillment, 'status' => $canonical['delivery_status'], 'address' => 'pickup' === $fulfillment ? get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ) : trim( $order->get_billing_address_1() . ', ' . $order->get_meta( '_cvd_locality', true ) . ', ' . $order->get_billing_city() ), 'location' => $location ),
 			'courier' => array( 'id' => $courier_id, 'name' => $courier_id ? (string) get_the_author_meta( 'display_name', $courier_id ) : '' ),
 			'payment' => array( 'status' => $canonical['cash_status'], 'method' => (string) $order->get_meta( '_cvd_collection_method', true ), 'verified_at' => (string) $order->get_meta( '_cvd_collection_received_at', true ) ),
 			'commission_summary' => array( 'status' => $canonical['commission_status'] ),
