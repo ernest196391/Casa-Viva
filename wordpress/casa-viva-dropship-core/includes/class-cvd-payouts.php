@@ -102,7 +102,12 @@ final class CVD_Payouts {
 		return is_wp_error( $result ) ? $result->get_error_message() : 'Liquidación actualizada.';
 	}
 
-	private static function request( int $owner_id ) {
+	/**
+	 * Creates one payout per currency from approved, unclaimed commissions.
+	 * The named lock serializes requests for the same owner and every write is checked
+	 * before COMMIT so a partial payout cannot become visible.
+	 */
+	public static function request( int $owner_id ) {
 		global $wpdb;
 		$method = sanitize_key( (string) get_user_meta( $owner_id, self::PROFILE_METHOD, true ) );
 		$encrypted_account = (string) get_user_meta( $owner_id, self::PROFILE_ACCOUNT, true );
@@ -110,27 +115,57 @@ final class CVD_Payouts {
 		$lock = 'cvd-payout-' . $owner_id;
 		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s,5)', $lock ) ) ) { return new WP_Error( 'cvd_payout_busy', 'Ya se está procesando otra solicitud.' ); }
 		try {
-			$wpdb->query( 'START TRANSACTION' );
-			// Se vuelve a calcular después del bloqueo para impedir solicitudes dobles simultáneas.
+			if ( false === $wpdb->query( 'START TRANSACTION' ) ) { throw new RuntimeException( 'No se pudo iniciar la liquidación.' ); }
 			$available = self::eligible_orders( $owner_id );
 			if ( ! $available ) { throw new RuntimeException( 'No hay comisiones aprobadas disponibles.' ); }
 			$created = 0;
 			foreach ( $available as $currency => $orders ) {
 				$total = array_sum( array_map( static fn( WC_Order $order ): float => (float) $order->get_meta( '_cvd_commission_amount', true ), $orders ) );
-				$wpdb->insert( $wpdb->prefix . 'cvd_payouts', array( 'payout_uuid' => wp_generate_uuid4(), 'owner_user_id' => $owner_id, 'amount' => $total, 'currency' => $currency, 'status' => 'requested', 'method' => $method, 'account_value' => $encrypted_account, 'qr_attachment_id' => absint( get_user_meta( $owner_id, self::PROFILE_QR, true ) ), 'requested_at' => current_time( 'mysql', true ), 'created_by' => $owner_id, 'created_at' => current_time( 'mysql', true ), 'updated_at' => current_time( 'mysql', true ) ) );
+				$inserted = $wpdb->insert(
+					$wpdb->prefix . 'cvd_payouts',
+					array(
+						'payout_uuid' => wp_generate_uuid4(), 'owner_user_id' => $owner_id, 'amount' => $total,
+						'currency' => $currency, 'status' => 'requested', 'method' => $method,
+						'account_value' => $encrypted_account,
+						'qr_attachment_id' => absint( get_user_meta( $owner_id, self::PROFILE_QR, true ) ),
+						'requested_at' => current_time( 'mysql', true ), 'created_by' => $owner_id,
+						'created_at' => current_time( 'mysql', true ), 'updated_at' => current_time( 'mysql', true ),
+					)
+				);
 				$payout_id = (int) $wpdb->insert_id;
-				if ( ! $payout_id ) { throw new RuntimeException( 'No se pudo crear la liquidación.' ); }
+				if ( 1 !== $inserted || ! $payout_id ) { throw new RuntimeException( 'No se pudo crear la liquidación.' ); }
 				foreach ( $orders as $order ) {
-					$wpdb->insert( $wpdb->prefix . 'cvd_payout_items', array( 'payout_id' => $payout_id, 'order_id' => $order->get_id(), 'amount' => $order->get_meta( '_cvd_commission_amount', true ), 'base_commission' => $order->get_meta( '_cvd_base_commission_amount', true ), 'markup' => $order->get_meta( '_cvd_margin_amount', true ), 'currency' => $currency, 'created_at' => current_time( 'mysql', true ) ) );
-					$order->update_meta_data( '_cvd_payout_id', $payout_id ); $order->update_meta_data( '_cvd_payout_status', 'requested' ); $order->save();
+					$item_inserted = $wpdb->insert(
+						$wpdb->prefix . 'cvd_payout_items',
+						array(
+							'payout_id' => $payout_id, 'order_id' => $order->get_id(),
+							'amount' => $order->get_meta( '_cvd_commission_amount', true ),
+							'base_commission' => $order->get_meta( '_cvd_base_commission_amount', true ),
+							'markup' => $order->get_meta( '_cvd_margin_amount', true ),
+							'currency' => $currency, 'created_at' => current_time( 'mysql', true ),
+						)
+					);
+					if ( 1 !== $item_inserted ) { throw new RuntimeException( 'No se pudo anexar una comisión a la liquidación.' ); }
+					$order->update_meta_data( '_cvd_payout_id', $payout_id );
+					$order->update_meta_data( '_cvd_payout_status', 'requested' );
+					$order->save();
+					$fresh = wc_get_order( $order->get_id() );
+					if ( ! $fresh || $payout_id !== absint( $fresh->get_meta( '_cvd_payout_id', true ) ) || 'requested' !== $fresh->get_meta( '_cvd_payout_status', true ) ) {
+						throw new RuntimeException( 'No se pudo vincular una comisión a la liquidación.' );
+					}
 				}
-				self::event( $payout_id, 'requested', '', 'requested' ); $created++;
+				if ( ! self::event( $payout_id, 'requested', '', 'requested' ) ) { throw new RuntimeException( 'No se pudo registrar el historial de la liquidación.' ); }
+				$created++;
 			}
-			$wpdb->query( 'COMMIT' );
+			if ( false === $wpdb->query( 'COMMIT' ) ) { throw new RuntimeException( 'No se pudo confirmar la liquidación.' ); }
 			wp_mail( get_option( 'cvd_notification_email', get_option( 'admin_email' ) ), 'Nueva solicitud de pago Casa Viva', 'Una gestora solicitó una liquidación. Revisar: ' . home_url( '/contabilidad/' ) );
 			return $created;
-		} catch ( Throwable $error ) { $wpdb->query( 'ROLLBACK' ); return new WP_Error( 'cvd_payout_failed', $error->getMessage() ); }
-		finally { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); }
+		} catch ( Throwable $error ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new WP_Error( 'cvd_payout_failed', $error->getMessage() );
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) );
+		}
 	}
 
 	private static function eligible_orders( int $owner_id ): array {
@@ -147,27 +182,104 @@ final class CVD_Payouts {
 		$result = array(); foreach ( self::eligible_orders( $owner_id ) as $currency => $orders ) { $result[ $currency ] = array_sum( array_map( static fn( WC_Order $o ): float => (float) $o->get_meta( '_cvd_commission_amount', true ), $orders ) ); } return $result;
 	}
 
-	private static function transition( int $payout_id, string $action, string $reference, int $proof ) {
+	/**
+	 * Atomic payout state change. A row lock plus a named lock makes a competing
+	 * approve/pay/reject observe the committed winner instead of overwriting it.
+	 */
+	public static function transition( int $payout_id, string $action, string $reference = '', int $proof = 0 ) {
 		global $wpdb;
-		$table = $wpdb->prefix . 'cvd_payouts'; $payout = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id=%d", $payout_id ), ARRAY_A );
-		if ( ! $payout ) { return new WP_Error( 'cvd_payout_missing', 'Liquidación no encontrada.' ); }
-		$map = array( 'approve' => array( 'requested', 'approved' ), 'pay' => array( 'approved', 'paid' ), 'reject' => array( array( 'requested', 'approved' ), 'rejected' ) );
-		if ( ! isset( $map[ $action ] ) ) { return new WP_Error( 'cvd_payout_action', 'Acción no válida.' ); }
-		$allowed_from = (array) $map[ $action ][0]; $next = $map[ $action ][1];
-		if ( ! in_array( $payout['status'], $allowed_from, true ) ) { return new WP_Error( 'cvd_payout_transition', 'Esta liquidación ya cambió de estado.' ); }
-		if ( 'paid' === $next && ! $reference ) { return new WP_Error( 'cvd_reference_required', 'Escribe la referencia de la transferencia.' ); }
-		$data = array( 'status' => $next, 'updated_at' => current_time( 'mysql', true ) );
-		if ( 'approved' === $next ) { $data['approved_at'] = current_time( 'mysql', true ); $data['approved_by'] = get_current_user_id(); }
-		if ( 'paid' === $next ) { $data['paid_at'] = current_time( 'mysql', true ); $data['paid_by'] = get_current_user_id(); $data['reference'] = $reference; $data['proof_attachment_id'] = $proof; }
-		$wpdb->update( $table, $data, array( 'id' => $payout_id ) ); self::event( $payout_id, $action, $payout['status'], $next, array( 'reference' => $reference, 'proof' => $proof ) );
-		$order_ids = $wpdb->get_col( $wpdb->prepare( "SELECT order_id FROM {$wpdb->prefix}cvd_payout_items WHERE payout_id=%d", $payout_id ) );
-		foreach ( $order_ids as $order_id ) { $order = wc_get_order( $order_id ); if ( ! $order ) { continue; } $order->update_meta_data( '_cvd_payout_status', $next ); if ( 'paid' === $next ) { CVD_Commissions::mark_paid( (int) $order_id ); } elseif ( 'rejected' === $next ) { $order->delete_meta_data( '_cvd_payout_id' ); $order->delete_meta_data( '_cvd_payout_status' ); $order->save(); } else { $order->save(); } }
+		$table = $wpdb->prefix . 'cvd_payouts';
+		$items_table = $wpdb->prefix . 'cvd_payout_items';
+		$lock = 'cvd-payout-transition-' . $payout_id;
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s,5)', $lock ) ) ) {
+			return new WP_Error( 'cvd_payout_busy', 'Esta liquidación ya se está procesando.' );
+		}
+
+		$order_ids = array();
+		try {
+			if ( false === $wpdb->query( 'START TRANSACTION' ) ) { throw new RuntimeException( 'No se pudo iniciar la actualización.' ); }
+			$payout = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id=%d FOR UPDATE", $payout_id ), ARRAY_A );
+			if ( ! $payout ) { throw new RuntimeException( 'Liquidación no encontrada.' ); }
+
+			$map = array(
+				'approve' => array( array( 'requested' ), 'approved' ),
+				'pay' => array( array( 'approved' ), 'paid' ),
+				'reject' => array( array( 'requested', 'approved' ), 'rejected' ),
+			);
+			if ( ! isset( $map[ $action ] ) ) { throw new InvalidArgumentException( 'Acción no válida.' ); }
+			$allowed_from = $map[ $action ][0];
+			$next = $map[ $action ][1];
+			if ( ! in_array( $payout['status'], $allowed_from, true ) ) { throw new DomainException( 'Esta liquidación ya cambió de estado.' ); }
+			if ( 'paid' === $next && ! $reference ) { throw new InvalidArgumentException( 'Escribe la referencia de la transferencia.' ); }
+
+			$order_ids = array_map( 'absint', $wpdb->get_col( $wpdb->prepare( "SELECT order_id FROM {$items_table} WHERE payout_id=%d ORDER BY id ASC", $payout_id ) ) );
+			if ( ! $order_ids ) { throw new RuntimeException( 'La liquidación no contiene comisiones verificables.' ); }
+
+			$data = array( 'status' => $next, 'updated_at' => current_time( 'mysql', true ) );
+			if ( 'approved' === $next ) { $data['approved_at'] = current_time( 'mysql', true ); $data['approved_by'] = get_current_user_id(); }
+			if ( 'paid' === $next ) { $data['paid_at'] = current_time( 'mysql', true ); $data['paid_by'] = get_current_user_id(); $data['reference'] = $reference; $data['proof_attachment_id'] = $proof; }
+			$updated = $wpdb->update( $table, $data, array( 'id' => $payout_id, 'status' => $payout['status'] ) );
+			if ( 1 !== $updated ) { throw new RuntimeException( 'La liquidación cambió mientras se procesaba.' ); }
+
+			foreach ( $order_ids as $order_id ) {
+				$order = wc_get_order( $order_id );
+				if ( ! $order || $payout_id !== absint( $order->get_meta( '_cvd_payout_id', true ) ) || (int) $payout['owner_user_id'] !== absint( $order->get_meta( '_cvd_owner_user_id', true ) ) ) {
+					throw new RuntimeException( 'Una comisión ya no coincide con esta liquidación.' );
+				}
+
+				if ( 'rejected' === $next ) {
+					$order->delete_meta_data( '_cvd_payout_id' );
+					$order->delete_meta_data( '_cvd_payout_status' );
+					$order->save();
+					$fresh = wc_get_order( $order_id );
+					if ( ! $fresh || absint( $fresh->get_meta( '_cvd_payout_id', true ) ) ) { throw new RuntimeException( 'No se pudo liberar una comisión rechazada.' ); }
+					continue;
+				}
+
+				$order->update_meta_data( '_cvd_payout_status', $next );
+				$order->save();
+				if ( 'paid' === $next ) {
+					CVD_Commissions::mark_paid( $order_id );
+				}
+				$fresh = wc_get_order( $order_id );
+				if ( ! $fresh || $next !== $fresh->get_meta( '_cvd_payout_status', true ) ) { throw new RuntimeException( 'No se pudo sincronizar una comisión con la liquidación.' ); }
+				if ( 'paid' === $next && 'paid' !== $fresh->get_meta( '_cvd_commission_status', true ) ) { throw new RuntimeException( 'La comisión no quedó marcada como pagada.' ); }
+			}
+
+			if ( ! self::event( $payout_id, $action, $payout['status'], $next, array( 'reference' => $reference, 'proof' => $proof ) ) ) {
+				throw new RuntimeException( 'No se pudo registrar el historial de la liquidación.' );
+			}
+			if ( false === $wpdb->query( 'COMMIT' ) ) { throw new RuntimeException( 'No se pudo confirmar la actualización.' ); }
+		} catch ( InvalidArgumentException $error ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new WP_Error( 'cvd_payout_action', $error->getMessage() );
+		} catch ( DomainException $error ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new WP_Error( 'cvd_payout_transition', $error->getMessage() );
+		} catch ( Throwable $error ) {
+			$wpdb->query( 'ROLLBACK' );
+			foreach ( $order_ids as $order_id ) { clean_post_cache( $order_id ); }
+			return new WP_Error( 'cvd_payout_failed', $error->getMessage() );
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) );
+		}
+
 		$owner = get_userdata( (int) $payout['owner_user_id'] );
 		if ( $owner ) { wp_mail( $owner->user_email, 'Actualización de tu pago Casa Viva', 'Tu liquidación #' . $payout_id . ' cambió a: ' . $next . ( $reference ? "\nReferencia: " . $reference : '' ) . "\n\nConsulta tu historial: " . home_url( '/area-gestoras/#pagos' ) ); }
 		return true;
 	}
 
-	private static function event( int $payout_id, string $type, string $from, string $to, array $metadata = array() ): void { global $wpdb; $wpdb->insert( $wpdb->prefix . 'cvd_payout_events', array( 'payout_id' => $payout_id, 'event_type' => $type, 'from_status' => $from, 'to_status' => $to, 'actor_user_id' => get_current_user_id(), 'created_at' => current_time( 'mysql', true ), 'metadata' => wp_json_encode( $metadata ) ) ); }
+	private static function event( int $payout_id, string $type, string $from, string $to, array $metadata = array() ): bool {
+		global $wpdb;
+		return 1 === $wpdb->insert(
+			$wpdb->prefix . 'cvd_payout_events',
+			array(
+				'payout_id' => $payout_id, 'event_type' => $type, 'from_status' => $from,
+				'to_status' => $to, 'actor_user_id' => get_current_user_id(),
+				'created_at' => current_time( 'mysql', true ), 'metadata' => wp_json_encode( $metadata ),
+			)
+		);
+	}
 
 	private static function payouts_for_owner( int $owner_id ): array { global $wpdb; return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}cvd_payouts WHERE owner_user_id=%d ORDER BY id DESC LIMIT 50", $owner_id ), ARRAY_A ); }
 	private static function all_payouts(): array { global $wpdb; return $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}cvd_payouts ORDER BY id DESC LIMIT 200", ARRAY_A ); }
