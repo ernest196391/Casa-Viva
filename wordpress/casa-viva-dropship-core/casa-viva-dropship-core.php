@@ -18,6 +18,7 @@ define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
 
 require_once CVD_DIR . 'includes/class-cvd-plugin.php';
+require_once CVD_DIR . 'includes/class-cvd-customer-orders.php';
 require_once CVD_DIR . 'includes/class-cvd-customer-navigation.php';
 
 register_activation_hook( __FILE__, array( 'CVD_Plugin', 'activate' ) );
@@ -27,6 +28,7 @@ add_action(
 	static function () {
 		CVD_Plugin::instance()->boot();
 		if ( class_exists( 'WooCommerce' ) ) {
+			CVD_Customer_Orders::register();
 			CVD_Customer_Navigation::register();
 		}
 	}
