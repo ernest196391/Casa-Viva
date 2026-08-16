@@ -12,16 +12,32 @@ final class CVD_Messenger_Accounting {
 
 	/** Crea una sola ganancia cuando la entrega y el efectivo ya fueron verificados. */
 	public static function credit_order( WC_Order $order ): bool {
+		try { $created = self::credit_order_atomic( $order, get_current_user_id(), current_time( 'mysql', true ) ); }
+		catch ( Throwable $error ) { return false; }
+		if ( $created ) { $order->save(); }
+		return $created;
+	}
+
+	/** Inserta o reconoce el único asiento de ganancia dentro de la transacción del cierre. */
+	public static function credit_order_atomic( WC_Order $order, int $actor_id, string $at ): bool {
 		global $wpdb;
-		if ( 'closed' !== CVD_Delivery::status( $order ) || 'verified' !== $order->get_meta( '_cvd_cash_status', true ) ) { return false; }
+		if ( 'closed' !== sanitize_key( (string) $order->get_meta( '_cvd_delivery_status', true ) ) || 'verified' !== $order->get_meta( '_cvd_cash_status', true ) ) { throw new RuntimeException( 'closeout_not_verified' ); }
 		$messenger_id = absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
 		$amount = (float) $order->get_meta( '_cvd_shipping_courier_amount_cup', true );
-		if ( ! $messenger_id || $amount <= 0 ) { return false; }
+		if ( ! $messenger_id ) { throw new RuntimeException( 'invalid_messenger_earning' ); }
+		// El flujo histórico permite tarifas de mensajería en cero. En ese caso no
+		// existe ganancia que acreditar y, por tanto, no corresponde crear asiento.
+		if ( $amount <= 0 ) { return false; }
 		$created = $wpdb->query( $wpdb->prepare(
 			"INSERT IGNORE INTO {$wpdb->prefix}cvd_messenger_ledger (entry_uuid,order_id,messenger_user_id,entry_type,amount,currency,status,created_at,created_by,metadata) VALUES (%s,%d,%d,'earning',%f,'CUP','available',%s,%d,%s)",
-			wp_generate_uuid4(), $order->get_id(), $messenger_id, $amount, current_time( 'mysql', true ), get_current_user_id(), wp_json_encode( array( 'platform_amount' => (float) $order->get_meta( '_cvd_shipping_platform_amount_cup', true ), 'rate_snapshot' => (float) $order->get_meta( '_cvd_shipping_platform_rate', true ) ) )
+			wp_generate_uuid4(), $order->get_id(), $messenger_id, $amount, $at, $actor_id, wp_json_encode( array( 'platform_amount' => (float) $order->get_meta( '_cvd_shipping_platform_amount_cup', true ), 'rate_snapshot' => (float) $order->get_meta( '_cvd_shipping_platform_rate', true ) ) )
 		) );
-		if ( $created ) { $order->update_meta_data( '_cvd_messenger_ledger_status', 'available' ); $order->save(); }
+		if ( false === $created ) { throw new RuntimeException( 'ledger_insert_failed' ); }
+		if ( 0 === (int) $created ) {
+			$existing = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}cvd_messenger_ledger WHERE order_id=%d AND entry_type='earning'", $order->get_id() ) );
+			if ( 1 !== $existing ) { throw new RuntimeException( 'ledger_conflict' ); }
+		}
+		$order->update_meta_data( '_cvd_messenger_ledger_status', 'available' );
 		return (bool) $created;
 	}
 

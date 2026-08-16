@@ -124,3 +124,39 @@ push y reputación siguen siendo consecuencias posteriores al commit.
 Los estados terminales logísticos incompatibles se serializan: si uno de
 `delivered|failed|returned` ya ganó, otro destino devuelve `CONFLICT`. `failed`
 logístico nunca se proyecta ni escribe como `failed` de WooCommerce.
+
+## Extensión 1C.3
+
+El catálogo incorpora `delivered → cash_returned → closed`, conservando las dos
+etapas financieras reales. La primera transición acopla payment `pending_return →
+returned`, actor/hora y `_cvd_commission_review_ready`; no completa WooCommerce ni
+acredita saldos.
+
+`closed` es una unidad MariaDB única bajo el mismo `GET_LOCK`:
+
+1. delivery `cash_returned → closed` e historial;
+2. payment `returned → verified`;
+3. operation → `delivered`, solo si cambia;
+4. ganancia del mensajero `approved`;
+5. si la ganancia es positiva, `INSERT IGNORE` del único ledger `earning`, validado
+   por `UNIQUE(order_id,entry_type)`; una tarifa histórica igual a cero no genera un
+   asiento artificial;
+6. comisión `pending → approved` cuando existe propietaria elegible, reutilizando el
+   cálculo y snapshots existentes;
+7. WooCommerce → `completed` si todavía no lo está;
+8. eventos canónicos y receipt;
+9. commit completo o rollback completo.
+
+Comisiones `approved`, `paid` o `cancelled` no se reactivan durante replay/cierre. Un
+pedido orgánico no recibe comisión artificial. Pedidos históricos con delivery
+demostrable pero payment ausente pueden continuar sin migración masiva; el evento
+conserva el origen vacío en vez de inventar `pending_return`/`returned`.
+
+La acción manual `closed` conserva `manage_woocommerce`. El adaptador automático
+invocado después de la confirmación de dinero conserva el permiso previo de
+dependienta y puede reanudarse desde `cash_returned`; un pedido ya cerrado y coherente
+devuelve éxito sin repetir efectos. Push y reputación continúan post-commit.
+
+Los fallos internos de ledger, comisión o WooCommerce devuelven
+`SIDE_EFFECT_FAILED` y dejan `cash_returned/payment=returned`. Cancelaciones,
+refunds, ledger void, payout e incidencias siguen fuera del catálogo de 1C.3.
