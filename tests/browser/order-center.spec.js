@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const baseURL = process.env.ORDER_CENTER_BASE_URL || 'http://localhost:8889';
+const pageId = Number(process.env.ORDER_CENTER_PAGE_ID);
 const ids = {
   new: Number(process.env.ORDER_CENTER_NEW_ID),
   ready: Number(process.env.ORDER_CENTER_READY_ID),
@@ -27,7 +28,10 @@ async function login(page, credentials) {
 }
 
 async function openOrder(page, id) {
-  const response = await page.goto(`${baseURL}/centro-pedido/?order_id=${id}`, { waitUntil: 'domcontentloaded' });
+  const orderCenterURL = pageId > 0
+    ? `${baseURL}/?page_id=${pageId}&order_id=${id}`
+    : `${baseURL}/centro-pedido/?order_id=${id}`;
+  const response = await page.goto(orderCenterURL, { waitUntil: 'domcontentloaded' });
   expect(response && response.ok()).toBeTruthy();
   expect(new URL(page.url()).pathname).not.toContain('wp-login.php');
   await expect(page.locator('.cvd-oc-head')).toBeVisible({ timeout: 15000 });
