@@ -139,7 +139,7 @@ jobs:
             echo "MESSENGER_CENTER_ORDER_ID=$(echo "$messenger_json" | jq -r .order_id)"
             echo "MESSENGER_CENTER_USER=$(echo "$messenger_json" | jq -r .messenger_user)"
             echo "MESSENGER_CENTER_PASSWORD=$(echo "$messenger_json" | jq -r .messenger_pass)"
-            echo "CUSTOMER_ORDERS_PATH=$(echo "$customer_orders_json" | jq -r .orders_path)"
+            echo "CUSTOMER_ORDERS_RELATIVE=$(echo "$customer_orders_json" | jq -r .orders_relative)"
             echo "CUSTOMER_ORDERS_USER=$(echo "$customer_orders_json" | jq -r .user)"
             echo "CUSTOMER_ORDERS_PASSWORD=$(echo "$customer_orders_json" | jq -r .password)"
             echo "CUSTOMER_ORDERS_ACTIVE_ID=$(echo "$customer_orders_json" | jq -r .active_id)"
