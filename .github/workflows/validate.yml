@@ -45,6 +45,9 @@ jobs:
       - name: Validar contrato de navegación móvil del cliente
         run: node artifacts/tests/test-customer-navigation-3a.mjs
 
+      - name: Validar contrato de Pedidos del cliente
+        run: node artifacts/tests/test-customer-orders-3b.mjs
+
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
@@ -115,9 +118,11 @@ jobs:
           bootstrap_json="$("${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/bootstrap.php | tail -n 1)"
           fixture_json="$("${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/order-center-browser.php | tail -n 1)"
           messenger_json="$("${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/messenger-center-browser.php | tail -n 1)"
+          customer_orders_json="$("${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/customer-orders-browser.php | tail -n 1)"
           echo "$bootstrap_json" | jq -e . >/dev/null
           echo "$fixture_json" | jq -e . >/dev/null
           echo "$messenger_json" | jq -e . >/dev/null
+          echo "$customer_orders_json" | jq -e . >/dev/null
           {
             echo "ORDER_CENTER_BASE_URL=http://localhost:8889"
             echo "CUSTOMER_NAV_PRODUCT_ID=$(echo "$bootstrap_json" | jq -r .product_id)"
@@ -134,6 +139,11 @@ jobs:
             echo "MESSENGER_CENTER_ORDER_ID=$(echo "$messenger_json" | jq -r .order_id)"
             echo "MESSENGER_CENTER_USER=$(echo "$messenger_json" | jq -r .messenger_user)"
             echo "MESSENGER_CENTER_PASSWORD=$(echo "$messenger_json" | jq -r .messenger_pass)"
+            echo "CUSTOMER_ORDERS_PATH=$(echo "$customer_orders_json" | jq -r .orders_path)"
+            echo "CUSTOMER_ORDERS_USER=$(echo "$customer_orders_json" | jq -r .user)"
+            echo "CUSTOMER_ORDERS_PASSWORD=$(echo "$customer_orders_json" | jq -r .password)"
+            echo "CUSTOMER_ORDERS_ACTIVE_ID=$(echo "$customer_orders_json" | jq -r .active_id)"
+            echo "CUSTOMER_ORDERS_FINISHED_ID=$(echo "$customer_orders_json" | jq -r .finished_id)"
           } >> "$GITHUB_ENV"
 
       - name: Ejecutar validación visual real
