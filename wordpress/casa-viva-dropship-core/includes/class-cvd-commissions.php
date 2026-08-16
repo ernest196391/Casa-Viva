@@ -181,19 +181,57 @@ final class CVD_Commissions {
 	private static function flag_self_order_risk( WC_Order $order, int $owner_user_id ): void {
 		$owner = get_userdata( $owner_user_id );
 		if ( ! $owner ) { return; }
+
+		$order->delete_meta_data( '_cvd_commission_risk' );
 		$order_email = strtolower( sanitize_email( $order->get_billing_email() ) );
 		$owner_email = strtolower( sanitize_email( $owner->user_email ) );
 		$order_phone = preg_replace( '/\D+/', '', $order->get_billing_phone() );
-		$owner_phone = preg_replace( '/\D+/', '', (string) get_user_meta( $owner_user_id, '_cvd_phone', true ) );
+		$owner_phone = (string) get_user_meta( $owner_user_id, '_cvd_whatsapp', true );
+		if ( '' === $owner_phone ) {
+			$owner_phone = (string) get_user_meta( $owner_user_id, '_cvd_phone', true );
+		}
+		$owner_phone = preg_replace( '/\D+/', '', $owner_phone );
 		if ( ( $order_email && $owner_email && hash_equals( $owner_email, $order_email ) ) || ( $order_phone && $owner_phone && hash_equals( $owner_phone, $order_phone ) ) ) {
 			$order->update_meta_data( '_cvd_commission_risk', 'self_order' );
 		}
 	}
 
+	private static function commission_policy( ?WC_Product $product, float $gestora_rate ): array {
+		$type = 'percent';
+		$value = '';
+		$source = 'gestora';
+
+		if ( $product ) {
+			$type_value = $product->get_meta( '_cvd_commission_type', true );
+			$commission_value = $product->get_meta( '_cvd_commission_value', true );
+			if ( '' !== $type_value || '' !== $commission_value ) {
+				$type = 'fixed' === sanitize_key( (string) $type_value ) ? 'fixed' : 'percent';
+				$value = $commission_value;
+				$source = 'product';
+			} elseif ( $product->is_type( 'variation' ) && $product->get_parent_id() ) {
+				$parent = wc_get_product( $product->get_parent_id() );
+				if ( $parent ) {
+					$type_value = $parent->get_meta( '_cvd_commission_type', true );
+					$commission_value = $parent->get_meta( '_cvd_commission_value', true );
+					if ( '' !== $type_value || '' !== $commission_value ) {
+						$type = 'fixed' === sanitize_key( (string) $type_value ) ? 'fixed' : 'percent';
+						$value = $commission_value;
+						$source = 'parent_product';
+					}
+				}
+			}
+		}
+
+		if ( '' === $value ) {
+			$value = $gestora_rate;
+		}
+		return array( 'type' => $type, 'value' => (float) $value, 'source' => $source );
+	}
+
 	public static function calculate( WC_Order $order, int $owner_user_id ): array {
 		$default_rate = (float) get_option( 'cvd_default_commission_rate', 13 );
 		$user_rate = get_user_meta( $owner_user_id, '_cvd_commission_rate', true );
-		$default_rate = '' !== $user_rate ? (float) $user_rate : $default_rate;
+		$gestora_rate = '' !== $user_rate ? (float) $user_rate : $default_rate;
 		$base_amount = 0.0;
 		$sale_amount = 0.0;
 		$commission_amount = 0.0;
@@ -208,27 +246,33 @@ final class CVD_Commissions {
 			$base_unit = (float) $item->get_meta( '_cvd_base_unit_price', true );
 			$line_base = $base_unit > 0 ? min( $line, $base_unit * $quantity ) : $line;
 			$line_margin = ( $base_unit > 0 && $pricing_gestora_id === $owner_user_id ) ? max( 0, $line - ( $base_unit * $quantity ) ) : 0;
-			$base_amount += $line_base;
-			$sale_amount += $line;
 
 			$snapshot = $item->get_meta( '_cvd_commission_snapshot', true );
-			if ( ! is_array( $snapshot ) || ! isset( $snapshot['base_commission'] ) ) {
-				$type = $product ? ( $product->get_meta( '_cvd_commission_type', true ) ?: 'percent' ) : 'percent';
-				$value = $product ? $product->get_meta( '_cvd_commission_value', true ) : '';
-				$value = '' === $value ? $default_rate : (float) $value;
-				$line_commission = 'fixed' === $type ? $value * $quantity : $line_base * ( $value / 100 );
+			if ( ! is_array( $snapshot ) || ! isset( $snapshot['base_commission'], $snapshot['base_amount'], $snapshot['sale_amount'] ) ) {
+				$policy = self::commission_policy( $product, $gestora_rate );
+				$line_commission = 'fixed' === $policy['type'] ? $policy['value'] * $quantity : $line_base * ( $policy['value'] / 100 );
 				$snapshot = array(
-					'product_id' => $item->get_product_id(), 'variation_id' => $item->get_variation_id(),
-					'type' => $type, 'value' => wc_format_decimal( $value, 4 ), 'quantity' => $quantity,
-					'base_amount' => wc_format_decimal( $line_base, 4 ), 'sale_amount' => wc_format_decimal( $line, 4 ),
-					'base_commission' => wc_format_decimal( $line_commission, 4 ), 'markup' => wc_format_decimal( $line_margin, 4 ),
-					'captured_at' => current_time( 'mysql', true ),
+					'product_id'       => $item->get_product_id(),
+					'variation_id'     => $item->get_variation_id(),
+					'owner_user_id'    => $owner_user_id,
+					'type'             => $policy['type'],
+					'value'            => wc_format_decimal( $policy['value'], 4 ),
+					'policy_source'    => $policy['source'],
+					'quantity'         => $quantity,
+					'base_amount'      => wc_format_decimal( $line_base, 4 ),
+					'sale_amount'      => wc_format_decimal( $line, 4 ),
+					'base_commission'  => wc_format_decimal( $line_commission, 4 ),
+					'markup'           => wc_format_decimal( $line_margin, 4 ),
+					'captured_at'      => current_time( 'mysql', true ),
 				);
 				$item->update_meta_data( '_cvd_commission_snapshot', $snapshot );
 				$item->save_meta_data();
 			}
+
+			$base_amount += (float) $snapshot['base_amount'];
+			$sale_amount += (float) $snapshot['sale_amount'];
 			$commission_amount += (float) $snapshot['base_commission'];
-			$margin_amount += (float) $snapshot['markup'];
+			$margin_amount += (float) ( $snapshot['markup'] ?? 0 );
 			$breakdown[] = $snapshot;
 		}
 
