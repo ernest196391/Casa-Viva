@@ -2,7 +2,7 @@
 const { test, expect } = require('@playwright/test');
 
 const baseURL = process.env.ORDER_CENTER_BASE_URL || 'http://localhost:8889';
-const ordersPath = process.env.CUSTOMER_ORDERS_PATH;
+const ordersRelative = process.env.CUSTOMER_ORDERS_RELATIVE;
 const user = process.env.CUSTOMER_ORDERS_USER;
 const password = process.env.CUSTOMER_ORDERS_PASSWORD;
 const activeId = process.env.CUSTOMER_ORDERS_ACTIVE_ID;
@@ -21,7 +21,7 @@ async function login(page) {
 test('Pedidos separa activos y terminados y abre el pedido', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page);
-  await page.goto(`${baseURL}${ordersPath}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(new URL(ordersRelative, baseURL).toString(), { waitUntil: 'domcontentloaded' });
 
   const center = page.locator('.cvd-customer-orders');
   await expect(center).toBeVisible();
