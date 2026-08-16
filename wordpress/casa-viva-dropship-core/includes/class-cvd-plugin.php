@@ -445,6 +445,7 @@ final class CVD_Plugin {
 		require_once CVD_DIR . 'includes/class-cvd-canonical-order-reader.php';
 		require_once CVD_DIR . 'includes/class-cvd-order-events.php';
 		require_once CVD_DIR . 'includes/class-cvd-order-transition-service.php';
+		require_once CVD_DIR . 'includes/class-cvd-order-center.php';
 		require_once CVD_DIR . 'includes/class-cvd-commissions.php';
 		require_once CVD_DIR . 'includes/class-cvd-admin.php';
 		require_once CVD_DIR . 'includes/class-cvd-portal.php';
@@ -470,6 +471,7 @@ final class CVD_Plugin {
 
 		CVD_Attribution::register();
 		CVD_Order_Events::register();
+		CVD_Order_Center::register();
 		CVD_Commissions::register();
 		CVD_Admin::register();
 		CVD_Portal::register();

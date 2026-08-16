@@ -36,6 +36,9 @@ jobs:
       - name: Validar servicio único de transiciones
         run: php artifacts/tests/test-order-transition-service-1c.php
 
+      - name: Validar contrato del Centro Único
+        run: node artifacts/tests/test-order-center-2a.mjs
+
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
@@ -65,6 +68,70 @@ jobs:
 
       - name: Ejecutar integración WordPress y MariaDB
         run: scripts/integration.sh test
+
+      - name: Mostrar diagnóstico si falla
+        if: failure()
+        run: scripts/integration.sh logs
+
+      - name: Eliminar entorno desechable
+        if: always()
+        run: scripts/integration.sh down
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Instalar Playwright y Chromium
+        run: |
+          npm install --no-save @playwright/test@1.54.2
+          npx playwright install --with-deps chromium
+
+      - name: Levantar WordPress y preparar fixtures visuales
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/integration.sh up
+          compose=(docker compose -f integration/compose.yml)
+          "${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/bootstrap.php >/dev/null
+          fixture_json="$("${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/order-center-browser.php | tail -n 1)"
+          echo "$fixture_json" | jq -e . >/dev/null
+          {
+            echo "ORDER_CENTER_BASE_URL=http://localhost:8889"
+            echo "ORDER_CENTER_PAGE_ID=$(echo "$fixture_json" | jq -r .page_id)"
+            echo "ORDER_CENTER_NEW_ID=$(echo "$fixture_json" | jq -r .new_id)"
+            echo "ORDER_CENTER_READY_ID=$(echo "$fixture_json" | jq -r .ready_id)"
+            echo "ORDER_CENTER_HANDED_ID=$(echo "$fixture_json" | jq -r .handed_id)"
+            echo "ORDER_CENTER_CONFLICT_ID=$(echo "$fixture_json" | jq -r .conflict_id)"
+            echo "ORDER_CENTER_ADMIN_USER=$(echo "$fixture_json" | jq -r .admin_user)"
+            echo "ORDER_CENTER_ADMIN_PASSWORD=$(echo "$fixture_json" | jq -r .admin_password)"
+            echo "ORDER_CENTER_CLERK_USER=$(echo "$fixture_json" | jq -r .clerk_user)"
+            echo "ORDER_CENTER_CLERK_PASSWORD=$(echo "$fixture_json" | jq -r .clerk_password)"
+          } >> "$GITHUB_ENV"
+
+      - name: Ejecutar validación visual real
+        run: npx playwright test tests/browser/order-center.spec.js --reporter=line
+
+      - name: Subir screenshots del Centro Único
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: order-center-browser-${{ github.run_id }}
+          path: |
+            test-results/order-center/*.png
+            test-results/**/test-failed-*.png
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Mostrar diagnóstico si falla
         if: failure()

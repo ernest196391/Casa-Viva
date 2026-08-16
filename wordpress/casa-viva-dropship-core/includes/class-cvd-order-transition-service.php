@@ -31,6 +31,20 @@ final class CVD_Order_Transition_Service {
 		return in_array( $to, $map[$from] ?? array(), true );
 	}
 
+	/** Catálogo de destinos gobernados por este servicio para un actor, sin escribir. */
+	public static function available_targets( WC_Order $order, string $domain, int $actor_user_id ): array {
+		$domain = sanitize_key( $domain );
+		$current = self::state( $order, $domain );
+		$map = 'operation' === $domain ? self::OPERATION_TRANSITIONS : ( 'delivery' === $domain ? self::DELIVERY_TRANSITIONS : array() );
+		$actor = $actor_user_id ? get_userdata( $actor_user_id ) : null;
+		if ( ! $actor || empty( $map[ $current ] ) || in_array( $order->get_status(), array( 'completed', 'cancelled', 'refunded', 'failed' ), true ) ) { return array(); }
+		$result = array();
+		foreach ( $map[ $current ] as $target ) {
+			if ( self::authorized( $order, $domain, $current, $target, $actor ) ) { $result[] = $target; }
+		}
+		return $result;
+	}
+
 	/** Abre una incidencia sin sustituir la etapa logística u operativa. */
 	public static function open_incident( int $order_id, string $affected_domain, array $context=array() ): array {
 		return self::incident($order_id,$affected_domain,true,$context);
