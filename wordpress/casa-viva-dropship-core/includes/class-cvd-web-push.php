@@ -90,24 +90,34 @@ final class CVD_Web_Push {
 		return rest_ensure_response( array('read'=>true) );
 	}
 
+	private static function staff_order_url( WC_Order $order ): string {
+		return add_query_arg( 'order_id', $order->get_id(), home_url( '/centro-pedido/' ) );
+	}
+
+	private static function messenger_order_url( WC_Order $order ): string {
+		return add_query_arg( 'order_id', $order->get_id(), home_url( '/area-mensajeros/' ) );
+	}
+
 	public static function send_offer( WC_Order $order, array $messengers ): void {
+		$title = 'Pedido #' . $order->get_order_number() . ' disponible';
+		$message = 'Nueva entrega disponible. Abre el pedido para aceptar o rechazar.';
 		foreach ( $messengers as $messenger ) {
-			self::notify_user( (int) $messenger->ID, $order->get_id(), 'delivery_offer', 'Nueva carrera', 'Toca para aceptar o rechazar.', home_url('/area-mensajeros/#ofertas') );
+			self::notify_user( (int) $messenger->ID, $order->get_id(), 'delivery_offer', $title, $message, self::messenger_order_url( $order ) );
 		}
 	}
 
 	/** Registra y envía cada avance relevante a operaciones; el cliente lo recibe como nota del pedido. */
 	public static function send_delivery_update( WC_Order $order, string $status ): void {
 		$messages = array(
-			'accepted'      => array( 'Carrera aceptada', 'El mensajero aceptó el pedido.' ),
-			'to_store'      => array( 'Mensajero en camino', 'Va a recoger el pedido en Casa Viva.' ),
-			'picked_up'     => array( 'Pedido entregado al mensajero', 'El mensajero ya recibió el pedido.' ),
-			'handed_over'   => array( 'Pedido recogido', 'El mensajero va hacia el cliente.' ),
-			'delivered'     => array( 'Pedido entregado', 'Falta confirmar el dinero recibido.' ),
-			'cash_returned' => array( 'Dinero recibido', 'La operación está cerrando.' ),
-			'closed'        => array( 'Operación cerrada', 'Dinero y comisiones quedaron registrados.' ),
-			'incident'      => array( 'Incidencia de entrega', 'Revisar el pedido.' ),
-			'failed'        => array( 'Entrega no completada', 'Revisar el pedido.' ),
+			'accepted'      => array( 'Pedido aceptado', 'El mensajero aceptó la entrega.' ),
+			'to_store'      => array( 'Mensajero va a recoger', 'El mensajero va camino a Casa Viva para recoger el pedido.' ),
+			'picked_up'     => array( 'Pedido recogido por mensajero', 'Casa Viva transfirió la custodia física del pedido al mensajero.' ),
+			'handed_over'   => array( 'Pedido va camino al cliente', 'El mensajero inició la ruta hacia el cliente.' ),
+			'delivered'     => array( 'Pedido entregado', 'El cliente recibió el pedido. Puede quedar pendiente la reconciliación del dinero.' ),
+			'cash_returned' => array( 'Dinero recibido', 'El efectivo del pedido regresó a Casa Viva.' ),
+			'closed'        => array( 'Pedido cerrado', 'El pedido quedó cerrado definitivamente.' ),
+			'incident'      => array( 'Incidencia en el pedido', 'Hay una incidencia activa que requiere revisión.' ),
+			'failed'        => array( 'Entrega no completada', 'La entrega terminó con resultado fallido. Revisa el pedido.' ),
 			'returned'      => array( 'Pedido devuelto', 'El pedido regresó a Casa Viva.' ),
 		);
 		if ( ! isset( $messages[ $status ] ) ) { return; }
@@ -115,16 +125,16 @@ final class CVD_Web_Push {
 		$title .= ' · #' . $order->get_order_number();
 		$staff = get_users( array( 'role__in'=>array('administrator','shop_manager','cvd_clerk','cvd_operator'), 'fields'=>array('ID') ) );
 		foreach ( $staff as $user ) {
-			self::notify_user( (int) $user->ID, $order->get_id(), 'delivery_' . $status, $title, $message, add_query_arg( 'order', $order->get_id(), home_url( '/mensajeria/' ) ) );
+			self::notify_user( (int) $user->ID, $order->get_id(), 'delivery_' . $status, $title, $message, self::staff_order_url( $order ) );
 		}
 		$messenger_id = absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
 		if ( $messenger_id && $messenger_id !== get_current_user_id() ) {
-			self::notify_user( $messenger_id, $order->get_id(), 'delivery_' . $status, $title, $message, home_url( '/area-mensajeros/' ) );
+			self::notify_user( $messenger_id, $order->get_id(), 'delivery_' . $status, $title, $message, self::messenger_order_url( $order ) );
 		}
 		$customer_messages = array(
 			'to_store'    => 'El mensajero va a recoger tu pedido.',
 			'picked_up'   => 'Casa Viva entregó tu pedido al mensajero.',
-			'handed_over' => 'El mensajero ya recogió tu pedido y va hacia tu dirección.',
+			'handed_over' => 'Tu pedido va camino a tu dirección.',
 			'delivered'   => 'Tu pedido fue marcado como entregado.',
 		);
 		if ( isset( $customer_messages[ $status ] ) ) {
@@ -137,7 +147,7 @@ final class CVD_Web_Push {
 		if ( $order->get_meta( '_cvd_staff_new_order_notified', true ) ) { return; }
 		$users = get_users( array( 'role__in'=>array('administrator','shop_manager','cvd_clerk','cvd_operator'), 'fields'=>array('ID') ) );
 		foreach ( $users as $user ) {
-			self::notify_user( (int) $user->ID, $order->get_id(), 'new_order', 'Nuevo pedido #' . $order->get_order_number(), 'Revisar y preparar.', add_query_arg('order',$order->get_id(),home_url('/ventas/')) );
+			self::notify_user( (int) $user->ID, $order->get_id(), 'new_order', 'Nuevo pedido #' . $order->get_order_number(), 'Pedido recibido. Abre el pedido para revisar y comenzar la preparación.', self::staff_order_url( $order ) );
 		}
 		$order->update_meta_data( '_cvd_staff_new_order_notified', current_time('mysql',true) );
 		$order->save();
