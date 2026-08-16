@@ -14,44 +14,26 @@ final class CVD_Customer_Navigation {
 	}
 
 	private static function is_customer_surface(): bool {
-		if ( is_admin() || wp_doing_ajax() ) {
-			return false;
-		}
-		if ( function_exists( 'is_checkout' ) && is_checkout() ) {
-			return false;
-		}
+		if ( is_admin() || wp_doing_ajax() ) { return false; }
+		if ( function_exists( 'is_checkout' ) && is_checkout() ) { return false; }
 		if ( is_user_logged_in() ) {
 			$user = wp_get_current_user();
 			$program = class_exists( 'CVD_Registration' ) ? CVD_Registration::program_type( $user ) : '';
-			if ( in_array( $program, array( 'gestora', 'mensajero' ), true ) ) {
-				return false;
-			}
-			if ( array_intersect( array( 'administrator', 'shop_manager', 'cvd_clerk', 'cvd_operator' ), (array) $user->roles ) ) {
-				return false;
-			}
+			if ( in_array( $program, array( 'gestora', 'mensajero' ), true ) ) { return false; }
+			if ( array_intersect( array( 'administrator', 'shop_manager', 'cvd_clerk', 'cvd_operator' ), (array) $user->roles ) ) { return false; }
 		}
 		return true;
 	}
 
 	public static function assets(): void {
-		if ( ! self::is_customer_surface() ) {
-			return;
-		}
+		if ( ! self::is_customer_surface() ) { return; }
 		wp_enqueue_style( 'cvd-customer-navigation', CVD_URL . 'assets/customer-navigation.css', array(), CVD_VERSION );
 		wp_enqueue_script( 'cvd-customer-navigation', CVD_URL . 'assets/customer-navigation.js', array( 'jquery' ), CVD_VERSION, true );
-		wp_localize_script(
-			'cvd-customer-navigation',
-			'cvdCustomerNav',
-			array(
-				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-			)
-		);
+		wp_localize_script( 'cvd-customer-navigation', 'cvdCustomerNav', array( 'ajaxUrl' => admin_url( 'admin-ajax.php' ) ) );
 	}
 
 	public static function body_class( array $classes ): array {
-		if ( self::is_customer_surface() ) {
-			$classes[] = 'cvd-customer-navigation-visible';
-		}
+		if ( self::is_customer_surface() ) { $classes[] = 'cvd-customer-navigation-visible'; }
 		return $classes;
 	}
 
@@ -69,34 +51,26 @@ final class CVD_Customer_Navigation {
 		return $fragments;
 	}
 
-	public static function ajax_cart_count(): void {
-		wp_send_json_success( array( 'count' => self::cart_count() ) );
-	}
+	public static function ajax_cart_count(): void { wp_send_json_success( array( 'count' => self::cart_count() ) ); }
 
 	private static function active_key(): string {
-		if ( function_exists( 'is_cart' ) && is_cart() ) {
-			return 'cart';
-		}
-		if ( function_exists( 'is_account_page' ) && is_account_page() ) {
-			return function_exists( 'is_wc_endpoint_url' ) && is_wc_endpoint_url( 'orders' ) ? 'orders' : 'account';
-		}
-		if ( function_exists( 'is_shop' ) && ( is_shop() || is_product_category() || is_product_tag() ) ) {
-			return 'categories';
-		}
+		if ( function_exists( 'is_cart' ) && is_cart() ) { return 'cart'; }
+		if ( function_exists( 'is_account_page' ) && is_account_page() ) { return function_exists( 'is_wc_endpoint_url' ) && is_wc_endpoint_url( 'orders' ) ? 'orders' : 'account'; }
+		if ( function_exists( 'is_shop' ) && ( is_shop() || is_product_category() || is_product_tag() ) ) { return 'categories'; }
 		return is_front_page() ? 'home' : '';
 	}
 
 	private static function item( string $key, string $label, string $url, string $glyph, string $active ): string {
 		$classes = 'cvd-customer-nav__item' . ( $key === $active ? ' is-active' : '' ) . ( 'cart' === $key ? ' cvd-customer-nav__item--cart' : '' );
 		$current = $key === $active ? ' aria-current="page"' : '';
-		$badge = 'cart' === $key ? self::badge_html() : '';
+		$badge = '';
+		if ( 'cart' === $key ) { $badge = self::badge_html(); }
+		if ( 'orders' === $key && class_exists( 'CVD_Customer_Orders' ) && is_user_logged_in() ) { $badge = CVD_Customer_Orders::badge_html(); }
 		return '<a class="' . esc_attr( $classes ) . '" href="' . esc_url( $url ) . '"' . $current . ' data-cvd-nav="' . esc_attr( $key ) . '"><span class="cvd-customer-nav__icon" aria-hidden="true">' . esc_html( $glyph ) . '</span><span class="cvd-customer-nav__label">' . esc_html( $label ) . '</span>' . $badge . '</a>';
 	}
 
 	public static function render(): void {
-		if ( ! self::is_customer_surface() || ! function_exists( 'wc_get_page_permalink' ) ) {
-			return;
-		}
+		if ( ! self::is_customer_surface() || ! function_exists( 'wc_get_page_permalink' ) ) { return; }
 		$active = self::active_key();
 		$account_url = wc_get_page_permalink( 'myaccount' );
 		$orders_url = is_user_logged_in() ? wc_get_account_endpoint_url( 'orders' ) : $account_url;
