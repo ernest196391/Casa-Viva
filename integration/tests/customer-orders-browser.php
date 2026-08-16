@@ -39,11 +39,16 @@ $make_order = static function ( string $kind ) use ( $user_id, $product_id ): WC
 $active = $make_order( 'active' );
 $finished = $make_order( 'finished' );
 $orders_url = wc_get_account_endpoint_url( 'orders' );
+$orders_relative = wp_make_link_relative( $orders_url );
+
+if ( ! $orders_relative || '/' === $orders_relative ) {
+	throw new RuntimeException( 'WooCommerce no devolvió una URL utilizable para Pedidos.' );
+}
 
 echo wp_json_encode( array(
 	'user' => 'cvt_customer',
 	'password' => 'Synthetic-Customer-Only-1!',
 	'active_id' => $active->get_id(),
 	'finished_id' => $finished->get_id(),
-	'orders_path' => (string) wp_parse_url( $orders_url, PHP_URL_PATH ),
+	'orders_relative' => $orders_relative,
 ) ) . PHP_EOL;
