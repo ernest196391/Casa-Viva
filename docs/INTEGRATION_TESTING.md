@@ -165,6 +165,15 @@ Cada llamada `delivery` se ejecuta en un proceso WP-CLI independiente porque el 
 - valida operation/delivery/commission/earning cancelados y mantiene separado
   `delivery=failed` de `WooCommerce=failed`.
 
+### Fase 2A
+
+- consulta la proyección única en pedidos sintéticos nuevos, en preparación, listos,
+  recogida, custodia, entrega, fallo, devolución e incidencia;
+- ejecuta `new → preparing → ready` desde la proyección mediante
+  `CVD_Order_Transition_Service` y comprueba un flujo logístico avanzado;
+- verifica acciones por actor, bloqueo en `CONFLICT`, timeline y filtrado de campos
+  para dependienta frente a administración.
+
 ## Clasificación de pruebas
 
 - `artifacts/tests/test-canonical-*.php`: **unit tests**, sin WordPress.

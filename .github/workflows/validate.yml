@@ -36,6 +36,9 @@ jobs:
       - name: Validar servicio único de transiciones
         run: php artifacts/tests/test-order-transition-service-1c.php
 
+      - name: Validar contrato del Centro Único
+        run: node artifacts/tests/test-order-center-2a.mjs
+
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
