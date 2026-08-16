@@ -35,6 +35,14 @@ function assertNoInternalData(text) {
   expect(text).not.toContain('identity_email');
 }
 
+async function assertNoPageOverflow(page) {
+  const width = await page.evaluate(() => ({
+    scroll: document.documentElement.scrollWidth,
+    client: document.documentElement.clientWidth,
+  }));
+  expect(width.scroll).toBeLessThanOrEqual(width.client + 1);
+}
+
 test('Gestora A solo ve sus clientes y finanzas en móvil', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page, aUser, aPassword);
@@ -49,8 +57,7 @@ test('Gestora A solo ve sus clientes y finanzas en móvil', async ({ page }) => 
 
   const text = await shell.innerText();
   assertNoInternalData(text);
-  const width = await shell.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
-  expect(width.scroll).toBeLessThanOrEqual(width.client + 1);
+  await assertNoPageOverflow(page);
 });
 
 test('Gestora B no hereda datos del portal de Gestora A', async ({ page }) => {
@@ -67,4 +74,5 @@ test('Gestora B no hereda datos del portal de Gestora A', async ({ page }) => {
 
   const text = await shell.innerText();
   assertNoInternalData(text);
+  await assertNoPageOverflow(page);
 });
