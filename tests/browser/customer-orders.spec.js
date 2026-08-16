@@ -57,7 +57,7 @@ test('Detalle del pedido reúne compra, entrega y seguimiento sin datos internos
   await expect(detail.getByRole('heading', { name: 'Preparando pedido' })).toBeVisible();
   await expect(detail.getByRole('heading', { name: 'Tu compra' })).toBeVisible();
   await expect(detail.getByRole('heading', { name: 'Entrega' })).toBeVisible();
-  await expect(detail.getByRole('heading', { name: 'Seguimiento' })).toBeVisible();
+  await expect(detail.getByRole('heading', { name: /Seguimiento/ })).toBeVisible();
   await expect(detail).toContainText('Entrega a domicilio');
   await expect(detail.getByRole('link', { name: '← Mis pedidos' })).toBeVisible();
   await expect(detail).not.toContainText('commission');
@@ -66,4 +66,46 @@ test('Detalle del pedido reúne compra, entrega y seguimiento sin datos internos
 
   const width = await detail.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
   expect(width.scroll).toBeLessThanOrEqual(width.client + 1);
+});
+
+test('Detalle actualiza estado y ubicación sin recargar', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page);
+  await page.goto(new URL(ordersRelative, baseURL).toString(), { waitUntil: 'domcontentloaded' });
+  const active = page.locator(`[data-cvd-customer-order="${activeId}"]`);
+  const detailHref = await active.getByRole('link', { name: 'Ver pedido' }).getAttribute('href');
+  expect(detailHref).toBeTruthy();
+
+  const detailUrl = new URL(detailHref, baseURL).toString();
+  await page.goto(detailUrl, { waitUntil: 'domcontentloaded' });
+  const trackingUrl = await page.evaluate(() => window.cvdCustomerOrderLive && window.cvdCustomerOrderLive.url);
+  expect(trackingUrl).toBeTruthy();
+
+  await page.route(trackingUrl, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        orderId: Number(activeId),
+        stage: 'ON_THE_WAY_TO_CUSTOMER',
+        stageLabel: 'En camino',
+        deliveryStatus: 'handed_over',
+        deliveryStatusLabel: 'En camino al cliente',
+        location: { latitude: 23.1136, longitude: -82.3666, accuracy: 12, recordedAt: '2026-08-16T12:00:00Z' },
+        timeline: [
+          { label: 'Preparando pedido', timestamp: '2026-08-16 11:40:00' },
+          { label: 'En camino', timestamp: '2026-08-16 12:00:00' },
+        ],
+      }),
+    });
+  });
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const detail = page.locator(`[data-cvd-customer-order-detail="${activeId}"]`);
+  await expect(detail.locator('[data-cvd-customer-stage]')).toHaveText('En camino');
+  await expect(detail.locator('[data-cvd-live-status]')).toHaveText('En camino al cliente');
+  const map = detail.locator('[data-cvd-live-location]');
+  await expect(map).toBeVisible();
+  await expect(map).toHaveAttribute('href', /google\.com\/maps\/search/);
+  await expect(detail.locator('[data-cvd-customer-timeline]')).toContainText('En camino');
 });
