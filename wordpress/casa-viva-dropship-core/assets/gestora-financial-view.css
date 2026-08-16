@@ -1,0 +1,46 @@
+/* Mobile hardening for the gestora portal and auditable financial history. */
+@media (max-width: 800px) {
+  .cvd-app-shell,
+  .cvd-app-shell > *,
+  .cvd-app-shell .cvd-panel,
+  .cvd-app-shell .cvd-panel > *,
+  .cvd-app-shell .cvd-table-wrap {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .cvd-app-shell .cvd-table-wrap table,
+  .cvd-app-shell .cvd-table-wrap tbody,
+  .cvd-app-shell .cvd-table-wrap tr,
+  .cvd-app-shell .cvd-table-wrap td {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .cvd-app-shell .cvd-table-wrap td > *,
+  .cvd-app-shell input,
+  .cvd-app-shell select,
+  .cvd-app-shell button,
+  .cvd-app-shell a {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .cvd-app-shell .cvd-table-wrap td {
+    overflow-wrap: anywhere;
+  }
+
+  .cvd-history-panel .cvd-table-wrap td:nth-child(1)::before { content: 'Pedido'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(2)::before { content: 'Fecha'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(3)::before { content: 'Cliente'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(4)::before { content: 'Producto'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(5)::before { content: 'Importe'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(6)::before { content: 'Comisión base'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(7)::before { content: 'Margen propio'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(8)::before { content: 'Total'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(9)::before { content: 'Regla aplicada'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(10)::before { content: 'Estado'; }
+}
