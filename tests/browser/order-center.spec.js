@@ -44,7 +44,7 @@ async function assertLayout(page) {
   const layout = await page.evaluate(() => {
     const width = window.innerWidth;
     const doc = document.documentElement;
-    const candidates = [...document.querySelectorAll('.cvd-oc-card, .cvd-oc-head, .cvd-oc-primary button')];
+    const candidates = [...document.querySelectorAll('.cvd-oc-card, .cvd-oc-head, .cvd-oc-primary button, .cvd-oc-contact')];
     const bad = candidates.map((el) => {
       const r = el.getBoundingClientRect();
       return { tag: el.tagName, left: r.left, right: r.right, width: r.width };
@@ -74,6 +74,20 @@ for (const viewport of [
     await context.close();
   });
 }
+
+test('WhatsApp llamada y navegación usan datos reales del pedido', async ({ page }) => {
+  await login(page, clerk);
+  await openOrder(page, ids.handed);
+  const whatsapp = page.locator('[data-contact="whatsapp"]');
+  const call = page.locator('[data-contact="call"]');
+  const navigate = page.locator('[data-contact="navigate"]');
+  await expect(whatsapp).toBeVisible();
+  await expect(call).toBeVisible();
+  await expect(navigate).toBeVisible();
+  await expect(whatsapp).toHaveAttribute('href', /https:\/\/wa\.me\/5355550101\?text=/);
+  await expect(call).toHaveAttribute('href', 'tel:+5355550101');
+  await expect(navigate).toHaveAttribute('href', 'https://maps.google.com/?q=23.1136,-82.3666');
+});
 
 test('estados ready, handed_over y conflict se proyectan correctamente', async ({ page }) => {
   await login(page, admin);
