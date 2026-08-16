@@ -69,6 +69,9 @@ jobs:
       - name: Ejecutar integración WordPress y MariaDB
         run: scripts/integration.sh test
 
+      - name: Validar notificaciones y enlaces directos
+        run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/notifications-direct-links.php
+
       - name: Mostrar diagnóstico si falla
         if: failure()
         run: scripts/integration.sh logs
