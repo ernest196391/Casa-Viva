@@ -33,21 +33,25 @@ final class CVD_Attribution {
 		}
 	}
 
+	/**
+	 * First-touch referral owner for the current browser.
+	 *
+	 * A valid saved referral wins over later links. This keeps storefront pricing and
+	 * order attribution aligned with the permanent ownership model.
+	 */
 	public static function current_referral_owner(): ?array {
-		$owner = self::owner_from_request();
-		return $owner ?: self::owner_from_saved_referral();
+		$owner = self::owner_from_saved_referral();
+		return $owner ?: self::owner_from_request();
 	}
 
-	/** Resolve the permanent owner for the authenticated customer before cookie fallback. */
+	/** Resolve permanent ownership for an authenticated customer before transient referral state. */
 	public static function current_customer_owner(): ?array {
-		$active_referral = self::current_referral_owner();
-		if ( $active_referral ) { return $active_referral; }
 		if ( is_user_logged_in() ) {
 			$user = wp_get_current_user();
 			$owner = self::find_existing_owner( self::identities( '', $user->user_email, $user->ID ) );
 			if ( $owner ) { return $owner; }
 		}
-		return null;
+		return self::current_referral_owner();
 	}
 
 	/** Ensure LiteSpeed never shares one gestora's storefront prices with another visitor. */
@@ -73,6 +77,17 @@ final class CVD_Attribution {
 		if ( ! $owner ) {
 			return;
 		}
+
+		// First touch is permanent at browser level too: a later referral link cannot
+		// replace a valid saved owner. Administration remains the only reassignment path.
+		$saved_owner = self::owner_from_saved_referral();
+		if ( $saved_owner ) {
+			if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+				define( 'DONOTCACHEPAGE', true );
+			}
+			return;
+		}
+
 		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
 			define( 'DONOTCACHEPAGE', true );
 		}
@@ -117,12 +132,16 @@ final class CVD_Attribution {
 		}
 
 		$identities = self::identities( $phone, $email, $customer_id );
-		$owner = self::owner_from_request();
+
+		// Permanent customer ownership always wins. This protects a gestora's client
+		// when the client later arrives organically, through another link, or when a
+		// gestora places the order on the client's behalf.
+		$owner = self::find_existing_owner( $identities );
 		if ( ! $owner ) {
 			$owner = self::owner_from_saved_referral();
 		}
 		if ( ! $owner ) {
-			$owner = self::find_existing_owner( $identities );
+			$owner = self::owner_from_request();
 		}
 		if ( ! $owner ) {
 			$owner = self::owner_from_coupon( $order );
@@ -164,7 +183,11 @@ final class CVD_Attribution {
 		$identities = array();
 		$phone = preg_replace( '/\D+/', '', $phone );
 		$email = sanitize_email( strtolower( trim( $email ) ) );
-		if ( $customer_id > 0 ) {
+
+		// A gestora can checkout while logged in for a different customer. In that
+		// case her own WordPress user ID is an operator identity, not the client.
+		$use_customer_identity = $customer_id > 0 && ! self::is_program_operator( $customer_id );
+		if ( $use_customer_identity ) {
 			$identities[] = array( 'type' => 'customer', 'hash' => hash( 'sha256', (string) $customer_id ) );
 		}
 		if ( $phone ) {
@@ -176,30 +199,58 @@ final class CVD_Attribution {
 		return $identities;
 	}
 
+	private static function is_program_operator( int $user_id ): bool {
+		$user = get_userdata( $user_id );
+		if ( ! $user ) { return false; }
+		$roles = (array) $user->roles;
+		return (bool) array_intersect(
+			array( 'cvd_gestora', 'cvd_influencer', 'cvd_messenger', 'cvd_clerk', 'cvd_operator', 'administrator', 'shop_manager' ),
+			$roles
+		);
+	}
+
 	private static function find_existing_owner( array $identities ): ?array {
 		foreach ( $identities as $identity ) {
-			$orders = wc_get_orders(
-				array(
-					'limit'      => 1,
-					'orderby'    => 'date',
-					'order'      => 'ASC',
-					// Un pedido cancelado o fallido no vincula permanentemente al cliente.
-					'status'     => array( 'pending', 'processing', 'on-hold', 'completed' ),
-					'meta_query' => array(
-						array( 'key' => '_cvd_identity_' . $identity['type'], 'value' => $identity['hash'] ),
-						array( 'key' => '_cvd_owner_user_id', 'value' => 0, 'compare' => '>', 'type' => 'NUMERIC' ),
-					),
-				)
-			);
-			if ( $orders ) {
-				$order = $orders[0];
-				return array(
-					'owner_user_id' => absint( $order->get_meta( '_cvd_owner_user_id', true ) ),
-					'owner_type'    => sanitize_key( $order->get_meta( '_cvd_owner_type', true ) ),
-					'referral_code' => self::sanitize_code( (string) $order->get_meta( '_cvd_referral_code', true ) ),
-					'source'        => 'linked_customer',
+			$page = 1;
+			do {
+				$result = wc_get_orders(
+					array(
+						'limit'      => 20,
+						'page'       => $page,
+						'paginate'   => true,
+						'orderby'    => 'date',
+						'order'      => 'ASC',
+						// Un pedido cancelado o fallido no vincula permanentemente al cliente.
+						'status'     => array( 'pending', 'processing', 'on-hold', 'completed' ),
+						// WooCommerce 8.2 no filtra de forma fiable el meta_query compuesto
+						// en todos los motores de almacenamiento. La identidad exacta se
+						// consulta como meta_key/meta_value y el owner se valida abajo.
+						'meta_key'   => '_cvd_identity_' . $identity['type'],
+						'meta_value' => $identity['hash'],
+					)
 				);
-			}
+
+				$orders = is_object( $result ) && isset( $result->orders ) ? $result->orders : (array) $result;
+				foreach ( $orders as $order ) {
+					if ( ! $order instanceof WC_Order ) { continue; }
+					// Defensa adicional: aunque el data store ignore accidentalmente el
+					// filtro, nunca aceptar una identidad distinta a la solicitada.
+					$stored_hash = (string) $order->get_meta( '_cvd_identity_' . $identity['type'], true );
+					if ( ! $stored_hash || ! hash_equals( $identity['hash'], $stored_hash ) ) { continue; }
+					$owner_user_id = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
+					$owner_type = sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) );
+					if ( ! $owner_user_id || 'organic' === $owner_type ) { continue; }
+					return array(
+						'owner_user_id' => $owner_user_id,
+						'owner_type'    => $owner_type,
+						'referral_code' => self::sanitize_code( (string) $order->get_meta( '_cvd_referral_code', true ) ),
+						'source'        => 'linked_customer',
+					);
+				}
+
+				$max_pages = is_object( $result ) && isset( $result->max_num_pages ) ? max( 1, (int) $result->max_num_pages ) : 1;
+				$page++;
+			} while ( $page <= $max_pages );
 		}
 		return null;
 	}
@@ -230,18 +281,21 @@ final class CVD_Attribution {
 		if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
 			return null;
 		}
+		$owner_ids = array();
 		foreach ( WC()->cart->get_cart() as $cart_item ) {
 			$user_id = absint( $cart_item['_cvd_gestora_id'] ?? 0 );
-			if ( $user_id ) {
-				return array(
-					'owner_user_id' => $user_id,
-					'owner_type'    => 'gestora',
-					'referral_code' => self::sanitize_code( (string) get_user_meta( $user_id, '_cvd_referral_code', true ) ),
-					'source'        => 'cart_snapshot',
-				);
-			}
+			if ( $user_id ) { $owner_ids[ $user_id ] = true; }
 		}
-		return null;
+		if ( 1 !== count( $owner_ids ) ) {
+			return null;
+		}
+		$user_id = (int) array_key_first( $owner_ids );
+		return array(
+			'owner_user_id' => $user_id,
+			'owner_type'    => 'gestora',
+			'referral_code' => self::sanitize_code( (string) get_user_meta( $user_id, '_cvd_referral_code', true ) ),
+			'source'        => 'cart_snapshot',
+		);
 	}
 
 	private static function owner_from_coupon( WC_Order $order ): ?array {
