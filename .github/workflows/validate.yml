@@ -108,6 +108,7 @@ jobs:
           echo "$fixture_json" | jq -e . >/dev/null
           {
             echo "ORDER_CENTER_BASE_URL=http://localhost:8889"
+            echo "ORDER_CENTER_PAGE_ID=$(echo "$fixture_json" | jq -r .page_id)"
             echo "ORDER_CENTER_NEW_ID=$(echo "$fixture_json" | jq -r .new_id)"
             echo "ORDER_CENTER_READY_ID=$(echo "$fixture_json" | jq -r .ready_id)"
             echo "ORDER_CENTER_HANDED_ID=$(echo "$fixture_json" | jq -r .handed_id)"
