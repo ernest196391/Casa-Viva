@@ -87,6 +87,9 @@ jobs:
       - name: Ejecutar integración WordPress y MariaDB
         run: scripts/integration.sh test
 
+      - name: Validar panel financiero de gestora
+        run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/gestora-dashboard-4d.php
+
       - name: Validar notificaciones y enlaces directos
         run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/notifications-direct-links.php
 
