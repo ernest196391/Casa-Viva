@@ -1,0 +1,13 @@
+/* Mobile labels for the 10-column auditable gestora financial history. */
+@media (max-width: 800px) {
+  .cvd-history-panel .cvd-table-wrap td:nth-child(1)::before { content: 'Pedido'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(2)::before { content: 'Fecha'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(3)::before { content: 'Cliente'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(4)::before { content: 'Producto'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(5)::before { content: 'Importe'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(6)::before { content: 'Comisión base'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(7)::before { content: 'Margen propio'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(8)::before { content: 'Total'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(9)::before { content: 'Regla aplicada'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(10)::before { content: 'Estado'; }
+}
