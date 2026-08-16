@@ -6,6 +6,11 @@ if ( ! is_array( $fixture ) || empty( $fixture['product_id'] ) ) {
 	throw new RuntimeException( 'Falta el fixture base de integración.' );
 }
 
+// Browser tests need deterministic credentials even when the disposable
+// environment reuses an already-created synthetic user during setup.
+wp_set_password( 'Synthetic-Admin-Only-1!', absint( $fixture['admin_id'] ) );
+wp_set_password( 'Synthetic-Clerk-Only-1!', absint( $fixture['clerk_id'] ) );
+
 $page = get_page_by_path( 'centro-pedido' );
 if ( ! $page ) {
 	$page_id = wp_insert_post( array(
@@ -55,15 +60,15 @@ $handed_order->save();
 $conflict_order = $make_order( 'new', 'picked_up' );
 
 $browser = array(
-	'page_id'       => $page_id,
-	'new_id'        => $new_order->get_id(),
-	'ready_id'      => $ready_order->get_id(),
-	'handed_id'     => $handed_order->get_id(),
-	'conflict_id'   => $conflict_order->get_id(),
-	'admin_user'    => 'cvt_admin',
-	'admin_password'=> 'Synthetic-Admin-Only-1!',
-	'clerk_user'    => 'cvt_clerk',
-	'clerk_password'=> 'Synthetic-Clerk-Only-1!',
+	'page_id'        => $page_id,
+	'new_id'         => $new_order->get_id(),
+	'ready_id'       => $ready_order->get_id(),
+	'handed_id'      => $handed_order->get_id(),
+	'conflict_id'    => $conflict_order->get_id(),
+	'admin_user'     => 'cvt_admin',
+	'admin_password' => 'Synthetic-Admin-Only-1!',
+	'clerk_user'     => 'cvt_clerk',
+	'clerk_password' => 'Synthetic-Clerk-Only-1!',
 );
 update_option( 'cvt_order_center_browser_fixture', $browser, false );
 echo wp_json_encode( $browser ) . PHP_EOL;
