@@ -69,12 +69,13 @@ final class CVD_Gestora_Financial_View {
 	private static function summary_card( string $label, array $amounts, string $note ): string {
 		$html = '<article><span>' . esc_html( $label ) . '</span><strong class="cvd-multicurrency-total">';
 		if ( ! $amounts ) {
-			$html .= wp_kses_post( wc_price( 0 ) );
+			$currency = get_woocommerce_currency();
+			$html .= '<span class="cvd-money-line" data-currency="' . esc_attr( $currency ) . '">' . wp_kses_post( wc_price( 0, array( 'currency' => $currency ) ) ) . ' <small>' . esc_html( $currency ) . '</small></span>';
 		} else {
 			ksort( $amounts );
 			$parts = array();
 			foreach ( $amounts as $currency => $amount ) {
-				$parts[] = '<span class="cvd-money-line">' . wp_kses_post( wc_price( $amount, array( 'currency' => $currency ) ) ) . '</span>';
+				$parts[] = '<span class="cvd-money-line" data-currency="' . esc_attr( $currency ) . '">' . wp_kses_post( wc_price( $amount, array( 'currency' => $currency ) ) ) . ' <small>' . esc_html( $currency ) . '</small></span>';
 			}
 			$html .= implode( '<span class="cvd-money-separator"> · </span>', $parts );
 		}
@@ -94,14 +95,19 @@ final class CVD_Gestora_Financial_View {
 				$products[] = $item->get_name() . ' × ' . max( 1, (int) $item->get_quantity() );
 			}
 			$status = sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ?: 'pending';
-			$currency = $order->get_currency();
+			$currency = strtoupper( (string) $order->get_currency() );
 			$base = (float) $order->get_meta( '_cvd_base_commission_amount', true );
 			$margin = (float) $order->get_meta( '_cvd_margin_amount', true );
 			$total = (float) $order->get_meta( '_cvd_commission_amount', true );
 			$rules = self::human_rules( $order );
-			$html .= '<tr><td>#' . esc_html( $order->get_order_number() ) . '</td><td>' . esc_html( wc_format_datetime( $order->get_date_created() ) ) . '</td><td>' . esc_html( $order->get_formatted_billing_full_name() ) . '</td><td>' . esc_html( implode( ', ', $products ) ) . '</td><td>' . wp_kses_post( $order->get_formatted_order_total() ) . '</td><td>' . wp_kses_post( wc_price( $base, array( 'currency' => $currency ) ) ) . '</td><td>' . wp_kses_post( wc_price( $margin, array( 'currency' => $currency ) ) ) . '</td><td><strong>' . wp_kses_post( wc_price( $total, array( 'currency' => $currency ) ) ) . '</strong></td><td>' . esc_html( $rules ) . '</td><td><span class="cvd-badge">' . esc_html( $labels[ $status ] ?? ucfirst( $status ) ) . '</span></td></tr>';
+			$html .= '<tr><td>#' . esc_html( $order->get_order_number() ) . '</td><td>' . esc_html( wc_format_datetime( $order->get_date_created() ) ) . '</td><td>' . esc_html( $order->get_formatted_billing_full_name() ) . '</td><td>' . esc_html( implode( ', ', $products ) ) . '</td><td>' . wp_kses_post( $order->get_formatted_order_total() ) . '</td><td>' . self::money_with_code( $base, $currency ) . '</td><td>' . self::money_with_code( $margin, $currency ) . '</td><td><strong>' . self::money_with_code( $total, $currency ) . '</strong></td><td>' . esc_html( $rules ) . '</td><td><span class="cvd-badge">' . esc_html( $labels[ $status ] ?? ucfirst( $status ) ) . '</span></td></tr>';
 		}
 		return $html . '</tbody></table></div>';
+	}
+
+	private static function money_with_code( float $amount, string $currency ): string {
+		$currency = $currency ?: get_woocommerce_currency();
+		return wp_kses_post( wc_price( $amount, array( 'currency' => $currency ) ) ) . ' <small>' . esc_html( $currency ) . '</small>';
 	}
 
 	private static function human_rules( WC_Order $order ): string {
