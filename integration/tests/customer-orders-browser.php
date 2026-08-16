@@ -9,6 +9,7 @@ if ( ! $user_id ) {
 $user = new WP_User( $user_id );
 $user->set_role( 'customer' );
 wp_set_password( 'Synthetic-Customer-Only-1!', $user_id );
+update_option( 'cvd_central_whatsapp', '5355550101' );
 
 $product_id = wc_get_product_id_by_sku( 'CVT-SYNTHETIC-1' );
 if ( ! $product_id ) { throw new RuntimeException( 'Producto sintético ausente.' ); }
