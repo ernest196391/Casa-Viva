@@ -4,8 +4,9 @@
 - 2A: Centro Único del Pedido validado e integrado.
 - 2B: notificaciones descriptivas y enlaces directos validado e integrado.
 - 2C: WhatsApp, llamada y navegación directa validado e integrado.
-- 2D: Centro Operativo del Mensajero en validación.
+- 2D: Centro Operativo del Mensajero validado e integrado.
+- 3A: Navegación móvil del cliente en implementación y validación.
 
-Rama 2D: `codex/messenger-operational-center`.
+Rama 3A: `codex/customer-mobile-navigation-foundation`.
 
-Objetivo 2D: priorizar la entrega activa en el portal existente del mensajero, destacar una acción logística principal y agrupar accesos rápidos a WhatsApp, llamada y navegación sin crear estados nuevos ni duplicar la lógica logística existente.
+Objetivo 3A: incorporar una barra inferior mobile-first con Inicio, Categorías, Carrito, Pedidos y Cuenta, reutilizando WooCommerce y manteniendo el badge del carrito sincronizado sin invadir portales internos ni modificar checkout, estados o lógica operativa.
