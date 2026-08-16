@@ -43,6 +43,25 @@ async function assertNoPageOverflow(page) {
   expect(width.scroll).toBeLessThanOrEqual(width.client + 1);
 }
 
+async function assertFinancialMobileLabels(page) {
+  const expected = [
+    'Pedido',
+    'Fecha',
+    'Cliente',
+    'Producto',
+    'Importe',
+    'Comisión base',
+    'Margen propio',
+    'Total',
+    'Regla aplicada',
+    'Estado',
+  ];
+  const labels = await page.locator('.cvd-history-panel tbody tr').first().locator('td').evaluateAll((cells) =>
+    cells.map((cell) => getComputedStyle(cell, '::before').content.replace(/^['"]|['"]$/g, '')),
+  );
+  expect(labels).toEqual(expected);
+}
+
 test('Gestora A solo ve sus clientes y finanzas en móvil', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page, aUser, aPassword);
@@ -57,6 +76,7 @@ test('Gestora A solo ve sus clientes y finanzas en móvil', async ({ page }) => 
 
   const text = await shell.innerText();
   assertNoInternalData(text);
+  await assertFinancialMobileLabels(page);
   await assertNoPageOverflow(page);
 });
 
@@ -74,5 +94,6 @@ test('Gestora B no hereda datos del portal de Gestora A', async ({ page }) => {
 
   const text = await shell.innerText();
   assertNoInternalData(text);
+  await assertFinancialMobileLabels(page);
   await assertNoPageOverflow(page);
 });
