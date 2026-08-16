@@ -51,6 +51,9 @@ jobs:
       - name: Validar contrato del detalle del pedido del cliente
         run: node artifacts/tests/test-customer-order-detail-3c.mjs
 
+      - name: Validar contrato de seguimiento en vivo del cliente
+        run: node artifacts/tests/test-customer-live-tracking-3d.mjs
+
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
