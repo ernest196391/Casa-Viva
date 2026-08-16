@@ -39,6 +39,9 @@ jobs:
       - name: Validar contrato del Centro Único
         run: node artifacts/tests/test-order-center-2a.mjs
 
+      - name: Validar contrato del Centro Operativo del Mensajero
+        run: node artifacts/tests/test-messenger-center-2d.mjs
+
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
