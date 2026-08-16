@@ -6,6 +6,19 @@ defined( 'ABSPATH' ) || exit;
 final class CVD_Gestora_Financial_View {
 	public static function register(): void {
 		add_filter( 'do_shortcode_tag', array( __CLASS__, 'filter_portal' ), 20, 4 );
+		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 30 );
+	}
+
+	public static function assets(): void {
+		if ( ! is_page( 'area-gestoras' ) ) {
+			return;
+		}
+		wp_enqueue_style(
+			'cvd-gestora-financial-view',
+			CVD_URL . 'assets/gestora-financial-view.css',
+			array( 'cvd-portal' ),
+			CVD_VERSION
+		);
 	}
 
 	public static function filter_portal( string $output, string $tag, array $attr, array $match ): string {
