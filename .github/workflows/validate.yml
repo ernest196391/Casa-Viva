@@ -108,7 +108,9 @@ jobs:
           compose=(docker compose -f integration/compose.yml)
           "${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/bootstrap.php >/dev/null
           fixture_json="$("${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/order-center-browser.php | tail -n 1)"
+          messenger_json="$("${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/messenger-center-browser.php | tail -n 1)"
           echo "$fixture_json" | jq -e . >/dev/null
+          echo "$messenger_json" | jq -e . >/dev/null
           {
             echo "ORDER_CENTER_BASE_URL=http://localhost:8889"
             echo "ORDER_CENTER_PAGE_ID=$(echo "$fixture_json" | jq -r .page_id)"
@@ -120,10 +122,14 @@ jobs:
             echo "ORDER_CENTER_ADMIN_PASSWORD=$(echo "$fixture_json" | jq -r .admin_password)"
             echo "ORDER_CENTER_CLERK_USER=$(echo "$fixture_json" | jq -r .clerk_user)"
             echo "ORDER_CENTER_CLERK_PASSWORD=$(echo "$fixture_json" | jq -r .clerk_password)"
+            echo "MESSENGER_CENTER_PAGE_ID=$(echo "$messenger_json" | jq -r .page_id)"
+            echo "MESSENGER_CENTER_ORDER_ID=$(echo "$messenger_json" | jq -r .order_id)"
+            echo "MESSENGER_CENTER_USER=$(echo "$messenger_json" | jq -r .messenger_user)"
+            echo "MESSENGER_CENTER_PASSWORD=$(echo "$messenger_json" | jq -r .messenger_pass)"
           } >> "$GITHUB_ENV"
 
       - name: Ejecutar validación visual real
-        run: npx playwright test tests/browser/order-center.spec.js --reporter=line
+        run: npx playwright test tests/browser --reporter=line
 
       - name: Subir screenshots del Centro Único
         if: always()
