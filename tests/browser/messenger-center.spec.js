@@ -22,6 +22,28 @@ async function openCenter(page) {
   await expect(page.locator(`[data-delivery-id="${orderId}"]`)).toBeVisible({ timeout: 15000 });
 }
 
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  await page.screenshot({ path: testInfo.outputPath('test-failed-messenger.png'), fullPage: true }).catch(() => {});
+  const snapshot = await page.evaluate(() => ({
+    href: window.location.href,
+    width: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    title: document.querySelector('#entregas h2')?.textContent || '',
+    shellClass: document.querySelector('.cvd-dashboard.cvd-app-shell')?.className || '',
+    cards: Array.from(document.querySelectorAll('[data-delivery-id]')).map((card) => ({
+      id: card.getAttribute('data-delivery-id'),
+      status: card.getAttribute('data-delivery-status'),
+      className: card.className,
+      whatsapp: Boolean(card.querySelector('a[href^="https://wa.me/"]')),
+      phone: Boolean(card.querySelector('a[href^="tel:"]')),
+      navigate: Array.from(card.querySelectorAll('a')).some((link) => link.textContent.trim() === 'Navegar'),
+      delivered: Boolean(card.querySelector('[data-confirm-delivery="delivered"]')),
+    })),
+  })).catch(() => null);
+  if (snapshot) console.log('MESSENGER_DIAGNOSTIC ' + JSON.stringify(snapshot));
+});
+
 test('mensajero ve una entrega activa con acciones operativas directas', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page);
