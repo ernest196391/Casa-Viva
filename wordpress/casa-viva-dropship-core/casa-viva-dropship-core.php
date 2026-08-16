@@ -22,6 +22,7 @@ require_once CVD_DIR . 'includes/class-cvd-customer-orders.php';
 require_once CVD_DIR . 'includes/class-cvd-customer-order-support.php';
 require_once CVD_DIR . 'includes/class-cvd-customer-navigation.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-financial-view.php';
+require_once CVD_DIR . 'includes/class-cvd-gestora-price-integrity.php';
 
 register_activation_hook( __FILE__, array( 'CVD_Plugin', 'activate' ) );
 
@@ -34,6 +35,7 @@ add_action(
 			CVD_Customer_Order_Support::register();
 			CVD_Customer_Navigation::register();
 			CVD_Gestora_Financial_View::register();
+			CVD_Gestora_Price_Integrity::register();
 		}
 	}
 );
