@@ -45,6 +45,19 @@
     target.classList.toggle("is-error", Boolean(error));
   }
 
+  function withQuery(url, params) {
+    var target = new URL(url, window.location.href);
+    Object.keys(params).forEach(function (key) {
+      var value = params[key];
+      if (value === "" || value == null) {
+        target.searchParams.delete(key);
+      } else {
+        target.searchParams.set(key, value);
+      }
+    });
+    return target.toString();
+  }
+
   async function api(url, options) {
     var response = await fetch(url, Object.assign({
       credentials: "same-origin",
@@ -85,8 +98,10 @@
     if (!list || !cvdInventory.reportUrl) return;
     list.innerHTML = "<p>Cargando actividad…</p>";
     try {
-      var query = reportFilter && reportFilter.value ? "?type=" + encodeURIComponent(reportFilter.value) : "";
-      var report = await api(cvdInventory.reportUrl + query, { method: "GET" });
+      var reportUrl = withQuery(cvdInventory.reportUrl, {
+        type: reportFilter && reportFilter.value ? reportFilter.value : ""
+      });
+      var report = await api(reportUrl, { method: "GET" });
       document.getElementById("cvd-summary-entries").textContent = report.summary.entries;
       document.getElementById("cvd-summary-exits").textContent = report.summary.exits;
       document.getElementById("cvd-summary-movements").textContent = report.summary.movements;
@@ -116,7 +131,7 @@
     if (!code) return message(status, "Escribe o escanea un código.", true);
     message(status, "Buscando…", false);
     try {
-      var product = await api(cvdInventory.productUrl + "?code=" + encodeURIComponent(code), { method: "GET" });
+      var product = await api(withQuery(cvdInventory.productUrl, { code: code }), { method: "GET" });
       codeInput.value = product.code;
       paintProduct(product);
       message(status, "Producto encontrado.", false);
