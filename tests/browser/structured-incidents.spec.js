@@ -26,6 +26,17 @@ async function openOrder(page) {
   await expect(page.locator('#cvd-structured-incidents')).toBeVisible({ timeout: 15000 });
 }
 
+async function submitIncident(page, buttonName) {
+  const responsePromise = page.waitForResponse((response) =>
+    response.request().method() === 'POST' && response.url().includes('/structured-incidents/'),
+    { timeout: 15000 }
+  );
+  await page.locator('#cvd-structured-incidents').getByRole('button', { name: buttonName }).click();
+  const response = await responsePromise;
+  expect(response.ok(), await response.text()).toBeTruthy();
+  return response.json();
+}
+
 test('dependienta abre y resuelve incidencia estructurada sin cambiar la etapa', async ({ page }) => {
   await login(page);
   await openOrder(page);
@@ -36,17 +47,20 @@ test('dependienta abre y resuelve incidencia estructurada sin cambiar la etapa',
   await expect(panel.locator('select[name="reason"]')).toContainText('Cliente no recoge');
   await panel.locator('select[name="reason"]').selectOption('customer_no_show');
   await panel.locator('textarea[name="note"]').fill('Cliente no acudió a la recogida acordada.');
-  await panel.getByRole('button', { name: 'Registrar incidencia' }).click();
+  const opened = await submitIncident(page, 'Registrar incidencia');
+  expect(opened.transition.success).toBeTruthy();
+  expect(opened.incident.active.active).toBeTruthy();
 
-  await page.waitForLoadState('domcontentloaded');
   await expect(page.locator('#cvd-structured-incidents')).toContainText('Cliente no recoge', { timeout: 15000 });
   await expect(page.locator('.cvd-oc-stage')).toContainText(/READY/i);
 
   const activePanel = page.locator('#cvd-structured-incidents');
   await activePanel.locator('textarea[name="note"]').fill('Cliente confirmó nueva hora de recogida.');
-  await activePanel.getByRole('button', { name: 'Resolver incidencia' }).click();
+  const resolved = await submitIncident(page, 'Resolver incidencia');
+  expect(resolved.transition.success).toBeTruthy();
+  expect(resolved.incident.active.active).toBeFalsy();
+  expect(resolved.incident.historyCount).toBe(2);
 
-  await page.waitForLoadState('domcontentloaded');
   await expect(page.locator('#cvd-structured-incidents').getByRole('button', { name: 'Registrar incidencia' })).toBeVisible({ timeout: 15000 });
   await expect(page.locator('.cvd-oc-stage')).toContainText(/READY/i);
 
