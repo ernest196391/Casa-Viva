@@ -30,9 +30,17 @@
     return node.innerHTML;
   }
 
+  function withQuery(url, params) {
+    var target = new URL(url, window.location.href);
+    Object.keys(params).forEach(function (key) {
+      target.searchParams.set(key, params[key]);
+    });
+    return target.toString();
+  }
+
   async function refreshIntegrity() {
     try {
-      var response = await fetch(cvdInventory.reportUrl + "?limit=10", {
+      var response = await fetch(withQuery(cvdInventory.reportUrl, { limit: "10" }), {
         credentials: "same-origin",
         headers: { "X-WP-Nonce": cvdInventory.nonce, "Content-Type": "application/json" }
       });
