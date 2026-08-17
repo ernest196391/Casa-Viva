@@ -10,7 +10,7 @@ $assert = static function ( bool $condition, string $message ): void {
 	if ( ! $condition ) { throw new RuntimeException( 'FAIL 5D: ' . $message ); }
 };
 
-$make_order = static function ( string $fulfillment, string $operation, string $delivery ): WC_Order use ( $fixture ) {
+$make_order = static function ( string $fulfillment, string $operation, string $delivery ) use ( $fixture ): WC_Order {
 	$order = wc_create_order();
 	$product = wc_get_product( absint( $fixture['product_id'] ) );
 	if ( ! $product ) { throw new RuntimeException( 'Producto sintético no encontrado.' ); }
@@ -38,7 +38,8 @@ $call = static function ( WC_Order $order, array $payload, string $key ): WP_RES
 wp_set_current_user( absint( $fixture['clerk_id'] ) );
 
 $pickup = $make_order( 'pickup', 'ready', 'unassigned' );
-$open = $call( $pickup, array( 'action'=>'open', 'reason'=>'customer_no_show', 'note'=>'Cliente no acudió a la hora acordada.' ), '5d-open-pickup-' . $pickup->get_id() );
+$open_key = '5d-open-pickup-' . $pickup->get_id();
+$open = $call( $pickup, array( 'action'=>'open', 'reason'=>'customer_no_show', 'note'=>'Cliente no acudió a la hora acordada.' ), $open_key );
 $data = $open->get_data();
 $assert( ! empty( $data['transition']['success'] ), 'no abrió la incidencia de cliente que no recoge' );
 $pickup = wc_get_order( $pickup->get_id() );
@@ -49,11 +50,19 @@ $history = (array) $pickup->get_meta( '_cvd_structured_incident_history', true )
 $assert( 1 === count( $history ), 'la apertura no generó exactamente un registro estructurado' );
 $assert( ! empty( $history[0]['event_id'] ) && $history[0]['event_id'] === $data['transition']['event_id'], 'el registro estructurado no enlaza el evento canónico' );
 
-$replay = $call( $pickup, array( 'action'=>'open', 'reason'=>'customer_no_show', 'note'=>'Cliente no acudió a la hora acordada.' ), '5d-open-pickup-' . $pickup->get_id() );
+$replay = $call( $pickup, array( 'action'=>'open', 'reason'=>'customer_no_show', 'note'=>'Cliente no acudió a la hora acordada.' ), $open_key );
 $replay_data = $replay->get_data();
 $assert( ! empty( $replay_data['transition']['idempotent_replay'] ), 'la apertura repetida no fue idempotente' );
 $pickup = wc_get_order( $pickup->get_id() );
 $assert( 1 === count( (array) $pickup->get_meta( '_cvd_structured_incident_history', true ) ), 'el replay duplicó el historial estructurado' );
+
+$other_active = new WP_REST_Request( 'POST', '/casa-viva/v1/structured-incidents/' . $pickup->get_id() );
+$other_active->set_url_params( array( 'id' => $pickup->get_id() ) );
+$other_active->set_param( 'action', 'open' );
+$other_active->set_param( 'reason', 'missing_product' );
+$other_active->set_param( 'note', 'Intento de sustituir la incidencia activa.' );
+$other_response = CVD_Structured_Incidents::act( $other_active );
+$assert( is_wp_error( $other_response ) && 'cvd_incident_already_active' === $other_response->get_error_code(), 'permitió sustituir una incidencia activa por otra' );
 
 $resolve = $call( $pickup, array( 'action'=>'resolve', 'note'=>'Cliente confirmó nueva recogida.' ), '5d-resolve-pickup-' . $pickup->get_id() );
 $resolve_data = $resolve->get_data();
@@ -74,8 +83,9 @@ $delivery = wc_get_order( $delivery->get_id() );
 $assert( 'accepted' === $delivery->get_meta( '_cvd_delivery_status', true ), 'la incidencia cambió la etapa accepted' );
 $assert( 'messenger_no_show' === $delivery->get_meta( '_cvd_delivery_incident_reason', true ), 'no persistió el motivo logístico' );
 
-$invalid = new WP_REST_Request( 'POST', '/casa-viva/v1/structured-incidents/' . $delivery->get_id() );
-$invalid->set_url_params( array( 'id' => $delivery->get_id() ) );
+$invalid_order = $make_order( 'delivery', 'ready', 'accepted' );
+$invalid = new WP_REST_Request( 'POST', '/casa-viva/v1/structured-incidents/' . $invalid_order->get_id() );
+$invalid->set_url_params( array( 'id' => $invalid_order->get_id() ) );
 $invalid->set_param( 'action', 'open' );
 $invalid->set_param( 'reason', 'customer_no_show' );
 $invalid->set_param( 'note', 'Motivo incompatible.' );
