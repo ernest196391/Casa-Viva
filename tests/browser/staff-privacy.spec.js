@@ -2,6 +2,7 @@
 const { test, expect } = require('@playwright/test');
 
 const baseURL = process.env.ORDER_CENTER_BASE_URL || 'http://localhost:8889';
+const salesPageId = Number(process.env.ORDER_CENTER_SALES_PAGE_ID);
 const admin = { user: process.env.ORDER_CENTER_ADMIN_USER, pass: process.env.ORDER_CENTER_ADMIN_PASSWORD };
 const clerk = { user: process.env.ORDER_CENTER_CLERK_USER, pass: process.env.ORDER_CENTER_CLERK_PASSWORD };
 
@@ -16,7 +17,8 @@ async function login(page, credentials) {
 }
 
 async function openSales(page) {
-  const response = await page.goto(`${baseURL}/ventas/`, { waitUntil: 'domcontentloaded' });
+  const salesURL = salesPageId > 0 ? `${baseURL}/?page_id=${salesPageId}` : `${baseURL}/ventas/`;
+  const response = await page.goto(salesURL, { waitUntil: 'domcontentloaded' });
   expect(response && response.ok()).toBeTruthy();
   await expect(page.locator('.cvd-sale-card').first()).toBeVisible({ timeout: 15000 });
 }
