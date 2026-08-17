@@ -33,7 +33,7 @@ async function submitIncident(page, buttonName) {
   );
   await page.locator('#cvd-structured-incidents').getByRole('button', { name: buttonName }).click();
   const response = await responsePromise;
-  expect(response.ok(), await response.text()).toBeTruthy();
+  expect(response.ok()).toBeTruthy();
   return response.json();
 }
 
@@ -74,7 +74,7 @@ test('dependienta abre y resuelve incidencia estructurada sin cambiar la etapa',
   const auditResponse = await page.request.get(`${restConfig.url}${incidentId}`, {
     headers: { 'X-WP-Nonce': restConfig.nonce },
   });
-  expect(auditResponse.ok(), await auditResponse.text()).toBeTruthy();
+  expect(auditResponse.ok()).toBeTruthy();
   const audit = await auditResponse.json();
   expect(audit.active.active).toBeFalsy();
   expect(audit.historyCount).toBe(2);
