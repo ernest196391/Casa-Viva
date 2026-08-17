@@ -55,6 +55,46 @@ final class CVD_Order_Transition_Service {
 		return self::incident($order_id,$affected_domain,false,$context);
 	}
 
+	/**
+	 * Cierra una recogida en tienda como una sola operación canónica.
+	 * No crea estados de mensajería: exige pedido pickup, operación ready y
+	 * confirmación explícita de entrega física y cobro.
+	 */
+	public static function complete_pickup( int $order_id, array $context=array() ): array {
+		$order=wc_get_order($order_id);if(!$order){return self::failure(self::ORDER_NOT_FOUND);}
+		$actor_id=array_key_exists('actor_user_id',$context)?absint($context['actor_user_id']):get_current_user_id();$actor=$actor_id?get_userdata($actor_id):null;
+		if(!$actor||(!user_can($actor,'cvd_manage_sales')&&!user_can($actor,'manage_woocommerce'))){return self::failure(self::UNAUTHORIZED);}
+		$idempotency_key=trim((string)($context['idempotency_key']??''));$hash=$idempotency_key?hash('sha256',$idempotency_key):'';$receipt=$hash?(self::receipts($order)[$hash]??null):null;
+		if(is_array($receipt)){return self::replay($receipt,'pickup','delivered');}
+		$method=sanitize_key((string)($context['collection_method']??''));$money_confirmed=!empty($context['money_confirmed']);$handover_confirmed=!empty($context['handover_confirmed']);
+		if(!in_array($method,array('cash_usd','cash_cup','transfer','mixed','other'),true)||!$money_confirmed||!$handover_confirmed){return self::failure(self::PRECONDITION_FAILED,self::state($order,'operation'));}
+		global $wpdb;$lock_key='cvd_transition_'.$order_id;if(!self::acquire_lock($wpdb,$lock_key)){return self::failure(self::CONFLICT);} $started=false;
+		try{
+			$order=self::fresh_order($order_id);$receipts=self::receipts($order);if($hash&&isset($receipts[$hash])){return self::replay($receipts[$hash],'pickup','delivered');}
+			if('pickup'!==sanitize_key((string)$order->get_meta('_cvd_fulfillment_type',true))){return self::failure(self::PRECONDITION_FAILED,self::state($order,'operation'));}
+			$operation=self::state($order,'operation');
+			if('delivered'===$operation&&$order->has_status('completed')){return self::success('ready','delivered','',true,self::ALREADY_APPLIED);}
+			if('ready'!==$operation||in_array($order->get_status(),array('completed','cancelled','refunded','failed'),true)){return self::failure(self::PRECONDITION_FAILED,$operation);}
+			$wpdb->query('START TRANSACTION');$started=true;$at=current_time('mysql',true);$anchor=$idempotency_key?:wp_generate_uuid4();$cash_from=sanitize_key((string)$order->get_meta('_cvd_cash_status',true));
+			$order->update_meta_data('_cvd_collection_method',$method);
+			$order->update_meta_data('_cvd_collection_amount_usd',wc_format_decimal($context['collected_usd']??0,2));
+			$order->update_meta_data('_cvd_collection_amount_cup',wc_format_decimal($context['collected_cup']??0,2));
+			$order->update_meta_data('_cvd_collection_note',sanitize_textarea_field((string)($context['collection_note']??'')));
+			$order->update_meta_data('_cvd_collection_received_by',$actor_id);$order->update_meta_data('_cvd_collection_received_at',$at);
+			$order->update_meta_data('_cvd_pickup_handed_over_by',$actor_id);$order->update_meta_data('_cvd_pickup_handed_over_at',$at);$order->update_meta_data('_cvd_pickup_handover_confirmed','yes');
+			$order->update_meta_data('_cvd_cash_status','verified');$order->update_meta_data('_cvd_commission_review_ready','yes');
+			self::write_state_and_history($order,'operation','ready','delivered',$actor_id,$at,$anchor,array('pickup_completion'=>true));
+			$extra=array();if(class_exists('CVD_Commissions')){$commission=CVD_Commissions::approve_for_closeout($order,$actor_id,$at,$anchor.':commission');if($commission){$extra[]=$commission;}}
+			$order->set_status('completed','Recogida en tienda entregada y cobro confirmado.');$order->save();
+			$event=self::record_event($order_id,'operation.state_changed','operation','ready','delivered',$actor,$actor_id,$at,'cvd_order_transition_service',array('centralized'=>true,'fulfillment'=>'pickup','handover_confirmed'=>true,'collection_method'=>$method),$anchor);
+			if('verified'!==$cash_from){self::record_event($order_id,'payment.state_changed','payment',$cash_from?:'none','verified',$actor,$actor_id,$at,'cvd_order_transition_service',array('centralized'=>true,'fulfillment'=>'pickup','collection_method'=>$method),$anchor.':payment');}
+			foreach($extra as $index=>$change){self::record_event($order_id,$change['domain'].'.state_changed',$change['domain'],$change['from'],$change['to'],$actor,$actor_id,$at,'cvd_order_transition_service',array('centralized'=>true,'fulfillment'=>'pickup'),$anchor.':extra:'.$index);}
+			if($hash){$receipts[$hash]=array('domain'=>'pickup','from'=>'ready','to'=>'delivered','event_id'=>$event['event_id']);$order->update_meta_data(self::RECEIPTS_META,array_slice($receipts,-50,null,true));$order->save();}
+			$wpdb->query('COMMIT');$started=false;return self::success('ready','delivered',(string)$event['event_id']);
+		}catch(Throwable $error){if($started){$wpdb->query('ROLLBACK');}if(function_exists('clean_post_cache')){clean_post_cache($order_id);}return self::failure(self::SIDE_EFFECT_FAILED);}
+		finally{self::release_lock($wpdb,$lock_key);}
+	}
+
 	/** Cascada única para estados terminales WooCommerce. */
 	public static function cancel( int $order_id, string $woocommerce_status, array $context=array() ): array {
 		$woocommerce_status=sanitize_key($woocommerce_status);
