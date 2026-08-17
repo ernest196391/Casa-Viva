@@ -18,8 +18,9 @@ async function login(page) {
 
 test('dependienta completa una recogida con entrega física y cobro confirmados', async ({ page }) => {
   await login(page);
-  await page.goto(`${baseURL}/?page_id=${salesPage}&cvd_order=${pickupId}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${baseURL}/?page_id=${salesPage}`, { waitUntil: 'domcontentloaded' });
 
+  await expect(page.locator('.cvd-sale-card').first()).toBeVisible({ timeout: 15000 });
   const card = page.locator('.cvd-sale-card', { hasText: `Pedido #${pickupId}` }).first();
   await expect(card).toBeVisible({ timeout: 15000 });
   await expect(card.getByText('Listo para recoger')).toBeVisible();
