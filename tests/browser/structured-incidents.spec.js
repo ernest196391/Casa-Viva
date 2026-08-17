@@ -55,6 +55,10 @@ test('dependienta abre y resuelve incidencia estructurada sin cambiar la etapa',
   await expect(page.locator('.cvd-oc-stage')).toContainText(/READY/i);
 
   const activePanel = page.locator('#cvd-structured-incidents');
+  const restConfig = await page.evaluate(() => ({
+    url: window.cvdStructuredIncidents.url,
+    nonce: window.cvdStructuredIncidents.nonce,
+  }));
   await activePanel.locator('textarea[name="note"]').fill('Cliente confirmó nueva hora de recogida.');
   const resolved = await submitIncident(page, 'Resolver incidencia');
   expect(resolved.transition.success).toBeTruthy();
@@ -64,13 +68,8 @@ test('dependienta abre y resuelve incidencia estructurada sin cambiar la etapa',
   await expect(page.locator('#cvd-structured-incidents').getByRole('button', { name: 'Registrar incidencia' })).toBeVisible({ timeout: 15000 });
   await expect(page.locator('.cvd-oc-stage')).toContainText(/READY/i);
 
-  // Resolution schedules a page reload. Re-open the order before the final
-  // audit so the request cannot race a navigation and fail nondeterministically.
-  await openOrder(page);
-  const restConfig = await page.evaluate(() => ({
-    url: window.cvdStructuredIncidents.url,
-    nonce: window.cvdStructuredIncidents.nonce,
-  }));
+  // Resolution schedules a page reload. Audit through the API request context
+  // using configuration captured before resolution so navigation cannot race it.
   const auditResponse = await page.request.get(`${restConfig.url}${incidentId}`, {
     headers: { 'X-WP-Nonce': restConfig.nonce },
   });
