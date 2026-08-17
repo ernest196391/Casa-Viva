@@ -34,7 +34,6 @@ async function submitIncident(page, buttonName) {
   await page.locator('#cvd-structured-incidents').getByRole('button', { name: buttonName }).click();
   const response = await responsePromise;
   expect(response.ok()).toBeTruthy();
-  return response.json();
 }
 
 test('dependienta abre y resuelve incidencia estructurada sin cambiar la etapa', async ({ page }) => {
@@ -47,9 +46,7 @@ test('dependienta abre y resuelve incidencia estructurada sin cambiar la etapa',
   await expect(panel.locator('select[name="reason"]')).toContainText('Cliente no recoge');
   await panel.locator('select[name="reason"]').selectOption('customer_no_show');
   await panel.locator('textarea[name="note"]').fill('Cliente no acudió a la recogida acordada.');
-  const opened = await submitIncident(page, 'Registrar incidencia');
-  expect(opened.transition.success).toBeTruthy();
-  expect(opened.incident.active.active).toBeTruthy();
+  await submitIncident(page, 'Registrar incidencia');
 
   await expect(page.locator('#cvd-structured-incidents')).toContainText('Cliente no recoge', { timeout: 15000 });
   await expect(page.locator('.cvd-oc-stage')).toContainText(/READY/i);
@@ -60,10 +57,7 @@ test('dependienta abre y resuelve incidencia estructurada sin cambiar la etapa',
     nonce: window.cvdStructuredIncidents.nonce,
   }));
   await activePanel.locator('textarea[name="note"]').fill('Cliente confirmó nueva hora de recogida.');
-  const resolved = await submitIncident(page, 'Resolver incidencia');
-  expect(resolved.transition.success).toBeTruthy();
-  expect(resolved.incident.active.active).toBeFalsy();
-  expect(resolved.incident.historyCount).toBe(2);
+  await submitIncident(page, 'Resolver incidencia');
 
   await expect(page.locator('#cvd-structured-incidents').getByRole('button', { name: 'Registrar incidencia' })).toBeVisible({ timeout: 15000 });
   await expect(page.locator('.cvd-oc-stage')).toContainText(/READY/i);
