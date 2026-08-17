@@ -103,7 +103,7 @@ test('estados ready, handed_over y conflict se proyectan correctamente', async (
   await expect(page.locator('.cvd-oc-primary button')).toHaveCount(0);
 });
 
-test('dependienta no recibe diagnósticos internos ni id de gestora', async ({ page }) => {
+test('dependienta no recibe datos comerciales ni diagnósticos internos', async ({ page }) => {
   await login(page, clerk);
   await openOrder(page, ids.handed);
   const payload = await page.evaluate(async (id) => {
@@ -113,9 +113,28 @@ test('dependienta no recibe diagnósticos internos ni id de gestora', async ({ p
     });
     return response.json();
   }, ids.handed);
-  expect(payload.gestora.id).toBeUndefined();
+  expect(payload.gestora).toBeUndefined();
+  expect(payload.commission_summary).toBeUndefined();
   expect(payload.consistency.reasons).toEqual([]);
+  await expect(page.locator('.cvd-oc-card').filter({ hasText: /^Gestora/ })).toHaveCount(0);
+  await expect(page.locator('.cvd-oc-card').filter({ hasText: /^Comisión/ })).toHaveCount(0);
   expect(documentTextHasTechnicalIds(await page.locator('body').innerText())).toBeFalsy();
+});
+
+test('administración conserva la vista comercial completa', async ({ page }) => {
+  await login(page, admin);
+  await openOrder(page, ids.handed);
+  const payload = await page.evaluate(async (id) => {
+    const response = await fetch(`${window.cvdOrderCenter.url}${id}`, {
+      credentials: 'same-origin',
+      headers: { 'X-WP-Nonce': window.cvdOrderCenter.nonce },
+    });
+    return response.json();
+  }, ids.handed);
+  expect(payload.gestora).toBeDefined();
+  expect(payload.commission_summary).toBeDefined();
+  await expect(page.locator('.cvd-oc-card').filter({ hasText: /^Gestora/ })).toHaveCount(1);
+  await expect(page.locator('.cvd-oc-card').filter({ hasText: /^Comisión/ })).toHaveCount(1);
 });
 
 function documentTextHasTechnicalIds(text) {

@@ -24,6 +24,7 @@ require_once CVD_DIR . 'includes/class-cvd-customer-navigation.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-financial-view.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-price-integrity.php';
 require_once CVD_DIR . 'includes/class-cvd-attribution-overrides.php';
+require_once CVD_DIR . 'includes/class-cvd-staff-privacy.php';
 
 register_activation_hook( __FILE__, array( 'CVD_Plugin', 'activate' ) );
 
@@ -38,6 +39,7 @@ add_action(
 			CVD_Gestora_Financial_View::register();
 			CVD_Gestora_Price_Integrity::register();
 			CVD_Attribution_Overrides::register();
+			CVD_Staff_Privacy::register();
 		}
 	}
 );
