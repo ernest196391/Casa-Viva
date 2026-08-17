@@ -12,7 +12,7 @@ async function login(page) {
   await page.locator('#user_login').fill(user);
   await page.locator('#user_pass').fill(password);
   await Promise.all([
-    page.waitForLoadState('domcontentloaded'),
+    page.waitForURL((url) => !url.pathname.includes('wp-login.php'), { timeout: 15000 }),
     page.locator('#wp-submit').click(),
   ]);
 }
