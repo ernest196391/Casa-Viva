@@ -6,7 +6,7 @@
   var filter = document.getElementById("cvd-sales-filter");
   var search = document.getElementById("cvd-sales-search");
   var message = document.getElementById("cvd-sales-message");
-  var labels = { new: "Nuevo", confirmed: "Confirmar", preparing: "Preparar", ready: "Listo para mensajería", picked_up: "Entregado al mensajero", delivered: "Registrar dinero recibido", incident: "Incidencia", cancelled: "Cancelar" };
+  var labels = { new: "Nuevo", confirmed: "Confirmar", preparing: "Preparar", ready: "Pedido listo", picked_up: "Entregado al mensajero", delivered: "Registrar dinero recibido", incident: "Incidencia", cancelled: "Cancelar" };
   var moneyDialog = document.getElementById("cvd-money-dialog");
   var scanner = document.getElementById("cvd-order-scanner");
   var stream = null;
@@ -20,10 +20,15 @@
     return data;
   }
   function productLinks(products) { return products.map(function (p) { var text = escapeText(p.quantity + " × " + p.name); return p.url ? '<a target="_blank" rel="noopener" href="' + escapeText(p.url) + '">' + text + "</a>" : text; }).join(" · "); }
+  function actionLabel(order, status) {
+    if (status === "ready" && order.fulfillment === "Recogida en tienda") return "Listo para recoger";
+    if (status === "delivered" && order.fulfillment === "Recogida en tienda") return "Entregar al cliente";
+    return labels[status] || status;
+  }
   function actionButtons(order) {
     return order.actions.filter(function (status) { return cvdSales.isAdmin || status !== "cancelled"; }).map(function (status) {
       var danger = status === "cancelled" || status === "incident" ? " is-warning" : status === "delivered" ? " is-success" : "";
-      return '<button class="cvd-sale-action' + danger + '" data-order="' + order.id + '" data-status="' + status + '">' + escapeText(labels[status] || status) + "</button>";
+      return '<button class="cvd-sale-action' + danger + '" data-order="' + order.id + '" data-status="' + status + '" data-pickup="' + (order.fulfillment === "Recogida en tienda" ? "1" : "0") + '">' + escapeText(actionLabel(order, status)) + "</button>";
     }).join("");
   }
   function commercialData(order) {
@@ -61,7 +66,14 @@
     var button = event.target.closest(".cvd-sale-action"); if (!button) return;
     var status = button.dataset.status;
     if (status === "delivered") {
+      var pickup = button.dataset.pickup === "1";
       document.getElementById("cvd-money-order").value = button.dataset.order;
+      document.getElementById("cvd-money-pickup").value = pickup ? "1" : "0";
+      document.getElementById("cvd-money-title").textContent = pickup ? "Confirmar recogida y cobro" : "Dinero recibido";
+      var handover = document.getElementById("cvd-handover-confirmed");
+      handover.closest("label").hidden = !pickup;
+      handover.required = pickup;
+      handover.checked = false;
       var card = button.closest(".cvd-sale-card");
       document.getElementById("cvd-money-usd").value = ((card && card.querySelector(".cvd-sale-top>strong").textContent.match(/[\d.,]+/)) || [""])[0].replace(",", ".");
       moneyDialog.showModal(); return;
@@ -74,7 +86,8 @@
   document.getElementById("cvd-money-form").addEventListener("submit", async function (event) {
     if (event.submitter && event.submitter.value === "cancel") return;
     event.preventDefault(); var submit = document.getElementById("cvd-money-submit"); submit.disabled = true;
-    try { await api(cvdSales.url + "/" + document.getElementById("cvd-money-order").value + "/status", { method: "POST", body: JSON.stringify({ status: "delivered", collectionMethod: document.getElementById("cvd-money-method").value, collectedUsd: document.getElementById("cvd-money-usd").value, collectedCup: document.getElementById("cvd-money-cup").value, collectionNote: document.getElementById("cvd-money-note").value, moneyConfirmed: document.getElementById("cvd-money-confirmed").checked }) }); moneyDialog.close(); event.target.reset(); await load(); }
+    var pickup = document.getElementById("cvd-money-pickup").value === "1";
+    try { await api(cvdSales.url + "/" + document.getElementById("cvd-money-order").value + "/status", { method: "POST", body: JSON.stringify({ status: "delivered", collectionMethod: document.getElementById("cvd-money-method").value, collectedUsd: document.getElementById("cvd-money-usd").value, collectedCup: document.getElementById("cvd-money-cup").value, collectionNote: document.getElementById("cvd-money-note").value, moneyConfirmed: document.getElementById("cvd-money-confirmed").checked, handoverConfirmed: pickup ? document.getElementById("cvd-handover-confirmed").checked : false }) }); moneyDialog.close(); event.target.reset(); document.getElementById("cvd-money-pickup").value = "0"; await load(); }
     catch (error) { message.textContent = error.message; message.className = "is-error"; }
     finally { submit.disabled = false; }
   });
