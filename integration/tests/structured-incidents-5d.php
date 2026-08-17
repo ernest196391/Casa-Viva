@@ -64,7 +64,8 @@ $other_active->set_param( 'note', 'Intento de sustituir la incidencia activa.' )
 $other_response = CVD_Structured_Incidents::act( $other_active );
 $assert( is_wp_error( $other_response ) && 'cvd_incident_already_active' === $other_response->get_error_code(), 'permitió sustituir una incidencia activa por otra' );
 
-$resolve = $call( $pickup, array( 'action'=>'resolve', 'note'=>'Cliente confirmó nueva recogida.' ), '5d-resolve-pickup-' . $pickup->get_id() );
+$resolve_key = '5d-resolve-pickup-' . $pickup->get_id();
+$resolve = $call( $pickup, array( 'action'=>'resolve', 'note'=>'Cliente confirmó nueva recogida.' ), $resolve_key );
 $resolve_data = $resolve->get_data();
 $assert( ! empty( $resolve_data['transition']['success'] ), 'no resolvió la incidencia operativa' );
 $pickup = wc_get_order( $pickup->get_id() );
@@ -72,6 +73,12 @@ $assert( 'ready' === $pickup->get_meta( '_cvd_operation_status', true ), 'resolv
 $assert( 'no' === $pickup->get_meta( '_cvd_operation_incident_active', true ), 'la incidencia siguió activa tras resolver' );
 $history = (array) $pickup->get_meta( '_cvd_structured_incident_history', true );
 $assert( 2 === count( $history ) && 'resolve' === $history[1]['action'], 'la resolución no quedó auditada' );
+
+$resolve_replay = $call( $pickup, array( 'action'=>'resolve', 'note'=>'Cliente confirmó nueva recogida.' ), $resolve_key );
+$resolve_replay_data = $resolve_replay->get_data();
+$assert( ! empty( $resolve_replay_data['transition']['idempotent_replay'] ), 'la resolución repetida no fue idempotente' );
+$pickup = wc_get_order( $pickup->get_id() );
+$assert( 2 === count( (array) $pickup->get_meta( '_cvd_structured_incident_history', true ) ), 'el replay de resolución duplicó historial' );
 
 $delivery = $make_order( 'delivery', 'ready', 'accepted' );
 $delivery->update_meta_data( '_cvd_messenger_user_id', absint( $fixture['messenger_id'] ?? 0 ) );
