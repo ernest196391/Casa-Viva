@@ -15,6 +15,12 @@
     if(actions.navigation_url) links.push('<a class="cvd-oc-contact" href="'+safeHref(actions.navigation_url)+'" target="_blank" rel="noopener noreferrer" data-contact="navigate">Navegar</a>');
     return links.length?'<nav class="cvd-oc-contacts" aria-label="Acciones con el cliente">'+links.join('')+'</nav>':'';
   }
+  function commercialCards(p) {
+    var cards=[];
+    if(p.gestora) cards.push(card('Gestora','<p>'+esc(p.gestora.name||(p.gestora.attributed?'Atribuida':'Venta orgánica'))+'</p>'));
+    if(p.commission_summary) cards.push(card('Comisión','<p>Estado: '+esc(p.commission_summary.status)+'</p>'));
+    return cards.join('');
+  }
   function render(p) {
     var action=p.available_actions.find(function(a){return !a.blocked;});
     var warning=p.consistency.level!=="OK"?'<div class="cvd-oc-alert is-'+esc(p.consistency.level.toLowerCase())+'">'+(p.consistency.review_required?'Revisión requerida':'Revisar coherencia del pedido')+'</div>':'';
@@ -25,7 +31,7 @@
       card('Productos',items)+card('Operación','<p>Etapa: <strong>'+esc(p.operation.status)+'</strong></p>')+
       card('Mensajería','<p>'+esc(p.delivery.status||'No iniciada')+'</p><p>Mensajero: '+esc(p.courier.name||'Sin asignar')+'</p><p>Tarifa: '+esc(p.pricing.shipping_cup)+' CUP</p>')+
       card('Dinero','<p>Estado: <strong>'+esc(p.payment.status)+'</strong></p><p>Método: '+esc(p.payment.method||'Sin registrar')+'</p>')+
-      card('Gestora','<p>'+esc(p.gestora.name||(p.gestora.attributed?'Atribuida':'Venta orgánica'))+'</p><p>Comisión: '+esc(p.commission_summary.status)+'</p>')+
+      commercialCards(p)+
       (p.incident.active?card('Incidencia','<p>'+esc(p.incident.note||'Incidencia activa')+'</p><small>'+esc(p.incident.at)+'</small>'):'')+
       card('Historial','<ol class="cvd-oc-timeline">'+timeline+'</ol>'+(p.timeline.total>p.timeline.per_page?'<p>Mostrando '+p.timeline.per_page+' de '+p.timeline.total+'.</p>':''))+'</div>'+
       (action?'<div class="cvd-oc-primary"><button data-action="'+esc(action.id)+'">'+esc(action.label)+'</button></div>':'');
