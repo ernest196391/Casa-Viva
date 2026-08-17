@@ -26,6 +26,16 @@
       return '<button class="cvd-sale-action' + danger + '" data-order="' + order.id + '" data-status="' + status + '">' + escapeText(labels[status] || status) + "</button>";
     }).join("");
   }
+  function commercialData(order) {
+    var rows = [];
+    if (Object.prototype.hasOwnProperty.call(order, "gestora")) {
+      rows.push('<p><b>Gestora</b><span>' + escapeText(order.gestora || "Casa Viva · Venta directa") + '</span></p>');
+    }
+    if (Object.prototype.hasOwnProperty.call(order, "commission") && Object.prototype.hasOwnProperty.call(order, "commissionStatus")) {
+      rows.push('<p><b>Comisión</b><span>' + escapeText(Number(order.commission || 0).toFixed(2) + " · " + order.commissionStatus) + '</span></p>');
+    }
+    return rows.join("");
+  }
   function paint(data) {
     var cards = [["new", "Nuevos"], ["preparing", "Preparando"], ["ready", "Listos"], ["with_courier", "En camino"]];
     summary.innerHTML = cards.map(function (x) { return '<button type="button" data-summary-status="' + x[0] + '"><span>' + x[1] + '</span><strong>' + (data.summary[x[0]] || 0) + "</strong></button>"; }).join("");
@@ -33,7 +43,7 @@
     list.innerHTML = data.orders.map(function (order) {
       var phone = order.phone ? '<a href="tel:' + escapeText(order.phone) + '">' + escapeText(order.phone) + "</a>" : "";
       var wa = order.phone ? '<a class="cvd-sale-wa" target="_blank" rel="noopener" href="https://wa.me/' + escapeText(order.phone.replace(/\D/g, "")) + '">WhatsApp</a>' : "";
-      return '<article class="cvd-sale-card"><div class="cvd-sale-top"><div><span class="cvd-sale-status is-' + order.status + '">' + escapeText(order.statusLabel) + '</span><h2>Pedido #' + escapeText(order.number) + '</h2><small>' + escapeText(order.date) + '</small></div><div class="cvd-sale-code"><canvas data-order-code="' + escapeText(order.orderCode) + '"></canvas><small>' + escapeText(order.orderCode) + '</small></div><strong>' + escapeText(order.total) + (order.shippingCup ? ' + ' + escapeText(order.shippingCup) + ' CUP' : '') + '</strong></div><div class="cvd-sale-data"><p><b>Cliente</b><span>' + escapeText(order.customer) + " · " + phone + '</span></p><p><b>Entrega</b><span>' + escapeText(order.fulfillment + " · " + order.address) + '</span></p><p><b>Productos</b><span>' + productLinks(order.products) + '</span></p><p><b>Mensajería</b><span>' + escapeText(order.deliveryStatus || "No aplica") + '</span></p><p><b>Gestora</b><span>' + escapeText(order.gestora || "Casa Viva · Venta directa") + '</span></p><p><b>Comisión</b><span>' + escapeText(order.commission.toFixed(2) + " · " + order.commissionStatus) + '</span></p></div><div class="cvd-sale-actions">' + actionButtons(order) + (order.trackingUrl ? '<button type="button" data-copy-tracking="' + escapeText(order.trackingUrl) + '">Copiar seguimiento</button>' : '') + wa + (cvdSales.isAdmin ? '<a href="' + escapeText(order.adminUrl) + '" target="_blank" rel="noopener">Ver pedido</a>' : '') + '</div></article>';
+      return '<article class="cvd-sale-card"><div class="cvd-sale-top"><div><span class="cvd-sale-status is-' + order.status + '">' + escapeText(order.statusLabel) + '</span><h2>Pedido #' + escapeText(order.number) + '</h2><small>' + escapeText(order.date) + '</small></div><div class="cvd-sale-code"><canvas data-order-code="' + escapeText(order.orderCode) + '"></canvas><small>' + escapeText(order.orderCode) + '</small></div><strong>' + escapeText(order.total) + (order.shippingCup ? ' + ' + escapeText(order.shippingCup) + ' CUP' : '') + '</strong></div><div class="cvd-sale-data"><p><b>Cliente</b><span>' + escapeText(order.customer) + " · " + phone + '</span></p><p><b>Entrega</b><span>' + escapeText(order.fulfillment + " · " + order.address) + '</span></p><p><b>Productos</b><span>' + productLinks(order.products) + '</span></p><p><b>Mensajería</b><span>' + escapeText(order.deliveryStatus || "No aplica") + '</span></p>' + commercialData(order) + '</div><div class="cvd-sale-actions">' + actionButtons(order) + (order.trackingUrl ? '<button type="button" data-copy-tracking="' + escapeText(order.trackingUrl) + '">Copiar seguimiento</button>' : '') + wa + (cvdSales.isAdmin && order.adminUrl ? '<a href="' + escapeText(order.adminUrl) + '" target="_blank" rel="noopener">Ver pedido</a>' : '') + '</div></article>';
     }).join("");
     if (window.CVQRCode) document.querySelectorAll("[data-order-code]").forEach(function (canvas) { window.CVQRCode.toCanvas(canvas, canvas.dataset.orderCode, { width: 84, margin: 1 }); });
   }
