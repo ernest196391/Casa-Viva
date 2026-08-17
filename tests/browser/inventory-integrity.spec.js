@@ -25,6 +25,15 @@ test('inventario obliga a reconciliar discrepancias y no ofrece ventas manuales'
   await expect(movementType.locator('option[value="sale"]')).toHaveCount(0);
   await expect(movementType.locator('option[value="return"]')).toHaveCount(0);
 
+  const reportDiagnostic = await page.evaluate(async () => {
+    const response = await fetch(window.cvdInventory.reportUrl + '?limit=10', {
+      credentials: 'same-origin',
+      headers: { 'X-WP-Nonce': window.cvdInventory.nonce, 'Content-Type': 'application/json' },
+    });
+    return { status: response.status, body: await response.text() };
+  });
+  console.log('INVENTORY_REPORT_DIAGNOSTIC', JSON.stringify(reportDiagnostic));
+
   const integrity = page.locator('#cvd-inventory-integrity');
   await expect(integrity).toContainText('Reconciliación requerida', { timeout: 15000 });
   await expect(integrity).toContainText('Producto discrepancia visual 5C');
