@@ -141,4 +141,35 @@ CVD_Commissions::mark_pending_from_order( $order_risk );
 $order_risk = wc_get_order( $order_risk->get_id() );
 cvt_4b_assert( '' === (string) $order_risk->get_meta( '_cvd_commission_risk', true ), 'El riesgo de auto-compra quedó pegado después de corregir la identidad.' );
 
+// 8. Una comisión aprobada no puede saltar a pagada fuera de una liquidación pagada.
+$product_payout = cvt_4b_product( 'CVT-4G-PAYOUT-GUARD', 100 );
+$order_payout = cvt_4b_order( $gestora, $product_payout, 1, 100 );
+CVD_Commissions::mark_approved( $order_payout->get_id() );
+$order_payout = wc_get_order( $order_payout->get_id() );
+cvt_4b_assert( 'approved' === $order_payout->get_meta( '_cvd_commission_status', true ), 'No se pudo preparar la comisión aprobada para 4G.' );
+
+CVD_Commissions::mark_paid( $order_payout->get_id() );
+$order_payout = wc_get_order( $order_payout->get_id() );
+cvt_4b_assert( 'approved' === $order_payout->get_meta( '_cvd_commission_status', true ), 'mark_paid permitió pagar una comisión sin payout pagado.' );
+
+$admin_id = username_exists( 'cvt_admin' );
+cvt_4b_assert( (bool) $admin_id, 'No existe el administrador sintético para validar el intento manual.' );
+$previous_user_id = get_current_user_id();
+wp_set_current_user( (int) $admin_id );
+$_POST['cvd_commission_status_nonce'] = wp_create_nonce( 'cvd_save_commission_status_' . $order_payout->get_id() );
+$_POST['cvd_commission_status'] = 'paid';
+CVD_Commissions::save_admin_status( $order_payout->get_id() );
+unset( $_POST['cvd_commission_status_nonce'], $_POST['cvd_commission_status'] );
+wp_set_current_user( $previous_user_id );
+$order_payout = wc_get_order( $order_payout->get_id() );
+cvt_4b_assert( 'approved' === $order_payout->get_meta( '_cvd_commission_status', true ), 'El formulario administrativo permitió saltarse la liquidación.' );
+
+$order_payout->update_meta_data( '_cvd_payout_id', 999999 );
+$order_payout->update_meta_data( '_cvd_payout_status', 'paid' );
+$order_payout->save();
+CVD_Commissions::mark_paid( $order_payout->get_id() );
+$order_payout = wc_get_order( $order_payout->get_id() );
+cvt_4b_assert( 'paid' === $order_payout->get_meta( '_cvd_commission_status', true ), 'Una liquidación pagada válida no pudo cerrar la comisión.' );
+
 echo "OK 4B: porcentajes, excepciones, fijo, margen, snapshot y auto-compra validados.\n";
+echo "OK 4G: una comisión solo pasa a pagada mediante una liquidación pagada.\n";

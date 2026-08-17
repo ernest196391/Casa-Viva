@@ -63,6 +63,15 @@ final class CVD_Commissions {
 	}
 
 	public static function mark_paid( int $order_id ): void {
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			return;
+		}
+		$payout_id = absint( $order->get_meta( '_cvd_payout_id', true ) );
+		$payout_status = sanitize_key( (string) $order->get_meta( '_cvd_payout_status', true ) );
+		if ( ! $payout_id || 'paid' !== $payout_status ) {
+			return;
+		}
 		self::store( $order_id, 'paid', true );
 	}
 
@@ -116,7 +125,7 @@ final class CVD_Commissions {
 		$labels = array( 'pending' => 'Por verificar', 'approved' => 'Aprobada', 'paid' => 'Pagada', 'cancelled' => 'Cancelada' );
 		$transitions = array(
 			'pending'   => array( 'pending', 'approved', 'cancelled' ),
-			'approved'  => array( 'approved', 'paid', 'cancelled' ),
+			'approved'  => array( 'approved', 'cancelled' ),
 			'paid'      => array( 'paid', 'cancelled' ),
 			'cancelled' => array( 'cancelled' ),
 		);
