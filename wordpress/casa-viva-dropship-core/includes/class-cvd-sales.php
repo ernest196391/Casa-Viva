@@ -93,6 +93,25 @@ final class CVD_Sales {
 			return rest_ensure_response( array( 'message' => 'Pedido entregado al mensajero.', 'order' => self::payload( wc_get_order( $order->get_id() ) ) ) );
 		}
 		$current = self::operation_status( $order );
+		$fulfillment = sanitize_key( (string) $order->get_meta( '_cvd_fulfillment_type', true ) );
+		if ( 'pickup' === $fulfillment && 'ready' === $current && 'delivered' === $next && class_exists( 'CVD_Order_Transition_Service' ) ) {
+			$idempotency_key = sanitize_text_field( (string) ( $request->get_header( 'X-CVD-Idempotency-Key' ) ?: $request->get_param( 'idempotencyKey' ) ) );
+			$result = CVD_Order_Transition_Service::complete_pickup( $order->get_id(), array(
+				'actor_user_id' => get_current_user_id(),
+				'idempotency_key' => $idempotency_key,
+				'collection_method' => sanitize_key( (string) $request->get_param( 'collectionMethod' ) ),
+				'collected_usd' => $request->get_param( 'collectedUsd' ),
+				'collected_cup' => $request->get_param( 'collectedCup' ),
+				'collection_note' => sanitize_textarea_field( (string) $request->get_param( 'collectionNote' ) ),
+				'money_confirmed' => rest_sanitize_boolean( $request->get_param( 'moneyConfirmed' ) ),
+				'handover_confirmed' => rest_sanitize_boolean( $request->get_param( 'handoverConfirmed' ) ),
+			) );
+			if ( empty( $result['success'] ) ) {
+				$status = CVD_Order_Transition_Service::UNAUTHORIZED === $result['error_code'] ? 403 : ( CVD_Order_Transition_Service::ORDER_NOT_FOUND === $result['error_code'] ? 404 : ( CVD_Order_Transition_Service::PRECONDITION_FAILED === $result['error_code'] ? 422 : 409 ) );
+				return new WP_Error( 'cvd_pickup_' . strtolower( $result['error_code'] ), 'No se pudo completar la recogida. Confirma entrega física y cobro.', array( 'status' => $status, 'transition' => $result ) );
+			}
+			return rest_ensure_response( array( 'message' => 'Recogida completada.', 'order' => self::payload( wc_get_order( $order->get_id() ) ), 'transition' => $result ) );
+		}
 		if(class_exists('CVD_Order_Transition_Service')&&('incident'===$next||'incident'===$current)){
 			$key=sanitize_text_field((string)($request->get_header('X-CVD-Idempotency-Key')?:$request->get_param('idempotencyKey')));$result='incident'===$next?CVD_Order_Transition_Service::open_incident($order->get_id(),'operation',array('actor_user_id'=>get_current_user_id(),'idempotency_key'=>$key,'note'=>sanitize_textarea_field((string)$request->get_param('note')))):CVD_Order_Transition_Service::resolve_incident($order->get_id(),'operation',array('actor_user_id'=>get_current_user_id(),'idempotency_key'=>$key,'note'=>sanitize_textarea_field((string)$request->get_param('note'))));
 			if(empty($result['success'])||('incident'===$current&&$next!==$result['new_state'])){return new WP_Error('cvd_incident_conflict','No se pudo actualizar la incidencia sin inventar una etapa.',array('status'=>409,'transition'=>$result));}return rest_ensure_response(array('message'=>'Pedido actualizado.','order'=>self::payload(wc_get_order($order->get_id())),'transition'=>$result));
@@ -108,8 +127,6 @@ final class CVD_Sales {
 				$status = in_array( $result['error_code'], array( CVD_Order_Transition_Service::UNAUTHORIZED ), true ) ? 403 : ( CVD_Order_Transition_Service::ORDER_NOT_FOUND === $result['error_code'] ? 404 : 409 );
 				return new WP_Error( 'cvd_transition_' . strtolower( $result['error_code'] ), 'No se pudo actualizar el pedido.', array( 'status' => $status, 'transition' => $result ) );
 			}
-			// También en replay: publish_offer() reconoce una oferta compatible ya
-			// existente y permite recuperar un fallo externo sin duplicar avisos.
 			if ( 'ready' === $next && 'pickup' !== $order->get_meta( '_cvd_fulfillment_type', true ) && class_exists( 'CVD_Delivery' ) ) {
 				CVD_Delivery::publish_offer( wc_get_order( $order->get_id() ) );
 			}
@@ -194,6 +211,7 @@ final class CVD_Sales {
 		$operation_status = self::operation_status( $order );
 		$delivery_status = class_exists( 'CVD_Delivery' ) ? CVD_Delivery::status( $order ) : '';
 		$actions = self::allowed_transitions( $operation_status );
+		if ( 'pickup' === $fulfillment && 'ready' === $operation_status ) { array_unshift( $actions, 'delivered' ); }
 		if ( 'pickup' !== $fulfillment && class_exists( 'CVD_Delivery' ) ) {
 			$actions = array_values( array_diff( $actions, array( 'with_courier', 'delivered' ) ) );
 			if ( in_array( $delivery_status, array( 'accepted', 'to_store' ), true ) ) { array_unshift( $actions, 'picked_up' ); }
@@ -205,7 +223,7 @@ final class CVD_Sales {
 			'number' => $order->get_order_number(),
 			'date' => $order->get_date_created() ? $order->get_date_created()->date_i18n( 'd/m/Y H:i' ) : '',
 			'status' => $operation_status,
-			'statusLabel' => self::label( $operation_status ),
+			'statusLabel' => 'pickup' === $fulfillment && 'ready' === $operation_status ? 'Listo para recoger' : self::label( $operation_status ),
 			'customer' => $order->get_formatted_billing_full_name(),
 			'phone' => $phone,
 			'address' => 'pickup' === $fulfillment ? get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ) : trim( $order->get_billing_address_1() . ', ' . $order->get_meta( '_cvd_locality', true ) . ', ' . $order->get_billing_city() ),
@@ -215,9 +233,9 @@ final class CVD_Sales {
 			'gestora' => (string) $order->get_meta( 'gestora_nombre', true ),
 			'commission' => (float) $order->get_meta( '_cvd_commission_amount', true ),
 			'commissionStatus' => sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ?: 'none',
-			'shippingCup' => class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_fee( $order ) : absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) ),
+			'shippingCup' => 'pickup' === $fulfillment ? 0 : ( class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_fee( $order ) : absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) ) ),
 			'orderCode' => 'CV-PEDIDO-' . $order->get_id(),
-			'deliveryStatus' => class_exists( 'CVD_Delivery' ) ? CVD_Delivery::label( $delivery_status ) : '',
+			'deliveryStatus' => 'pickup' === $fulfillment ? '' : ( class_exists( 'CVD_Delivery' ) ? CVD_Delivery::label( $delivery_status ) : '' ),
 			'trackingUrl' => class_exists( 'CVD_Delivery' ) && 'pickup' !== $fulfillment ? CVD_Delivery::tracking_url( $order ) : '',
 			'actions' => array_values( array_unique( $actions ) ),
 			'adminUrl' => admin_url( 'admin.php?page=wc-orders&action=edit&id=' . $order->get_id() ),
@@ -246,6 +264,6 @@ final class CVD_Sales {
 	public static function render(): string {
 		if ( ! is_user_logged_in() ) { return '<section class="cvd-sales-denied"><h1>Centro de ventas</h1><p>Inicia sesión para continuar.</p><a href="' . esc_url( home_url( '/casa-viva-app/' ) ) . '">Iniciar sesión</a></section>'; }
 		if ( ! self::can_view() ) { return '<section class="cvd-sales-denied"><h1>Acceso restringido</h1><p>Esta cuenta no administra pedidos.</p></section>'; }
-		return '<section class="cvd-sales-app"><nav><a href="' . esc_url( home_url( '/centro-operaciones/' ) ) . '">Operaciones</a><button data-cvd-enable-notifications type="button">Activar alertas</button><a href="' . esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ) . '">Salir</a></nav><header><h1>Pedidos</h1></header><div class="cvd-sales-summary" id="cvd-sales-summary"></div><div class="cvd-sales-tools"><input id="cvd-sales-search" type="search" placeholder="Buscar pedido, cliente o producto"><select id="cvd-sales-filter"><option value="">Todos</option><option value="new">Nuevos</option><option value="preparing">Preparando</option><option value="ready">Listos</option><option value="with_courier">Con mensajero</option><option value="delivered">Completados</option><option value="incident">Incidencias</option><option value="cancelled">Cancelados</option></select><button id="cvd-sales-refresh" type="button">Actualizar</button><button id="cvd-scan-order" type="button">Escanear vale</button></div><video id="cvd-order-scanner" playsinline hidden></video><p id="cvd-sales-message" role="status"></p><div class="cvd-sales-list" id="cvd-sales-list"><p>Cargando pedidos…</p></div><dialog id="cvd-money-dialog"><form method="dialog" id="cvd-money-form"><h2>Dinero recibido</h2><input id="cvd-money-order" type="hidden"><label>Forma de cobro<select id="cvd-money-method" required><option value="">Selecciona</option><option value="cash_usd">Efectivo USD</option><option value="cash_cup">Efectivo CUP</option><option value="transfer">Transferencia</option><option value="mixed">Pago mixto</option><option value="other">Otro</option></select></label><label>Recibido en USD<input id="cvd-money-usd" min="0" step="0.01" type="number"></label><label>Recibido en CUP<input id="cvd-money-cup" min="0" step="1" type="number"></label><label>Observación<textarea id="cvd-money-note" rows="2"></textarea></label><label class="cvd-money-check"><input id="cvd-money-confirmed" type="checkbox" required> Confirmo el dinero recibido.</label><div><button value="cancel">Volver</button><button id="cvd-money-submit" value="default">Completar</button></div></form></dialog></section>';
+		return '<section class="cvd-sales-app"><nav><a href="' . esc_url( home_url( '/centro-operaciones/' ) ) . '">Operaciones</a><button data-cvd-enable-notifications type="button">Activar alertas</button><a href="' . esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ) . '">Salir</a></nav><header><h1>Pedidos</h1></header><div class="cvd-sales-summary" id="cvd-sales-summary"></div><div class="cvd-sales-tools"><input id="cvd-sales-search" type="search" placeholder="Buscar pedido, cliente o producto"><select id="cvd-sales-filter"><option value="">Todos</option><option value="new">Nuevos</option><option value="preparing">Preparando</option><option value="ready">Listos</option><option value="with_courier">Con mensajero</option><option value="delivered">Completados</option><option value="incident">Incidencias</option><option value="cancelled">Cancelados</option></select><button id="cvd-sales-refresh" type="button">Actualizar</button><button id="cvd-scan-order" type="button">Escanear vale</button></div><video id="cvd-order-scanner" playsinline hidden></video><p id="cvd-sales-message" role="status"></p><div class="cvd-sales-list" id="cvd-sales-list"><p>Cargando pedidos…</p></div><dialog id="cvd-money-dialog"><form method="dialog" id="cvd-money-form"><h2 id="cvd-money-title">Dinero recibido</h2><input id="cvd-money-order" type="hidden"><input id="cvd-money-pickup" type="hidden" value="0"><label>Forma de cobro<select id="cvd-money-method" required><option value="">Selecciona</option><option value="cash_usd">Efectivo USD</option><option value="cash_cup">Efectivo CUP</option><option value="transfer">Transferencia</option><option value="mixed">Pago mixto</option><option value="other">Otro</option></select></label><label>Recibido en USD<input id="cvd-money-usd" min="0" step="0.01" type="number"></label><label>Recibido en CUP<input id="cvd-money-cup" min="0" step="1" type="number"></label><label>Observación<textarea id="cvd-money-note" rows="2"></textarea></label><label class="cvd-money-check"><input id="cvd-handover-confirmed" type="checkbox"> Confirmo que el producto fue entregado físicamente al cliente.</label><label class="cvd-money-check"><input id="cvd-money-confirmed" type="checkbox" required> Confirmo el dinero recibido.</label><div><button value="cancel">Volver</button><button id="cvd-money-submit" value="default">Completar</button></div></form></dialog></section>';
 	}
 }
