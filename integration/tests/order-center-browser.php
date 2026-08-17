@@ -33,7 +33,7 @@ $ensure_page = static function ( string $slug, string $title, string $shortcode 
 $page_id = $ensure_page( 'centro-pedido', 'Centro pedido', '[casa_viva_order_center]' );
 $sales_page_id = $ensure_page( 'ventas', 'Centro de ventas', '[casa_viva_sales]' );
 
-$make_order = static function ( string $operation, string $delivery ) use ( $fixture ): WC_Order {
+$make_order = static function ( string $operation, string $delivery, string $fulfillment = 'delivery' ) use ( $fixture ): WC_Order {
 	$order = wc_create_order();
 	$order->add_product( wc_get_product( absint( $fixture['product_id'] ) ), 1 );
 	$order->set_status( 'processing' );
@@ -45,7 +45,7 @@ $make_order = static function ( string $operation, string $delivery ) use ( $fix
 		'city'       => 'Zona sintética',
 		'country'    => 'CU',
 	), 'billing' );
-	$order->update_meta_data( '_cvd_fulfillment_type', 'delivery' );
+	$order->update_meta_data( '_cvd_fulfillment_type', $fulfillment );
 	$order->update_meta_data( '_cvd_operation_status', $operation );
 	$order->update_meta_data( '_cvd_delivery_status', $delivery );
 	$order->update_meta_data( '_cvd_location_url', 'https://maps.google.com/?q=23.1136,-82.3666' );
@@ -60,6 +60,7 @@ $make_order = static function ( string $operation, string $delivery ) use ( $fix
 
 $new_order = $make_order( 'new', 'unassigned' );
 $ready_order = $make_order( 'ready', 'offered' );
+$pickup_order = $make_order( 'ready', 'unassigned', 'pickup' );
 $handed_order = $make_order( 'with_courier', 'handed_over' );
 $handed_order->update_meta_data( '_cvd_messenger_user_id', absint( $fixture['messenger_id'] ) );
 $handed_order->save();
@@ -70,6 +71,7 @@ $browser = array(
 	'sales_page_id'  => $sales_page_id,
 	'new_id'         => $new_order->get_id(),
 	'ready_id'       => $ready_order->get_id(),
+	'pickup_id'      => $pickup_order->get_id(),
 	'handed_id'      => $handed_order->get_id(),
 	'conflict_id'    => $conflict_order->get_id(),
 	'admin_user'     => 'cvt_admin',
