@@ -1,0 +1,20 @@
+name: Validar fundación de release
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-foundation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+      - name: Validar contrato 6A
+        run: node artifacts/tests/test-release-foundation-6a.mjs
