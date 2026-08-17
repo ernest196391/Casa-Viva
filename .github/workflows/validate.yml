@@ -57,6 +57,9 @@ jobs:
       - name: Validar contrato de ayuda contextual del cliente
         run: node artifacts/tests/test-customer-order-support-3e.mjs
 
+      - name: Validar privacidad dependienta y administración
+        run: node artifacts/tests/test-staff-privacy-5a.mjs
+
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
@@ -98,6 +101,9 @@ jobs:
 
       - name: Validar notificaciones y enlaces directos
         run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/notifications-direct-links.php
+
+      - name: Validar privacidad operativa de dependienta
+        run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/staff-privacy-5a.php
 
       - name: Mostrar diagnóstico si falla
         if: failure()
