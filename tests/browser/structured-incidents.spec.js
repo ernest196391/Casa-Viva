@@ -64,14 +64,18 @@ test('dependienta abre y resuelve incidencia estructurada sin cambiar la etapa',
   await expect(page.locator('#cvd-structured-incidents').getByRole('button', { name: 'Registrar incidencia' })).toBeVisible({ timeout: 15000 });
   await expect(page.locator('.cvd-oc-stage')).toContainText(/READY/i);
 
-  const audit = await page.evaluate(async (id) => {
-    const response = await fetch(`${window.cvdStructuredIncidents.url}${id}`, {
-      credentials: 'same-origin',
-      headers: { 'X-WP-Nonce': window.cvdStructuredIncidents.nonce },
-    });
-    if (!response.ok) throw new Error(await response.text());
-    return response.json();
-  }, incidentId);
+  // Resolution schedules a page reload. Re-open the order before the final
+  // audit so the request cannot race a navigation and fail nondeterministically.
+  await openOrder(page);
+  const restConfig = await page.evaluate(() => ({
+    url: window.cvdStructuredIncidents.url,
+    nonce: window.cvdStructuredIncidents.nonce,
+  }));
+  const auditResponse = await page.request.get(`${restConfig.url}${incidentId}`, {
+    headers: { 'X-WP-Nonce': restConfig.nonce },
+  });
+  expect(auditResponse.ok(), await auditResponse.text()).toBeTruthy();
+  const audit = await auditResponse.json();
   expect(audit.active.active).toBeFalsy();
   expect(audit.historyCount).toBe(2);
 });
