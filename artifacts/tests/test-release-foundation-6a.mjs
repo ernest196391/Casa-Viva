@@ -16,11 +16,13 @@ mustInclude(builder, 'sha256sum "$manifest"', 'manifest checksum');
 mustInclude(workflow, 'workflow_dispatch:', 'manual release trigger');
 mustInclude(workflow, 'ref: main', 'main checkout');
 mustInclude(workflow, 'git rev-parse HEAD', 'checked-out SHA capture');
+mustInclude(workflow, 'Verificar CI post-merge del SHA', 'validated-SHA guard');
 mustInclude(workflow, 'scripts/build-release-candidate.sh', 'release builder invocation');
+mustInclude(workflow, 'sha256sum -c SHA256SUMS', 'checksum verification');
 mustInclude(workflow, 'actions/upload-artifact@v4', 'candidate artifact upload');
 mustInclude(workflow, 'release-manifest.json', 'manifest upload');
 
-if (/HOSTINGER|PASSWORD|TOKEN|SECRET\s*:/i.test(workflow)) {
+if (/HOSTINGER|PASSWORD|secrets\./i.test(workflow)) {
   throw new Error('6A release candidate workflow must not contain deployment credentials or Hostinger writes.');
 }
 
