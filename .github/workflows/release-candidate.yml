@@ -1,0 +1,66 @@
+name: Preparar release candidato
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Descargar main exacto
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Capturar SHA candidato
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Candidato: $sha"
+
+      - name: Verificar CI post-merge del SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.source.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(gh api "/repos/$REPO/actions/runs?head_sha=$SHA&event=push&status=completed&per_page=20")"
+          ok="$(echo "$response" | jq -r '[.workflow_runs[] | select(.name == "Validar aplicación" and .conclusion == "success")] | length')"
+          if [[ "$ok" -lt 1 ]]; then
+            echo "No existe un CI post-merge exitoso para $SHA; no se puede crear release candidato." >&2
+            exit 1
+          fi
+
+      - name: Construir release candidato reproducible
+        shell: bash
+        env:
+          GITHUB_REF_NAME: main
+        run: bash scripts/build-release-candidate.sh release
+
+      - name: Verificar checksums
+        shell: bash
+        working-directory: release
+        run: sha256sum -c SHA256SUMS
+
+      - name: Publicar artefacto candidato
+        uses: actions/upload-artifact@v4
+        with:
+          name: casa-viva-release-${{ steps.source.outputs.sha }}
+          path: |
+            release/*.zip
+            release/release-manifest.json
+            release/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
