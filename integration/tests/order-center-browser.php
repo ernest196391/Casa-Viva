@@ -6,8 +6,6 @@ if ( ! is_array( $fixture ) || empty( $fixture['product_id'] ) ) {
 	throw new RuntimeException( 'Falta el fixture base de integración.' );
 }
 
-// Browser tests need deterministic credentials even when the disposable
-// environment reuses an already-created synthetic user during setup.
 wp_set_password( 'Synthetic-Admin-Only-1!', absint( $fixture['admin_id'] ) );
 wp_set_password( 'Synthetic-Clerk-Only-1!', absint( $fixture['clerk_id'] ) );
 
@@ -21,9 +19,7 @@ $ensure_page = static function ( string $slug, string $title, string $shortcode 
 			'post_type'    => 'page',
 			'post_content' => $shortcode,
 		), true );
-		if ( is_wp_error( $page_id ) ) {
-			throw new RuntimeException( $page_id->get_error_message() );
-		}
+		if ( is_wp_error( $page_id ) ) { throw new RuntimeException( $page_id->get_error_message() ); }
 		return (int) $page_id;
 	}
 	wp_update_post( array( 'ID' => $page->ID, 'post_content' => $shortcode, 'post_status' => 'publish' ) );
@@ -61,6 +57,7 @@ $make_order = static function ( string $operation, string $delivery, string $ful
 $new_order = $make_order( 'new', 'unassigned' );
 $ready_order = $make_order( 'ready', 'offered' );
 $pickup_order = $make_order( 'ready', 'unassigned', 'pickup' );
+$incident_order = $make_order( 'ready', 'unassigned', 'pickup' );
 $handed_order = $make_order( 'with_courier', 'handed_over' );
 $handed_order->update_meta_data( '_cvd_messenger_user_id', absint( $fixture['messenger_id'] ) );
 $handed_order->save();
@@ -72,6 +69,7 @@ $browser = array(
 	'new_id'         => $new_order->get_id(),
 	'ready_id'       => $ready_order->get_id(),
 	'pickup_id'      => $pickup_order->get_id(),
+	'incident_id'    => $incident_order->get_id(),
 	'handed_id'      => $handed_order->get_id(),
 	'conflict_id'    => $conflict_order->get_id(),
 	'admin_user'     => 'cvt_admin',
