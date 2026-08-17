@@ -1,0 +1,20 @@
+name: Validar contrato de staging
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  staging-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+      - name: Validar contrato 6B
+        run: node artifacts/tests/test-staging-smoke-6b.mjs
