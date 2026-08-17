@@ -93,6 +93,9 @@ jobs:
       - name: Validar integridad de precios espejo
         run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/gestora-mirror-price-integrity-4e.php
 
+      - name: Validar reasignación auditable de gestora
+        run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/gestora-attribution-reassignment-4h.php
+
       - name: Validar notificaciones y enlaces directos
         run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/notifications-direct-links.php
 
