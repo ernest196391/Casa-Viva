@@ -11,22 +11,27 @@ if ( ! is_array( $fixture ) || empty( $fixture['product_id'] ) ) {
 wp_set_password( 'Synthetic-Admin-Only-1!', absint( $fixture['admin_id'] ) );
 wp_set_password( 'Synthetic-Clerk-Only-1!', absint( $fixture['clerk_id'] ) );
 
-$page = get_page_by_path( 'centro-pedido' );
-if ( ! $page ) {
-	$page_id = wp_insert_post( array(
-		'post_title'   => 'Centro pedido',
-		'post_name'    => 'centro-pedido',
-		'post_status'  => 'publish',
-		'post_type'    => 'page',
-		'post_content' => '[casa_viva_order_center]',
-	), true );
-	if ( is_wp_error( $page_id ) ) {
-		throw new RuntimeException( $page_id->get_error_message() );
+$ensure_page = static function ( string $slug, string $title, string $shortcode ): int {
+	$page = get_page_by_path( $slug );
+	if ( ! $page ) {
+		$page_id = wp_insert_post( array(
+			'post_title'   => $title,
+			'post_name'    => $slug,
+			'post_status'  => 'publish',
+			'post_type'    => 'page',
+			'post_content' => $shortcode,
+		), true );
+		if ( is_wp_error( $page_id ) ) {
+			throw new RuntimeException( $page_id->get_error_message() );
+		}
+		return (int) $page_id;
 	}
-} else {
-	$page_id = $page->ID;
-	wp_update_post( array( 'ID' => $page_id, 'post_content' => '[casa_viva_order_center]', 'post_status' => 'publish' ) );
-}
+	wp_update_post( array( 'ID' => $page->ID, 'post_content' => $shortcode, 'post_status' => 'publish' ) );
+	return (int) $page->ID;
+};
+
+$page_id = $ensure_page( 'centro-pedido', 'Centro pedido', '[casa_viva_order_center]' );
+$sales_page_id = $ensure_page( 'ventas', 'Centro de ventas', '[casa_viva_sales]' );
 
 $make_order = static function ( string $operation, string $delivery ) use ( $fixture ): WC_Order {
 	$order = wc_create_order();
@@ -62,6 +67,7 @@ $conflict_order = $make_order( 'new', 'picked_up' );
 
 $browser = array(
 	'page_id'        => $page_id,
+	'sales_page_id'  => $sales_page_id,
 	'new_id'         => $new_order->get_id(),
 	'ready_id'       => $ready_order->get_id(),
 	'handed_id'      => $handed_order->get_id(),
