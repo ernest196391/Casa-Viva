@@ -103,7 +103,9 @@
   summary.addEventListener("click", function (event) { var card=event.target.closest('[data-summary-status]'); if(!card)return; filter.value=card.dataset.summaryStatus; load(); document.getElementById('cvd-sales-list').scrollIntoView({behavior:'smooth',block:'start'}); });
   document.getElementById("cvd-sales-refresh").addEventListener("click", load);
   search.addEventListener("keydown", function (event) { if (event.key === "Enter") load(); });
-  var requestedOrder = new URLSearchParams(location.search).get("order"); if (requestedOrder) search.value = requestedOrder;
+  var query = new URLSearchParams(location.search);
+  var requestedOrder = query.get("cvd_order") || query.get("order");
+  if (requestedOrder) search.value = requestedOrder;
   load();
   window.setInterval(function(){ if(!document.hidden)load(); },8000);
   document.addEventListener("visibilitychange", function () { if (!document.hidden) load(); });
