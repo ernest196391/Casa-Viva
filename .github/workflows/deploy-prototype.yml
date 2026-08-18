@@ -42,8 +42,8 @@ jobs:
           set -euo pipefail
           sha="${{ inputs.expected_sha }}"
           runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${sha}&branch=main&event=push&per_page=50")"
-          conclusion="$(jq -r '[.workflow_runs[] | select(.name == "Validar aplicación" and .conclusion == "success")] | length' <<<"$runs")"
-          test "$conclusion" -ge 1
+          successful="$(jq -r '[.workflow_runs[] | select(.name == "Validar aplicación" and .conclusion == "success")] | length' <<<"$runs")"
+          test "$successful" -ge 1
 
       - name: Construir release reproducible
         shell: bash
@@ -94,7 +94,6 @@ jobs:
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             "WP_PATH='$WP_PATH' PLUGIN_SLUG='$PLUGIN_SLUG' EXPECTED_SHA='$EXPECTED_SHA' bash -s" <<'REMOTE'
           set -euo pipefail
-          manifest=/tmp/release-manifest.json
           archive="$(python3 -c 'import json; print(json.load(open("/tmp/release-manifest.json"))["archive"])')"
           archive_sha="$(python3 -c 'import json; print(json.load(open("/tmp/release-manifest.json"))["archive_sha256"])')"
           source_sha="$(python3 -c 'import json; print(json.load(open("/tmp/release-manifest.json"))["source_sha"])')"
@@ -106,14 +105,17 @@ jobs:
           stamp="$(date -u +%Y%m%dT%H%M%SZ)"
           backup="$plugins_dir/${PLUGIN_SLUG}.predeploy-${stamp}"
           temp="$plugins_dir/.${PLUGIN_SLUG}.deploy-${stamp}"
+          marker="/tmp/cvd-prototype-backup-${EXPECTED_SHA}.txt"
 
           rm -rf "$temp"
           mkdir -p "$temp"
           unzip -q "/tmp/$archive" -d "$temp"
           test -f "$temp/$PLUGIN_SLUG/casa-viva-dropship-core.php"
 
+          : > "$marker"
           if [ -d "$current" ]; then
             mv "$current" "$backup"
+            printf '%s\n' "$backup" > "$marker"
           fi
           mv "$temp/$PLUGIN_SLUG" "$current"
           rmdir "$temp" 2>/dev/null || true
@@ -143,6 +145,32 @@ jobs:
         shell: bash
         run: bash scripts/smoke-staging.sh "$PROTOTYPE_URL"
 
+      - name: Rollback automático si falla el deploy o smoke
+        if: failure()
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "WP_PATH='$WP_PATH' PLUGIN_SLUG='$PLUGIN_SLUG' EXPECTED_SHA='$EXPECTED_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+          current="$WP_PATH/wp-content/plugins/$PLUGIN_SLUG"
+          marker="/tmp/cvd-prototype-backup-${EXPECTED_SHA}.txt"
+          [ -f "$marker" ] || exit 0
+          backup="$(cat "$marker")"
+          [ -n "$backup" ] || exit 0
+          [ -d "$backup" ] || exit 0
+          rm -rf "$current"
+          mv "$backup" "$current"
+          cd "$WP_PATH"
+          wp plugin activate "$PLUGIN_SLUG" --quiet || true
+          rm -f "$marker"
+          REMOTE
+
       - name: Resumen
         if: always()
         shell: bash
@@ -153,4 +181,5 @@ jobs:
             echo "- SHA solicitado: ${{ inputs.expected_sha }}"
             echo "- Resultado: ${{ job.status }}"
             echo "- Unidad desplegada: $PLUGIN_SLUG"
+            echo "- Rollback automático: habilitado si falla verificación o smoke"
           } >> "$GITHUB_STEP_SUMMARY"
