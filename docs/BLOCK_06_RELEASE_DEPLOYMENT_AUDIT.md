@@ -102,6 +102,10 @@ El workflow `.github/workflows/deploy-prototype.yml`:
 - ejecuta smoke tests contra `https://casavivadecuba.com`;
 - restaura automáticamente la carpeta previa si falla la verificación o el smoke.
 
+## Frontera de autorización
+
+Que el sitio sea un prototipo permite omitir staging separado, pero no convierte el deploy en automático. El workflow de prototipo se ejecuta únicamente mediante `workflow_dispatch` y la primera configuración de la clave SSH/secrets requiere una acción explícita del propietario del repositorio. Una vez configurados, cada ejecución seguirá siendo deliberada y trazable por SHA.
+
 ## 6C y producción futura
 
 Cuando Casa Viva pase de prototipo a operación real, volverán a ser obligatorios:
