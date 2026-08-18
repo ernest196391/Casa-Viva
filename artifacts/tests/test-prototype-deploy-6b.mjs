@@ -19,9 +19,11 @@ for (const marker of [
   '/home/u824654880/domains/casavivadecuba.com/public_html',
   'casa-viva-dropship-core',
   '.cvd-deployed-sha',
+  '.cvd-deployed-archive-sha256',
   'smoke-staging.sh',
   'Rollback automático si falla el deploy o smoke',
   'predeploy-',
+  'if: failure()',
 ]) {
   if (!workflow.includes(marker)) {
     throw new Error(`6B prototype deploy missing contract marker: ${marker}`);
@@ -31,10 +33,6 @@ for (const marker of [
 const forbidden = /(password|passwd|api[_-]?token)\s*[:=]\s*['\"][^$]/i;
 if (forbidden.test(workflow)) {
   throw new Error('6B prototype deploy must not embed credentials');
-}
-
-if (!workflow.includes('if: failure()')) {
-  throw new Error('6B prototype deploy must retain automatic rollback on failure');
 }
 
 console.log('6B prototype deploy contract OK');
