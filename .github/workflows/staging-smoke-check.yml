@@ -16,5 +16,7 @@ jobs:
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
-      - name: Validar contrato 6B
+      - name: Validar contrato 6B de smoke
         run: node artifacts/tests/test-staging-smoke-6b.mjs
+      - name: Validar contrato 6B de deploy al prototipo
+        run: node artifacts/tests/test-prototype-deploy-6b.mjs
