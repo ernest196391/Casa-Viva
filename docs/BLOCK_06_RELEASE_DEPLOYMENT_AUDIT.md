@@ -4,154 +4,111 @@
 
 - Repositorio: `ernest196391/Casa-Viva`
 - Rama base: `main`
-- HEAD de base: `428f7e1fffe34431782c2237239fb02b7a002e9f`
-- Último cierre funcional: Bloque 05 / Fase 5D
-- CI post-merge de referencia: run #133 (`validate`, `integration`, `browser` en success)
+- HEAD validado tras 6A: `d5cdacf80a47d967bd088b15192d3dab15f541a3`
+- CI post-merge 6A: `Validar aplicación #141` y `Validar fundación de release #8` en success.
 
 ## Estado actual observado
 
 ### CI existente
 
-Existe un único workflow: `.github/workflows/validate.yml`.
-
-Se ejecuta en:
-
-- `pull_request` hacia `main`;
-- `push` a `main`;
-- `workflow_dispatch`.
-
-Incluye tres jobs principales:
+El repositorio valida cada cambio relevante con:
 
 1. `validate`
-   - contratos PHP/Node de las fases funcionales;
+   - contratos PHP/Node;
    - lint;
    - TypeScript;
-   - build Next.js.
+   - build.
 2. `integration`
    - WordPress + MariaDB reales en Docker;
-   - suites funcionales de gestoras, operaciones, inventario e incidencias.
+   - suites funcionales del sistema.
 3. `browser`
    - WordPress desechable;
-   - fixtures reales;
    - Playwright + Chromium;
-   - artefactos de diagnóstico.
+   - diagnóstico automático.
+4. `release-foundation-check`
+   - contrato del empaquetado reproducible de 6A.
+5. `staging-smoke-check`
+   - contrato de smoke y despliegue controlado de 6B.
 
-### Fortalezas
+### Fundación 6A integrada
 
-- La rama `main` queda protegida de regresiones funcionales mediante validación estática, integración y navegador.
-- Las pruebas de WordPress no dependen de la instalación productiva.
-- Los jobs de integración y navegador limpian su entorno al finalizar.
-- Los artefactos de Playwright se conservan para diagnóstico.
-- Los permisos del workflow están limitados a lectura de contenidos.
+6A establece:
 
-### Huecos identificados
+`main validado` → `release candidate reproducible` → `manifest` → `SHA256SUMS`
 
-No se observa todavía una capa explícita y auditable para:
+La unidad desplegable actual es exclusivamente:
 
-- empaquetado de una versión desplegable;
-- identificación/versionado de releases;
-- promoción controlada desde código validado hacia Hostinger;
-- separación entre validar y desplegar;
-- entorno de staging o preproducción;
-- smoke test contra el sitio desplegado;
-- backup previo al despliegue;
-- rollback documentado y probado;
-- registro de qué commit está desplegado en producción;
-- política de secretos/credenciales de despliegue;
-- protección contra desplegar un SHA distinto al que fue validado;
-- procedimiento de emergencia cuando producción falla después de un release.
+`wordpress/casa-viva-dropship-core`
 
-## Decisión de arquitectura para el Bloque 06
+El ZIP se construye desde un SHA exacto de `main` mediante `git archive` y no contiene secretos.
 
-El Bloque 06 no debe convertir cada push a `main` en un despliegue automático ciego.
+## Infraestructura Hostinger auditada manualmente por SSH
 
-La primera versión del proceso debe separar claramente cuatro etapas:
+Sitio: `https://casavivadecuba.com`
 
-`PR validado` → `main validado` → `release candidato` → `deploy autorizado`
+Estado observado el 18-08-2026:
 
-Producción solo debe recibir un artefacto o commit que ya haya pasado las mismas garantías de CI que protegieron el merge.
+- WordPress: `7.0.4`
+- PHP CLI: `8.2.30`
+- WooCommerce activo: `10.9.4`
+- `casa-viva-dropship-core` activo: `3.4.0`
+- plugin legacy/inactivo detectado: `casa-viva-dropship-core-error-2.1.0`
+- ruta WordPress: `/home/u824654880/domains/casavivadecuba.com/public_html`
+- SSH disponible por Hostinger;
+- no se detectó staging dedicado por filesystem;
+- el sitio se considera prototipo/no operativo, por lo que no se exige staging separado para esta fase.
 
-## Secuencia propuesta
+## Decisión actualizada para 6B
 
-### 6A — Fundación de release y trazabilidad
+Dado que `casavivadecuba.com` es todavía un prototipo y no procesa operación real, 6B se simplifica a un despliegue manualmente autorizado y auditable sobre ese prototipo.
 
-Objetivo: definir un artefacto/release reproducible e identificar inequívocamente qué SHA se pretende desplegar.
+La secuencia queda:
 
-Criterios de aceptación:
+`main verde`
+→ `release reproducible`
+→ `checksum local`
+→ `SSH con GitHub Secrets`
+→ `copia del ZIP`
+→ `backup inmediato de la carpeta actual del plugin`
+→ `reemplazo únicamente de casa-viva-dropship-core`
+→ `verificación de plugin/version`
+→ `registro de SHA desplegado`
+→ `smoke HTTP/REST/privacidad`
+→ `rollback automático de la carpeta anterior si falla`
 
-- el release referencia un SHA exacto de `main`;
-- no contiene secretos;
-- puede verificarse antes de subirlo;
-- existe una manifestación mínima de versión, SHA y contenido;
-- el proceso no modifica producción.
+No se modifica base de datos deliberadamente como parte del mecanismo de deploy y no se despliega el repositorio completo.
 
-### 6B — Staging y smoke tests
+## Secrets requeridos para el workflow de prototipo
 
-Objetivo: desplegar primero en un entorno no productivo o equivalente seguro y ejecutar comprobaciones mínimas reales.
+Los valores deben configurarse en GitHub Actions Secrets y nunca escribirse en el repositorio:
 
-Criterios de aceptación:
+- `HOSTINGER_SSH_HOST`
+- `HOSTINGER_SSH_PORT`
+- `HOSTINGER_SSH_USER`
+- `HOSTINGER_SSH_PRIVATE_KEY`
 
-- el entorno de prueba no comparte datos productivos de forma peligrosa;
-- la versión desplegada coincide con el SHA esperado;
-- se verifican disponibilidad, WordPress/plugin y rutas críticas;
-- el fallo bloquea promoción a producción.
+## Garantías del deploy
 
-### 6C — Backup y rollback
+El workflow `.github/workflows/deploy-prototype.yml`:
 
-Objetivo: garantizar una vía de retorno antes de cualquier despliegue productivo.
+- solo se ejecuta manualmente (`workflow_dispatch`);
+- exige un `expected_sha` completo;
+- comprueba que ese SHA pertenece a `main`;
+- exige un `Validar aplicación` post-merge exitoso para ese SHA;
+- reconstruye la release desde ese SHA;
+- valida `SHA256SUMS` antes de copiar;
+- conserva la carpeta previa del plugin con timestamp;
+- escribe `.cvd-deployed-sha` y `.cvd-deployed-archive-sha256` dentro del plugin desplegado;
+- ejecuta smoke tests contra `https://casavivadecuba.com`;
+- restaura automáticamente la carpeta previa si falla la verificación o el smoke.
 
-Criterios de aceptación:
+## 6C y producción futura
 
-- backup previo identificable;
-- procedimiento de restauración documentado;
-- rollback a una versión conocida;
-- no se declara cerrado hasta verificar el mecanismo de recuperación con recursos seguros.
+Cuando Casa Viva pase de prototipo a operación real, volverán a ser obligatorios:
 
-### 6D — Deploy productivo controlado
+- backup fresco previo a deploy;
+- staging o estrategia equivalente de preproducción;
+- rollback probado incluyendo cambios de base de datos cuando existan migraciones;
+- autorización explícita de producción.
 
-Objetivo: desplegar una release validada a Hostinger sin depender de pasos manuales ambiguos.
-
-Criterios de aceptación:
-
-- requiere autorización explícita antes de tocar producción;
-- despliega solo una release/SHA previamente validada;
-- registra resultado y versión desplegada;
-- ejecuta smoke tests posteriores;
-- si falla, activa el procedimiento de rollback.
-
-### 6E — Cierre operativo de releases
-
-Objetivo: dejar una rutina repetible para futuras versiones.
-
-Criterios de aceptación:
-
-- checklist de release;
-- responsable y evidencias;
-- política de versionado;
-- runbook de incidentes de despliegue;
-- documentación alineada con GitHub y Hostinger reales.
-
-## Información de Hostinger pendiente de auditar
-
-Antes de implementar 6B–6D hay que leer, mediante el conector de Hostinger cuando esté disponible en la sesión:
-
-- sitio/hosting que contiene `casavivadecuba.com`;
-- tipo de plan;
-- instalación WordPress activa;
-- versión PHP;
-- plugins y tema relevantes;
-- subdominios disponibles;
-- mecanismos de backup/restauración disponibles;
-- forma segura de desplegar el plugin/código de Casa Viva;
-- posibilidad de staging;
-- caché y operaciones posteriores al deploy.
-
-No deben copiarse usuario, contraseña, tokens ni secretos al repositorio.
-
-## Regla de seguridad
-
-Ningún paso de esta auditoría autoriza por sí mismo un cambio en producción. Las operaciones de escritura en Hostinger deben identificar el recurso afectado y solicitar confirmación antes de ejecutarse.
-
-## Estado
-
-Auditoría inicial completada. La implementación comienza por 6A y puede avanzar en GitHub sin credenciales de Hostinger. 6B–6D quedan condicionadas a la lectura segura de la infraestructura real de Hostinger.
+La simplificación de 6B no debe interpretarse como política permanente de producción.
