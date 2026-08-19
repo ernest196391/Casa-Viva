@@ -1,1 +1,0 @@
-Compatibility note: SSH private keys stored from Windows clients are normalized to LF and validated before remote deployment.
