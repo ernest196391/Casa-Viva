@@ -67,8 +67,10 @@ jobs:
         run: |
           set -euo pipefail
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '\n' >> ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
           ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
 
       - name: Copiar release al servidor
