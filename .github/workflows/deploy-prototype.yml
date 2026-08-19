@@ -81,6 +81,7 @@ jobs:
           set -euo pipefail
           archive="$(jq -r '.archive' release/release-manifest.json)"
           scp -P "$SSH_PORT" "release/$archive" release/release-manifest.json release/SHA256SUMS "$SSH_USER@$SSH_HOST:/tmp/"
+          echo "DEPLOY_ATTEMPTED=1" >> "$GITHUB_ENV"
 
       - name: Desplegar plugin de forma controlada
         shell: bash
@@ -146,7 +147,7 @@ jobs:
         run: bash scripts/smoke-staging.sh "$PROTOTYPE_URL"
 
       - name: Rollback automático si falla el deploy o smoke
-        if: failure()
+        if: failure() && env.DEPLOY_ATTEMPTED == '1'
         shell: bash
         env:
           SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
