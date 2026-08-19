@@ -1,0 +1,52 @@
+name: Smoke staging Casa Viva
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_url:
+        description: URL HTTPS del staging de Casa Viva
+        required: true
+        type: string
+      expected_sha:
+        description: SHA completo de main que fue desplegado en staging
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  staging-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_sha }}
+
+      - name: Verificar que el SHA pertenece a main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=200
+          git merge-base --is-ancestor "${{ inputs.expected_sha }}" origin/main
+
+      - name: Ejecutar smoke tests contra staging
+        shell: bash
+        env:
+          STAGING_URL: ${{ inputs.staging_url }}
+        run: bash scripts/smoke-staging.sh "$STAGING_URL"
+
+      - name: Resumen
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Smoke staging Casa Viva"
+            echo "- URL: ${{ inputs.staging_url }}"
+            echo "- SHA esperado: ${{ inputs.expected_sha }}"
+            echo "- Resultado: ${{ job.status }}"
+            echo ""
+            echo "La identidad exacta del artefacto desplegado debe verificarse en el hosting contra release-manifest.json antes de promover a producción."
+          } >> "$GITHUB_STEP_SUMMARY"
