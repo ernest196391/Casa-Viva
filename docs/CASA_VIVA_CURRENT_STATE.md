@@ -6,85 +6,88 @@
 - 2A–2D: Centro Único del Pedido, notificaciones/enlaces, acciones de contacto y Centro Operativo del Mensajero — validadas e integradas.
 - 3A–3E: navegación móvil del cliente, listado de pedidos, detalle único, seguimiento en vivo y ayuda/contacto contextual — validadas e integradas.
 - 4A–4H: gestoras, referidos, comisiones, payouts, portal financiero, precios espejo, privacidad, cierre canónico de comisión y reasignación administrativa auditable — validadas e integradas.
+- 5A–5D: privacidad operativa de dependientas, recogida en tienda canónica, integridad/reconciliación de inventario e incidencias operativas estructuradas — validadas e integradas.
+- 6A–6B: release reproducible, manifest/checksum, despliegue controlado por SHA, conexión GitHub→Hostinger, smoke tests y rollback automático — validadas e integradas.
 
-## Bloque 04 — Gestoras, referidos y comisiones — CERRADO
+## Bloque 05 — Operaciones, dependientas y administración — CERRADO
 
-### 4A — Atribución permanente
+### 5A — Privacidad operativa de dependientas
 
-- first-touch persistente por identidad de cliente;
-- atribución por enlace/código, cookie/sesión, cupón y carrito;
-- cliente orgánico sin comisión;
-- identidad de operador separada de identidad de cliente;
-- pedidos históricos como fuente de vínculo permanente.
+- frontera central de datos por capability;
+- dependienta recibe solo datos necesarios para preparar/entregar;
+- administración conserva la vista completa;
+- sin exposición de comisiones, gestoras ni metadatos administrativos innecesarios.
 
-### 4B — Comisiones y margen de tienda espejo
+### 5B — Recogida en tienda canónica
 
-- comisión base configurable;
-- excepciones por gestora;
-- reglas fijas o porcentuales por producto;
-- prioridad de reglas de producto;
-- margen propio de tienda espejo separado de la comisión base;
-- snapshots históricos inmutables;
-- detección de riesgo de auto-compra.
+- cierre de recogida mediante servicio de transición canónico;
+- exige pedido de recogida, estado operativo listo, entrega física y cobro confirmado;
+- registra actor, hora y evidencia;
+- completa WooCommerce sin inventar estados paralelos;
+- aprobación de comisión separada de payout.
 
-### 4C — Liquidaciones y pagos
+### 5C — Integridad y reconciliación de inventario
 
-- solicitud de payout por gestora;
-- agrupación por moneda;
-- bloqueo transaccional y concurrencia segura;
-- aprobación, pago y rechazo con historial;
-- referencia y comprobante de pago;
-- vinculación payout ↔ pedidos;
-- rollback seguro de liquidaciones rechazadas o fallidas.
+- WooCommerce continúa como fuente oficial de stock;
+- ventas/devoluciones ligadas al ciclo real del pedido;
+- ajustes humanos limitados a movimientos explícitos de inventario;
+- detección de discrepancias entre stock oficial y último saldo auditado;
+- reconciliación física explícita cuando corresponde.
 
-### 4D — Vista financiera de gestora
+### 5D — Incidencias operativas estructuradas
 
-- ventas y ganancias visibles solo para su propietaria;
-- desglose de comisión base y margen propio;
-- estados financieros e historial trazables.
+- reutiliza el servicio canónico de incidencias;
+- falta de producto, preparación incorrecta, cliente no recoge y mensajero no recoge;
+- historial estructurado enlazado al evento canónico;
+- reintentos idempotentes y sin sustitución destructiva de incidencias activas.
 
-### 4E — Integridad de precios espejo
+## Bloque 06 — Pruebas, releases y despliegues — CERRADO PARA PROTOTIPO
 
-- precio base Casa Viva preservado;
-- precios personalizados por gestora;
-- límites mínimo/máximo configurables;
-- caché y versiones de precio aisladas por gestora;
-- snapshots de precio en carrito y pedido.
+### 6A — Fundación de release y trazabilidad
 
-### 4F — Privacidad y aislamiento del portal
+- release reproducible desde SHA exacto de `main`;
+- unidad desplegable: `wordpress/casa-viva-dropship-core`;
+- `release-manifest.json` y `SHA256SUMS`;
+- CI post-merge obligatorio antes de empaquetar.
 
-- una gestora no puede ver clientes, pedidos ni finanzas de otra;
-- datos internos y metadatos sensibles no se renderizan;
-- validación real en navegador móvil;
-- protección frente a desbordamiento horizontal y problemas de lectura móvil.
+### 6B — Despliegue controlado del prototipo
 
-### 4G — Cierre canónico de comisiones pagadas
+Flujo validado:
 
-- una comisión aprobada no puede marcarse pagada manualmente desde el pedido;
-- `paid` exige un payout vinculado y realmente pagado;
-- el flujo canónico queda: comisión aprobada → payout → pago → comisión pagada → historial.
+`main verde`
+→ `release reproducible`
+→ `checksum`
+→ `SSH GitHub Actions`
+→ `Hostinger`
+→ `backup de carpeta previa`
+→ `reemplazo del plugin`
+→ `verificación de SHA desplegado`
+→ `smoke HTTP/REST/privacidad`
+→ `rollback automático si falla`.
 
-### 4H — Reasignación administrativa auditable
+Evidencia operativa final:
 
-- administración es la única vía para cambiar la propietaria permanente de un cliente;
-- motivo obligatorio y permisos administrativos;
-- solo gestoras/influencers aprobados pueden ser nueva propietaria;
-- historial append-only con propietaria anterior, nueva, actor, motivo, fecha, UUID y pedido de referencia;
-- la reasignación se aplica únicamente a pedidos futuros;
-- pedidos, comisiones y payouts históricos permanecen intactos;
-- una corrección posterior crea un nuevo evento y no borra el anterior.
+- sitio prototipo: `https://casavivadecuba.com`;
+- WordPress observado: `7.0.4`;
+- PHP CLI observado: `8.2.30`;
+- WooCommerce observado: `10.9.4`;
+- plugin previo observado: `casa-viva-dropship-core 3.4.0`;
+- despliegue exitoso del SHA `1450e552adae727b73abd51c0c3513a707e54df8`;
+- workflow `Deploy prototype Casa Viva` finalizado en `success`;
+- conexión GitHub→Hostinger y copia remota verificadas;
+- smoke final verde;
+- rollback automático permanece habilitado.
 
-## Evidencia de cierre del Bloque 04
+## Próxima frontera
 
-- PR #30 — Fase 4G — integrada en `main`.
-- Merge 4G: `46d04ce2f7367042669103f53e64e74968654af3`.
-- PR #31 — Fase 4H — integrada en `main`.
-- Merge 4H: `afcfa5f4e4089dc1eb52e71790b464405529f620`.
-- GitHub Actions PR 4H: run #108 / `31992130441` — `validate=success`, `integration=success`, `browser=success`.
-- GitHub Actions post-merge 4H: run #109 / `31992346744` iniciado sobre `main`; debe quedar completamente verde antes de usar este commit como base de la siguiente fase funcional.
+No inventar una fase 7A sin auditoría previa.
 
-## Regla para continuar
+La siguiente tarea es una auditoría de puesta en marcha real y experiencia visible sobre el prototipo desplegado, contrastando:
 
-El Bloque 04 se considera funcionalmente cerrado. No crear 4I ni ampliar gestoras/referidos/comisiones sin un nuevo hallazgo concreto y verificable.
+- lo que el cliente puede hacer hoy en `casavivadecuba.com`;
+- checkout y creación de pedido reales;
+- acceso/UX de cliente, dependienta, mensajero, gestora y administración;
+- correspondencia entre las interfaces WordPress existentes y los contratos ya implementados en los Bloques 01–06;
+- huecos de navegación, identidad visual, onboarding, datos demo/legacy y preparación para pasar de prototipo a operación real.
 
-El siguiente bloque funcional debe comenzar desde `main` únicamente después de confirmar que el CI post-merge de 4H está completamente verde. Antes de programar, auditar el estado real del siguiente bloque y diseñar sus fases sobre esa realidad.
+La numeración del siguiente bloque/fases debe surgir de esa auditoría y no de supuestos.
