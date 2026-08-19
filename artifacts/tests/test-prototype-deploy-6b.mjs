@@ -16,6 +16,8 @@ for (const marker of [
   'HOSTINGER_SSH_HOST',
   'HOSTINGER_SSH_PORT',
   'HOSTINGER_SSH_USER',
+  "tr -d '\\r'",
+  'ssh-keygen -y -f ~/.ssh/id_ed25519',
   '/home/u824654880/domains/casavivadecuba.com/public_html',
   'casa-viva-dropship-core',
   '.cvd-deployed-sha',
