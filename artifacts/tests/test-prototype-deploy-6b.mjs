@@ -18,6 +18,8 @@ for (const marker of [
   'HOSTINGER_SSH_USER',
   "tr -d '\\r'",
   'ssh-keygen -y -f ~/.ssh/id_ed25519',
+  'command -v php >/dev/null',
+  'json_decode(file_get_contents("/tmp/release-manifest.json")',
   '/home/u824654880/domains/casavivadecuba.com/public_html',
   'casa-viva-dropship-core',
   '.cvd-deployed-sha',
@@ -30,6 +32,10 @@ for (const marker of [
   if (!workflow.includes(marker)) {
     throw new Error(`6B prototype deploy missing contract marker: ${marker}`);
   }
+}
+
+if (workflow.includes('python3 -c')) {
+  throw new Error('6B Hostinger deploy must not require python3 on the remote host');
 }
 
 const forbidden = /(password|passwd|api[_-]?token)\s*[:=]\s*['\"][^$]/i;
