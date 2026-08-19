@@ -97,9 +97,14 @@ jobs:
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             "WP_PATH='$WP_PATH' PLUGIN_SLUG='$PLUGIN_SLUG' EXPECTED_SHA='$EXPECTED_SHA' bash -s" <<'REMOTE'
           set -euo pipefail
-          archive="$(python3 -c 'import json; print(json.load(open("/tmp/release-manifest.json"))["archive"])')"
-          archive_sha="$(python3 -c 'import json; print(json.load(open("/tmp/release-manifest.json"))["archive_sha256"])')"
-          source_sha="$(python3 -c 'import json; print(json.load(open("/tmp/release-manifest.json"))["source_sha"])')"
+          command -v php >/dev/null
+          manifest_get() {
+            key="$1"
+            php -r '$m=json_decode(file_get_contents("/tmp/release-manifest.json"), true, 512, JSON_THROW_ON_ERROR); $k=$argv[1]; if (!array_key_exists($k, $m)) { fwrite(STDERR, "Missing manifest key: $k\n"); exit(2); } echo $m[$k];' "$key"
+          }
+          archive="$(manifest_get archive)"
+          archive_sha="$(manifest_get archive_sha256)"
+          source_sha="$(manifest_get source_sha)"
           test "$source_sha" = "$EXPECTED_SHA"
           printf '%s  %s\n' "$archive_sha" "/tmp/$archive" | sha256sum -c -
 
