@@ -11,7 +11,7 @@ mustInclude(builder, 'Release candidates must be built from main', 'main-only gu
 mustInclude(builder, 'git archive --format=zip', 'git archive packaging');
 mustInclude(builder, 'source_sha', 'manifest source SHA');
 mustInclude(builder, 'archive_sha256', 'archive checksum');
-mustInclude(builder, 'sha256sum "$manifest"', 'manifest checksum');
+mustInclude(builder, "sha256sum release-manifest.json", 'manifest checksum');
 
 mustInclude(workflow, 'workflow_dispatch:', 'manual release trigger');
 mustInclude(workflow, 'ref: main', 'main checkout');
