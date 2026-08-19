@@ -42,7 +42,10 @@ cat > "$manifest" <<JSON
 JSON
 
 printf '%s  %s\n' "$archive_sha" "$archive_name" > "$checksums"
-sha256sum "$manifest" >> "$checksums"
+(
+  cd "$out_dir"
+  sha256sum release-manifest.json >> SHA256SUMS
+)
 
 echo "Built $archive"
 echo "Source SHA: $sha"
