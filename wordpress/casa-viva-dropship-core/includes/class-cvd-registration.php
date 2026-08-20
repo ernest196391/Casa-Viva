@@ -61,12 +61,16 @@ final class CVD_Registration {
 		return $user;
 	}
 
+	private static function portal_url_for_type( string $type ): string {
+		return home_url( 'mensajero' === $type ? '/area-mensajeros/' : '/area-gestoras/' );
+	}
+
 	public static function render( array $atts = array() ): string {
 		$atts = shortcode_atts( array( 'role' => 'gestora' ), $atts );
 		$type = 'mensajero' === $atts['role'] ? 'mensajero' : 'gestora';
 		$current_user = is_user_logged_in() ? wp_get_current_user() : null;
 		if ( $current_user && self::has_program_account( $current_user, $type ) ) {
-			$url = home_url( 'mensajero' === $type ? '/area-mensajeros/' : '/area-gestoras/' );
+			$url = self::portal_url_for_type( $type );
 			$status = get_user_meta( $current_user->ID, '_cvd_account_status', true );
 			$label = 'approved' === $status ? 'Abrir mi área' : 'Consultar estado de mi solicitud';
 			return '<div class="cvd-notice">Tu cuenta ya está vinculada al programa de Casa Viva. <a href="' . esc_url( $url ) . '">' . esc_html( $label ) . '</a>.</div>';
@@ -84,7 +88,7 @@ final class CVD_Registration {
 		}
 
 		if ( $success ) {
-			return '<section class="cvd-auth-card"><p class="cvd-kicker">Solicitud recibida</p><h1>Tu cuenta ya fue creada.</h1><p>Ahora está pendiente de aprobación por Casa Viva. No necesitas registrarte otra vez. Te avisaremos por correo cuando sea aprobada.</p><a class="cvd-primary" href="' . esc_url( home_url( '/area-gestoras/' ) ) . '">Consultar mi solicitud</a></section>';
+			return '<section class="cvd-auth-card"><p class="cvd-kicker">Solicitud recibida</p><h1>Tu cuenta ya fue creada.</h1><p>Ahora está pendiente de aprobación por Casa Viva. No necesitas registrarte otra vez. Te avisaremos por correo cuando sea aprobada.</p><a class="cvd-primary" href="' . esc_url( self::portal_url_for_type( $type ) ) . '">Consultar mi solicitud</a></section>';
 		}
 
 		$title = 'mensajero' === $type ? 'Trabaja como mensajero de Casa Viva' : 'Vende con Casa Viva como gestora';
@@ -167,7 +171,7 @@ final class CVD_Registration {
 		$admin_email = sanitize_email( get_option( 'cvd_notification_email', get_option( 'admin_email' ) ) );
 		$admin_url = admin_url( 'admin.php?page=cvd-gestoras' );
 		$applicant_subject = 'Casa Viva recibió tu solicitud';
-		$applicant_message = "Hola {$user->display_name},\n\nRecibimos tu solicitud para participar como {$program}.\n\nEstado: Pendiente de aprobación.\n\nPuedes consultar el estado aquí:\n" . home_url( '/area-gestoras/' ) . "\n\nCasa Viva";
+		$applicant_message = "Hola {$user->display_name},\n\nRecibimos tu solicitud para participar como {$program}.\n\nEstado: Pendiente de aprobación.\n\nPuedes consultar el estado aquí:\n" . self::portal_url_for_type( $type ) . "\n\nCasa Viva";
 		$applicant_sent = wp_mail( $user->user_email, $applicant_subject, $applicant_message );
 		update_user_meta( $user->ID, '_cvd_application_email_sent', $applicant_sent ? current_time( 'mysql', true ) : 'failed' );
 
