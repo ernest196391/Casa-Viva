@@ -10,7 +10,7 @@ test('cliente ve navegación móvil persistente y badge de carrito reactivo', as
 
   let nav = page.locator('.cvd-customer-nav');
   await expect(nav).toBeVisible();
-  for (const label of ['Inicio', 'Categorías', 'Carrito', 'Pedidos', 'Cuenta']) {
+  for (const label of ['Inicio', 'Comprar', 'Carrito', 'Pedidos', 'Mi cuenta']) {
     await expect(nav.getByText(label, { exact: true })).toBeVisible();
   }
 
