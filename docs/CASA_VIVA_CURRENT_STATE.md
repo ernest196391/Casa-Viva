@@ -8,6 +8,8 @@
 - 4A–4H: gestoras, referidos, comisiones, payouts, portal financiero, precios espejo, privacidad, cierre canónico de comisión y reasignación administrativa auditable — validadas e integradas.
 - 5A–5D: privacidad operativa de dependientas, recogida en tienda canónica, integridad/reconciliación de inventario e incidencias operativas estructuradas — validadas e integradas.
 - 6A–6B: release reproducible, manifest/checksum, despliegue controlado por SHA, conexión GitHub→Hostinger, smoke tests y rollback automático — validadas e integradas.
+- 7A: camino de compra real y acceso al pedido — integrado en `main`; la confirmación conecta al cliente autenticado con su seguimiento sin exponer claves públicas.
+- 7B: puertas de entrada y onboarding por rol — integrado en `main`; accesos y redirects por rol corregidos sin duplicar motores funcionales.
 
 ## Bloque 05 — Operaciones, dependientas y administración — CERRADO
 
@@ -78,16 +80,37 @@ Evidencia operativa final:
 - smoke final verde;
 - rollback automático permanece habilitado.
 
+## Bloque 07 — Puesta en marcha real — EN CURSO
+
+La auditoría de lanzamiento está documentada en `docs/BLOCK_07_LAUNCH_READINESS_AUDIT.md` y define la secuencia 7A→7D.
+
+### 7A — Camino de compra real y acceso al pedido — INTEGRADO
+
+- PR #44 fusionado a `main`;
+- la confirmación de compra mantiene WhatsApp como paso operativo;
+- clientes autenticados pueden abrir directamente su pedido/seguimiento;
+- no se exponen `order_key` ni rutas públicas de terceros;
+- la regresión quedó cubierta por la suite de navegador.
+
+### 7B — Puertas de entrada y onboarding por rol — INTEGRADO
+
+- PR #45 fusionado a `main`;
+- accesos y redirects por rol quedan alineados con las capacidades existentes;
+- no se duplican motores de gestora, mensajero, dependienta o administración;
+- la privacidad ya cerrada en Bloques 04–05 se conserva.
+
 ## Próxima frontera
 
-No inventar una fase 7A sin auditoría previa.
+### 7C — Capa visual de lanzamiento y saneamiento del catálogo
 
-La siguiente tarea es una auditoría de puesta en marcha real y experiencia visible sobre el prototipo desplegado, contrastando:
+Frontera estricta:
 
-- lo que el cliente puede hacer hoy en `casavivadecuba.com`;
-- checkout y creación de pedido reales;
-- acceso/UX de cliente, dependienta, mensajero, gestora y administración;
-- correspondencia entre las interfaces WordPress existentes y los contratos ya implementados en los Bloques 01–06;
-- huecos de navegación, identidad visual, onboarding, datos demo/legacy y preparación para pasar de prototipo a operación real.
+- aplicar identidad Casa Viva a la superficie visible;
+- simplificar navegación y copy;
+- resolver estados vacíos y jerarquía de CTA;
+- revisar presentación de nombres, categorías, imágenes y datos legacy;
+- mantener WooCommerce como fuente oficial de stock;
+- no recalcular ni alterar stock, pedidos, comisiones, payouts o finanzas;
+- no desplegar a Hostinger hasta que `validate`, `integration` y `browser` estén verdes y exista una decisión explícita de despliegue.
 
-La numeración del siguiente bloque/fases debe surgir de esa auditoría y no de supuestos.
+Después de 7C, la siguiente frontera prevista es 7D — certificación de lanzamiento E2E sobre el sitio desplegado, con matriz por rol, rollback y checklist operativo.
