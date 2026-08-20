@@ -21,6 +21,7 @@ require_once CVD_DIR . 'includes/class-cvd-plugin.php';
 require_once CVD_DIR . 'includes/class-cvd-customer-orders.php';
 require_once CVD_DIR . 'includes/class-cvd-customer-order-support.php';
 require_once CVD_DIR . 'includes/class-cvd-customer-navigation.php';
+require_once CVD_DIR . 'includes/class-cvd-catalog-presentation.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-financial-view.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-price-integrity.php';
 require_once CVD_DIR . 'includes/class-cvd-attribution-overrides.php';
@@ -38,6 +39,7 @@ add_action(
 			CVD_Customer_Orders::register();
 			CVD_Customer_Order_Support::register();
 			CVD_Customer_Navigation::register();
+			CVD_Catalog_Presentation::register();
 			CVD_Gestora_Financial_View::register();
 			CVD_Gestora_Price_Integrity::register();
 			CVD_Attribution_Overrides::register();
