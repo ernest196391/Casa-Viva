@@ -12,7 +12,7 @@ function must(condition, message) {
 
 must(plugin.includes('class-cvd-customer-navigation.php'), 'El módulo de navegación debe cargarse desde el plugin.');
 must(plugin.includes('CVD_Customer_Navigation::register()'), 'El módulo de navegación debe registrarse.');
-for (const label of ['Inicio', 'Categorías', 'Carrito', 'Pedidos', 'Cuenta']) {
+for (const label of ['Inicio', 'Comprar', 'Carrito', 'Pedidos', 'Mi cuenta']) {
   must(php.includes(`'${label}'`), `Falta la entrada ${label}.`);
 }
 must(php.includes('woocommerce_add_to_cart_fragments'), 'El badge debe integrarse con fragmentos WooCommerce.');
