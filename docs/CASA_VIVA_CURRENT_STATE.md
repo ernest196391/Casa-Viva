@@ -8,8 +8,10 @@
 - 4A–4H: gestoras, referidos, comisiones, payouts, portal financiero, precios espejo, privacidad, cierre canónico de comisión y reasignación administrativa auditable — validadas e integradas.
 - 5A–5D: privacidad operativa de dependientas, recogida en tienda canónica, integridad/reconciliación de inventario e incidencias operativas estructuradas — validadas e integradas.
 - 6A–6B: release reproducible, manifest/checksum, despliegue controlado por SHA, conexión GitHub→Hostinger, smoke tests y rollback automático — validadas e integradas.
-- 7A: camino de compra real y acceso al pedido — integrado en `main`; la confirmación conecta al cliente autenticado con su seguimiento sin exponer claves públicas.
-- 7B: puertas de entrada y onboarding por rol — integrado en `main`; accesos y redirects por rol corregidos sin duplicar motores funcionales.
+- 7A: camino de compra real y acceso al pedido — integrado en `main`.
+- 7B: puertas de entrada y onboarding por rol — integrado en `main`.
+- 7C: capa visual de lanzamiento y presentación del catálogo — cerrada funcionalmente con 7C.1, 7C.2 y 7C.3 integrados.
+- 7D: certificación E2E de lanzamiento — EN CURSO; 7D.1, 7D.2 y 7D.3 integrados.
 
 ## Bloque 05 — Operaciones, dependientas y administración — CERRADO
 
@@ -99,18 +101,46 @@ La auditoría de lanzamiento está documentada en `docs/BLOCK_07_LAUNCH_READINES
 - no se duplican motores de gestora, mensajero, dependienta o administración;
 - la privacidad ya cerrada en Bloques 04–05 se conserva.
 
+### 7C — Capa visual de lanzamiento y saneamiento del catálogo — CERRADO FUNCIONALMENTE
+
+- 7C.1 refinó la navegación móvil y su base visual;
+- 7C.2 simplificó copy y jerarquía de navegación;
+- 7C.3 reforzó la presentación pública del catálogo sin mutar stock;
+- WooCommerce sigue siendo fuente oficial de producto y stock;
+- no se introdujeron motores paralelos ni cambios financieros.
+
+### 7D — Certificación E2E de lanzamiento — EN CURSO
+
+Estado integrado:
+
+- 7D base: matriz mínima de certificación por rol definida en `docs/PHASE_7D_E2E_CERTIFICATION.md`;
+- 7D.1: checkpoint de ejecución en `docs/PHASE_7D_CERTIFICATION_STATUS.md`;
+- 7D.2: evidencia pre-despliegue en `docs/PHASE_7D_PREDEPLOY_EVIDENCE.md` con estado `PREDEPLOY READY — NO GO YET`;
+- 7D.3: modelo operativo de despliegue autónomo en `docs/AUTOMATED_DEPLOYMENT_OPERATING_MODEL.md`;
+- `main` de referencia al iniciar este checkpoint: `f3efa5b0af5539561e05f83f54efc2fc65901588`.
+
+La vía canónica de despliegue es:
+
+`GitHub/CI → release reproducible → SSH → script controlado en Hostinger → WP-CLI → smoke → rollback automático si falla`.
+
+Hostinger Connector es auxiliar y no bloqueante.
+
 ## Próxima frontera
 
-### 7C — Capa visual de lanzamiento y saneamiento del catálogo
+Completar 7D con evidencia reproducible del ciclo crítico:
 
-Frontera estricta:
+`cliente → compra → atribución gestora → operación/dependienta → mensajero → seguimiento → entrega → administración → comisión/payout`.
 
-- aplicar identidad Casa Viva a la superficie visible;
-- simplificar navegación y copy;
-- resolver estados vacíos y jerarquía de CTA;
-- revisar presentación de nombres, categorías, imágenes y datos legacy;
-- mantener WooCommerce como fuente oficial de stock;
-- no recalcular ni alterar stock, pedidos, comisiones, payouts o finanzas;
-- no desplegar a Hostinger hasta que `validate`, `integration` y `browser` estén verdes y exista una decisión explícita de despliegue.
+Antes de declarar `GO` deben quedar verificados:
 
-Después de 7C, la siguiente frontera prevista es 7D — certificación de lanzamiento E2E sobre el sitio desplegado, con matriz por rol, rollback y checklist operativo.
+- `validate`, `integration` y `browser` verdes;
+- fundación de release y contrato de staging/deploy verdes;
+- release reproducible desde SHA exacto;
+- despliegue controlado del mismo SHA certificado;
+- smoke final verde;
+- rollback validado/disponible;
+- sin fallos P0/P1 abiertos;
+- checklist operativo del primer día;
+- checkpoint `CASA VIVA CORE — BASELINE ESTABLE PRE-NETWORK` con SHA exacto.
+
+Casa Viva Network permanece `FUTURE` durante 7D. Al completar el baseline estable pre-Network, detenerse antes de Bloque 08 y avisar explícitamente que Casa Viva Core está listo para Network.
