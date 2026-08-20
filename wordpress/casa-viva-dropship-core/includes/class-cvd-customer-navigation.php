@@ -76,10 +76,10 @@ final class CVD_Customer_Navigation {
 		$orders_url = is_user_logged_in() ? wc_get_account_endpoint_url( 'orders' ) : $account_url;
 		echo '<nav class="cvd-customer-nav" aria-label="Navegación principal">';
 		echo self::item( 'home', 'Inicio', home_url( '/' ), '⌂', $active );
-		echo self::item( 'categories', 'Categorías', wc_get_page_permalink( 'shop' ), '▦', $active );
+		echo self::item( 'categories', 'Comprar', wc_get_page_permalink( 'shop' ), '▦', $active );
 		echo self::item( 'cart', 'Carrito', wc_get_cart_url(), '🛒', $active );
 		echo self::item( 'orders', 'Pedidos', $orders_url, '≡', $active );
-		echo self::item( 'account', 'Cuenta', $account_url, '○', $active );
+		echo self::item( 'account', 'Mi cuenta', $account_url, '○', $active );
 		echo '</nav>';
 	}
 }
