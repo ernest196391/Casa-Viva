@@ -13,6 +13,13 @@ final class CVD_WhatsApp_Gateway {
 		return $gateways;
 	}
 
+	private static function customer_order_url( WC_Order $order ): string {
+		if ( ! is_user_logged_in() || (int) $order->get_customer_id() !== get_current_user_id() ) {
+			return '';
+		}
+		return wc_get_endpoint_url( 'view-order', $order->get_id(), wc_get_page_permalink( 'myaccount' ) );
+	}
+
 	public static function thankyou_button( int $order_id ): void {
 		$order = wc_get_order( $order_id );
 		if ( ! $order ) {
@@ -20,21 +27,31 @@ final class CVD_WhatsApp_Gateway {
 		}
 
 		$url = self::whatsapp_url( $order );
-		if ( ! $url ) {
-			echo '<p>Tu pedido fue guardado. Casa Viva se comunicará contigo para confirmarlo.</p>';
-			return;
-		}
+		$order_url = self::customer_order_url( $order );
 
 		echo '<section class="cvd-order-success">';
 		echo '<div class="cvd-order-success__icon" aria-hidden="true">✓</div>';
 		echo '<h2>Tu pedido está siendo procesado</h2>';
-		echo '<p>El pedido #' . esc_html( $order->get_order_number() ) . ' quedó guardado. Envíalo por WhatsApp para confirmar disponibilidad, envío y pago.</p>';
+		if ( $url ) {
+			echo '<p>El pedido #' . esc_html( $order->get_order_number() ) . ' quedó guardado. Envíalo por WhatsApp para confirmar disponibilidad, envío y pago.</p>';
+		} else {
+			echo '<p>El pedido #' . esc_html( $order->get_order_number() ) . ' quedó guardado. Casa Viva se comunicará contigo para confirmarlo.</p>';
+		}
 		echo '<div class="cvd-order-success__actions">';
-		// esc_url() strips encoded CR/LF sequences and destroys WhatsApp line breaks.
-		// whatsapp_url() validates the destination; esc_attr() only protects the HTML attribute.
-		echo '<a class="button alt cvd-order-success__whatsapp" href="' . esc_attr( $url ) . '" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.4L3 20.4l1.3-4.7a8.5 8.5 0 1 1 16.2-4Zm-4.7 2.4c-.2-.1-1.4-.7-1.6-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.9 6.9 0 0 1-3.4-3c-.2-.3 0-.4.1-.5l.6-.7c.1-.2.1-.4 0-.5l-.8-2c-.1-.3-.3-.3-.5-.3h-.5c-.2 0-.5.1-.7.3-.2.2-.9.9-.9 2.2s.9 2.5 1 2.7c.1.2 1.8 2.8 4.5 3.9.6.3 1.1.4 1.5.5.6.2 1.2.2 1.7.1.5-.1 1.4-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.2-.2-.3-.2-.5-.3Z"/></svg><span>Abrir WhatsApp y confirmar</span></a>';
+		if ( $url ) {
+			// esc_url() strips encoded CR/LF sequences and destroys WhatsApp line breaks.
+			// whatsapp_url() validates the destination; esc_attr() only protects the HTML attribute.
+			echo '<a class="button alt cvd-order-success__whatsapp" href="' . esc_attr( $url ) . '" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.4L3 20.4l1.3-4.7a8.5 8.5 0 1 1 16.2-4Zm-4.7 2.4c-.2-.1-1.4-.7-1.6-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.9 6.9 0 0 1-3.4-3c-.2-.3 0-.4.1-.5l.6-.7c.1-.2.1-.4 0-.5l-.8-2c-.1-.3-.3-.3-.5-.3h-.5c-.2 0-.5.1-.7.3-.2.2-.9.9-.9 2.2s.9 2.5 1 2.7c.1.2 1.8 2.8 4.5 3.9.6.3 1.1.4 1.5.5.6.2 1.2.2 1.7.1.5-.1 1.4-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.2-.2-.3-.2-.5-.3Z"/></svg><span>Abrir WhatsApp y confirmar</span></a>';
+		}
+		if ( $order_url ) {
+			echo '<a class="button cvd-order-success__order" href="' . esc_url( $order_url ) . '">Ver seguimiento del pedido</a>';
+		}
 		echo '<a class="button cvd-order-success__shop" href="' . esc_url( wc_get_page_permalink( 'shop' ) ) . '">Seguir comprando</a>';
-		echo '</div></section>';
+		echo '</div>';
+		if ( ! $order_url && ! is_user_logged_in() ) {
+			echo '<p class="cvd-order-success__account-note">Si quieres consultar pedidos y seguimiento desde Casa Viva, inicia sesión o crea tu cuenta antes de tu próxima compra.</p>';
+		}
+		echo '</section>';
 	}
 
 	public static function whatsapp_url( WC_Order $order ): string {
