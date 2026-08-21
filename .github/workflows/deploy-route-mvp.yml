@@ -1,0 +1,127 @@
+name: Deploy Casa Viva Ruta MVP
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'wordpress/casa-viva-ruta-mvp/**'
+      - '.github/workflows/deploy-route-mvp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  WP_PATH: /home/u824654880/domains/casavivadecuba.com/public_html
+  PLUGIN_SLUG: casa-viva-ruta-mvp
+  SITE_URL: https://casavivadecuba.com
+
+jobs:
+  deploy-route-mvp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+
+      - name: Validar sintaxis del plugin
+        run: php -l wordpress/casa-viva-ruta-mvp/casa-viva-ruta-mvp.php
+
+      - name: Construir paquete aislado
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-route
+          cd wordpress
+          zip -qr ../release-route/casa-viva-ruta-mvp.zip casa-viva-ruta-mvp
+          cd ../release-route
+          sha256sum casa-viva-ruta-mvp.zip > SHA256SUMS
+          sha256sum -c SHA256SUMS
+
+      - name: Preparar SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '\n' >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Copiar paquete
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          scp -P "$SSH_PORT" release-route/casa-viva-ruta-mvp.zip "$SSH_USER@$SSH_HOST:/tmp/casa-viva-ruta-mvp.zip"
+          echo "DEPLOY_ATTEMPTED=1" >> "$GITHUB_ENV"
+
+      - name: Desplegar y activar plugin
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "WP_PATH='$WP_PATH' PLUGIN_SLUG='$PLUGIN_SLUG' bash -s" <<'REMOTE'
+          set -euo pipefail
+          plugins="$WP_PATH/wp-content/plugins"
+          current="$plugins/$PLUGIN_SLUG"
+          backup="$plugins/${PLUGIN_SLUG}.predeploy-$(date -u +%Y%m%dT%H%M%SZ)"
+          marker="/tmp/cvr-mvp-backup.txt"
+          rm -f "$marker"
+          if [ -d "$current" ]; then
+            mv "$current" "$backup"
+            printf '%s\n' "$backup" > "$marker"
+          fi
+          unzip -q /tmp/casa-viva-ruta-mvp.zip -d "$plugins"
+          test -f "$current/casa-viva-ruta-mvp.php"
+          cd "$WP_PATH"
+          wp plugin activate "$PLUGIN_SLUG" --quiet
+          wp plugin status "$PLUGIN_SLUG"
+          REMOTE
+
+      - name: Smoke público y privado
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --retry-delay 2 "$SITE_URL/tarifas-mensajeria/" | grep -q 'Tarifas de mensajería'
+          code="$(curl -sS -o /dev/null -w '%{http_code}' "$SITE_URL/ruta-cv/")"
+          test "$code" = "302" -o "$code" = "200"
+
+      - name: Rollback automático
+        if: failure() && env.DEPLOY_ATTEMPTED == '1'
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "WP_PATH='$WP_PATH' PLUGIN_SLUG='$PLUGIN_SLUG' bash -s" <<'REMOTE'
+          set -euo pipefail
+          plugins="$WP_PATH/wp-content/plugins"
+          current="$plugins/$PLUGIN_SLUG"
+          marker="/tmp/cvr-mvp-backup.txt"
+          rm -rf "$current"
+          if [ -f "$marker" ]; then
+            backup="$(cat "$marker")"
+            if [ -d "$backup" ]; then mv "$backup" "$current"; fi
+          fi
+          cd "$WP_PATH"
+          if [ -d "$current" ]; then wp plugin activate "$PLUGIN_SLUG" --quiet || true; fi
+          REMOTE
