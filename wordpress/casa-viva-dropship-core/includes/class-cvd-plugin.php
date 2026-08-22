@@ -421,6 +421,7 @@ final class CVD_Plugin {
 			'mensajeria'        => array( 'Mensajería Casa Viva', '[casa_viva_delivery_control]' ),
 			'seguimiento'       => array( 'Seguimiento de pedido', '[casa_viva_order_tracking]' ),
 			'interpretar-vale'   => array( 'Interpretar vale con NEXO', '[casa_viva_voucher_intake]' ),
+			'cotizar-mensajeria' => array( 'Cotizar mensajería', '[casa_viva_shipping_quote]' ),
 		);
 		foreach ( $pages as $slug => $page ) {
 			$existing = get_page_by_path( $slug );
