@@ -69,6 +69,38 @@
   document.addEventListener('click', function(event) { var item=event.target.closest('[data-notification-id]'); if(!item||!window.cvdPwa)return; fetch(window.cvdPwa.notificationsUrl,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-WP-Nonce':window.cvdPwa.restNonce},body:JSON.stringify({id:Number(item.getAttribute('data-notification-id'))})}).catch(function(){}); });
   loadInbox();
 
+  function initializeMessengerRoute() {
+    var route = document.querySelector('[data-route-list]');
+    if (!route) return;
+    var list = route.querySelector('.cvd-route-list');
+    if (!list) return;
+    var storageKey = route.getAttribute('data-route-key') || 'cvd-route-session';
+    function stops() { return Array.prototype.slice.call(list.querySelectorAll('[data-route-stop]')); }
+    function updatePositions() {
+      var current = stops(), total = current.length;
+      current.forEach(function (stop, index) {
+        var label = stop.querySelector('.cvd-route-position'); if (label) label.textContent = 'Parada ' + (index + 1) + ' de ' + total;
+        var up = stop.querySelector('[data-route-up]'), down = stop.querySelector('[data-route-down]');
+        if (up) up.disabled = index === 0; if (down) down.disabled = index === total - 1;
+      });
+      try { sessionStorage.setItem(storageKey, JSON.stringify(current.map(function (stop) { return stop.getAttribute('data-route-stop'); }))); } catch (ignore) {}
+    }
+    try {
+      var saved = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
+      if (Array.isArray(saved)) saved.forEach(function (id) { var stop = list.querySelector('[data-route-stop="' + String(id).replace(/[^0-9]/g, '') + '"]'); if (stop) list.appendChild(stop); });
+    } catch (ignore) {}
+    route.addEventListener('click', function (event) {
+      var button = event.target.closest('[data-route-up],[data-route-down],[data-route-reset]'); if (!button) return;
+      if (button.matches('[data-route-reset]')) { try { sessionStorage.removeItem(storageKey); } catch (ignore) {} window.location.reload(); return; }
+      var stop = button.closest('[data-route-stop]'); if (!stop) return;
+      if (button.matches('[data-route-up]') && stop.previousElementSibling) list.insertBefore(stop, stop.previousElementSibling);
+      if (button.matches('[data-route-down]') && stop.nextElementSibling) list.insertBefore(stop.nextElementSibling, stop);
+      updatePositions(); stop.focus({ preventScroll: true });
+    });
+    stops().forEach(function (stop) { stop.setAttribute('tabindex', '-1'); }); updatePositions();
+  }
+  initializeMessengerRoute();
+
   function enhanceMessengerCenter() {
     if (!window.cvdPortal || !window.cvdPortal.isMessenger) return;
     var shell = document.querySelector('.cvd-dashboard.cvd-app-shell');
