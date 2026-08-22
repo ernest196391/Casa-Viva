@@ -27,3 +27,24 @@ La primera iteración añade una capa visual mobile-first al portal de mensajero
 ## Alcance posterior
 
 Después del piloto se podrá refinar el diseño, incorporar finalizados del día y mejorar resúmenes contables sin cambiar la autoridad de estados.
+
+## P0.2 · Inicio/Hoy y entrega activa
+
+La superficie operativa canónica es `/area-mensajeros/`. La ruta Next.js `/mensajero` permanece como sandbox visual Stitch y no comparte autenticación, estado ni pedidos.
+
+P0.2 traslada a WordPress los tokens y patrones visuales aprobados y renderiza, con datos del pedido existente:
+
+- resumen del trabajo activo y ofertas disponibles;
+- productos y cantidades;
+- cliente, teléfono, dirección, referencia y mapa cuando existen;
+- total WooCommerce y mensajería CUP como conceptos separados;
+- notas operativas;
+- WhatsApp, llamada, navegación, QR, ubicación e incidencias existentes;
+- acciones que conservan las URLs con nonce de `CVD_Delivery`.
+
+### Degradaciones explícitas
+
+- “Hoy” representa la carga activa actual, no una agenda persistida: todavía no existe un campo canónico de jornada o secuencia diaria.
+- El vuelto no tiene un campo estructurado en el pedido. Solo se muestra dentro de la nota operativa cuando fue registrado allí; la interfaz no intenta inferirlo.
+- Una dirección, referencia, teléfono o mapa ausentes se muestran como faltantes o se omite la acción correspondiente.
+- No se calculan ETA ni orden óptimo de ruta.
