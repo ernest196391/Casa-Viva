@@ -54,6 +54,7 @@ final class CVD_Portal {
 				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 				'nonce' => wp_create_nonce( 'cvd_portal_price' ),
 				'messengerFeedUrl' => rest_url( 'casa-viva/v1/messenger/feed' ),
+				'messengerContactUrl' => rest_url( 'casa-viva/v1/messenger/orders/' ),
 				'restNonce' => wp_create_nonce( 'wp_rest' ),
 				'isMessenger' => is_user_logged_in() && 'mensajero' === CVD_Registration::program_type( wp_get_current_user() ),
 			) );
@@ -273,6 +274,7 @@ final class CVD_Portal {
 		$html .= '<div class="cvd-contact-list">';
 		foreach ( $orders as $order ) {
 			$status = CVD_Delivery::status( $order ); $stage = self::messenger_delivery_stage( $order );
+			$latest_contact = class_exists( 'CVD_Messenger_Contacts' ) ? CVD_Messenger_Contacts::latest( $order ) : null;
 			$phones = array_filter( array( trim( (string) $order->get_billing_phone() ) ) );
 			if ( is_callable( array( $order, 'get_shipping_phone' ) ) ) { $phones[] = trim( (string) $order->get_shipping_phone() ); }
 			$phones = array_values( array_unique( array_filter( $phones ) ) );
@@ -286,7 +288,13 @@ final class CVD_Portal {
 				$html .= '</div>';
 			} elseif ( ! $contact_allowed ) { $html .= '<p class="cvd-contact-locked">Acepta el pedido para ver y usar los datos de contacto.</p>'; }
 			else { $html .= '<p class="cvd-contact-locked">Este pedido no tiene un teléfono disponible.</p>'; }
-			$html .= '<div class="cvd-contact-outcomes" aria-label="Resultados de contacto no disponibles"><span>Confirmó</span><span>No responde</span><span>Reprogramar</span><span>Ubicación recibida</span></div><small class="cvd-domain-gap">Pendiente de contrato canónico: estos resultados todavía no se registran.</small></article>';
+			$outcomes = array( 'confirmed' => 'Confirmó', 'no_answer' => 'No responde', 'reschedule_requested' => 'Reprogramar', 'location_received' => 'Ubicación recibida' );
+			$html .= '<div class="cvd-contact-outcomes" aria-label="Registrar resultado de contacto">';
+			foreach ( $outcomes as $value => $label ) { $html .= $contact_allowed ? '<button type="button" data-contact-outcome="' . esc_attr( $value ) . '" data-contact-order="' . esc_attr( $order->get_id() ) . '">' . esc_html( $label ) . '</button>' : '<span>' . esc_html( $label ) . '</span>'; }
+			$html .= '</div><small class="cvd-contact-result" aria-live="polite">';
+			if ( $latest_contact ) { $labels = array( 'contact.confirmed' => 'Confirmó', 'contact.no_answer' => 'No responde', 'contact.reschedule_requested' => 'Reprogramar', 'contact.location_received' => 'Ubicación recibida' ); $html .= 'Último resultado: ' . esc_html( $labels[ $latest_contact['event_type'] ] ?? $latest_contact['event_type'] ) . ' · ' . esc_html( get_date_from_gmt( $latest_contact['timestamp'], 'j M · H:i' ) ); }
+			else { $html .= 'Sin resultado de contacto registrado.'; }
+			$html .= '</small></article>';
 		}
 		return $html . '</div></section>';
 	}
