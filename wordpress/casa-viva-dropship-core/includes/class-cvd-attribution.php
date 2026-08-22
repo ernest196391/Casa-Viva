@@ -121,12 +121,17 @@ final class CVD_Attribution {
 		self::resolve_and_attach( $order, $phone, $email, $order->get_customer_id() );
 	}
 
+	/** Adjunta un pedido creado por una operadora sin saltarse el ownership permanente del cliente. */
+	public static function attach_operator_order( WC_Order $order, int $preferred_owner_id = 0 ): void {
+		self::resolve_and_attach( $order, $order->get_billing_phone(), $order->get_billing_email(), $order->get_customer_id(), $preferred_owner_id );
+	}
+
 	public static function attach_store_api_order( WC_Order $order, WP_REST_Request $request ): void {
 		unset( $request );
 		self::resolve_and_attach( $order, $order->get_billing_phone(), $order->get_billing_email(), $order->get_customer_id() );
 	}
 
-	private static function resolve_and_attach( WC_Order $order, string $phone, string $email, int $customer_id ): void {
+	private static function resolve_and_attach( WC_Order $order, string $phone, string $email, int $customer_id, int $preferred_owner_id = 0 ): void {
 		if ( $order->get_meta( '_cvd_attribution_locked', true ) ) {
 			return;
 		}
@@ -137,6 +142,13 @@ final class CVD_Attribution {
 		// when the client later arrives organically, through another link, or when a
 		// gestora places the order on the client's behalf.
 		$owner = self::find_existing_owner( $identities );
+		if ( ! $owner && $preferred_owner_id ) {
+			$user = get_userdata( $preferred_owner_id );
+			$code = self::sanitize_code( (string) get_user_meta( $preferred_owner_id, '_cvd_referral_code', true ) );
+			if ( $user && $code && 'approved' === get_user_meta( $preferred_owner_id, '_cvd_account_status', true ) && array_intersect( array( 'cvd_gestora', 'cvd_influencer' ), (array) $user->roles ) ) {
+				$owner = array( 'owner_user_id' => $preferred_owner_id, 'owner_type' => in_array( 'cvd_influencer', (array) $user->roles, true ) ? 'influencer' : 'gestora', 'referral_code' => $code, 'source' => 'operator_confirmed_voucher' );
+			}
+		}
 		if ( ! $owner ) {
 			$owner = self::owner_from_saved_referral();
 		}
