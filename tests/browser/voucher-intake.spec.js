@@ -7,7 +7,7 @@ test('entrada de vales degrada sin crear pedidos cuando NEXO falla', async ({ pa
   await page.setViewportSize({ width: 360, height: 740 });
   await page.goto(`${baseURL}/wp-login.php`); await page.locator('#user_login').fill(operator.user); await page.locator('#user_pass').fill(operator.pass);
   await Promise.all([page.waitForURL(url=>!url.pathname.includes('wp-login.php')),page.locator('#wp-submit').click()]);
-  await page.route('**/wp-json/casa-viva/v1/voucher/parse', route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'NEXO no está disponible. No se creó ningún pedido.'})}));
+  await page.route(/.*voucher(?:%2F|\/)parse.*/i, route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'NEXO no está disponible. No se creó ningún pedido.'})}));
   await page.goto(`${baseURL}/?page_id=${pageId}`,{waitUntil:'domcontentloaded'});
   await page.locator('#cvd-voucher-text').fill('Vale sintético de prueba con cliente, producto, teléfono y dirección; no contiene PII real.');
   await page.locator('[data-voucher-parse]').click();
