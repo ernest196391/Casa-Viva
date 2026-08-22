@@ -3,6 +3,14 @@
 :root {
   --background: #ffffff;
   --foreground: #222222;
+  --cv-petrol: #0d3b45;
+  --cv-carbon: #2b2420;
+  --cv-amber: #a35a1f;
+  --cv-cream: #f6f1e6;
+  --cv-surface: #ffffff;
+  --cv-space-unit: 0.5rem;
+  --cv-card-radius: 1rem;
+  --cv-card-shadow: 0 4px 20px rgba(43, 36, 32, 0.06);
 }
 
 html {
