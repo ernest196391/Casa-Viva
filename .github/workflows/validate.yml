@@ -173,12 +173,14 @@ jobs:
           customer_orders_json="$("${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/customer-orders-browser.php | tail -n 1)"
           gestora_portal_json="$("${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/gestora-portal-browser-4f.php | tail -n 1)"
           inventory_json="$("${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/inventory-integrity-browser.php | tail -n 1)"
+          voucher_json="$("${compose[@]}" run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/voucher-intake-browser.php | tail -n 1)"
           echo "$bootstrap_json" | jq -e . >/dev/null
           echo "$fixture_json" | jq -e . >/dev/null
           echo "$messenger_json" | jq -e . >/dev/null
           echo "$customer_orders_json" | jq -e . >/dev/null
           echo "$gestora_portal_json" | jq -e . >/dev/null
           echo "$inventory_json" | jq -e . >/dev/null
+          echo "$voucher_json" | jq -e . >/dev/null
           {
             echo "ORDER_CENTER_BASE_URL=http://localhost:8889"
             echo "CUSTOMER_NAV_PRODUCT_ID=$(echo "$bootstrap_json" | jq -r .product_id)"
@@ -214,6 +216,7 @@ jobs:
             echo "GESTORA_PORTAL_B_ORDER_ID=$(echo "$gestora_portal_json" | jq -r .b_order_id)"
             echo "INVENTORY_PAGE_ID=$(echo "$inventory_json" | jq -r .page_id)"
             echo "INVENTORY_PRODUCT_CODE=$(echo "$inventory_json" | jq -r .product_code)"
+            echo "VOUCHER_INTAKE_PAGE_ID=$(echo "$voucher_json" | jq -r .page_id)"
           } >> "$GITHUB_ENV"
 
       - name: Ejecutar validación visual real
