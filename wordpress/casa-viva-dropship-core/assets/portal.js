@@ -50,6 +50,7 @@
     var labels = { to_store: 'Confirma que vas a recoger el pedido.', handed_over: 'Confirma que vas en camino al cliente.', delivered: 'Confirma que entregaste el pedido al cliente.', failed: 'Confirma que la entrega no pudo completarse.', returned: 'Confirma que devolviste el pedido a Casa Viva.' };
     if (!window.confirm(labels[action.getAttribute('data-confirm-delivery')] || '¿Confirmas este cambio?')) event.preventDefault();
   });
+  document.addEventListener('click', function (event) { if (event.target.closest('[data-cvd-refresh-preparation]')) window.location.reload(); });
 
   var notifyButton = document.getElementById('cvd-enable-notifications');
   var knownOffers = Array.prototype.map.call(document.querySelectorAll('[data-offer-id]'), function (card) { return Number(card.getAttribute('data-offer-id')); });

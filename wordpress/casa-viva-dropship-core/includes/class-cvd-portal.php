@@ -208,9 +208,11 @@ final class CVD_Portal {
 		<section class="cvd-dashboard cvd-app-shell cvd-messenger-center">
 			<?php if ( isset( $_GET['oferta'] ) ) : $offer_result = sanitize_key( wp_unslash( $_GET['oferta'] ) ); ?><div class="cvd-notice" role="status"><?php echo esc_html( 'accepted' === $offer_result ? 'Carrera aceptada. Presenta el QR en la tienda.' : ( 'declined' === $offer_result ? 'Oferta descartada.' : 'La carrera ya no está disponible.' ) ); ?></div><?php endif; ?>
 			<header class="cvd-dashboard-head cvd-messenger-head"><div><p class="cvd-kicker">Casa Viva · Mensajería</p><h1>Hola, <?php echo esc_html( $user->display_name ); ?>.</h1><p><?php echo esc_html( $offers ? 'Tienes una carrera por responder.' : ( $active ? 'Este es tu trabajo activo de hoy.' : 'Estás listo para recibir carreras.' ) ); ?></p></div><a class="cvd-secondary" href="<?php echo esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ); ?>">Cambiar cuenta</a></header>
-			<nav class="cvd-app-nav cvd-messenger-nav" aria-label="Panel del mensajero"><a href="#hoy">Inicio</a><a href="#entregas">Entrega activa</a><a href="#ofertas">Carreras</a><a href="#ganancias">Ganancias</a><a href="#perfil">Disponibilidad</a></nav>
+			<nav class="cvd-app-nav cvd-messenger-nav" aria-label="Panel del mensajero"><a href="#hoy">Inicio</a><a href="#contactos">Contactos</a><a href="#preparar">Preparar</a><a href="#entregas">Entrega</a><a href="#perfil">Más</a></nav>
 			<?php echo self::messenger_today_summary( $active, $offers ); ?>
 			<div class="cvd-messenger-alert-control"><button class="cvd-secondary" id="cvd-enable-notifications" type="button">Activar alertas</button></div>
+			<?php echo self::messenger_contacts( $active ); ?>
+			<?php echo self::messenger_preparation( $active ); ?>
 			<section class="cvd-panel cvd-offers-panel" id="ofertas"><h2>Carreras</h2><?php echo self::messenger_offers( $offers ); ?></section>
 			<section class="cvd-panel" id="entregas"><h2>Entrega activa</h2><?php echo self::delivery_orders( $active ); ?></section>
 			<div class="cvd-stats cvd-messenger-earnings" id="ganancias"><article><span>Pendiente</span><strong><?php echo esc_html( number_format_i18n( $earnings['pending'], 0 ) ); ?> CUP</strong></article><article><span>Aprobado</span><strong><?php echo esc_html( number_format_i18n( $earnings['approved'], 0 ) ); ?> CUP</strong></article></div>
@@ -259,6 +261,61 @@ final class CVD_Portal {
 			$html .= '</div>';
 		}
 		return $html . '</section>';
+	}
+
+	/** Contactos de pedidos asignados. Los resultados quedan en lectura hasta tener un evento canónico. */
+	private static function messenger_contacts( array $orders ): string {
+		$html = '<section class="cvd-panel cvd-messenger-contacts" id="contactos"><div class="cvd-messenger-section-head"><div><p class="cvd-kicker">Contactos</p><h2>Clientes asignados</h2><p>Teléfonos y acciones de los pedidos bajo tu responsabilidad.</p></div></div>';
+		if ( ! $orders ) { return $html . '<p class="cvd-empty-state">No tienes clientes asignados ahora.</p></section>'; }
+		$html .= '<div class="cvd-contact-list">';
+		foreach ( $orders as $order ) {
+			$status = CVD_Delivery::status( $order );
+			$phones = array_filter( array( trim( (string) $order->get_billing_phone() ) ) );
+			if ( is_callable( array( $order, 'get_shipping_phone' ) ) ) { $phones[] = trim( (string) $order->get_shipping_phone() ); }
+			$phones = array_values( array_unique( array_filter( $phones ) ) );
+			$contact_allowed = in_array( $status, array( 'accepted', 'to_store', 'picked_up', 'handed_over', 'delivered' ), true );
+			$html .= '<article><header><div><strong>' . esc_html( $order->get_formatted_billing_full_name() ?: 'Cliente sin nombre' ) . '</strong><small>Pedido #' . esc_html( $order->get_order_number() ) . ' · ' . esc_html( CVD_Delivery::destination_zone( $order ) ) . '</small></div><span class="cvd-badge">' . esc_html( CVD_Delivery::label( $status ) ) . '</span></header>';
+			if ( $contact_allowed && $phones ) {
+				$html .= '<div class="cvd-contact-phones">';
+				foreach ( $phones as $index => $phone ) { $html .= '<p><span>' . esc_html( 0 === $index ? 'Principal' : 'Alternativo' ) . '</span><strong>' . esc_html( $phone ) . '</strong></p>'; }
+				$html .= '</div><div class="cvd-contact-actions">';
+				foreach ( $phones as $index => $phone ) { $digits = preg_replace( '/\D+/', '', $phone ); if ( 0 === $index ) { $html .= '<a class="cvd-primary" href="https://wa.me/' . esc_attr( $digits ) . '?text=' . rawurlencode( 'Hola, soy el mensajero de Casa Viva. Te contacto por el pedido #' . $order->get_order_number() . '.' ) . '" target="_blank" rel="noopener">WhatsApp</a>'; } $html .= '<a class="cvd-secondary" href="tel:' . esc_attr( $phone ) . '">Llamar' . ( $index ? ' alternativo' : '' ) . '</a>'; }
+				$html .= '</div>';
+			} elseif ( ! $contact_allowed ) { $html .= '<p class="cvd-contact-locked">Acepta el pedido para ver y usar los datos de contacto.</p>'; }
+			else { $html .= '<p class="cvd-contact-locked">Este pedido no tiene un teléfono disponible.</p>'; }
+			$html .= '<div class="cvd-contact-outcomes" aria-label="Resultados de contacto no disponibles"><span>Confirmó</span><span>No responde</span><span>Reprogramar</span><span>Ubicación recibida</span></div><small class="cvd-domain-gap">Pendiente de contrato canónico: estos resultados todavía no se registran.</small></article>';
+		}
+		return $html . '</div></section>';
+	}
+
+	/** Manifiesto consolidado de lectura; preparación y verificación siguen perteneciendo a tienda. */
+	private static function messenger_preparation( array $orders ): string {
+		$pickup = trim( (string) get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ) );
+		$products = array(); $order_numbers = array(); $checks = array(); $notes = array(); $ready = 0; $verified = 0; $go_to_store = array();
+		foreach ( $orders as $order ) {
+			$status = CVD_Delivery::status( $order );
+			if ( ! in_array( $status, array( 'accepted', 'to_store', 'picked_up' ), true ) ) { continue; }
+			$order_numbers[] = '#' . $order->get_order_number();
+			foreach ( $order->get_items( 'line_item' ) as $item ) { $name = (string) $item->get_name(); $products[ $name ] = ( $products[ $name ] ?? 0 ) + max( 1, (int) $item->get_quantity() ); }
+			$note = trim( (string) $order->get_customer_note() ); if ( $note ) { $notes[] = '#' . $order->get_order_number() . ': ' . $note; }
+			$operation = sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) ); $is_ready = in_array( $operation, array( 'ready', 'with_courier', 'delivered' ), true ); if ( $is_ready ) { $ready++; }
+			$is_verified = 'picked_up' === $status && (bool) $order->get_meta( '_cvd_handed_over_by', true ); if ( $is_verified ) { $verified++; }
+			$checks[] = array( 'number' => $order->get_order_number(), 'ready' => $is_ready, 'verified' => $is_verified );
+			if ( 'accepted' === $status ) { $go_to_store[] = $order; }
+		}
+		$html = '<section class="cvd-panel cvd-messenger-preparation" id="preparar"><div class="cvd-messenger-section-head"><div><p class="cvd-kicker">Preparar salida</p><h2>Recogida en Casa Viva</h2><p>' . esc_html( $pickup ?: 'Punto de recogida por confirmar' ) . '</p></div><button class="cvd-secondary" type="button" data-cvd-refresh-preparation>Actualizar</button></div>';
+		if ( ! $order_numbers ) { return $html . '<p class="cvd-empty-state">No tienes pedidos aceptados pendientes de carga.</p></section>'; }
+		$html .= '<div class="cvd-preparation-status"><p><span>Pedidos</span><strong>' . esc_html( count( $order_numbers ) ) . '</strong></p><p><span>Preparados por tienda</span><strong>' . esc_html( $ready ) . '</strong></p><p><span>Verificados al cargar</span><strong>' . esc_html( $verified ) . '</strong></p></div><div class="cvd-preparation-manifest"><h3>Productos consolidados</h3><ul>';
+		foreach ( $products as $name => $quantity ) { $html .= '<li><strong>' . esc_html( $quantity ) . '×</strong><span>' . esc_html( $name ) . '</span></li>'; }
+		$html .= '</ul><small>Pedidos: ' . esc_html( implode( ', ', $order_numbers ) ) . '</small><div class="cvd-preparation-checks">';
+		foreach ( $checks as $check ) { $html .= '<p><strong>#' . esc_html( $check['number'] ) . '</strong><span class="' . ( $check['ready'] ? 'is-done' : '' ) . '">Preparado por tienda: ' . ( $check['ready'] ? 'Sí' : 'Pendiente' ) . '</span><span class="' . ( $check['verified'] ? 'is-done' : '' ) . '">Carga verificada: ' . ( $check['verified'] ? 'Sí' : 'Pendiente' ) . '</span></p>'; }
+		$html .= '</div></div>';
+		if ( $notes ) { $html .= '<div class="cvd-preparation-alerts" role="note"><strong>Vuelto y notas reales</strong>'; foreach ( $notes as $note ) { $html .= '<p>' . esc_html( $note ) . '</p>'; } $html .= '</div>'; }
+		$summary = "Resumen para tienda — Casa Viva\nRecogida: " . ( $pickup ?: 'Por confirmar' ) . "\nPedidos: " . implode( ', ', $order_numbers ); foreach ( $products as $name => $quantity ) { $summary .= "\n- " . $quantity . 'x ' . $name; } foreach ( $notes as $note ) { $summary .= "\n⚠ " . $note; }
+		$html .= '<div class="cvd-preparation-actions"><a class="cvd-secondary" href="https://wa.me/?text=' . rawurlencode( $summary ) . '" target="_blank" rel="noopener">Compartir resumen por WhatsApp</a>';
+		foreach ( $go_to_store as $order ) { $html .= '<a class="cvd-primary" data-confirm-delivery="to_store" href="' . esc_url( CVD_Delivery::action_url( $order->get_id(), 'to_store' ) ) . '">Voy a recoger #' . esc_html( $order->get_order_number() ) . '</a>'; }
+		$html .= '</div><p class="cvd-preparation-sync">Los cambios canónicos generan aviso al mensajero y esta vista comprueba actualizaciones cada 8 segundos.</p></section>';
+		return $html;
 	}
 
 	private static function delivery_orders( array $orders ): string {
