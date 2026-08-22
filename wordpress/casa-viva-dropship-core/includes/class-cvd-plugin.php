@@ -301,6 +301,7 @@ final class CVD_Plugin {
 		require_once CVD_DIR . 'includes/class-cvd-web-push.php';
 		require_once CVD_DIR . 'includes/class-cvd-messenger-accounting.php';
 		require_once CVD_DIR . 'includes/class-cvd-messenger-reputation.php';
+		require_once CVD_DIR . 'includes/class-cvd-messenger-contacts.php';
 		CVD_Web_Push::ensure_keys();
 		flush_rewrite_rules( false );
 		self::create_pages();
@@ -468,6 +469,7 @@ final class CVD_Plugin {
 		require_once CVD_DIR . 'includes/class-cvd-web-push.php';
 		require_once CVD_DIR . 'includes/class-cvd-messenger-accounting.php';
 		require_once CVD_DIR . 'includes/class-cvd-messenger-reputation.php';
+		require_once CVD_DIR . 'includes/class-cvd-messenger-contacts.php';
 
 		CVD_Attribution::register();
 		CVD_Order_Events::register();
@@ -493,6 +495,7 @@ final class CVD_Plugin {
 		CVD_Web_Push::register();
 		CVD_Messenger_Accounting::register();
 		CVD_Messenger_Reputation::register();
+		CVD_Messenger_Contacts::register();
 		add_action( 'admin_init', array( __CLASS__, 'maybe_upgrade' ) );
 	}
 
