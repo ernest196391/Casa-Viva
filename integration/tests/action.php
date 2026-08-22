@@ -33,6 +33,7 @@ if ( 'delivery' === $kind ) {
 	$_REQUEST = array( 'order_id' => $order_id, 'status' => $status, '_wpnonce' => wp_create_nonce( 'cvd_delivery_' . $order_id . '_' . $status ) );
 	$_GET = $_REQUEST;
 	if ( 'incident' === $status ) { $_POST['note'] = 'Incidencia sintética sin datos privados'; }
+	if ( 'delivered' === $status ) { $_POST += array( 'collection_method' => 'mixed', 'collected_usd' => '90.00', 'collected_cup' => '1000.00', 'collection_note' => 'Cobro sintético de integración', 'money_confirmed' => '1' ); }
 	CVD_Delivery::change_status();
 }
 
