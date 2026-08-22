@@ -420,6 +420,7 @@ final class CVD_Plugin {
 			'contabilidad-mensajeros' => array( 'Liquidaciones de mensajeros', '[casa_viva_messenger_accounting]' ),
 			'mensajeria'        => array( 'Mensajería Casa Viva', '[casa_viva_delivery_control]' ),
 			'seguimiento'       => array( 'Seguimiento de pedido', '[casa_viva_order_tracking]' ),
+			'interpretar-vale'   => array( 'Interpretar vale con NEXO', '[casa_viva_voucher_intake]' ),
 		);
 		foreach ( $pages as $slug => $page ) {
 			$existing = get_page_by_path( $slug );
@@ -470,6 +471,7 @@ final class CVD_Plugin {
 		require_once CVD_DIR . 'includes/class-cvd-messenger-accounting.php';
 		require_once CVD_DIR . 'includes/class-cvd-messenger-reputation.php';
 		require_once CVD_DIR . 'includes/class-cvd-messenger-contacts.php';
+		require_once CVD_DIR . 'includes/class-cvd-voucher-intake.php';
 
 		CVD_Attribution::register();
 		CVD_Order_Events::register();
@@ -496,6 +498,7 @@ final class CVD_Plugin {
 		CVD_Messenger_Accounting::register();
 		CVD_Messenger_Reputation::register();
 		CVD_Messenger_Contacts::register();
+		CVD_Voucher_Intake::register();
 		add_action( 'admin_init', array( __CLASS__, 'maybe_upgrade' ) );
 	}
 
