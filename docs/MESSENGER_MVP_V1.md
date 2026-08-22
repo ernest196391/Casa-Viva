@@ -41,3 +41,15 @@ Mensajero asignado a una entrega.
 ## Siguiente integración
 
 Después de validar visualmente y en móvil, sustituir el pedido demo por una lectura del pedido asignado desde los servicios existentes. Las acciones deberán llamar a las transiciones ya implementadas y generar historial; no se debe almacenar un estado paralelo en esta pantalla.
+
+## Design Foundation Stitch
+
+La base visual aprobada usa los tokens Casa Viva/Stitch petróleo, carbón, ámbar, crema y blanco. La ruta `/mensajero` incluye componentes reutilizables para alertas, badges, desglose monetario, acciones rápidas, navegación inferior y acceso visual a NEXO.
+
+Esta iteración es exclusivamente de presentación:
+
+- el pedido continúa anonimizado y marcado como demostración;
+- las transiciones visibles continúan siendo una simulación local temporal;
+- la navegación hacia Contactos, Preparar y Ruta anuncia pantallas posteriores, sin inventar funcionalidad;
+- el acceso a NEXO permanece deshabilitado hasta implementar el Copilot read-only;
+- no existe escritura en WooCommerce, WordPress ni servicios canónicos.
