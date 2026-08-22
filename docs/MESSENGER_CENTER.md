@@ -88,5 +88,5 @@ Después de `delivered`, el pedido deja de competir con las entregas activas y a
 - Core conserva teléfono alternativo, fecha solicitada, ventana mañana/tarde y vuelto por importe/moneda como datos del mismo pedido WooCommerce. El mensajero los lee en Contactos, Preparación, Ruta y Entrega; no constituyen estados.
 - Pedidos históricos sin esos metadatos mantienen una degradación explícita y no se reinterpretan desde notas libres.
 - La fecha/ventana no constituye ETA y nunca se calcula una hora predictiva.
-- La acción canónica del mensajero `delivered` no recibe cantidades por moneda ni medio de cobro. Esos datos pueden existir después, cuando el personal de Casa Viva registra el retorno de dinero. Hasta aprobar un contrato canónico con permisos, idempotencia y auditoría, P0.4 muestra el gap y no crea metadatos.
+- La acción canónica `handed_over → delivered` exige al mensajero confirmar medio e importes realmente recibidos en USD/CUP. La misma transacción guarda actor/hora y emite el evento de entrega; no infiere cantidades del total. El retorno y la verificación del dinero continúan perteneciendo a Casa Viva mediante `cash_returned → closed`.
 - Un pedido sin teléfono o `_cvd_map_url` conserva la parada, muestra el faltante y omite la acción correspondiente; no se geocodifica la dirección.
