@@ -40,8 +40,11 @@ for (const marker of ['operationStatus', 'operationUpdatedAt']) {
 if (!source.includes("current.operationStatus") || !source.includes("data-operation-status")) {
   throw new Error('El polling del mensajero debe detectar cambios de preparación canónica.');
 }
-for (const marker of ['Confirmó', 'No responde', 'Reprogramar', 'Ubicación recibida', 'Pendiente de contrato canónico']) {
-  if (!portal.includes(marker)) throw new Error(`Falta degradación de contacto P0.3: ${marker}`);
+for (const marker of ['Confirmó', 'No responde', 'Reprogramar', 'Ubicación recibida', 'data-contact-outcome', 'CVD_Messenger_Contacts::latest']) {
+  if (!portal.includes(marker)) throw new Error(`Falta contacto canónico del mensajero: ${marker}`);
+}
+for (const marker of ['messengerContactUrl', 'X-CVD-Idempotency-Key', 'Resultado registrado y auditado.']) {
+  if (!source.includes(marker)) throw new Error(`Falta escritura de contacto auditable: ${marker}`);
 }
 if (!portal.includes("wc_price( $order->get_total(), array( 'currency' => $order->get_currency() ) )")) {
   throw new Error('El desglose P0.2 debe separar el total del pedido de la mensajería CUP.');
