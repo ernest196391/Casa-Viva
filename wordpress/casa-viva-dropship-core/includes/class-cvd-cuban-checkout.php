@@ -195,6 +195,10 @@ final class CVD_Cuban_Checkout {
 		$fields['billing']['billing_phone']['class'] = array( 'form-row-wide' );
 		$fields['billing']['billing_phone']['autocomplete'] = 'tel';
 		$fields['billing']['billing_phone']['priority'] = 40;
+		$fields['billing']['billing_cvd_alternate_phone'] = array(
+			'type' => 'tel', 'label' => 'Teléfono alternativo', 'required' => false,
+			'class' => array( 'form-row-wide' ), 'priority' => 41, 'autocomplete' => 'tel',
+		);
 		$fields['billing']['billing_email']['label'] = 'Correo de quien compra';
 		$fields['billing']['billing_email']['required'] = false;
 		$fields['billing']['billing_email']['class'] = array( 'form-row-wide' );
@@ -249,6 +253,25 @@ final class CVD_Cuban_Checkout {
 			'required'    => false,
 			'class'       => array( 'form-row-wide', 'cvd-delivery-field' ),
 			'priority'    => 120,
+		);
+		$fields['billing']['billing_cvd_delivery_date'] = array(
+			'type' => 'date', 'label' => 'Fecha solicitada de entrega', 'required' => false,
+			'class' => array( 'form-row-first', 'cvd-delivery-field' ), 'priority' => 121,
+		);
+		$fields['billing']['billing_cvd_delivery_window'] = array(
+			'type' => 'select', 'label' => 'Horario preferido', 'required' => false,
+			'options' => array( '' => 'Sin preferencia', 'morning' => 'Mañana', 'afternoon' => 'Tarde' ),
+			'class' => array( 'form-row-last', 'cvd-delivery-field' ), 'priority' => 122,
+		);
+		$fields['billing']['billing_cvd_change_amount'] = array(
+			'type' => 'number', 'label' => 'Necesita vuelto de', 'required' => false,
+			'class' => array( 'form-row-first', 'cvd-delivery-field' ), 'priority' => 123,
+			'custom_attributes' => array( 'min' => '0', 'step' => '0.01', 'inputmode' => 'decimal' ),
+		);
+		$fields['billing']['billing_cvd_change_currency'] = array(
+			'type' => 'select', 'label' => 'Moneda del vuelto', 'required' => false,
+			'options' => array( 'USD' => 'USD', 'CUP' => 'CUP', 'EUR' => 'EUR' ),
+			'class' => array( 'form-row-last', 'cvd-delivery-field' ), 'priority' => 124,
 		);
 		$fields['billing']['billing_cvd_map_url'] = array(
 			'type'        => 'url',
@@ -307,6 +330,10 @@ final class CVD_Cuban_Checkout {
 		if ( strlen( $phone ) < 8 ) {
 			$errors->add( 'billing_phone', 'Escribe un teléfono válido de quien recibe.' );
 		}
+		$alternate = isset( $_POST['billing_cvd_alternate_phone'] ) ? preg_replace( '/\D+/', '', wp_unslash( $_POST['billing_cvd_alternate_phone'] ) ) : '';
+		if ( $alternate && strlen( $alternate ) < 8 ) { $errors->add( 'billing_cvd_alternate_phone', 'Escribe un teléfono alternativo válido.' ); }
+		$date = sanitize_text_field( wp_unslash( $_POST['billing_cvd_delivery_date'] ?? '' ) );
+		if ( $date && ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) { $errors->add( 'billing_cvd_delivery_date', 'Selecciona una fecha de entrega válida.' ); }
 
 		$required = array(
 			'billing_state'      => 'Selecciona la provincia de entrega.',
@@ -338,6 +365,13 @@ final class CVD_Cuban_Checkout {
 		$order->update_meta_data( '_cvd_buyer_name', isset( $_POST['billing_cvd_buyer_name'] ) ? sanitize_text_field( wp_unslash( $_POST['billing_cvd_buyer_name'] ) ) : '' );
 		$order->update_meta_data( '_cvd_map_url', isset( $_POST['billing_cvd_map_url'] ) ? esc_url_raw( wp_unslash( $_POST['billing_cvd_map_url'] ) ) : '' );
 		$order->update_meta_data( '_cvd_map_accuracy', isset( $_POST['billing_cvd_map_accuracy'] ) ? absint( $_POST['billing_cvd_map_accuracy'] ) : 0 );
+		$order->update_meta_data( '_cvd_alternate_phone', sanitize_text_field( wp_unslash( $_POST['billing_cvd_alternate_phone'] ?? '' ) ) );
+		$order->update_meta_data( '_cvd_delivery_date', sanitize_text_field( wp_unslash( $_POST['billing_cvd_delivery_date'] ?? '' ) ) );
+		$window = sanitize_key( wp_unslash( $_POST['billing_cvd_delivery_window'] ?? '' ) );
+		$order->update_meta_data( '_cvd_delivery_window', in_array( $window, array( 'morning', 'afternoon' ), true ) ? $window : '' );
+		$change_amount = (float) wc_format_decimal( wp_unslash( $_POST['billing_cvd_change_amount'] ?? 0 ), 2 );
+		$change_currency = strtoupper( sanitize_key( wp_unslash( $_POST['billing_cvd_change_currency'] ?? 'USD' ) ) );
+		$order->update_meta_data( '_cvd_change_required', $change_amount > 0 ? array( array( 'amount' => $change_amount, 'currency' => in_array( $change_currency, array( 'USD', 'CUP', 'EUR' ), true ) ? $change_currency : 'USD' ) ) : array() );
 		if ( 'pickup' === $type ) {
 			$order->add_order_note( 'Cliente seleccionó recogida en tienda.' );
 		}
@@ -348,7 +382,7 @@ final class CVD_Cuban_Checkout {
 		echo '<p><strong>Modalidad:</strong> ' . esc_html( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ? 'Recogida en tienda' : 'Mensajería' ) . '</p>';
 		$shipping_cup = class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_fee( $order ) : absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) );
 		echo '<p><strong>Tarifa guardada:</strong> ' . esc_html( $shipping_cup ? number_format_i18n( $shipping_cup, 0 ) . ' CUP' : 'Por confirmar' ) . '</p>';
-		foreach ( array( '_cvd_locality' => 'Reparto/localidad', '_cvd_reference' => 'Referencia', '_cvd_map_url' => 'Ubicación en mapa', '_cvd_buyer_name' => 'Persona que compra/paga' ) as $key => $label ) {
+		foreach ( array( '_cvd_locality' => 'Reparto/localidad', '_cvd_reference' => 'Referencia', '_cvd_alternate_phone' => 'Teléfono alternativo', '_cvd_delivery_date' => 'Fecha solicitada', '_cvd_delivery_window' => 'Horario solicitado', '_cvd_map_url' => 'Ubicación en mapa', '_cvd_buyer_name' => 'Persona que compra/paga' ) as $key => $label ) {
 			$value = $order->get_meta( $key, true );
 			if ( $value ) {
 				echo '<p><strong>' . esc_html( $label ) . ':</strong> ';
@@ -356,6 +390,7 @@ final class CVD_Cuban_Checkout {
 				echo '</p>';
 			}
 		}
+		$change = $order->get_meta( '_cvd_change_required', true ); if ( is_array( $change ) && $change ) { $item = reset( $change ); echo '<p><strong>Vuelto solicitado:</strong> ' . esc_html( wc_format_decimal( $item['amount'] ?? 0, 2 ) . ' ' . ( $item['currency'] ?? '' ) ) . '</p>'; }
 		echo '</div>';
 	}
 
