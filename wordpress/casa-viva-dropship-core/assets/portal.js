@@ -84,6 +84,7 @@
         if (primary) primary.classList.add('cvd-primary', 'cvd-messenger-primary');
       }
       if (['accepted','to_store','picked_up','handed_over'].indexOf(status) !== -1) {
+        if (card.querySelector('.cvd-messenger-tools')) return;
         var small = card.querySelector('header small');
         var text = small ? small.textContent : '';
         var phoneMatch = text.match(/(?:\+?\d[\d\s().-]{6,}\d)/);

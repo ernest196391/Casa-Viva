@@ -205,13 +205,14 @@ final class CVD_Portal {
 		}
 		ob_start();
 		?>
-		<section class="cvd-dashboard cvd-app-shell">
+		<section class="cvd-dashboard cvd-app-shell cvd-messenger-center">
 			<?php if ( isset( $_GET['oferta'] ) ) : $offer_result = sanitize_key( wp_unslash( $_GET['oferta'] ) ); ?><div class="cvd-notice" role="status"><?php echo esc_html( 'accepted' === $offer_result ? 'Carrera aceptada. Presenta el QR en la tienda.' : ( 'declined' === $offer_result ? 'Oferta descartada.' : 'La carrera ya no está disponible.' ) ); ?></div><?php endif; ?>
-			<header class="cvd-dashboard-head cvd-messenger-head"><div><p class="cvd-kicker">Mensajero</p><h1>Hola, <?php echo esc_html( $user->display_name ); ?>.</h1><p><?php echo esc_html( $offers ? 'Tienes una carrera por responder.' : ( $active ? 'Continúa tu entrega activa.' : 'Estás listo para recibir carreras.' ) ); ?></p></div><a class="cvd-secondary" href="<?php echo esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ); ?>">Cambiar cuenta</a></header>
-			<nav class="cvd-app-nav cvd-messenger-nav" aria-label="Panel del mensajero"><a href="#ofertas">Carreras</a><a href="#entregas">Mi entrega</a><a href="#ganancias">Ganancias</a><a href="#perfil">Disponibilidad</a></nav>
+			<header class="cvd-dashboard-head cvd-messenger-head"><div><p class="cvd-kicker">Casa Viva · Mensajería</p><h1>Hola, <?php echo esc_html( $user->display_name ); ?>.</h1><p><?php echo esc_html( $offers ? 'Tienes una carrera por responder.' : ( $active ? 'Este es tu trabajo activo de hoy.' : 'Estás listo para recibir carreras.' ) ); ?></p></div><a class="cvd-secondary" href="<?php echo esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ); ?>">Cambiar cuenta</a></header>
+			<nav class="cvd-app-nav cvd-messenger-nav" aria-label="Panel del mensajero"><a href="#hoy">Inicio</a><a href="#entregas">Entrega activa</a><a href="#ofertas">Carreras</a><a href="#ganancias">Ganancias</a><a href="#perfil">Disponibilidad</a></nav>
+			<?php echo self::messenger_today_summary( $active, $offers ); ?>
 			<div class="cvd-messenger-alert-control"><button class="cvd-secondary" id="cvd-enable-notifications" type="button">Activar alertas</button></div>
 			<section class="cvd-panel cvd-offers-panel" id="ofertas"><h2>Carreras</h2><?php echo self::messenger_offers( $offers ); ?></section>
-			<section class="cvd-panel" id="entregas"><h2>Mi entrega</h2><?php echo self::delivery_orders( $active ); ?></section>
+			<section class="cvd-panel" id="entregas"><h2>Entrega activa</h2><?php echo self::delivery_orders( $active ); ?></section>
 			<div class="cvd-stats cvd-messenger-earnings" id="ganancias"><article><span>Pendiente</span><strong><?php echo esc_html( number_format_i18n( $earnings['pending'], 0 ) ); ?> CUP</strong></article><article><span>Aprobado</span><strong><?php echo esc_html( number_format_i18n( $earnings['approved'], 0 ) ); ?> CUP</strong></article></div>
 			<?php echo CVD_Messenger_Accounting::render_messenger( $user ); ?>
 			<section class="cvd-panel" id="perfil"><div><p class="cvd-kicker">Disponibilidad</p><h2>Mi jornada</h2><p><?php echo esc_html( $user->user_email ); ?></p></div><form method="post"><label>Estado<select name="cvd_messenger_availability"><option value="available" <?php selected( get_user_meta( $user->ID, '_cvd_messenger_available', true ), 'yes' ); ?>>Disponible</option><option value="unavailable" <?php selected( get_user_meta( $user->ID, '_cvd_messenger_available', true ), 'no' ); ?>>No disponible</option></select></label><label>Zona preferida<input name="cvd_messenger_zone" type="text" value="<?php echo esc_attr( get_user_meta( $user->ID, '_cvd_zone', true ) ); ?>" placeholder="Ej. Nuevo Vedado"></label><?php wp_nonce_field( 'cvd_messenger_availability', 'cvd_messenger_availability_nonce' ); ?><button class="cvd-primary" type="submit">Guardar jornada</button></form></section>
@@ -239,6 +240,27 @@ final class CVD_Portal {
 		return $html . '</tbody></table></div>';
 	}
 
+	/** Resumen de lectura del trabajo activo; no crea ni persiste estados. */
+	private static function messenger_today_summary( array $orders, array $offers ): string {
+		$products = 0;
+		$notes = 0;
+		$without_map = 0;
+		foreach ( $orders as $order ) {
+			foreach ( $order->get_items( 'line_item' ) as $item ) { $products += max( 1, (int) $item->get_quantity() ); }
+			if ( trim( (string) $order->get_customer_note() ) ) { $notes++; }
+			if ( ! $order->get_meta( '_cvd_map_url', true ) ) { $without_map++; }
+		}
+		$html = '<section class="cvd-messenger-today" id="hoy"><div class="cvd-messenger-section-head"><div><p class="cvd-kicker">Inicio · Hoy</p><h2>Tu jornada</h2><p>Resumen del trabajo asignado y las carreras disponibles ahora.</p></div><span class="cvd-live-badge">Datos de Casa Viva</span></div>';
+		$html .= '<div class="cvd-messenger-today-stats"><article><span>Entregas activas</span><strong>' . esc_html( count( $orders ) ) . '</strong></article><article><span>Productos activos</span><strong>' . esc_html( $products ) . '</strong></article><article><span>Carreras disponibles</span><strong>' . esc_html( count( $offers ) ) . '</strong></article></div>';
+		if ( $notes || $without_map ) {
+			$html .= '<div class="cvd-messenger-alerts" aria-label="Alertas operativas">';
+			if ( $notes ) { $html .= '<p><b>' . esc_html( $notes ) . '</b> ' . esc_html( 1 === $notes ? 'pedido tiene una nota que debes revisar.' : 'pedidos tienen notas que debes revisar.' ) . '</p>'; }
+			if ( $without_map ) { $html .= '<p><b>' . esc_html( $without_map ) . '</b> ' . esc_html( 1 === $without_map ? 'entrega no tiene enlace de mapa.' : 'entregas no tienen enlace de mapa.' ) . '</p>'; }
+			$html .= '</div>';
+		}
+		return $html . '</section>';
+	}
+
 	private static function delivery_orders( array $orders ): string {
 		if ( ! $orders ) { return '<p>No tienes entregas asignadas en este momento.</p>'; }
 		$html = '<div class="cvd-deliveries">';
@@ -246,9 +268,24 @@ final class CVD_Portal {
 			$status = $order->get_meta( '_cvd_delivery_status', true ) ?: 'assigned';
 			$address = $order->get_formatted_shipping_address() ?: $order->get_formatted_billing_address();
 			$shipping_cup = class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_fee( $order ) : absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) );
-			$html .= '<article data-delivery-id="' . esc_attr( $order->get_id() ) . '" data-delivery-status="' . esc_attr( $status ) . '"><header><div><strong>Pedido #' . esc_html( $order->get_order_number() ) . '</strong><small>' . esc_html( $order->get_formatted_billing_full_name() ) . ' · ' . esc_html( $order->get_billing_phone() ) . '</small></div><span class="cvd-badge">' . esc_html( CVD_Delivery::label( $status ) ) . '</span></header><p>' . wp_kses_post( $address ) . '</p><p><strong>Mensajería:</strong> ' . esc_html( $shipping_cup ? number_format_i18n( $shipping_cup, 0 ) . ' CUP' : 'Por confirmar' ) . '</p>';
+			$phone = trim( (string) $order->get_billing_phone() );
+			$reference = trim( (string) $order->get_meta( '_cvd_reference', true ) );
+			$note = trim( (string) $order->get_customer_note() );
+			$zone = trim( (string) CVD_Delivery::destination_zone( $order ) );
+			$html .= '<article data-delivery-id="' . esc_attr( $order->get_id() ) . '" data-delivery-status="' . esc_attr( $status ) . '"><header><div><small class="cvd-delivery-zone">' . esc_html( $zone ?: 'Zona por confirmar' ) . '</small><strong>Pedido #' . esc_html( $order->get_order_number() ) . '</strong><small>' . esc_html( $order->get_formatted_billing_full_name() ) . ( $phone ? ' · ' . esc_html( $phone ) : '' ) . '</small></div><span class="cvd-badge">' . esc_html( CVD_Delivery::label( $status ) ) . '</span></header>';
+			$html .= '<div class="cvd-delivery-address"><strong>Entregar en</strong><p>' . ( $address ? wp_kses_post( $address ) : 'Dirección por confirmar' ) . '</p>' . ( $reference ? '<small><b>Referencia:</b> ' . esc_html( $reference ) . '</small>' : '' ) . '</div>';
+			$html .= '<div class="cvd-delivery-products"><strong>Productos</strong><ul>';
+			foreach ( $order->get_items( 'line_item' ) as $item ) { $html .= '<li><span>' . esc_html( max( 1, (int) $item->get_quantity() ) . ' × ' . $item->get_name() ) . '</span><b>' . wp_kses_post( $order->get_formatted_line_subtotal( $item ) ) . '</b></li>'; }
+			$order_total = wc_price( $order->get_total(), array( 'currency' => $order->get_currency() ) );
+			$html .= '</ul></div><div class="cvd-delivery-money"><div><span>Pedido</span><strong>' . wp_kses_post( $order_total ) . '</strong></div><div><span>Mensajería</span><strong>' . esc_html( $shipping_cup ? number_format_i18n( $shipping_cup, 0 ) . ' CUP' : 'Por confirmar' ) . '</strong></div></div>';
+			if ( $note ) { $html .= '<div class="cvd-delivery-note" role="note"><b>Nota operativa</b><p>' . esc_html( $note ) . '</p></div>'; }
 			$map_url = esc_url( (string) $order->get_meta( '_cvd_map_url', true ) );
-			if ( $map_url && in_array( $status, array( 'accepted', 'to_store', 'picked_up', 'handed_over' ), true ) ) { $html .= '<p><a class="cvd-map-action" href="' . $map_url . '" target="_blank" rel="noopener">Abrir ubicación</a></p>'; }
+			if ( in_array( $status, array( 'accepted', 'to_store', 'picked_up', 'handed_over' ), true ) ) {
+				$html .= '<div class="cvd-messenger-tools">';
+				if ( $phone ) { $digits = preg_replace( '/\D+/', '', $phone ); $html .= '<a class="cvd-secondary" href="https://wa.me/' . esc_attr( $digits ) . '" target="_blank" rel="noopener">WhatsApp</a><a class="cvd-secondary" href="tel:' . esc_attr( $phone ) . '">Llamar</a>'; }
+				if ( $map_url ) { $html .= '<a class="cvd-secondary cvd-map-action" href="' . $map_url . '" target="_blank" rel="noopener">Navegar</a>'; }
+				$html .= '</div>';
+			}
 			if ( 'handed_over' === $status ) { $html .= '<div class="cvd-live-control" data-live-order="' . esc_attr( $order->get_id() ) . '"><div><strong>Ubicación durante la carrera</strong><small data-live-status>Desactivada</small></div><button class="cvd-primary" type="button" data-live-toggle>Compartir ubicación</button><p>Déjala activa hasta entregar. La aplicación debe permanecer abierta.</p></div>'; }
 			$pickup_url = CVD_Delivery::pickup_url( $order );
 			if ( $pickup_url ) { $html .= '<div class="cvd-pickup-qr"><button type="button" class="cvd-qr-expand" data-qr-expand aria-label="Ampliar QR de recogida"><canvas data-pickup-qr="' . esc_attr( $pickup_url ) . '"></canvas><span>Ampliar QR</span></button><div><strong>QR de recogida</strong><small>Tócalo para ampliarlo. La dependienta lo abre con la cámara y su cuenta iniciada. Si falla, busca el pedido #' . esc_html( $order->get_order_number() ) . '.</small></div></div>'; }
