@@ -2,6 +2,7 @@ import fs from 'node:fs';
 
 const source = fs.readFileSync('wordpress/casa-viva-dropship-core/assets/portal.js', 'utf8');
 const portal = fs.readFileSync('wordpress/casa-viva-dropship-core/includes/class-cvd-portal.php', 'utf8');
+const delivery = fs.readFileSync('wordpress/casa-viva-dropship-core/includes/class-cvd-delivery.php', 'utf8');
 const styles = fs.readFileSync('wordpress/casa-viva-dropship-core/assets/portal.css', 'utf8');
 const required = [
   'enhanceMessengerCenter',
@@ -20,6 +21,15 @@ for (const marker of ['messenger_today_summary', 'cvd-messenger-today', 'cvd-del
 }
 for (const marker of ['messenger_contacts', 'messenger_preparation', 'cvd-contact-outcomes', 'cvd-preparation-manifest', "get_option( 'cvd_pickup_address'"]) {
   if (!portal.includes(marker)) throw new Error(`Falta contrato P0.3 canónico: ${marker}`);
+}
+for (const marker of ['messenger_delivery_stage', '_cvd_delivery_incident_stage', 'get_variation_id', 'get_formatted_meta_data']) {
+  if (!portal.includes(marker)) throw new Error(`Falta integridad del manifiesto P0.3: ${marker}`);
+}
+for (const marker of ['operationStatus', 'operationUpdatedAt']) {
+  if (!delivery.includes(marker)) throw new Error(`Falta refresco operativo mínimo P0.3: ${marker}`);
+}
+if (!source.includes("current.operationStatus") || !source.includes("data-operation-status")) {
+  throw new Error('El polling del mensajero debe detectar cambios de preparación canónica.');
 }
 for (const marker of ['Confirmó', 'No responde', 'Reprogramar', 'Ubicación recibida', 'Pendiente de contrato canónico']) {
   if (!portal.includes(marker)) throw new Error(`Falta degradación de contacto P0.3: ${marker}`);

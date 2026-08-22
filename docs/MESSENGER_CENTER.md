@@ -54,11 +54,11 @@ P0.2 traslada a WordPress los tokens y patrones visuales aprobados y renderiza, 
 `/area-mensajeros/` reutiliza los pedidos asignados y el ownership existente:
 
 - Contactos lista clientes reales. Solo revela teléfono y habilita WhatsApp/Llamar después de aceptar la entrega. Muestra el teléfono de facturación y el de envío cuando WooCommerce los expone y son distintos; no inventa alternativos.
-- Preparar agrupa por el único punto de recogida configurado de Casa Viva, consolida productos/cantidades y muestra notas reales.
+- Preparar agrupa por el único punto de recogida configurado de Casa Viva, consolida productos/cantidades sin mezclar variantes y muestra notas reales. Una incidencia aditiva conserva el pedido en el manifiesto mediante la etapa logística preservada y se presenta como alerta separada.
 - `operation=ready` se presenta como preparado por tienda. `delivery=picked_up` junto a `_cvd_handed_over_by` se presenta como carga verificada por tienda. El mensajero no escribe ninguno de esos datos.
 - El mensajero conserva únicamente `accepted → to_store` y, después de la transferencia física, `picked_up → handed_over` mediante las acciones canónicas existentes.
 - El resumen para tienda es texto compartible por WhatsApp y no crea un manifiesto persistente.
-- `CVD_Web_Push::send_delivery_update()` ya avisa al mensajero de cambios canónicos ajenos y el feed existente refresca la vista al detectar un cambio de entrega.
+- `CVD_Web_Push::send_delivery_update()` ya avisa al mensajero de cambios canónicos ajenos. P0.3 amplía mínimamente el feed protegido del mensajero con `operationStatus` y `operationUpdatedAt` de sus pedidos asignados para refrescar la vista cuando tienda marca `ready`; no añade datos del cliente ni capacidades de escritura.
 
 ### Gap de resultados de contacto
 

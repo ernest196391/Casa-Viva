@@ -64,7 +64,11 @@ final class CVD_Delivery {
 		);
 		$assigned = wc_get_orders( array( 'limit'=>30, 'orderby'=>'date', 'order'=>'DESC', 'meta_key'=>'_cvd_messenger_user_id', 'meta_value'=>$user->ID ) );
 		$deliveries = array_values( array_map(
-			static fn( WC_Order $order ): array => array( 'id'=>$order->get_id(), 'status'=>self::status( $order ), 'label'=>self::label( self::status( $order ) ) ),
+			static fn( WC_Order $order ): array => array(
+				'id'=>$order->get_id(), 'status'=>self::status( $order ), 'label'=>self::label( self::status( $order ) ),
+				'operationStatus'=>sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) ),
+				'operationUpdatedAt'=>(string) $order->get_meta( '_cvd_operation_updated_at', true ),
+			),
 			array_filter( $assigned, static fn( WC_Order $order ): bool => ! in_array( self::status( $order ), array('closed','failed','returned','cancelled'), true ) )
 		) );
 		$response = rest_ensure_response( array( 'offers'=>$offers, 'deliveries'=>$deliveries, 'serverTime'=>time() ) );

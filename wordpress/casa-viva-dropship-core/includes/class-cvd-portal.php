@@ -269,11 +269,11 @@ final class CVD_Portal {
 		if ( ! $orders ) { return $html . '<p class="cvd-empty-state">No tienes clientes asignados ahora.</p></section>'; }
 		$html .= '<div class="cvd-contact-list">';
 		foreach ( $orders as $order ) {
-			$status = CVD_Delivery::status( $order );
+			$status = CVD_Delivery::status( $order ); $stage = self::messenger_delivery_stage( $order );
 			$phones = array_filter( array( trim( (string) $order->get_billing_phone() ) ) );
 			if ( is_callable( array( $order, 'get_shipping_phone' ) ) ) { $phones[] = trim( (string) $order->get_shipping_phone() ); }
 			$phones = array_values( array_unique( array_filter( $phones ) ) );
-			$contact_allowed = in_array( $status, array( 'accepted', 'to_store', 'picked_up', 'handed_over', 'delivered' ), true );
+			$contact_allowed = in_array( $stage, array( 'accepted', 'to_store', 'picked_up', 'handed_over', 'delivered' ), true );
 			$html .= '<article><header><div><strong>' . esc_html( $order->get_formatted_billing_full_name() ?: 'Cliente sin nombre' ) . '</strong><small>Pedido #' . esc_html( $order->get_order_number() ) . ' · ' . esc_html( CVD_Delivery::destination_zone( $order ) ) . '</small></div><span class="cvd-badge">' . esc_html( CVD_Delivery::label( $status ) ) . '</span></header>';
 			if ( $contact_allowed && $phones ) {
 				$html .= '<div class="cvd-contact-phones">';
@@ -293,29 +293,45 @@ final class CVD_Portal {
 		$pickup = trim( (string) get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ) );
 		$products = array(); $order_numbers = array(); $checks = array(); $notes = array(); $ready = 0; $verified = 0; $go_to_store = array();
 		foreach ( $orders as $order ) {
-			$status = CVD_Delivery::status( $order );
-			if ( ! in_array( $status, array( 'accepted', 'to_store', 'picked_up' ), true ) ) { continue; }
+			$status = CVD_Delivery::status( $order ); $stage = self::messenger_delivery_stage( $order );
+			if ( ! in_array( $stage, array( 'accepted', 'to_store', 'picked_up' ), true ) ) { continue; }
 			$order_numbers[] = '#' . $order->get_order_number();
-			foreach ( $order->get_items( 'line_item' ) as $item ) { $name = (string) $item->get_name(); $products[ $name ] = ( $products[ $name ] ?? 0 ) + max( 1, (int) $item->get_quantity() ); }
+			foreach ( $order->get_items( 'line_item' ) as $item ) {
+				$variation = array(); foreach ( $item->get_formatted_meta_data( '' ) as $meta ) { $variation[] = wp_strip_all_tags( $meta->display_key . ': ' . $meta->display_value ); }
+				$label = (string) $item->get_name() . ( $variation ? ' · ' . implode( ' · ', $variation ) : '' );
+				$key = $item->get_product_id() . ':' . $item->get_variation_id() . ':' . hash( 'sha256', $label );
+				if ( ! isset( $products[ $key ] ) ) { $products[ $key ] = array( 'label' => $label, 'quantity' => 0 ); }
+				$products[ $key ]['quantity'] += max( 1, (int) $item->get_quantity() );
+			}
 			$note = trim( (string) $order->get_customer_note() ); if ( $note ) { $notes[] = '#' . $order->get_order_number() . ': ' . $note; }
+			if ( 'incident' === $status ) { $notes[] = '#' . $order->get_order_number() . ': Incidencia activa; confirma con Casa Viva antes de cargar.'; }
 			$operation = sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) ); $is_ready = in_array( $operation, array( 'ready', 'with_courier', 'delivered' ), true ); if ( $is_ready ) { $ready++; }
-			$is_verified = 'picked_up' === $status && (bool) $order->get_meta( '_cvd_handed_over_by', true ); if ( $is_verified ) { $verified++; }
+			$is_verified = 'picked_up' === $stage && (bool) $order->get_meta( '_cvd_handed_over_by', true ); if ( $is_verified ) { $verified++; }
 			$checks[] = array( 'number' => $order->get_order_number(), 'ready' => $is_ready, 'verified' => $is_verified );
 			if ( 'accepted' === $status ) { $go_to_store[] = $order; }
 		}
 		$html = '<section class="cvd-panel cvd-messenger-preparation" id="preparar"><div class="cvd-messenger-section-head"><div><p class="cvd-kicker">Preparar salida</p><h2>Recogida en Casa Viva</h2><p>' . esc_html( $pickup ?: 'Punto de recogida por confirmar' ) . '</p></div><button class="cvd-secondary" type="button" data-cvd-refresh-preparation>Actualizar</button></div>';
 		if ( ! $order_numbers ) { return $html . '<p class="cvd-empty-state">No tienes pedidos aceptados pendientes de carga.</p></section>'; }
 		$html .= '<div class="cvd-preparation-status"><p><span>Pedidos</span><strong>' . esc_html( count( $order_numbers ) ) . '</strong></p><p><span>Preparados por tienda</span><strong>' . esc_html( $ready ) . '</strong></p><p><span>Verificados al cargar</span><strong>' . esc_html( $verified ) . '</strong></p></div><div class="cvd-preparation-manifest"><h3>Productos consolidados</h3><ul>';
-		foreach ( $products as $name => $quantity ) { $html .= '<li><strong>' . esc_html( $quantity ) . '×</strong><span>' . esc_html( $name ) . '</span></li>'; }
+		foreach ( $products as $product ) { $html .= '<li><strong>' . esc_html( $product['quantity'] ) . '×</strong><span>' . esc_html( $product['label'] ) . '</span></li>'; }
 		$html .= '</ul><small>Pedidos: ' . esc_html( implode( ', ', $order_numbers ) ) . '</small><div class="cvd-preparation-checks">';
 		foreach ( $checks as $check ) { $html .= '<p><strong>#' . esc_html( $check['number'] ) . '</strong><span class="' . ( $check['ready'] ? 'is-done' : '' ) . '">Preparado por tienda: ' . ( $check['ready'] ? 'Sí' : 'Pendiente' ) . '</span><span class="' . ( $check['verified'] ? 'is-done' : '' ) . '">Carga verificada: ' . ( $check['verified'] ? 'Sí' : 'Pendiente' ) . '</span></p>'; }
 		$html .= '</div></div>';
 		if ( $notes ) { $html .= '<div class="cvd-preparation-alerts" role="note"><strong>Vuelto y notas reales</strong>'; foreach ( $notes as $note ) { $html .= '<p>' . esc_html( $note ) . '</p>'; } $html .= '</div>'; }
-		$summary = "Resumen para tienda — Casa Viva\nRecogida: " . ( $pickup ?: 'Por confirmar' ) . "\nPedidos: " . implode( ', ', $order_numbers ); foreach ( $products as $name => $quantity ) { $summary .= "\n- " . $quantity . 'x ' . $name; } foreach ( $notes as $note ) { $summary .= "\n⚠ " . $note; }
+		$summary = "Resumen para tienda — Casa Viva\nRecogida: " . ( $pickup ?: 'Por confirmar' ) . "\nPedidos: " . implode( ', ', $order_numbers ); foreach ( $products as $product ) { $summary .= "\n- " . $product['quantity'] . 'x ' . $product['label']; } foreach ( $notes as $note ) { $summary .= "\n⚠ " . $note; }
 		$html .= '<div class="cvd-preparation-actions"><a class="cvd-secondary" href="https://wa.me/?text=' . rawurlencode( $summary ) . '" target="_blank" rel="noopener">Compartir resumen por WhatsApp</a>';
 		foreach ( $go_to_store as $order ) { $html .= '<a class="cvd-primary" data-confirm-delivery="to_store" href="' . esc_url( CVD_Delivery::action_url( $order->get_id(), 'to_store' ) ) . '">Voy a recoger #' . esc_html( $order->get_order_number() ) . '</a>'; }
 		$html .= '</div><p class="cvd-preparation-sync">Los cambios canónicos generan aviso al mensajero y esta vista comprueba actualizaciones cada 8 segundos.</p></section>';
 		return $html;
+	}
+
+	/** Etapa logística conservada por Core cuando una incidencia aditiva está activa. */
+	private static function messenger_delivery_stage( WC_Order $order ): string {
+		if ( 'yes' === $order->get_meta( '_cvd_delivery_incident_active', true ) ) {
+			$preserved = sanitize_key( (string) $order->get_meta( '_cvd_delivery_incident_stage', true ) );
+			if ( $preserved ) { return $preserved; }
+		}
+		return sanitize_key( (string) $order->get_meta( '_cvd_delivery_status', true ) ) ?: CVD_Delivery::status( $order );
 	}
 
 	private static function delivery_orders( array $orders ): string {
@@ -329,7 +345,8 @@ final class CVD_Portal {
 			$reference = trim( (string) $order->get_meta( '_cvd_reference', true ) );
 			$note = trim( (string) $order->get_customer_note() );
 			$zone = trim( (string) CVD_Delivery::destination_zone( $order ) );
-			$html .= '<article data-delivery-id="' . esc_attr( $order->get_id() ) . '" data-delivery-status="' . esc_attr( $status ) . '"><header><div><small class="cvd-delivery-zone">' . esc_html( $zone ?: 'Zona por confirmar' ) . '</small><strong>Pedido #' . esc_html( $order->get_order_number() ) . '</strong><small>' . esc_html( $order->get_formatted_billing_full_name() ) . ( $phone ? ' · ' . esc_html( $phone ) : '' ) . '</small></div><span class="cvd-badge">' . esc_html( CVD_Delivery::label( $status ) ) . '</span></header>';
+			$operation_status = sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) );
+			$html .= '<article data-delivery-id="' . esc_attr( $order->get_id() ) . '" data-delivery-status="' . esc_attr( $status ) . '" data-operation-status="' . esc_attr( $operation_status ) . '"><header><div><small class="cvd-delivery-zone">' . esc_html( $zone ?: 'Zona por confirmar' ) . '</small><strong>Pedido #' . esc_html( $order->get_order_number() ) . '</strong><small>' . esc_html( $order->get_formatted_billing_full_name() ) . ( $phone ? ' · ' . esc_html( $phone ) : '' ) . '</small></div><span class="cvd-badge">' . esc_html( CVD_Delivery::label( $status ) ) . '</span></header>';
 			$html .= '<div class="cvd-delivery-address"><strong>Entregar en</strong><p>' . ( $address ? wp_kses_post( $address ) : 'Dirección por confirmar' ) . '</p>' . ( $reference ? '<small><b>Referencia:</b> ' . esc_html( $reference ) . '</small>' : '' ) . '</div>';
 			$html .= '<div class="cvd-delivery-products"><strong>Productos</strong><ul>';
 			foreach ( $order->get_items( 'line_item' ) as $item ) { $html .= '<li><span>' . esc_html( max( 1, (int) $item->get_quantity() ) . ' × ' . $item->get_name() ) . '</span><b>' . wp_kses_post( $order->get_formatted_line_subtotal( $item ) ) . '</b></li>'; }
