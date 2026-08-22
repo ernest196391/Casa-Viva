@@ -69,6 +69,13 @@ jobs:
       - name: Validar contrato de incidencias operativas estructuradas
         run: node artifacts/tests/test-structured-incidents-5d.mjs
 
+      - name: Validar contratos field-ready de mensajería
+        run: |
+          node artifacts/tests/test-messenger-contact-events.mjs
+          node artifacts/tests/test-messenger-delivery-collection.mjs
+          node artifacts/tests/test-voucher-intake-contract.mjs
+          node artifacts/tests/test-shipping-quote-contract.mjs
+
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
@@ -122,6 +129,9 @@ jobs:
 
       - name: Validar incidencias operativas estructuradas
         run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/structured-incidents-5d.php
+
+      - name: Validar jornada field-ready
+        run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/field-ready-messaging.php
 
       - name: Mostrar diagnóstico si falla
         if: failure()
