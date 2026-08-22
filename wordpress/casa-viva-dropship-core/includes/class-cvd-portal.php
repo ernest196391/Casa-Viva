@@ -198,6 +198,7 @@ final class CVD_Portal {
 		$orders = wc_get_orders( array( 'limit' => 30, 'orderby' => 'date', 'order' => 'DESC', 'meta_key' => '_cvd_messenger_user_id', 'meta_value' => $user->ID ) );
 		$offers = CVD_Delivery::offers_for( $user );
 		$active = array_filter( $orders, static fn( $order ) => ! in_array( $order->get_meta( '_cvd_delivery_status', true ), array( 'closed', 'failed', 'returned', 'cancelled' ), true ) );
+		$in_delivery = array_filter( $active, static fn( $order ) => ! in_array( self::messenger_delivery_stage( $order ), array( 'delivered', 'cash_returned', 'closed' ), true ) );
 		$earnings = array( 'pending' => 0.0, 'approved' => 0.0, 'paid' => 0.0 );
 		foreach ( $orders as $order ) {
 			$status = sanitize_key( (string) $order->get_meta( '_cvd_messenger_earning_status', true ) ) ?: ( 'closed' === $order->get_meta( '_cvd_delivery_status', true ) ? 'approved' : 'pending' );
@@ -208,13 +209,15 @@ final class CVD_Portal {
 		<section class="cvd-dashboard cvd-app-shell cvd-messenger-center">
 			<?php if ( isset( $_GET['oferta'] ) ) : $offer_result = sanitize_key( wp_unslash( $_GET['oferta'] ) ); ?><div class="cvd-notice" role="status"><?php echo esc_html( 'accepted' === $offer_result ? 'Carrera aceptada. Presenta el QR en la tienda.' : ( 'declined' === $offer_result ? 'Oferta descartada.' : 'La carrera ya no está disponible.' ) ); ?></div><?php endif; ?>
 			<header class="cvd-dashboard-head cvd-messenger-head"><div><p class="cvd-kicker">Casa Viva · Mensajería</p><h1>Hola, <?php echo esc_html( $user->display_name ); ?>.</h1><p><?php echo esc_html( $offers ? 'Tienes una carrera por responder.' : ( $active ? 'Este es tu trabajo activo de hoy.' : 'Estás listo para recibir carreras.' ) ); ?></p></div><a class="cvd-secondary" href="<?php echo esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ); ?>">Cambiar cuenta</a></header>
-			<nav class="cvd-app-nav cvd-messenger-nav" aria-label="Panel del mensajero"><a href="#hoy">Inicio</a><a href="#contactos">Contactos</a><a href="#preparar">Preparar</a><a href="#entregas">Entrega</a><a href="#perfil">Más</a></nav>
+			<nav class="cvd-app-nav cvd-messenger-nav" aria-label="Panel del mensajero"><a href="#hoy">Inicio</a><a href="#contactos">Contactos</a><a href="#preparar">Preparar</a><a href="#ruta">Mi ruta</a><a href="#perfil">Más</a></nav>
 			<?php echo self::messenger_today_summary( $active, $offers ); ?>
 			<div class="cvd-messenger-alert-control"><button class="cvd-secondary" id="cvd-enable-notifications" type="button">Activar alertas</button></div>
 			<?php echo self::messenger_contacts( $active ); ?>
 			<?php echo self::messenger_preparation( $active ); ?>
+			<?php echo self::messenger_route( $active, $user ); ?>
 			<section class="cvd-panel cvd-offers-panel" id="ofertas"><h2>Carreras</h2><?php echo self::messenger_offers( $offers ); ?></section>
-			<section class="cvd-panel" id="entregas"><h2>Entrega activa</h2><?php echo self::delivery_orders( $active ); ?></section>
+			<section class="cvd-panel" id="entregas"><h2>Entrega activa</h2><?php echo self::delivery_orders( $in_delivery ); ?></section>
+			<?php echo self::messenger_closeout( $orders ); ?>
 			<div class="cvd-stats cvd-messenger-earnings" id="ganancias"><article><span>Pendiente</span><strong><?php echo esc_html( number_format_i18n( $earnings['pending'], 0 ) ); ?> CUP</strong></article><article><span>Aprobado</span><strong><?php echo esc_html( number_format_i18n( $earnings['approved'], 0 ) ); ?> CUP</strong></article></div>
 			<?php echo CVD_Messenger_Accounting::render_messenger( $user ); ?>
 			<section class="cvd-panel" id="perfil"><div><p class="cvd-kicker">Disponibilidad</p><h2>Mi jornada</h2><p><?php echo esc_html( $user->user_email ); ?></p></div><form method="post"><label>Estado<select name="cvd_messenger_availability"><option value="available" <?php selected( get_user_meta( $user->ID, '_cvd_messenger_available', true ), 'yes' ); ?>>Disponible</option><option value="unavailable" <?php selected( get_user_meta( $user->ID, '_cvd_messenger_available', true ), 'no' ); ?>>No disponible</option></select></label><label>Zona preferida<input name="cvd_messenger_zone" type="text" value="<?php echo esc_attr( get_user_meta( $user->ID, '_cvd_zone', true ) ); ?>" placeholder="Ej. Nuevo Vedado"></label><?php wp_nonce_field( 'cvd_messenger_availability', 'cvd_messenger_availability_nonce' ); ?><button class="cvd-primary" type="submit">Guardar jornada</button></form></section>
@@ -332,6 +335,53 @@ final class CVD_Portal {
 			if ( $preserved ) { return $preserved; }
 		}
 		return sanitize_key( (string) $order->get_meta( '_cvd_delivery_status', true ) ) ?: CVD_Delivery::status( $order );
+	}
+
+	/** Orden manual de sesión. No escribe el pedido ni sustituye una ruta canónica. */
+	private static function messenger_route( array $orders, WP_User $user ): string {
+		$route = array_filter( $orders, static function ( $order ) {
+			return in_array( self::messenger_delivery_stage( $order ), array( 'accepted', 'to_store', 'picked_up', 'handed_over' ), true );
+		} );
+		$html = '<section class="cvd-panel cvd-messenger-route" id="ruta" data-route-list data-route-key="cvd-route-' . esc_attr( $user->ID ) . '"><div class="cvd-messenger-section-head"><div><p class="cvd-kicker">Mi ruta</p><h2>Paradas de hoy</h2><p>Ordena manualmente tus pedidos aceptados. NEXO no optimiza esta ruta todavía.</p></div><button class="cvd-secondary" type="button" data-route-reset>Restaurar orden</button></div>';
+		if ( ! $route ) { return $html . '<p class="cvd-empty-state">Acepta una carrera para añadirla a tu ruta.</p></section>'; }
+		$html .= '<div class="cvd-route-list">';
+		foreach ( $route as $order ) {
+			$address = $order->get_formatted_shipping_address() ?: $order->get_formatted_billing_address();
+			$phone = trim( (string) $order->get_billing_phone() );
+			$reference = trim( (string) $order->get_meta( '_cvd_reference', true ) );
+			$note = trim( (string) $order->get_customer_note() );
+			$map_url = esc_url( (string) $order->get_meta( '_cvd_map_url', true ) );
+			$shipping_cup = class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_fee( $order ) : absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) );
+			$html .= '<article data-route-stop="' . esc_attr( $order->get_id() ) . '"><header><div><span class="cvd-route-position">Parada</span><strong>#' . esc_html( $order->get_order_number() ) . ' · ' . esc_html( CVD_Delivery::destination_zone( $order ) ?: 'Zona por confirmar' ) . '</strong></div><div class="cvd-route-order"><button type="button" data-route-up aria-label="Subir pedido ' . esc_attr( $order->get_order_number() ) . '">Subir</button><button type="button" data-route-down aria-label="Bajar pedido ' . esc_attr( $order->get_order_number() ) . '">Bajar</button></div></header>';
+			$html .= '<p class="cvd-route-address">' . ( $address ? wp_kses_post( $address ) : '<b>Dirección no registrada</b>' ) . '</p>' . ( $reference ? '<small><b>Referencia:</b> ' . esc_html( $reference ) . '</small>' : '<small>Referencia no registrada</small>' );
+			$html .= '<div class="cvd-route-items"><strong>Productos</strong><ul>'; foreach ( $order->get_items( 'line_item' ) as $item ) { $html .= '<li>' . esc_html( max( 1, (int) $item->get_quantity() ) . ' × ' . $item->get_name() ) . '</li>'; } $html .= '</ul></div>';
+			$html .= '<div class="cvd-delivery-money"><div><span>Pedido</span><strong>' . wp_kses_post( wc_price( $order->get_total(), array( 'currency' => $order->get_currency() ) ) ) . '</strong></div><div><span>Mensajería</span><strong>' . esc_html( $shipping_cup ? number_format_i18n( $shipping_cup, 0 ) . ' CUP' : 'No registrada' ) . '</strong></div></div>';
+			$html .= '<div class="cvd-route-window"><span>Fecha / horario</span><strong>No registrados en Core</strong></div>';
+			if ( $note ) { $html .= '<div class="cvd-delivery-note" role="note"><b>Vuelto, nota o restricción</b><p>' . esc_html( $note ) . '</p></div>'; }
+			$html .= '<div class="cvd-messenger-tools">'; if ( $phone ) { $digits = preg_replace( '/\D+/', '', $phone ); $html .= '<a class="cvd-secondary" href="tel:' . esc_attr( $phone ) . '">Llamar</a><a class="cvd-secondary" href="https://wa.me/' . esc_attr( $digits ) . '?text=' . rawurlencode( 'Hola, soy el mensajero de Casa Viva. Te contacto por el pedido #' . $order->get_order_number() . '.' ) . '" target="_blank" rel="noopener">WhatsApp</a>'; } if ( $map_url ) { $html .= '<a class="cvd-secondary" href="' . $map_url . '" target="_blank" rel="noopener">Abrir mapa</a>'; } $html .= '</div>';
+			if ( ! $phone || ! $map_url ) { $html .= '<small class="cvd-domain-gap">' . esc_html( ! $phone && ! $map_url ? 'Teléfono y mapa no registrados.' : ( ! $phone ? 'Teléfono no registrado.' : 'Mapa no registrado.' ) ) . '</small>'; }
+			$html .= '</article>';
+		}
+		return $html . '</div><p class="cvd-route-disclaimer">El orden se conserva solo durante esta sesión del navegador; no modifica pedidos ni estados de Casa Viva.</p></section>';
+	}
+
+	/** Resumen de lectura posterior a ENTREGADO; el arqueo sigue en Casa Viva Core. */
+	private static function messenger_closeout( array $orders ): string {
+		$closed = array_filter( $orders, static fn( $order ) => in_array( self::messenger_delivery_stage( $order ), array( 'delivered', 'cash_returned', 'closed' ), true ) );
+		$html = '<section class="cvd-panel cvd-messenger-closeout" id="cierre"><div class="cvd-messenger-section-head"><div><p class="cvd-kicker">Cierre de entrega</p><h2>Entregas recientes</h2><p>Lectura del cierre y la conciliación registrados en Casa Viva.</p></div></div>';
+		if ( ! $closed ) { return $html . '<p class="cvd-empty-state">Las entregas marcadas como entregadas aparecerán aquí.</p></section>'; }
+		$html .= '<div class="cvd-closeout-list">';
+		foreach ( $closed as $order ) {
+			$status = self::messenger_delivery_stage( $order ); $cash = sanitize_key( (string) $order->get_meta( '_cvd_cash_status', true ) );
+			$method = sanitize_key( (string) $order->get_meta( '_cvd_collection_method', true ) ); $usd = (string) $order->get_meta( '_cvd_collection_amount_usd', true ); $cup = (string) $order->get_meta( '_cvd_collection_amount_cup', true );
+			$method_labels = array( 'cash' => 'Efectivo', 'transfer' => 'Transferencia', 'mixed' => 'Mixto', 'other' => 'Otro' );
+			$time = (string) $order->get_meta( 'closed' === $status ? '_cvd_cash_verified_at' : ( 'cash_returned' === $status ? '_cvd_cash_returned_at' : '_cvd_delivered_at' ), true );
+			$html .= '<article><header><div><strong>Pedido #' . esc_html( $order->get_order_number() ) . '</strong><small>' . esc_html( $time ? get_date_from_gmt( $time, 'j M Y · H:i' ) : 'Hora no registrada' ) . '</small></div><span class="cvd-badge">' . esc_html( CVD_Delivery::label( $status ) ) . '</span></header><div class="cvd-closeout-state"><span>Conciliación</span><strong>' . esc_html( 'verified' === $cash ? 'Verificada' : ( 'returned' === $cash ? 'Dinero recibido por Casa Viva' : 'Pendiente de entregar a Casa Viva' ) ) . '</strong></div>';
+			if ( $method || '' !== $usd || '' !== $cup ) { $html .= '<dl><div><dt>Medio registrado</dt><dd>' . esc_html( $method_labels[ $method ] ?? ( $method ?: 'No especificado' ) ) . '</dd></div><div><dt>Recibido USD</dt><dd>' . esc_html( '' !== $usd ? number_format_i18n( (float) $usd, 2 ) . ' USD' : 'No registrado' ) . '</dd></div><div><dt>Recibido CUP</dt><dd>' . esc_html( '' !== $cup ? number_format_i18n( (float) $cup, 2 ) . ' CUP' : 'No registrado' ) . '</dd></div></dl>'; }
+			else { $html .= '<p class="cvd-domain-gap">Core no registra todavía el cobro estructurado por moneda/medio desde la acción del mensajero. No se infiere del total.</p>'; }
+			$html .= '<small>El mensajero no puede cerrar la conciliación: Casa Viva conserva verificación, auditoría y arqueo.</small></article>';
+		}
+		return $html . '</div></section>';
 	}
 
 	private static function delivery_orders( array $orders ): string {

@@ -72,3 +72,20 @@ El cambio mínimo propuesto para una iteración posterior es un evento inmutable
 - escritura mediante un servicio canónico y lectura desde el timeline, sin modificar `operation` ni `delivery` automáticamente.
 
 Ese contrato debe aprobarse y probarse en Core antes de habilitar los cuatro controles.
+
+## P0.4 · Mi ruta y cierre de entrega
+
+`Mi ruta` muestra únicamente pedidos asignados al mensajero autenticado que ya fueron aceptados y siguen en una etapa operativa (`accepted`, `to_store`, `picked_up` o `handed_over`). Direcciones, zonas, referencias, productos, totales, mensajería, notas, teléfonos y enlaces de mapa provienen del pedido canónico. Los datos de contacto no se muestran antes de la aceptación.
+
+El mensajero puede mover cada parada con `Subir` y `Bajar`. Ese orden vive solo en `sessionStorage`, por usuario y sesión del navegador; no se escribe en WooCommerce, no modifica estados y no representa una ruta canónica. La interfaz lo identifica expresamente como orden manual previo a NEXO. No se añaden geocodificación, ETA ni `route-suggest`.
+
+`Entrega activa` conserva una acción principal según la transición permitida por `CVD_Delivery`, con incidencia como acción secundaria. Producto y mensajería continúan separados y la transición `handed_over → delivered` usa la URL canónica con nonce.
+
+Después de `delivered`, el pedido deja de competir con las entregas activas y aparece en `Cierre de entrega`. La vista lee `_cvd_cash_status`, timestamps de entrega/retorno/verificación y, cuando existen, `_cvd_collection_method`, `_cvd_collection_amount_usd` y `_cvd_collection_amount_cup`. No permite al mensajero declarar el arqueo ni cambiar la conciliación.
+
+### Gaps explícitos para campo
+
+- Core no expone una fecha o ventana horaria estructurada del pedido; la ruta muestra `No registrados en Core` y no calcula ETA.
+- El vuelto no tiene campo estructurado. Solo puede aparecer en la nota real y nunca se infiere.
+- La acción canónica del mensajero `delivered` no recibe cantidades por moneda ni medio de cobro. Esos datos pueden existir después, cuando el personal de Casa Viva registra el retorno de dinero. Hasta aprobar un contrato canónico con permisos, idempotencia y auditoría, P0.4 muestra el gap y no crea metadatos.
+- Un pedido sin teléfono o `_cvd_map_url` conserva la parada, muestra el faltante y omite la acción correspondiente; no se geocodifica la dirección.
