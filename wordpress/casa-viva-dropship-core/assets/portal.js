@@ -51,6 +51,20 @@
     if (!window.confirm(labels[action.getAttribute('data-confirm-delivery')] || '¿Confirmas este cambio?')) event.preventDefault();
   });
   document.addEventListener('click', function (event) { if (event.target.closest('[data-cvd-refresh-preparation]')) window.location.reload(); });
+  document.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-contact-outcome]');
+    if (!button || !window.cvdPortal || !window.cvdPortal.messengerContactUrl) return;
+    var card = button.closest('article'), status = card && card.querySelector('.cvd-contact-result');
+    var id = Number(button.getAttribute('data-contact-order')), outcome = button.getAttribute('data-contact-outcome');
+    if (!id || !outcome || button.disabled) return;
+    var key = 'contact-' + id + '-' + outcome + '-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+    Array.prototype.forEach.call(card.querySelectorAll('[data-contact-outcome]'), function (item) { item.disabled = true; });
+    if (status) status.textContent = 'Registrando…';
+    fetch(window.cvdPortal.messengerContactUrl + id + '/contact', { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json','X-WP-Nonce':window.cvdPortal.restNonce,'X-CVD-Idempotency-Key':key}, body:JSON.stringify({outcome:outcome,channel:'unspecified'}) })
+      .then(function (response) { return response.json().then(function (data) { if (!response.ok) throw new Error(data.message || 'No se pudo registrar.'); return data; }); })
+      .then(function () { if (status) status.textContent = 'Resultado registrado y auditado.'; })
+      .catch(function (error) { if (status) status.textContent = error.message; Array.prototype.forEach.call(card.querySelectorAll('[data-contact-outcome]'), function (item) { item.disabled = false; }); });
+  });
 
   var notifyButton = document.getElementById('cvd-enable-notifications');
   var knownOffers = Array.prototype.map.call(document.querySelectorAll('[data-offer-id]'), function (card) { return Number(card.getAttribute('data-offer-id')); });
