@@ -25,6 +25,15 @@ for (const marker of ['messenger_contacts', 'messenger_preparation', 'cvd-contac
 for (const marker of ['messenger_delivery_stage', '_cvd_delivery_incident_stage', 'get_variation_id', 'get_formatted_meta_data']) {
   if (!portal.includes(marker)) throw new Error(`Falta integridad del manifiesto P0.3: ${marker}`);
 }
+for (const marker of ['messenger_route', 'data-route-stop', 'Parada', 'Subir', 'Bajar', 'NEXO no optimiza esta ruta todavía', 'messenger_closeout', '_cvd_collection_amount_usd', '_cvd_collection_amount_cup']) {
+  if (!portal.includes(marker)) throw new Error(`Falta contrato P0.4 canónico: ${marker}`);
+}
+for (const marker of ['initializeMessengerRoute', 'sessionStorage.setItem(storageKey', 'data-route-up', 'data-route-down']) {
+  if (!source.includes(marker)) throw new Error(`Falta orden manual de sesión P0.4: ${marker}`);
+}
+if (portal.includes("update_meta_data( '_cvd_route") || portal.includes('route-suggest')) {
+  throw new Error('P0.4 no puede persistir una ruta paralela ni activar route-suggest.');
+}
 for (const marker of ['operationStatus', 'operationUpdatedAt']) {
   if (!delivery.includes(marker)) throw new Error(`Falta refresco operativo mínimo P0.3: ${marker}`);
 }
@@ -42,5 +51,8 @@ for (const marker of ['Stitch P0.2', '.cvd-messenger-today-stats', '.cvd-deliver
 }
 for (const marker of ['Stitch P0.3', '.cvd-contact-list', '.cvd-preparation-status']) {
   if (!styles.includes(marker)) throw new Error(`Falta contrato visual P0.3: ${marker}`);
+}
+for (const marker of ['Stitch P0.4', '.cvd-route-list', '.cvd-closeout-list']) {
+  if (!styles.includes(marker)) throw new Error(`Falta contrato visual P0.4: ${marker}`);
 }
 console.log('OK: contrato del Centro Operativo del Mensajero.');
