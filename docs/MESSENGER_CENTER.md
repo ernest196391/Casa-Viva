@@ -71,7 +71,7 @@ El cambio mínimo propuesto para una iteración posterior es un evento inmutable
 - idempotencia propia y permisos del mensajero asignado o personal operativo;
 - escritura mediante un servicio canónico y lectura desde el timeline, sin modificar `operation` ni `delivery` automáticamente.
 
-Ese contrato debe aprobarse y probarse en Core antes de habilitar los cuatro controles.
+El contrato ya está implementado mediante eventos inmutables del dominio `contact`. El mensajero asignado puede registrar los cuatro resultados después de aceptar el pedido. Cada escritura exige nonce REST e idempotencia, conserva actor/hora y no modifica estados `operation` ni `delivery`.
 
 ## P0.4 · Mi ruta y cierre de entrega
 
