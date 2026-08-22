@@ -8,6 +8,9 @@ final class CVD_Shipping_Rates {
 	private const VERSION = '2026-08-04-v2';
 
 	public static function register(): void {
+		add_shortcode( 'casa_viva_shipping_quote', array( __CLASS__, 'render_quote' ) );
+		add_action( 'rest_api_init', array( __CLASS__, 'rest_routes' ) );
+		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'quote_assets' ) );
 		add_action( 'woocommerce_checkout_update_order_review', array( __CLASS__, 'refresh_checkout_rate' ) );
 		add_action( 'woocommerce_review_order_before_order_total', array( __CLASS__, 'checkout_rate_row' ) );
 		add_action( 'woocommerce_checkout_create_order', array( __CLASS__, 'save_order_rate' ), 30, 2 );
@@ -16,6 +19,30 @@ final class CVD_Shipping_Rates {
 		add_action( 'wp_ajax_nopriv_cvd_address_search', array( __CLASS__, 'address_search' ) );
 		add_filter( 'woocommerce_get_order_item_totals', array( __CLASS__, 'order_item_totals' ), 20, 3 );
 		add_filter( 'woocommerce_get_formatted_order_total', array( __CLASS__, 'formatted_order_total' ), 20, 2 );
+	}
+
+	public static function rest_routes(): void {
+		register_rest_route( 'casa-viva/v1', '/shipping/quote', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'rest_quote' ), 'permission_callback' => '__return_true' ) );
+	}
+
+	public static function rest_quote( WP_REST_Request $request ): WP_REST_Response {
+		$municipality = sanitize_text_field( (string) $request->get_param( 'municipality' ) ); $zone = sanitize_text_field( (string) $request->get_param( 'zone' ) );
+		$quote = self::quote( $municipality, $zone );
+		$response = rest_ensure_response( array( 'origin' => 'Casa Viva', 'destination' => implode( ', ', array_filter( array( $zone, $municipality ) ) ), 'feeCup' => absint( $quote['fee'] ?? 0 ), 'status' => sanitize_key( (string) ( $quote['status'] ?? 'pending' ) ), 'label' => sanitize_text_field( (string) ( $quote['label'] ?? '' ) ), 'referenceCup' => absint( $quote['reference'] ?? 0 ), 'official' => 'zone' === ( $quote['status'] ?? '' ) ) );
+		$response->header( 'Cache-Control', 'public, max-age=300' ); return $response;
+	}
+
+	public static function quote_assets(): void {
+		if ( ! is_page( 'cotizar-mensajeria' ) ) { return; }
+		wp_enqueue_style( 'cvd-shipping-quote', CVD_URL . 'assets/shipping-quote.css', array(), CVD_VERSION );
+		wp_enqueue_script( 'cvd-shipping-quote', CVD_URL . 'assets/shipping-quote.js', array(), CVD_VERSION, true );
+		wp_localize_script( 'cvd-shipping-quote', 'cvdShippingQuote', array( 'endpoint' => rest_url( 'casa-viva/v1/shipping/quote' ), 'localities' => self::localities() ) );
+	}
+
+	public static function render_quote(): string {
+		ob_start(); ?>
+		<main class="cvd-quote-app" data-cvd-quote><header><p class="cvd-kicker">Tarifas Casa Viva</p><h1>Calculadora de mensajería</h1><p>Consulta la tarifa oficial vigente desde Casa Viva. NEXO no calcula precios.</p></header><section class="cvd-quote-card"><label>Origen<input disabled value="Casa Viva"></label><label>Municipio<select data-quote-municipality><option value="">Selecciona municipio</option><?php foreach ( array_keys( self::localities() ) as $municipality ) : ?><option value="<?php echo esc_attr( $municipality ); ?>"><?php echo esc_html( $municipality ); ?></option><?php endforeach; ?></select></label><label>Zona o reparto<select data-quote-zone disabled><option value="">Selecciona primero el municipio</option></select></label><button class="cvd-primary" data-quote-submit type="button">Consultar tarifa</button><p role="status" aria-live="polite"></p></section><section class="cvd-quote-card cvd-quote-result" data-quote-result hidden><p class="cvd-kicker" data-quote-kind></p><strong data-quote-price></strong><p data-quote-route></p><div><button type="button" data-quote-copy>Copiar</button><button type="button" data-quote-share>Compartir</button></div></section></main>
+		<?php return (string) ob_get_clean();
 	}
 
 	public static function address_search(): void {
