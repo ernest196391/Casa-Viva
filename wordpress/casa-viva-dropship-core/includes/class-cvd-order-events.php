@@ -57,7 +57,7 @@ final class CVD_WPDB_Order_Event_Repository implements CVD_Order_Event_Repositor
 
 /** Persistencia aditiva e inmutable de eventos observados. No gobierna transiciones. */
 final class CVD_Order_Events {
-	private const DOMAINS = array( 'order', 'operation', 'delivery', 'payment', 'commission', 'incident' );
+	private const DOMAINS = array( 'order', 'operation', 'delivery', 'payment', 'commission', 'incident', 'contact' );
 	private static ?CVD_Order_Event_Repository $repository = null;
 
 	public static function register(): void {
