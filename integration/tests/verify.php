@@ -10,6 +10,9 @@ $order = wc_get_order( $order_id );
 cvt_verify( $order instanceof WC_Order, 'Pedido sintético ausente.' );
 cvt_verify( 'closed' === CVD_Delivery::status( $order ), 'La entrega no quedó cerrada.' );
 cvt_verify( 'verified' === $order->get_meta( '_cvd_cash_status', true ), 'El efectivo no quedó verificado.' );
+cvt_verify( 'mixed' === $order->get_meta( '_cvd_collection_method', true ), 'No se conservó el medio cobrado al entregar.' );
+cvt_verify( 90.0 === (float) $order->get_meta( '_cvd_collection_amount_usd', true ) && 1000.0 === (float) $order->get_meta( '_cvd_collection_amount_cup', true ), 'No se conservaron importes por moneda.' );
+cvt_verify( absint( $fixture['messenger_id'] ) === absint( $order->get_meta( '_cvd_collection_received_by', true ) ), 'Actor de cobro incorrecto.' );
 
 $rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE order_id=%d ORDER BY occurred_at,id", $order_id ), ARRAY_A );
 cvt_verify( count( $rows ) >= 14, 'Faltan eventos del flujo sintético.' );
