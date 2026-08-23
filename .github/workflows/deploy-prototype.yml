@@ -7,9 +7,6 @@ on:
         description: SHA completo de main que se desea desplegar
         required: true
         type: string
-  push:
-    branches: [main]
-    paths: [.github/deploy-mvp-v2-approved]
 
 permissions:
   contents: read
@@ -18,7 +15,7 @@ env:
   WP_PATH: /home/u824654880/domains/casavivadecuba.com/public_html
   PLUGIN_SLUG: casa-viva-dropship-core
   PROTOTYPE_URL: https://casavivadecuba.com
-  DEPLOY_SHA: ${{ inputs.expected_sha || github.sha }}
+  DEPLOY_SHA: ${{ inputs.expected_sha }}
 
 jobs:
   deploy-prototype:
