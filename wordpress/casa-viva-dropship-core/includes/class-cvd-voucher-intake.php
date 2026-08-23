@@ -135,7 +135,7 @@ final class CVD_Voucher_Intake {
 			return new WP_Error( 'cvd_nexo_config', 'El servicio NEXO no está configurado de forma segura.', array( 'status' => 503 ) );
 		}
 		$response = wp_remote_post( $base . '/api/messaging/parse-voucher', array(
-			'timeout' => 25,
+			'timeout' => 45,
 			'headers' => array( 'Content-Type' => 'application/json' ),
 			'body' => wp_json_encode( array( 'rawVoucher' => $text, 'text' => $text, 'business' => 'casa-viva', 'source' => 'operator-paste', 'locale' => 'es-CU' ) ),
 		) );
