@@ -75,6 +75,7 @@ jobs:
           node artifacts/tests/test-messenger-delivery-collection.mjs
           node artifacts/tests/test-voucher-intake-contract.mjs
           node artifacts/tests/test-shipping-quote-contract.mjs
+          node artifacts/tests/test-split-payment-obligations.mjs
 
       - name: Configurar Node.js
         uses: actions/setup-node@v4
@@ -132,6 +133,9 @@ jobs:
 
       - name: Validar jornada field-ready
         run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/field-ready-messaging.php
+
+      - name: Validar cobro y pagador dividido
+        run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/split-payment-obligations.php
 
       - name: Mostrar diagnóstico si falla
         if: failure()
