@@ -28,6 +28,14 @@ La primera iteración añade una capa visual mobile-first al portal de mensajero
 
 Después del piloto se podrá refinar el diseño, incorporar finalizados del día y mejorar resúmenes contables sin cambiar la autoridad de estados.
 
+## Piloto V2 · Captura y asistente operativo
+
+- `/ruta-cv/` muestra accesos visibles a `Subir vale` y `Asistente`.
+- El mensajero puede pegar e interpretar texto con NEXO, pero no crear un pedido: la confirmación canónica pertenece a administración, operación o gestora aprobada.
+- La confirmación vincula productos reales, compara la mensajería con la tarifa canónica y, si existe pagador dividido, configura obligaciones mediante `CVD_Payment_Obligations`.
+- El asistente es determinista, de solo lectura y trabaja exclusivamente con pedidos asignados al mensajero autenticado. Si no puede responder, muestra `FALTA INFORMACIÓN`.
+- El manifiesto filtra metadatos protegidos de WooCommerce; ninguna clave interna se comparte por WhatsApp.
+
 ## P0.2 · Inicio/Hoy y entrega activa
 
 La superficie operativa canónica es `/area-mensajeros/`. La ruta Next.js `/mensajero` permanece como sandbox visual Stitch y no comparte autenticación, estado ni pedidos.

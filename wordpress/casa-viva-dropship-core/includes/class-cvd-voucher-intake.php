@@ -16,10 +16,10 @@ final class CVD_Voucher_Intake {
 		register_rest_route( 'casa-viva/v1', '/voucher/parse', array(
 			'methods' => 'POST',
 			'callback' => array( __CLASS__, 'parse' ),
-			'permission_callback' => array( __CLASS__, 'allowed' ),
+			'permission_callback' => array( __CLASS__, 'can_parse' ),
 		) );
-		register_rest_route( 'casa-viva/v1', '/voucher/products', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'products' ), 'permission_callback' => array( __CLASS__, 'allowed' ) ) );
-		register_rest_route( 'casa-viva/v1', '/voucher/orders', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'create_order' ), 'permission_callback' => array( __CLASS__, 'allowed' ) ) );
+		register_rest_route( 'casa-viva/v1', '/voucher/products', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'products' ), 'permission_callback' => array( __CLASS__, 'can_parse' ) ) );
+		register_rest_route( 'casa-viva/v1', '/voucher/orders', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'create_order' ), 'permission_callback' => array( __CLASS__, 'can_confirm' ) ) );
 	}
 
 	public static function products( WP_REST_Request $request ): WP_REST_Response {
@@ -71,14 +71,33 @@ final class CVD_Voucher_Intake {
 			$window = sanitize_key( (string) ( $draft['scheduledTime'] ?? '' ) ); $window = str_contains( $window, 'tarde' ) ? 'afternoon' : ( str_contains( $window, 'mañana' ) || str_contains( $window, 'manana' ) ? 'morning' : '' ); $order->update_meta_data( '_cvd_delivery_window', $window );
 			$change = array(); foreach ( (array) ( $draft['changeRequired'] ?? array() ) as $money ) { $amount = (float) wc_format_decimal( $money['amount'] ?? 0, 2 ); $currency = strtoupper( sanitize_key( (string) ( $money['currency'] ?? '' ) ) ); if ( $amount > 0 && in_array( $currency, array( 'USD', 'CUP', 'EUR' ), true ) ) { $change[] = array( 'amount' => $amount, 'currency' => $currency ); } } $order->update_meta_data( '_cvd_change_required', $change );
 			$quote = CVD_Shipping_Rates::quote( $municipality, $zone ); $order->update_meta_data( '_cvd_shipping_fee_cup', absint( $quote['fee'] ?? 0 ) ); $order->update_meta_data( '_cvd_shipping_rate_status', sanitize_key( (string) ( $quote['status'] ?? 'pending' ) ) ); $order->update_meta_data( '_cvd_shipping_rate_label', sanitize_text_field( (string) ( $quote['label'] ?? '' ) ) );
-			$order->update_meta_data( '_cvd_voucher_confirmation_key', $key_hash ); $order->update_meta_data( '_cvd_source_order_code', sanitize_text_field( (string) ( $draft['orderCode'] ?? '' ) ) ); $order->update_meta_data( '_cvd_order_intake_source', 'nexo_confirmed_voucher' ); $order->update_meta_data( '_cvd_pricing_gestora_user_id', $owner_id );
+			$order->update_meta_data( '_cvd_voucher_confirmation_key', $key_hash ); $order->update_meta_data( '_cvd_source_order_code', sanitize_text_field( (string) ( $draft['orderCode'] ?? '' ) ) ); $order->update_meta_data( '_cvd_order_intake_source', 'nexo_confirmed_voucher' ); $order->update_meta_data( '_cvd_source_store', sanitize_text_field( (string) ( $draft['store'] ?? $draft['origin'] ?? '' ) ) ); $order->update_meta_data( '_cvd_source_url', esc_url_raw( (string) ( $draft['sourceUrl'] ?? '' ) ) ); $order->update_meta_data( '_cvd_pricing_gestora_user_id', $owner_id );
 			$notes = array_map( 'sanitize_text_field', (array) ( $draft['notes'] ?? array() ) ); if ( $notes ) { $order->set_customer_note( implode( "\n", array_filter( $notes ) ) ); }
-			CVD_Attribution::attach_operator_order( $order, $owner_id ); $order->calculate_totals(); $order->save(); do_action( 'woocommerce_checkout_order_created', $order ); $order->update_status( 'processing', 'Pedido confirmado por humano desde vale interpretado por NEXO.' );
+			CVD_Attribution::attach_operator_order( $order, $owner_id ); $order->calculate_totals();
+			$obligations = self::payment_obligations( $draft, $owner_id, absint( $quote['fee'] ?? 0 ) );
+			if ( is_wp_error( $obligations ) ) { throw new RuntimeException( $obligations->get_error_message() ); }
+			if ( $obligations ) { $configured = CVD_Payment_Obligations::configure( $order, $obligations, get_current_user_id() ); if ( is_wp_error( $configured ) ) { throw new RuntimeException( $configured->get_error_message() ); } }
+			$order->save(); do_action( 'woocommerce_checkout_order_created', $order ); $order->update_status( 'processing', 'Pedido confirmado por humano desde vale interpretado por NEXO.' );
+			if ( $obligations && class_exists( 'CVD_Order_Events' ) ) { CVD_Order_Events::record( array( 'order_id' => $order->get_id(), 'event_type' => 'payment.obligations_configured', 'domain' => 'payment', 'from_state' => '', 'to_state' => 'configured', 'actor_user_id' => get_current_user_id(), 'source' => 'voucher_human_confirmation', 'metadata' => array( 'version' => 1, 'count' => count( $obligations ) ), 'idempotency_key' => 'voucher-payment-plan:' . $order->get_id() . ':' . $key_hash ) ); }
 			delete_option( $lock ); return rest_ensure_response( self::created_projection( $order, false ) );
 		} catch ( Throwable $error ) {
 			delete_option( $lock ); if ( $order instanceof WC_Order ) { $order->delete( true ); }
 			return new WP_Error( 'cvd_voucher_create', $error->getMessage(), array( 'status' => 400 ) );
 		}
+	}
+
+	/** Convierte únicamente la revisión humana en obligaciones canónicas; NEXO nunca persiste importes. */
+	private static function payment_obligations( array $draft, int $owner_id, int $official_fee ) {
+		$customer = (float) wc_format_decimal( $draft['deliveryCustomerAmount'] ?? 0, 2 );
+		$gestora = (float) wc_format_decimal( $draft['deliveryManagerAmount'] ?? 0, 2 );
+		if ( $customer <= 0 && $gestora <= 0 ) { return array(); }
+		if ( $official_fee <= 0 ) { return new WP_Error( 'cvd_voucher_payment_rate', 'La ruta no tiene tarifa canónica. Resuelve la cotización antes de confirmar el cobro.' ); }
+		if ( abs( ( $customer + $gestora ) - $official_fee ) > 0.009 ) { return new WP_Error( 'cvd_voucher_payment_total', 'El reparto de mensajería debe sumar la tarifa oficial de Casa Viva.' ); }
+		if ( $gestora > 0 && ! $owner_id ) { return new WP_Error( 'cvd_voucher_payment_owner', 'Selecciona una gestora aprobada antes de aplicar descuento de comisión.' ); }
+		$rows = array();
+		if ( $customer > 0 ) { $rows[] = array( 'id' => 'delivery-customer-cup', 'concept' => 'delivery', 'amount' => $customer, 'currency' => 'CUP', 'payer' => 'customer', 'method' => 'cash_cup' ); }
+		if ( $gestora > 0 ) { $rows[] = array( 'id' => 'delivery-gestora-cup', 'concept' => 'delivery', 'amount' => $gestora, 'currency' => 'CUP', 'payer' => 'gestora', 'payer_user_id' => $owner_id, 'method' => 'commission_deduction' ); }
+		return $rows;
 	}
 
 	private static function preferred_owner( string $manager_code ) {
@@ -91,12 +110,20 @@ final class CVD_Voucher_Intake {
 
 	private static function created_projection( WC_Order $order, bool $replayed ): array { return array( 'orderId' => $order->get_id(), 'orderNumber' => $order->get_order_number(), 'status' => $order->get_status(), 'shippingFeeCup' => CVD_Shipping_Rates::order_fee( $order ), 'shippingStatus' => $order->get_meta( '_cvd_shipping_rate_status', true ), 'replayed' => $replayed, 'url' => $order->get_view_order_url() ); }
 
-	public static function allowed(): bool {
+	public static function can_confirm(): bool {
 		if ( ! is_user_logged_in() ) { return false; }
 		$user = wp_get_current_user();
 		if ( array_intersect( array( 'administrator', 'shop_manager', 'cvd_operator' ), (array) $user->roles ) ) { return true; }
 		return CVD_Registration::is_approved_gestora( $user );
 	}
+
+	public static function can_parse(): bool {
+		if ( self::can_confirm() ) { return true; }
+		return is_user_logged_in() && 'mensajero' === CVD_Registration::program_type( wp_get_current_user() );
+	}
+
+	/** Compatibilidad con pruebas y llamadas existentes. */
+	public static function allowed(): bool { return self::can_confirm(); }
 
 	public static function parse( WP_REST_Request $request ) {
 		$text = trim( sanitize_textarea_field( (string) $request->get_param( 'text' ) ) );
@@ -138,17 +165,20 @@ final class CVD_Voucher_Intake {
 			'nonce' => wp_create_nonce( 'wp_rest' ),
 			'productsEndpoint' => rest_url( 'casa-viva/v1/voucher/products' ),
 			'ordersEndpoint' => rest_url( 'casa-viva/v1/voucher/orders' ),
+			'quoteEndpoint' => rest_url( 'casa-viva/v1/shipping/quote' ),
+			'canConfirm' => self::can_confirm(),
+			'routeUrl' => home_url( '/ruta-cv/' ),
 		) );
 	}
 
 	public static function render(): string {
-		if ( ! self::allowed() ) { return '<div class="cvd-app-denied">Necesitas una cuenta autorizada de Casa Viva.</div>'; }
+		if ( ! self::can_parse() ) { return '<div class="cvd-app-denied">Necesitas una cuenta autorizada de Casa Viva.</div>'; }
 		ob_start(); ?>
 		<main class="cvd-voucher-app" data-cvd-voucher>
-			<header><p class="cvd-kicker">Entrada inteligente · sin persistencia</p><h1>Agregar pedido desde un vale</h1><p>NEXO propone; tú corriges. Casa Viva todavía no crea nada en este paso.</p></header>
+			<header><a class="cvd-voucher-back" href="<?php echo esc_url( home_url( '/ruta-cv/' ) ); ?>">← Volver a Ruta</a><p class="cvd-kicker">Entrada inteligente</p><h1>Subir vale</h1><p>Pega el texto de WhatsApp. NEXO propone y Casa Viva valida antes de guardar.</p></header>
 			<section class="cvd-voucher-card"><label for="cvd-voucher-text"><strong>Pega el vale completo</strong></label><textarea id="cvd-voucher-text" maxlength="12000" rows="12" placeholder="Pedido, productos, cliente, dirección, importes y notas"></textarea><button class="cvd-primary" data-voucher-parse type="button">Interpretar con NEXO</button><p class="cvd-voucher-status" role="status" aria-live="polite"></p></section>
-			<section class="cvd-voucher-card" data-voucher-review hidden><div class="cvd-voucher-heading"><div><p class="cvd-kicker">NEXO entendió esto</p><h2>Revisa y corrige</h2></div><strong data-voucher-confidence></strong></div><div data-voucher-alerts></div><form data-voucher-form></form><button class="cvd-primary" data-voucher-confirm type="button">Continuar a confirmación canónica</button><p class="cvd-voucher-note">Este botón prepara el payload revisado. La creación canónica se habilitará en el siguiente bloque.</p></section>
-			<section class="cvd-voucher-card" data-voucher-payload hidden><h2>Confirmación</h2><pre></pre></section>
+			<section class="cvd-voucher-card" data-voucher-review hidden><div class="cvd-voucher-heading"><div><p class="cvd-kicker">NEXO entendió esto</p><h2>Revisa y corrige</h2></div><strong data-voucher-confidence></strong></div><div data-voucher-alerts></div><form data-voucher-form></form><button class="cvd-primary" data-voucher-confirm type="button" <?php disabled( ! self::can_confirm() ); ?>><?php echo self::can_confirm() ? 'Confirmar y crear pedido' : 'Operación debe confirmar'; ?></button><p class="cvd-voucher-note"><?php echo self::can_confirm() ? 'Al confirmar se crea un pedido canónico e idempotente en Casa Viva.' : 'Puedes interpretar y revisar. Por seguridad, solo operación, administración o la gestora autorizada crea el pedido.'; ?></p></section>
+			<section class="cvd-voucher-card cvd-voucher-success" data-voucher-payload hidden><p class="cvd-kicker">Pedido creado</p><h2>Listo para operación</h2><pre></pre><a class="cvd-primary" href="<?php echo esc_url( home_url( '/ruta-cv/' ) ); ?>">Abrir jornada</a></section>
 		</main>
 		<?php return (string) ob_get_clean();
 	}
