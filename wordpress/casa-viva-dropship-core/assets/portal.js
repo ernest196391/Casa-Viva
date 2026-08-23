@@ -115,6 +115,22 @@
   }
   initializeMessengerRoute();
 
+  function initializeOperationalAssistant() {
+    var assistant = document.querySelector('[data-cvd-assistant]');
+    if (!assistant) return;
+    var context = {};
+    try { context = JSON.parse(assistant.getAttribute('data-assistant-context') || '{}'); } catch (ignore) {}
+    var form = assistant.querySelector('[data-assistant-form]'), input = assistant.querySelector('input'), answer = assistant.querySelector('.cvd-assistant-answer');
+    function reply(raw) {
+      var question = String(raw || '').toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      var key = /llamar|contact|responde/.test(question) ? 'pendingContact' : /vuelto|cambio/.test(question) ? 'change' : /prepar|manifiesto|tienda/.test(question) ? 'prepare' : /manana|horario|franja/.test(question) ? 'morning' : /divid|comision|pagador/.test(question) ? 'split' : /falta|salir|telefono|mapa|tarifa/.test(question) ? 'missing' : /zona|habana|municipio|organiza/.test(question) ? 'zones' : '';
+      answer.hidden = false; answer.querySelector('p').textContent = key ? context[key] : 'FALTA INFORMACIÓN — Puedo consultar contactos, vuelto, preparación, horarios, pagador dividido, zonas y datos faltantes. No cambio pedidos ni invento respuestas.'; answer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    assistant.addEventListener('click', function (event) { var button = event.target.closest('[data-assistant-question]'); if (button) reply(button.getAttribute('data-assistant-question')); });
+    if (form) form.addEventListener('submit', function (event) { event.preventDefault(); reply(input && input.value); });
+  }
+  initializeOperationalAssistant();
+
   function enhanceMessengerCenter() {
     if (!window.cvdPortal || !window.cvdPortal.isMessenger) return;
     var shell = document.querySelector('.cvd-dashboard.cvd-app-shell');

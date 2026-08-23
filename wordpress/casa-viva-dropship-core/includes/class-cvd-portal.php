@@ -54,7 +54,8 @@ final class CVD_Portal {
 				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 				'nonce' => wp_create_nonce( 'cvd_portal_price' ),
 				'messengerFeedUrl' => rest_url( 'casa-viva/v1/messenger/feed' ),
-				'messengerContactUrl' => rest_url( 'casa-viva/v1/messenger/orders/' ),
+			'messengerContactUrl' => rest_url( 'casa-viva/v1/messenger/orders/' ),
+			'voucherUrl' => home_url( '/interpretar-vale/' ),
 				'restNonce' => wp_create_nonce( 'wp_rest' ),
 				'isMessenger' => is_user_logged_in() && 'mensajero' === CVD_Registration::program_type( wp_get_current_user() ),
 			) );
@@ -210,8 +211,10 @@ final class CVD_Portal {
 		<section class="cvd-dashboard cvd-app-shell cvd-messenger-center">
 			<?php if ( isset( $_GET['oferta'] ) ) : $offer_result = sanitize_key( wp_unslash( $_GET['oferta'] ) ); ?><div class="cvd-notice" role="status"><?php echo esc_html( 'accepted' === $offer_result ? 'Carrera aceptada. Presenta el QR en la tienda.' : ( 'declined' === $offer_result ? 'Oferta descartada.' : 'La carrera ya no está disponible.' ) ); ?></div><?php endif; ?>
 			<header class="cvd-dashboard-head cvd-messenger-head"><div><p class="cvd-kicker">Casa Viva · Mensajería</p><h1>Hola, <?php echo esc_html( $user->display_name ); ?>.</h1><p><?php echo esc_html( $offers ? 'Tienes una carrera por responder.' : ( $active ? 'Este es tu trabajo activo de hoy.' : 'Estás listo para recibir carreras.' ) ); ?></p></div><a class="cvd-secondary" href="<?php echo esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ); ?>">Cambiar cuenta</a></header>
-			<nav class="cvd-app-nav cvd-messenger-nav" aria-label="Panel del mensajero"><a href="#hoy">Inicio</a><a href="#contactos">Contactos</a><a href="#preparar">Preparar</a><a href="#ruta">Mi ruta</a><a href="#perfil">Más</a></nav>
+			<nav class="cvd-app-nav cvd-messenger-nav" aria-label="Panel del mensajero"><a href="#hoy">Inicio</a><a href="#contactos">Contactos</a><a href="#preparar">Preparar</a><a href="#ruta">Mi ruta</a><a href="#asistente">Asistente</a></nav>
+			<section class="cvd-messenger-launchpad" aria-label="Acciones rápidas"><a class="cvd-primary cvd-upload-voucher" href="<?php echo esc_url( home_url( '/interpretar-vale/' ) ); ?>"><span aria-hidden="true">＋</span> Subir vale</a><a class="cvd-secondary" href="#asistente">Asistente</a></section>
 			<?php echo self::messenger_today_summary( $active, $offers ); ?>
+			<?php echo self::messenger_assistant( $active ); ?>
 			<div class="cvd-messenger-alert-control"><button class="cvd-secondary" id="cvd-enable-notifications" type="button">Activar alertas</button></div>
 			<?php echo self::messenger_contacts( $active ); ?>
 			<?php echo self::messenger_preparation( $active ); ?>
@@ -226,6 +229,32 @@ final class CVD_Portal {
 		</section>
 		<?php
 		return (string) ob_get_clean();
+	}
+
+	/** Asistente determinista y de solo lectura sobre pedidos ya autorizados al mensajero. */
+	private static function messenger_assistant( array $orders ): string {
+		$pending_contact = 0; $morning = array(); $change = array(); $split = array(); $missing = array(); $products = array(); $zones = array();
+		foreach ( $orders as $order ) {
+			$number = '#' . $order->get_order_number();
+			if ( ! CVD_Messenger_Contacts::latest( $order ) ) { $pending_contact++; }
+			if ( 'morning' === sanitize_key( (string) $order->get_meta( '_cvd_delivery_window', true ) ) ) { $morning[] = $number; }
+			$change_label = self::messenger_change_label( $order ); if ( $change_label ) { $change[] = $number . ': ' . $change_label; }
+			$obligations = class_exists( 'CVD_Payment_Obligations' ) ? CVD_Payment_Obligations::for_order( $order ) : array();
+			$payers = array_unique( array_column( $obligations, 'payer' ) ); if ( count( $payers ) > 1 ) { $split[] = $number; }
+			$gaps = array(); if ( ! trim( (string) $order->get_billing_phone() ) ) { $gaps[] = 'teléfono'; } if ( ! trim( (string) $order->get_meta( '_cvd_map_url', true ) ) ) { $gaps[] = 'mapa'; } if ( ! CVD_Shipping_Rates::order_fee( $order ) ) { $gaps[] = 'tarifa'; } if ( $gaps ) { $missing[] = $number . ': ' . implode( ', ', $gaps ); }
+			$zone = CVD_Delivery::destination_zone( $order ); if ( $zone ) { $zones[ $zone ] = ( $zones[ $zone ] ?? 0 ) + 1; }
+			foreach ( $order->get_items( 'line_item' ) as $item ) { $name = wp_strip_all_tags( $item->get_name() ); $products[ $name ] = ( $products[ $name ] ?? 0 ) + max( 1, (int) $item->get_quantity() ); }
+		}
+		$data = array(
+			'pendingContact' => $pending_contact ? $pending_contact . ' cliente(s) sin resultado de contacto.' : 'Todos los clientes tienen un resultado de contacto.',
+			'change' => $change ? implode( ' · ', $change ) : 'No hay vuelto estructurado registrado.',
+			'morning' => $morning ? 'Entrega por la mañana: ' . implode( ', ', $morning ) . '.' : 'No hay entregas con franja de mañana registrada.',
+			'split' => $split ? 'Mensajería dividida: ' . implode( ', ', $split ) . '.' : 'No hay pedidos asignados con pagador dividido.',
+			'missing' => $missing ? 'FALTA INFORMACIÓN — ' . implode( ' · ', $missing ) : 'No faltan teléfono, mapa ni tarifa en los pedidos activos.',
+			'prepare' => $products ? implode( ' · ', array_map( static fn( $name, $quantity ) => $quantity . '× ' . $name, array_keys( $products ), $products ) ) : 'No hay productos pendientes de preparación.',
+			'zones' => $zones ? implode( ' · ', array_map( static fn( $zone, $count ) => $zone . ': ' . $count, array_keys( $zones ), $zones ) ) : 'No hay zonas activas.',
+		);
+		return '<section class="cvd-panel cvd-operational-assistant" id="asistente" data-cvd-assistant data-assistant-context="' . esc_attr( wp_json_encode( $data ) ) . '"><div class="cvd-messenger-section-head"><div><p class="cvd-kicker">Asistente operativo</p><h2>Pregunta por tu jornada</h2><p>Responde solo con tus pedidos asignados. No cambia estados ni inventa datos.</p></div></div><div class="cvd-assistant-chips"><button type="button" data-assistant-question="contact">¿Quién falta por llamar?</button><button type="button" data-assistant-question="change">¿Cuánto vuelto llevo?</button><button type="button" data-assistant-question="prepare">¿Qué debe preparar tienda?</button><button type="button" data-assistant-question="missing">¿Qué falta antes de salir?</button></div><form data-assistant-form><label for="cvd-assistant-question">Escribe una pregunta</label><div><input id="cvd-assistant-question" type="text" autocomplete="off" placeholder="Ej.: ¿Quién pidió por la mañana?"><button class="cvd-primary" type="submit">Consultar</button></div></form><div class="cvd-assistant-answer" role="status" aria-live="polite" hidden><strong>Respuesta</strong><p></p></div></section>';
 	}
 
 	private static function gestora_history( array $orders ): string {
@@ -283,9 +312,10 @@ final class CVD_Portal {
 		}
 		$greeting = $name ? 'Hola ' . $name . ',' : 'Hola,';
 		$products = $items ? implode( ', ', $items ) : ( 1 === $quantity ? 'su producto' : 'su pedido' );
+		$origin = trim( (string) $order->get_meta( '_cvd_source_store', true ) ) ?: 'Casa Viva';
 		$schedule = self::messenger_schedule_label( $order );
 		$timing = $schedule ? ' La entrega está prevista ' . $schedule . '.' : '';
-		return $greeting . ' soy el mensajero que le llevará su pedido de Casa Viva: ' . $products . '.' . $timing . ' ¿Sería tan amable de enviarme su ubicación por WhatsApp para ir directamente? ¿Está disponible para recibirlo? La llamaré antes de llegar.';
+		return $greeting . ' soy el mensajero que le llevará su pedido de ' . $origin . ': ' . $products . '.' . $timing . ' ¿Sería tan amable de enviarme su ubicación por WhatsApp para ir directamente? ¿Está disponible para recibirlo? La llamaré antes de llegar.';
 	}
 
 	/** Contactos de pedidos asignados. Los resultados quedan en lectura hasta tener un evento canónico. */
@@ -329,7 +359,7 @@ final class CVD_Portal {
 			if ( ! in_array( $stage, array( 'accepted', 'to_store', 'picked_up' ), true ) ) { continue; }
 			$order_numbers[] = '#' . $order->get_order_number();
 			foreach ( $order->get_items( 'line_item' ) as $item ) {
-				$variation = array(); foreach ( $item->get_formatted_meta_data( '' ) as $meta ) { $variation[] = wp_strip_all_tags( $meta->display_key . ': ' . $meta->display_value ); }
+				$variation = array(); foreach ( $item->get_formatted_meta_data() as $meta ) { if ( str_starts_with( (string) $meta->key, '_' ) ) { continue; } $variation[] = wp_strip_all_tags( $meta->display_key . ': ' . $meta->display_value ); }
 				$label = (string) $item->get_name() . ( $variation ? ' · ' . implode( ' · ', $variation ) : '' );
 				$key = $item->get_product_id() . ':' . $item->get_variation_id() . ':' . hash( 'sha256', $label );
 				if ( ! isset( $products[ $key ] ) ) { $products[ $key ] = array( 'label' => $label, 'quantity' => 0 ); }

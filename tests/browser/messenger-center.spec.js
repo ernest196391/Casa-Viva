@@ -64,3 +64,14 @@ test('mensajero ve una entrega activa con acciones operativas directas', async (
   expect(layout.present).toBeTruthy();
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width + 1);
 });
+
+test('mensajero ve Subir vale y un asistente operativo de solo lectura', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await login(page); await openCenter(page);
+  await expect(page.getByRole('link', { name: /Subir vale/i })).toBeVisible();
+  await page.locator('[data-assistant-question="missing"]').click();
+  await expect(page.locator('.cvd-assistant-answer')).toBeVisible();
+  await expect(page.locator('.cvd-assistant-answer p')).not.toHaveText('');
+  await expect(page.locator('#preparar')).not.toContainText('_reduced_stock');
+  await expect(page.locator('#preparar')).not.toContainText('_cvd_stock_reduction_sequence');
+});
