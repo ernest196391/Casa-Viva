@@ -137,7 +137,7 @@ final class CVD_Voucher_Intake {
 		$response = wp_remote_post( $base . '/api/messaging/parse-voucher', array(
 			'timeout' => 25,
 			'headers' => array( 'Content-Type' => 'application/json' ),
-			'body' => wp_json_encode( array( 'text' => $text, 'business' => 'casa-viva', 'source' => 'operator-paste', 'locale' => 'es-CU' ) ),
+			'body' => wp_json_encode( array( 'rawVoucher' => $text, 'text' => $text, 'business' => 'casa-viva', 'source' => 'operator-paste', 'locale' => 'es-CU' ) ),
 		) );
 		if ( is_wp_error( $response ) ) {
 			return new WP_Error( 'cvd_nexo_unavailable', 'NEXO no está disponible. Conserva el vale y reintenta; no se creó ningún pedido.', array( 'status' => 503 ) );
