@@ -4,6 +4,7 @@ const source = fs.readFileSync('wordpress/casa-viva-dropship-core/assets/portal.
 const portal = fs.readFileSync('wordpress/casa-viva-dropship-core/includes/class-cvd-portal.php', 'utf8');
 const delivery = fs.readFileSync('wordpress/casa-viva-dropship-core/includes/class-cvd-delivery.php', 'utf8');
 const styles = fs.readFileSync('wordpress/casa-viva-dropship-core/assets/portal.css', 'utf8');
+const plugin = fs.readFileSync('wordpress/casa-viva-dropship-core/includes/class-cvd-plugin.php', 'utf8');
 const required = [
   'enhanceMessengerCenter',
   'cvd-messenger-center',
@@ -27,6 +28,12 @@ for (const marker of ['messenger_delivery_stage', '_cvd_delivery_incident_stage'
 }
 for (const marker of ['messenger_route', 'data-route-stop', 'Parada', 'Subir', 'Bajar', 'NEXO no optimiza esta ruta todavía', 'messenger_closeout', '_cvd_collection_amount_usd', '_cvd_collection_amount_cup']) {
   if (!portal.includes(marker)) throw new Error(`Falta contrato P0.4 canónico: ${marker}`);
+}
+for (const marker of ['ruta-cv', '[casa_viva_portal role="mensajero"]']) {
+  if (!plugin.includes(marker)) throw new Error(`Falta entrada pública canónica de ruta: ${marker}`);
+}
+for (const marker of ['messenger_whatsapp_message', '¿Está disponible para recibirlo?', 'CVD_Payment_Obligations::customer_collectible', 'Cobrar al cliente', 'No se infiere del total.']) {
+  if (!portal.includes(marker)) throw new Error(`Falta contrato field-ready del mensajero: ${marker}`);
 }
 for (const marker of ['initializeMessengerRoute', 'sessionStorage.setItem(storageKey', 'data-route-up', 'data-route-down']) {
   if (!source.includes(marker)) throw new Error(`Falta orden manual de sesión P0.4: ${marker}`);

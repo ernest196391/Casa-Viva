@@ -33,7 +33,7 @@ final class CVD_Shipping_Rates {
 	}
 
 	public static function quote_assets(): void {
-		if ( ! is_page( 'cotizar-mensajeria' ) ) { return; }
+		if ( ! is_page( array( 'cotizar-mensajeria', 'tarifas-mensajeria' ) ) ) { return; }
 		wp_enqueue_style( 'cvd-shipping-quote', CVD_URL . 'assets/shipping-quote.css', array(), CVD_VERSION );
 		wp_enqueue_script( 'cvd-shipping-quote', CVD_URL . 'assets/shipping-quote.js', array(), CVD_VERSION, true );
 		wp_localize_script( 'cvd-shipping-quote', 'cvdShippingQuote', array( 'endpoint' => rest_url( 'casa-viva/v1/shipping/quote' ), 'localities' => self::localities() ) );

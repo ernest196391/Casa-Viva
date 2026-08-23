@@ -46,7 +46,7 @@ final class CVD_Portal {
 	}
 
 	public static function assets(): void {
-		if ( is_page( array( 'gestores', 'area-gestoras', 'area-mensajeros', 'registro-gestora', 'registro-mensajero' ) ) ) {
+		if ( is_page( array( 'gestores', 'area-gestoras', 'area-mensajeros', 'ruta-cv', 'registro-gestora', 'registro-mensajero' ) ) ) {
 			wp_enqueue_style( 'cvd-portal', plugins_url( 'assets/portal.css', CVD_FILE ), array(), CVD_VERSION );
 			wp_enqueue_script( 'cvd-qr-code', CVD_URL . 'assets/qr-code.js', array(), CVD_VERSION, true );
 			wp_enqueue_script( 'cvd-portal', plugins_url( 'assets/portal.js', CVD_FILE ), array( 'cvd-qr-code' ), CVD_VERSION, true );
@@ -64,7 +64,7 @@ final class CVD_Portal {
 	public static function redirect_gestora_account(): void {
 		if ( ! is_user_logged_in() ) {
 			if ( is_page( 'area-gestoras' ) ) { wp_safe_redirect( add_query_arg( 'acceso', 'gestoras', home_url( '/mi-cuenta/' ) ) . '#cv-customer-login' ); exit; }
-			if ( is_page( 'area-mensajeros' ) ) { wp_safe_redirect( add_query_arg( 'acceso', 'mensajeros', home_url( '/mi-cuenta/' ) ) . '#cv-customer-login' ); exit; }
+			if ( is_page( array( 'area-mensajeros', 'ruta-cv' ) ) ) { wp_safe_redirect( add_query_arg( 'acceso', 'mensajeros', home_url( '/mi-cuenta/' ) ) . '#cv-customer-login' ); exit; }
 			return;
 		}
 		if ( ! function_exists( 'is_account_page' ) || ! is_account_page() ) { return; }
@@ -248,16 +248,21 @@ final class CVD_Portal {
 
 	/** Resumen de lectura del trabajo activo; no crea ni persiste estados. */
 	private static function messenger_today_summary( array $orders, array $offers ): string {
-		$products = 0;
-		$notes = 0;
-		$without_map = 0;
+		$products = 0; $notes = 0; $without_map = 0; $contacted = 0; $prepared = 0; $loaded = 0; $delivered = 0; $incidents = 0;
 		foreach ( $orders as $order ) {
 			foreach ( $order->get_items( 'line_item' ) as $item ) { $products += max( 1, (int) $item->get_quantity() ); }
 			if ( trim( (string) $order->get_customer_note() ) ) { $notes++; }
 			if ( ! $order->get_meta( '_cvd_map_url', true ) ) { $without_map++; }
+			if ( class_exists( 'CVD_Messenger_Contacts' ) && CVD_Messenger_Contacts::latest( $order ) ) { $contacted++; }
+			$operation = sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) );
+			$stage = self::messenger_delivery_stage( $order );
+			if ( in_array( $operation, array( 'ready', 'with_courier', 'delivered' ), true ) ) { $prepared++; }
+			if ( in_array( $stage, array( 'picked_up', 'handed_over', 'delivered', 'cash_returned', 'closed' ), true ) ) { $loaded++; }
+			if ( in_array( $stage, array( 'delivered', 'cash_returned', 'closed' ), true ) ) { $delivered++; }
+			if ( 'yes' === $order->get_meta( '_cvd_delivery_incident_active', true ) || 'incident' === CVD_Delivery::status( $order ) ) { $incidents++; }
 		}
 		$html = '<section class="cvd-messenger-today" id="hoy"><div class="cvd-messenger-section-head"><div><p class="cvd-kicker">Inicio · Hoy</p><h2>Tu jornada</h2><p>Resumen del trabajo asignado y las carreras disponibles ahora.</p></div><span class="cvd-live-badge">Datos de Casa Viva</span></div>';
-		$html .= '<div class="cvd-messenger-today-stats"><article><span>Entregas activas</span><strong>' . esc_html( count( $orders ) ) . '</strong></article><article><span>Productos activos</span><strong>' . esc_html( $products ) . '</strong></article><article><span>Carreras disponibles</span><strong>' . esc_html( count( $offers ) ) . '</strong></article></div>';
+		$html .= '<div class="cvd-messenger-today-stats"><article><span>Pedidos</span><strong>' . esc_html( count( $orders ) ) . '</strong></article><article><span>Contactados</span><strong>' . esc_html( $contacted ) . '</strong></article><article><span>Pendientes de contacto</span><strong>' . esc_html( max( 0, count( $orders ) - $contacted ) ) . '</strong></article><article><span>Preparados</span><strong>' . esc_html( $prepared ) . '</strong></article><article><span>Cargados</span><strong>' . esc_html( $loaded ) . '</strong></article><article><span>Entregados</span><strong>' . esc_html( $delivered ) . '</strong></article><article><span>Incidencias</span><strong>' . esc_html( $incidents ) . '</strong></article><article><span>Productos</span><strong>' . esc_html( $products ) . '</strong></article><article><span>Carreras disponibles</span><strong>' . esc_html( count( $offers ) ) . '</strong></article></div>';
 		if ( $notes || $without_map ) {
 			$html .= '<div class="cvd-messenger-alerts" aria-label="Alertas operativas">';
 			if ( $notes ) { $html .= '<p><b>' . esc_html( $notes ) . '</b> ' . esc_html( 1 === $notes ? 'pedido tiene una nota que debes revisar.' : 'pedidos tienen notas que debes revisar.' ) . '</p>'; }
@@ -265,6 +270,22 @@ final class CVD_Portal {
 			$html .= '</div>';
 		}
 		return $html . '</section>';
+	}
+
+	/** Mensaje de prellamada sin CI, dirección ni información financiera interna. */
+	private static function messenger_whatsapp_message( WC_Order $order ): string {
+		$name = trim( (string) $order->get_billing_first_name() );
+		if ( ! $name ) { $name = trim( (string) $order->get_formatted_billing_full_name() ); }
+		$items = array(); $quantity = 0;
+		foreach ( $order->get_items( 'line_item' ) as $item ) {
+			$count = max( 1, (int) $item->get_quantity() ); $quantity += $count;
+			$items[] = $count . ' × ' . wp_strip_all_tags( $item->get_name() );
+		}
+		$greeting = $name ? 'Hola ' . $name . ',' : 'Hola,';
+		$products = $items ? implode( ', ', $items ) : ( 1 === $quantity ? 'su producto' : 'su pedido' );
+		$schedule = self::messenger_schedule_label( $order );
+		$timing = $schedule ? ' La entrega está prevista ' . $schedule . '.' : '';
+		return $greeting . ' soy el mensajero que le llevará su pedido de Casa Viva: ' . $products . '.' . $timing . ' ¿Sería tan amable de enviarme su ubicación por WhatsApp para ir directamente? ¿Está disponible para recibirlo? La llamaré antes de llegar.';
 	}
 
 	/** Contactos de pedidos asignados. Los resultados quedan en lectura hasta tener un evento canónico. */
@@ -284,7 +305,7 @@ final class CVD_Portal {
 				$html .= '<div class="cvd-contact-phones">';
 				foreach ( $phones as $index => $phone ) { $html .= '<p><span>' . esc_html( 0 === $index ? 'Principal' : 'Alternativo' ) . '</span><strong>' . esc_html( $phone ) . '</strong></p>'; }
 				$html .= '</div><div class="cvd-contact-actions">';
-				foreach ( $phones as $index => $phone ) { $digits = preg_replace( '/\D+/', '', $phone ); if ( 0 === $index ) { $html .= '<a class="cvd-primary" href="https://wa.me/' . esc_attr( $digits ) . '?text=' . rawurlencode( 'Hola, soy el mensajero de Casa Viva. Te contacto por el pedido #' . $order->get_order_number() . '.' ) . '" target="_blank" rel="noopener">WhatsApp</a>'; } $html .= '<a class="cvd-secondary" href="tel:' . esc_attr( $phone ) . '">Llamar' . ( $index ? ' alternativo' : '' ) . '</a>'; }
+				foreach ( $phones as $index => $phone ) { $digits = preg_replace( '/\D+/', '', $phone ); if ( 0 === $index ) { $html .= '<a class="cvd-primary" href="https://wa.me/' . esc_attr( $digits ) . '?text=' . rawurlencode( self::messenger_whatsapp_message( $order ) ) . '" target="_blank" rel="noopener">WhatsApp</a>'; } $html .= '<a class="cvd-secondary" href="tel:' . esc_attr( $phone ) . '">Llamar' . ( $index ? ' alternativo' : '' ) . '</a>'; }
 				$html .= '</div>';
 			} elseif ( ! $contact_allowed ) { $html .= '<p class="cvd-contact-locked">Acepta el pedido para ver y usar los datos de contacto.</p>'; }
 			else { $html .= '<p class="cvd-contact-locked">Este pedido no tiene un teléfono disponible.</p>'; }
@@ -377,12 +398,16 @@ final class CVD_Portal {
 			$html .= '<article data-route-stop="' . esc_attr( $order->get_id() ) . '"><header><div><span class="cvd-route-position">Parada</span><strong>#' . esc_html( $order->get_order_number() ) . ' · ' . esc_html( CVD_Delivery::destination_zone( $order ) ?: 'Zona por confirmar' ) . '</strong></div><div class="cvd-route-order"><button type="button" data-route-up aria-label="Subir pedido ' . esc_attr( $order->get_order_number() ) . '">Subir</button><button type="button" data-route-down aria-label="Bajar pedido ' . esc_attr( $order->get_order_number() ) . '">Bajar</button></div></header>';
 			$html .= '<p class="cvd-route-address">' . ( $address ? wp_kses_post( $address ) : '<b>Dirección no registrada</b>' ) . '</p>' . ( $reference ? '<small><b>Referencia:</b> ' . esc_html( $reference ) . '</small>' : '<small>Referencia no registrada</small>' );
 			$html .= '<div class="cvd-route-items"><strong>Productos</strong><ul>'; foreach ( $order->get_items( 'line_item' ) as $item ) { $html .= '<li>' . esc_html( max( 1, (int) $item->get_quantity() ) . ' × ' . $item->get_name() ) . '</li>'; } $html .= '</ul></div>';
-			$html .= '<div class="cvd-delivery-money"><div><span>Pedido</span><strong>' . wp_kses_post( wc_price( $order->get_total(), array( 'currency' => $order->get_currency() ) ) ) . '</strong></div><div><span>Mensajería</span><strong>' . esc_html( $shipping_cup ? number_format_i18n( $shipping_cup, 0 ) . ' CUP' : 'No registrada' ) . '</strong></div></div>';
+			$html .= '<div class="cvd-delivery-money"><div><span>Pedido</span><strong>' . wp_kses_post( wc_price( $order->get_total(), array( 'currency' => $order->get_currency() ) ) ) . '</strong></div><div><span>Mensajería total</span><strong>' . esc_html( $shipping_cup ? number_format_i18n( $shipping_cup, 0 ) . ' CUP' : 'No registrada' ) . '</strong></div>';
+			$collectible = class_exists( 'CVD_Payment_Obligations' ) ? CVD_Payment_Obligations::customer_collectible( $order ) : array();
+			if ( $collectible ) { foreach ( $collectible as $obligation ) { $html .= '<div class="cvd-customer-collectible"><span>Cobrar al cliente</span><strong>' . esc_html( number_format_i18n( (float) $obligation['amount'], 2 ) . ' ' . $obligation['currency'] ) . '</strong><small>' . esc_html( ucfirst( $obligation['concept'] ) . ' · ' . $obligation['method'] ) . '</small></div>'; } }
+			else { $html .= '<div class="cvd-customer-collectible"><span>Cobrar al cliente</span><strong>Por confirmar</strong><small>No se infiere del total.</small></div>'; }
+			$html .= '</div>';
 			$schedule = self::messenger_schedule_label( $order ); $change = self::messenger_change_label( $order );
 			$html .= '<div class="cvd-route-window"><span>Fecha / horario</span><strong>' . esc_html( $schedule ?: 'Sin preferencia registrada' ) . '</strong></div>';
 			if ( $change ) { $html .= '<div class="cvd-delivery-note" role="note"><b>Vuelto confirmado</b><p>Llevar ' . esc_html( $change ) . ' de vuelto.</p></div>'; }
 			if ( $note ) { $html .= '<div class="cvd-delivery-note" role="note"><b>Vuelto, nota o restricción</b><p>' . esc_html( $note ) . '</p></div>'; }
-			$html .= '<div class="cvd-messenger-tools">'; if ( $phone ) { $digits = preg_replace( '/\D+/', '', $phone ); $html .= '<a class="cvd-secondary" href="tel:' . esc_attr( $phone ) . '">Llamar</a><a class="cvd-secondary" href="https://wa.me/' . esc_attr( $digits ) . '?text=' . rawurlencode( 'Hola, soy el mensajero de Casa Viva. Te contacto por el pedido #' . $order->get_order_number() . '.' ) . '" target="_blank" rel="noopener">WhatsApp</a>'; } if ( $map_url ) { $html .= '<a class="cvd-secondary" href="' . $map_url . '" target="_blank" rel="noopener">Abrir mapa</a>'; } $html .= '</div>';
+			$html .= '<div class="cvd-messenger-tools">'; if ( $phone ) { $digits = preg_replace( '/\D+/', '', $phone ); $html .= '<a class="cvd-secondary" href="tel:' . esc_attr( $phone ) . '">Llamar</a><a class="cvd-secondary" href="https://wa.me/' . esc_attr( $digits ) . '?text=' . rawurlencode( self::messenger_whatsapp_message( $order ) ) . '" target="_blank" rel="noopener">WhatsApp</a>'; } if ( $map_url ) { $html .= '<a class="cvd-secondary" href="' . $map_url . '" target="_blank" rel="noopener">Abrir mapa</a>'; } $html .= '</div>';
 			if ( ! $phone || ! $map_url ) { $html .= '<small class="cvd-domain-gap">' . esc_html( ! $phone && ! $map_url ? 'Teléfono y mapa no registrados.' : ( ! $phone ? 'Teléfono no registrado.' : 'Mapa no registrado.' ) ) . '</small>'; }
 			$html .= '</article>';
 		}
@@ -433,7 +458,7 @@ final class CVD_Portal {
 			$map_url = esc_url( (string) $order->get_meta( '_cvd_map_url', true ) );
 			if ( in_array( $status, array( 'accepted', 'to_store', 'picked_up', 'handed_over' ), true ) ) {
 				$html .= '<div class="cvd-messenger-tools">';
-				if ( $phone ) { $digits = preg_replace( '/\D+/', '', $phone ); $html .= '<a class="cvd-secondary" href="https://wa.me/' . esc_attr( $digits ) . '" target="_blank" rel="noopener">WhatsApp</a><a class="cvd-secondary" href="tel:' . esc_attr( $phone ) . '">Llamar</a>'; }
+				if ( $phone ) { $digits = preg_replace( '/\D+/', '', $phone ); $html .= '<a class="cvd-secondary" href="https://wa.me/' . esc_attr( $digits ) . '?text=' . rawurlencode( self::messenger_whatsapp_message( $order ) ) . '" target="_blank" rel="noopener">WhatsApp</a><a class="cvd-secondary" href="tel:' . esc_attr( $phone ) . '">Llamar</a>'; }
 				if ( $map_url ) { $html .= '<a class="cvd-secondary cvd-map-action" href="' . $map_url . '" target="_blank" rel="noopener">Navegar</a>'; }
 				$html .= '</div>';
 			}
