@@ -139,6 +139,7 @@ jobs:
           cd "$WP_PATH"
           wp plugin is-installed "$PLUGIN_SLUG"
           wp plugin activate "$PLUGIN_SLUG" --quiet
+          wp eval 'CVD_Plugin::maybe_upgrade();'
           wp plugin status "$PLUGIN_SLUG"
           wp plugin get "$PLUGIN_SLUG" --field=version
 
