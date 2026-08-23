@@ -7,6 +7,9 @@ on:
         description: SHA completo de main que se desea desplegar
         required: true
         type: string
+  push:
+    branches: [main]
+    paths: [.github/deploy-mvp-approved]
 
 permissions:
   contents: read
@@ -15,6 +18,7 @@ env:
   WP_PATH: /home/u824654880/domains/casavivadecuba.com/public_html
   PLUGIN_SLUG: casa-viva-dropship-core
   PROTOTYPE_URL: https://casavivadecuba.com
+  DEPLOY_SHA: ${{ inputs.expected_sha || github.sha }}
 
 jobs:
   deploy-prototype:
@@ -24,7 +28,7 @@ jobs:
       - name: Descargar SHA solicitado
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.expected_sha }}
+          ref: ${{ env.DEPLOY_SHA }}
           fetch-depth: 0
 
       - name: Verificar que el SHA pertenece a main
@@ -32,7 +36,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin main --depth=200
-          git merge-base --is-ancestor "${{ inputs.expected_sha }}" origin/main
+          git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
 
       - name: Verificar CI post-merge exitoso
         shell: bash
@@ -40,10 +44,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          sha="${{ inputs.expected_sha }}"
-          runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${sha}&branch=main&event=push&per_page=50")"
-          successful="$(jq -r '[.workflow_runs[] | select(.name == "Validar aplicación" and .conclusion == "success")] | length' <<<"$runs")"
-          test "$successful" -ge 1
+          for attempt in {1..40}; do
+            runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${DEPLOY_SHA}&branch=main&event=push&per_page=50")"
+            successful="$(jq -r '[.workflow_runs[] | select(.name == "Validar aplicación" and .conclusion == "success")] | length' <<<"$runs")"
+            test "$successful" -ge 1 && exit 0
+            sleep 15
+          done
+          echo "No existe CI post-merge exitoso para $DEPLOY_SHA" >&2
+          exit 1
 
       - name: Construir release reproducible
         shell: bash
@@ -91,7 +99,7 @@ jobs:
           SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
           SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
           SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
-          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          EXPECTED_SHA: ${{ env.DEPLOY_SHA }}
         run: |
           set -euo pipefail
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
@@ -147,7 +155,7 @@ jobs:
         run: |
           set -euo pipefail
           deployed="$(ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cat '$WP_PATH/wp-content/plugins/$PLUGIN_SLUG/.cvd-deployed-sha'")"
-          test "$deployed" = "${{ inputs.expected_sha }}"
+          test "$deployed" = "$DEPLOY_SHA"
 
       - name: Ejecutar smoke tests contra prototipo
         shell: bash
@@ -160,7 +168,7 @@ jobs:
           SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
           SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
           SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
-          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          EXPECTED_SHA: ${{ env.DEPLOY_SHA }}
         run: |
           set -euo pipefail
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
@@ -186,7 +194,7 @@ jobs:
           {
             echo "## Deploy prototipo Casa Viva"
             echo "- URL: $PROTOTYPE_URL"
-            echo "- SHA solicitado: ${{ inputs.expected_sha }}"
+            echo "- SHA solicitado: $DEPLOY_SHA"
             echo "- Resultado: ${{ job.status }}"
             echo "- Unidad desplegada: $PLUGIN_SLUG"
             echo "- Rollback automático: habilitado si falla verificación o smoke"
