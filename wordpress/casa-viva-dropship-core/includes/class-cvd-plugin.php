@@ -435,6 +435,7 @@ final class CVD_Plugin {
 			'area-gestoras'     => array( 'Gestoras · Acceso', '[casa_viva_portal role="gestora"]' ),
 			'registro-mensajero'=> array( 'Registro de mensajeros', '[casa_viva_registro role="mensajero"]' ),
 			'area-mensajeros'   => array( 'Área de mensajeros', '[casa_viva_portal role="mensajero"]' ),
+			'ruta-cv'           => array( 'Ruta Casa Viva', '[casa_viva_portal role="mensajero"]' ),
 			'gestores'          => array( 'Gestoras', '[casa_viva_gestores]' ),
 			'casa-viva-app'     => array( 'Casa Viva App', '[casa_viva_app]' ),
 			'centro-operaciones'=> array( 'Centro de operaciones', '[casa_viva_operations]' ),
@@ -446,6 +447,7 @@ final class CVD_Plugin {
 			'seguimiento'       => array( 'Seguimiento de pedido', '[casa_viva_order_tracking]' ),
 			'interpretar-vale'   => array( 'Interpretar vale con NEXO', '[casa_viva_voucher_intake]' ),
 			'cotizar-mensajeria' => array( 'Cotizar mensajería', '[casa_viva_shipping_quote]' ),
+			'tarifas-mensajeria' => array( 'Tarifas de mensajería', '[casa_viva_shipping_quote]' ),
 		);
 		foreach ( $pages as $slug => $page ) {
 			$existing = get_page_by_path( $slug );
