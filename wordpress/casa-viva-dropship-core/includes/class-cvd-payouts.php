@@ -34,6 +34,7 @@ final class CVD_Payouts {
 			<div class="cvd-payout-balance">
 				<?php if ( $available ) : foreach ( $available as $currency => $amount ) : ?><article><span>Disponible</span><strong><?php echo wp_kses_post( wc_price( $amount, array( 'currency' => $currency ) ) ); ?></strong></article><?php endforeach; else : ?><article><span>Disponible</span><strong>0</strong><small>No hay comisiones aprobadas sin liquidar.</small></article><?php endif; ?>
 			</div>
+			<?php $debits = class_exists( 'CVD_Payment_Obligations' ) ? CVD_Payment_Obligations::open_debits_by_currency( $user->ID ) : array(); if ( $debits ) : ?><div class="cvd-notice" role="status"><strong>Descuentos pendientes</strong><?php foreach ( $debits as $currency => $amount ) : ?><br><?php echo esc_html( wc_format_decimal( $amount, 2 ) . ' ' . $currency ); ?><?php endforeach; ?><br><small>Se compensan solo con comisiones de la misma moneda; no se aplica conversión.</small></div><?php endif; ?>
 			<form class="cvd-payout-profile" method="post" enctype="multipart/form-data">
 				<h3>Destino del pago</h3>
 				<label>Método<select name="cvd_payout_method" required><option value="">Selecciona</option><?php foreach ( array( 'transfermovil' => 'Transfermóvil', 'transferencia' => 'Transferencia bancaria', 'zelle' => 'Zelle', 'tropipay' => 'TropiPay', 'cash' => 'Efectivo', 'otro' => 'Otro' ) as $value => $label ) : ?><option value="<?php echo esc_attr( $value ); ?>" <?php selected( $method, $value ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></label>
@@ -78,10 +79,12 @@ final class CVD_Payouts {
 		$payouts = self::all_payouts();
 		$totals = array( 'requested' => array(), 'approved' => array(), 'paid' => array() );
 		foreach ( $payouts as $payout ) { if ( isset( $totals[ $payout['status'] ] ) ) { $currency = $payout['currency']; $totals[ $payout['status'] ][ $currency ] = ( $totals[ $payout['status'] ][ $currency ] ?? 0 ) + (float) $payout['amount']; } }
+		$open_debits = self::open_debits_admin();
 		ob_start(); ?>
 		<section class="cvd-accounting-app"><nav><a href="<?php echo esc_url( home_url( '/centro-operaciones/' ) ); ?>">Operaciones</a><a href="<?php echo esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ); ?>">Cerrar sesión</a></nav><header><p>Casa Viva · Administración</p><h1>Contabilidad</h1><span>Solicitudes, liquidaciones y trazabilidad de comisiones.</span></header>
 		<?php if ( $notice ) : ?><div class="cvd-accounting-notice"><?php echo esc_html( $notice ); ?></div><?php endif; ?>
 		<div class="cvd-accounting-summary"><article><span>Solicitado</span><strong><?php echo wp_kses_post( self::format_totals( $totals['requested'] ) ); ?></strong></article><article><span>Aprobado</span><strong><?php echo wp_kses_post( self::format_totals( $totals['approved'] ) ); ?></strong></article><article><span>Pagado</span><strong><?php echo wp_kses_post( self::format_totals( $totals['paid'] ) ); ?></strong></article></div>
+		<?php if ( $open_debits ) : ?><section class="cvd-panel"><h2>Descuentos de comisión pendientes</h2><p>Obligaciones internas por moneda. No se convierten ni se restan de otra moneda.</p><?php foreach ( $open_debits as $debit ) : $owner = get_userdata( absint( $debit['owner_user_id'] ) ); ?><article><strong><?php echo esc_html( wc_format_decimal( $debit['amount'], 2 ) . ' ' . $debit['currency'] ); ?></strong><span> · <?php echo esc_html( $owner ? $owner->display_name : 'Gestora' ); ?> · Pedido #<?php echo esc_html( $debit['order_id'] ); ?></span><small> · <?php echo esc_html( $debit['status'] ); ?></small></article><?php endforeach; ?></section><?php endif; ?>
 		<?php echo self::render_history( $payouts, true ); ?></section>
 		<?php return (string) ob_get_clean();
 	}
@@ -120,7 +123,11 @@ final class CVD_Payouts {
 			if ( ! $available ) { throw new RuntimeException( 'No hay comisiones aprobadas disponibles.' ); }
 			$created = 0;
 			foreach ( $available as $currency => $orders ) {
-				$total = array_sum( array_map( static fn( WC_Order $order ): float => (float) $order->get_meta( '_cvd_commission_amount', true ), $orders ) );
+				$gross = array_sum( array_map( static fn( WC_Order $order ): float => (float) $order->get_meta( '_cvd_commission_amount', true ), $orders ) );
+				$debit_table = $wpdb->prefix . 'cvd_owner_financial_ledger';
+				$debits = (float) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(amount),0) FROM {$debit_table} WHERE owner_user_id=%d AND currency=%s AND entry_type='commission_deduction' AND status='open' FOR UPDATE", $owner_id, $currency ) );
+				$total = $gross - $debits;
+				if ( $total <= 0 ) { continue; }
 				$inserted = $wpdb->insert(
 					$wpdb->prefix . 'cvd_payouts',
 					array(
@@ -134,6 +141,7 @@ final class CVD_Payouts {
 				);
 				$payout_id = (int) $wpdb->insert_id;
 				if ( 1 !== $inserted || ! $payout_id ) { throw new RuntimeException( 'No se pudo crear la liquidación.' ); }
+				if ( $debits > 0 ) { $reserved = $wpdb->query( $wpdb->prepare( "UPDATE {$debit_table} SET status='reserved',payout_id=%d WHERE owner_user_id=%d AND currency=%s AND entry_type='commission_deduction' AND status='open'", $payout_id, $owner_id, $currency ) ); if ( false === $reserved ) { throw new RuntimeException( 'No se pudieron reservar los descuentos de comisión.' ); } }
 				foreach ( $orders as $order ) {
 					$item_inserted = $wpdb->insert(
 						$wpdb->prefix . 'cvd_payout_items',
@@ -157,6 +165,7 @@ final class CVD_Payouts {
 				if ( ! self::event( $payout_id, 'requested', '', 'requested' ) ) { throw new RuntimeException( 'No se pudo registrar el historial de la liquidación.' ); }
 				$created++;
 			}
+			if ( ! $created ) { throw new RuntimeException( 'Las comisiones disponibles no superan los descuentos pendientes de la misma moneda.' ); }
 			if ( false === $wpdb->query( 'COMMIT' ) ) { throw new RuntimeException( 'No se pudo confirmar la liquidación.' ); }
 			wp_mail( get_option( 'cvd_notification_email', get_option( 'admin_email' ) ), 'Nueva solicitud de pago Casa Viva', 'Una gestora solicitó una liquidación. Revisar: ' . home_url( '/contabilidad/' ) );
 			return $created;
@@ -179,7 +188,7 @@ final class CVD_Payouts {
 	}
 
 	private static function available_by_currency( int $owner_id ): array {
-		$result = array(); foreach ( self::eligible_orders( $owner_id ) as $currency => $orders ) { $result[ $currency ] = array_sum( array_map( static fn( WC_Order $o ): float => (float) $o->get_meta( '_cvd_commission_amount', true ), $orders ) ); } return $result;
+		$result = array(); $debits = class_exists( 'CVD_Payment_Obligations' ) ? CVD_Payment_Obligations::open_debits_by_currency( $owner_id ) : array(); foreach ( self::eligible_orders( $owner_id ) as $currency => $orders ) { $net = array_sum( array_map( static fn( WC_Order $o ): float => (float) $o->get_meta( '_cvd_commission_amount', true ), $orders ) ) - ( $debits[ $currency ] ?? 0 ); if ( $net > 0 ) { $result[ $currency ] = $net; } } return $result;
 	}
 
 	/**
@@ -249,6 +258,9 @@ final class CVD_Payouts {
 			if ( ! self::event( $payout_id, $action, $payout['status'], $next, array( 'reference' => $reference, 'proof' => $proof ) ) ) {
 				throw new RuntimeException( 'No se pudo registrar el historial de la liquidación.' );
 			}
+			$ledger_table = $wpdb->prefix . 'cvd_owner_financial_ledger';
+			if ( 'rejected' === $next ) { if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$ledger_table} SET status='open',payout_id=0 WHERE payout_id=%d AND status='reserved'", $payout_id ) ) ) { throw new RuntimeException( 'No se pudieron liberar los descuentos reservados.' ); } }
+			if ( 'paid' === $next ) { if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$ledger_table} SET status='settled' WHERE payout_id=%d AND status='reserved'", $payout_id ) ) ) { throw new RuntimeException( 'No se pudieron conciliar los descuentos reservados.' ); } }
 			if ( false === $wpdb->query( 'COMMIT' ) ) { throw new RuntimeException( 'No se pudo confirmar la actualización.' ); }
 		} catch ( InvalidArgumentException $error ) {
 			$wpdb->query( 'ROLLBACK' );
@@ -283,6 +295,7 @@ final class CVD_Payouts {
 
 	private static function payouts_for_owner( int $owner_id ): array { global $wpdb; return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}cvd_payouts WHERE owner_user_id=%d ORDER BY id DESC LIMIT 50", $owner_id ), ARRAY_A ); }
 	private static function all_payouts(): array { global $wpdb; return $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}cvd_payouts ORDER BY id DESC LIMIT 200", ARRAY_A ); }
+	private static function open_debits_admin(): array { global $wpdb; return $wpdb->get_results( "SELECT owner_user_id,order_id,amount,currency,status FROM {$wpdb->prefix}cvd_owner_financial_ledger WHERE entry_type='commission_deduction' AND status IN ('open','reserved') ORDER BY id DESC LIMIT 200", ARRAY_A ); }
 	private static function format_totals( array $totals ): string { if ( ! $totals ) { return '0'; } $parts = array(); foreach ( $totals as $currency => $amount ) { $parts[] = wc_price( $amount, array( 'currency' => $currency ) ); } return implode( '<br>', $parts ); }
 
 	private static function render_history( array $payouts, bool $admin ): string {

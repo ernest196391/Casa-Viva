@@ -31,6 +31,30 @@ final class CVD_Plugin {
 		$messenger_settlements_table = $wpdb->prefix . 'cvd_messenger_settlements';
 		$messenger_settlement_items_table = $wpdb->prefix . 'cvd_messenger_settlement_items';
 		$order_events_table = $wpdb->prefix . 'cvd_order_events';
+		$owner_financial_ledger_table = $wpdb->prefix . 'cvd_owner_financial_ledger';
+
+		dbDelta(
+			"CREATE TABLE {$owner_financial_ledger_table} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				entry_uuid varchar(64) NOT NULL,
+				owner_user_id bigint(20) unsigned NOT NULL,
+				order_id bigint(20) unsigned NOT NULL,
+				obligation_id varchar(64) NOT NULL,
+				entry_type varchar(32) NOT NULL,
+				amount decimal(18,4) NOT NULL DEFAULT 0,
+				currency varchar(8) NOT NULL,
+				status varchar(24) NOT NULL DEFAULT 'open',
+				payout_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				created_at datetime NOT NULL,
+				created_by bigint(20) unsigned NOT NULL DEFAULT 0,
+				metadata longtext NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY entry_uuid (entry_uuid),
+				UNIQUE KEY order_obligation_entry (order_id,obligation_id,entry_type),
+				KEY owner_status_currency (owner_user_id,status,currency),
+				KEY payout_id (payout_id)
+			) {$charset_collate};"
+		);
 
 		dbDelta(
 			"CREATE TABLE {$order_events_table} (
@@ -448,6 +472,7 @@ final class CVD_Plugin {
 		require_once CVD_DIR . 'includes/class-cvd-canonical-order-reader.php';
 		require_once CVD_DIR . 'includes/class-cvd-order-events.php';
 		require_once CVD_DIR . 'includes/class-cvd-order-transition-service.php';
+		require_once CVD_DIR . 'includes/class-cvd-payment-obligations.php';
 		require_once CVD_DIR . 'includes/class-cvd-order-center.php';
 		require_once CVD_DIR . 'includes/class-cvd-commissions.php';
 		require_once CVD_DIR . 'includes/class-cvd-admin.php';
@@ -476,6 +501,7 @@ final class CVD_Plugin {
 
 		CVD_Attribution::register();
 		CVD_Order_Events::register();
+		CVD_Payment_Obligations::register();
 		CVD_Order_Center::register();
 		CVD_Commissions::register();
 		CVD_Admin::register();
