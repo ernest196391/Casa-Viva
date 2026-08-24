@@ -1,0 +1,140 @@
+name: Deploy hotfix 3.10.2
+
+on:
+  push:
+    branches: [deploy/hotfix-3-10-2]
+    paths: [.github/workflows/deploy-hotfix-3-10-2.yml]
+
+permissions:
+  contents: read
+
+env:
+  WP_PATH: /home/u824654880/domains/casavivadecuba.com/public_html
+  PLUGIN_SLUG: casa-viva-dropship-core
+  PROTOTYPE_URL: https://casavivadecuba.com
+  DEPLOY_SHA: 38a2a07a569309e019bea9a8d2cac3e5772b392c
+
+jobs:
+  deploy-hotfix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Descargar SHA validado
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          fetch-depth: 0
+
+      - name: Construir release reproducible
+        shell: bash
+        env:
+          GITHUB_REF_NAME: main
+        run: bash scripts/build-release-candidate.sh release
+
+      - name: Verificar checksum local
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release
+          sha256sum -c SHA256SUMS
+
+      - name: Preparar SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '\n' >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Copiar release al servidor
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          archive="$(jq -r '.archive' release/release-manifest.json)"
+          scp -P "$SSH_PORT" "release/$archive" release/release-manifest.json release/SHA256SUMS "$SSH_USER@$SSH_HOST:/tmp/"
+          echo "DEPLOY_ATTEMPTED=1" >> "$GITHUB_ENV"
+
+      - name: Desplegar plugin de forma controlada
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "WP_PATH='$WP_PATH' PLUGIN_SLUG='$PLUGIN_SLUG' EXPECTED_SHA='$DEPLOY_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+          manifest_get() {
+            key="$1"
+            php -r '$m=json_decode(file_get_contents("/tmp/release-manifest.json"), true, 512, JSON_THROW_ON_ERROR); $k=$argv[1]; echo $m[$k];' "$key"
+          }
+          archive="$(manifest_get archive)"
+          archive_sha="$(manifest_get archive_sha256)"
+          source_sha="$(manifest_get source_sha)"
+          test "$source_sha" = "$EXPECTED_SHA"
+          printf '%s  %s\n' "$archive_sha" "/tmp/$archive" | sha256sum -c -
+          plugins_dir="$WP_PATH/wp-content/plugins"
+          current="$plugins_dir/$PLUGIN_SLUG"
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          backup="$plugins_dir/${PLUGIN_SLUG}.predeploy-${stamp}"
+          temp="$plugins_dir/.${PLUGIN_SLUG}.deploy-${stamp}"
+          marker="/tmp/cvd-hotfix-backup-${EXPECTED_SHA}.txt"
+          rm -rf "$temp"
+          mkdir -p "$temp"
+          unzip -q "/tmp/$archive" -d "$temp"
+          test -f "$temp/$PLUGIN_SLUG/casa-viva-dropship-core.php"
+          : > "$marker"
+          if [ -d "$current" ]; then
+            mv "$current" "$backup"
+            printf '%s\n' "$backup" > "$marker"
+          fi
+          mv "$temp/$PLUGIN_SLUG" "$current"
+          rmdir "$temp" 2>/dev/null || true
+          cd "$WP_PATH"
+          wp plugin activate "$PLUGIN_SLUG" --quiet
+          wp eval 'CVD_Plugin::maybe_upgrade();'
+          version="$(wp plugin get "$PLUGIN_SLUG" --field=version)"
+          test "$version" = "3.10.2"
+          printf '%s\n' "$EXPECTED_SHA" > "$current/.cvd-deployed-sha"
+          REMOTE
+
+      - name: Smoke real
+        shell: bash
+        run: bash scripts/smoke-staging.sh "$PROTOTYPE_URL"
+
+      - name: Rollback automático si falla
+        if: failure() && env.DEPLOY_ATTEMPTED == '1'
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "WP_PATH='$WP_PATH' PLUGIN_SLUG='$PLUGIN_SLUG' EXPECTED_SHA='$DEPLOY_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+          current="$WP_PATH/wp-content/plugins/$PLUGIN_SLUG"
+          marker="/tmp/cvd-hotfix-backup-${EXPECTED_SHA}.txt"
+          [ -f "$marker" ] || exit 0
+          backup="$(cat "$marker")"
+          [ -n "$backup" ] || exit 0
+          [ -d "$backup" ] || exit 0
+          rm -rf "$current"
+          mv "$backup" "$current"
+          cd "$WP_PATH"
+          wp plugin activate "$PLUGIN_SLUG" --quiet || true
+          rm -f "$marker"
+          REMOTE
