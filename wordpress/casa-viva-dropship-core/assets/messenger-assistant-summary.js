@@ -18,10 +18,7 @@
     const input = form?.querySelector('input');
     if (!center || !assistant || !answer || !form || !input) return;
 
-    let lastQuestion = '';
-    form.addEventListener('submit', () => { lastQuestion = String(input.value || '').trim(); });
-
-    const isOverviewQuestion = () => /(?:qu[eé]\s+hay\s+de\s+nuevo|resumen|c[oó]mo\s+va|estado\s+de\s+(?:hoy|la\s+jornada)|ahora\s+mismo)/i.test(lastQuestion);
+    const overviewPattern = /(?:qu[eé]\s+hay\s+de\s+nuevo|resumen|c[oó]mo\s+va|estado\s+de\s+(?:hoy|la\s+jornada)|ahora\s+mismo)/i;
 
     const readStat = (needle) => {
       const cards = Array.from(center.querySelectorAll('.cvd-messenger-today-stats article'));
@@ -30,9 +27,6 @@
     };
 
     const renderOverview = () => {
-      if (!isOverviewQuestion()) return;
-      if (!/falta\s+informaci[oó]n/i.test(clean(answer))) return;
-
       const orders = readStat('pedido');
       const pending = readStat('pendiente');
       const delivered = readStat('entregado');
@@ -55,10 +49,17 @@
       addLine(overview, 'span', mapAlert);
       addLine(overview, 'span', incident);
       addLine(overview, 'b', nextAction);
+      answer.hidden = false;
       answer.replaceChildren(overview);
     };
 
-    new MutationObserver(renderOverview).observe(answer, { childList: true, subtree: true, characterData: true });
+    form.addEventListener('submit', (event) => {
+      const question = String(input.value || '').trim();
+      if (!overviewPattern.test(question)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      renderOverview();
+    }, true);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
