@@ -86,7 +86,7 @@ test('Más compacta contactos, preparación y asistente bajo demanda', async ({ 
   }
   const assistant = page.locator('#asistente');
   await expect(assistant).toBeHidden();
-  await page.getByRole('link', { name: 'Asistente', exact: true }).click();
+  await page.locator('[data-cvd-open-assistant]').first().click();
   await expect(assistant).toBeVisible();
   await assistant.locator('[data-assistant-question="missing"]').click();
   await expect(page.locator('.cvd-assistant-answer')).toBeVisible();
