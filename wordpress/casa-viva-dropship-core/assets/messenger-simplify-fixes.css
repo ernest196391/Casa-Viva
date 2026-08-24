@@ -1,0 +1,12 @@
+.cvd-p03 .cvd-operational-assistant.is-collapsed:not(.is-open){display:none!important}
+
+@media(max-width:640px){
+  html,body{max-width:100%;overflow-x:hidden}
+  body:has(.cvd-messenger-center.cvd-p03){width:100%;max-width:100vw;overflow-x:hidden}
+  .cvd-messenger-center.cvd-p03{box-sizing:border-box;max-width:100%;overflow-x:hidden;width:100%}
+  .cvd-messenger-center.cvd-p03 *{box-sizing:border-box;min-width:0}
+  .cvd-p03 .cvd-contact-outcomes,.cvd-p03 .cvd-route-list,.cvd-p03 .cvd-messenger-tools,.cvd-p03 .cvd-delivery-money{max-width:100%}
+  .cvd-p03 input,.cvd-p03 textarea,.cvd-p03 select,.cvd-p03 button,.cvd-p03 a{max-width:100%}
+  .cvd-p03 .cvd-messenger-nav{box-sizing:border-box;max-width:100vw;width:100%}
+  .cvd-p03 p,.cvd-p03 strong,.cvd-p03 small,.cvd-p03 span{overflow-wrap:anywhere}
+}

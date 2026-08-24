@@ -20,6 +20,7 @@ async function openCenter(page) {
   const response = await page.goto(`${baseURL}/?page_id=${pageId}`, { waitUntil: 'domcontentloaded' });
   expect(response && response.ok()).toBeTruthy();
   await expect(page.locator(`[data-delivery-id="${orderId}"]`)).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.cvd-messenger-center.cvd-p03')).toBeVisible({ timeout: 15000 });
 }
 
 test.afterEach(async ({ page }, testInfo) => {
@@ -31,6 +32,7 @@ test.afterEach(async ({ page }, testInfo) => {
     scrollWidth: document.documentElement.scrollWidth,
     title: document.querySelector('#entregas h2')?.textContent || '',
     shellClass: document.querySelector('.cvd-dashboard.cvd-app-shell')?.className || '',
+    nav: Array.from(document.querySelectorAll('.cvd-messenger-nav a')).map((a) => a.textContent.trim()),
     cards: Array.from(document.querySelectorAll('[data-delivery-id]')).map((card) => ({
       id: card.getAttribute('data-delivery-id'),
       status: card.getAttribute('data-delivery-status'),
@@ -65,13 +67,43 @@ test('mensajero ve una entrega activa con acciones operativas directas', async (
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width + 1);
 });
 
-test('mensajero ve Subir vale y un asistente operativo de solo lectura', async ({ page }) => {
+test('mensajero recibe una jerarquía móvil simple con CTA, siguiente tarea y cuatro destinos', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await login(page); await openCenter(page);
-  await expect(page.getByRole('link', { name: /Subir vale/i })).toBeVisible();
-  await page.locator('[data-assistant-question="missing"]').click();
+
+  await expect(page.getByRole('link', { name: /Añadir vale/i })).toBeVisible();
+  await expect(page.locator('.cvd-next-task')).toBeVisible();
+  await expect(page.locator('.cvd-messenger-nav a')).toHaveCount(4);
+  await expect(page.locator('.cvd-messenger-nav')).toContainText('Hoy');
+  await expect(page.locator('.cvd-messenger-nav')).toContainText('Ruta');
+  await expect(page.locator('.cvd-messenger-nav')).toContainText('Dinero');
+  await expect(page.locator('.cvd-messenger-nav')).toContainText('Más');
+
+  const layout = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth }));
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width + 1);
+});
+
+test('mensajero abre asistente contextual bajo demanda sin exponer metadatos internos', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await login(page); await openCenter(page);
+
+  const assistant = page.locator('#asistente');
+  await expect(assistant).toBeHidden();
+  await page.getByRole('link', { name: 'Asistente', exact: true }).click();
+  await expect(assistant).toBeVisible();
+  await expect(assistant.locator('[data-assistant-question="missing"]')).toContainText('Qué falta');
+  await assistant.locator('[data-assistant-question="missing"]').click();
   await expect(page.locator('.cvd-assistant-answer')).toBeVisible();
   await expect(page.locator('.cvd-assistant-answer p')).not.toHaveText('');
   await expect(page.locator('#preparar')).not.toContainText('_reduced_stock');
   await expect(page.locator('#preparar')).not.toContainText('_cvd_stock_reduction_sequence');
+});
+
+test('mensajero mantiene jerarquía y ancho correcto en 414x896', async ({ page }) => {
+  await page.setViewportSize({ width: 414, height: 896 });
+  await login(page); await openCenter(page);
+  await expect(page.locator('.cvd-next-task')).toBeVisible();
+  await expect(page.locator('.cvd-messenger-nav a')).toHaveCount(4);
+  const layout = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth }));
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width + 1);
 });
