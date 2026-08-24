@@ -1,0 +1,42 @@
+body:has(.cvd-premium-v2) .wp-block-post-title,
+body:has(.cvd-premium-v2) .entry-title{display:none!important}
+
+.cvd-premium-v2 .cvd-messenger-alerts[hidden],
+.cvd-premium-v2 #liquidaciones[hidden]{display:none!important}
+
+.cvd-premium-v2 .cvd-embedded-delivery{
+  border:0!important;
+  border-top:1px solid var(--cvd-premium-line)!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  margin:12px 0 0!important;
+  padding:12px 0 0!important;
+}
+.cvd-premium-v2 .cvd-embedded-delivery>header{
+  background:transparent!important;
+  color:var(--cvd-premium-ink)!important;
+  border-radius:0!important;
+  padding:0 0 10px!important;
+}
+.cvd-premium-v2 .cvd-embedded-delivery>header .cvd-kicker,
+.cvd-premium-v2 .cvd-embedded-delivery>header h3,
+.cvd-premium-v2 .cvd-embedded-delivery>header p{display:none!important}
+.cvd-premium-v2 .cvd-embedded-delivery>header .cvd-badge{margin-left:auto}
+.cvd-premium-v2 .cvd-embedded-delivery .cvd-delivery-body{padding:0!important}
+.cvd-premium-v2 .cvd-embedded-delivery .cvd-delivery-body>section{margin:8px 0!important;padding:10px!important}
+.cvd-premium-v2 .cvd-embedded-delivery footer{padding:8px 0 0!important}
+
+.cvd-premium-v2 .cvd-assistant-overview{display:grid;gap:7px}
+.cvd-premium-v2 .cvd-assistant-overview strong{font-size:16px}
+.cvd-premium-v2 .cvd-assistant-overview span{font-size:13px;line-height:1.4}
+.cvd-premium-v2 .cvd-assistant-overview b{font-size:13px;color:var(--cvd-premium-green)}
+
+@media(max-width:640px){
+  body:has(.cvd-premium-v2) .wp-block-post-content{margin-top:0!important}
+  .cvd-premium-v2 .cvd-embedded-delivery .cvd-delivery-actions,
+  .cvd-premium-v2 .cvd-embedded-delivery .cvd-messenger-tools{gap:6px!important}
+  .cvd-premium-v2 .cvd-embedded-delivery input,
+  .cvd-premium-v2 .cvd-embedded-delivery select,
+  .cvd-premium-v2 .cvd-embedded-delivery button,
+  .cvd-premium-v2 .cvd-embedded-delivery a{min-height:40px}
+}
