@@ -38,6 +38,19 @@ final class CVD_Messenger_Simplification {
 			true
 		);
 
+		// La lista de "Entrega activa" y la lista de Ruta son superficies distintas.
+		// La simplificación original marcaba solo las paradas de Ruta; por eso la
+		// tarjeta activa podía quedar sin jerarquía visual. Marcamos la tarjeta que
+		// realmente ofrece "Navegar" (fallback: la primera) después de que la capa
+		// de simplificación haya terminado de preparar el DOM.
+		if ( is_page( array( 'area-mensajeros', 'ruta-cv' ) ) ) {
+			wp_add_inline_script(
+				'cvd-messenger-simplify',
+				'document.addEventListener("DOMContentLoaded",function(){var c=document.querySelector(".cvd-messenger-center");if(!c)return;var cards=Array.prototype.slice.call(c.querySelectorAll("[data-delivery-id]"));if(!cards.length)return;var current=cards.find(function(card){return Array.prototype.slice.call(card.querySelectorAll("a")).some(function(a){return (a.textContent||"").trim()==="Navegar";});})||cards[0];cards.forEach(function(card){card.classList.toggle("is-current",card===current);});});',
+				'after'
+			);
+		}
+
 		// Estabilidad del piloto: portal.js inicia pollOffers() inmediatamente cuando
 		// cvdPortal.isMessenger es true y ese bloque contiene recargas automáticas.
 		// Desactivamos ese polling en las dos superficies del mensajero. El resto de
