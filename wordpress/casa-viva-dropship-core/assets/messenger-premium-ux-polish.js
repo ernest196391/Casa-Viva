@@ -42,16 +42,18 @@
     });
 
     const legacyDelivery = qs('#entregas', center);
-    if (legacyDelivery) legacyDelivery.hidden = !qs('[data-delivery-id]', legacyDelivery);
+    const embeddedCards = qsa('.cvd-route-details [data-delivery-id]', route);
+    if (legacyDelivery && embeddedCards.length) legacyDelivery.hidden = true;
   }
 
   function observeDeliveryCards(center) {
     embedDeliveryCards(center);
     const observer = new MutationObserver((mutations) => {
-      if (!mutations.some((mutation) => mutation.type === 'childList' && (mutation.addedNodes.length || mutation.removedNodes.length))) return;
-      embedDeliveryCards(center);
+      const relevant = mutations.some((mutation) => mutation.type === 'attributes'
+        || (mutation.type === 'childList' && (mutation.addedNodes.length || mutation.removedNodes.length)));
+      if (relevant) embedDeliveryCards(center);
     });
-    observer.observe(center, { childList: true, subtree: true });
+    observer.observe(center, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-cvd-view'] });
   }
 
   function observeLateWhatsapp(center) {
