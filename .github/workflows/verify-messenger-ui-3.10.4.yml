@@ -1,0 +1,51 @@
+name: Verificar producción Core 3.10.4
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      WP_PATH: /home/u824654880/domains/casavivadecuba.com/public_html
+      PLUGIN_SLUG: casa-viva-dropship-core
+      EXPECTED_SHA: d9f96d710eb7e5a4634b1a4603fb7b27c9d028c2
+      EXPECTED_VERSION: 3.10.4
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Esperar deploy y verificar identidad por SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '\n' >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          for attempt in {1..60}; do
+            deployed="$(ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cat '$WP_PATH/wp-content/plugins/$PLUGIN_SLUG/.cvd-deployed-sha' 2>/dev/null || true")"
+            version="$(ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cd '$WP_PATH' && wp plugin get '$PLUGIN_SLUG' --field=version 2>/dev/null || true")"
+            if [ "$deployed" = "$EXPECTED_SHA" ] && [ "$version" = "$EXPECTED_VERSION" ]; then
+              echo "Producción confirmada: $deployed / Core $version"
+              exit 0
+            fi
+            echo "Esperando deploy: sha=$deployed version=$version"
+            sleep 15
+          done
+          echo "Producción no alcanzó $EXPECTED_SHA / Core $EXPECTED_VERSION" >&2
+          exit 1
+
+      - name: Smoke real de producción
+        run: bash scripts/smoke-staging.sh https://casavivadecuba.com
