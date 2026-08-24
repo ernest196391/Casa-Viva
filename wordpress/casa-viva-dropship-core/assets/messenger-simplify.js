@@ -11,10 +11,30 @@
     target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  function syncMobileViewport(center) {
+    const query = window.matchMedia('(max-width: 640px)');
+    const apply = () => {
+      if (query.matches) {
+        center.style.setProperty('width', '100vw', 'important');
+        center.style.setProperty('max-width', '100vw', 'important');
+        center.style.setProperty('margin-left', 'calc(50% - 50vw)', 'important');
+        center.style.setProperty('margin-right', 'calc(50% - 50vw)', 'important');
+      } else {
+        center.style.removeProperty('width');
+        center.style.removeProperty('max-width');
+        center.style.removeProperty('margin-left');
+        center.style.removeProperty('margin-right');
+      }
+    };
+    apply();
+    if (query.addEventListener) query.addEventListener('change', apply);
+  }
+
   function simplifyMessenger() {
     const center = qs('.cvd-messenger-center');
     if (!center) return;
     center.classList.add('cvd-p03');
+    syncMobileViewport(center);
 
     const head = qs('.cvd-messenger-head', center);
     if (head) {
@@ -151,6 +171,11 @@
         const collectible = qs('.cvd-customer-collectible small', stop);
         if (collectible) collectible.hidden = true;
       });
+
+      const deliveryCards = qsa('[data-delivery-id]', route);
+      const currentDelivery = deliveryCards.find((card) => qsa('a', card).some((link) => text(link) === 'Navegar')) || deliveryCards[0];
+      deliveryCards.forEach((card) => card.classList.toggle('is-current', card === currentDelivery));
+
       const disclaimer = qs('.cvd-route-disclaimer', route);
       if (disclaimer) disclaimer.textContent = 'Puedes cambiar el orden con Subir y Bajar.';
     }
