@@ -98,3 +98,12 @@ test('mensajero abre asistente contextual bajo demanda sin exponer metadatos int
   await expect(page.locator('#preparar')).not.toContainText('_reduced_stock');
   await expect(page.locator('#preparar')).not.toContainText('_cvd_stock_reduction_sequence');
 });
+
+test('mensajero mantiene jerarquía y ancho correcto en 414x896', async ({ page }) => {
+  await page.setViewportSize({ width: 414, height: 896 });
+  await login(page); await openCenter(page);
+  await expect(page.locator('.cvd-next-task')).toBeVisible();
+  await expect(page.locator('.cvd-messenger-nav a')).toHaveCount(4);
+  const layout = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth }));
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width + 1);
+});
