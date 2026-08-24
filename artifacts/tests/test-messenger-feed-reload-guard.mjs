@@ -13,6 +13,9 @@ expect(guard.includes("'/casa-viva/v1/messenger/feed'"), 'guard must target only
 for (const status of ['delivered', 'cash_returned', 'closed']) {
   expect(guard.includes(`'${status}'`), `guard must exclude ${status} from polling feed`);
 }
+expect(guard.includes("'_cvd_delivery_incident_stage'"), 'guard must inspect preserved stage for incidents');
+expect(guard.includes("'incident'"), 'guard must handle incident responses explicitly');
+expect(guard.includes('wc_get_order'), 'guard must resolve incident order to inspect preserved stage');
 expect(guard.includes("add_filter( 'rest_post_dispatch'"), 'guard must filter final REST response');
 
 console.log('Messenger reload-loop guard contract OK');
