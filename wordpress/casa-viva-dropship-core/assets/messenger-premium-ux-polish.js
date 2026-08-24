@@ -41,9 +41,8 @@
       if (!details.contains(card)) details.appendChild(card);
     });
 
-    qsa('h2, h3, h4', route).forEach((heading) => {
-      if (/^entrega activa$/i.test(text(heading))) heading.hidden = true;
-    });
+    const legacyDelivery = qs('#entregas', center);
+    if (legacyDelivery) legacyDelivery.hidden = !qs('[data-delivery-id]', legacyDelivery);
   }
 
   function observeDeliveryCards(center) {
