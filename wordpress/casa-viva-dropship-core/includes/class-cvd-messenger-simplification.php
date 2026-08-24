@@ -8,8 +8,6 @@ defined( 'ABSPATH' ) || exit;
  */
 final class CVD_Messenger_Simplification {
 	public static function register(): void {
-		// Portal registra sus assets con prioridad 10. Entramos después para poder
-		// modificar su configuración antes de que portal.js se ejecute en navegador.
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 80 );
 	}
 
@@ -18,49 +16,16 @@ final class CVD_Messenger_Simplification {
 			return;
 		}
 
-		wp_enqueue_style(
-			'cvd-messenger-simplify',
-			CVD_URL . 'assets/messenger-simplify.css',
-			array(),
-			CVD_VERSION
-		);
-		wp_enqueue_style(
-			'cvd-messenger-simplify-fixes',
-			CVD_URL . 'assets/messenger-simplify-fixes.css',
-			array( 'cvd-messenger-simplify' ),
-			CVD_VERSION
-		);
-		wp_enqueue_style(
-			'cvd-messenger-premium-ux',
-			CVD_URL . 'assets/messenger-premium-ux.css',
-			array( 'cvd-messenger-simplify-fixes' ),
-			CVD_VERSION
-		);
-		wp_enqueue_script(
-			'cvd-messenger-simplify',
-			CVD_URL . 'assets/messenger-simplify.js',
-			array(),
-			CVD_VERSION,
-			true
-		);
-		wp_enqueue_script(
-			'cvd-messenger-premium-ux',
-			CVD_URL . 'assets/messenger-premium-ux.js',
-			array( 'cvd-messenger-simplify' ),
-			CVD_VERSION,
-			true
-		);
-		wp_enqueue_script(
-			'cvd-messenger-assistant-summary',
-			CVD_URL . 'assets/messenger-assistant-summary.js',
-			array( 'cvd-messenger-premium-ux' ),
-			CVD_VERSION,
-			true
-		);
+		wp_enqueue_style( 'cvd-messenger-simplify', CVD_URL . 'assets/messenger-simplify.css', array(), CVD_VERSION );
+		wp_enqueue_style( 'cvd-messenger-simplify-fixes', CVD_URL . 'assets/messenger-simplify-fixes.css', array( 'cvd-messenger-simplify' ), CVD_VERSION );
+		wp_enqueue_style( 'cvd-messenger-premium-ux', CVD_URL . 'assets/messenger-premium-ux.css', array( 'cvd-messenger-simplify-fixes' ), CVD_VERSION );
+		wp_enqueue_style( 'cvd-messenger-premium-ux-polish', CVD_URL . 'assets/messenger-premium-ux-polish.css', array( 'cvd-messenger-premium-ux' ), CVD_VERSION );
 
-		// La lista de "Entrega activa" y la lista de Ruta son superficies distintas.
-		// Marcamos la tarjeta que realmente ofrece "Navegar" (fallback: la primera)
-		// después de que la capa de simplificación haya terminado de preparar el DOM.
+		wp_enqueue_script( 'cvd-messenger-simplify', CVD_URL . 'assets/messenger-simplify.js', array(), CVD_VERSION, true );
+		wp_enqueue_script( 'cvd-messenger-premium-ux', CVD_URL . 'assets/messenger-premium-ux.js', array( 'cvd-messenger-simplify' ), CVD_VERSION, true );
+		wp_enqueue_script( 'cvd-messenger-assistant-summary', CVD_URL . 'assets/messenger-assistant-summary.js', array( 'cvd-messenger-premium-ux' ), CVD_VERSION, true );
+		wp_enqueue_script( 'cvd-messenger-premium-ux-polish', CVD_URL . 'assets/messenger-premium-ux-polish.js', array( 'cvd-messenger-assistant-summary' ), CVD_VERSION, true );
+
 		if ( is_page( array( 'area-mensajeros', 'ruta-cv' ) ) ) {
 			wp_add_inline_script(
 				'cvd-messenger-simplify',
@@ -69,11 +34,6 @@ final class CVD_Messenger_Simplification {
 			);
 		}
 
-		// Estabilidad del piloto: portal.js inicia pollOffers() inmediatamente cuando
-		// cvdPortal.isMessenger es true y ese bloque contiene recargas automáticas.
-		// Desactivamos ese polling en las dos superficies del mensajero. El resto de
-		// funciones (contactos, WhatsApp, ruta, cobros, asistente) no depende de esta
-		// bandera. Los avisos push siguen gestionándose por CVD_PWA.
 		if ( is_page( array( 'area-mensajeros', 'ruta-cv' ) ) ) {
 			wp_add_inline_script(
 				'cvd-portal',
