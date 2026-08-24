@@ -12,7 +12,7 @@ permissions:
 jobs:
   staging-contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
@@ -20,3 +20,38 @@ jobs:
         run: node artifacts/tests/test-staging-smoke-6b.mjs
       - name: Validar contrato 6B de deploy al prototipo
         run: node artifacts/tests/test-prototype-deploy-6b.mjs
+      - name: Preparar SSH de verificación
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '\n' >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+      - name: Esperar hotfix 3.10.1 desplegado
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          EXPECTED_SHA: 66219492ca52f5129734f7c74240a60f5b54ba79
+          WP_PATH: /home/u824654880/domains/casavivadecuba.com/public_html
+        run: |
+          set -euo pipefail
+          for attempt in {1..60}; do
+            deployed="$(ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cat '$WP_PATH/wp-content/plugins/casa-viva-dropship-core/.cvd-deployed-sha' 2>/dev/null || true")"
+            version="$(ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cd '$WP_PATH' && wp plugin get casa-viva-dropship-core --field=version 2>/dev/null || true")"
+            if [ "$deployed" = "$EXPECTED_SHA" ] && [ "$version" = "3.10.1" ]; then
+              echo "Hotfix desplegado: $deployed · Core $version"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Producción no alcanzó el SHA/version esperados" >&2
+          exit 1
+      - name: Smoke real de producción
+        run: bash scripts/smoke-staging.sh https://casavivadecuba.com
