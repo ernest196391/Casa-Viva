@@ -50,6 +50,13 @@ final class CVD_Messenger_Simplification {
 			CVD_VERSION,
 			true
 		);
+		wp_enqueue_script(
+			'cvd-messenger-assistant-summary',
+			CVD_URL . 'assets/messenger-assistant-summary.js',
+			array( 'cvd-messenger-premium-ux' ),
+			CVD_VERSION,
+			true
+		);
 
 		// La lista de "Entrega activa" y la lista de Ruta son superficies distintas.
 		// Marcamos la tarjeta que realmente ofrece "Navegar" (fallback: la primera)
