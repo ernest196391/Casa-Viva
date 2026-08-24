@@ -8,24 +8,14 @@ defined( 'ABSPATH' ) || exit;
  */
 final class CVD_Messenger_Simplification {
 	public static function register(): void {
-		// Debe ejecutarse antes que CVD_Portal::assets() (prioridad por defecto 10)
-		// para instalar la protección del feed antes de que portal.js haga su poll inicial.
-		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 1 );
+		// Portal registra sus assets con prioridad 10. Entramos después para poder
+		// modificar su configuración antes de que portal.js se ejecute en navegador.
+		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 80 );
 	}
 
 	public static function assets(): void {
 		if ( ! is_page( array( 'area-mensajeros', 'ruta-cv', 'interpretar-vale' ) ) ) {
 			return;
-		}
-
-		if ( is_page( array( 'area-mensajeros', 'ruta-cv' ) ) ) {
-			wp_enqueue_script(
-				'cvd-messenger-feed-stability',
-				CVD_URL . 'assets/messenger-feed-stability.js',
-				array(),
-				CVD_VERSION,
-				true
-			);
 		}
 
 		wp_enqueue_style(
@@ -47,5 +37,18 @@ final class CVD_Messenger_Simplification {
 			CVD_VERSION,
 			true
 		);
+
+		// Estabilidad del piloto: portal.js inicia pollOffers() inmediatamente cuando
+		// cvdPortal.isMessenger es true y ese bloque contiene recargas automáticas.
+		// Desactivamos ese polling en las dos superficies del mensajero. El resto de
+		// funciones (contactos, WhatsApp, ruta, cobros, asistente) no depende de esta
+		// bandera. Los avisos push siguen gestionándose por CVD_PWA.
+		if ( is_page( array( 'area-mensajeros', 'ruta-cv' ) ) ) {
+			wp_add_inline_script(
+				'cvd-portal',
+				'if (window.cvdPortal) { window.cvdPortal.isMessenger = false; }',
+				'before'
+			);
+		}
 	}
 }
