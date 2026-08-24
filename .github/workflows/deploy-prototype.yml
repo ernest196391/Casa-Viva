@@ -23,7 +23,7 @@ env:
 jobs:
   deploy-prototype:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
       - name: Descargar SHA solicitado
         uses: actions/checkout@v4
@@ -44,13 +44,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          for attempt in {1..40}; do
+          # El navegador tiene un presupuesto de hasta 30 min. Esperamos hasta 35 min
+          # para no fallar un despliegue válido mientras CI todavía está ejecutándose.
+          for attempt in {1..140}; do
             runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${DEPLOY_SHA}&branch=main&event=push&per_page=50")"
             successful="$(jq -r '[.workflow_runs[] | select(.name == "Validar aplicación" and .conclusion == "success")] | length' <<<"$runs")"
             test "$successful" -ge 1 && exit 0
             sleep 15
           done
-          echo "No existe CI post-merge exitoso para $DEPLOY_SHA" >&2
+          echo "No existe CI post-merge exitoso para $DEPLOY_SHA tras 35 minutos" >&2
           exit 1
 
       - name: Construir release reproducible
