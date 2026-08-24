@@ -22,6 +22,12 @@ final class CVD_Messenger_Simplification {
 			array(),
 			CVD_VERSION
 		);
+		wp_enqueue_style(
+			'cvd-messenger-simplify-fixes',
+			CVD_URL . 'assets/messenger-simplify-fixes.css',
+			array( 'cvd-messenger-simplify' ),
+			CVD_VERSION
+		);
 		wp_enqueue_script(
 			'cvd-messenger-simplify',
 			CVD_URL . 'assets/messenger-simplify.js',
