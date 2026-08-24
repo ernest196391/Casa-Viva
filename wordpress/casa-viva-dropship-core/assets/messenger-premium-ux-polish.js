@@ -28,22 +28,31 @@
   function embedDeliveryCards(center) {
     const route = qs('.cvd-messenger-route', center);
     if (!route) return;
-    const cards = qsa('[data-delivery-id]', route);
-    if (!cards.length) return;
 
-    cards.forEach((card) => {
+    qsa('[data-delivery-id]', center).forEach((card) => {
       const id = card.getAttribute('data-delivery-id');
       if (!id) return;
       const stop = qsa('[data-route-stop]', route).find((candidate) => candidate.getAttribute('data-route-stop') === id);
       const details = stop && qs('.cvd-route-details', stop);
       if (!details) return;
+
       card.classList.add('cvd-embedded-delivery');
-      details.appendChild(card);
+      card.classList.toggle('is-current', stop.classList.contains('is-current'));
+      if (!details.contains(card)) details.appendChild(card);
     });
 
     qsa('h2, h3, h4', route).forEach((heading) => {
       if (/^entrega activa$/i.test(text(heading))) heading.hidden = true;
     });
+  }
+
+  function observeDeliveryCards(center) {
+    embedDeliveryCards(center);
+    const observer = new MutationObserver((mutations) => {
+      if (!mutations.some((mutation) => mutation.type === 'childList' && (mutation.addedNodes.length || mutation.removedNodes.length))) return;
+      embedDeliveryCards(center);
+    });
+    observer.observe(center, { childList: true, subtree: true });
   }
 
   function observeLateWhatsapp(center) {
@@ -66,7 +75,7 @@
     if (!center) return;
     syncMoneyScreen(center);
     consolidateTodayAlerts(center);
-    embedDeliveryCards(center);
+    observeDeliveryCards(center);
     observeLateWhatsapp(center);
   }
 
