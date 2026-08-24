@@ -12,7 +12,7 @@ permissions:
 jobs:
   staging-contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
@@ -20,3 +20,5 @@ jobs:
         run: node artifacts/tests/test-staging-smoke-6b.mjs
       - name: Validar contrato 6B de deploy al prototipo
         run: node artifacts/tests/test-prototype-deploy-6b.mjs
+      - name: Verificar producción P0.3
+        run: bash scripts/smoke-staging.sh https://casavivadecuba.com
