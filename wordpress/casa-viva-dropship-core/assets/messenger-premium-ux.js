@@ -20,7 +20,7 @@
     const selectors = {
       hoy: ['.cvd-messenger-today'],
       ruta: ['.cvd-messenger-route', '#entregas'],
-      dinero: ['#ganancias', '.cvd-messenger-earnings', '#cierre', '.cvd-messenger-closeout'],
+      dinero: ['#ganancias', '.cvd-messenger-earnings', '#cierre', '.cvd-messenger-closeout', '#liquidaciones'],
       mas: ['.cvd-messenger-contacts', '.cvd-messenger-preparation', '#asistente', '#ofertas', '#perfil'],
     };
 
@@ -43,7 +43,11 @@
       ['#hoy', 'hoy'],
       ['#ruta', 'ruta'],
       ['#ganancias', 'dinero'],
+      ['#liquidaciones', 'dinero'],
       ['#perfil', 'mas'],
+      ['#contactos', 'mas'],
+      ['#preparar', 'mas'],
+      ['#asistente', 'mas'],
     ]);
 
     const activate = (screen, focus = false) => {
@@ -76,6 +80,16 @@
       });
     });
 
+    qsa('a[href^="#"]', center).forEach((link) => {
+      if (nav.contains(link) || link.getAttribute('href') === '#asistente') return;
+      const screen = destination.get(link.getAttribute('href'));
+      if (!screen) return;
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        activate(screen, true);
+      });
+    });
+
     qsa('.cvd-messenger-launchpad a[href="#asistente"]', center).forEach((link) => {
       link.addEventListener('click', (event) => {
         event.preventDefault();
@@ -91,7 +105,7 @@
       }, { capture: true });
     });
 
-    let initial = location.hash === '#ruta' ? 'ruta' : location.hash === '#ganancias' ? 'dinero' : location.hash === '#perfil' || location.hash === '#asistente' ? 'mas' : 'hoy';
+    let initial = location.hash === '#ruta' ? 'ruta' : location.hash === '#ganancias' || location.hash === '#liquidaciones' ? 'dinero' : location.hash === '#perfil' || location.hash === '#contactos' || location.hash === '#preparar' || location.hash === '#asistente' ? 'mas' : 'hoy';
     if (location.hash === '#asistente' && assistant) assistant.classList.add('is-open');
     try {
       const stored = sessionStorage.getItem('cvdMessengerView');
