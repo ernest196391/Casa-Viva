@@ -8,12 +8,24 @@ defined( 'ABSPATH' ) || exit;
  */
 final class CVD_Messenger_Simplification {
 	public static function register(): void {
-		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 80 );
+		// Debe ejecutarse antes que CVD_Portal::assets() (prioridad por defecto 10)
+		// para instalar la protección del feed antes de que portal.js haga su poll inicial.
+		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 1 );
 	}
 
 	public static function assets(): void {
 		if ( ! is_page( array( 'area-mensajeros', 'ruta-cv', 'interpretar-vale' ) ) ) {
 			return;
+		}
+
+		if ( is_page( array( 'area-mensajeros', 'ruta-cv' ) ) ) {
+			wp_enqueue_script(
+				'cvd-messenger-feed-stability',
+				CVD_URL . 'assets/messenger-feed-stability.js',
+				array(),
+				CVD_VERSION,
+				true
+			);
 		}
 
 		wp_enqueue_style(
