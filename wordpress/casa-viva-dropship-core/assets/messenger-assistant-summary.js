@@ -3,6 +3,13 @@
 
   const clean = (node) => (node?.textContent || '').replace(/\s+/g, ' ').trim();
 
+  function addLine(root, tag, value) {
+    if (!value) return;
+    const node = document.createElement(tag);
+    node.textContent = value;
+    root.appendChild(node);
+  }
+
   function init() {
     const center = document.querySelector('.cvd-messenger-center.cvd-p03');
     const assistant = center?.querySelector('#asistente');
@@ -34,22 +41,21 @@
         .filter(Boolean);
       const mapAlert = alerts.find((item) => /mapa|ubicaci[oó]n/i.test(item));
       const incident = alerts.find((item) => /incidencia/i.test(item));
-
-      const lines = [
-        `<strong>Ahora mismo</strong>`,
-        `<span>${orders} entregas · ${pending} pendientes de confirmar · ${delivered} entregadas.</span>`,
-      ];
-      if (mapAlert) lines.push(`<span>${mapAlert}</span>`);
-      if (incident) lines.push(`<span>${incident}</span>`);
-
       const pendingNumber = Number(String(pending).replace(/\D/g, '')) || 0;
       const nextAction = pendingNumber > 0
         ? `Lo primero: contactar ${pendingNumber === 1 ? 'al cliente pendiente' : `a los ${pendingNumber} clientes pendientes`}.`
         : incident
           ? 'Lo primero: revisar la incidencia antes de continuar.'
           : 'La jornada no muestra bloqueos prioritarios en este momento.';
-      lines.push(`<b>${nextAction}</b>`);
-      answer.innerHTML = `<div class="cvd-assistant-overview">${lines.join('')}</div>`;
+
+      const overview = document.createElement('div');
+      overview.className = 'cvd-assistant-overview';
+      addLine(overview, 'strong', 'Ahora mismo');
+      addLine(overview, 'span', `${orders} entregas · ${pending} pendientes de confirmar · ${delivered} entregadas.`);
+      addLine(overview, 'span', mapAlert);
+      addLine(overview, 'span', incident);
+      addLine(overview, 'b', nextAction);
+      answer.replaceChildren(overview);
     };
 
     new MutationObserver(renderOverview).observe(answer, { childList: true, subtree: true, characterData: true });
