@@ -4,6 +4,12 @@
   const qs = (selector, root = document) => root.querySelector(selector);
   const qsa = (selector, root = document) => Array.from(root.querySelectorAll(selector));
   const cleanText = (node) => (node?.textContent || '').replace(/\s+/g, ' ').trim();
+  const make = (tag, className = '', text = '') => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text) node.textContent = text;
+    return node;
+  };
 
   function setExpanded(button, expanded, openLabel = 'Ocultar detalle', closedLabel = 'Ver detalle') {
     button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
@@ -31,6 +37,7 @@
     const nav = qs('.cvd-messenger-nav', center);
     if (!nav || !allSections.size) return;
 
+    const assistant = qs('#asistente', center);
     const links = qsa('a', nav);
     const destination = new Map([
       ['#hoy', 'hoy'],
@@ -41,8 +48,11 @@
 
     const activate = (screen, focus = false) => {
       center.dataset.cvdView = screen;
+      if (screen !== 'mas' && assistant) assistant.classList.remove('is-open');
       allSections.forEach((section) => {
-        section.hidden = section.dataset.cvdScreen !== screen;
+        const isAssistant = section.id === 'asistente';
+        const belongsToScreen = section.dataset.cvdScreen === screen;
+        section.hidden = !belongsToScreen || (isAssistant && !section.classList.contains('is-open'));
       });
       links.forEach((link) => {
         const active = destination.get(link.getAttribute('href')) === screen;
@@ -69,18 +79,20 @@
     qsa('.cvd-messenger-launchpad a[href="#asistente"]', center).forEach((link) => {
       link.addEventListener('click', (event) => {
         event.preventDefault();
-        activate('mas', false);
-        const assistant = qs('#asistente', center);
         if (assistant) {
-          assistant.hidden = false;
           assistant.classList.add('is-open');
           assistant.classList.remove('is-collapsed');
+        }
+        activate('mas', false);
+        if (assistant) {
+          assistant.hidden = false;
           assistant.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       }, { capture: true });
     });
 
     let initial = location.hash === '#ruta' ? 'ruta' : location.hash === '#ganancias' ? 'dinero' : location.hash === '#perfil' || location.hash === '#asistente' ? 'mas' : 'hoy';
+    if (location.hash === '#asistente' && assistant) assistant.classList.add('is-open');
     try {
       const stored = sessionStorage.getItem('cvdMessengerView');
       if (['hoy', 'ruta', 'dinero', 'mas'].includes(stored) && !location.hash) initial = stored;
@@ -102,18 +114,16 @@
     const delivered = getValue('entregado');
     const alerts = qsa('.cvd-messenger-alerts p', today).map(cleanText).filter(Boolean);
 
-    const brief = document.createElement('div');
-    brief.className = 'cvd-today-brief';
+    const brief = make('div', 'cvd-today-brief');
     brief.setAttribute('aria-label', 'Estado de jornada');
-    brief.innerHTML = `<strong>${orders} entregas hoy</strong><span>${pending} por confirmar · ${delivered} entregadas</span>`;
+    brief.append(make('strong', '', `${orders} entregas hoy`), make('span', '', `${pending} por confirmar · ${delivered} entregadas`));
 
     const head = qs('.cvd-messenger-section-head', today);
     if (head) head.insertAdjacentElement('afterend', brief);
 
     if (alerts.length) {
-      const attention = document.createElement('div');
-      attention.className = 'cvd-today-attention';
-      attention.innerHTML = `<span>Requiere atención</span><strong>${alerts[0]}</strong>`;
+      const attention = make('div', 'cvd-today-attention');
+      attention.append(make('span', '', 'Requiere atención'), make('strong', '', alerts[0]));
       const statsGrid = qs('.cvd-messenger-today-stats', today);
       statsGrid?.insertAdjacentElement('afterend', attention);
     }
@@ -124,9 +134,12 @@
       const address = cleanText(qs('.cvd-route-address', firstStop));
       const amount = cleanText(qs('.cvd-customer-collectible strong', firstStop));
       const navigate = qsa('a', firstStop).find((a) => /navegar|abrir mapa/i.test(cleanText(a)));
-      const next = document.createElement('div');
-      next.className = 'cvd-today-next-delivery';
-      next.innerHTML = `<div><span>Siguiente entrega</span><strong>${order || 'Próxima parada'}</strong>${address ? `<small>${address}</small>` : ''}${amount ? `<b>${amount}</b>` : ''}</div>`;
+      const next = make('div', 'cvd-today-next-delivery');
+      const info = make('div');
+      info.append(make('span', '', 'Siguiente entrega'), make('strong', '', order || 'Próxima parada'));
+      if (address) info.append(make('small', '', address));
+      if (amount) info.append(make('b', '', amount));
+      next.append(info);
       if (navigate) {
         const quick = navigate.cloneNode(true);
         quick.className = 'cvd-primary cvd-today-navigate';
@@ -145,16 +158,14 @@
       const result = qs('.cvd-contact-result', card);
       if (!outcomes && !result) return;
 
-      const details = document.createElement('div');
-      details.className = 'cvd-contact-more';
+      const details = make('div', 'cvd-contact-more');
       if (outcomes) details.appendChild(outcomes);
       if (result) details.appendChild(result);
       details.hidden = true;
       card.appendChild(details);
 
-      const toggle = document.createElement('button');
+      const toggle = make('button', 'cvd-contact-toggle');
       toggle.type = 'button';
-      toggle.className = 'cvd-contact-toggle';
       toggle.setAttribute('aria-controls', `cvd-contact-more-${index}`);
       details.id = `cvd-contact-more-${index}`;
       setExpanded(toggle, false, 'Ocultar opciones', 'Más opciones');
@@ -182,9 +193,8 @@
     if (!blocks.length) return;
     blocks.forEach((block) => { block.classList.add('cvd-prep-order-detail'); block.hidden = true; });
 
-    const toggle = document.createElement('button');
+    const toggle = make('button', 'cvd-secondary cvd-preparation-toggle');
     toggle.type = 'button';
-    toggle.className = 'cvd-secondary cvd-preparation-toggle';
     setExpanded(toggle, false, 'Ocultar pedidos', `Ver pedidos (${blocks.length})`);
     toggle.addEventListener('click', () => {
       const expanded = toggle.getAttribute('aria-expanded') !== 'true';
@@ -200,15 +210,9 @@
       stop.dataset.cvdCompactReady = '1';
       stop.classList.add('cvd-route-compact-card');
 
-      const quick = document.createElement('div');
-      quick.className = 'cvd-route-quick';
+      const quick = make('div', 'cvd-route-quick');
       const amount = cleanText(qs('.cvd-customer-collectible strong', stop));
-      if (amount) {
-        const money = document.createElement('strong');
-        money.className = 'cvd-route-quick-money';
-        money.textContent = amount;
-        quick.appendChild(money);
-      }
+      if (amount) quick.appendChild(make('strong', 'cvd-route-quick-money', amount));
       const navigate = qsa('a', stop).find((a) => /navegar|abrir mapa/i.test(cleanText(a)));
       if (navigate) {
         const clone = navigate.cloneNode(true);
@@ -221,14 +225,12 @@
       if (header) header.insertAdjacentElement('afterend', quick);
       else stop.prepend(quick);
 
-      const toggle = document.createElement('button');
+      const toggle = make('button', 'cvd-route-detail-toggle');
       toggle.type = 'button';
-      toggle.className = 'cvd-route-detail-toggle';
       toggle.setAttribute('aria-controls', `cvd-route-details-${index}`);
       setExpanded(toggle, false);
 
-      const details = document.createElement('div');
-      details.className = 'cvd-route-details';
+      const details = make('div', 'cvd-route-details');
       details.id = `cvd-route-details-${index}`;
       details.hidden = true;
 
@@ -254,22 +256,18 @@
       parent.dataset.cvdQrReady = '1';
       parent.classList.add('cvd-qr-collapsible');
 
-      const content = document.createElement('div');
-      content.className = 'cvd-qr-content';
+      const content = make('div', 'cvd-qr-content');
       content.id = `cvd-qr-content-${index}`;
       const children = qsa(':scope > *', parent);
       children.forEach((child) => content.appendChild(child));
       content.hidden = true;
       parent.appendChild(content);
 
-      const label = document.createElement('strong');
-      label.className = 'cvd-qr-label';
-      label.textContent = 'Recogida pendiente';
+      const label = make('strong', 'cvd-qr-label', 'Recogida pendiente');
       parent.prepend(label);
 
-      const toggle = document.createElement('button');
+      const toggle = make('button', 'cvd-secondary cvd-qr-toggle');
       toggle.type = 'button';
-      toggle.className = 'cvd-secondary cvd-qr-toggle';
       toggle.setAttribute('aria-controls', content.id);
       setExpanded(toggle, false, 'Ocultar QR', 'Mostrar QR');
       toggle.addEventListener('click', () => {
