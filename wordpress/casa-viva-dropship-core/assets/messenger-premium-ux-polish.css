@@ -10,6 +10,10 @@ body:has(.cvd-premium-v2) .entry-title{display:none!important}
 .cvd-premium-v2 .cvd-messenger-alert-control{display:none!important}
 .cvd-premium-v2[data-cvd-view="mas"] .cvd-messenger-alert-control{display:block!important}
 
+/* El contenedor legado de Entrega activa conserva semántica/DOM para los contratos,
+   pero no añade una segunda tarjeta visual: la entrega se presenta dentro del detalle de Ruta. */
+.cvd-premium-v2[data-cvd-view="ruta"] #entregas{display:block!important;position:absolute!important;width:1px!important;height:1px!important;margin:-1px!important;padding:0!important;border:0!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;white-space:nowrap!important}
+
 .cvd-premium-v2 .cvd-embedded-delivery{
   border:0!important;
   border-top:1px solid var(--cvd-premium-line)!important;
