@@ -30,6 +30,12 @@ final class CVD_Messenger_Simplification {
 			array( 'cvd-messenger-simplify' ),
 			CVD_VERSION
 		);
+		wp_enqueue_style(
+			'cvd-messenger-premium-ux',
+			CVD_URL . 'assets/messenger-premium-ux.css',
+			array( 'cvd-messenger-simplify-fixes' ),
+			CVD_VERSION
+		);
 		wp_enqueue_script(
 			'cvd-messenger-simplify',
 			CVD_URL . 'assets/messenger-simplify.js',
@@ -37,12 +43,17 @@ final class CVD_Messenger_Simplification {
 			CVD_VERSION,
 			true
 		);
+		wp_enqueue_script(
+			'cvd-messenger-premium-ux',
+			CVD_URL . 'assets/messenger-premium-ux.js',
+			array( 'cvd-messenger-simplify' ),
+			CVD_VERSION,
+			true
+		);
 
 		// La lista de "Entrega activa" y la lista de Ruta son superficies distintas.
-		// La simplificación original marcaba solo las paradas de Ruta; por eso la
-		// tarjeta activa podía quedar sin jerarquía visual. Marcamos la tarjeta que
-		// realmente ofrece "Navegar" (fallback: la primera) después de que la capa
-		// de simplificación haya terminado de preparar el DOM.
+		// Marcamos la tarjeta que realmente ofrece "Navegar" (fallback: la primera)
+		// después de que la capa de simplificación haya terminado de preparar el DOM.
 		if ( is_page( array( 'area-mensajeros', 'ruta-cv' ) ) ) {
 			wp_add_inline_script(
 				'cvd-messenger-simplify',
