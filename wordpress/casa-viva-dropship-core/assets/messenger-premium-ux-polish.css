@@ -5,8 +5,13 @@ body:has(.cvd-premium-v2) .entry-title{display:none!important}
 .cvd-premium-v2 #liquidaciones[hidden]{display:none!important}
 
 /* Cada tab debe sentirse como una superficie propia, no como una página larga repetida. */
-.cvd-premium-v2:not([data-cvd-view="hoy"]) .cvd-messenger-head,
-.cvd-premium-v2:not([data-cvd-view="hoy"]) .cvd-messenger-launchpad{display:none!important}
+.cvd-premium-v2:not([data-cvd-view="hoy"]) .cvd-messenger-head{display:none!important}
+.cvd-premium-v2:not([data-cvd-view="hoy"]):not([data-cvd-view="mas"]) .cvd-messenger-launchpad{display:none!important}
+.cvd-premium-v2[data-cvd-view="mas"] .cvd-messenger-launchpad{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+}
+.cvd-premium-v2[data-cvd-view="mas"] .cvd-messenger-launchpad .cvd-upload-voucher{display:none!important}
 .cvd-premium-v2 .cvd-messenger-alert-control{display:none!important}
 .cvd-premium-v2[data-cvd-view="mas"] .cvd-messenger-alert-control{display:block!important}
 
