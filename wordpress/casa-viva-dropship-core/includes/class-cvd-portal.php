@@ -11,6 +11,7 @@ final class CVD_Portal {
 		add_filter( 'wp_authenticate_user', array( __CLASS__, 'enforce_selected_access' ), 30 );
 		add_action( 'woocommerce_login_form', array( __CLASS__, 'selected_access_field' ) );
 		add_action( 'wp_ajax_cvd_save_gestora_price', array( __CLASS__, 'ajax_save_gestora_price' ) );
+		add_action( 'admin_post_cvd_gestora_publish_delivery', array( __CLASS__, 'gestora_publish_delivery' ) );
 	}
 
 	public static function role_login_redirect( string $redirect_to, string $requested, $user ): string {
@@ -101,6 +102,27 @@ final class CVD_Portal {
 		wp_send_json_success( array( 'message' => '' === trim( (string) $price ) ? 'Precio automático restaurado.' : 'Precio guardado.' ) );
 	}
 
+	/** Publish only the authenticated gestora's unassigned order to Core's canonical offer pool. */
+	public static function gestora_publish_delivery(): void {
+		$user = wp_get_current_user();
+		$order_id = absint( $_POST['order_id'] ?? 0 );
+		$result = 'unavailable';
+		if ( ! $user->exists() || ! CVD_Registration::is_approved_gestora( $user ) ) {
+			wp_die( esc_html__( 'No tienes permiso para enviar este pedido.', 'casa-viva-dropship' ), 403 );
+		}
+		check_admin_referer( 'cvd_gestora_publish_delivery_' . $order_id );
+		$order = wc_get_order( $order_id );
+		if ( $order instanceof WC_Order
+			&& $user->ID === absint( $order->get_meta( '_cvd_owner_user_id', true ) )
+			&& 'pickup' !== $order->get_meta( '_cvd_fulfillment_type', true )
+			&& 'unassigned' === CVD_Delivery::status( $order )
+			&& CVD_Delivery::publish_offer( $order ) ) {
+			$result = 'offered';
+		}
+		wp_safe_redirect( add_query_arg( 'mensajeria', $result, home_url( '/area-gestoras/#mensajeria' ) ) );
+		exit;
+	}
+
 	public static function render( array $atts = array() ): string {
 		$atts = shortcode_atts( array( 'role' => 'gestora' ), $atts );
 		$type = 'mensajero' === $atts['role'] ? 'mensajero' : 'gestora';
@@ -159,6 +181,8 @@ final class CVD_Portal {
 		}
 		$clients = count( $client_keys );
 		$orders = array_slice( $all_orders, 0, 100 );
+		$available_messengers = CVD_Delivery::available_messengers();
+		$dispatchable_orders = array_values( array_filter( $all_orders, static fn( $order ) => 'pickup' !== $order->get_meta( '_cvd_fulfillment_type', true ) && 'unassigned' === CVD_Delivery::status( $order ) ) );
 		$code = get_user_meta( $user->ID, '_cvd_referral_code', true );
 		if ( ! $code ) {
 			$code = 'CV' . $user->ID . strtoupper( substr( preg_replace( '/[^A-Z0-9]/i', '', $user->user_login ), 0, 8 ) );
@@ -174,8 +198,9 @@ final class CVD_Portal {
 		<section class="cvd-dashboard cvd-app-shell">
 			<?php if ( $notice ) : ?><div class="cvd-notice" role="status"><?php echo esc_html( $notice ); ?></div><?php endif; ?>
 			<header class="cvd-dashboard-head"><div><p class="cvd-kicker">Casa Viva · Gestoras</p><h1>Hola, <?php echo esc_html( $user->display_name ); ?>.</h1><p>Tu centro de ventas, clientes, catálogo y comisiones.</p></div><a class="cvd-secondary" href="<?php echo esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ); ?>">Cambiar cuenta</a></header>
-			<nav class="cvd-app-nav" aria-label="Panel de gestora"><a href="#dashboard">Dashboard</a><a href="#ventas">Ventas</a><a href="#clientes">Clientes</a><a href="#comisiones">Comisiones</a><a href="#pagos">Pagos</a><a href="#catalogo">Mi catálogo</a><a href="#precios">Mis precios</a><a href="#materiales">Material promocional</a><a href="#configuracion">Configuración</a><a href="#perfil">Perfil</a></nav>
+			<nav class="cvd-app-nav" aria-label="Panel de gestora"><a href="#dashboard">Dashboard</a><a href="#ventas">Ventas</a><a href="#mensajeria">Mensajería</a><a href="#clientes">Clientes</a><a href="#comisiones">Comisiones</a><a href="#pagos">Pagos</a><a href="#catalogo">Mi catálogo</a><a href="#precios">Mis precios</a><a href="#materiales">Material promocional</a><a href="#configuracion">Configuración</a><a href="#perfil">Perfil</a></nav>
 			<div class="cvd-stats" id="dashboard"><article><span>Por verificar</span><strong><?php echo wp_kses_post( wc_price( $totals['pending'] ) ); ?></strong><small>No es saldo ganado todavía</small></article><article><span>Aprobada</span><strong><?php echo wp_kses_post( wc_price( $totals['approved'] ) ); ?></strong><small>Venta validada por Casa Viva</small></article><article><span>Pagada</span><strong><?php echo wp_kses_post( wc_price( $totals['paid'] ) ); ?></strong><small>Liquidación completada</small></article><article id="clientes"><span>Clientes vinculados</span><strong><?php echo esc_html( $clients ); ?></strong><small>Excluye pedidos anulados</small></article></div>
+			<section class="cvd-panel cvd-gestora-dispatch" id="mensajeria"><div><p class="cvd-kicker">Mensajería</p><h2>Enviar a mensajeros</h2><p>Casa Viva ofrece el pedido. El primer mensajero elegible que acepte queda asignado.</p></div><?php if ( isset( $_GET['mensajeria'] ) ) : ?><div class="cvd-notice" role="status"><?php echo esc_html( 'offered' === sanitize_key( wp_unslash( $_GET['mensajeria'] ) ) ? 'Pedido enviado a mensajeros disponibles.' : 'No se pudo enviar. Comprueba el pedido y la disponibilidad.' ); ?></div><?php endif; ?><div class="cvd-available-messengers"><strong><?php echo esc_html( count( $available_messengers ) ); ?> disponibles ahora</strong><?php if ( $available_messengers ) : ?><ul><?php foreach ( $available_messengers as $messenger ) : ?><li><span aria-hidden="true"></span><b><?php echo esc_html( $messenger->display_name ); ?></b><small><?php echo esc_html( get_user_meta( $messenger->ID, '_cvd_zone', true ) ?: 'Zona abierta' ); ?></small></li><?php endforeach; ?></ul><?php else : ?><p>Nadie ha marcado disponibilidad.</p><?php endif; ?></div><?php if ( $dispatchable_orders ) : ?><div class="cvd-dispatch-orders"><?php foreach ( array_slice( $dispatchable_orders, 0, 20 ) as $dispatch_order ) : ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="cvd_gestora_publish_delivery"><input type="hidden" name="order_id" value="<?php echo esc_attr( $dispatch_order->get_id() ); ?>"><div><strong>#<?php echo esc_html( $dispatch_order->get_order_number() ); ?></strong><small><?php echo esc_html( CVD_Delivery::destination_zone( $dispatch_order ) ); ?></small></div><?php wp_nonce_field( 'cvd_gestora_publish_delivery_' . $dispatch_order->get_id() ); ?><button class="cvd-primary" type="submit" <?php disabled( ! $available_messengers ); ?>>Enviar vale</button></form><?php endforeach; ?></div><?php else : ?><p class="cvd-empty-state">No tienes pedidos pendientes de enviar.</p><?php endif; ?></section>
 			<section class="cvd-panel" id="catalogo"><div><p class="cvd-kicker">Tu tienda espejo</p><h2>Comparte tu catálogo personalizado</h2><p>Los productos y existencias vienen de Casa Viva. Tu enlace conserva tu código y muestra tus precios.</p></div><div class="cvd-referral"><input aria-label="Enlace personal" id="cvd-store-link" readonly value="<?php echo esc_attr( $link ); ?>"><div class="cvd-inline-actions"><button class="cvd-secondary" data-copy-target="cvd-store-link" type="button">Copiar</button><a class="cvd-primary" href="<?php echo esc_url( $link ); ?>" target="_blank" rel="noopener">Ver mi tienda</a></div><a href="<?php echo esc_url( 'https://wa.me/?text=' . rawurlencode( 'Mira mi tienda Casa Viva: ' . $link ) ); ?>" target="_blank" rel="noopener">Compartir por WhatsApp</a><small>Código: <?php echo esc_html( $code ); ?></small></div></section>
 			<section class="cvd-panel cvd-pricing-panel" id="precios"><div><p class="cvd-kicker">Configuración rápida</p><h2>Precio general de tu tienda</h2><p>Aplica el mismo porcentaje sobre el precio Casa Viva. Los precios individuales tienen prioridad.</p></div><form method="post"><label>Aumento general <span>(máximo <?php echo esc_html( wc_format_decimal( $max_markup, 2 ) ); ?>%)</span><div class="cvd-percentage"><input max="<?php echo esc_attr( $max_markup ); ?>" min="0" name="cvd_global_markup" step="0.01" type="number" value="<?php echo esc_attr( $global_markup ); ?>"><b>%</b></div></label><?php wp_nonce_field( 'cvd_save_gestora_prices', 'cvd_gestora_prices_nonce' ); ?><button class="cvd-primary" name="cvd_price_action" type="submit" value="global">Aplicar a mi tienda</button></form></section>
 			<section class="cvd-panel cvd-products-pricing"><div class="cvd-section-head"><div><p class="cvd-kicker">Precios por producto</p><h2>Personaliza productos</h2></div><label class="cvd-product-search">Buscar producto<input id="cvd-price-search" type="search" placeholder="Ej.: ventilador"></label></div><form method="post"><div class="cvd-price-list">
