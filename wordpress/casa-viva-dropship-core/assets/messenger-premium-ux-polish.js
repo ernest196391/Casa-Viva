@@ -57,12 +57,21 @@
   }
 
   function observeLateWhatsapp(center) {
+    const fixedAncestor = (link) => {
+      let node = link;
+      while (node && node !== document.body) {
+        if (getComputedStyle(node).position === 'fixed') return node;
+        node = node.parentElement;
+      }
+      return null;
+    };
+
     const hide = () => {
       qsa('a[href*="wa.me"], a[href*="whatsapp.com"]', document).forEach((link) => {
         if (center.contains(link)) return;
-        const style = getComputedStyle(link);
-        if (style.position !== 'fixed') return;
-        link.classList.add('cvd-hide-global-whatsapp');
+        const floating = fixedAncestor(link);
+        if (!floating) return;
+        floating.classList.add('cvd-hide-global-whatsapp');
         link.setAttribute('aria-hidden', 'true');
         link.tabIndex = -1;
       });

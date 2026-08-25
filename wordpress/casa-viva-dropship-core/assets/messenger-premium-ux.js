@@ -295,9 +295,12 @@
   function hideFloatingWhatsapp(center) {
     qsa('a[href*="wa.me"], a[href*="whatsapp.com"]', document).forEach((link) => {
       if (center.contains(link)) return;
-      const style = getComputedStyle(link);
-      if (style.position === 'fixed') {
-        link.classList.add('cvd-hide-global-whatsapp');
+      let floating = link;
+      while (floating && floating !== document.body && getComputedStyle(floating).position !== 'fixed') {
+        floating = floating.parentElement;
+      }
+      if (floating && floating !== document.body) {
+        floating.classList.add('cvd-hide-global-whatsapp');
         link.setAttribute('aria-hidden', 'true');
         link.tabIndex = -1;
       }

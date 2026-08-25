@@ -13,7 +13,8 @@ body:has(.cvd-premium-v2) .entry-title{display:none!important}
 }
 .cvd-premium-v2[data-cvd-view="mas"] .cvd-messenger-launchpad .cvd-upload-voucher{display:none!important}
 .cvd-premium-v2 .cvd-messenger-alert-control{display:none!important}
-.cvd-premium-v2[data-cvd-view="mas"] .cvd-messenger-alert-control{display:block!important}
+.cvd-premium-v2[data-cvd-view="mas"] .cvd-messenger-alert-control{display:flex!important;position:static!important}
+.cvd-premium-v2 .cvd-messenger-alert-control button{max-width:100%!important;position:static!important}
 
 /* El contenedor legado de Entrega activa conserva semántica/DOM para los contratos,
    pero no añade una segunda tarjeta visual: la entrega se presenta dentro del detalle de Ruta. */

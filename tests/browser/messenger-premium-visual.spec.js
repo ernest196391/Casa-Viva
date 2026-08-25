@@ -22,6 +22,14 @@ test('auditoría visual móvil de Hoy, Ruta y Más', async ({ page }, testInfo) 
   expect(response && response.ok()).toBeTruthy();
   await expect(page.locator('.cvd-messenger-center.cvd-premium-v2')).toBeVisible({ timeout: 15000 });
 
+  const mobileGeometry = await page.evaluate(() => {
+    const rect = document.querySelector('.cvd-messenger-center.cvd-premium-v2').getBoundingClientRect();
+    return { viewport: document.documentElement.clientWidth, left: rect.left, right: rect.right, width: rect.width };
+  });
+  expect(mobileGeometry.left).toBeGreaterThanOrEqual(0);
+  expect(mobileGeometry.right).toBeLessThanOrEqual(mobileGeometry.viewport + 1);
+  expect(mobileGeometry.width).toBeGreaterThanOrEqual(mobileGeometry.viewport - 22);
+
   await page.screenshot({ path: testInfo.outputPath('messenger-hoy-390.png'), fullPage: true });
 
   await page.getByRole('link', { name: 'Ruta', exact: true }).click();
@@ -31,6 +39,15 @@ test('auditoría visual móvil de Hoy, Ruta y Más', async ({ page }, testInfo) 
   await page.getByRole('link', { name: 'Más', exact: true }).click();
   await expect(page.locator('.cvd-messenger-center')).toHaveAttribute('data-cvd-view', 'mas');
   await page.screenshot({ path: testInfo.outputPath('messenger-mas-390.png'), fullPage: true });
+
+  const firstPhone = page.locator('.cvd-contact-phones p').first();
+  if (await firstPhone.count()) await expect(firstPhone).toHaveCSS('display', 'grid');
+
+  const notificationControl = page.locator('.cvd-messenger-alert-control');
+  if (await notificationControl.count()) await expect(notificationControl).not.toHaveCSS('position', 'fixed');
+
+  const floatingWhatsapp = page.locator('.cvd-hide-global-whatsapp');
+  if (await floatingWhatsapp.count()) await expect(floatingWhatsapp).toBeHidden();
 
   const layout = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth }));
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width + 1);
