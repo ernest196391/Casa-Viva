@@ -19,91 +19,100 @@ async function login(page) {
 async function openCenter(page) {
   const response = await page.goto(`${baseURL}/?page_id=${pageId}`, { waitUntil: 'domcontentloaded' });
   expect(response && response.ok()).toBeTruthy();
-  await expect(page.locator(`[data-delivery-id="${orderId}"]`)).toBeVisible({ timeout: 15000 });
-  await expect(page.locator('.cvd-messenger-center.cvd-p03')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.cvd-messenger-center.cvd-p03.cvd-premium-v2')).toBeVisible({ timeout: 15000 });
+}
+
+async function assertNoOverflow(page) {
+  const layout = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth }));
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width + 1);
 }
 
 test.afterEach(async ({ page }, testInfo) => {
   if (testInfo.status === testInfo.expectedStatus) return;
   await page.screenshot({ path: testInfo.outputPath('test-failed-messenger.png'), fullPage: true }).catch(() => {});
-  const snapshot = await page.evaluate(() => ({
-    href: window.location.href,
-    width: window.innerWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-    title: document.querySelector('#entregas h2')?.textContent || '',
-    shellClass: document.querySelector('.cvd-dashboard.cvd-app-shell')?.className || '',
-    nav: Array.from(document.querySelectorAll('.cvd-messenger-nav a')).map((a) => a.textContent.trim()),
-    cards: Array.from(document.querySelectorAll('[data-delivery-id]')).map((card) => ({
-      id: card.getAttribute('data-delivery-id'),
-      status: card.getAttribute('data-delivery-status'),
-      className: card.className,
-      whatsapp: Boolean(card.querySelector('a[href^="https://wa.me/"]')),
-      phone: Boolean(card.querySelector('a[href^="tel:"]')),
-      navigate: Array.from(card.querySelectorAll('a')).some((link) => link.textContent.trim() === 'Navegar'),
-      delivered: Boolean(card.querySelector('[data-confirm-delivery="delivered"]')),
-    })),
-  })).catch(() => null);
-  if (snapshot) console.log('MESSENGER_DIAGNOSTIC ' + JSON.stringify(snapshot));
 });
 
-test('mensajero ve una entrega activa con acciones operativas directas', async ({ page }) => {
+test('Hoy es un dashboard compacto y no duplica toda la operación', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await login(page);
-  await openCenter(page);
+  await login(page); await openCenter(page);
+  const center = page.locator('.cvd-messenger-center');
+  await expect(center).toHaveAttribute('data-cvd-view', 'hoy');
+  await expect(page.locator('.cvd-messenger-today')).toBeVisible();
+  await expect(page.locator('.cvd-today-brief')).toBeVisible();
+  await expect(page.locator('.cvd-next-task')).toBeVisible();
+  await expect(page.locator('.cvd-messenger-route')).toBeHidden();
+  await expect(page.locator('.cvd-messenger-contacts')).toBeHidden();
+  await expect(page.locator('.cvd-messenger-preparation')).toBeHidden();
+  await expect(page.locator('#liquidaciones')).toBeHidden();
+  await assertNoOverflow(page);
+});
 
-  const card = page.locator(`[data-delivery-id="${orderId}"]`);
-  await expect(page.locator('#entregas h2')).toHaveText('Entrega activa');
+test('Ruta concentra la entrega activa y usa progressive disclosure', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page); await openCenter(page);
+  await page.getByRole('link', { name: 'Ruta', exact: true }).click();
+  await expect(page.locator('.cvd-messenger-center')).toHaveAttribute('data-cvd-view', 'ruta');
+  await expect(page.locator('.cvd-messenger-route')).toBeVisible();
+  await expect(page.locator('#liquidaciones')).toBeHidden();
+
+  const stop = page.locator(`[data-route-stop="${orderId}"]`);
+  await expect(stop.locator('.cvd-route-quick')).toBeVisible();
+  await expect(stop.locator('.cvd-route-details')).toBeHidden();
+  await stop.locator('.cvd-route-detail-toggle').click();
+  await expect(stop.locator('.cvd-route-details')).toBeVisible();
+
+  const card = stop.locator(`[data-delivery-id="${orderId}"]`);
   await expect(card).toHaveClass(/is-current/);
   await expect(card.locator('a[href^="https://wa.me/"]')).toBeVisible();
   await expect(card.locator('a[href^="tel:"]')).toBeVisible();
   await expect(card.getByText('Navegar')).toBeVisible();
   await expect(card.locator('[data-confirm-delivery="delivered"]')).toContainText('Entregado');
-
-  const layout = await page.evaluate(() => {
-    const center = document.getElementById('entregas');
-    return center ? { present: true, width: center.clientWidth, scrollWidth: center.scrollWidth } : { present: false, width: 0, scrollWidth: 0 };
-  });
-  expect(layout.present).toBeTruthy();
-  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width + 1);
+  await assertNoOverflow(page);
 });
 
-test('mensajero recibe una jerarquía móvil simple con CTA, siguiente tarea y cuatro destinos', async ({ page }) => {
+test('Más compacta contactos, preparación y asistente bajo demanda', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await login(page); await openCenter(page);
-
-  await expect(page.getByRole('link', { name: /Añadir vale/i })).toBeVisible();
-  await expect(page.locator('.cvd-next-task')).toBeVisible();
-  await expect(page.locator('.cvd-messenger-nav a')).toHaveCount(4);
-  await expect(page.locator('.cvd-messenger-nav')).toContainText('Hoy');
-  await expect(page.locator('.cvd-messenger-nav')).toContainText('Ruta');
-  await expect(page.locator('.cvd-messenger-nav')).toContainText('Dinero');
-  await expect(page.locator('.cvd-messenger-nav')).toContainText('Más');
-
-  const layout = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth }));
-  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width + 1);
-});
-
-test('mensajero abre asistente contextual bajo demanda sin exponer metadatos internos', async ({ page }) => {
-  await page.setViewportSize({ width: 360, height: 740 });
-  await login(page); await openCenter(page);
-
+  await page.getByRole('link', { name: 'Más', exact: true }).click();
+  await expect(page.locator('.cvd-messenger-center')).toHaveAttribute('data-cvd-view', 'mas');
+  await expect(page.locator('.cvd-messenger-contacts')).toBeVisible();
+  await expect(page.locator('.cvd-messenger-preparation')).toBeVisible();
+  await expect(page.locator('#liquidaciones')).toBeHidden();
+  const contact = page.locator('.cvd-contact-list article').first();
+  if (await contact.locator('.cvd-contact-toggle').count()) {
+    await expect(contact.locator('.cvd-contact-more')).toBeHidden();
+    await contact.locator('.cvd-contact-toggle').click();
+    await expect(contact.locator('.cvd-contact-more')).toBeVisible();
+  }
   const assistant = page.locator('#asistente');
   await expect(assistant).toBeHidden();
-  await page.getByRole('link', { name: 'Asistente', exact: true }).click();
+  await page.locator('.cvd-messenger-launchpad a[href="#asistente"]').first().click();
   await expect(assistant).toBeVisible();
-  await expect(assistant.locator('[data-assistant-question="missing"]')).toContainText('Qué falta');
   await assistant.locator('[data-assistant-question="missing"]').click();
   await expect(page.locator('.cvd-assistant-answer')).toBeVisible();
-  await expect(page.locator('.cvd-assistant-answer p')).not.toHaveText('');
   await expect(page.locator('#preparar')).not.toContainText('_reduced_stock');
-  await expect(page.locator('#preparar')).not.toContainText('_cvd_stock_reduction_sequence');
+  await assertNoOverflow(page);
 });
 
-test('mensajero mantiene jerarquía y ancho correcto en 414x896', async ({ page }) => {
-  await page.setViewportSize({ width: 414, height: 896 });
+test('Dinero concentra liquidaciones y navegación activa', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
   await login(page); await openCenter(page);
-  await expect(page.locator('.cvd-next-task')).toBeVisible();
   await expect(page.locator('.cvd-messenger-nav a')).toHaveCount(4);
-  const layout = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth }));
-  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width + 1);
+  await page.getByRole('link', { name: 'Dinero', exact: true }).click();
+  await expect(page.locator('.cvd-messenger-nav a[aria-current="page"]')).toHaveText('Dinero');
+  await expect(page.locator('#liquidaciones')).toBeVisible();
+  await expect(page.locator('.cvd-messenger-today')).toBeHidden();
+  await assertNoOverflow(page);
 });
+
+for (const width of [320, 360, 375, 390, 414]) {
+  test(`mensajero no desborda horizontalmente a ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await login(page); await openCenter(page);
+    await assertNoOverflow(page);
+    for (const destination of ['Ruta', 'Dinero', 'Más']) {
+      await page.getByRole('link', { name: destination, exact: true }).click();
+      await assertNoOverflow(page);
+    }
+  });
+}

@@ -40,7 +40,9 @@ jobs:
         run: node artifacts/tests/test-order-center-2a.mjs
 
       - name: Validar contrato del Centro Operativo del Mensajero
-        run: node artifacts/tests/test-messenger-center-2d.mjs
+        run: |
+          node artifacts/tests/test-messenger-center-2d.mjs
+          node artifacts/tests/test-messenger-operational-fields.mjs
 
       - name: Validar contrato de navegación móvil del cliente
         run: node artifacts/tests/test-customer-navigation-3a.mjs
