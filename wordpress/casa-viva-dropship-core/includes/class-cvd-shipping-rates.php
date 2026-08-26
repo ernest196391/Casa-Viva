@@ -42,7 +42,6 @@ final class CVD_Shipping_Rates {
 	public static function render_quote(): string {
 		ob_start(); ?>
 		<main class="cvd-quote-app" data-cvd-quote>
-			<header><h1>Tarifa de mensajería</h1></header>
 			<section class="cvd-quote-card" aria-label="Consultar tarifa">
 				<label>Municipio<select data-quote-municipality><option value="">Selecciona municipio</option><?php foreach ( array_keys( self::localities() ) as $municipality ) : ?><option value="<?php echo esc_attr( $municipality ); ?>"><?php echo esc_html( $municipality ); ?></option><?php endforeach; ?></select></label>
 				<label>Zona o reparto<select data-quote-zone disabled><option value="">Selecciona primero el municipio</option></select></label>
