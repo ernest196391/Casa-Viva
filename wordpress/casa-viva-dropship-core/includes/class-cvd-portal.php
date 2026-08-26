@@ -115,6 +115,7 @@ final class CVD_Portal {
 		if ( $order instanceof WC_Order
 			&& $user->ID === absint( $order->get_meta( '_cvd_owner_user_id', true ) )
 			&& 'pickup' !== $order->get_meta( '_cvd_fulfillment_type', true )
+			&& 'ready' === sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) )
 			&& 'unassigned' === CVD_Delivery::status( $order )
 			&& CVD_Delivery::publish_offer( $order ) ) {
 			$result = 'offered';
@@ -182,7 +183,7 @@ final class CVD_Portal {
 		$clients = count( $client_keys );
 		$orders = array_slice( $all_orders, 0, 100 );
 		$available_messengers = CVD_Delivery::available_messengers();
-		$dispatchable_orders = array_values( array_filter( $all_orders, static fn( $order ) => 'pickup' !== $order->get_meta( '_cvd_fulfillment_type', true ) && 'unassigned' === CVD_Delivery::status( $order ) ) );
+		$dispatchable_orders = array_values( array_filter( $all_orders, static fn( $order ) => 'pickup' !== $order->get_meta( '_cvd_fulfillment_type', true ) && 'ready' === sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) ) && 'unassigned' === CVD_Delivery::status( $order ) ) );
 		$code = get_user_meta( $user->ID, '_cvd_referral_code', true );
 		if ( ! $code ) {
 			$code = 'CV' . $user->ID . strtoupper( substr( preg_replace( '/[^A-Z0-9]/i', '', $user->user_login ), 0, 8 ) );

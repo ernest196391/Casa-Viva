@@ -87,6 +87,10 @@ El contrato ya está implementado mediante eventos inmutables del dominio `conta
 
 El mensajero puede mover cada parada con `Subir` y `Bajar`. Ese orden vive solo en `sessionStorage`, por usuario y sesión del navegador; no se escribe en WooCommerce, no modifica estados y no representa una ruta canónica. La interfaz lo identifica expresamente como orden manual previo a NEXO. No se añaden geocodificación, ETA ni `route-suggest`.
 
+## Despacho de gestora al pool canónico
+
+La gestora aprobada puede publicar exclusivamente pedidos propios, a domicilio, sin asignar y con operación `ready`. Tanto el listado visible como el handler server-side exigen las cuatro condiciones. La acción reutiliza `CVD_Delivery::publish_offer()` y nunca asigna directamente: el primer mensajero elegible que acepta obtiene la carrera mediante el mecanismo atómico del Core.
+
 `Entrega activa` conserva una acción principal según la transición permitida por `CVD_Delivery`, con incidencia como acción secundaria. Producto y mensajería continúan separados y la transición `handed_over → delivered` usa la URL canónica con nonce.
 
 Después de `delivered`, el pedido deja de competir con las entregas activas y aparece en `Cierre de entrega`. La vista lee `_cvd_cash_status`, timestamps de entrega/retorno/verificación y, cuando existen, `_cvd_collection_method`, `_cvd_collection_amount_usd` y `_cvd_collection_amount_cup`. No permite al mensajero declarar el arqueo ni cambiar la conciliación.
