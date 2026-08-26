@@ -1,0 +1,21 @@
+name: Activar deploy Core 3.10.9
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  trigger-deploy:
+    if: github.repository == 'ernest196391/Casa-Viva'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Lanzar deploy canónico del SHA recién fusionado
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: gh workflow run deploy-prototype.yml --ref main -f expected_sha="$DEPLOY_SHA"
