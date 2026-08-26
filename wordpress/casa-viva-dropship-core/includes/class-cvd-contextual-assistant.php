@@ -6,7 +6,8 @@ defined( 'ABSPATH' ) || exit;
 final class CVD_Contextual_Assistant {
 	public static function register(): void {
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 90 );
-		add_action( 'wp_footer', array( __CLASS__, 'render' ), 45 );
+		// El marcado debe existir antes de que WordPress imprima los scripts del pie (prioridad 20).
+		add_action( 'wp_footer', array( __CLASS__, 'render' ), 5 );
 	}
 
 	private static function context(): string {
