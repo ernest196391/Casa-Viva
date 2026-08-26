@@ -1,0 +1,223 @@
+name: Activador temporal Core 3.10.11
+
+on:
+  push:
+    paths:
+      - '.github/workflows/deploy-trigger-3.10.11.yml'
+
+permissions:
+  contents: read
+
+env:
+  WP_PATH: /home/u824654880/domains/casavivadecuba.com/public_html
+  PLUGIN_SLUG: casa-viva-dropship-core
+  PROTOTYPE_URL: https://casavivadecuba.com
+  DEPLOY_SHA: ${{ github.event.before }}
+
+jobs:
+  deploy-prototype:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Descargar SHA solicitado
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          fetch-depth: 0
+
+      - name: Verificar que el SHA pertenece a main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=200
+          git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
+
+      - name: Verificar CI post-merge exitoso
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # El navegador tiene un presupuesto de hasta 30 min. Esperamos hasta 35 min
+          # para no fallar un despliegue válido mientras CI todavía está ejecutándose.
+          for attempt in {1..140}; do
+            runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${DEPLOY_SHA}&branch=main&event=push&per_page=50")"
+            successful="$(jq -r '[.workflow_runs[] | select(.name == "Validar aplicación" and .conclusion == "success")] | length' <<<"$runs")"
+            test "$successful" -ge 1 && exit 0
+            sleep 15
+          done
+          echo "No existe CI post-merge exitoso para $DEPLOY_SHA tras 35 minutos" >&2
+          exit 1
+
+      - name: Construir release reproducible
+        shell: bash
+        env:
+          GITHUB_REF_NAME: main
+        run: bash scripts/build-release-candidate.sh release
+
+      - name: Verificar checksum local
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release
+          sha256sum -c SHA256SUMS
+
+      - name: Preparar SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '\n' >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Copiar release al servidor
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          archive="$(jq -r '.archive' release/release-manifest.json)"
+          scp -P "$SSH_PORT" "release/$archive" release/release-manifest.json release/SHA256SUMS "$SSH_USER@$SSH_HOST:/tmp/"
+          echo "DEPLOY_ATTEMPTED=1" >> "$GITHUB_ENV"
+
+      - name: Desplegar plugin de forma controlada
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          EXPECTED_SHA: ${{ env.DEPLOY_SHA }}
+        run: |
+          set -euo pipefail
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "WP_PATH='$WP_PATH' PLUGIN_SLUG='$PLUGIN_SLUG' EXPECTED_SHA='$EXPECTED_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+          command -v php >/dev/null
+          manifest_get() {
+            key="$1"
+            php -r '$m=json_decode(file_get_contents("/tmp/release-manifest.json"), true, 512, JSON_THROW_ON_ERROR); $k=$argv[1]; if (!array_key_exists($k, $m)) { fwrite(STDERR, "Missing manifest key: $k\n"); exit(2); } echo $m[$k];' "$key"
+          }
+          archive="$(manifest_get archive)"
+          archive_sha="$(manifest_get archive_sha256)"
+          source_sha="$(manifest_get source_sha)"
+          test "$source_sha" = "$EXPECTED_SHA"
+          printf '%s  %s\n' "$archive_sha" "/tmp/$archive" | sha256sum -c -
+
+          plugins_dir="$WP_PATH/wp-content/plugins"
+          current="$plugins_dir/$PLUGIN_SLUG"
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          backup="$plugins_dir/${PLUGIN_SLUG}.predeploy-${stamp}"
+          temp="$plugins_dir/.${PLUGIN_SLUG}.deploy-${stamp}"
+          marker="/tmp/cvd-prototype-backup-${EXPECTED_SHA}.txt"
+
+          rm -rf "$temp"
+          mkdir -p "$temp"
+          unzip -q "/tmp/$archive" -d "$temp"
+          test -f "$temp/$PLUGIN_SLUG/casa-viva-dropship-core.php"
+
+          : > "$marker"
+          if [ -d "$current" ]; then
+            mv "$current" "$backup"
+            printf '%s\n' "$backup" > "$marker"
+          fi
+          mv "$temp/$PLUGIN_SLUG" "$current"
+          rmdir "$temp" 2>/dev/null || true
+
+          cd "$WP_PATH"
+          wp plugin is-installed "$PLUGIN_SLUG"
+          wp plugin activate "$PLUGIN_SLUG" --quiet
+          wp eval 'CVD_Plugin::maybe_upgrade();'
+          wp plugin status "$PLUGIN_SLUG"
+          wp plugin get "$PLUGIN_SLUG" --field=version
+
+          printf '%s\n' "$EXPECTED_SHA" > "$current/.cvd-deployed-sha"
+          printf '%s\n' "$archive_sha" > "$current/.cvd-deployed-archive-sha256"
+          REMOTE
+
+      - name: Verificar identidad desplegada
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          deployed="$(ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cat '$WP_PATH/wp-content/plugins/$PLUGIN_SLUG/.cvd-deployed-sha'")"
+          test "$deployed" = "$DEPLOY_SHA"
+
+      - name: Verificar análisis real de un vale sintético
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          check="$(base64 -w 0 <<'PHP'
+          <?php
+          $request = new WP_REST_Request( 'POST', '/cvd/v1/voucher/parse' );
+          $request->set_param( 'text', "Casa Viva\nCliente: Prueba sintética\nTeléfono: 50000000\nDirección: Calle 1, Cotorro\nProducto: Artículo sintético, cantidad 1, 10 USD\nMensajería: 3300 CUP" );
+          $response = CVD_Voucher_Intake::parse( $request );
+          if ( is_wp_error( $response ) ) {
+              throw new RuntimeException( $response->get_error_message() );
+          }
+          $data = $response instanceof WP_REST_Response ? $response->get_data() : $response;
+          if ( empty( $data['draft'] ) || empty( $data['draft']['products'] ) ) {
+              throw new RuntimeException( 'NEXO no devolvió un vale revisable.' );
+          }
+          echo "Vale sintético interpretado correctamente.\n";
+          PHP
+          )"
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cd '$WP_PATH' && printf '%s' '$check' | base64 -d | wp eval-file -"
+
+      - name: Ejecutar smoke tests contra prototipo
+        shell: bash
+        run: bash scripts/smoke-staging.sh "$PROTOTYPE_URL"
+
+      - name: Rollback automático si falla el deploy o smoke
+        if: failure() && env.DEPLOY_ATTEMPTED == '1'
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          EXPECTED_SHA: ${{ env.DEPLOY_SHA }}
+        run: |
+          set -euo pipefail
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "WP_PATH='$WP_PATH' PLUGIN_SLUG='$PLUGIN_SLUG' EXPECTED_SHA='$EXPECTED_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+          current="$WP_PATH/wp-content/plugins/$PLUGIN_SLUG"
+          marker="/tmp/cvd-prototype-backup-${EXPECTED_SHA}.txt"
+          [ -f "$marker" ] || exit 0
+          backup="$(cat "$marker")"
+          [ -n "$backup" ] || exit 0
+          [ -d "$backup" ] || exit 0
+          rm -rf "$current"
+          mv "$backup" "$current"
+          cd "$WP_PATH"
+          wp plugin activate "$PLUGIN_SLUG" --quiet || true
+          rm -f "$marker"
+          REMOTE
+
+      - name: Resumen
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Deploy prototipo Casa Viva"
+            echo "- URL: $PROTOTYPE_URL"
+            echo "- SHA solicitado: $DEPLOY_SHA"
+            echo "- Resultado: ${{ job.status }}"
+            echo "- Unidad desplegada: $PLUGIN_SLUG"
+            echo "- Rollback automático: habilitado si falla verificación o smoke"
+          } >> "$GITHUB_STEP_SUMMARY"
