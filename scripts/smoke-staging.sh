@@ -48,7 +48,7 @@ fi
 
 echo "[4/6] Public canonical tariff page"
 tariff_code="$(curl "${curl_common[@]}" --output /tmp/cvd-tariffs.html --write-out '%{http_code}' "$base_url/tarifas-mensajeria/")"
-if [[ "$tariff_code" -ne 200 ]] || ! grep -Fq 'Calculadora de mensajería' /tmp/cvd-tariffs.html; then
+if [[ "$tariff_code" -ne 200 ]] || ! grep -Fq 'Tarifa de mensajería' /tmp/cvd-tariffs.html; then
   echo "Canonical tariff page is unavailable or incomplete (HTTP $tariff_code)" >&2
   exit 1
 fi
