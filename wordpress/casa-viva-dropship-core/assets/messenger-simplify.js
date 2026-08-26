@@ -275,17 +275,26 @@
     tuneReview();
 
     const status = qs('.cvd-voucher-status', app);
-    if (status) {
-      const slowTimer = new MutationObserver(() => {
-        const current = text(status).toLowerCase();
-        app.classList.toggle('is-analyzing', /analiz|interpret|esper/.test(current));
-      });
-      slowTimer.observe(status, { childList: true, characterData: true, subtree: true });
+    if (status && parse) {
+      const syncAnalyzing = () => app.classList.toggle('is-analyzing', parse.disabled);
+      const slowTimer = new MutationObserver(syncAnalyzing);
+      slowTimer.observe(parse, { attributes: true, attributeFilter: ['disabled'] });
+      syncAnalyzing();
     }
   }
 
   document.addEventListener('DOMContentLoaded', () => {
     simplifyMessenger();
     simplifyVoucher();
+  });
+
+  document.addEventListener('click', (event) => {
+    qsa('details.cv-mobile-nav[open]').forEach((menu) => {
+      if (!menu.contains(event.target) || event.target.closest('.cv-mobile-nav__panel a')) menu.removeAttribute('open');
+    });
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') qsa('details.cv-mobile-nav[open]').forEach((menu) => menu.removeAttribute('open'));
   });
 })();

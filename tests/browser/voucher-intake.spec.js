@@ -20,7 +20,25 @@ test('entrada de vales es simple en móvil y degrada sin crear pedidos cuando NE
   await page.locator('#cvd-voucher-text').fill('Vale sintético de prueba con cliente, producto, teléfono y dirección; no contiene PII real.');
   await page.locator('[data-voucher-parse]').click();
   await expect(page.locator('[role=status]')).toContainText('No se creó ningún pedido');
+  await expect(page.locator('[data-voucher-parse]')).toBeEnabled();
+  await expect(page.locator('.cvd-voucher-app')).not.toHaveClass(/is-analyzing/);
   await expect(page.locator('[data-voucher-review]')).toBeHidden();
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
+});
+
+test('un fallo de red libera el analizador para reintentar', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.goto(`${baseURL}/wp-login.php`);
+  await page.locator('#user_login').fill(operator.user);
+  await page.locator('#user_pass').fill(operator.pass);
+  await Promise.all([page.waitForURL(url=>!url.pathname.includes('wp-login.php')),page.locator('#wp-submit').click()]);
+  await page.route(/.*voucher(?:%2F|\/)parse.*/i, route=>route.abort('failed'));
+  await page.goto(`${baseURL}/?page_id=${pageId}`,{waitUntil:'domcontentloaded'});
+
+  await page.locator('#cvd-voucher-text').fill('Vale sintético de prueba con cliente, producto, teléfono y dirección; no contiene PII real.');
+  await page.locator('[data-voucher-parse]').click();
+  await expect(page.locator('[role=status]')).toContainText('No hubo conexión');
+  await expect(page.locator('[data-voucher-parse]')).toBeEnabled();
+  await expect(page.locator('.cvd-voucher-app')).not.toHaveClass(/is-analyzing/);
 });

@@ -41,7 +41,19 @@ final class CVD_Shipping_Rates {
 
 	public static function render_quote(): string {
 		ob_start(); ?>
-		<main class="cvd-quote-app" data-cvd-quote><header><p class="cvd-kicker">Tarifas Casa Viva</p><h1>Calculadora de mensajería</h1><p>Consulta la tarifa oficial vigente desde Casa Viva. NEXO no calcula precios.</p></header><section class="cvd-quote-card"><label>Origen<input disabled value="Casa Viva"></label><label>Municipio<select data-quote-municipality><option value="">Selecciona municipio</option><?php foreach ( array_keys( self::localities() ) as $municipality ) : ?><option value="<?php echo esc_attr( $municipality ); ?>"><?php echo esc_html( $municipality ); ?></option><?php endforeach; ?></select></label><label>Zona o reparto<select data-quote-zone disabled><option value="">Selecciona primero el municipio</option></select></label><button class="cvd-primary" data-quote-submit type="button">Consultar tarifa</button><p role="status" aria-live="polite"></p></section><section class="cvd-quote-card cvd-quote-result" data-quote-result hidden><p class="cvd-kicker" data-quote-kind></p><strong data-quote-price></strong><p data-quote-route></p><div><button type="button" data-quote-copy>Copiar</button><button type="button" data-quote-share>Compartir</button></div></section></main>
+		<main class="cvd-quote-app" data-cvd-quote>
+			<header><h1>Tarifa de mensajería</h1></header>
+			<section class="cvd-quote-card" aria-label="Consultar tarifa">
+				<label>Municipio<select data-quote-municipality><option value="">Selecciona municipio</option><?php foreach ( array_keys( self::localities() ) as $municipality ) : ?><option value="<?php echo esc_attr( $municipality ); ?>"><?php echo esc_html( $municipality ); ?></option><?php endforeach; ?></select></label>
+				<label>Zona o reparto<select data-quote-zone disabled><option value="">Selecciona primero el municipio</option></select></label>
+				<button class="cvd-primary" data-quote-submit type="button">Ver tarifa</button>
+				<p class="cvd-quote-status" role="status" aria-live="polite"></p>
+			</section>
+			<section class="cvd-quote-card cvd-quote-result" data-quote-result hidden>
+				<p class="cvd-quote-kind" data-quote-kind></p><strong data-quote-price></strong><p data-quote-route></p>
+				<div class="cvd-quote-actions"><button type="button" data-quote-copy>Copiar</button><button type="button" data-quote-share>Compartir</button></div>
+			</section>
+		</main>
 		<?php return (string) ob_get_clean();
 	}
 

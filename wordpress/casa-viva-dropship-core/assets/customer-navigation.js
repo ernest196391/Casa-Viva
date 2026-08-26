@@ -40,4 +40,14 @@
   }
 
   window.addEventListener('pageshow', syncCount);
+
+  document.addEventListener('click', function (event) {
+    document.querySelectorAll('details.cv-mobile-nav[open]').forEach(function (menu) {
+      if (!menu.contains(event.target) || event.target.closest('.cv-mobile-nav__panel a')) menu.removeAttribute('open');
+    });
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') document.querySelectorAll('details.cv-mobile-nav[open]').forEach(function (menu) { menu.removeAttribute('open'); });
+  });
 })(window.jQuery);

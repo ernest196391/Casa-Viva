@@ -77,6 +77,7 @@ jobs:
           node artifacts/tests/test-messenger-delivery-collection.mjs
           node artifacts/tests/test-voucher-intake-contract.mjs
           node artifacts/tests/test-shipping-quote-contract.mjs
+          node artifacts/tests/test-tariffs-mobile-polish.mjs
           node artifacts/tests/test-split-payment-obligations.mjs
           node artifacts/tests/test-gestora-messenger-dispatch.mjs
 
