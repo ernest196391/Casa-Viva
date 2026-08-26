@@ -11,6 +11,7 @@ for (const marker of ['visitante', 'cliente', 'gestora', 'mensajero', 'operacion
 if (!plugin.includes('CVD_Contextual_Assistant::register()')) throw new Error('El asistente contextual no está registrado.');
 if (!css.includes('bottom:112px') || !css.includes('z-index:61')) throw new Error('El robot no está situado de forma estable sobre WhatsApp.');
 if (!js.includes('#asistente[data-cvd-assistant]')) throw new Error('El mensajero debe reutilizar su asistente operativo autorizado.');
+if (!js.includes('window.cvdContextualAssistant ||') || !php.includes('data-context=')) throw new Error('El robot debe abrir incluso si una caché difiere la configuración localizada.');
 if (/email|billing_phone|address_1|customer_id/i.test(php + js)) throw new Error('El asistente global no debe recibir PII.');
 
 console.log('Asistente contextual: roles, privacidad y acceso flotante verificados.');
