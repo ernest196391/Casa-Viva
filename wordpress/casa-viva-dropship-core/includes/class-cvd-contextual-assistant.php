@@ -36,7 +36,7 @@ final class CVD_Contextual_Assistant {
 		if ( is_admin() ) { return; }
 		?>
 		<button class="cvd-assistant-launcher" type="button" aria-label="Abrir Asistente Casa Viva" aria-expanded="false" aria-controls="cvd-contextual-assistant"><span aria-hidden="true">🤖</span></button>
-		<aside class="cvd-contextual-assistant" id="cvd-contextual-assistant" aria-label="Asistente Casa Viva" hidden>
+		<aside class="cvd-contextual-assistant" id="cvd-contextual-assistant" data-context="<?php echo esc_attr( self::context() ); ?>" aria-label="Asistente Casa Viva" hidden>
 			<header><div><small>Casa Viva</small><strong>¿En qué te ayudo?</strong></div><button type="button" data-cvd-assistant-close aria-label="Cerrar asistente">×</button></header>
 			<div class="cvd-contextual-assistant__quick" aria-label="Preguntas frecuentes">
 				<button type="button" data-question="pedido">Mi pedido</button><button type="button" data-question="pago">Cómo pagar</button><button type="button" data-question="tarifa">Mensajería</button><button type="button" data-question="ayuda">Necesito ayuda</button>

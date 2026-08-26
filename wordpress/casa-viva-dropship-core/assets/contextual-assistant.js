@@ -2,11 +2,18 @@
   "use strict";
   const launcher = document.querySelector(".cvd-assistant-launcher");
   const panel = document.querySelector(".cvd-contextual-assistant");
-  if (!launcher || !panel || !window.cvdContextualAssistant) return;
+  if (!launcher || !panel) return;
   const answer = panel.querySelector(".cvd-contextual-assistant__answer p");
   const form = panel.querySelector("form");
   const input = panel.querySelector("input");
-  const context = window.cvdContextualAssistant.context;
+  const urls = window.cvdContextualAssistant || {
+    context: panel.dataset.context || "visitante",
+    routeUrl: "/ruta-cv/",
+    managersUrl: "/gestores/",
+    ordersUrl: "/mi-cuenta/orders/",
+    ratesUrl: "/tarifas-mensajeria/"
+  };
+  const context = urls.context;
 
   function open() {
     const messengerAssistant = document.querySelector("#asistente[data-cvd-assistant]");
@@ -22,7 +29,6 @@
   function link(label, url) { return `<a href="${url}">${label}</a>`; }
   function reply(question) {
     const value = question.toLocaleLowerCase("es");
-    const urls = window.cvdContextualAssistant;
     let message;
     if (/pedido|estado|seguimiento|dónde está/.test(value)) message = context === "mensajero" ? `Abre ${link("tu Ruta", urls.routeUrl)} para ver únicamente tus entregas.` : `Consulta ${link("Mis pedidos", urls.ordersUrl)} para ver estado y progreso.`;
     else if (/tarifa|mensajería|envío|zona|reparto/.test(value)) message = `Consulta la ${link("tarifa oficial", urls.ratesUrl)} seleccionando municipio y reparto.`;
