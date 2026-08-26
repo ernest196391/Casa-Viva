@@ -1,5 +1,4 @@
 :root { --cvd-petrol: #0d3b45; --cvd-amber: #a35a1f; --cvd-cream: #f6f1e6; --cvd-ink: #2b2420; }
-body.cvd-quote-page .entry-header, body.cvd-quote-page .entry-title { display: none !important; }
 .cvd-quote-app { box-sizing: border-box; width: min(100%, 600px); margin: 0 auto; padding: clamp(24px, 6vw, 48px) 16px 64px; color: var(--cvd-ink); }
 .cvd-quote-app * { box-sizing: border-box; }
 .cvd-quote-card { display: grid; gap: 18px; margin: 0 0 16px; padding: clamp(20px, 5vw, 28px); border: 1px solid rgba(13,59,69,.14); border-radius: 24px; background: #fff; box-shadow: 0 16px 42px rgba(13,59,69,.08); }

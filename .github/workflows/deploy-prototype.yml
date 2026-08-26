@@ -157,6 +157,31 @@ jobs:
           deployed="$(ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cat '$WP_PATH/wp-content/plugins/$PLUGIN_SLUG/.cvd-deployed-sha'")"
           test "$deployed" = "$DEPLOY_SHA"
 
+      - name: Verificar análisis real de un vale sintético
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          check="$(base64 -w 0 <<'PHP'
+          <?php
+          $request = new WP_REST_Request( 'POST', '/cvd/v1/voucher/parse' );
+          $request->set_param( 'text', "Casa Viva\nCliente: Prueba sintética\nTeléfono: 50000000\nDirección: Calle 1, Cotorro\nProducto: Artículo sintético, cantidad 1, 10 USD\nMensajería: 3300 CUP" );
+          $response = CVD_Voucher_Intake::parse( $request );
+          if ( is_wp_error( $response ) ) {
+              throw new RuntimeException( $response->get_error_message() );
+          }
+          $data = $response instanceof WP_REST_Response ? $response->get_data() : $response;
+          if ( empty( $data['draft'] ) || empty( $data['draft']['products'] ) ) {
+              throw new RuntimeException( 'NEXO no devolvió un vale revisable.' );
+          }
+          echo "Vale sintético interpretado correctamente.\n";
+          PHP
+          )"
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cd '$WP_PATH' && printf '%s' '$check' | base64 -d | wp eval-file -"
+
       - name: Ejecutar smoke tests contra prototipo
         shell: bash
         run: bash scripts/smoke-staging.sh "$PROTOTYPE_URL"

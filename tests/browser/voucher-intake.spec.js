@@ -19,7 +19,7 @@ test('entrada de vales es simple en móvil y degrada sin crear pedidos cuando NE
 
   await page.locator('#cvd-voucher-text').fill('Vale sintético de prueba con cliente, producto, teléfono y dirección; no contiene PII real.');
   await page.locator('[data-voucher-parse]').click();
-  await expect(page.locator('[role=status]')).toContainText('No se creó ningún pedido');
+  await expect(page.locator('.cvd-voucher-status')).toContainText('No se creó ningún pedido');
   await expect(page.locator('[data-voucher-parse]')).toBeEnabled();
   await expect(page.locator('.cvd-voucher-app')).not.toHaveClass(/is-analyzing/);
   await expect(page.locator('[data-voucher-review]')).toBeHidden();
@@ -38,7 +38,7 @@ test('un fallo de red libera el analizador para reintentar', async ({ page }) =>
 
   await page.locator('#cvd-voucher-text').fill('Vale sintético de prueba con cliente, producto, teléfono y dirección; no contiene PII real.');
   await page.locator('[data-voucher-parse]').click();
-  await expect(page.locator('[role=status]')).toContainText('No hubo conexión');
+  await expect(page.locator('.cvd-voucher-status')).toContainText('No hubo conexión');
   await expect(page.locator('[data-voucher-parse]')).toBeEnabled();
   await expect(page.locator('.cvd-voucher-app')).not.toHaveClass(/is-analyzing/);
 });
@@ -50,7 +50,7 @@ test('un catálogo lento no congela un vale ya interpretado', async ({ page }) =
   await page.locator('#user_pass').fill(operator.pass);
   await Promise.all([page.waitForURL(url=>!url.pathname.includes('wp-login.php')),page.locator('#wp-submit').click()]);
   await page.route(/.*voucher(?:%2F|\/)parse.*/i, route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({draft:{orderCode:'CV-TEST',store:'Casa Viva',manager:null,managerCode:null,customer:'Cliente sintético',phones:['50000000'],address:'Dirección sintética',betweenStreets:null,reference:null,municipality:'Cotorro',zone:'Vedado Cotorro',scheduledDate:null,scheduledTime:null,products:[{name:'Producto sintético',quantity:1,unitPrice:10,currency:'USD'}],productTotals:[{amount:10,currency:'USD'}],deliveryCharge:{amount:3300,currency:'CUP',payer:'client',commissionAdjustment:0},changeRequired:[],sourceUrl:null,notes:[],missing:[],warnings:[],confidence:.9}})}));
-  await page.route(/.*voucher(?:%2F|\/)products.*/i, async () => {});
+  await page.route(/.*voucher(?:%2F|\/)products.*/i, route => { setTimeout(() => route.fulfill({status:200,contentType:'application/json',body:'[]'}), 12000); });
   await page.route(/.*shipping(?:%2F|\/)quote.*/i, route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({official:true,feeCup:3300})}));
   await page.goto(`${baseURL}/?page_id=${pageId}`,{waitUntil:'domcontentloaded'});
 
@@ -58,5 +58,5 @@ test('un catálogo lento no congela un vale ya interpretado', async ({ page }) =
   await page.locator('[data-voucher-parse]').click();
   await expect(page.locator('[data-voucher-review]')).toBeVisible({timeout:5000});
   await expect(page.locator('[data-voucher-parse]')).toBeEnabled();
-  await expect(page.locator('[role=status]')).toContainText('Listo');
+  await expect(page.locator('.cvd-voucher-status')).toContainText('Listo');
 });
