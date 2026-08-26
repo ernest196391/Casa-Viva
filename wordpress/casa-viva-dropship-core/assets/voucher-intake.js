@@ -4,6 +4,11 @@
   if (!root || !window.cvdVoucherIntake) return;
   const ui = { text: root.querySelector("#cvd-voucher-text"), parse: root.querySelector("[data-voucher-parse]"), status: root.querySelector("[role=status]"), review: root.querySelector("[data-voucher-review]"), form: root.querySelector("[data-voucher-form]"), alerts: root.querySelector("[data-voucher-alerts]"), confidence: root.querySelector("[data-voucher-confidence]"), confirm: root.querySelector("[data-voucher-confirm]"), result: root.querySelector("[data-voucher-payload]") };
   let draft = null, confirmationKey = "";
+  const PARSE_TIMEOUT_MS = 55000;
+  async function responseBody(response) {
+    const text = await response.text();
+    try { return text ? JSON.parse(text) : {}; } catch { return {}; }
+  }
   const scalar = [["orderCode", "ID pedido"], ["store", "Origen / tienda"], ["sourceUrl", "Enlace original"], ["manager", "Gestor/a"], ["managerCode", "Código"], ["customer", "Cliente"], ["address", "Dirección"], ["betweenStreets", "Entrecalles"], ["reference", "Referencia"], ["municipality", "Municipio"], ["zone", "Zona/reparto"], ["scheduledDate", "Fecha (AAAA-MM-DD)"], ["scheduledTime", "Horario"]];
   function field(label, value, name, tag = "input") { const wrap = document.createElement("label"); wrap.className = "cvd-voucher-field"; wrap.append(Object.assign(document.createElement("span"), { textContent: label })); const input = document.createElement(tag); input.value = value ?? ""; input.dataset.key = name; wrap.append(input); return wrap; }
   async function choices(row, product, index) {
@@ -21,6 +26,46 @@
     ui.alerts.replaceChildren(); for (const [kind, items] of [["Faltan datos", draft.missing || []], ["Advertencias", draft.warnings || []]]) if (items.length) { const box = document.createElement("div"); box.className = "cvd-voucher-alert"; box.append(Object.assign(document.createElement("strong"), { textContent: kind })); const list = document.createElement("ul"); items.forEach((item) => list.append(Object.assign(document.createElement("li"), { textContent: item }))); box.append(list); ui.alerts.append(box); } ui.confidence.textContent = `${Math.round(Number(draft.confidence || 0) * 100)}% confianza`; ui.review.hidden = false;
   }
   function collect() { ui.form.querySelectorAll("[data-key]").forEach((input) => { const key = input.dataset.key; if (key === "phones" || key === "notes") draft[key] = input.value.split(/\n|,/).map((value) => value.trim()).filter(Boolean); else if (key.startsWith("product.")) { const [, index, property] = key.split("."); draft.products[Number(index)][property] = Number(input.value); } else if (["deliveryVoucherAmount", "deliveryCustomerAmount", "deliveryManagerAmount"].includes(key)) draft[key] = Number(input.value || 0); else if (!key.startsWith("search.")) draft[key] = input.value || null; }); return [...ui.form.querySelectorAll("[data-product-id]")].map((select, index) => ({ productId: Number(select.value), quantity: Number(draft.products[index]?.quantity || 1) })); }
-  ui.parse.addEventListener("click", async () => { ui.status.textContent = "NEXO está interpretando…"; ui.parse.disabled = true; ui.review.hidden = true; ui.result.hidden = true; try { const response = await fetch(window.cvdVoucherIntake.endpoint, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-WP-Nonce": window.cvdVoucherIntake.nonce }, body: JSON.stringify({ text: ui.text.value }) }); const body = await response.json(); if (!response.ok) throw new Error(body?.message || "No se pudo interpretar el vale."); draft = body.draft; draft.municipality = draft.municipality || ""; normalizeSplitPayment(); confirmationKey = crypto.randomUUID(); await render(); const total = ui.form.querySelector('[data-key="deliveryVoucherAmount"]'); if (total && draft.deliveryVoucherTotal) total.value = String(draft.deliveryVoucherTotal); ui.status.textContent = "Interpretación lista. Corrige y vincula los productos."; } catch (error) { ui.status.textContent = error instanceof Error ? error.message : "NEXO no está disponible. No se creó ningún pedido."; } finally { ui.parse.disabled = false; } });
+  ui.parse.addEventListener("click", async () => {
+    const voucherText = ui.text.value.trim();
+    if (voucherText.length < 20) {
+      ui.status.textContent = "Pega el vale completo antes de analizar.";
+      ui.text.focus();
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), PARSE_TIMEOUT_MS);
+    ui.status.textContent = "Analizando…";
+    ui.parse.disabled = true;
+    ui.review.hidden = true;
+    ui.result.hidden = true;
+    try {
+      const response = await fetch(window.cvdVoucherIntake.endpoint, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-WP-Nonce": window.cvdVoucherIntake.nonce },
+        body: JSON.stringify({ text: voucherText }),
+        signal: controller.signal
+      });
+      const body = await responseBody(response);
+      if (!response.ok) throw new Error(body?.message || "No se pudo analizar. Reintenta.");
+      if (!body?.draft) throw new Error("La respuesta no se pudo leer. Reintenta.");
+      draft = body.draft;
+      draft.municipality = draft.municipality || "";
+      normalizeSplitPayment();
+      confirmationKey = crypto.randomUUID();
+      await render();
+      const total = ui.form.querySelector('[data-key="deliveryVoucherAmount"]');
+      if (total && draft.deliveryVoucherTotal) total.value = String(draft.deliveryVoucherTotal);
+      ui.status.textContent = "Listo. Revisa los datos.";
+    } catch (error) {
+      if (error?.name === "AbortError") ui.status.textContent = "El análisis tardó demasiado. Reintenta; no se creó ningún pedido.";
+      else if (error instanceof TypeError) ui.status.textContent = "No hubo conexión para analizar. Reintenta; no se creó ningún pedido.";
+      else ui.status.textContent = error instanceof Error ? error.message : "No se pudo analizar. Reintenta; no se creó ningún pedido.";
+    } finally {
+      window.clearTimeout(timer);
+      ui.parse.disabled = false;
+    }
+  });
   ui.confirm.addEventListener("click", async () => { if (!window.cvdVoucherIntake.canConfirm) return; ui.confirm.disabled = true; try { const lines = collect(); if (lines.some((line) => !line.productId)) throw new Error("Vincula todos los productos con el catálogo Casa Viva."); const split = Number(draft.deliveryCustomerAmount || 0) + Number(draft.deliveryManagerAmount || 0); if (split > 0 && split !== Number(draft.officialShippingFeeCup || 0)) throw new Error("El reparto de mensajería debe sumar la tarifa oficial antes de confirmar."); const response = await fetch(window.cvdVoucherIntake.ordersEndpoint, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-WP-Nonce": window.cvdVoucherIntake.nonce, "Idempotency-Key": confirmationKey }, body: JSON.stringify({ draft, lines }) }); const body = await response.json(); if (!response.ok) throw new Error(body?.message || "No se pudo crear el pedido."); ui.result.querySelector("pre").textContent = `Pedido #${body.orderNumber}\nEstado: ${body.status}\nMensajería: ${body.shippingFeeCup || "por confirmar"} CUP\nTarifa: ${body.shippingStatus}`; ui.result.hidden = false; ui.status.textContent = `Pedido Casa Viva #${body.orderNumber} creado y auditado.`; ui.result.scrollIntoView({ behavior: "smooth" }); } catch (error) { ui.status.textContent = error instanceof Error ? error.message : "No se pudo confirmar el pedido."; } finally { ui.confirm.disabled = false; } });
 })();
