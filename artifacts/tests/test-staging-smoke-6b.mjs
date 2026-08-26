@@ -23,7 +23,7 @@ for (const needle of [
   'critical error',
   '/ruta-cv/',
   '/tarifas-mensajeria/',
-  'Calculadora de mensajería',
+  'Tarifa de mensajería',
 ]) {
   if (!smoke.toLowerCase().includes(needle.toLowerCase())) {
     throw new Error(`6B smoke runner missing contract marker: ${needle}`);
