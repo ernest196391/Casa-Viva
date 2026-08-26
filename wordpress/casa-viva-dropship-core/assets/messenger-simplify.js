@@ -231,7 +231,10 @@
     const review = qs('[data-voucher-review]', app);
     if (!review) return;
 
+    let reviewObserver = null;
     function tuneReview() {
+      reviewObserver?.disconnect();
+      try {
       if (review.hidden) return;
       const kicker = qs('.cvd-kicker', review);
       const h2 = qs('h2', review);
@@ -240,7 +243,10 @@
       const confirm = qs('[data-voucher-confirm]', review);
       if (kicker) kicker.textContent = 'Encontré esto';
       if (h2) h2.textContent = 'Revisa lo importante';
-      if (confidence) confidence.setAttribute('aria-label', `Confianza: ${text(confidence)}`);
+      if (confidence) {
+        const label = `Confianza: ${text(confidence)}`;
+        if (confidence.getAttribute('aria-label') !== label) confidence.setAttribute('aria-label', label);
+      }
       if (note) note.hidden = true;
       if (confirm && !confirm.disabled) confirm.textContent = 'Confirmar';
 
@@ -268,10 +274,12 @@
         });
         grid.insertAdjacentElement('afterend', toggle);
       }
+      } finally {
+        reviewObserver?.observe(review, { attributes: true, subtree: true, childList: true });
+      }
     }
 
-    const observer = new MutationObserver(tuneReview);
-    observer.observe(review, { attributes: true, subtree: true, childList: true });
+    reviewObserver = new MutationObserver(tuneReview);
     tuneReview();
 
     const status = qs('.cvd-voucher-status', app);

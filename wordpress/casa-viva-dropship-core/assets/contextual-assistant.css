@@ -1,0 +1,14 @@
+.cvd-assistant-launcher{position:fixed;right:28px;bottom:112px;z-index:61;display:grid;place-items:center;width:58px;height:58px;margin:0;border:0;border-radius:50%;background:#0d3b45;color:#fff;font-size:27px;box-shadow:0 12px 28px rgba(13,59,69,.28)}
+.cvd-assistant-launcher:focus-visible{outline:3px solid rgba(163,90,31,.45);outline-offset:3px}
+.cvd-contextual-assistant{position:fixed;right:18px;bottom:180px;z-index:80;box-sizing:border-box;width:min(380px,calc(100vw - 28px));max-height:min(560px,calc(100dvh - 210px));overflow:auto;border:1px solid rgba(13,59,69,.16);border-radius:22px;background:#fff;color:#2b2420;box-shadow:0 22px 58px rgba(13,59,69,.24)}
+.cvd-contextual-assistant[hidden]{display:none!important}
+.cvd-contextual-assistant *{box-sizing:border-box}
+.cvd-contextual-assistant header{display:flex;align-items:center;justify-content:space-between;padding:18px 18px 14px;background:#0d3b45;color:#fff}
+.cvd-contextual-assistant header div{display:grid;gap:2px}.cvd-contextual-assistant header small{opacity:.78}.cvd-contextual-assistant header strong{font-size:18px}
+.cvd-contextual-assistant header button{width:44px;height:44px;margin:0;border:0;background:transparent;color:#fff;font-size:30px;line-height:1}
+.cvd-contextual-assistant__quick{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:16px 16px 8px}
+.cvd-contextual-assistant__quick button{min-height:44px;margin:0;border:1px solid rgba(13,59,69,.2);border-radius:12px;background:#f6f1e6;color:#0d3b45;font:inherit;font-weight:750}
+.cvd-contextual-assistant__answer{margin:8px 16px;padding:13px 14px;border-radius:14px;background:#f4f8f6;line-height:1.45}.cvd-contextual-assistant__answer p{margin:0}
+.cvd-contextual-assistant form{padding:8px 16px 18px}.cvd-contextual-assistant form label{display:block;margin-bottom:6px;font-size:13px;font-weight:750}
+.cvd-contextual-assistant form>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.cvd-contextual-assistant input{min-width:0;min-height:48px;border:1px solid rgba(13,59,69,.28);border-radius:12px;padding:10px 12px;font:inherit}.cvd-contextual-assistant form button{min-height:48px;margin:0;border:0;border-radius:12px;padding:0 16px;background:#a35a1f;color:#fff;font:inherit;font-weight:800}
+@media(max-width:640px){.cvd-assistant-launcher{right:28px;bottom:108px}.cvd-contextual-assistant{right:14px;bottom:174px;max-height:calc(100dvh - 194px)}}
