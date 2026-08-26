@@ -1,45 +1,77 @@
-# Reglas de trabajo para Casa Viva
+# Casa Viva — repository agent rules
 
-Estas instrucciones se aplican a todo el repositorio.
+These instructions apply to the whole repository.
 
-Antes de cualquier cambio funcional en pedidos, mensajería, gestoras, comisiones, pagos, cliente o administración, consultar `docs/CASA_VIVA_BLUEPRINT.md`.
+## 1. Read the source of truth before changing behavior
 
-## Forma de trabajo
+For functional work involving orders, messaging, gestoras, commissions, payments, customers or operations, read:
 
-- Trabaja una sola tarea funcional por vez.
-- Revisa el código existente antes de modificarlo.
-- Convierte cada petición informal en requisitos verificables antes de programar: objetivo, actor, flujo, estados, permisos y criterio de aceptación.
-- Resuelve cada tarea en este orden: lógica de producto, arquitectura y seguridad, experiencia móvil, diseño visual, copy y pruebas.
-- Reutiliza las decisiones ya validadas y consulta los errores anteriores para no reintroducir duplicaciones, accesos ambiguos, textos inflados ni soluciones parciales.
-- Trata el copy como parte del producto: elimina redundancias, usa frases breves y conserva texto adicional solo cuando ayude a decidir o evite un error.
-- Cuando una corrección revele el mismo problema evidente en componentes equivalentes, aplícala también dentro del mismo alcance y documéntala en la entrega.
-- No consideres terminada una función solo porque exista: revisa coherencia visual, estados vacíos, acceso móvil, permisos y navegación de salida.
-- No implementes funciones no solicitadas.
-- Explica brevemente los cambios realizados, los archivos modificados y las pruebas ejecutadas.
-- No elimines ni reestructures partes importantes sin explicar primero la razón.
+1. `docs/CASA_VIVA_BLUEPRINT.md` — permanent functional authority.
+2. `docs/CASA_VIVA_CURRENT_STATE.md` — current implementation status.
+3. The relevant domain document, e.g. `docs/MESSENGER_CENTER.md` for Messenger.
+4. Existing code/tests and recent PRs that touched the same surface.
 
-## Base técnica
+Do not duplicate a capability that already exists.
 
-- Mantén Next.js con App Router, TypeScript y Tailwind CSS.
-- Prioriza componentes pequeños, reutilizables y bien organizados.
-- No instales dependencias nuevas sin justificar su necesidad.
-- Ejecuta `npm run lint`, `npm run typecheck` y `npm run build` después de cambios funcionales cuando el entorno lo permita.
-- No inventes resultados de pruebas que no pudieron ejecutarse.
+## 2. Translate informal requests before coding
 
-## Alcance actual
+For non-trivial product work, use the operating system in `docs/agent-system/README.md`.
 
-- La primera versión es una tienda propia de Casa Viva, no un marketplace multivendedor.
-- No agregues base de datos, autenticación, pagos, inventario, tracking, gestores, comisiones, integraciones externas o despliegues sin una tarea específica.
-- Usa datos de demostración claramente identificados mientras no exista una base de datos real.
+Every implementation task must be expressed with `docs/agent-system/WORK_TASK_CONTRACT.md` and only the skills required for that task:
 
-## Reglas comerciales y datos
+- Product: `docs/agent-system/SKILL_PRODUCT.md`
+- UX: `docs/agent-system/SKILL_UX.md`
+- UI: `docs/agent-system/SKILL_UI.md`
+- Copy: `docs/agent-system/SKILL_COPY.md`
+- Engineering: `docs/agent-system/SKILL_ENGINEERING.md`
+- QA/Release: `docs/agent-system/SKILL_QA_RELEASE.md`
 
-- No fijes directamente en el código precios, tasas de cambio, comisiones, horarios, tarifas o reglas comerciales que deban ser configurables.
-- No incluyas secretos, contraseñas, tokens ni credenciales en el repositorio.
+Do not solve vague requests such as “make it premium” directly. Convert them into observable behavior and binary acceptance criteria first.
 
-## Experiencia y diseño
+## 3. Work in small verified changes
 
-- Usa español para los textos visibles al cliente y para la documentación principal.
-- Prioriza diseño mobile-first, responsive, accesible y navegable con teclado.
-- Optimiza para conexiones lentas y dispositivos de recursos limitados.
-- Mantén la identidad de Casa Viva: minimalista, cálida, beige y verde oscuro, con estética de lujo silencioso accesible.
+- One dominant functional outcome per PR.
+- Inspect before editing.
+- Reuse canonical services and permissions.
+- No unrelated refactors.
+- Do not install dependencies without justification.
+- Do not change commercial rules to make tests pass.
+- Do not claim tests that were not executed.
+- Document changed files, tests, risks and rollback.
+
+## 4. Architecture boundaries
+
+- WooCommerce/Casa Viva Core remain the current authorities for orders and stock.
+- Do not create parallel order, status, delivery, payout, identity or commission engines.
+- Keep secrets, tokens and provider credentials out of client code and the repository.
+- Minimize PII sent to external services.
+- Casa Viva Network remains FUTURE unless a task explicitly changes that boundary.
+
+## 5. Stack is surface-specific
+
+Do not assume one stack applies to the entire repository.
+
+- The canonical production operations/Messenger surface is WordPress/WooCommerce through `casa-viva-dropship-core`.
+- Existing Next.js/App Router/TypeScript/Tailwind surfaces must keep their current stack when a task targets them.
+- Do not rebuild a canonical WordPress capability in Next.js merely because a sandbox/visual prototype exists.
+
+## 6. Experience rules
+
+- Spanish is the default user-facing language.
+- Mobile-first, responsive, accessible and usable on slow connections/devices.
+- One screen, one dominant action.
+- Role-specific operational tools must not look like the public store.
+- Approved Casa Viva brand assets must be reused; do not redraw logos inside feature work.
+- Copy is part of the contract. Do not silently invent product language when exact copy is required.
+
+## 7. Definition of done
+
+Use the evidence ladder from `docs/agent-system/SKILL_QA_RELEASE.md`:
+
+`IMPLEMENTED -> CI_VERIFIED -> PRODUCTION_VERIFIED -> HUMAN_VALIDATED -> CLOSED`
+
+Do not report `PILOT_READY` from CI alone.
+
+## 8. Learn from failures
+
+When a material defect, false-positive closeout or repeated prompting problem is discovered, record it in `docs/agent-system/LESSONS_LEDGER.md` and update the relevant reusable rule instead of making the next prompt longer.
