@@ -3,3 +3,7 @@ import fs from "node:fs";const php=fs.readFileSync("wordpress/casa-viva-dropship
 for(const required of ["DATA_VERSION_OPTION","2026-09-23-v3","update_option( self::OPTION, $rates","update_option( self::DATA_VERSION_OPTION, self::VERSION"]){if(!php.includes(required))throw new Error(`Falta sincronización versionada de tarifas: ${required}`)}
 const csv=fs.readFileSync("wordpress/casa-viva-dropship-core/data/shipping-rates.csv","utf8");for(const required of ["Regla,Casablanca,4500","Boyeros,Bejucal,5000","Boyeros,Embil,2800","Cerro,,1700"]){if(!csv.includes(required))throw new Error(`Tarifa unificada ausente: ${required}`)}
 console.log("OK: matriz unificada y sincronización versionada verificadas.");
+
+if(csv.includes("Habana del Este,Casa Blanca,"))throw new Error("Casa Blanca no debe duplicarse en Habana del Este");
+if(!csv.includes("Regla,Casablanca,4500"))throw new Error("Casablanca debe existir solo en Regla a 4500 CUP");
+console.log("OK: Casablanca única en Regla a 4500 CUP.");
