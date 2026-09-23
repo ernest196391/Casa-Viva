@@ -5,7 +5,8 @@ defined( 'ABSPATH' ) || exit;
 /** Configurable CUP delivery prices. Product totals remain in the store currency. */
 final class CVD_Shipping_Rates {
 	private const OPTION = 'cvd_shipping_rates';
-	private const VERSION = '2026-08-04-v2';
+	private const VERSION = '2026-09-23-v3';
+	private const DATA_VERSION_OPTION = 'cvd_shipping_rates_data_version';
 
 	public static function register(): void {
 		add_shortcode( 'casa_viva_shipping_quote', array( __CLASS__, 'render_quote' ) );
@@ -81,11 +82,17 @@ final class CVD_Shipping_Rates {
 	}
 
 	public static function install_defaults(): void {
-		if ( false !== get_option( self::OPTION, false ) ) { return; }
+		$installed_version = (string) get_option( self::DATA_VERSION_OPTION, '' );
+		if ( self::VERSION === $installed_version && false !== get_option( self::OPTION, false ) ) { return; }
+
 		$path = CVD_DIR . 'data/shipping-rates.csv';
-		if ( is_readable( $path ) ) {
-			update_option( self::OPTION, self::parse_csv( (string) file_get_contents( $path ) ), false );
-		}
+		if ( ! is_readable( $path ) ) { return; }
+
+		$rates = self::parse_csv( (string) file_get_contents( $path ) );
+		if ( ! $rates ) { return; }
+
+		update_option( self::OPTION, $rates, false );
+		update_option( self::DATA_VERSION_OPTION, self::VERSION, false );
 	}
 
 	public static function rates(): array {
