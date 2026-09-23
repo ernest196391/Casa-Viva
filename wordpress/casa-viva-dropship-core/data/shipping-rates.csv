@@ -1,316 +1,342 @@
 municipio,zona,tarifa_cup,activo,origen
-Arroyo Naranjo,,3000,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Poey,2500,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Santa Amalia,2500,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Mantilla,2500,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,La Palma,2000,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Víbora Park,2500,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Los Pinos,2300,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Managua,2500,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Calvario,2500,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Güinera,2500,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Eléctrico,2700,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Párraga,2400,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Arroyo Apolo,2000,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Porvenir,2300,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Montejo,2300,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Callejas,2000,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Vieja Linda,2300,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Rosario,2400,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Capri,2400,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Comodoro,2500,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,El Retiro,2500,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Parcelación Moderna,2900,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Gavilán,3500,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,El Moro,2300,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Reparto La Solita,2300,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Las Guásimas,3300,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Café Colón,2400,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Naranjito,1700,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Las Lajas,2400,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,Reparto Eléctrico,2700,yes,BizneCubano verificado 2026-09-05
-Arroyo Naranjo,La Fortuna,2300,yes,BizneCubano verificado 2026-09-05
+Arroyo Naranjo,,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Arroyo Apolo,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
 Arroyo Naranjo,Arroyo Naranjo,3000,yes,BizneCubano verificado 2026-09-05
-Boyeros,,3500,yes,BizneCubano verificado 2026-09-05
-Boyeros,Santiago de las Vegas,3300,yes,BizneCubano verificado 2026-09-05
-Boyeros,Rancho Boyeros,2700,yes,BizneCubano verificado 2026-09-05
-Boyeros,Calabazar,2700,yes,BizneCubano verificado 2026-09-05
-Boyeros,Abel Santamaría,2700,yes,BizneCubano verificado 2026-09-05
-Boyeros,Fontanar,2600,yes,BizneCubano verificado 2026-09-05
-Boyeros,Wajay,2900,yes,BizneCubano verificado 2026-09-05
-Boyeros,Altahabana,1900,yes,BizneCubano verificado 2026-09-05
-Boyeros,Capdevila,2000,yes,BizneCubano verificado 2026-09-05
-Boyeros,Aldabó,2000,yes,BizneCubano verificado 2026-09-05
-Boyeros,Trébol,2600,yes,BizneCubano verificado 2026-09-05
-Boyeros,Mulgoba,3200,yes,BizneCubano verificado 2026-09-05
-Boyeros,Los Cocos,3600,yes,BizneCubano verificado 2026-09-05
-Boyeros,La Catalina,3200,yes,BizneCubano verificado 2026-09-05
-Boyeros,Lídice,2700,yes,BizneCubano verificado 2026-09-05
-Boyeros,El Chico,3100,yes,BizneCubano verificado 2026-09-05
-Boyeros,Juan Manuel Márquez,2700,yes,BizneCubano verificado 2026-09-05
-Boyeros,Alturas de La Habana,2600,yes,BizneCubano verificado 2026-09-05
-Boyeros,Sierra Maestra,3500,yes,BizneCubano verificado 2026-09-05
-Boyeros,El Globo,3000,yes,BizneCubano verificado 2026-09-05
-Boyeros,Nuevo Santiago,2900,yes,BizneCubano verificado 2026-09-05
-Boyeros,La Fortuna,2300,yes,BizneCubano verificado 2026-09-05
-Boyeros,Miraflores Viejos,2800,yes,BizneCubano verificado 2026-09-05
-Boyeros,Cepero Bonilla,2700,yes,BizneCubano verificado 2026-09-05
-Boyeros,El Trigal,2400,yes,BizneCubano verificado 2026-09-05
-Boyeros,José Antonio Saco,2700,yes,BizneCubano verificado 2026-09-05
-Boyeros,Ampliación de Mulgoba,3200,yes,BizneCubano verificado 2026-09-05
-Boyeros,Villa Nueva,2700,yes,BizneCubano verificado 2026-09-05
-Boyeros,Aurora,2700,yes,BizneCubano verificado 2026-09-05
-Boyeros,Nueva Aurora,2700,yes,BizneCubano verificado 2026-09-05
-Boyeros,El Especial,2700,yes,BizneCubano verificado 2026-09-05
-Boyeros,Armada-Aldabó,2700,yes,BizneCubano verificado 2026-09-05
-Boyeros,Embil,2800,yes,BizneCubano verificado 2026-09-05
-Boyeros,Río Verde,2600,yes,BizneCubano verificado 2026-09-05
-Boyeros,Mazorra,2600,yes,BizneCubano verificado 2026-09-05
-Boyeros,Panamérica,2700,yes,BizneCubano verificado 2026-09-05
-Boyeros,Baluarte,2700,yes,BizneCubano verificado 2026-09-05
-Boyeros,Berenguer,2900,yes,BizneCubano verificado 2026-09-05
-Boyeros,Nazareno,2700,yes,BizneCubano verificado 2026-09-05
-Boyeros,Las Cañas,2600,yes,BizneCubano verificado 2026-09-05
-Boyeros,El Rincón,3800,yes,BizneCubano verificado 2026-09-05
-Boyeros,Bejucal,5000,yes,BizneCubano verificado 2026-09-05
-Boyeros,Reloj Club,1900,yes,BizneCubano verificado 2026-09-05
-Boyeros,Río Cristal,2400,yes,BizneCubano verificado 2026-09-05
+Arroyo Naranjo,Café Colón,2400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Callejas,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Calvario,2500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Capri,2400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Comodoro,2500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,El Moro,2300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,El Retiro,2500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Eléctrico,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Gavilán,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Güinera,2500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,La Fortuna,2300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,La Palma,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Las Guásimas,3300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Las Lajas,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Los Pinos,2300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Managua,2500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Mantilla,2500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Montejo,2300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Naranjito,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Parcelación Moderna,2900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Párraga,2400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Poey,2500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Porvenir,2300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Reparto Eléctrico,3300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Reparto La Solita,2300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Rosario,2400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Santa Amalia,2500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Víbora Park,2500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Arroyo Naranjo,Vieja Linda,2300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,1ro. de Mayo,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Abel Santamaría,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Aeropuerto Terminal,53000,yes,"Unificada max(PDF, matriz) 2026-09-23"
 Boyeros,Aeropuerto Terminal 1,3000,yes,BizneCubano verificado 2026-09-05
 Boyeros,Aeropuerto Terminal 2,3000,yes,BizneCubano verificado 2026-09-05
-Boyeros,1ro de Mayo,2700,yes,BizneCubano verificado 2026-09-05
 Boyeros,Aeropuerto Terminal 3,3000,yes,BizneCubano verificado 2026-09-05
-Boyeros,Aeropuerto Aerovaradero,3000,yes,BizneCubano verificado 2026-09-05
 Boyeros,Aeropuerto Terminal 5,3000,yes,BizneCubano verificado 2026-09-05
-Boyeros,Lugardita,2900,yes,BizneCubano verificado 2026-09-05
-Boyeros,Cacahual,2800,yes,BizneCubano verificado 2026-09-05
-Boyeros,María del Carmen,2300,yes,BizneCubano verificado 2026-09-05
-Boyeros,Boyeros,3500,yes,BizneCubano verificado 2026-09-05
-Centro Habana,,1600,yes,BizneCubano verificado 2026-09-05
-Centro Habana,Cayo Hueso,1600,yes,BizneCubano verificado 2026-09-05
-Centro Habana,Dragones,1600,yes,BizneCubano verificado 2026-09-05
-Centro Habana,Colón,1700,yes,BizneCubano verificado 2026-09-05
-Centro Habana,Los Sitios,1600,yes,BizneCubano verificado 2026-09-05
-Centro Habana,Pueblo Nuevo,1600,yes,BizneCubano verificado 2026-09-05
+Boyeros,Aerovaradero,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Aldabó,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Altahabana,1900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Alturas de La Habana,2600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Ampliación de Mulgoba,3200,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Armada-Aldabó,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Aurora,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Baluarte,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Bejucal,5000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Berenguer,2900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Boyeros,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Cacahual,2800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Calabazar,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Capdevila,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Cepero Bonilla,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,El Chico,3100,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,El Especial,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,El Globo,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,El Rincón,3800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,El Trigal,2400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Embil,2800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Fontanar,2600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,José Antonio Saco,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Juan Manuel Márquez,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,La Catalina,3200,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,La Fortuna,2300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Las Cañas,2600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Lídice,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Los Cocos,3600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Lugardita,2900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,María del Carmen,2300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Mazorra,2600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Miraflores Viejos,2800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Mulgoba,3200,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Nazareno,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Nueva Aurora,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Nuevo Santiago,2900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Panamérica,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Rancho Boyeros,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Reloj Club,1900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Río Cristal,2400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Río Verde,2600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Santiago de las Vegas,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Sierra Maestra,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Trébol,2600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Villa Nueva,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Boyeros,Wajay,2900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Centro Habana,,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Centro Habana,Cayo Hueso,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
 Centro Habana,Centro Habana,1600,yes,BizneCubano verificado 2026-09-05
-Cerro,,1700,yes,BizneCubano verificado 2026-09-05
-Cerro,El Cerro,1700,yes,BizneCubano verificado 2026-09-05
-Cerro,Casino Deportivo,1650,yes,BizneCubano verificado 2026-09-05
-Cerro,Las Cañas,1700,yes,BizneCubano verificado 2026-09-05
-Cerro,Palatino,1650,yes,BizneCubano verificado 2026-09-05
-Cerro,El Canal,1650,yes,BizneCubano verificado 2026-09-05
-Cerro,Esquina de Tejas,1650,yes,BizneCubano verificado 2026-09-05
-Cerro,Reparto Martí,1700,yes,BizneCubano verificado 2026-09-05
-Cerro,Atarés,1650,yes,BizneCubano verificado 2026-09-05
-Cerro,Puentes Grandes,1600,yes,BizneCubano verificado 2026-09-05
-Cerro,20 de Mayo,1600,yes,BizneCubano verificado 2026-09-05
-Cerro,Ayestarán,1600,yes,BizneCubano verificado 2026-09-05
-Cotorro,,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,Santa María del Rosario,3300,yes,BizneCubano verificado 2026-09-05
-Cotorro,Cotorro,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,Cuatro Caminos,3900,yes,BizneCubano verificado 2026-09-05
-Cotorro,Alberro,3600,yes,BizneCubano verificado 2026-09-05
-Cotorro,Magdalena,3200,yes,BizneCubano verificado 2026-09-05
-Cotorro,Vedado Cotorro,3300,yes,BizneCubano verificado 2026-09-05
-Cotorro,Residencial América,3100,yes,BizneCubano verificado 2026-09-05
-Cotorro,Residencial Paraíso,3000,yes,BizneCubano verificado 2026-09-05
-Cotorro,Bello Palmar,3300,yes,BizneCubano verificado 2026-09-05
-Cotorro,Lotería,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,La Portada,3600,yes,BizneCubano verificado 2026-09-05
-Cotorro,La Guarapeta,3700,yes,BizneCubano verificado 2026-09-05
-Cotorro,El Cafetal,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,La Gomera,3000,yes,BizneCubano verificado 2026-09-05
-Cotorro,Loma de Tierra,3600,yes,BizneCubano verificado 2026-09-05
-Cotorro,Alberro Nuevo,3600,yes,BizneCubano verificado 2026-09-05
-Cotorro,Alberro Viejo,3600,yes,BizneCubano verificado 2026-09-05
-Cotorro,Alturas de Lotería,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,Cruz Verde,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,Dulce Nombre,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,El Dique,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,Finca Los Espiritistas,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,La Caridad,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,La Coubre,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,La Granada,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,La Purísima,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,La Torre,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,Las Delicias,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,Las Granjas,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,Magdalena-Torriente,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,Modelo,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,Paraíso,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,San Pedro,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,San Pedro-Centro Cotorro,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,Santa Ana,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,Torriente,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,Vista Alegre,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,Parajón,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,Blanco,3500,yes,BizneCubano verificado 2026-09-05
-Cotorro,La Lima,3500,yes,BizneCubano verificado 2026-09-05
-Diez de Octubre,,1700,yes,BizneCubano verificado 2026-09-05
-Diez de Octubre,Víbora,1700,yes,BizneCubano verificado 2026-09-05
-Diez de Octubre,Santos Suárez,1600,yes,BizneCubano verificado 2026-09-05
-Diez de Octubre,Lawton,2000,yes,BizneCubano verificado 2026-09-05
-Diez de Octubre,Luyanó,1700,yes,BizneCubano verificado 2026-09-05
-Diez de Octubre,Sevillano,1800,yes,BizneCubano verificado 2026-09-05
-Diez de Octubre,Vista Alegre,2000,yes,BizneCubano verificado 2026-09-05
-Diez de Octubre,Tamarindo,1600,yes,BizneCubano verificado 2026-09-05
-Diez de Octubre,Mónaco,1650,yes,BizneCubano verificado 2026-09-05
-Diez de Octubre,La Lira,1650,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,,3000,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Guanabacoa,3000,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Chibás,2600,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,D'Beche,2600,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Minas,3400,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Barreras,3800,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,La Jata,2400,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Villa María,2500,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Repollo,2700,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Bacuranao,2900,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,La Gallega,3200,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Aranguito,3700,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Arango,3300,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,La Sepultura,2600,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Naranjo,2400,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Santa Fe,2700,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,El Roble,2400,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Reparto Mañana,2000,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Nalón,2400,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Cruz de Piedra,2200,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Campo Florido,3200,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Reparto Vía Blanca,2600,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Balero,2600,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Rotonda de Shell,2600,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Semáforo de Guanabacoa,2600,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Habana Nueva,2100,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Azotea,2100,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,Altura de Vía Blanca,2600,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,El Mikito,2600,yes,BizneCubano verificado 2026-09-05
-Guanabacoa,La Lima,2600,yes,BizneCubano verificado 2026-09-05
-Habana del Este,,3000,yes,BizneCubano verificado 2026-09-05
-Habana del Este,Alamar,3500,yes,BizneCubano verificado 2026-09-05
-Habana del Este,Cojímar,3000,yes,BizneCubano verificado 2026-09-05
-Habana del Este,Guanabo,6000,yes,BizneCubano verificado 2026-09-05
-Habana del Este,Camilo Cienfuegos,3500,yes,BizneCubano verificado 2026-09-05
-Habana del Este,Guiteras,3000,yes,BizneCubano verificado 2026-09-05
+Centro Habana,Colón,1700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Centro Habana,Dragones (Barrio Chino),1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Centro Habana,Los Sitios,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Centro Habana,Pueblo Nuevo,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cerro,,1700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cerro,20 de Mayo,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cerro,Atarés,1650,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cerro,Ayestarán,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cerro,Casino Deportivo,1650,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cerro,El Canal,1650,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cerro,El Cerro,1700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cerro,Esquina de Tejas,1650,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cerro,Las Cañas,1700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cerro,Palatino,1650,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cerro,Puentes Grandes,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cerro,Reparto Martí,1700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Alberro,3600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Alberro Nuevo,3600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Alberro Viejo,3600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Alturas de Lotería,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Bello Palmar,3300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Blanco,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Cotorro,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Cruz Verde,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Cuatro Caminos,4000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Dulce Nombre,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,El Águila Hatuey,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,El Cafetal,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,El Dique,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Finca Los Espiritistas,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,La Caridad,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,La Coubre,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,La Gomera,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,La Granada,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,La Guarapeta,3700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,La Lima,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,La Portada,3600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,La Purísima,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,La Torre,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Las Delicias,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Las Granjas,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Loma de Tierra,3600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Lotería,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Magdalena,3200,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Magdalena - Torriente,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Modelo,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Paraíso,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Parajón,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Residencial América,3100,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Residencial Paraíso,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,San Pedro,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,San Pedro - Centro Cotorro,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Santa Ana,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Santa María del Rosario,3300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Torriente,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Vedado Cotorro,3300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Cotorro,Vista Alegre,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Diez de Octubre,,1700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Diez de Octubre,La Lira,1650,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Diez de Octubre,Lawton,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Diez de Octubre,Luyanó,1700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Diez de Octubre,Mónaco,1650,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Diez de Octubre,Santos Suárez,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Diez de Octubre,Sevillano,1800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Diez de Octubre,Tamarindo,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Diez de Octubre,Víbora,1700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Diez de Octubre,Vista Alegre,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Altura de Vía Blanca,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Arango,3300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Aranguito,3700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Azotea,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Bacuranao,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Balero,3600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Barreras,3800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Campo Florido,3200,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Chibás,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Cruz de Piedra,3200,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,D'Beche,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,El Mikito,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,El Roble,3400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Guanabacoa,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Habana Nueva,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,La Federal,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,La Gallega,3200,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,La Jata,3400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,La Lima,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,La Sepultura,3600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Minas,3400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Nalón,3400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Naranjo,3400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Reparto Mañana,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Reparto Vía Blanca,3600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Repollo,3700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Ricobar,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Rotonda de Shell,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Santa Fe,3300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Semáforo de Guanabacoa,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Guanabacoa,Villa María,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Alamar,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Ampliación y alturas de Marbella,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
 Habana del Este,Antonio Guiteras,3000,yes,BizneCubano verificado 2026-09-05
-Habana del Este,Bahía,3000,yes,BizneCubano verificado 2026-09-05
+Habana del Este,Bacuranao,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Bahía,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Bajurayabo,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Boca Ciega,4000,yes,"Unificada max(PDF, matriz) 2026-09-23"
 Habana del Este,Brisas del Mar,4500,yes,BizneCubano verificado 2026-09-05
-Habana del Este,Campo Florido,4000,yes,BizneCubano verificado 2026-09-05
-Habana del Este,Celimar,4500,yes,BizneCubano verificado 2026-09-05
+Habana del Este,Camilo Cienfuegos,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Campo Florido,7500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Casa Blanca,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Celimar,4500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Cojímar,3700,yes,"Unificada max(PDF, matriz) 2026-09-23"
 Habana del Este,El Trébol,3500,yes,BizneCubano verificado 2026-09-05
-Habana del Este,Peñas Altas,4500,yes,BizneCubano verificado 2026-09-05
+Habana del Este,Guanabo,6000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Guanabo Viejo,6000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Guiteras,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Juztis,5200,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Mégano,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Peñas Altas,4500,yes,"Unificada max(PDF, matriz) 2026-09-23"
 Habana del Este,Playa del Este,4500,yes,BizneCubano verificado 2026-09-05
+Habana del Este,Santa María,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
 Habana del Este,Santa María del Mar,4500,yes,BizneCubano verificado 2026-09-05
-Habana del Este,Tarará,4000,yes,BizneCubano verificado 2026-09-05
+Habana del Este,Sibalimar,6000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Tarará,5000,yes,"Unificada max(PDF, matriz) 2026-09-23"
 Habana del Este,Via Blanca,3500,yes,BizneCubano verificado 2026-09-05
-Habana Vieja,,1600,yes,BizneCubano verificado 2026-09-05
-Habana Vieja,Habana Vieja,1600,yes,BizneCubano verificado 2026-09-05
-La Lisa,,2700,yes,BizneCubano verificado 2026-09-05
-La Lisa,La Lisa,2700,yes,BizneCubano verificado 2026-09-05
-La Lisa,Alturas de la Lisa,2300,yes,BizneCubano verificado 2026-09-05
-La Lisa,Arroyo Arenas,2500,yes,BizneCubano verificado 2026-09-05
-La Lisa,Punta Brava,3200,yes,BizneCubano verificado 2026-09-05
-La Lisa,Arimao,2400,yes,BizneCubano verificado 2026-09-05
-La Lisa,El Cano,2700,yes,BizneCubano verificado 2026-09-05
-La Lisa,San Agustín,2500,yes,BizneCubano verificado 2026-09-05
-La Lisa,La Coronela,2400,yes,BizneCubano verificado 2026-09-05
-La Lisa,El Hueco,2000,yes,BizneCubano verificado 2026-09-05
-La Lisa,El Pedregal,2100,yes,BizneCubano verificado 2026-09-05
-La Lisa,Juan de Dios,2700,yes,BizneCubano verificado 2026-09-05
-La Lisa,La Concepción,2900,yes,BizneCubano verificado 2026-09-05
-La Lisa,XX Aniversario,3000,yes,BizneCubano verificado 2026-09-05
-La Lisa,Valle Grande,3100,yes,BizneCubano verificado 2026-09-05
-La Lisa,El Guatao,3300,yes,BizneCubano verificado 2026-09-05
-La Lisa,Bello,2400,yes,BizneCubano verificado 2026-09-05
-La Lisa,UCI,3100,yes,BizneCubano verificado 2026-09-05
-La Lisa,Versalles,2000,yes,BizneCubano verificado 2026-09-05
-La Lisa,La Vereda,2100,yes,BizneCubano verificado 2026-09-05
-La Lisa,Novia del Mediodía,3300,yes,BizneCubano verificado 2026-09-05
-La Lisa,El Morado,3300,yes,BizneCubano verificado 2026-09-05
-Marianao,,2000,yes,BizneCubano verificado 2026-09-05
-Marianao,Los Quemados,1800,yes,BizneCubano verificado 2026-09-05
-Marianao,Pogolotti,1700,yes,BizneCubano verificado 2026-09-05
-Marianao,Los Pocitos,1900,yes,BizneCubano verificado 2026-09-05
-Marianao,Santa Felicia,1700,yes,BizneCubano verificado 2026-09-05
-Marianao,El Palmar,2000,yes,BizneCubano verificado 2026-09-05
-Marianao,Belén,1900,yes,BizneCubano verificado 2026-09-05
-Marianao,Zamora,1800,yes,BizneCubano verificado 2026-09-05
-Marianao,Coco Solo,1900,yes,BizneCubano verificado 2026-09-05
-Marianao,Finlay,1700,yes,BizneCubano verificado 2026-09-05
-Marianao,Los Ángeles,1900,yes,BizneCubano verificado 2026-09-05
-Marianao,Ceiba (Puentes Grandes),1800,yes,BizneCubano verificado 2026-09-05
-Marianao,Cujae,2000,yes,BizneCubano verificado 2026-09-05
-Marianao,Marianao,2000,yes,BizneCubano verificado 2026-09-05
-Marianao,Avenida 35,1900,yes,BizneCubano verificado 2026-09-05
+Habana del Este,Villa Panamericana,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana del Este,Zona,243000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana Vieja,,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana Vieja,Atarés,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana Vieja,Casco Histórico,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana Vieja,Jesús María,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Habana Vieja,La Habana Vieja,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,Alturas de La Lisa,2300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,Arimao,2400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,Arroyo Arenas,2500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,Bello,2400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,El Cano,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,El Guatao,3300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,El Hueco,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,El Morado,3300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,El Pedregal,2100,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,Juan de Dios,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,La Concepción,2900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,La Coronela,2400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,La Lisa,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,La Vereda,2100,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,Novia del Mediodía,3300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,Punta Brava,3200,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,San Agustín,2500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,UCI,3100,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,Valle Grande,3100,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,Versalles,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+La Lisa,XX Aniversario,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Marianao,,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Marianao,Avenida,351900,yes,"Unificada max(PDF, matriz) 2026-09-23"
 Marianao,Avenida 25,1900,yes,BizneCubano verificado 2026-09-05
-Playa,,1800,yes,BizneCubano verificado 2026-09-05
-Playa,Miramar,1800,yes,BizneCubano verificado 2026-09-05
-Playa,Buenavista,1600,yes,BizneCubano verificado 2026-09-05
-Playa,La Ceiba,1600,yes,BizneCubano verificado 2026-09-05
-Playa,La Sierra,1600,yes,BizneCubano verificado 2026-09-05
-Playa,Kholi,1600,yes,BizneCubano verificado 2026-09-05
-Playa,Siboney,2300,yes,BizneCubano verificado 2026-09-05
-Playa,Atabey,2300,yes,BizneCubano verificado 2026-09-05
-Playa,Santa Fe,2800,yes,BizneCubano verificado 2026-09-05
-Playa,Jaimanitas,2500,yes,BizneCubano verificado 2026-09-05
-Playa,Flores,2200,yes,BizneCubano verificado 2026-09-05
-Playa,Almendares,1600,yes,BizneCubano verificado 2026-09-05
-Playa,El Bosque,1600,yes,BizneCubano verificado 2026-09-05
-Playa,Paradero de Playa,2000,yes,BizneCubano verificado 2026-09-05
-Playa,Náutico,2000,yes,BizneCubano verificado 2026-09-05
-Playa,Puente Grande,1600,yes,BizneCubano verificado 2026-09-05
-Playa,La ELAM,3000,yes,BizneCubano verificado 2026-09-05
-Playa,Barbosa,2700,yes,BizneCubano verificado 2026-09-05
-Playa,Cubanacan,1900,yes,BizneCubano verificado 2026-09-05
-Playa,El Basurero,2000,yes,BizneCubano verificado 2026-09-05
-Playa,Los Sitios,2000,yes,BizneCubano verificado 2026-09-05
-Playa,Romerillo,1800,yes,BizneCubano verificado 2026-09-05
-Playa,Jesús María,2000,yes,BizneCubano verificado 2026-09-05
-Playa,Reparto Juan Manual Marques,2800,yes,BizneCubano verificado 2026-09-05
-Playa,Loma Tanque,2200,yes,BizneCubano verificado 2026-09-05
-Playa,Ramirito,2000,yes,BizneCubano verificado 2026-09-05
-Playa,Marina Hemingway,2400,yes,BizneCubano verificado 2026-09-05
-Playa,El Bote,2300,yes,BizneCubano verificado 2026-09-05
-Playa,El Náutico,2000,yes,BizneCubano verificado 2026-09-05
-Playa,Fanguito,1800,yes,BizneCubano verificado 2026-09-05
-Playa,Lido,1700,yes,BizneCubano verificado 2026-09-05
-Playa,Playa,1800,yes,BizneCubano verificado 2026-09-05
-Playa,Reparto Cubanacan,1900,yes,BizneCubano verificado 2026-09-05
-Playa,Cangrejera,2800,yes,BizneCubano verificado 2026-09-05
-Plaza de la Revolución,,1500,yes,BizneCubano verificado 2026-09-05
-Regla,,3100,yes,BizneCubano verificado 2026-09-05
-Regla,Regla,3100,yes,BizneCubano verificado 2026-09-05
-Regla,Casablanca,4500,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,,3700,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,San Miguel,3700,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Diezmero,3500,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Alturas de Luyanó,3400,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Rocafort,3000,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,San Francisco de Paula,3700,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Jacomino,3500,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,California,3500,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Juanelo,3500,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,La Rosalía,3500,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,La Fernanda,3500,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,María Luisa,3500,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Bella Vista,3700,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,La Prosperidad,3400,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Reboledo,3900,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Tejas,3400,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,La Cuevita,3400,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Virgen del Camino,2900,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Barrio Obrero,3000,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Balear,3000,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,La cumbre,3400,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Caballo Blanco,3200,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Monterrey,3500,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Ciudamar,3300,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Ruta 12,3400,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Doble vía,3400,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,San matias,3300,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Dolores,3300,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,La corea,3400,yes,BizneCubano verificado 2026-09-05
+Marianao,Avenida 35,1900,yes,BizneCubano verificado 2026-09-05
+Marianao,Belén,1900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Marianao,Ceiba (Puentes Grandes),1800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Marianao,Coco Solo,1900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Marianao,CUJAE,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Marianao,El Palmar,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Marianao,Finlay,1700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Marianao,Los Ángeles,1900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Marianao,Los Pocitos,1900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Marianao,Los Quemados,1800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Marianao,Marianao,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Marianao,Pogolotti,1700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Marianao,Santa Felicia,1700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Marianao,Zamora,1800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,,1800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Almendares,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Atabey,2300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Barbosa,2700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Buenavista,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Cangrejera,2800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Cubanacán,1900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,El Basurero,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,El Bosque,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,El Bote,2300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,El Náutico,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,ELAM,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Fanguito,1800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Flores,2200,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Jaimanitas,2500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Jesús María,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Kholy,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,La Ceiba,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,La Sierra,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Lido,1700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Loma Tanque,2200,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Los Sitios,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Marina Hemingway,2400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Miramar,1800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Náutico,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Paradero de Playa,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Playa,1800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Puentes Grandes,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Ramirito,2000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Reparto Cubanacán,1900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Reparto Juan Manuel Márquez,2800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Romerillo,1800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Santa Fe,2800,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Playa,Siboney,2300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Plaza de la Revolución,,1500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Plaza de la Revolución,El Vedado,1500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Plaza de la Revolución,Nuevo Vedado,1500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Plaza de la Revolución,Plaza,1600,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Plaza de la Revolución,Príncipe,1700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Plaza de la Revolución,Puentes Grandes,1700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Regla,,3100,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Regla,Casablanca,4500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+Regla,Regla,3100,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,,3700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Alturas de Luyanó,3400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Balear,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Barrio Obrero,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Bella Vista,3700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Caballo Blanco,3200,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,California,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Ciudamar,3300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Diezmero,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Doble Vía,3400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Dolores,3300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Jacomino,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Juanelo,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
 San Miguel del Padrón,La core,3400,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Vista hermosa,3400,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Mirta,3500,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,Las palmas,3500,yes,BizneCubano verificado 2026-09-05
-San Miguel del Padrón,La rosita,3500,yes,BizneCubano verificado 2026-09-05
+San Miguel del Padrón,La Corea,3400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,La Cuevita,3400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,La Cumbre,3400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,La Fernanda,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,La Prosperidad,3400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,La Rosalía,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,La Rosita,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Las Palmas,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,María Luisa,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Mirta,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Monterrey,3500,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Reboledo,3900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Rocafort,3000,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Ruta,123400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Ruta 12,3400,yes,BizneCubano verificado 2026-09-05
+San Miguel del Padrón,San Francisco de Paula,3700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,San Matías,3300,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,San Miguel,3700,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Tejas,3400,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Virgen del Camino,2900,yes,"Unificada max(PDF, matriz) 2026-09-23"
+San Miguel del Padrón,Vista Hermosa,3400,yes,"Unificada max(PDF, matriz) 2026-09-23"
