@@ -4,6 +4,8 @@ Estas instrucciones se aplican a todo el repositorio.
 
 Antes de cualquier cambio funcional en pedidos, mensajería, gestoras, comisiones, pagos, cliente o administración, consultar `docs/CASA_VIVA_BLUEPRINT.md`.
 
+Casa Viva se desarrolla en paralelo con NEXO Business. Antes de cambiar identidad de producto, SKU/códigos, semántica de inventario, contratos de pedidos/eventos, idempotencia o fronteras de integración, consultar `docs/NEXO_BUSINESS_INTEGRATION.md`. No sustituir WooCommerce como autoridad actual durante la certificación ni crear motores paralelos.
+
 ## Forma de trabajo
 
 - Trabaja una sola tarea funcional por vez.
