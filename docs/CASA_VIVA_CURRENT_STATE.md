@@ -1,5 +1,7 @@
 # Casa Viva — estado actual
 
+> Para la fase activa y el punto exacto de reanudación, consultar primero `CASA_VIVA_PLATFORM_CHECKPOINT.md`. El estado real de producción puede diferir de `main`; no asumir despliegue por el solo hecho de que CI esté verde.
+
 ## Estado general
 
 - 1A–1C.4: modelo canónico de pedidos, eventos, transiciones, logística, custodia, cierre y excepciones — validadas e integradas.

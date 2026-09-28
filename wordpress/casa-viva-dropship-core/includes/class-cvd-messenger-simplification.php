@@ -8,7 +8,8 @@ defined( 'ABSPATH' ) || exit;
  */
 final class CVD_Messenger_Simplification {
 	public static function register(): void {
-		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 80 );
+		// The feed guard must wrap window.fetch before portal.js starts polling.
+		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 1 );
 	}
 
 	public static function assets(): void {
@@ -21,7 +22,8 @@ final class CVD_Messenger_Simplification {
 		wp_enqueue_style( 'cvd-messenger-premium-ux', CVD_URL . 'assets/messenger-premium-ux.css', array( 'cvd-messenger-simplify-fixes' ), CVD_VERSION );
 		wp_enqueue_style( 'cvd-messenger-premium-ux-polish', CVD_URL . 'assets/messenger-premium-ux-polish.css', array( 'cvd-messenger-premium-ux' ), CVD_VERSION );
 
-		wp_enqueue_script( 'cvd-messenger-simplify', CVD_URL . 'assets/messenger-simplify.js', array(), CVD_VERSION, true );
+		wp_enqueue_script( 'cvd-messenger-feed-stability', CVD_URL . 'assets/messenger-feed-stability.js', array(), CVD_VERSION, false );
+		wp_enqueue_script( 'cvd-messenger-simplify', CVD_URL . 'assets/messenger-simplify.js', array( 'cvd-messenger-feed-stability' ), CVD_VERSION, true );
 		wp_enqueue_script( 'cvd-messenger-premium-ux', CVD_URL . 'assets/messenger-premium-ux.js', array( 'cvd-messenger-simplify' ), CVD_VERSION, true );
 		wp_enqueue_script( 'cvd-messenger-assistant-summary', CVD_URL . 'assets/messenger-assistant-summary.js', array( 'cvd-messenger-premium-ux' ), CVD_VERSION, true );
 		wp_enqueue_script( 'cvd-messenger-premium-ux-polish', CVD_URL . 'assets/messenger-premium-ux-polish.js', array( 'cvd-messenger-assistant-summary' ), CVD_VERSION, true );
