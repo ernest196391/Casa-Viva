@@ -2,7 +2,9 @@
 
 Estas instrucciones se aplican a todo el repositorio.
 
-Antes de cualquier cambio funcional en pedidos, mensajería, gestoras, comisiones, pagos, cliente o administración, consultar `docs/CASA_VIVA_BLUEPRINT.md`.
+Antes de cualquier cambio, consultar `docs/CASA_VIVA_PLATFORM_MASTER_BLUEPRINT.md` y `docs/CASA_VIVA_PLATFORM_CHECKPOINT.md`. Para cambios funcionales en pedidos, mensajería, gestoras, comisiones, pagos, cliente o administración, consultar además `docs/CASA_VIVA_BLUEPRINT.md`.
+
+Al iniciar, informar fase, subfase, estado, último SHA verificado, producción, bloqueo y siguiente acción. Al cerrar un subpaso, actualizar el checkpoint en el mismo PR.
 
 ## Forma de trabajo
 

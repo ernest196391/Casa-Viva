@@ -1,6 +1,18 @@
 # Casa Viva
 
-Casa Viva será una tienda online cubana de productos para el hogar. Este repositorio contiene únicamente la base técnica inicial de la aplicación web; no incluye todavía catálogo, carrito, inventario, pagos, gestores, tracking ni panel administrativo.
+Casa Viva es el primer comercio operativo de una plataforma multiempresa en evolución. El repositorio contiene la aplicación pública de referencia, el plugin operativo para WordPress/WooCommerce, contratos de pedidos, gestoras, dependientas, mensajería, inventario, pruebas, release y despliegue.
+
+## Reanudación obligatoria
+
+Antes de modificar el proyecto, leer en este orden:
+
+1. `docs/CASA_VIVA_PLATFORM_MASTER_BLUEPRINT.md`
+2. `docs/CASA_VIVA_PLATFORM_CHECKPOINT.md`
+3. `docs/CASA_VIVA_CURRENT_STATE.md`
+4. `docs/CASA_VIVA_BLUEPRINT.md`
+5. `AGENTS.md`
+
+El checkpoint indica la fase activa, los bloqueos, el SHA auditado y la siguiente acción autorizada.
 
 ## Tecnología utilizada
 
@@ -35,4 +47,4 @@ npm run build
 
 ## Alcance actual
 
-Esta es solamente la base inicial de Casa Viva. La plataforma completa se construirá más adelante y podrá incorporar catálogo, inventario, pedidos, seguimiento, gestores, comisiones, cierres y panel administrativo cuando corresponda.
+La Fase 0 está dedicada a cerrar y certificar Casa Viva Core. La Foundation multiempresa, las tiendas adicionales, Gestor multitienda, mensajería global y contabilidad Windows permanecen en fases posteriores. No deben iniciarse antes del baseline estable documentado.

@@ -43,6 +43,8 @@ jobs:
         run: |
           node artifacts/tests/test-messenger-center-2d.mjs
           node artifacts/tests/test-messenger-operational-fields.mjs
+          node artifacts/tests/test-messenger-feed-reload-guard.mjs
+          node artifacts/tests/test-messenger-immediate-reload-guard.mjs
 
       - name: Validar contrato de navegación móvil del cliente
         run: node artifacts/tests/test-customer-navigation-3a.mjs
