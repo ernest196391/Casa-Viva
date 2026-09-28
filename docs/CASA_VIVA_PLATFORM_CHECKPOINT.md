@@ -49,9 +49,9 @@ No se deben iniciar esas fases hasta cerrar la Fase 0.
 
 | Paso | Estado | Criterio de cierre |
 | --- | --- | --- |
-| 001.1 Crear Blueprint y checkpoint vivos | VALIDADO LOCALMENTE | Documentos presentes, enlazados y revisables en PR |
-| 001.2 Corregir orden de carga del guard del mensajero | VALIDADO LOCALMENTE | Ambos contratos de recarga verdes |
-| 001.3 Incorporar prueba omitida al CI | VALIDADO LOCALMENTE | Workflow ejecuta las dos regresiones |
+| 001.1 Crear Blueprint y checkpoint vivos | VALIDADO EN PR #116 | Documentos presentes, enlazados y revisables en PR |
+| 001.2 Corregir orden de carga del guard del mensajero | VALIDADO EN PR #116 | Ambos contratos de recarga verdes |
+| 001.3 Incorporar prueba omitida al CI | VALIDADO EN PR #116 | Workflow ejecuta las dos regresiones |
 | 001.4 Inventariar pruebas huérfanas | PENDIENTE | Toda prueba relevante está ejecutada o justificada |
 | 001.5 Ejecutar validación completa | PENDIENTE | contratos, lint, typecheck, build, integración y browser verdes |
 | 001.6 Fijar SHA candidato | PENDIENTE | SHA exacto documentado; sin despliegue todavía |
@@ -67,7 +67,7 @@ No se deben iniciar esas fases hasta cerrar la Fase 0.
 
 ## Próxima acción
 
-Publicar 001.1–001.3 en un PR pequeño y esperar CI remoto. Después inventariar pruebas huérfanas y completar integración/navegador antes de fijar el SHA candidato.
+Revisar y aprobar el PR #116. Después ejecutar 001.4: inventariar pruebas huérfanas antes de fijar el SHA candidato. No fusionar ni desplegar como consecuencia automática de CI verde.
 
 ## Evidencia local de 001.1–001.3
 
@@ -76,7 +76,12 @@ Publicar 001.1–001.3 en un PR pequeño y esperar CI remoto. Después inventari
 - ESLint: 0 errores y 77 advertencias legacy;
 - TypeScript: verde;
 - build Next.js: verde;
-- integración WordPress/MariaDB y navegador: pendientes de CI/entorno completo.
+- PR draft: `#116`;
+- commit remoto de implementación: `5ab2ea9058b49911648489ee712cd96cb966dc5f`;
+- `Validar aplicación`: verde, incluidos validate, integración WordPress/MariaDB y navegador;
+- `Validar fundación de release`: verde;
+- `Validar contrato de staging`: verde;
+- producción: sin cambios; continúa en `7c5305c9dd2c6c1246354e6807282abfdbe9bc5f`.
 
 ## Cómo actualizar este archivo
 
