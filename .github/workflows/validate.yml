@@ -29,6 +29,8 @@ jobs:
         run: |
           php artifacts/tests/test-canonical-order-reader-1a.php
           php artifacts/tests/test-canonical-order-reader-history-truncation-1a.php
+          node artifacts/tests/test-canonical-order-reader-1a.mjs
+          node artifacts/tests/test-canonical-order-reader-history-truncation-1a.mjs
 
       - name: Validar historial canónico de eventos
         run: php artifacts/tests/test-canonical-order-events-1b.php
@@ -60,6 +62,11 @@ jobs:
 
       - name: Validar contrato de ayuda contextual del cliente
         run: node artifacts/tests/test-customer-order-support-3e.mjs
+
+      - name: Validar acceso post-compra y presentación del catálogo
+        run: |
+          node artifacts/tests/test-order-success-access-7a.mjs
+          node artifacts/tests/test-catalog-presentation-7c3.mjs
 
       - name: Validar privacidad dependienta y administración
         run: node artifacts/tests/test-staff-privacy-5a.mjs

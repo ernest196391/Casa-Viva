@@ -52,8 +52,8 @@ No se deben iniciar esas fases hasta cerrar la Fase 0.
 | 001.1 Crear Blueprint y checkpoint vivos | VALIDADO EN PR #116 | Documentos presentes, enlazados y revisables en PR |
 | 001.2 Corregir orden de carga del guard del mensajero | VALIDADO EN PR #116 | Ambos contratos de recarga verdes |
 | 001.3 Incorporar prueba omitida al CI | VALIDADO EN PR #116 | Workflow ejecuta las dos regresiones |
-| 001.4 Inventariar pruebas huérfanas | PENDIENTE | Toda prueba relevante está ejecutada o justificada |
-| 001.5 Ejecutar validación completa | PENDIENTE | contratos, lint, typecheck, build, integración y browser verdes |
+| 001.4 Inventariar pruebas huérfanas | IMPLEMENTADO; CI PENDIENTE | Toda prueba relevante está ejecutada o justificada |
+| 001.5 Ejecutar validación completa | PRIMER CICLO VERDE; CICLO FINAL PENDIENTE | contratos, lint, typecheck, build, integración y browser verdes |
 | 001.6 Fijar SHA candidato | PENDIENTE | SHA exacto documentado; sin despliegue todavía |
 
 ## Límites de esta subfase
@@ -67,7 +67,7 @@ No se deben iniciar esas fases hasta cerrar la Fase 0.
 
 ## Próxima acción
 
-Revisar y aprobar el PR #116. Después ejecutar 001.4: inventariar pruebas huérfanas antes de fijar el SHA candidato. No fusionar ni desplegar como consecuencia automática de CI verde.
+Esperar el ciclo final de CI con las cuatro pruebas huérfanas incorporadas. Si queda verde, documentar el SHA candidato y presentar el PR #116 para aprobación. No fusionar ni desplegar como consecuencia automática de CI verde.
 
 ## Evidencia local de 001.1–001.3
 
