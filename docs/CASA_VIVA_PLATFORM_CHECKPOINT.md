@@ -4,15 +4,15 @@
 
 ```text
 FASE: 0 — Casa Viva Core estable
-SUBFASE ACTIVA: CV-LAUNCH-POLISH-001 — Portada móvil, SEO técnico y resiliencia visual
-ESTADO: 3.10.14 DESPLEGADO Y VERIFICADO EN MÓVIL; 3.10.15 (corrección de scroll horizontal) EN CURSO
+SUBFASE CERRADA: CV-LAUNCH-POLISH-001 — Portada móvil, SEO técnico y resiliencia visual
+ESTADO: CERRADA — 3.10.15 DESPLEGADO Y VERIFICADO EN MÓVIL POR AUDITORÍA AUTOMÁTICA
 SUBFASE ANTERIOR: CV-RECOVERY-001 — CERRADA Y DESPLEGADA
 MAIN ANTES DEL PR: 2f2610293d990e200cb81301c18c7324ccabd924
-MAIN CON EL PR: 635dd1fc55aaf12f0e54080cef6c3f9743c763b2
-PRODUCCIÓN DESPLEGADA: 635dd1fc55aaf12f0e54080cef6c3f9743c763b2
-PRODUCCIÓN ANTERIOR (rollback): 001589c4ce4d0d31ac4986a18fbb20168e8369b3
+SHA CERTIFICADO Y DESPLEGADO: cdff54f011ee18576f9a6df9eee2a85dd006a00b (plugin 3.10.15, PR #121)
+PRODUCCIÓN ANTERIOR (rollback): 635dd1fc55aaf12f0e54080cef6c3f9743c763b2 (3.10.14)
 NOTA: al fusionar cambios solo documentales, `main` puede avanzar sin que producción cambie
-DEPLOY: GitHub Actions #21 — SUCCESS (identidad, vale sintético y smoke verdes; rollback no ejecutado)
+DEPLOY: Deploy prototype #23 — SUCCESS; auditoría móvil posterior #36867808732 — SUCCESS (0 scroll horizontal en 14 páginas)
+INCIDENTE: Deploy #22 falló en el vale sintético porque NEXO (Render) respondió en frío; el rollback automático devolvió producción a 3.10.14 y el reintento #23 pasó
 DECISIÓN: Ernesto aprobó el 2026-10-01 trabajar sin pedir permiso (fusiones y despliegues por el workflow oficial incluidos); siguen reservadas las decisiones comerciales, datos reales y acciones irreversibles
 COSTO NUEVO UTILIZADO: 0 USD
 ```
@@ -90,6 +90,8 @@ Resultado sobre 3.10.14:
 - **P1 móvil encontrado**: la portada tenía scroll horizontal (647 px en viewport de 390). Causa: los textos `screen-reader-text` de precios rebajados de WooCommerce en la estantería “Ofertas” (`.cv-market-shelf`, con `overflow-x:auto`) son absolutos y su bloque contenedor quedaba fuera del carrusel, así que no se recortaban. Corrección en 3.10.15: `.cv-market-shelf{position:relative}` en `launch-polish.css` (solo portada). Reproducido y comprobado en Chromium (648 → 390).
 - la auditoría de producción ahora falla si cualquier página auditada tiene scroll horizontal.
 
+Cierre en producción: 3.10.15 desplegado con Deploy prototype #23 (https://github.com/ernest196391/Casa-Viva/actions/runs/36867758303). La auditoría automática posterior confirmó HTTP 200, un H1, cero imágenes rotas y ancho 390/390 en portada, tienda, tarifario, Mi cuenta, accesos de gestoras y mensajeros, 6 categorías y 2 productos.
+
 Pendiente menor de catálogo: un producto sin imagen (placeholder de WooCommerce) visible en portada/tienda y en Electrodomésticos; requiere subir la foto real del producto.
 
 Criterio de cierre de la unidad:
@@ -103,9 +105,11 @@ Criterio de cierre de la unidad:
 
 ### P2 — Lanzamiento web
 
-- SEO de portada y resiliencia ante imágenes rotas: desplegados en 3.10.14; falta verificación visual en móvil;
+- SEO de portada, resiliencia de imágenes y scroll horizontal: cerrados en 3.10.15;
 - sanear catálogo y accesos;
-- verificar en producción móvil el tarifario de mensajería actualizado después del próximo despliegue;
+- botones “Añadir al carrito” de tienda/categorías en azul genérico de WooCommerce con texto oscuro: bajo contraste y fuera de la identidad (portada sí usa el verde Casa Viva);
+- tarifario móvil: la tarjeta de resultado muestra “Copiar” y “Compartir” vacíos antes de elegir zona;
+- producto “Aspiradora de Mano Inalámbrica” sin foto (placeholder WooCommerce): requiere la imagen real;
 - ejecutar cierre funcional de compra, vale, IA, mensajería y roles.
 
 ### Mantenimiento no bloqueante
@@ -116,7 +120,7 @@ Criterio de cierre de la unidad:
 
 ## Próxima compuerta
 
-Verificar en producción móvil la portada (H1, title, description, canonical, categorías) y el tarifario de 3.10.14. Después, presentar el siguiente subpaso de Fase 0: sanear catálogo y accesos.
+Siguiente tarea: CV-LAUNCH-POLISH-002 — coherencia visual móvil de tienda/categorías (botones de compra con la identidad y contraste AA) y estado vacío del tarifario, verificado con la auditoría móvil de producción.
 
 No iniciar Foundation multiempresa, nuevas tablas, compras de servicios ni cambios sobre pedidos reales sin aprobación expresa.
 
