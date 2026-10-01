@@ -1,0 +1,79 @@
+name: Auditoría móvil de producción
+
+on:
+  workflow_dispatch:
+    inputs:
+      production_url:
+        description: URL HTTPS pública a auditar
+        required: false
+        default: https://casavivadecuba.com
+        type: string
+  workflow_run:
+    workflows: [Deploy prototype Casa Viva]
+    types: [completed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: production-mobile-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PRODUCTION_URL: ${{ inputs.production_url || 'https://casavivadecuba.com' }}
+      PRODUCTION_EVIDENCE_DIR: prod-evidence
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Instalar Playwright y Chromium
+        run: |
+          npm install --no-save @playwright/test@1.54.2
+          npx playwright install --with-deps chromium
+
+      - name: Auditar producción en móvil (solo lectura)
+        id: audit
+        shell: bash
+        run: npx playwright test tests/production --workers=1 --reporter=line 2>&1 | tee prod-evidence-output.log
+
+      - name: Resumir hallazgos
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f prod-evidence/report.json || { echo "::error::No se generó report.json"; exit 0; }
+          jq -r '.pages[] | "::notice title=\(.final_url)::HTTP \(.status) · \(.load_ms) ms · h1=\(.h1|length) · overflow=\(.scroll_width)/\(.client_width) · rotas=\(.images_broken|length) · reparadas=\(.images_repaired|length) · placeholders=\(.woo_placeholders) · sin alt=\(.images_without_alt) · toques pequeños=\(.small_tap_targets) · consola=\(.console_errors|length) · fallos red=\(.failed_requests|length)"' prod-evidence/report.json
+          jq -r '.pages[] | select((.images_broken|length) > 0 or (.overflow_elements|length) > 0) | "::warning title=\(.final_url)::rotas: \(.images_broken|join(" , ")) | overflow: \(.overflow_elements|join(" , "))"' prod-evidence/report.json | head -c 60000
+          {
+            echo "## Auditoría móvil de producción"
+            echo "- URL: $PRODUCTION_URL"
+            echo "- SHA del repositorio: $GITHUB_SHA"
+            echo '```json'
+            jq '[.pages[] | {final_url, status, title, h1, images_broken, overflow_elements, small_tap_targets}]' prod-evidence/report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar evidencia en la rama evidence/production-mobile
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d prod-evidence || exit 0
+          cp prod-evidence-output.log prod-evidence/ 2>/dev/null || true
+          cd prod-evidence
+          git init -q -b evidence
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "evidence: auditoría móvil de producción ${GITHUB_RUN_ID}"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/evidence/production-mobile
