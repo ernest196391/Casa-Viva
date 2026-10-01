@@ -41,6 +41,53 @@ async function inspect(page) {
         overflow.push(`${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${cls ? '.' + cls : ''} right=${Math.round(r.right)}`);
       }
     });
+    const sel = (el) => {
+      const parts = [];
+      for (let n = el; n && n !== document.body && parts.length < 4; n = n.parentElement) {
+        const cls = typeof n.className === 'string' ? n.className.trim().split(/\s+/).filter(Boolean).slice(0, 2).join('.') : '';
+        parts.unshift(`${n.tagName.toLowerCase()}${n.id ? '#' + n.id : ''}${cls ? '.' + cls : ''}`);
+      }
+      return parts.join(' > ');
+    };
+    // Raíces del desbordamiento: elementos que salen del viewport cuyo padre no sale.
+    const overflowRoots = [];
+    document.querySelectorAll('body *').forEach((el) => {
+      const r = el.getBoundingClientRect();
+      const parent = el.parentElement;
+      if (!parent || r.width === 0 || r.right <= vw + 1 || getComputedStyle(el).position === 'fixed') return;
+      const pr = parent.getBoundingClientRect();
+      if (pr.right > vw + 1) return;
+      const ps = getComputedStyle(parent);
+      if (ps.overflowX !== 'visible' && ps.overflowX !== 'clip') return;
+      overflowRoots.push({
+        element: sel(el),
+        right: Math.round(r.right),
+        width: Math.round(r.width),
+        parent_display: ps.display,
+        parent_overflow_x: ps.overflowX,
+        parent_flex_wrap: ps.flexWrap,
+        parent_html: parent.outerHTML.replace(/\s+/g, ' ').slice(0, 400),
+      });
+    });
+    const widest = [...document.querySelectorAll('body *')]
+      .map((el) => ({ el, r: el.getBoundingClientRect() }))
+      .filter(({ el, r }) => {
+        if (r.width === 0 || r.right <= vw + 1) return false;
+        // Ignora lo que ya recorta un ancestro con scroll/hidden: no ensancha la página.
+        // También ignora lo fijo: sigue al viewport de layout ya ensanchado.
+        if (getComputedStyle(el).position === 'fixed') return false;
+        for (let n = el.parentElement; n && n !== document.documentElement; n = n.parentElement) {
+          const ns = getComputedStyle(n);
+          if (ns.overflowX !== 'visible' || ns.position === 'fixed') return false;
+        }
+        return true;
+      })
+      .sort((a, b) => b.r.right - a.r.right)
+      .slice(0, 6)
+      .map(({ el, r }) => {
+        const cs = getComputedStyle(el);
+        return { html: el.outerHTML.replace(/\s+/g, ' ').slice(0, 300), element: sel(el), right: Math.round(r.right), position: cs.position, transform: cs.transform === 'none' ? '' : cs.transform, parent_overflow_x: el.parentElement ? getComputedStyle(el.parentElement).overflowX : '' };
+      });
     const imgs = [...document.images];
     const broken = imgs
       .filter((i) => i.complete && i.naturalWidth === 0 && (i.currentSrc || i.src))
@@ -61,6 +108,9 @@ async function inspect(page) {
       scroll_width: document.documentElement.scrollWidth,
       client_width: vw,
       overflow_elements: overflow.slice(0, 8),
+      overflow_roots: overflowRoots.slice(0, 10),
+      overflow_widest: widest,
+      body_overflow_x: getComputedStyle(document.body).overflowX + '/' + getComputedStyle(document.documentElement).overflowX,
       images_total: imgs.length,
       images_broken: [...new Set(broken)].slice(0, 20),
       images_repaired: repaired,
@@ -73,6 +123,61 @@ async function inspect(page) {
       category_links: [...new Set([...document.querySelectorAll('a[href*="/categoria-producto/"]')].map((a) => a.href.split('#')[0]))].slice(0, 8),
       launch_assets: !!document.querySelector('link[href*="launch-polish.css"], script[src*="launch-polish.js"]'),
     };
+  });
+}
+
+// Localiza por bisección (ocultando nodos solo en el DOM local) qué elemento ensancha la página.
+async function overflowCulprit(page) {
+  return page.evaluate(() => {
+    const root = document.documentElement;
+    const wide = () => root.scrollWidth > root.clientWidth + 1;
+    if (!wide()) return [];
+    const path = [];
+    let node = document.body;
+    for (let depth = 0; depth < 25 && node; depth++) {
+      let next = null;
+      for (const child of node.children) {
+        const prev = child.style.getPropertyValue('display');
+        const prio = child.style.getPropertyPriority('display');
+        child.style.setProperty('display', 'none', 'important');
+        const fixed = !wide();
+        child.style.setProperty('display', prev, prio);
+        if (fixed) { next = child; break; }
+      }
+      if (!next) break;
+      const cs = getComputedStyle(next);
+      const r = next.getBoundingClientRect();
+      const cls = typeof next.className === 'string' ? next.className.trim().split(/\s+/).slice(0, 3).join('.') : '';
+      path.push({
+        element: `${next.tagName.toLowerCase()}${next.id ? '#' + next.id : ''}${cls ? '.' + cls : ''}`,
+        left: Math.round(r.left), right: Math.round(r.right), width: Math.round(r.width),
+        position: cs.position, display: cs.display, overflow_x: cs.overflowX,
+        transform: cs.transform === 'none' ? '' : cs.transform,
+        before_width: getComputedStyle(next, '::before').width, after_width: getComputedStyle(next, '::after').width,
+      });
+      node = next;
+    }
+    // Si ningún hijo aislado lo explica, prueba a ocultar cada clase de descendiente a la vez.
+    if (node && node !== document.body && path.length) {
+      const classes = new Set();
+      node.querySelectorAll('*').forEach((el) => {
+        if (typeof el.className === 'string') el.className.trim().split(/\s+/).filter(Boolean).forEach((c) => classes.add(c));
+      });
+      const fixers = [];
+      for (const c of classes) {
+        const els = [...node.getElementsByClassName(c)];
+        const prev = els.map((el) => el.style.getPropertyValue('display'));
+        els.forEach((el) => el.style.setProperty('display', 'none', 'important'));
+        if (!wide()) {
+          const sample = els[0];
+          const cs = getComputedStyle(sample);
+          fixers.push({ class: c, count: els.length, position: cs.position, html: sample.outerHTML.replace(/\s+/g, ' ').slice(0, 250) });
+        }
+        els.forEach((el, i) => el.style.setProperty('display', prev[i]));
+      }
+      path.push({ fixing_descendant_classes: fixers.slice(0, 12) });
+    }
+    return path;
   });
 }
 
@@ -91,6 +196,7 @@ async function audit(page, url) {
   const html = response ? await response.text().catch(() => '') : '';
   await settle(page);
   const data = await inspect(page);
+  data.overflow_culprit = await overflowCulprit(page);
   const name = slug(page.url());
   await page.screenshot({ path: path.join(outDir, `${name}.png`) });
   await page.screenshot({ path: path.join(outDir, `${name}-full.png`), fullPage: true }).catch(() => {});
@@ -132,5 +238,6 @@ test('auditoría móvil de producción', async ({ page }) => {
   for (const p of report.pages) {
     expect.soft(p.status, `${p.url} HTTP`).toBeLessThan(400);
     expect.soft(p.fatal_marker, `${p.url} error fatal`).toBe(false);
+    expect.soft(p.scroll_width, `${p.url} scroll horizontal en móvil`).toBeLessThanOrEqual(p.client_width + 1);
   }
 });

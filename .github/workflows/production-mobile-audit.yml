@@ -53,7 +53,7 @@ jobs:
           set -euo pipefail
           test -f prod-evidence/report.json || { echo "::error::No se generó report.json"; exit 0; }
           jq -r '.pages[] | "::notice title=\(.final_url)::HTTP \(.status) · \(.load_ms) ms · h1=\(.h1|length) · overflow=\(.scroll_width)/\(.client_width) · rotas=\(.images_broken|length) · reparadas=\(.images_repaired|length) · placeholders=\(.woo_placeholders) · sin alt=\(.images_without_alt) · toques pequeños=\(.small_tap_targets) · consola=\(.console_errors|length) · fallos red=\(.failed_requests|length)"' prod-evidence/report.json
-          jq -r '.pages[] | select((.images_broken|length) > 0 or (.overflow_elements|length) > 0) | "::warning title=\(.final_url)::rotas: \(.images_broken|join(" , ")) | overflow: \(.overflow_elements|join(" , "))"' prod-evidence/report.json | head -c 60000
+          jq -r '.pages[] | select((.images_broken|length) > 0 or (.overflow_elements|length) > 0) | "::warning title=\(.final_url)::rotas: \(.images_broken|join(" , ")) | raíces overflow: \([.overflow_roots[] | "\(.element) (right=\(.right), padre overflow-x=\(.parent_overflow_x))"]|join(" , "))"' prod-evidence/report.json | head -c 60000
           {
             echo "## Auditoría móvil de producción"
             echo "- URL: $PRODUCTION_URL"
