@@ -5,7 +5,7 @@
 ```text
 FASE: 0 — Casa Viva Core estable
 SUBFASE ACTIVA: CV-LAUNCH-POLISH-001 — Portada móvil, SEO técnico y resiliencia visual
-ESTADO: CANDIDATO 3.10.14 VALIDADO EN PR #118 — PRODUCCIÓN PENDIENTE
+ESTADO: 3.10.14 VALIDADO Y FUSIONADO A MAIN (PR #118) — DESPLIEGUE PENDIENTE DE APROBACIÓN
 SUBFASE ANTERIOR: CV-RECOVERY-001 — CERRADA Y DESPLEGADA
 MAIN ANTES DEL PR: 2f2610293d990e200cb81301c18c7324ccabd924
 PRODUCCIÓN CERTIFICADA: 001589c4ce4d0d31ac4986a18fbb20168e8369b3
@@ -70,7 +70,8 @@ Implementación:
 - rama: `cv-launch-polish-001`;
 - prueba de contrato: `artifacts/tests/test-launch-polish-001.mjs`;
 - prueba navegador móvil: `tests/browser/launch-polish.spec.js`;
-- CI de evidencia: Validar aplicación #389 (validate, integración y browser verdes), release #256 verde y staging #248 verde;
+- SHA certificado del candidato (head del PR): `9698dda112c98c585b2f8e3444aa40348dbe344e`;
+- CI de evidencia sobre ese SHA: Validar aplicación #393 (validate, integración y browser verdes), release #260 verde y staging #252 verde;
 - viewport verificado: 390×844;
 - producción permanece en `001589c4ce4d0d31ac4986a18fbb20168e8369b3`.
 
