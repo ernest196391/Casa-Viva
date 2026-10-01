@@ -5,13 +5,15 @@
 ```text
 FASE: 0 — Casa Viva Core estable
 SUBFASE ACTIVA: CV-LAUNCH-POLISH-001 — Portada móvil, SEO técnico y resiliencia visual
-ESTADO: 3.10.14 VALIDADO EN PR #118 — FUSIÓN Y DESPLIEGUE PENDIENTES DE APROBACIÓN EXPLÍCITA
+ESTADO: 3.10.14 FUSIONADO Y DESPLEGADO — VERIFICACIÓN VISUAL MÓVIL PENDIENTE
 SUBFASE ANTERIOR: CV-RECOVERY-001 — CERRADA Y DESPLEGADA
 MAIN ANTES DEL PR: 2f2610293d990e200cb81301c18c7324ccabd924
-PRODUCCIÓN CERTIFICADA: 001589c4ce4d0d31ac4986a18fbb20168e8369b3
+MAIN CON EL PR: 635dd1fc55aaf12f0e54080cef6c3f9743c763b2
+PRODUCCIÓN DESPLEGADA: 635dd1fc55aaf12f0e54080cef6c3f9743c763b2
+PRODUCCIÓN ANTERIOR (rollback): 001589c4ce4d0d31ac4986a18fbb20168e8369b3
 NOTA: al fusionar cambios solo documentales, `main` puede avanzar sin que producción cambie
-DEPLOY: GitHub Actions #20 — SUCCESS
-DECISIÓN: GO recibido para CV-LAUNCH-POLISH-001; NO desplegar producción sin aprobación explícita
+DEPLOY: GitHub Actions #21 — SUCCESS (identidad, vale sintético y smoke verdes; rollback no ejecutado)
+DECISIÓN: despliegue aprobado por Ernesto el 2026-10-01; próximos despliegues siguen requiriendo aprobación explícita
 COSTO NUEVO UTILIZADO: 0 USD
 ```
 
@@ -73,7 +75,8 @@ Implementación:
 - SHA certificado del candidato (head del PR): `9698dda112c98c585b2f8e3444aa40348dbe344e`;
 - CI de evidencia sobre ese SHA: Validar aplicación #393 (validate, integración y browser verdes), release #260 verde y staging #252 verde;
 - viewport verificado: 390×844;
-- producción permanece en `001589c4ce4d0d31ac4986a18fbb20168e8369b3`.
+- fusionado a `main` en `635dd1fc55aaf12f0e54080cef6c3f9743c763b2` y desplegado con Deploy prototype #21 (https://github.com/ernest196391/Casa-Viva/actions/runs/36856337660);
+- pendiente: comprobación visual en móvil de H1, title, description, canonical, tarjetas de categoría y tarifario.
 
 Criterio de cierre de la unidad:
 
@@ -86,7 +89,7 @@ Criterio de cierre de la unidad:
 
 ### P2 — Lanzamiento web
 
-- SEO de portada y resiliencia ante imágenes rotas: implementados y validados en PR #118; pendientes de despliegue controlado;
+- SEO de portada y resiliencia ante imágenes rotas: desplegados en 3.10.14; falta verificación visual en móvil;
 - sanear catálogo y accesos;
 - verificar en producción móvil el tarifario de mensajería actualizado después del próximo despliegue;
 - ejecutar cierre funcional de compra, vale, IA, mensajería y roles.
@@ -99,7 +102,7 @@ Criterio de cierre de la unidad:
 
 ## Próxima compuerta
 
-Fusionar PR #118 a `main` solo con aprobación explícita de Ernesto y con la corrida final en verde. No desplegar producción. La siguiente compuerta será el despliegue controlado de 3.10.14, que requiere aprobación explícita.
+Verificar en producción móvil la portada (H1, title, description, canonical, categorías) y el tarifario de 3.10.14. Después, presentar el siguiente subpaso de Fase 0: sanear catálogo y accesos.
 
 No iniciar Foundation multiempresa, nuevas tablas, compras de servicios ni cambios sobre pedidos reales sin aprobación expresa.
 
