@@ -5,7 +5,7 @@
 ```text
 FASE: 0 — Casa Viva Core estable
 SUBFASE ACTIVA: CV-LAUNCH-POLISH-001 — Portada móvil, SEO técnico y resiliencia visual
-ESTADO: 3.10.14 FUSIONADO Y DESPLEGADO — VERIFICACIÓN VISUAL MÓVIL PENDIENTE
+ESTADO: 3.10.14 DESPLEGADO Y VERIFICADO EN MÓVIL; 3.10.15 (corrección de scroll horizontal) EN CURSO
 SUBFASE ANTERIOR: CV-RECOVERY-001 — CERRADA Y DESPLEGADA
 MAIN ANTES DEL PR: 2f2610293d990e200cb81301c18c7324ccabd924
 MAIN CON EL PR: 635dd1fc55aaf12f0e54080cef6c3f9743c763b2
@@ -13,7 +13,7 @@ PRODUCCIÓN DESPLEGADA: 635dd1fc55aaf12f0e54080cef6c3f9743c763b2
 PRODUCCIÓN ANTERIOR (rollback): 001589c4ce4d0d31ac4986a18fbb20168e8369b3
 NOTA: al fusionar cambios solo documentales, `main` puede avanzar sin que producción cambie
 DEPLOY: GitHub Actions #21 — SUCCESS (identidad, vale sintético y smoke verdes; rollback no ejecutado)
-DECISIÓN: despliegue aprobado por Ernesto el 2026-10-01; próximos despliegues siguen requiriendo aprobación explícita
+DECISIÓN: Ernesto aprobó el 2026-10-01 trabajar sin pedir permiso (fusiones y despliegues por el workflow oficial incluidos); siguen reservadas las decisiones comerciales, datos reales y acciones irreversibles
 COSTO NUEVO UTILIZADO: 0 USD
 ```
 
@@ -77,6 +77,20 @@ Implementación:
 - viewport verificado: 390×844;
 - fusionado a `main` en `635dd1fc55aaf12f0e54080cef6c3f9743c763b2` y desplegado con Deploy prototype #21 (https://github.com/ernest196391/Casa-Viva/actions/runs/36856337660);
 - pendiente: comprobación visual en móvil de H1, title, description, canonical, tarjetas de categoría y tarifario.
+
+### Verificación en producción (2026-10-01)
+
+Nuevo workflow **Auditoría móvil de producción** (`.github/workflows/production-mobile-audit.yml`, PR #120): Playwright 390×844 de solo lectura contra `https://casavivadecuba.com`, automático tras cada despliegue exitoso y bajo demanda. Publica capturas y `report.json` en la rama `evidence/production-mobile`.
+
+Resultado sobre 3.10.14:
+
+- portada: title, meta description, canonical y un único H1 correctos;
+- tienda, tarifario, Mi cuenta, accesos de gestoras y mensajeros, 6 categorías y 2 productos: HTTP 200, un H1, sin errores fatales ni de consola;
+- imágenes de categoría: ninguna rota hoy (el fallback queda como protección);
+- **P1 móvil encontrado**: la portada tenía scroll horizontal (647 px en viewport de 390). Causa: los textos `screen-reader-text` de precios rebajados de WooCommerce en la estantería “Ofertas” (`.cv-market-shelf`, con `overflow-x:auto`) son absolutos y su bloque contenedor quedaba fuera del carrusel, así que no se recortaban. Corrección en 3.10.15: `.cv-market-shelf{position:relative}` en `launch-polish.css` (solo portada). Reproducido y comprobado en Chromium (648 → 390).
+- la auditoría de producción ahora falla si cualquier página auditada tiene scroll horizontal.
+
+Pendiente menor de catálogo: un producto sin imagen (placeholder de WooCommerce) visible en portada/tienda y en Electrodomésticos; requiere subir la foto real del producto.
 
 Criterio de cierre de la unidad:
 

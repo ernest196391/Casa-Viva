@@ -238,5 +238,6 @@ test('auditoría móvil de producción', async ({ page }) => {
   for (const p of report.pages) {
     expect.soft(p.status, `${p.url} HTTP`).toBeLessThan(400);
     expect.soft(p.fatal_marker, `${p.url} error fatal`).toBe(false);
+    expect.soft(p.scroll_width, `${p.url} scroll horizontal en móvil`).toBeLessThanOrEqual(p.client_width + 1);
   }
 });
