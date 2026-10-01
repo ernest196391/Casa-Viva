@@ -69,6 +69,15 @@ async function inspect(page) {
         parent_html: parent.outerHTML.replace(/\s+/g, ' ').slice(0, 400),
       });
     });
+    const widest = [...document.querySelectorAll('body *')]
+      .map((el) => ({ el, r: el.getBoundingClientRect() }))
+      .filter(({ r }) => r.width > 0 && r.right > vw + 1)
+      .sort((a, b) => b.r.right - a.r.right)
+      .slice(0, 6)
+      .map(({ el, r }) => {
+        const cs = getComputedStyle(el);
+        return { element: sel(el), right: Math.round(r.right), position: cs.position, transform: cs.transform === 'none' ? '' : cs.transform, parent_overflow_x: el.parentElement ? getComputedStyle(el.parentElement).overflowX : '' };
+      });
     const imgs = [...document.images];
     const broken = imgs
       .filter((i) => i.complete && i.naturalWidth === 0 && (i.currentSrc || i.src))
@@ -90,6 +99,8 @@ async function inspect(page) {
       client_width: vw,
       overflow_elements: overflow.slice(0, 8),
       overflow_roots: overflowRoots.slice(0, 10),
+      overflow_widest: widest,
+      body_overflow_x: getComputedStyle(document.body).overflowX + '/' + getComputedStyle(document.documentElement).overflowX,
       images_total: imgs.length,
       images_broken: [...new Set(broken)].slice(0, 20),
       images_repaired: repaired,
