@@ -45,5 +45,10 @@ test.describe('CV-LAUNCH-POLISH-001', () => {
     const box = await image.boundingBox();
     expect(box).not.toBeNull();
     expect(box.width).toBeLessThanOrEqual(390);
+
+    await page.goto(baseURL + '/tienda/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('link[href*="launch-polish.css"]')).toHaveCount(0);
+    await expect(page.locator('script[src*="launch-polish.js"]')).toHaveCount(0);
+    await expect(page.locator('h1.cvd-launch-home-h1')).toHaveCount(0);
   });
 });
