@@ -5,7 +5,7 @@
 ```text
 FASE: 0 — Casa Viva Core estable
 SUBFASE ACTIVA: CV-LAUNCH-POLISH-001 — Portada móvil, SEO técnico y resiliencia visual
-ESTADO: 3.10.14 VALIDADO Y FUSIONADO A MAIN (PR #118) — DESPLIEGUE PENDIENTE DE APROBACIÓN
+ESTADO: 3.10.14 VALIDADO EN PR #118 — FUSIÓN Y DESPLIEGUE PENDIENTES DE APROBACIÓN EXPLÍCITA
 SUBFASE ANTERIOR: CV-RECOVERY-001 — CERRADA Y DESPLEGADA
 MAIN ANTES DEL PR: 2f2610293d990e200cb81301c18c7324ccabd924
 PRODUCCIÓN CERTIFICADA: 001589c4ce4d0d31ac4986a18fbb20168e8369b3
@@ -99,7 +99,7 @@ Criterio de cierre de la unidad:
 
 ## Próxima compuerta
 
-Fusionar PR #118 a `main` únicamente si la corrida final posterior a este checkpoint permanece verde. No desplegar producción. La siguiente compuerta será el despliegue controlado de 3.10.14, que requiere aprobación explícita.
+Fusionar PR #118 a `main` solo con aprobación explícita de Ernesto y con la corrida final en verde. No desplegar producción. La siguiente compuerta será el despliegue controlado de 3.10.14, que requiere aprobación explícita.
 
 No iniciar Foundation multiempresa, nuevas tablas, compras de servicios ni cambios sobre pedidos reales sin aprobación expresa.
 
