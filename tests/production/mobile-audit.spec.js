@@ -157,6 +157,26 @@ async function overflowCulprit(page) {
       });
       node = next;
     }
+    // Si ningún hijo aislado lo explica, prueba a ocultar cada clase de descendiente a la vez.
+    if (node && node !== document.body && path.length) {
+      const classes = new Set();
+      node.querySelectorAll('*').forEach((el) => {
+        if (typeof el.className === 'string') el.className.trim().split(/\s+/).filter(Boolean).forEach((c) => classes.add(c));
+      });
+      const fixers = [];
+      for (const c of classes) {
+        const els = [...node.getElementsByClassName(c)];
+        const prev = els.map((el) => el.style.getPropertyValue('display'));
+        els.forEach((el) => el.style.setProperty('display', 'none', 'important'));
+        if (!wide()) {
+          const sample = els[0];
+          const cs = getComputedStyle(sample);
+          fixers.push({ class: c, count: els.length, position: cs.position, html: sample.outerHTML.replace(/\s+/g, ' ').slice(0, 250) });
+        }
+        els.forEach((el, i) => el.style.setProperty('display', prev[i]));
+      }
+      path.push({ fixing_descendant_classes: fixers.slice(0, 12) });
+    }
     return path;
   });
 }
