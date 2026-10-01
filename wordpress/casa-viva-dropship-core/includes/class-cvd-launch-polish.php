@@ -23,7 +23,10 @@ final class CVD_Launch_Polish {
 	}
 
 	private static function is_public_home(): bool {
-		return ! is_admin() && ! wp_doing_ajax() && is_front_page();
+		if ( is_admin() || wp_doing_ajax() || ! is_front_page() ) { return false; }
+		$home_path = (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH );
+		$request_path = (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '/' ), PHP_URL_PATH );
+		return untrailingslashit( $home_path ?: '/' ) === untrailingslashit( $request_path ?: '/' );
 	}
 
 	public static function prepare_home_head(): void {
