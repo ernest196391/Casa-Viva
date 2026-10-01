@@ -13,22 +13,25 @@
   }
 
   function repair(img) {
-    if (!(img instanceof HTMLImageElement) || img.dataset.cvdCategoryRepair === '1') return;
-    img.dataset.cvdCategoryRepair = '1';
+    if (!(img instanceof HTMLImageElement)) return;
     const anchor = img.closest('a[href*="/categoria-producto/"]');
     if (anchor) anchor.classList.add('cvd-category-card-fallback');
+    img.dataset.cvdCategoryRepair = '1';
     img.classList.add('cvd-category-image-fallback');
     img.alt = categoryLabel(img);
     img.srcset = '';
     img.sizes = '';
-    img.src = fallback;
+    if (img.getAttribute('src') !== fallback) img.src = fallback;
   }
 
   function bind(img) {
     if (!(img instanceof HTMLImageElement) || img.dataset.cvdCategoryBound === '1') return;
     img.dataset.cvdCategoryBound = '1';
-    img.addEventListener('error', () => repair(img), { once: true });
-    if (img.complete && img.naturalWidth === 0) repair(img);
+    img.addEventListener('error', () => {
+      if (img.getAttribute('src') !== fallback) repair(img);
+    });
+    const source = (img.getAttribute('src') || '').trim();
+    if (source && img.complete && img.naturalWidth === 0) repair(img);
   }
 
   function scan(root) {
