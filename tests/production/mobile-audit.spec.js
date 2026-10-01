@@ -126,6 +126,41 @@ async function inspect(page) {
   });
 }
 
+// Localiza por bisección (ocultando nodos solo en el DOM local) qué elemento ensancha la página.
+async function overflowCulprit(page) {
+  return page.evaluate(() => {
+    const root = document.documentElement;
+    const wide = () => root.scrollWidth > root.clientWidth + 1;
+    if (!wide()) return [];
+    const path = [];
+    let node = document.body;
+    for (let depth = 0; depth < 25 && node; depth++) {
+      let next = null;
+      for (const child of node.children) {
+        const prev = child.style.getPropertyValue('display');
+        const prio = child.style.getPropertyPriority('display');
+        child.style.setProperty('display', 'none', 'important');
+        const fixed = !wide();
+        child.style.setProperty('display', prev, prio);
+        if (fixed) { next = child; break; }
+      }
+      if (!next) break;
+      const cs = getComputedStyle(next);
+      const r = next.getBoundingClientRect();
+      const cls = typeof next.className === 'string' ? next.className.trim().split(/\s+/).slice(0, 3).join('.') : '';
+      path.push({
+        element: `${next.tagName.toLowerCase()}${next.id ? '#' + next.id : ''}${cls ? '.' + cls : ''}`,
+        left: Math.round(r.left), right: Math.round(r.right), width: Math.round(r.width),
+        position: cs.position, display: cs.display, overflow_x: cs.overflowX,
+        transform: cs.transform === 'none' ? '' : cs.transform,
+        before_width: getComputedStyle(next, '::before').width, after_width: getComputedStyle(next, '::after').width,
+      });
+      node = next;
+    }
+    return path;
+  });
+}
+
 async function audit(page, url) {
   const consoleErrors = [];
   const failed = [];
@@ -141,6 +176,7 @@ async function audit(page, url) {
   const html = response ? await response.text().catch(() => '') : '';
   await settle(page);
   const data = await inspect(page);
+  data.overflow_culprit = await overflowCulprit(page);
   const name = slug(page.url());
   await page.screenshot({ path: path.join(outDir, `${name}.png`) });
   await page.screenshot({ path: path.join(outDir, `${name}-full.png`), fullPage: true }).catch(() => {});
