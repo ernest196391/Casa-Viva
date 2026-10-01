@@ -6,7 +6,9 @@
 FASE: 0 — Casa Viva Core estable
 SUBFASE CERRADA: CV-RECOVERY-001 — Recuperar una línea base confiable
 ESTADO: CERRADA Y DESPLEGADA
-MAIN / PRODUCCIÓN CERTIFICADA: 001589c4ce4d0d31ac4986a18fbb20168e8369b3
+MAIN BASE DEL PR: 001589c4ce4d0d31ac4986a18fbb20168e8369b3
+PRODUCCIÓN CERTIFICADA: 001589c4ce4d0d31ac4986a18fbb20168e8369b3
+NOTA: al fusionar cambios solo documentales, `main` puede avanzar sin que producción cambie
 DEPLOY: GitHub Actions #20 — SUCCESS
 DECISIÓN: GO para iniciar el próximo subpaso de Fase 0, únicamente con aprobación
 COSTO NUEVO UTILIZADO: 0 USD
@@ -70,7 +72,7 @@ No iniciar Foundation multiempresa, nuevas tablas, compras de servicios ni cambi
 Al retomar el proyecto:
 
 1. leer este checkpoint y el Blueprint maestro;
-2. comprobar que `main` y producción continúan en el SHA indicado;
+2. comprobar por separado que producción continúa en el SHA certificado y que `main` contiene ese SHA como ancestro o documenta explícitamente cualquier delta posterior;
 3. ejecutar solamente la próxima acción aprobada;
 4. actualizar estado, evidencia, costo y próxima compuerta;
 5. no avanzar de fase por inferencia ni por CI verde.
