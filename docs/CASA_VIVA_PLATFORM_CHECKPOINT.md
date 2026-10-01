@@ -4,13 +4,14 @@
 
 ```text
 FASE: 0 — Casa Viva Core estable
-SUBFASE CERRADA: CV-RECOVERY-001 — Recuperar una línea base confiable
-ESTADO: CERRADA Y DESPLEGADA
+SUBFASE ACTIVA: CV-LAUNCH-POLISH-001 — Portada móvil, SEO técnico y resiliencia visual
+ESTADO: IMPLEMENTADO EN PR #118 — CI PENDIENTE
+SUBFASE ANTERIOR: CV-RECOVERY-001 — CERRADA Y DESPLEGADA
 MAIN BASE DEL PR: 001589c4ce4d0d31ac4986a18fbb20168e8369b3
 PRODUCCIÓN CERTIFICADA: 001589c4ce4d0d31ac4986a18fbb20168e8369b3
 NOTA: al fusionar cambios solo documentales, `main` puede avanzar sin que producción cambie
 DEPLOY: GitHub Actions #20 — SUCCESS
-DECISIÓN: GO para iniciar el próximo subpaso de Fase 0, únicamente con aprobación
+DECISIÓN: GO recibido para CV-LAUNCH-POLISH-001; NO desplegar producción sin aprobación explícita
 COSTO NUEVO UTILIZADO: 0 USD
 ```
 
@@ -45,6 +46,39 @@ No se deben iniciar esas fases hasta cerrar completamente la Fase 0.
 - rollback automático: disponible y no ejecutado porque no hubo fallo;
 - portada pública: accesible y con catálogo renderizado tras el despliegue.
 
+## CV-LAUNCH-POLISH-001 — Portada móvil, SEO y categorías
+
+Objetivo de esta unidad:
+
+- corregir el SEO técnico ausente en la portada sin depender del tema;
+- garantizar un único H1 semántico aunque el tema no invoque `wp_body_open`;
+- sustituir automáticamente imágenes rotas de enlaces a categorías WooCommerce por un fallback local y ligero;
+- verificar el comportamiento en viewport móvil 390×844;
+- conservar intactas tarifas, stock, pedidos, comisiones, payouts y demás lógica comercial.
+
+Evidencia previa observada en producción:
+
+- la portada pública indexada no expone H1;
+- el título público observado es genérico;
+- las cuatro tarjetas visibles de “Comprar por habitación” enlazan a categorías reales de WooCommerce;
+- el tarifario sigue cubierto por `test-shipping-quote-contract.mjs` y `test-tariffs-mobile-polish.mjs` sin cambiar importes.
+
+Implementación:
+
+- PR: #118;
+- candidato plugin: `3.10.14`;
+- rama: `cv-launch-polish-001`;
+- prueba de contrato: `artifacts/tests/test-launch-polish-001.mjs`;
+- prueba navegador móvil: `tests/browser/launch-polish.spec.js`;
+- producción permanece en `001589c4ce4d0d31ac4986a18fbb20168e8369b3`.
+
+Criterio de cierre de la unidad:
+
+- validate, integración y navegador verdes;
+- PR #118 fusionado a `main`;
+- producción no cambia hasta una aprobación explícita de despliegue;
+- después del futuro despliegue, comprobar H1, title, description, canonical, tarjetas de categoría y tarifario desde móvil antes de marcar producción cerrada.
+
 ## Hallazgos que continúan abiertos en Fase 0
 
 ### P2 — Lanzamiento web
@@ -63,7 +97,7 @@ No se deben iniciar esas fases hasta cerrar completamente la Fase 0.
 
 ## Próxima compuerta
 
-Presentar para aprobación el siguiente subpaso de Fase 0: **auditoría y cierre de lanzamiento web en móvil**, empezando por imágenes rotas, SEO técnico y verificación visual del tarifario.
+Completar CI y revisión del PR #118. Si queda verde, fusionar CV-LAUNCH-POLISH-001 a `main` sin desplegar producción. La siguiente compuerta será el despliegue controlado de 3.10.14, que requiere aprobación explícita.
 
 No iniciar Foundation multiempresa, nuevas tablas, compras de servicios ni cambios sobre pedidos reales sin aprobación expresa.
 
