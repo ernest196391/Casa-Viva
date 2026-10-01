@@ -41,6 +41,34 @@ async function inspect(page) {
         overflow.push(`${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${cls ? '.' + cls : ''} right=${Math.round(r.right)}`);
       }
     });
+    const sel = (el) => {
+      const parts = [];
+      for (let n = el; n && n !== document.body && parts.length < 4; n = n.parentElement) {
+        const cls = typeof n.className === 'string' ? n.className.trim().split(/\s+/).filter(Boolean).slice(0, 2).join('.') : '';
+        parts.unshift(`${n.tagName.toLowerCase()}${n.id ? '#' + n.id : ''}${cls ? '.' + cls : ''}`);
+      }
+      return parts.join(' > ');
+    };
+    // Raíces del desbordamiento: elementos que salen del viewport cuyo padre no sale.
+    const overflowRoots = [];
+    document.querySelectorAll('body *').forEach((el) => {
+      const r = el.getBoundingClientRect();
+      const parent = el.parentElement;
+      if (!parent || r.width === 0 || r.right <= vw + 1 || getComputedStyle(el).position === 'fixed') return;
+      const pr = parent.getBoundingClientRect();
+      if (pr.right > vw + 1) return;
+      const ps = getComputedStyle(parent);
+      if (ps.overflowX !== 'visible' && ps.overflowX !== 'clip') return;
+      overflowRoots.push({
+        element: sel(el),
+        right: Math.round(r.right),
+        width: Math.round(r.width),
+        parent_display: ps.display,
+        parent_overflow_x: ps.overflowX,
+        parent_flex_wrap: ps.flexWrap,
+        parent_html: parent.outerHTML.replace(/\s+/g, ' ').slice(0, 400),
+      });
+    });
     const imgs = [...document.images];
     const broken = imgs
       .filter((i) => i.complete && i.naturalWidth === 0 && (i.currentSrc || i.src))
@@ -61,6 +89,7 @@ async function inspect(page) {
       scroll_width: document.documentElement.scrollWidth,
       client_width: vw,
       overflow_elements: overflow.slice(0, 8),
+      overflow_roots: overflowRoots.slice(0, 10),
       images_total: imgs.length,
       images_broken: [...new Set(broken)].slice(0, 20),
       images_repaired: repaired,
