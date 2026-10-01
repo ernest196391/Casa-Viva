@@ -71,12 +71,19 @@ async function inspect(page) {
     });
     const widest = [...document.querySelectorAll('body *')]
       .map((el) => ({ el, r: el.getBoundingClientRect() }))
-      .filter(({ r }) => r.width > 0 && r.right > vw + 1)
+      .filter(({ el, r }) => {
+        if (r.width === 0 || r.right <= vw + 1) return false;
+        // Ignora lo que ya recorta un ancestro con scroll/hidden: no ensancha la página.
+        for (let n = el.parentElement; n && n !== document.documentElement; n = n.parentElement) {
+          if (getComputedStyle(n).overflowX !== 'visible') return false;
+        }
+        return true;
+      })
       .sort((a, b) => b.r.right - a.r.right)
       .slice(0, 6)
       .map(({ el, r }) => {
         const cs = getComputedStyle(el);
-        return { element: sel(el), right: Math.round(r.right), position: cs.position, transform: cs.transform === 'none' ? '' : cs.transform, parent_overflow_x: el.parentElement ? getComputedStyle(el.parentElement).overflowX : '' };
+        return { html: el.outerHTML.replace(/\s+/g, ' ').slice(0, 300), element: sel(el), right: Math.round(r.right), position: cs.position, transform: cs.transform === 'none' ? '' : cs.transform, parent_overflow_x: el.parentElement ? getComputedStyle(el.parentElement).overflowX : '' };
       });
     const imgs = [...document.images];
     const broken = imgs
