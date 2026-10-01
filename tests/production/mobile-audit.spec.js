@@ -74,8 +74,11 @@ async function inspect(page) {
       .filter(({ el, r }) => {
         if (r.width === 0 || r.right <= vw + 1) return false;
         // Ignora lo que ya recorta un ancestro con scroll/hidden: no ensancha la página.
+        // También ignora lo fijo: sigue al viewport de layout ya ensanchado.
+        if (getComputedStyle(el).position === 'fixed') return false;
         for (let n = el.parentElement; n && n !== document.documentElement; n = n.parentElement) {
-          if (getComputedStyle(n).overflowX !== 'visible') return false;
+          const ns = getComputedStyle(n);
+          if (ns.overflowX !== 'visible' || ns.position === 'fixed') return false;
         }
         return true;
       })
