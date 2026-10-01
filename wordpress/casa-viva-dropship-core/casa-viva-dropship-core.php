@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.10.13
+ * Version: 3.10.14
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.10.13' );
+define( 'CVD_VERSION', '3.10.14' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -22,6 +22,7 @@ require_once CVD_DIR . 'includes/class-cvd-customer-orders.php';
 require_once CVD_DIR . 'includes/class-cvd-customer-order-support.php';
 require_once CVD_DIR . 'includes/class-cvd-customer-navigation.php';
 require_once CVD_DIR . 'includes/class-cvd-catalog-presentation.php';
+require_once CVD_DIR . 'includes/class-cvd-launch-polish.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-financial-view.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-price-integrity.php';
 require_once CVD_DIR . 'includes/class-cvd-attribution-overrides.php';
@@ -43,6 +44,7 @@ add_action(
 			CVD_Customer_Order_Support::register();
 			CVD_Customer_Navigation::register();
 			CVD_Catalog_Presentation::register();
+			CVD_Launch_Polish::register();
 			CVD_Gestora_Financial_View::register();
 			CVD_Gestora_Price_Integrity::register();
 			CVD_Attribution_Overrides::register();
