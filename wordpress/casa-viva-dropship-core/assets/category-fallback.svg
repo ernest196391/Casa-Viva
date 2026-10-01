@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420" role="img" aria-labelledby="title desc">
+  <title id="title">Casa Viva</title>
+  <desc id="desc">Ilustración neutra para categorías del hogar.</desc>
+  <rect width="640" height="420" fill="#f2e9dc"/>
+  <circle cx="514" cy="92" r="84" fill="#e5d6bd"/>
+  <path d="M150 224 320 92l170 132v128H150Z" fill="#fff" opacity=".96"/>
+  <path d="M124 232 320 78l196 154" fill="none" stroke="#004042" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M188 216v136h264V216" fill="none" stroke="#006068" stroke-width="16" stroke-linejoin="round"/>
+  <rect x="286" y="254" width="68" height="98" rx="8" fill="#f2e9dc" stroke="#006068" stroke-width="12"/>
+  <path d="M220 286h42M378 286h42" stroke="#28A745" stroke-width="14" stroke-linecap="round"/>
+</svg>
