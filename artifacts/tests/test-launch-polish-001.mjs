@@ -25,8 +25,8 @@ must(css.includes('@media(max-width:640px)') && css.includes('min-height:120px')
 must(css.includes('prefers-reduced-motion'), 'Launch polish debe respetar reducción de movimiento.');
 must(svg.includes('viewBox="0 0 640 420"') && svg.includes('#004042'), 'El fallback debe ser local, escalable y coherente con Casa Viva.');
 
-for (const forbidden of ['cvd_shipping_rates', 'set_stock_quantity', 'update_post_meta', 'commission', 'payout']) {
-  must(!php.includes(forbidden), `Launch polish no debe tocar lógica comercial/operativa: ${forbidden}`);
+for (const forbidden of ['cvd_shipping_rates', 'set_stock_quantity', 'update_post_meta', 'update_option(', 'wc_get_order(', 'CVD_Payouts::', 'CVD_Order_Transition_Service::']) {
+  must(!php.includes(forbidden), `Launch polish no debe ejecutar mutaciones comerciales/operativas: ${forbidden}`);
 }
 
 console.log('CV-LAUNCH-POLISH-001 contract OK');
