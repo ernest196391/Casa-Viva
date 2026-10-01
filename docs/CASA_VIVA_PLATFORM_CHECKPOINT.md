@@ -5,9 +5,9 @@
 ```text
 FASE: 0 — Casa Viva Core estable
 SUBFASE ACTIVA: CV-LAUNCH-POLISH-001 — Portada móvil, SEO técnico y resiliencia visual
-ESTADO: IMPLEMENTADO EN PR #118 — CI PENDIENTE
+ESTADO: CANDIDATO 3.10.14 VALIDADO EN PR #118 — PRODUCCIÓN PENDIENTE
 SUBFASE ANTERIOR: CV-RECOVERY-001 — CERRADA Y DESPLEGADA
-MAIN BASE DEL PR: 001589c4ce4d0d31ac4986a18fbb20168e8369b3
+MAIN ANTES DEL PR: 2f2610293d990e200cb81301c18c7324ccabd924
 PRODUCCIÓN CERTIFICADA: 001589c4ce4d0d31ac4986a18fbb20168e8369b3
 NOTA: al fusionar cambios solo documentales, `main` puede avanzar sin que producción cambie
 DEPLOY: GitHub Actions #20 — SUCCESS
@@ -70,6 +70,8 @@ Implementación:
 - rama: `cv-launch-polish-001`;
 - prueba de contrato: `artifacts/tests/test-launch-polish-001.mjs`;
 - prueba navegador móvil: `tests/browser/launch-polish.spec.js`;
+- CI de evidencia: Validar aplicación #389 (validate, integración y browser verdes), release #256 verde y staging #248 verde;
+- viewport verificado: 390×844;
 - producción permanece en `001589c4ce4d0d31ac4986a18fbb20168e8369b3`.
 
 Criterio de cierre de la unidad:
@@ -83,10 +85,9 @@ Criterio de cierre de la unidad:
 
 ### P2 — Lanzamiento web
 
-- revisar y sustituir las cuatro imágenes de categorías detectadas como rotas;
-- establecer H1, meta description, canonical y título definitivo;
+- SEO de portada y resiliencia ante imágenes rotas: implementados y validados en PR #118; pendientes de despliegue controlado;
 - sanear catálogo y accesos;
-- verificar visualmente en móvil el tarifario de mensajería actualizado;
+- verificar en producción móvil el tarifario de mensajería actualizado después del próximo despliegue;
 - ejecutar cierre funcional de compra, vale, IA, mensajería y roles.
 
 ### Mantenimiento no bloqueante
@@ -97,7 +98,7 @@ Criterio de cierre de la unidad:
 
 ## Próxima compuerta
 
-Completar CI y revisión del PR #118. Si queda verde, fusionar CV-LAUNCH-POLISH-001 a `main` sin desplegar producción. La siguiente compuerta será el despliegue controlado de 3.10.14, que requiere aprobación explícita.
+Fusionar PR #118 a `main` únicamente si la corrida final posterior a este checkpoint permanece verde. No desplegar producción. La siguiente compuerta será el despliegue controlado de 3.10.14, que requiere aprobación explícita.
 
 No iniciar Foundation multiempresa, nuevas tablas, compras de servicios ni cambios sobre pedidos reales sin aprobación expresa.
 
