@@ -9,6 +9,7 @@ defined( 'ABSPATH' ) || exit;
  * shipping rates, orders, roles, commissions, payouts or operational state.
  */
 final class CVD_Launch_Polish {
+	private static bool $home_h1_rendered = false;
 	private const HOME_TITLE = 'Casa Viva | Tienda online para el hogar en La Habana';
 	private const HOME_DESCRIPTION = 'Compra productos para el hogar en Casa Viva con precios visibles, catálogo online, recogida en Nuevo Vedado y entrega en La Habana.';
 
@@ -17,6 +18,7 @@ final class CVD_Launch_Polish {
 		add_filter( 'pre_get_document_title', array( __CLASS__, 'document_title' ), 50 );
 		add_action( 'wp_head', array( __CLASS__, 'home_meta' ), 1 );
 		add_action( 'wp_body_open', array( __CLASS__, 'home_h1' ), 20 );
+		add_action( 'wp_footer', array( __CLASS__, 'home_h1_fallback' ), 1 );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 40 );
 	}
 
@@ -41,8 +43,13 @@ final class CVD_Launch_Polish {
 	}
 
 	public static function home_h1(): void {
-		if ( ! self::is_public_home() ) { return; }
+		if ( ! self::is_public_home() || self::$home_h1_rendered ) { return; }
+		self::$home_h1_rendered = true;
 		echo '<h1 class="cvd-launch-home-h1">Casa Viva — tienda online para el hogar en La Habana</h1>';
+	}
+
+	public static function home_h1_fallback(): void {
+		self::home_h1();
 	}
 
 	public static function assets(): void {
