@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { test, expect } = require('@playwright/test');
 
 const baseURL = process.env.ORDER_CENTER_BASE_URL || 'http://localhost:8889';
