@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: dry-run (solo informe) o apply (precios, stock, publica lo de BizneCubano y oculta lo demás)
+        description: dry-run (solo informe) apply (precios, stock, publica lo de BizneCubano y oculta lo demás) o restore (vuelve a mostrar lo ocultado)
         required: true
         default: dry-run
         type: choice
-        options: [dry-run, apply]
+        options: [dry-run, apply, restore]
       limit:
         description: Máximo de productos nuevos a crear (0 = sin límite)
         required: false

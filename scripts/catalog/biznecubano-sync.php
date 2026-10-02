@@ -18,9 +18,25 @@
 defined( 'ABSPATH' ) || exit( 1 );
 
 $file  = getenv( 'CVD_SYNC_FILE' ) ?: '/tmp/biznecubano.json';
-$mode  = getenv( 'CVD_SYNC_MODE' ) === 'apply' ? 'apply' : 'dry-run';
+$mode  = in_array( getenv( 'CVD_SYNC_MODE' ), array( 'apply', 'restore' ), true ) ? getenv( 'CVD_SYNC_MODE' ) : 'dry-run';
 $limit = (int) ( getenv( 'CVD_SYNC_LIMIT' ) ?: 0 );
 $apply = 'apply' === $mode;
+
+// Reversión: devuelve a su estado anterior todo lo que la sincronización ocultó.
+if ( 'restore' === $mode ) {
+	$restored = array();
+	foreach ( wc_get_products( array( 'limit' => -1, 'status' => array( 'private' ), 'return' => 'objects' ) ) as $product ) {
+		if ( '' === (string) $product->get_meta( '_cvd_sync_hidden_from' ) ) {
+			continue;
+		}
+		$product->set_status( (string) $product->get_meta( '_cvd_sync_hidden_from' ) ?: 'publish' );
+		$product->delete_meta_data( '_cvd_sync_hidden_from' );
+		$product->save();
+		$restored[] = array( 'id' => $product->get_id(), 'sku' => $product->get_sku(), 'name' => $product->get_name() );
+	}
+	echo wp_json_encode( array( 'mode' => 'restore', 'restored' => $restored, 'totals' => array( 'restored' => count( $restored ) ) ), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) . "\n";
+	return;
+}
 
 $data = json_decode( (string) file_get_contents( $file ), true, 512, JSON_THROW_ON_ERROR );
 $products = $data['products'] ?? array();

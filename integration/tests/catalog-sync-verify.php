@@ -19,7 +19,11 @@ $ledger   = static function ( int $id ): int {
 $assert( '99' === $nexo->get_regular_price() && '20' === $gone->get_regular_price(), 'Ocultar no cambia precios.' );
 $assert( ! wc_get_product_id_by_sku( 'BC-P-cccc3' ), 'Un producto sin precio no se crea.' );
 
-if ( 'dry-run' === $phase ) {
+if ( 'restored' === $phase ) {
+	foreach ( array( $nexo, $gone ) as $restored ) {
+		$assert( 'publish' === $restored->get_status() && '' === $restored->get_meta( '_cvd_sync_hidden_from' ), 'La reversión restaura lo oculto: ' . $restored->get_sku() );
+	}
+} elseif ( 'dry-run' === $phase ) {
 	$assert( '10' === $existing->get_regular_price() && '' === $existing->get_sale_price(), 'El dry-run no debe cambiar precios.' );
 	$assert( 0 === count( $drafts ), 'El dry-run no debe crear productos.' );
 	$assert( 'outofstock' === $existing->get_stock_status() && 0 === $ledger( $existing->get_id() ), 'El dry-run no cambia stock.' );
