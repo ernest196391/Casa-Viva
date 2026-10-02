@@ -4,16 +4,25 @@
 
 ```text
 FASE: 0 — Casa Viva Core estable
-SUBFASE ACTUAL: CV-CURRU — Asistente Curru y buscador tolerante (estilo 23 y 28 / Colo Shop)
-ESTADO: CV-CURRU-001 (3.11.0, PR #128) y CV-CURRU-002 (3.11.1, PR #129: buscador con sugerencias) DESPLEGADOS Y VERIFICADOS
-SUBFASES ANTERIORES: CV-LAUNCH-POLISH-002, CV-CATALOG-SYNC y CV-LAUNCH-POLISH-001 — CERRADAS
-SHA DESPLEGADO: 71a954b06ac0ac319e2bd90ee6dc5874f51578e8 (plugin 3.11.1, PR #129, deploy run 37027423254 SUCCESS)
-PRODUCCIÓN ANTERIOR (rollback): 85225e3 (3.11.0)
+SUBFASE ACTUAL: CV-PREMIUM-001 — Auditoría de recorrido y tienda premium móvil (3.13.0)
+ESTADO: EN PR (cv-premium-001); producción sigue en 3.12.1
+SUBFASES ANTERIORES: CV-CURRU (3.11.0–3.12.1), CV-LAUNCH-POLISH-002, CV-CATALOG-SYNC y CV-LAUNCH-POLISH-001 — CERRADAS
+SHA DESPLEGADO: 7484eb2 (plugin 3.12.1)
+PRODUCCIÓN ANTERIOR (rollback): 08ea38a (3.12.0)
 NOTA: al fusionar cambios solo documentales, `main` puede avanzar sin que producción cambie
-DEPLOY: auditoría móvil #37027870189 SUCCESS (14 páginas sin scroll horizontal ni imágenes rotas) y #37027916280: Curru responde «sartén» con producto real; el buscador de /tienda/ sugiere «Juego de ollas» al escribir «paila»
-DECISIÓN: Ernesto aprobó el 2026-10-01 trabajar sin pedir permiso y el 2026-10-02 amplió la autorización a «lo que necesites para avanzar»; mejorará él las fotos (no usar Higgsfield); la foto de Curru la sube él en WooCommerce › Curru
-BLOQUEO: la IA de Curru (3.12.0) se activa cuando Ernesto pegue la clave de OpenAI en WooCommerce › Curru
+DECISIÓN: Ernesto (2026-10-02): checkout sin confirmar pedido; Curru da existencias exactas a gestoras y solo estados a clientes; mantener identidad beige/verde; Higgsfield hasta 50 créditos, nunca para fotos de producto; destacar con ventana las ofertas ya existentes
+BLOQUEO: prueba en vivo como gestora requiere que Ernesto cree una cuenta de gestora de prueba y guarde JOURNEY_GESTORA_USER / JOURNEY_GESTORA_PASS como secretos de GitHub
 ```
+
+## CV-PREMIUM-001 — Auditoría de recorrido y tienda premium (2026-10-02)
+
+Auditoría `customer-journey-audit.yml` (run 37041230617) como clienta en móvil: portada → categoría → producto → carrito → checkout sin confirmar → Curru. Investigación de patrones en `/mnt/project-files/auditoria/investigacion-tiendas-premium-2026-10-02.md`.
+
+- Curru y existencias: gestoras y operación reciben cantidades exactas por modelo (`CVD_Product_Search::cards( $ids, true )`); clientes y visitantes solo «Disponible», «Últimas unidades» (umbral de stock bajo de WooCommerce) o «Agotado». El endpoint público de búsqueda nunca expone cantidades. La IA recibe `CONTEXTO` y la misma regla.
+- Ficha de producto: barra fija de compra en móvil (encima de la barra inferior; Curru sube y el saludo se oculta), garantías junto al botón con los métodos reales (WhatsApp o transferencia, entrega por municipio o recogida, Curru) y disponibilidad sin cantidades para clientes.
+- Portada: imagen generada con Higgsfield (sin productos, enlace remoto `_min.webp`, filtro `cvd_home_hero_image`), titular, botón a la tienda y línea de entrega.
+- Ofertas: ventana una vez por sesión (al bajar más de la mitad o a los 15 s; nunca en ficha, carrito, checkout ni cuenta) con hasta 4 productos rebajados reales; insignias con porcentaje real; `/tienda/?cvd_ofertas=1` lista solo ofertas.
+- Marca: botones de carrito, checkout y añadir en verde Casa Viva; precio en verde, rebaja en terracota; opciones de entrega del checkout como tarjetas con radio propio.
 
 ## CV-CURRU — Asistente y buscador (2026-10-02)
 

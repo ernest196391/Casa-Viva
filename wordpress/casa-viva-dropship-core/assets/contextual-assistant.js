@@ -98,6 +98,7 @@
     if (product.regular) price.append(el("s", "", product.regular), " ");
     price.append(el("strong", "", product.price));
     card.append(link, price);
+    if (product.stockLabel) card.append(el("small", "cvd-curru-stock" + (product.inStock ? "" : " is-out"), product.stockLabel));
     if (product.quickAdd) {
       const add = el("button", "cvd-curru-add", "Añadir");
       add.type = "button";

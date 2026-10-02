@@ -137,6 +137,38 @@
 	margin-top: 10px;
 }
 
+/* WooCommerce pinta cada radio como hermano de su etiqueta: se oculta el control nativo y la etiqueta hace de tarjeta. */
+.woocommerce-checkout .cvd-fulfillment .woocommerce-input-wrapper input[type="radio"] {
+	clip: rect(0 0 0 0);
+	height: 1px;
+	margin: -1px;
+	overflow: hidden;
+	position: absolute;
+	width: 1px;
+}
+.woocommerce-checkout .cvd-fulfillment .woocommerce-input-wrapper label::before {
+	border: 2px solid #9c9385;
+	border-radius: 50%;
+	content: "";
+	flex: 0 0 18px;
+	height: 18px;
+}
+.woocommerce-checkout .cvd-fulfillment .woocommerce-input-wrapper input[type="radio"]:checked + label {
+	background: #eef5f1;
+	border-color: #0f3d3a;
+	box-shadow: 0 0 0 1px #0f3d3a;
+	font-weight: 750;
+}
+.woocommerce-checkout .cvd-fulfillment .woocommerce-input-wrapper input[type="radio"]:checked + label::before {
+	background: #0f3d3a;
+	border-color: #0f3d3a;
+	box-shadow: inset 0 0 0 3px #fff;
+}
+.woocommerce-checkout .cvd-fulfillment .woocommerce-input-wrapper input[type="radio"]:focus-visible + label {
+	outline: 3px solid rgba(15, 61, 58, .35);
+	outline-offset: 2px;
+}
+
 .woocommerce-checkout .cvd-fulfillment .woocommerce-input-wrapper label {
 	align-items: center;
 	background: #fff;
@@ -168,8 +200,8 @@
 .woocommerce-checkout #payment ul.payment_methods li { margin-bottom: 12px; }
 .woocommerce-checkout #payment div.payment_box { background: #edf4f4; border-radius: 12px; color: #334; font-size: 14px; line-height: 1.5; margin: 10px 0 14px; padding: 14px; }
 .woocommerce-checkout #payment div.payment_box::before { border-bottom-color: #edf4f4; }
-.woocommerce-checkout #payment #place_order { background: #006068; float: none; font-size: 16px; min-height: 52px; width: 100%; }
-.woocommerce-checkout #payment #place_order:hover { background: #004042; }
+.woocommerce-checkout #payment #place_order { background: #0f3d3a; border-radius: 999px; float: none; font-size: 16px; min-height: 52px; width: 100%; }
+.woocommerce-checkout #payment #place_order:hover { background: #0a2c2a; }
 .woocommerce-checkout .woocommerce-privacy-policy-text { font-size: 13px; line-height: 1.5; }
 .woocommerce-checkout .woocommerce-form-coupon-toggle .woocommerce-info { background: #f7f7f4; border-top-color: #006068; font-size: 14px; padding: 14px 16px 14px 48px; }
 .woocommerce-checkout form.checkout_coupon { border-color: #e0e0e0; border-radius: 14px; margin-top: 10px; }

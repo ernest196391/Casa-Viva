@@ -46,6 +46,52 @@ $assert( array() === $none['products'] && false !== strpos( $none['answer'], 'No
 $order = CVD_Contextual_Assistant::answer( 'dónde está mi pedido', 'mensajero' );
 $assert( false !== strpos( $order['links'][0]['url'], 'ruta-cv' ), 'el mensajero va a su Ruta.' );
 
+// Existencias: exactas para gestoras y operación; para clientes solo estados.
+$robe = new WC_Product_Variable();
+$robe->set_name( 'Albornoz de algodón' );
+$robe->set_status( 'publish' );
+$attribute = new WC_Product_Attribute();
+$attribute->set_name( 'Color' );
+$attribute->set_options( array( 'Azul', 'Blanco' ) );
+$attribute->set_variation( true );
+$attribute->set_visible( true );
+$robe->set_attributes( array( $attribute ) );
+$robe_id = $robe->save();
+foreach ( array( 'Azul' => 3, 'Blanco' => 5 ) as $color => $qty ) {
+	$variation = new WC_Product_Variation();
+	$variation->set_parent_id( $robe_id );
+	$variation->set_attributes( array( 'color' => $color ) );
+	$variation->set_regular_price( '22' );
+	$variation->set_manage_stock( true );
+	$variation->set_stock_quantity( $qty );
+	$variation->set_status( 'publish' );
+	$variation->save();
+}
+WC_Product_Variable::sync( $robe_id );
+$few = new WC_Product_Simple();
+$few->set_name( 'Sábana de lino beige' );
+$few->set_regular_price( '30' );
+$few->set_status( 'publish' );
+$few->set_manage_stock( true );
+$few->set_stock_quantity( 2 );
+$few->set_low_stock_amount( 3 );
+$few_id = $few->save();
+CVD_Product_Search::flush();
+$public = CVD_Product_Search::cards( array( $robe_id, $few_id ) );
+$assert( ! isset( $public[0]['stock'] ) && ! isset( $public[0]['variants'] ) && 'Disponible' === $public[0]['stockLabel'], 'la clienta no ve cantidades.' );
+$assert( 'Últimas unidades' === $public[1]['stockLabel'], 'stock en el umbral se muestra como últimas unidades.' );
+$exact = CVD_Product_Search::cards( array( $robe_id, $few_id ), true );
+$assert( 'Quedan 8 en total' === $exact[0]['stockLabel'] && 2 === count( $exact[0]['variants'] ), 'la gestora ve el total y cada modelo.' );
+$assert( array( 3, 5 ) === array_column( $exact[0]['variants'], 'stock' ), 'cada modelo trae su cantidad real.' );
+$assert( 'Quedan 2' === $exact[1]['stockLabel'], 'la gestora ve la cantidad exacta.' );
+$g = CVD_Contextual_Assistant::answer( '¿Cuántos albornoces quedan de cada modelo?', 'gestora' );
+$assert( false !== strpos( $g['answer'], 'Existencias ahora mismo' ) && false !== strpos( $g['answer'], 'Azul' ) && false !== strpos( $g['answer'], '3' ), 'Curru da a la gestora las existencias por modelo: ' . $g['answer'] );
+$c = CVD_Contextual_Assistant::answer( '¿Cuántos albornoces quedan?', 'cliente' );
+$assert( false === strpos( $c['answer'], 'Existencias' ) && ! isset( $c['products'][0]['stock'] ), 'Curru no da cantidades a la clienta.' );
+$assert( 'Últimas unidades' === CVD_Premium_Storefront::availability_text( '2 disponibles', wc_get_product( $few_id ) ), 'la ficha muestra estados a clientes.' );
+foreach ( array_merge( wc_get_product( $robe_id )->get_children(), array( $robe_id, $few_id ) ) as $id ) { wp_delete_post( $id, true ); }
+CVD_Product_Search::flush();
+
 // IA: solo redacta; productos limitados a candidatos reales y precio del servidor; fallo = respuesta local.
 $local = CVD_Contextual_Assistant::answer( 'quiero una sartén', 'visitante' );
 $assert( CVD_Curru_AI::improve( 'quiero una sartén', $local, array(), 'Curru' ) === $local, 'sin clave usa la respuesta local.' );

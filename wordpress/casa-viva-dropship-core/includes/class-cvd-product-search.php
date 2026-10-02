@@ -13,7 +13,7 @@ final class CVD_Product_Search {
 	private const MAX_RESULTS = 12;
 	private const MAX_SHOP_RESULTS = 200;
 
-	private const STOPWORDS = array( 'de', 'del', 'la', 'las', 'el', 'los', 'un', 'una', 'unos', 'unas', 'y', 'o', 'para', 'con', 'en', 'por', 'que', 'me', 'mi', 'quiero', 'busco', 'necesito', 'tienen', 'tienes', 'hay', 'algo', 'alguna', 'algun', 'precio', 'cuanto', 'cuesta', 'vale', 'venden', 'vendes', 'favor', 'hola', 'buenas' );
+	private const STOPWORDS = array( 'de', 'del', 'la', 'las', 'el', 'los', 'un', 'una', 'unos', 'unas', 'y', 'o', 'para', 'con', 'en', 'por', 'que', 'me', 'mi', 'quiero', 'busco', 'necesito', 'tienen', 'tienes', 'hay', 'algo', 'alguna', 'algun', 'precio', 'cuanto', 'cuesta', 'vale', 'venden', 'vendes', 'favor', 'hola', 'buenas', 'quedan', 'queda', 'existencia', 'existencias', 'stock', 'disponible', 'disponibles', 'disponibilidad', 'unidades', 'cuantos', 'cuantas', 'cada', 'modelo', 'modelos' );
 
 	/** Sinónimos frecuentes en Cuba. Ampliable con el filtro `cvd_product_search_aliases`. */
 	private const ALIASES = array(
@@ -275,8 +275,12 @@ final class CVD_Product_Search {
 		return array_slice( array_map( static fn( $r ) => (int) $r[0], $results ), 0, $limit );
 	}
 
-	/** Tarjetas públicas de producto con precio real de WooCommerce. */
-	public static function cards( array $ids ): array {
+	/**
+	 * Tarjetas de producto con precio y disponibilidad reales de WooCommerce, leídos en el momento.
+	 *
+	 * @param bool $exact true solo para gestoras y operación: incluye unidades exactas y por modelo.
+	 */
+	public static function cards( array $ids, bool $exact = false ): array {
 		$cards = array();
 		foreach ( $ids as $id ) {
 			$product = wc_get_product( $id );
@@ -284,7 +288,7 @@ final class CVD_Product_Search {
 				continue;
 			}
 			$image = wp_get_attachment_image_url( $product->get_image_id(), 'woocommerce_thumbnail' );
-			$cards[] = array(
+			$card = array(
 				'id'         => $product->get_id(),
 				'name'       => html_entity_decode( $product->get_name(), ENT_QUOTES, 'UTF-8' ),
 				'price'      => wp_strip_all_tags( html_entity_decode( wc_price( wc_get_price_to_display( $product ) ), ENT_QUOTES, 'UTF-8' ) ),
@@ -293,8 +297,59 @@ final class CVD_Product_Search {
 				'url'        => get_permalink( $product->get_id() ),
 				'inStock'    => $product->is_in_stock(),
 				'quickAdd'   => $product->is_type( 'simple' ) && $product->is_purchasable() && $product->is_in_stock(),
+				'stockLabel' => self::availability( $product, $exact ),
 			);
+			if ( $exact ) {
+				$card['stock'] = $product->managing_stock() ? (int) $product->get_stock_quantity() : null;
+				$card['variants'] = self::variants( $product );
+			}
+			$cards[] = $card;
 		}
 		return $cards;
+	}
+
+	/** Umbral de "últimas unidades": el de la ficha o el de la tienda (WooCommerce › Inventario). */
+	private static function low_threshold( WC_Product $product ): int {
+		$amount = method_exists( $product, 'get_low_stock_amount' ) ? $product->get_low_stock_amount() : '';
+		return max( 1, (int) ( '' !== $amount && null !== $amount ? $amount : get_option( 'woocommerce_notify_low_stock_amount', 2 ) ) );
+	}
+
+	/** Texto de disponibilidad: exacto para gestoras; para clientes solo disponible, últimas unidades o agotado. */
+	public static function availability( WC_Product $product, bool $exact = false ): string {
+		if ( ! $product->is_in_stock() ) {
+			return 'Agotado';
+		}
+		if ( ! $product->managing_stock() ) {
+			if ( $exact && $product->is_type( 'variable' ) ) {
+				$total = array_sum( array_map( static fn( $v ) => (int) ( $v['stock'] ?? 0 ), self::variants( $product ) ) );
+				return $total > 0 ? "Quedan {$total} en total" : 'Disponible';
+			}
+			return 'Disponible';
+		}
+		$qty = (int) $product->get_stock_quantity();
+		if ( $exact ) {
+			return 1 === $qty ? 'Queda 1' : "Quedan {$qty}";
+		}
+		return $qty <= self::low_threshold( $product ) ? 'Últimas unidades' : 'Disponible';
+	}
+
+	/** @return array<int, array{name:string, stock:?int, inStock:bool}> Modelos de un producto variable con sus existencias. */
+	private static function variants( WC_Product $product ): array {
+		if ( ! $product->is_type( 'variable' ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $product->get_children() as $child_id ) {
+			$variation = wc_get_product( $child_id );
+			if ( ! $variation || ! $variation->exists() || 'publish' !== $variation->get_status() ) {
+				continue;
+			}
+			$out[] = array(
+				'name'    => wp_strip_all_tags( wc_get_formatted_variation( $variation, true, false, false ) ),
+				'stock'   => $variation->managing_stock() ? (int) $variation->get_stock_quantity() : null,
+				'inStock' => $variation->is_in_stock(),
+			);
+		}
+		return $out;
 	}
 }
