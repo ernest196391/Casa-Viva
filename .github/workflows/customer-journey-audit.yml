@@ -1,0 +1,68 @@
+name: Auditoría de recorrido (clienta y gestora)
+
+# Recorre producción como clienta en móvil (hasta el checkout, sin confirmar pedido) y, si existen
+# los secretos JOURNEY_GESTORA_USER / JOURNEY_GESTORA_PASS, como gestora. No escribe en el servidor.
+on:
+  workflow_dispatch:
+    inputs:
+      production_url:
+        description: URL HTTPS pública a recorrer
+        required: false
+        default: https://casavivadecuba.com
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: customer-journey-audit
+  cancel-in-progress: false
+
+jobs:
+  journey:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PRODUCTION_URL: ${{ inputs.production_url || 'https://casavivadecuba.com' }}
+      JOURNEY_EVIDENCE_DIR: journey-evidence
+      JOURNEY_GESTORA_USER: ${{ secrets.JOURNEY_GESTORA_USER }}
+      JOURNEY_GESTORA_PASS: ${{ secrets.JOURNEY_GESTORA_PASS }}
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Instalar Playwright y Chromium
+        run: |
+          npm install --no-save @playwright/test@1.54.2
+          npx playwright install --with-deps chromium
+
+      - name: Recorrer producción
+        shell: bash
+        run: npx playwright test tests/journey --workers=1 --reporter=line 2>&1 | tee journey-output.log
+
+      - name: Resumir
+        if: always()
+        shell: bash
+        run: |
+          test -f journey-evidence/report.json || exit 0
+          jq -r '.steps[] | "::notice title=\(.name)::\(if .ok then "OK" else "FALLO" end) · \(.ms) ms · \(.note)"' journey-evidence/report.json
+          jq -r '.curru[] | "::notice title=Curru (\(.who))::\(.question) → ia=\(.ai) · \(.answer)"' journey-evidence/report.json
+
+      - name: Publicar evidencia en evidence/customer-journey
+        if: always()
+        shell: bash
+        run: |
+          test -d journey-evidence || exit 0
+          cp journey-output.log journey-evidence/ 2>/dev/null || true
+          cd journey-evidence
+          git init -q -b evidence
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "evidence: recorrido ${GITHUB_RUN_ID}"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/evidence/customer-journey
