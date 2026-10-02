@@ -23,8 +23,11 @@
   // Últimos turnos para que la IA entienda el hilo; solo texto de esta conversación.
   const history = [];
 
-  // Si la foto falla, queda la inicial.
-  document.querySelectorAll(".cvd-curru-photo").forEach((img) => img.addEventListener("error", () => img.closest(".has-photo")?.classList.remove("has-photo")));
+  // Si la foto falla, se usa el dibujo incluido; si también falla, queda la inicial.
+  document.querySelectorAll(".cvd-curru-photo").forEach((img) => img.addEventListener("error", () => {
+    if (img.dataset.fallback && img.getAttribute("src") !== img.dataset.fallback) { img.src = img.dataset.fallback; return; }
+    img.closest(".has-photo")?.classList.remove("has-photo");
+  }));
 
   function open() {
     const messengerAssistant = document.querySelector("#asistente[data-cvd-assistant]");
