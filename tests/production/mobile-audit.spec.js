@@ -269,3 +269,23 @@ test('Curru responde con productos', async ({ page }) => {
   expect.soft(curru.opened, 'Curru abre').toBe(true);
   expect.soft(curru.products, 'Curru muestra productos').toBeGreaterThan(0);
 });
+
+// Buscador: escribe en la tienda y comprueba las sugerencias (solo lectura).
+test('buscador sugiere productos', async ({ page }) => {
+  test.setTimeout(2 * 60 * 1000);
+  await page.goto(`${baseURL}/tienda/`, { waitUntil: 'domcontentloaded' });
+  const search = { form: false, suggestions: 0, first: '' };
+  const input = page.locator('#cvd-store-search-input');
+  search.form = await input.isVisible().catch(() => false);
+  if (search.form) {
+    await input.scrollIntoViewIfNeeded();
+    await input.pressSequentially('paila', { delay: 60 });
+    await page.waitForSelector('.cvd-search-suggest:not([hidden])', { timeout: 15000 }).catch(() => {});
+    search.suggestions = await page.locator('.cvd-search-suggest:not([hidden]) .cvd-search-item').count();
+    search.first = (await page.locator('.cvd-search-suggest:not([hidden]) .cvd-search-item b').first().textContent().catch(() => '')) || '';
+  }
+  await page.screenshot({ path: path.join(outDir, 'buscador.png') });
+  report.search = search;
+  expect.soft(search.form, 'buscador visible en la tienda').toBe(true);
+  expect.soft(search.suggestions, 'el buscador sugiere productos').toBeGreaterThan(0);
+});

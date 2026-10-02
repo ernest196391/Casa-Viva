@@ -5,13 +5,13 @@
 ```text
 FASE: 0 — Casa Viva Core estable
 SUBFASE ACTUAL: CV-CURRU — Asistente Curru y buscador tolerante (estilo 23 y 28 / Colo Shop)
-ESTADO: CV-CURRU-001 (3.11.0, PR #128) DESPLEGADO Y VERIFICADO; CV-CURRU-002 (3.11.1: buscador de tienda con sugerencias) EN PR
+ESTADO: CV-CURRU-001 (3.11.0, PR #128) y CV-CURRU-002 (3.11.1, PR #129: buscador con sugerencias) DESPLEGADOS Y VERIFICADOS
 SUBFASES ANTERIORES: CV-LAUNCH-POLISH-002, CV-CATALOG-SYNC y CV-LAUNCH-POLISH-001 — CERRADAS
-SHA DESPLEGADO: 85225e3 (plugin 3.11.0, PR #128, Deploy prototype #25 SUCCESS)
-PRODUCCIÓN ANTERIOR (rollback): 25415d15428b6c76b2042573cdd48e33a1569b21 (3.10.16)
+SHA DESPLEGADO: 71a954b06ac0ac319e2bd90ee6dc5874f51578e8 (plugin 3.11.1, PR #129, deploy run 37027423254 SUCCESS)
+PRODUCCIÓN ANTERIOR (rollback): 85225e3 (3.11.0)
 NOTA: al fusionar cambios solo documentales, `main` puede avanzar sin que producción cambie
-DEPLOY: auditoría móvil #37026428345 — Curru abre, responde «sartén» con producto real y botón Añadir; 0 scroll horizontal
-DECISIÓN: Ernesto aprobó el 2026-10-01 trabajar sin pedir permiso; mejorará él las fotos (no usar Higgsfield); la foto de Curru la sube él en WooCommerce › Curru
+DEPLOY: auditoría móvil #37027870189 SUCCESS (14 páginas sin scroll horizontal ni imágenes rotas) y #37027916280: Curru responde «sartén» con producto real; el buscador de /tienda/ sugiere «Juego de ollas» al escribir «paila»
+DECISIÓN: Ernesto aprobó el 2026-10-01 trabajar sin pedir permiso y el 2026-10-02 amplió la autorización a «lo que necesites para avanzar»; mejorará él las fotos (no usar Higgsfield); la foto de Curru la sube él en WooCommerce › Curru
 BLOQUEO: IA generativa de Curru espera que Ernesto elija proveedor (OpenAI o Gemini) y ponga la clave en wp-admin
 ```
 
@@ -20,7 +20,7 @@ BLOQUEO: IA generativa de Curru espera que Ernesto elija proveedor (OpenAI o Gem
 Referencias auditadas: 23 y 28 (asistente «Veci») y Colo Shop (asistente «Colo»). Se adoptó: avatar con foto, panel lateral, respuestas con tarjetas de producto y precio real de WooCommerce, añadir al carrito desde el chat, dictado por voz, búsqueda tolerante (acentos, plurales, sinónimos cubanos) y tarifas por municipio sin inventar precios.
 
 - 3.11.0 (PR #128): `CVD_Product_Search` (REST `casa-viva/v1/products/search`), Curru (`casa-viva/v1/curru/ask`, reglas locales: productos, mensajería por zona, pedidos, pagos, gestora, mensajero, WhatsApp), página WooCommerce › Curru para la foto.
-- 3.11.1: buscador de la tienda (tienda, categorías y resultados) con sugerencias con foto y precio, combobox accesible por teclado; también mejora los buscadores del tema. La búsqueda de la tienda usa el mismo motor tolerante («pailas» encuentra sartenes). La auditoría móvil de producción ahora abre Curru y guarda `curru.png`.
+- 3.11.1: buscador de la tienda (tienda, categorías y resultados) con sugerencias con foto y precio, combobox accesible por teclado; también mejora los buscadores del tema. La búsqueda de la tienda usa el mismo motor tolerante («pailas» encuentra sartenes). La auditoría móvil de producción abre Curru (`curru.png`) y prueba el buscador (`buscador.png`).
 - Pendiente: foto de Curru (Ernesto), IA generativa con clave en wp-admin (respuesta JSON con IDs; precios siempre del servidor; reglas locales como respaldo).
 
 ## CV-CATALOG-SYNC — Catálogo real desde BizneCubano (2026-10-02)
