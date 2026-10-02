@@ -53,7 +53,6 @@
  .cvd-buybar__button{flex:0 0 auto;min-height:48px;margin:0;padding:0 20px;border:0;border-radius:999px;background:var(--cvd-green);color:#fff;font:inherit;font-size:15px;font-weight:800;cursor:pointer}
  .cvd-buybar__button:focus-visible{outline:3px solid rgba(15,61,58,.4);outline-offset:2px}
  /* Curru sube por encima de la barra para no tapar el botón */
- .cvd-buybar-on .cvd-assistant-launcher{bottom:178px!important}
  .cvd-buybar-on .cvd-curru-nudge{display:none!important}
  .single-product .cvd-curru-nudge,.home .cvd-curru-nudge,.post-type-archive-product .cvd-curru-nudge,.tax-product_cat .cvd-curru-nudge{display:none!important}
 }
@@ -81,3 +80,14 @@
 .cvd-offers-open body{overflow:hidden}
 @media(min-width:821px){.cvd-offers{align-items:center}.cvd-offers__panel{border-radius:24px;padding:28px}.cvd-offers__grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(prefers-reduced-motion:reduce){.cvd-buybar,.cvd-offers__panel{animation:none}}
+
+/* Botones flotantes: Curru encima de WhatsApp, misma columna, mismo tamaño */
+:root{--cvd-fab:56px;--cvd-fab-gap:12px;--cvd-fab-right:20px;--cvd-fab-base:24px}
+.cv-whatsapp,.cvd-assistant-launcher{right:var(--cvd-fab-right)!important;width:var(--cvd-fab)!important;height:var(--cvd-fab)!important;border-radius:50%!important;box-shadow:0 8px 22px rgba(15,61,58,.22),0 2px 6px rgba(15,61,58,.12)!important;transition:bottom .2s ease,transform .15s ease}
+.cv-whatsapp{position:fixed!important;bottom:var(--cvd-fab-base)!important;z-index:61!important;box-sizing:border-box;border:3px solid #fff!important;background:#25d366!important;color:#fff!important}
+.cv-whatsapp svg,.cv-whatsapp img{width:28px;height:28px}
+.cvd-assistant-launcher{bottom:calc(var(--cvd-fab-base) + var(--cvd-fab) + var(--cvd-fab-gap))!important;border:3px solid #fff!important;outline:2px solid var(--cvd-green);outline-offset:-1px}
+.cvd-curru-nudge{right:var(--cvd-fab-right)!important;bottom:calc(var(--cvd-fab-base) + 2 * var(--cvd-fab) + 2 * var(--cvd-fab-gap))!important}
+.cv-whatsapp:active,.cvd-assistant-launcher:active{transform:scale(.94)}
+@media(max-width:820px){:root{--cvd-fab:52px;--cvd-fab-gap:10px;--cvd-fab-right:16px}body.cvd-customer-navigation-visible{--cvd-fab-base:calc(92px + env(safe-area-inset-bottom,0px))}html.cvd-buybar-on body{--cvd-fab-base:calc(162px + env(safe-area-inset-bottom,0px))}}
+@media(prefers-reduced-motion:reduce){.cv-whatsapp,.cvd-assistant-launcher{transition:none}}

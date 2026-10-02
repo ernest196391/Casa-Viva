@@ -5,10 +5,10 @@
 ```text
 FASE: 0 — Casa Viva Core estable
 SUBFASE ACTUAL: CV-PREMIUM-001 — Auditoría de recorrido y tienda premium móvil (3.13.x)
-ESTADO: 3.13.2 DESPLEGADO (PR #136, 16764a8, deploy 37050638048 tras un reintento por fallo SSH de Hostinger, recorrido 37051160500 y auditoría móvil 37051139904 SUCCESS); 3.13.3 en PR: la barra fija seguía oculta porque la barra inferior se imprime después del script y medía 0 px
+ESTADO: 3.13.3 DESPLEGADO (PR #137, 3ddea86, deploy 37054576417 tras un reintento por fallo SSH, recorrido 37055066479 SUCCESS: barra fija visible y portada nueva); 3.13.4 en PR: Curru y WhatsApp alineados
 SUBFASES ANTERIORES: CV-CURRU (3.11.0–3.12.1), CV-LAUNCH-POLISH-002, CV-CATALOG-SYNC y CV-LAUNCH-POLISH-001 — CERRADAS
-SHA DESPLEGADO: 16764a8 (plugin 3.13.2)
-PRODUCCIÓN ANTERIOR (rollback): 05ac537 (3.13.1)
+SHA DESPLEGADO: 3ddea86 (plugin 3.13.3)
+PRODUCCIÓN ANTERIOR (rollback): 16764a8 (3.13.2)
 NOTA: al fusionar cambios solo documentales, `main` puede avanzar sin que producción cambie
 DECISIÓN: Ernesto (2026-10-02): checkout sin confirmar pedido; Curru da existencias exactas a gestoras y solo estados a clientes; mantener identidad beige/verde; Higgsfield hasta 50 créditos, nunca para fotos de producto; destacar con ventana las ofertas ya existentes
 BLOQUEO: prueba en vivo como gestora requiere que Ernesto cree una cuenta de gestora de prueba y guarde JOURNEY_GESTORA_USER / JOURNEY_GESTORA_PASS como secretos de GitHub
@@ -26,6 +26,7 @@ Auditoría `customer-journey-audit.yml` (run 37041230617) como clienta en móvil
 - 3.13.2: la barra fija se muestra cuando el botón no se ve entero (`intersectionRatio < 0.99`); el recorrido de auditoría registra `report.buybar` (existencia, visibilidad y posiciones del botón y la barra inferior).
 - 3.13.3: la barra fija se calcula con la posición real del botón y de la barra inferior en cada desplazamiento (antes la barra inferior aún no existía al cargar el script). Probado en Chromium local: visible al cargar con el botón tapado, oculta con el botón entero, visible al pasarlo.
 - 3.13.3 (portada): texto más corto («Todo para tu casa, sin salir de ella.»), dos botones («Comprar ahora» y «Ver ofertas», este solo si hay rebajas) y portada más baja en móvil (380 px) para que el buscador quede en la primera pantalla.
+- 3.13.4: Curru y el botón de WhatsApp del tema (`.cv-whatsapp`) quedan en una sola columna a la derecha, con el mismo tamaño y margen; WhatsApp ya no queda tapado por la barra inferior y ambos suben con la barra fija de compra. En producción estaban a 12 px de distancia horizontal y WhatsApp quedaba medio oculto (sonda en la rama cv-probe-floats).
 - Marca: botones de carrito, checkout y añadir en verde Casa Viva; precio en verde, rebaja en terracota; opciones de entrega del checkout como tarjetas con radio propio.
 
 ## CV-CURRU — Asistente y buscador (2026-10-02)
