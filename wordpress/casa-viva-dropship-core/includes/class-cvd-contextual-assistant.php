@@ -244,14 +244,16 @@ final class CVD_Contextual_Assistant {
 		}
 
 		$ids = CVD_Product_Search::search( $question, 6 );
-		if ( ! $ids && self::find_place( $q ) ) {
+		$stock_question = (bool) preg_match( '/\b(quedan?|existencias?|stock|disponib\w*|unidades|cuant[oa]s|modelos?)\b/', $q );
+		// «modelo» también es un reparto: una pregunta de existencias no se responde con mensajería.
+		if ( ! $ids && ! $stock_question && self::find_place( $q ) ) {
 			return self::shipping_answer( $q, $urls );
 		}
 		if ( $ids ) {
 			$exact = self::sees_stock( $context );
 			$cards = CVD_Product_Search::cards( $ids, $exact );
 			$count = count( $cards );
-			if ( $exact && preg_match( '/\b(quedan?|existencias?|stock|disponib\w*|unidades|cuant[oa]s)\b/', $q ) ) {
+			if ( $exact && $stock_question ) {
 				return $reply( 'Existencias ahora mismo: ' . self::stock_summary( $cards ), array(), $cards );
 			}
 			return $reply( 1 === $count ? 'Encontré este producto:' : "Encontré {$count} productos que te pueden servir:", array(), $cards );

@@ -155,8 +155,11 @@ final class CVD_Product_Search {
 		return trim( (string) preg_replace( '/[^a-z0-9ñ]+/u', ' ', $text ) );
 	}
 
-	/** Singular aproximado para comparar plurales simples (sartenes → sarten, toallas → toalla). */
+	/** Singular aproximado para comparar plurales simples (sartenes → sarten, toallas → toalla, albornoces → albornoz). */
 	public static function stem( string $word ): string {
+		if ( mb_strlen( $word ) > 4 && preg_match( '/[aeiou]ces$/', $word ) ) {
+			return mb_substr( $word, 0, -3 ) . 'z'; // albornoces → albornoz, luces → luz.
+		}
 		if ( mb_strlen( $word ) > 4 && preg_match( '/(ones|enes|ores|ales|eles)$/', $word ) ) {
 			return mb_substr( $word, 0, -2 );
 		}

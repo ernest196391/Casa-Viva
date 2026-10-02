@@ -84,6 +84,7 @@ $exact = CVD_Product_Search::cards( array( $robe_id, $few_id ), true );
 $assert( 'Quedan 8 en total' === $exact[0]['stockLabel'] && 2 === count( $exact[0]['variants'] ), 'la gestora ve el total y cada modelo.' );
 $assert( array( 3, 5 ) === array_column( $exact[0]['variants'], 'stock' ), 'cada modelo trae su cantidad real.' );
 $assert( 'Quedan 2' === $exact[1]['stockLabel'], 'la gestora ve la cantidad exacta.' );
+$assert( in_array( $robe_id, CVD_Product_Search::search( 'albornoces' ), true ), 'el plural albornoces encuentra el albornoz.' );
 $g = CVD_Contextual_Assistant::answer( '¿Cuántos albornoces quedan de cada modelo?', 'gestora' );
 $assert( false !== strpos( $g['answer'], 'Existencias ahora mismo' ) && false !== strpos( $g['answer'], 'Azul' ) && false !== strpos( $g['answer'], '3' ), 'Curru da a la gestora las existencias por modelo: ' . $g['answer'] );
 $c = CVD_Contextual_Assistant::answer( '¿Cuántos albornoces quedan?', 'cliente' );
