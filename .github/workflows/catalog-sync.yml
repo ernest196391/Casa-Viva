@@ -71,7 +71,9 @@ jobs:
           mkdir -p catalog-sync
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             "cd '$WP_PATH' && CVD_SYNC_FILE=/tmp/cvd-biznecubano.json CVD_SYNC_MODE='$MODE' CVD_SYNC_LIMIT='${LIMIT:-0}' wp eval-file /tmp/cvd-biznecubano-sync.php" \
-            > catalog-sync/report.json
+            > catalog-sync/raw-output.txt
+          # Plugins de caché del hosting imprimen avisos ("Success: ...") antes del JSON.
+          sed -n '/^{/,$p' catalog-sync/raw-output.txt > catalog-sync/report.json
           jq -e .totals catalog-sync/report.json >/dev/null
           jq -r '"::notice title=Catálogo (\(.mode))::\(.totals | to_entries | map("\(.key)=\(.value)") | join(" · "))"' catalog-sync/report.json
           jq -r '.errors[]? | "::warning title=\(.sku)::\(.error)"' catalog-sync/report.json | head -20
