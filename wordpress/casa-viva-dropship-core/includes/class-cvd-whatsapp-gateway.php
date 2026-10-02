@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || exit;
 final class CVD_WhatsApp_Gateway {
 	public static function register(): void {
 		add_filter( 'woocommerce_payment_gateways', array( __CLASS__, 'add_gateway' ) );
-		add_action( 'woocommerce_thankyou', array( __CLASS__, 'thankyou_button' ), 20 );
+		add_filter( 'wc_get_template', array( __CLASS__, 'thankyou_template' ), 20, 2 );
 	}
 
 	public static function add_gateway( array $gateways ): array {
@@ -20,38 +20,102 @@ final class CVD_WhatsApp_Gateway {
 		return wc_get_endpoint_url( 'view-order', $order->get_id(), wc_get_page_permalink( 'myaccount' ) );
 	}
 
+	/**
+	 * Sustituye la plantilla nativa (tarjetas de resumen, tabla y facturación)
+	 * por una sola página ordenada al estilo Colo Shop.
+	 */
+	public static function thankyou_template( string $template, string $template_name ): string {
+		if ( 'checkout/thankyou.php' === $template_name ) {
+			return CVD_DIR . 'templates/checkout/thankyou.php';
+		}
+		return $template;
+	}
+
 	public static function thankyou_button( int $order_id ): void {
 		$order = wc_get_order( $order_id );
 		if ( ! $order ) {
 			return;
 		}
 
-		$url = self::whatsapp_url( $order );
+		$url       = self::whatsapp_url( $order );
 		$order_url = self::customer_order_url( $order );
+		$is_pickup = 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true );
+		$currency  = array( 'currency' => $order->get_currency() );
+		$fee       = $is_pickup || ! class_exists( 'CVD_Shipping_Rates' ) ? 0 : CVD_Shipping_Rates::order_fee( $order );
 
-		echo '<section class="cvd-order-success">';
-		echo '<div class="cvd-order-success__icon" aria-hidden="true">✓</div>';
-		echo '<h2>Tu pedido está siendo procesado</h2>';
+		echo '<section class="cvd-thanks" aria-label="Pedido recibido">';
+		echo '<p class="cvd-thanks__ref">Pedido #' . esc_html( $order->get_order_number() ) . '</p>';
 		if ( $url ) {
-			echo '<p>El pedido #' . esc_html( $order->get_order_number() ) . ' quedó guardado. Envíalo por WhatsApp para confirmar disponibilidad, envío y pago.</p>';
-		} else {
-			echo '<p>El pedido #' . esc_html( $order->get_order_number() ) . ' quedó guardado. Casa Viva se comunicará contigo para confirmarlo.</p>';
-		}
-		echo '<div class="cvd-order-success__actions">';
-		if ( $url ) {
+			echo '<p class="cvd-thanks__lead">Confírmalo por WhatsApp y coordinamos contigo la entrega y el pago.</p>';
 			// esc_url() strips encoded CR/LF sequences and destroys WhatsApp line breaks.
 			// whatsapp_url() validates the destination; esc_attr() only protects the HTML attribute.
-			echo '<a class="button alt cvd-order-success__whatsapp" href="' . esc_attr( $url ) . '" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.4L3 20.4l1.3-4.7a8.5 8.5 0 1 1 16.2-4Zm-4.7 2.4c-.2-.1-1.4-.7-1.6-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.9 6.9 0 0 1-3.4-3c-.2-.3 0-.4.1-.5l.6-.7c.1-.2.1-.4 0-.5l-.8-2c-.1-.3-.3-.3-.5-.3h-.5c-.2 0-.5.1-.7.3-.2.2-.9.9-.9 2.2s.9 2.5 1 2.7c.1.2 1.8 2.8 4.5 3.9.6.3 1.1.4 1.5.5.6.2 1.2.2 1.7.1.5-.1 1.4-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.2-.2-.3-.2-.5-.3Z"/></svg><span>Abrir WhatsApp y confirmar</span></a>';
+			echo '<a class="cvd-thanks__whatsapp" href="' . esc_attr( $url ) . '" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.4L3 20.4l1.3-4.7a8.5 8.5 0 1 1 16.2-4Zm-4.7 2.4c-.2-.1-1.4-.7-1.6-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.9 6.9 0 0 1-3.4-3c-.2-.3 0-.4.1-.5l.6-.7c.1-.2.1-.4 0-.5l-.8-2c-.1-.3-.3-.3-.5-.3h-.5c-.2 0-.5.1-.7.3-.2.2-.9.9-.9 2.2s.9 2.5 1 2.7c.1.2 1.8 2.8 4.5 3.9.6.3 1.1.4 1.5.5.6.2 1.2.2 1.7.1.5-.1 1.4-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.2-.2-.3-.2-.5-.3Z"/></svg><span>Confirmar por WhatsApp</span></a>';
+			echo '<p class="cvd-thanks__hint">Se abre con el vale del pedido listo para enviar.</p>';
+		} else {
+			echo '<p class="cvd-thanks__lead">Casa Viva te escribirá para confirmarlo.</p>';
 		}
+
+		echo '<div class="cvd-thanks__card"><h2 class="cvd-thanks__heading">Tu pedido</h2><ul class="cvd-thanks__lines">';
+		foreach ( $order->get_items( 'line_item' ) as $item ) {
+			$details = array();
+			foreach ( $item->get_formatted_meta_data() as $meta ) {
+				$details[] = wp_strip_all_tags( $meta->display_key . ': ' . $meta->display_value );
+			}
+			echo '<li><span class="cvd-thanks__qty">' . esc_html( $item->get_quantity() ) . ' ×</span><span class="cvd-thanks__name">' . esc_html( $item->get_name() );
+			if ( $details ) {
+				echo '<small>' . esc_html( implode( ' · ', $details ) ) . '</small>';
+			}
+			echo '</span><strong>' . wp_kses_post( wc_price( $item->get_subtotal(), $currency ) ) . '</strong></li>';
+		}
+		echo '</ul><dl class="cvd-thanks__totals">';
+		self::total_row( 'Productos', wc_price( $order->get_subtotal(), $currency ) );
+		if ( (float) $order->get_discount_total() > 0 ) {
+			self::total_row( 'Descuento', '-' . wc_price( $order->get_discount_total(), $currency ) );
+		}
+		self::total_row( $is_pickup ? 'Recogida' : 'Mensajería', $is_pickup ? 'Sin costo' : ( $fee ? esc_html( number_format_i18n( $fee, 0 ) . ' CUP' ) : 'Por confirmar' ) );
+		self::total_row( 'Total', wc_price( $order->get_total(), $currency ) . ( $fee ? '<small>+ ' . esc_html( number_format_i18n( $fee, 0 ) ) . ' CUP de mensajería</small>' : '' ), 'is-total' );
+		echo '</dl></div>';
+
+		self::delivery_card( $order, $is_pickup );
+
+		echo '<div class="cvd-thanks__secondary">';
 		if ( $order_url ) {
-			echo '<a class="button cvd-order-success__order" href="' . esc_url( $order_url ) . '">Ver seguimiento del pedido</a>';
+			echo '<a class="cvd-thanks__button" href="' . esc_url( $order_url ) . '">Ver seguimiento</a>';
 		}
-		echo '<a class="button cvd-order-success__shop" href="' . esc_url( wc_get_page_permalink( 'shop' ) ) . '">Seguir comprando</a>';
+		echo '<a class="cvd-thanks__button" href="' . esc_url( wc_get_page_permalink( 'shop' ) ) . '">Seguir comprando</a>';
 		echo '</div>';
 		if ( ! $order_url && ! is_user_logged_in() ) {
-			echo '<p class="cvd-order-success__account-note">Si quieres consultar pedidos y seguimiento desde Casa Viva, inicia sesión o crea tu cuenta antes de tu próxima compra.</p>';
+			echo '<p class="cvd-thanks__note">Para ver tus pedidos aquí, inicia sesión o crea tu cuenta antes de tu próxima compra.</p>';
 		}
 		echo '</section>';
+	}
+
+	private static function total_row( string $label, string $value_html, string $class = '' ): void {
+		echo '<div' . ( $class ? ' class="' . esc_attr( $class ) . '"' : '' ) . '><dt>' . esc_html( $label ) . '</dt><dd>' . wp_kses_post( $value_html ) . '</dd></div>';
+	}
+
+	private static function delivery_card( WC_Order $order, bool $is_pickup ): void {
+		$who = array_filter( array( $order->get_formatted_billing_full_name(), $order->get_billing_phone() ) );
+		echo '<div class="cvd-thanks__card"><h2 class="cvd-thanks__heading">' . ( $is_pickup ? 'Recogida en tienda' : 'Entrega a domicilio' ) . '</h2>';
+		if ( $who ) {
+			echo '<p class="cvd-thanks__who">' . esc_html( implode( ' · ', $who ) ) . '</p>';
+		}
+		if ( $is_pickup ) {
+			echo '<p>' . esc_html( get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ) ) . '</p>';
+			echo '<p class="cvd-thanks__muted">Te avisamos por WhatsApp cuándo estará listo.</p>';
+		} else {
+			$address = array_filter( array( $order->get_billing_address_1(), $order->get_billing_address_2(), $order->get_meta( '_cvd_locality', true ), $order->get_billing_city(), $order->get_meta( '_cvd_province_name', true ) ) );
+			echo '<p>' . esc_html( implode( ', ', array_map( static fn( $part ) => trim( (string) $part, " ,\t" ), $address ) ) ) . '</p>';
+			$reference = (string) $order->get_meta( '_cvd_reference', true );
+			if ( $reference ) {
+				echo '<p class="cvd-thanks__muted">Referencia: ' . esc_html( $reference ) . '</p>';
+			}
+			$map_url = (string) $order->get_meta( '_cvd_map_url', true );
+			if ( $map_url ) {
+				echo '<a class="cvd-thanks__link" href="' . esc_url( $map_url ) . '" target="_blank" rel="noopener">Ver ubicación en el mapa</a>';
+			}
+		}
+		echo '</div>';
 	}
 
 	public static function whatsapp_url( WC_Order $order ): string {

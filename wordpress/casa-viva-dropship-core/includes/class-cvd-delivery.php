@@ -18,7 +18,6 @@ final class CVD_Delivery {
 		add_shortcode( 'casa_viva_order_tracking', array( __CLASS__, 'render_tracking' ) );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'initialize_order' ), 30 );
-		add_action( 'woocommerce_thankyou', array( __CLASS__, 'render_thankyou_tracking' ), 25 );
 		add_action( 'woocommerce_email_after_order_table', array( __CLASS__, 'render_email_tracking' ), 25, 4 );
 		add_action( 'woocommerce_order_status_cancelled', array( __CLASS__, 'sync_cancelled' ), 40 );
 		add_action( 'woocommerce_order_status_refunded', array( __CLASS__, 'sync_cancelled' ), 40 );
@@ -502,11 +501,6 @@ final class CVD_Delivery {
 	private static function customer_status_label( string $status ): string {
 		$labels = array( 'unassigned'=>'Estamos preparando tu pedido','offered'=>'Estamos preparando tu pedido','assigned'=>'Mensajero asignado','accepted'=>'Mensajero asignado','to_store'=>'El mensajero va a recoger tu pedido','picked_up'=>'Pedido entregado al mensajero','handed_over'=>'Tu pedido va en camino','delivered'=>'Pedido entregado','cash_returned'=>'Pedido entregado','closed'=>'Pedido completado','incident'=>'Estamos revisando tu entrega','failed'=>'No se pudo completar la entrega','returned'=>'Pedido devuelto a Casa Viva','cancelled'=>'Pedido cancelado' );
 		return $labels[ $status ] ?? 'Pedido recibido';
-	}
-
-	public static function render_thankyou_tracking( int $order_id ): void {
-		$order = wc_get_order( $order_id );
-		if ( $order && 'pickup' !== $order->get_meta( '_cvd_fulfillment_type', true ) ) { echo '<p class="cvd-order-tracking-link"><a class="button" href="' . esc_url( self::tracking_url( $order ) ) . '">Seguir mi pedido</a></p>'; }
 	}
 
 	public static function render_email_tracking( WC_Order $order, bool $sent_to_admin, bool $plain_text, $email ): void {

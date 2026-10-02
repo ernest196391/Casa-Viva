@@ -106,8 +106,15 @@ final class CVD_Contextual_Assistant {
 		);
 	}
 
+	/**
+	 * Como en Colo Shop: en carrito, pago y pedido recibido no hay botones flotantes encima del total.
+	 */
+	private static function hidden_here(): bool {
+		return function_exists( 'is_cart' ) && ( is_cart() || is_checkout() );
+	}
+
 	public static function assets(): void {
-		if ( is_admin() ) { return; }
+		if ( is_admin() || self::hidden_here() ) { return; }
 		wp_enqueue_style( 'cvd-contextual-assistant', CVD_URL . 'assets/contextual-assistant.css', array(), CVD_VERSION );
 		wp_enqueue_script( 'cvd-contextual-assistant', CVD_URL . 'assets/contextual-assistant.js', array(), CVD_VERSION, true );
 		wp_localize_script(
@@ -129,7 +136,7 @@ final class CVD_Contextual_Assistant {
 	}
 
 	public static function render(): void {
-		if ( is_admin() ) { return; }
+		if ( is_admin() || self::hidden_here() ) { return; }
 		$name = self::name();
 		$avatar = self::avatar_url();
 		$photo = static function ( string $class ) use ( $name, $avatar ): string {

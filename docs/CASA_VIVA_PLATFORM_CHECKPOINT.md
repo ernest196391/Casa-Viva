@@ -5,7 +5,7 @@
 ```text
 FASE: 0 — Casa Viva Core estable
 SUBFASE ACTUAL: CV-PREMIUM-001 — Auditoría de recorrido y tienda premium móvil (3.13.x)
-ESTADO: 3.13.3 DESPLEGADO (PR #137, 3ddea86, deploy 37054576417 tras un reintento por fallo SSH, recorrido 37055066479 SUCCESS: barra fija visible y portada nueva); 3.13.4 en PR: Curru y WhatsApp alineados
+ESTADO: 3.13.3 DESPLEGADO (PR #137, 3ddea86, deploy 37054576417 tras un reintento por fallo SSH, recorrido 37055066479 SUCCESS: barra fija visible y portada nueva); 3.13.4 en PR #138: Curru y WhatsApp alineados; 3.13.5 en PR (apilado sobre #138): pedido recibido, carrito y vale de WhatsApp al estilo Colo Shop
 SUBFASES ANTERIORES: CV-CURRU (3.11.0–3.12.1), CV-LAUNCH-POLISH-002, CV-CATALOG-SYNC y CV-LAUNCH-POLISH-001 — CERRADAS
 SHA DESPLEGADO: 3ddea86 (plugin 3.13.3)
 PRODUCCIÓN ANTERIOR (rollback): 16764a8 (3.13.2)
@@ -27,6 +27,7 @@ Auditoría `customer-journey-audit.yml` (run 37041230617) como clienta en móvil
 - 3.13.3: la barra fija se calcula con la posición real del botón y de la barra inferior en cada desplazamiento (antes la barra inferior aún no existía al cargar el script). Probado en Chromium local: visible al cargar con el botón tapado, oculta con el botón entero, visible al pasarlo.
 - 3.13.3 (portada): texto más corto («Todo para tu casa, sin salir de ella.»), dos botones («Comprar ahora» y «Ver ofertas», este solo si hay rebajas) y portada más baja en móvil (380 px) para que el buscador quede en la primera pantalla.
 - 3.13.4: Curru y el botón de WhatsApp del tema (`.cv-whatsapp`) quedan en una sola columna a la derecha, con el mismo tamaño y margen; WhatsApp ya no queda tapado por la barra inferior y ambos suben con la barra fija de compra. En producción estaban a 12 px de distancia horizontal y WhatsApp quedaba medio oculto (sonda en la rama cv-probe-floats).
+- 3.13.5: pedido recibido al estilo Colo Shop (plantilla propia `templates/checkout/thankyou.php`): título «Tu pedido está listo», referencia, botón principal «Confirmar por WhatsApp», tarjeta con productos y totales, tarjeta de entrega o recogida, y «Ver seguimiento» (solo dueña con sesión, regla 7A) + «Seguir comprando». Se quitan las tarjetas de resumen de WooCommerce, «Dirección de facturación», el botón azul de mapa y el «Seguir mi pedido» duplicado. Vale de WhatsApp 3.2.0 con el formato de Colo Shop (PEDIDO CASA VIVA, TOTAL, PRODUCTOS, IMPORTES, ENTREGA/RECOGIDA, CLIENTE, SEGUIMIENTO, PARA CONFIRMAR). Curru y el WhatsApp flotante no aparecen en carrito, pago ni pedido recibido. Carrito: nombre sin subrayado, sin la descripción genérica y sugerencias en cuadrícula de 2 columnas (máximo 4) con botones verdes.
 - Marca: botones de carrito, checkout y añadir en verde Casa Viva; precio en verde, rebaja en terracota; opciones de entrega del checkout como tarjetas con radio propio.
 
 ## CV-CURRU — Asistente y buscador (2026-10-02)
