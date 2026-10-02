@@ -46,6 +46,26 @@ $assert( array() === $none['products'] && false !== strpos( $none['answer'], 'No
 $order = CVD_Contextual_Assistant::answer( 'dónde está mi pedido', 'mensajero' );
 $assert( false !== strpos( $order['links'][0]['url'], 'ruta-cv' ), 'el mensajero va a su Ruta.' );
 
+// IA: solo redacta; productos limitados a candidatos reales y precio del servidor; fallo = respuesta local.
+$local = CVD_Contextual_Assistant::answer( 'quiero una sartén', 'visitante' );
+$assert( CVD_Curru_AI::improve( 'quiero una sartén', $local, array(), 'Curru' ) === $local, 'sin clave usa la respuesta local.' );
+update_option( CVD_Curru_AI::OPTION_KEY, 'sk-prueba' );
+$mock = static function ( $pre, $args, $url ) use ( $pan, $hidden ) {
+	if ( false === strpos( $url, '/chat/completions' ) ) { return $pre; }
+	$content = wp_json_encode( array( 'answer' => '¡Claro! Esta sartén te va a encantar por $1.', 'productIds' => array( $pan, $hidden, 999999 ) ) );
+	return array( 'response' => array( 'code' => 200, 'message' => 'OK' ), 'body' => wp_json_encode( array( 'choices' => array( array( 'message' => array( 'content' => $content ) ) ) ) ), 'headers' => array(), 'cookies' => array() );
+};
+add_filter( 'pre_http_request', $mock, 10, 3 );
+$ai = CVD_Curru_AI::improve( 'quiero una sartén', $local, CVD_Curru_AI::history( array( array( 'role' => 'user', 'text' => 'hola' ) ) ), 'Curru' );
+$assert( ! empty( $ai['ai'] ) && array( $pan ) === array_column( $ai['products'], 'id' ), 'la IA solo puede elegir productos reales y visibles.' );
+$assert( false !== strpos( $ai['products'][0]['price'], '18' ), 'el precio de la tarjeta sale de WooCommerce, no de la IA.' );
+remove_filter( 'pre_http_request', $mock, 10 );
+$fail = static fn( $pre, $args, $url ) => false !== strpos( $url, '/chat/completions' ) ? new WP_Error( 'http_request_failed', 'sin red' ) : $pre;
+add_filter( 'pre_http_request', $fail, 10, 3 );
+$assert( CVD_Curru_AI::improve( 'quiero una sartén', $local, array(), 'Curru' ) === $local, 'si la IA falla responde la regla local.' );
+remove_filter( 'pre_http_request', $fail, 10 );
+delete_option( CVD_Curru_AI::OPTION_KEY );
+
 foreach ( array( $pan, $towel, $blend, $hidden ) as $id ) { wp_delete_post( $id, true ); }
 CVD_Product_Search::flush();
 echo "OK: Curru y búsqueda verificados.\n";

@@ -20,6 +20,8 @@
   const mic = panel.querySelector("[data-cvd-curru-mic]");
   const voiceStatus = panel.querySelector("[data-cvd-curru-voice]");
   let busy = false;
+  // Últimos turnos para que la IA entienda el hilo; solo texto de esta conversación.
+  const history = [];
 
   // Si la foto falla, queda la inicial.
   document.querySelectorAll(".cvd-curru-photo").forEach((img) => img.addEventListener("error", () => img.closest(".has-photo")?.classList.remove("has-photo")));
@@ -141,13 +143,14 @@
       const response = await fetch(config.askUrl, {
         method: "POST",
         headers: Object.assign({ "Content-Type": "application/json" }, config.nonce ? { "X-WP-Nonce": config.nonce } : {}),
-        body: JSON.stringify({ question: text }),
+        body: JSON.stringify({ question: text, history: history.slice(-6) }),
         credentials: "same-origin"
       });
       const data = await response.json().catch(() => ({}));
       typing.remove();
       if (!response.ok) throw new Error(data.message || "");
       render(data);
+      history.push({ role: "user", text }, { role: "assistant", text: String(data.answer || "").slice(0, 400) });
     } catch (error) {
       typing.remove();
       render({ answer: (error && error.message) || "No pude responder ahora. Inténtalo otra vez o escríbenos por WhatsApp.", links: config.whatsapp ? [{ label: "Escribir por WhatsApp", url: config.whatsapp }] : [] });
