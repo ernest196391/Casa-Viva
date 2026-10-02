@@ -43,7 +43,7 @@ for (let n = 1; n <= MAX_PAGES; n++) {
 
 // 1b. Categorías: cada listado /c/<slug> asigna sus productos.
 await page.goto(`${SOURCE}/`, { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
-const categoryLinks = await page.$$eval('a[href*="/c/"]', (as) => [...new Map(as.map((a) => [a.href.split(/[?#]/)[0], a.innerText.trim()])).entries()]);
+const categoryLinks = await page.$$eval('a[href*="/c/"]', (as) => [...new Map(as.map((a) => [a.href.split(/[?#]/)[0], a.innerText.trim().split('\n')[0].trim()])).entries()]);
 const categoriesByProduct = {};
 for (const [href, name] of categoryLinks) {
   const seen = new Set();

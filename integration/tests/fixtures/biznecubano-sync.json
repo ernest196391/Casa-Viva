@@ -1,0 +1,8 @@
+{
+  "source": "https://casaviva.biznecubano.com",
+  "products": [
+    { "url": "https://casaviva.biznecubano.com/p/aaaa1", "code": "aaaa1", "name": "Producto BC existente", "price": 8, "regular_price": 10, "currency": "USD", "on_sale": true, "out_of_stock": false, "stock_hint": 2, "categories": ["Baño\n46 productos"], "image": "https://casaviva.biznecubano.com/images/product_cover_v2/tenants/1410/products/900001/x.jpeg", "description": "" },
+    { "url": "https://casaviva.biznecubano.com/p/bbbb2", "code": "bbbb2", "name": "Producto BC nuevo", "price": 15, "regular_price": 15, "currency": "USD", "on_sale": false, "out_of_stock": false, "stock_hint": null, "categories": ["Sala", "Otros"], "image": "", "description": "Linea uno\n💵Precio: 15 usd\n<b>Linea dos</b>" },
+    { "url": "https://casaviva.biznecubano.com/p/cccc3", "code": "cccc3", "name": "Producto BC sin precio", "price": null, "regular_price": null, "currency": "USD", "on_sale": false, "out_of_stock": false, "stock_hint": null, "categories": [], "image": "", "description": "" }
+  ]
+}

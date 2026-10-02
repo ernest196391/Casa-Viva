@@ -53,6 +53,7 @@ services:
       - wordpress_data:/var/www/html
       - ../wordpress/casa-viva-dropship-core:/var/www/html/wp-content/plugins/casa-viva-dropship-core:ro
       - ./tests:/var/www/html/integration-tests:ro
+      - ../scripts/catalog:/var/www/html/catalog-scripts:ro
     working_dir: /var/www/html
 
 volumes:

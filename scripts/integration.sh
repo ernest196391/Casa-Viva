@@ -118,6 +118,13 @@ case "$command_name" in
 	concurrent_count="$("${compose[@]}" exec -T db mariadb -N -s -ucasa_viva_test -pcasa_viva_test_only casa_viva_test -e "SELECT COUNT(*) FROM cvt_cvd_order_events WHERE order_id=999998")"
 	if [[ "$concurrent_count" != "1" ]]; then echo "Concurrencia creó $concurrent_count filas." >&2; exit 1; fi
 	echo "OK: dos inserciones concurrentes produjeron una fila."
+	wp eval-file /var/www/html/integration-tests/catalog-sync-bootstrap.php
+	sync=("${compose[@]}" run --rm --no-deps -e CVD_SYNC_FILE=/var/www/html/integration-tests/fixtures/biznecubano-sync.json cli)
+	"${sync[@]}" env CVD_SYNC_MODE=dry-run wp eval-file /var/www/html/catalog-scripts/biznecubano-sync.php
+	wp eval-file /var/www/html/integration-tests/catalog-sync-verify.php dry-run
+	"${sync[@]}" env CVD_SYNC_MODE=apply wp eval-file /var/www/html/catalog-scripts/biznecubano-sync.php
+	"${sync[@]}" env CVD_SYNC_MODE=apply wp eval-file /var/www/html/catalog-scripts/biznecubano-sync.php
+	wp eval-file /var/www/html/integration-tests/catalog-sync-verify.php applied
     wp eval-file /var/www/html/integration-tests/failure-store.php
     "${compose[@]}" exec -T db mariadb -ucasa_viva_test -pcasa_viva_test_only casa_viva_test -e 'SHOW CREATE TABLE cvt_cvd_order_events\G'
     ;;
