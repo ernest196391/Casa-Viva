@@ -1,0 +1,393 @@
+{
+    "mode": "apply",
+    "source_count": 200,
+    "price_updates": [],
+    "created": [
+        {
+            "sku": "BC-122011",
+            "name": "Bolas Navideñas rosado metálico",
+            "regular": "8.00",
+            "sale": "",
+            "categories": [
+                "Otros"
+            ],
+            "source": "https://casaviva.biznecubano.com/p/wl6n7",
+            "id": 2610
+        },
+        {
+            "sku": "BC-122010",
+            "name": "Bolas Navideñas blanco verde rojo",
+            "regular": "8.00",
+            "sale": "",
+            "categories": [
+                "Otros"
+            ],
+            "source": "https://casaviva.biznecubano.com/p/2agfp",
+            "id": 2612
+        },
+        {
+            "sku": "BC-120698",
+            "name": "Protector de colchón Camero",
+            "regular": "34.00",
+            "sale": "",
+            "categories": [
+                "Habitación"
+            ],
+            "source": "https://casaviva.biznecubano.com/p/j714h",
+            "id": 2614
+        }
+    ],
+    "published": [],
+    "stock_updates": [
+        {
+            "id": 844,
+            "sku": "BC-87485",
+            "name": "Almohada Majestic Imperial",
+            "before": {
+                "manage": true,
+                "qty": 1,
+                "status": "instock"
+            },
+            "after": {
+                "manage": true,
+                "qty": 2,
+                "status": "instock"
+            }
+        },
+        {
+            "id": 2405,
+            "sku": "BC-120949",
+            "name": "Cable fotovoltaico negro",
+            "before": {
+                "manage": true,
+                "qty": 0,
+                "status": "outofstock"
+            },
+            "after": {
+                "manage": true,
+                "qty": 2,
+                "status": "instock"
+            }
+        },
+        {
+            "id": 2385,
+            "sku": "BC-120950",
+            "name": "Cable fotovoltaico rojo",
+            "before": {
+                "manage": true,
+                "qty": 0,
+                "status": "outofstock"
+            },
+            "after": {
+                "manage": true,
+                "qty": 2,
+                "status": "instock"
+            }
+        },
+        {
+            "id": 2419,
+            "sku": "BC-117401",
+            "name": "Cesto 70 L",
+            "before": {
+                "manage": true,
+                "qty": 2,
+                "status": "instock"
+            },
+            "after": {
+                "manage": true,
+                "qty": 1,
+                "status": "instock"
+            }
+        },
+        {
+            "id": 2435,
+            "sku": "BC-119853",
+            "name": "Cortinero expandible 167-305 cm",
+            "before": {
+                "manage": true,
+                "qty": 4,
+                "status": "instock"
+            },
+            "after": {
+                "manage": true,
+                "qty": 0,
+                "status": "outofstock"
+            }
+        },
+        {
+            "id": 2547,
+            "sku": "BC-108838",
+            "name": "Perchero Multifuncional 160x36x173cm",
+            "before": {
+                "manage": true,
+                "qty": 3,
+                "status": "instock"
+            },
+            "after": {
+                "manage": true,
+                "qty": 1,
+                "status": "instock"
+            }
+        },
+        {
+            "id": 2545,
+            "sku": "BC-121736",
+            "name": "Set de utensilios para cocina (5 piezas)",
+            "before": {
+                "manage": false,
+                "qty": null,
+                "status": "instock"
+            },
+            "after": {
+                "manage": true,
+                "qty": 5,
+                "status": "instock"
+            }
+        },
+        {
+            "id": 2595,
+            "sku": "BC-120947",
+            "name": "Soporte de TV 40\"x80\"",
+            "before": {
+                "manage": true,
+                "qty": 4,
+                "status": "instock"
+            },
+            "after": {
+                "manage": true,
+                "qty": 3,
+                "status": "instock"
+            }
+        },
+        {
+            "id": 2605,
+            "sku": "BC-120440",
+            "name": "Zapatera 8 niveles 120*120*26",
+            "before": {
+                "manage": true,
+                "qty": 2,
+                "status": "instock"
+            },
+            "after": {
+                "manage": true,
+                "qty": 1,
+                "status": "instock"
+            }
+        }
+    ],
+    "hidden": [
+        {
+            "id": 2591,
+            "sku": "BC-91182",
+            "name": "🎄 Casas en Miniatura – 8 cm c- 89045",
+            "reason": "ya no está en BizneCubano"
+        },
+        {
+            "id": 2553,
+            "sku": "BC-P-j714h",
+            "name": "Protector de colchón Camero",
+            "reason": "ya no está en BizneCubano"
+        },
+        {
+            "id": 2367,
+            "sku": "BC-120834",
+            "name": "Alfombra 120X180 cisne blanco (gris)",
+            "reason": "ya no está en BizneCubano"
+        },
+        {
+            "id": 816,
+            "sku": "BC-109794",
+            "name": "Protector de colchón Personal",
+            "reason": "ya no está en BizneCubano"
+        },
+        {
+            "id": 802,
+            "sku": "BC-107314",
+            "name": "Cojín decorativo — Diseño 3",
+            "reason": "ya no está en BizneCubano"
+        },
+        {
+            "id": 694,
+            "sku": "BC-99363",
+            "name": "Juego de Edredón 5 piezas Full",
+            "reason": "ya no está en BizneCubano"
+        },
+        {
+            "id": 464,
+            "sku": "BC-99361",
+            "name": "Juego de Edredón 5 piezas Queen",
+            "reason": "ya no está en BizneCubano"
+        },
+        {
+            "id": 451,
+            "sku": "BC-116745",
+            "name": "Cesto con Pedal SLIM 15LT Blanco",
+            "reason": "ya no está en BizneCubano"
+        },
+        {
+            "id": 302,
+            "sku": "BC-109793",
+            "name": "Protector de colchón Queen",
+            "reason": "ya no está en BizneCubano"
+        },
+        {
+            "id": 158,
+            "sku": "BC-109873",
+            "name": "Cortina blackout moderna (2 paneles)",
+            "reason": "ya no está en BizneCubano"
+        },
+        {
+            "id": 120,
+            "sku": "BC-73358",
+            "name": "Juego de cortina tapa sol -CRTN",
+            "reason": "ya no está en BizneCubano"
+        }
+    ],
+    "no_image": [],
+    "unchanged": 171,
+    "skipped": [
+        {
+            "sku": "BC-73346",
+            "name": "Alfombra de chenilla",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-100628",
+            "name": "Bata de baño",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-107269",
+            "name": "Cojín decorativo",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-100764",
+            "name": "Colcha navideña 180x220",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-107268",
+            "name": "Cojin decorativo",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-111554",
+            "name": "Cortinero decorativo ovalado",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-107265",
+            "name": "Forro para 6 sillas + mesa rectangular",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-100779",
+            "name": "Juego de cortina tapa sol Royale",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-85096",
+            "name": "Juego de Sábanas Majestic Imperial – TWIN",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-111555",
+            "name": "Cortinero decorativo espiral",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-111556",
+            "name": "Cortinero decorativo redondo",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-98927",
+            "name": "Doyle Elegante Rectangular (6 piezas)",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-100780",
+            "name": "Juego de cortina tapa sol Royale con diseño",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-82194",
+            "name": "Juego de Sábanas Majestic King",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-107266",
+            "name": "Mantel cuadrado",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-82193",
+            "name": "Juego de sabanas Queen Majestic imperial",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-107285",
+            "name": "Maceta con suculenta",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-107267",
+            "name": "Mantel circular",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-105181",
+            "name": "Rallador",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-109876",
+            "name": "Set de alfombras para baño (3 piezas)",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-98568",
+            "name": "Sobrecama Queen",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-98583",
+            "name": "Sobrecama king",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-102299",
+            "name": "Sobrecama tiwn",
+            "reason": "sin precio en BizneCubano"
+        },
+        {
+            "sku": "BC-107264",
+            "name": "Termo térmico 1L",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-113934",
+            "name": "Toallas Cisne Blanco 40x70",
+            "reason": "producto variable: precio y stock por variante"
+        },
+        {
+            "sku": "BC-104720",
+            "name": "Utensilios de silicona con cuchillos",
+            "reason": "producto variable: precio y stock por variante"
+        }
+    ],
+    "categories_new": [],
+    "errors": [],
+    "totals": {
+        "price_updates": 0,
+        "created": 3,
+        "published": 0,
+        "stock_updates": 9,
+        "hidden": 11,
+        "no_image": 0,
+        "unchanged": 171,
+        "skipped": 26,
+        "errors": 0
+    }
+}
