@@ -17,4 +17,6 @@ if (/cvd-quote-page \.cv-whatsapp/.test(css)) throw new Error('Tarifas debe cons
 if (!js.includes('document.body.classList.add("cvd-quote-page")')) throw new Error('Falta el scope visual de Tarifas.');
 if (!nav.includes("details.cv-mobile-nav[open]") || !nav.includes("!menu.contains(event.target)")) throw new Error('El menú móvil no se cierra al tocar fuera.');
 
+if (!css.includes('.cvd-quote-app [hidden] { display: none !important; }')) throw new Error('El resultado vacío (Copiar/Compartir) debe ocultarse hasta consultar una tarifa.');
+
 console.log('Tarifas móvil: copy, acciones y menú verificados.');

@@ -19,4 +19,6 @@ must(css.includes('aspect-ratio:1/1') && css.includes('object-fit:contain'), 'La
 must(css.includes(':focus-visible'), 'Debe existir foco visible en catálogo.');
 must(css.includes('prefers-reduced-motion'), 'Debe respetarse reducción de movimiento.');
 
+must(css.includes('li.product .button{background:#006068!important') && css.includes('color:#fff!important'), 'Los botones de compra deben usar el verde de Casa Viva con texto blanco (contraste AA).');
+
 console.log('Catalog presentation 7C.3 contract OK');
