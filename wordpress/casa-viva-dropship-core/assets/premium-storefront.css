@@ -1,17 +1,21 @@
 :root{--cvd-green:#0f3d3a;--cvd-green-dark:#0a2c2a;--cvd-sand:#f6f1e6;--cvd-ink:#25231f;--cvd-muted:#6f685f;--cvd-line:#e6ddcf;--cvd-sale:#a3502a}
 
 /* Portada */
-.cvd-hero{position:relative;display:grid;align-items:end;min-height:min(56vh,480px);margin:0 0 28px;overflow:hidden;border-radius:0 0 28px 28px;background:var(--cvd-sand);isolation:isolate}
+.cvd-hero{position:relative;display:grid;align-items:end;min-height:min(46vh,380px);margin:0 0 28px;overflow:hidden;border-radius:0 0 28px 28px;background:var(--cvd-sand);isolation:isolate}
 .cvd-hero__img{position:absolute;inset:0;z-index:-2;width:100%;height:100%;object-fit:cover;object-position:center 60%}
 .cvd-hero::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(15,40,36,0) 10%,rgba(15,40,36,.45) 40%,rgba(15,40,36,.8) 100%)}
-.cvd-hero__body{display:grid;gap:10px;max-width:560px;padding:28px 22px 30px;color:#fff}
-.cvd-hero__eyebrow{margin:0;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;opacity:.9}
-.cvd-hero__title{margin:0;color:#fff;font-family:Georgia,"Times New Roman",serif;font-size:clamp(32px,9vw,54px);font-weight:500;line-height:1.05;letter-spacing:-.01em}
+.cvd-hero__body{display:grid;gap:10px;max-width:560px;padding:24px 20px 22px;color:#fff}
+.cvd-hero__title{margin:0;color:#fff;font-family:Georgia,"Times New Roman",serif;font-size:clamp(30px,8.4vw,54px);font-weight:500;line-height:1.05;letter-spacing:-.01em}
 .cvd-hero__text{margin:0;font-size:16px;line-height:1.45;opacity:.95}
-.cvd-hero__cta{justify-self:start;display:inline-flex;align-items:center;min-height:50px;margin-top:6px;padding:0 28px;border-radius:999px;background:var(--cvd-sand);color:var(--cvd-green)!important;font-weight:800;font-size:16px;text-decoration:none!important;box-shadow:0 10px 24px rgba(0,0,0,.18)}
+.cvd-hero__actions{display:flex;gap:10px;margin-top:6px}
+.cvd-hero__actions .cvd-hero__cta{flex:1 1 0;min-width:0;max-width:220px;text-align:center}
+@media(max-width:360px){.cvd-hero__actions .cvd-hero__cta{padding:0 10px;font-size:15px}}
+.cvd-hero__cta{display:inline-flex;justify-content:center;align-items:center;min-height:50px;padding:0 18px;border-radius:999px;background:var(--cvd-sand);color:var(--cvd-green)!important;font-weight:800;font-size:16px;text-decoration:none!important;box-shadow:0 10px 24px rgba(0,0,0,.18)}
 .cvd-hero__cta:hover,.cvd-hero__cta:focus-visible{background:#fff}
+.cvd-hero__cta--ghost{background:transparent;color:#fff!important;border:1.5px solid rgba(255,255,255,.85);box-shadow:none}
+.cvd-hero__cta--ghost:hover,.cvd-hero__cta--ghost:focus-visible{background:rgba(255,255,255,.14)}
 .cvd-hero__cta:focus-visible{outline:3px solid #fff;outline-offset:3px}
-.cvd-hero__trust{margin:4px 0 0;font-size:13px;opacity:.88}
+.cvd-hero__trust{margin:2px 0 0;font-size:13px;opacity:.9}
 @media(min-width:821px){.cvd-hero{min-height:520px;border-radius:28px;margin:20px auto 36px}.cvd-hero__body{padding:48px}}
 
 /* Precios y ofertas con los colores de la marca */

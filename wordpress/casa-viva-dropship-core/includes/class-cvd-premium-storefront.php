@@ -57,16 +57,20 @@ final class CVD_Premium_Storefront {
 
 	public static function hero_html(): string {
 		$shop = function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'shop' ) : home_url( '/tienda/' );
+		// El segundo botón solo aparece si hay rebajas reales.
+		$offers = function_exists( 'wc_get_product_ids_on_sale' ) && wc_get_product_ids_on_sale() ? add_query_arg( 'cvd_ofertas', '1', $shop ) : '';
 		ob_start();
 		?>
 		<section class="cvd-hero" aria-labelledby="cvd-hero-title">
 			<img class="cvd-hero__img" src="<?php echo esc_url( self::hero_image() ); ?>" alt="" width="1024" height="1536" fetchpriority="high" decoding="async">
 			<div class="cvd-hero__body">
-				<p class="cvd-hero__eyebrow">Casa Viva · La Habana</p>
-				<h2 id="cvd-hero-title" class="cvd-hero__title">Tu casa, más bonita y más fácil.</h2>
-				<p class="cvd-hero__text">Artículos para el hogar con precio visible y existencias reales.</p>
-				<a class="cvd-hero__cta" href="<?php echo esc_url( $shop ); ?>">Ver la tienda</a>
-				<p class="cvd-hero__trust">Entrega en La Habana o recogida en Nuevo Vedado</p>
+				<h2 id="cvd-hero-title" class="cvd-hero__title">Todo para tu casa, sin salir de ella.</h2>
+				<p class="cvd-hero__text">Pides en minutos y te lo llevamos en La Habana.</p>
+				<div class="cvd-hero__actions">
+					<a class="cvd-hero__cta" href="<?php echo esc_url( $shop ); ?>">Comprar ahora</a>
+					<?php if ( $offers ) : ?><a class="cvd-hero__cta cvd-hero__cta--ghost" href="<?php echo esc_url( $offers ); ?>">Ver ofertas</a><?php endif; ?>
+				</div>
+				<p class="cvd-hero__trust">✓ Confirmas tu pedido por WhatsApp</p>
 			</div>
 		</section>
 		<?php

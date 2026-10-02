@@ -12,16 +12,24 @@
   const bar = document.querySelector("[data-cvd-buybar]");
   const form = document.querySelector("form.cart");
   const submit = form && form.querySelector('button[type="submit"]');
-  if (bar && submit && "IntersectionObserver" in window) {
-    // El margen inferior descuenta la barra de navegación: un botón tapado por ella cuenta como oculto.
-    const navHeight = () => (document.querySelector(".cvd-customer-nav")?.getBoundingClientRect().height || 0) + 8;
-    const observer = new IntersectionObserver(([entry]) => {
-      // isIntersecting es verdadero aunque se vea solo una parte; la barra sale si el botón no se ve entero.
-      const show = entry.intersectionRatio < 0.99;
+  if (bar && submit) {
+    // La barra de navegación se imprime después de este script: se mide en cada comprobación, no al cargar.
+    // La barra sale si el botón no se ve entero entre la parte de arriba y la navegación inferior.
+    let queued = false;
+    const update = () => {
+      queued = false;
+      const nav = document.querySelector(".cvd-customer-nav");
+      const limit = window.innerHeight - (nav ? nav.getBoundingClientRect().height : 0);
+      const rect = submit.getBoundingClientRect();
+      const show = rect.top < 0 || rect.bottom > limit;
       bar.hidden = !show;
       root.classList.toggle("cvd-buybar-on", show);
-    }, { rootMargin: `0px 0px -${Math.round(navHeight())}px 0px`, threshold: [0, 0.99, 1] });
-    observer.observe(submit);
+    };
+    const schedule = () => { if (!queued) { queued = true; window.requestAnimationFrame(update); } };
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    window.addEventListener("load", schedule);
+    schedule();
     bar.querySelector("[data-cvd-buybar-go]").addEventListener("click", (event) => {
       const variable = event.currentTarget.dataset.variable === "1";
       if (variable && submit.classList.contains("disabled")) {
