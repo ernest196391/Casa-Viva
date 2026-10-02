@@ -61,6 +61,14 @@ test('clienta en móvil: portada → categoría → producto → carrito → che
   test.setTimeout(6 * 60 * 1000);
   const errors = watch(page);
   await step(page, 'portada', async () => { await page.goto(`${baseURL}/`, { waitUntil: 'domcontentloaded' }); }, errors);
+  await page.waitForTimeout(9000);
+  report.floats = await page.evaluate(() => [...document.querySelectorAll('body *')].filter((el) => {
+    const cs = getComputedStyle(el);
+    if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden') return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.width < 200 && r.bottom > window.innerHeight - 260;
+  }).map((el) => { const r = el.getBoundingClientRect(); return { tag: el.tagName, id: el.id, cls: String(el.className).slice(0, 120), href: el.getAttribute('href'), rect: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)], z: getComputedStyle(el).zIndex }; }));
+  await page.screenshot({ path: `${outDir}/00-flotantes.png` });
   let categoryUrl = '';
   await step(page, 'categoria', async () => {
     categoryUrl = await page.locator('a[href*="/categoria-producto/"]').first().getAttribute('href');
