@@ -8,11 +8,16 @@ on:
         required: true
         default: dry-run
         type: choice
-        options: [dry-run, apply, restore]
+        options: [dry-run, apply, restore, orders-list, orders-cancel]
       limit:
         description: Máximo de productos nuevos a crear (0 = sin límite)
         required: false
         default: '0'
+        type: string
+      orders:
+        description: Solo orders-cancel. IDs de pedidos de prueba separados por comas
+        required: false
+        default: ''
         type: string
 
 permissions:
@@ -64,8 +69,19 @@ jobs:
           SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
           MODE: ${{ inputs.mode }}
           LIMIT: ${{ inputs.limit }}
+          ORDERS: ${{ inputs.orders }}
         run: |
           set -euo pipefail
+          if [[ "$MODE" == orders-* ]]; then
+            [[ "$ORDERS" =~ ^[0-9,]*$ ]] || { echo "IDs no válidos"; exit 1; }
+            scp -P "$SSH_PORT" scripts/catalog/test-orders.php "$SSH_USER@$SSH_HOST:/tmp/cvd-test-orders.php"
+            mkdir -p catalog-sync
+            ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+              "cd '$WP_PATH' && CVD_ORDERS_MODE='$MODE' CVD_ORDERS='$ORDERS' wp eval-file /tmp/cvd-test-orders.php" > catalog-sync/raw-output.txt
+            sed -n '/^{/,$p' catalog-sync/raw-output.txt > catalog-sync/orders.json
+            jq -e .mode catalog-sync/orders.json >/dev/null
+            exit 0
+          fi
           scp -P "$SSH_PORT" biznecubano.json "$SSH_USER@$SSH_HOST:/tmp/cvd-biznecubano.json"
           scp -P "$SSH_PORT" scripts/catalog/biznecubano-sync.php "$SSH_USER@$SSH_HOST:/tmp/cvd-biznecubano-sync.php"
           mkdir -p catalog-sync
@@ -83,7 +99,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f catalog-sync/report.json || exit 0
+          test -f catalog-sync/report.json || test -f catalog-sync/orders.json || exit 0
           cp biznecubano.json catalog-sync/source.json
           cd catalog-sync
           git init -q -b evidence
