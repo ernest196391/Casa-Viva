@@ -4,17 +4,15 @@
 
 ```text
 FASE: 0 — Casa Viva Core estable
-SUBFASE CERRADA: CV-LAUNCH-POLISH-001 — Portada móvil, SEO técnico y resiliencia visual
-ESTADO: CERRADA — 3.10.15 DESPLEGADO Y VERIFICADO EN MÓVIL POR AUDITORÍA AUTOMÁTICA
-SUBFASE ANTERIOR: CV-RECOVERY-001 — CERRADA Y DESPLEGADA
-MAIN ANTES DEL PR: 2f2610293d990e200cb81301c18c7324ccabd924
-SHA CERTIFICADO Y DESPLEGADO: cdff54f011ee18576f9a6df9eee2a85dd006a00b (plugin 3.10.15, PR #121)
-PRODUCCIÓN ANTERIOR (rollback): 635dd1fc55aaf12f0e54080cef6c3f9743c763b2 (3.10.14)
+SUBFASE CERRADA: CV-LAUNCH-POLISH-002 — Botones de compra con la identidad y tarifario sin resultado vacío
+ESTADO: CERRADA — 3.10.16 DESPLEGADO Y VERIFICADO EN MÓVIL POR AUDITORÍA AUTOMÁTICA
+SUBFASES ANTERIORES: CV-CATALOG-SYNC (catálogo BizneCubano, PRs #123-#125) y CV-LAUNCH-POLISH-001 — CERRADAS
+SHA CERTIFICADO Y DESPLEGADO: 25415d15428b6c76b2042573cdd48e33a1569b21 (plugin 3.10.16, PR #126)
+PRODUCCIÓN ANTERIOR (rollback): cdff54f011ee18576f9a6df9eee2a85dd006a00b (3.10.15)
 NOTA: al fusionar cambios solo documentales, `main` puede avanzar sin que producción cambie
-DEPLOY: Deploy prototype #23 — SUCCESS; auditoría móvil posterior #36867808732 — SUCCESS (0 scroll horizontal en 14 páginas)
-INCIDENTE: Deploy #22 falló en el vale sintético porque NEXO (Render) respondió en frío; el rollback automático devolvió producción a 3.10.14 y el reintento #23 pasó
-DECISIÓN: Ernesto aprobó el 2026-10-01 trabajar sin pedir permiso (fusiones y despliegues por el workflow oficial incluidos); siguen reservadas las decisiones comerciales, datos reales y acciones irreversibles
-COSTO NUEVO UTILIZADO: 0 USD
+DEPLOY: Deploy prototype #24 — SUCCESS; auditoría móvil posterior #37021406589 — SUCCESS (0 scroll horizontal, 0 imágenes rotas en 14 páginas)
+DECISIÓN: Ernesto aprobó el 2026-10-01 trabajar sin pedir permiso; el 2026-10-02 aprobó publicar el catálogo de BizneCubano, igualar stock y ocultar lo demás; mejorará él las fotos (no usar Higgsfield)
+COSTO NUEVO UTILIZADO: 3 créditos Higgsfield (2 muestras de foto)
 ```
 
 ## CV-CATALOG-SYNC — Catálogo real desde BizneCubano (2026-10-02)
@@ -131,7 +129,9 @@ Criterio de cierre de la unidad:
 
 ## Próxima compuerta
 
-Siguiente tarea: CV-LAUNCH-POLISH-002 — coherencia visual móvil de tienda/categorías (botones de compra con la identidad y contraste AA) y estado vacío del tarifario, verificado con la auditoría móvil de producción.
+CV-LAUNCH-POLISH-002 cerrada (3.10.16): Añadir al carrito en verde #006068 con texto blanco en tienda/categorías; Copiar/Compartir del tarifario ocultos hasta consultar una tarifa.
+
+Siguiente: entrega a la dueña para revisión; pendientes de catálogo en la sección CV-CATALOG-SYNC (29 fotos reales nuevas, 29 productos variables).
 
 No iniciar Foundation multiempresa, nuevas tablas, compras de servicios ni cambios sobre pedidos reales sin aprobación expresa.
 
