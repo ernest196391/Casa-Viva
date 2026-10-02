@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 45
     env:
       OUT_DIR: catalog-snapshot
-      DISCOVERY: ${{ inputs.discovery || (github.event_name == 'push' && '1') || '0' }}
+      DISCOVERY: ${{ inputs.discovery || '0' }}
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
