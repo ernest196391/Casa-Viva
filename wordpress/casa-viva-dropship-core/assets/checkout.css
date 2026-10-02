@@ -44,73 +44,42 @@
 .woocommerce-checkout .cvd-location-view { color: #006068; display: inline-block; font-size: 13px; font-weight: 800; margin-top: 6px; text-underline-offset: 3px; }
 .woocommerce-checkout .cvd-map-field .description { color: #666; display: block; font-size: 13px; line-height: 1.45; margin-top: 7px; }
 
-.cvd-order-success {
-	background: #fafaf7;
-	border: 1px solid #dfe8e7;
-	border-radius: 24px;
-	margin: 28px 0;
-	padding: clamp(24px, 6vw, 42px);
-	text-align: center;
-}
-.cvd-order-success__icon { align-items: center; background: #28a745; border-radius: 50%; color: #fff; display: inline-flex; font-size: 28px; font-weight: 900; height: 62px; justify-content: center; width: 62px; }
-.cvd-order-success h2 { color: #004042; margin: 18px 0 8px; }
-.cvd-order-success p { color: #555; margin: 0 auto; max-width: 620px; }
-.cvd-order-success__actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 24px; }
-.woocommerce .cvd-order-success__actions .button { align-items: center; display: inline-flex; justify-content: center; min-height: 50px; min-width: 210px; }
-.woocommerce .cvd-order-success__actions .cvd-order-success__whatsapp { background: #25d366 !important; border-color: #25d366 !important; color: #fff !important; gap: 9px; }
-.woocommerce .cvd-order-success__actions .cvd-order-success__whatsapp:hover { background: #1eae55 !important; border-color: #1eae55 !important; }
-.cvd-order-success__whatsapp svg { fill: currentColor; flex: 0 0 23px; height: 23px; width: 23px; }
-.woocommerce .cvd-order-success__actions .cvd-order-success__shop { background: #fff; border: 1px solid #006068; color: #006068; }
-
-/* Resumen de pedido legible: sustituye la cuadrícula estrecha nativa de WooCommerce. */
-.woocommerce-order-received .woocommerce-order-overview {
-	display: grid;
-	gap: 12px;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	list-style: none;
-	margin: 28px auto 48px;
-	max-width: 760px;
-	padding: 0;
-}
-.woocommerce-order-received .woocommerce-order-overview li {
-	background: #fafaf7;
-	border: 1px solid #dfe8e7 !important;
-	border-radius: 16px;
-	box-sizing: border-box;
-	float: none !important;
-	line-height: 1.35;
-	margin: 0 !important;
-	min-width: 0;
-	overflow-wrap: anywhere;
-	padding: 16px !important;
-	text-align: center;
-	text-transform: none;
-	width: auto;
-}
-.woocommerce-order-received .woocommerce-order-overview li strong {
-	display: block;
-	font-size: clamp(17px, 4vw, 22px);
-	line-height: 1.3;
-	margin-top: 5px;
-	overflow-wrap: anywhere;
-}
-.woocommerce-order-received .woocommerce-order-overview__email,
-.woocommerce-order-received .woocommerce-order-overview__payment-method {
-	grid-column: 1 / -1;
-}
-.woocommerce-order-received .cvd-customer-delivery {
-	text-align: center;
-}
-.woocommerce-order-received .cvd-customer-delivery > p {
-	line-height: 1.65;
-	margin-inline: auto;
-	max-width: 760px;
-}
-.woocommerce-order-received .cvd-customer-delivery > p > .button {
-	display: inline-flex;
-	justify-content: center;
-	margin-inline: auto;
-}
+/* Pedido recibido al estilo Colo Shop: todo alineado a la izquierda y una sola acción principal. */
+.woocommerce-order-received .entry-title,
+.woocommerce-order-received .wp-block-post-title { text-align: left; }
+.cvd-thanks { --cvd-green: #0f3d3a; --cvd-line: #e6ddcf; --cvd-sand: #f6f1e6; color: #25231f; display: grid; gap: 14px; margin: 8px 0 32px; max-width: 560px; text-align: left; }
+.cvd-thanks p { margin: 0; }
+.cvd-thanks__ref { background: var(--cvd-sand); border: 1px solid var(--cvd-line); border-radius: 999px; color: var(--cvd-green); font-size: 14px; font-weight: 800; justify-self: start; padding: 6px 14px; }
+.cvd-thanks__lead { font-size: 17px; line-height: 1.45; }
+.cvd-thanks__whatsapp { align-items: center; background: #25d366; border-radius: 17px; box-shadow: 0 8px 20px rgba(37, 211, 102, .25); color: #fff !important; display: flex; font-size: 16px; font-weight: 800; gap: 10px; justify-content: center; line-height: 1.2; min-height: 58px; padding: 0 14px; text-decoration: none !important; }
+.cvd-thanks__whatsapp:hover { background: #1eae55; }
+.cvd-thanks__whatsapp:focus-visible, .cvd-thanks__button:focus-visible, .cvd-thanks__link:focus-visible { outline: 3px solid var(--cvd-green); outline-offset: 3px; }
+.cvd-thanks__whatsapp svg { fill: currentColor; flex: 0 0 24px; height: 24px; width: 24px; }
+.cvd-thanks__hint, .cvd-thanks__muted, .cvd-thanks__note { color: #6f685f; font-size: 14px; line-height: 1.45; }
+.cvd-thanks__hint { margin-top: -6px !important; text-align: center; }
+.cvd-thanks__card { background: #fff; border: 1px solid var(--cvd-line); border-radius: 18px; display: grid; gap: 8px; padding: 16px; }
+.cvd-thanks .cvd-thanks__heading { color: var(--cvd-green); font-size: 16px; font-weight: 800; letter-spacing: 0; line-height: 1.3; margin: 0 0 4px; text-align: left; }
+.cvd-thanks__lines { display: grid; gap: 10px; list-style: none; margin: 0; padding: 0; }
+.cvd-thanks__lines li { align-items: baseline; display: grid; gap: 8px; grid-template-columns: auto minmax(0, 1fr) auto; margin: 0; }
+.cvd-thanks__qty { color: #6f685f; font-size: 14px; font-weight: 700; }
+.cvd-thanks__name { font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
+.cvd-thanks__name small { color: #6f685f; display: block; font-size: 13px; }
+.cvd-thanks__lines strong { font-size: 15px; white-space: nowrap; }
+.cvd-thanks__totals { border-top: 1px solid var(--cvd-line); display: grid; gap: 6px; margin: 6px 0 0; padding-top: 12px; }
+.cvd-thanks__totals div { align-items: baseline; display: flex; gap: 12px; justify-content: space-between; }
+.cvd-thanks__totals dt { color: #6f685f; font-size: 15px; font-weight: 400; margin: 0; }
+.cvd-thanks__totals dd { font-size: 15px; margin: 0; text-align: right; }
+.cvd-thanks__totals .is-total { border-top: 1px solid var(--cvd-line); margin-top: 4px; padding-top: 10px; }
+.cvd-thanks__totals .is-total dt { color: #25231f; font-weight: 800; }
+.cvd-thanks__totals .is-total dd { color: var(--cvd-green); font-size: 18px; font-weight: 800; }
+.cvd-thanks__totals dd small { color: var(--cvd-green); display: block; font-size: 13px; font-weight: 700; }
+.cvd-thanks__who { font-weight: 700; }
+.cvd-thanks__card p { font-size: 15px; line-height: 1.45; overflow-wrap: anywhere; }
+.cvd-thanks__link { color: var(--cvd-green) !important; font-size: 15px; font-weight: 800; justify-self: start; text-decoration: underline; text-underline-offset: 3px; }
+.cvd-thanks__secondary { display: grid; gap: 10px; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.cvd-thanks__button { align-items: center; background: #fff; border: 1px solid var(--cvd-green); border-radius: 14px; color: var(--cvd-green) !important; display: flex; font-size: 15px; font-weight: 800; justify-content: center; min-height: 48px; padding: 0 10px; white-space: nowrap; text-align: center; text-decoration: none !important; }
+.cvd-thanks__button:hover { background: var(--cvd-sand); }
+@media (max-width: 360px) { .cvd-thanks__button { font-size: 14px; padding: 0 6px; } }
 
 .woocommerce-checkout input.input-text,
 .woocommerce-checkout select,
@@ -227,15 +196,6 @@
 	.woocommerce-checkout textarea { font-size: 16px; min-height: 48px; }
 	.woocommerce-checkout .woocommerce-billing-fields__field-wrapper,
 	.woocommerce-checkout .woocommerce-additional-fields__field-wrapper { gap: 12px; }
-	.cvd-order-success__actions { display: grid; }
-	.woocommerce .cvd-order-success__actions .button { width: 100%; }
-	.woocommerce-order-received .woocommerce-order-overview { gap: 10px; grid-template-columns: 1fr 1fr; margin-bottom: 40px; }
-	.woocommerce-order-received .woocommerce-order-overview li { padding: 14px 10px !important; }
-	.woocommerce-order-received .woocommerce-order-overview__email,
-	.woocommerce-order-received .woocommerce-order-overview__total,
-	.woocommerce-order-received .woocommerce-order-overview__payment-method { grid-column: 1 / -1; }
-	.woocommerce-order-received .cvd-customer-delivery > p:last-child { display: flex; justify-content: center; }
-	.woocommerce-order-received .cvd-customer-delivery .button { width: min(100%, 430px); }
 }
 .cvd-shipping-cup strong { color: #006068; }
 .cvd-shipping-cup small { display: block; margin-top: .2rem; color: #555; font-weight: 400; }

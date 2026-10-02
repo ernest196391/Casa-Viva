@@ -60,7 +60,7 @@ final class CVD_Cuban_Checkout {
 
 	public static function checkout_title( string $title, int $post_id ): string {
 		if ( ! is_admin() && function_exists( 'wc_get_page_id' ) && $post_id === wc_get_page_id( 'checkout' ) && in_the_loop() ) {
-			return 'Completa tu pedido';
+			return is_order_received_page() ? 'Tu pedido está listo' : 'Completa tu pedido';
 		}
 		return $title;
 	}

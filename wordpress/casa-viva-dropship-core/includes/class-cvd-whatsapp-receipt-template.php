@@ -9,7 +9,7 @@ defined( 'ABSPATH' ) || exit;
  * construye texto plano línea por línea; el gateway codifica el resultado.
  */
 final class CVD_WhatsApp_Receipt_Template {
-	public const VERSION = '3.1.0';
+	public const VERSION = '3.2.0';
 
 	public static function render( WC_Order $order ): string {
 		return self::build_message( self::data( $order ), $order );
@@ -19,54 +19,100 @@ final class CVD_WhatsApp_Receipt_Template {
 	 * Plantilla editable única del vale. No aplicar codificación URL aquí.
 	 */
 	public static function build_message( array $data, ?WC_Order $order = null ): string {
-		$lines = array( '🛜️ *CASA VIVA · Pedido #' . $data['order']['number'] . '*', '' );
-		$recipient = $data['customer']['name'];
-		if ( $data['customer']['phone'] ) { $recipient .= ' · ' . $data['customer']['phone']; }
-		$lines[] = '👤 *Recibe:* ' . $recipient;
-		$lines[] = '';
-		$delivery_type = 'pickup' === $data['delivery']['type'] ? 'Recogida' : 'Mensajería';
-		$lines[] = '📍 *Entrega — ' . $delivery_type . '*';
-		foreach ( $data['delivery']['address_lines'] as $address_line ) {
-			$lines[] = $address_line;
-		}
-		if ( $data['delivery']['reference'] ) {
-			$lines[] = 'Referencia: ' . $data['delivery']['reference'];
-		}
-		if ( $data['delivery']['action_url'] ) {
-			$lines[] = 'Ver ubicación:';
-			$lines[] = $data['delivery']['action_url'];
-		}
-		$lines[] = '';
-		$item_count = array_sum( array_map( static fn( array $item ): int => (int) $item['quantity'], $data['items'] ) );
-		$lines[] = '📦 *Productos (' . $item_count . ')*';
+		// Formato Colo Shop: resumen arriba, secciones en mayúsculas y cierre con la referencia.
+		$number    = $data['order']['number'];
+		$is_pickup = 'pickup' === $data['delivery']['type'];
+		$address   = $data['delivery']['address_lines'];
+		$units     = array_sum( array_map( static fn( array $item ): int => (int) $item['quantity'], $data['items'] ) );
+		$products  = count( $data['items'] );
+
+		$lines = array(
+			'🛍️ *PEDIDO CASA VIVA*',
+			'*Pedido #' . $number . '*',
+			'🟠 *PENDIENTE DE CONFIRMACIÓN*',
+			'',
+			'*TOTAL · ' . implode( ' + ', $data['totals']['total_lines'] ) . '*',
+			$products . ( 1 === $products ? ' producto' : ' productos' ) . ' · ' . $units . ( 1 === $units ? ' unidad' : ' unidades' ),
+			$is_pickup ? '🏬 Recogida en tienda' : '🚚 A domicilio' . ( isset( $address[1] ) ? ' · ' . str_replace( ', ', ' · ', $address[1] ) : '' ),
+		);
+
+		$items = array();
 		foreach ( $data['items'] as $index => $item ) {
-			$name = $item['name'] . ( $item['variations'] ? ' (' . implode( ', ', $item['variations'] ) . ')' : '' );
-			$lines[] = ( $index + 1 ) . '. ' . $name . ' × ' . $item['quantity'] . ' — ' . $item['price'];
-			if ( $item['action_url'] ) {
-				$lines[] = $item['action_url'];
+			$items[] = ( $index + 1 ) . '. *' . $item['name'] . '* ×' . $item['quantity'] . ' — ' . $item['price'];
+			if ( $item['variations'] ) {
+				$items[] = '   _' . implode( ' · ', $item['variations'] ) . '_';
 			}
-			if ( $index < count( $data['items'] ) - 1 ) { $lines[] = ''; }
 		}
-		$lines[] = '';
-		$lines[] = '💵 *Resumen*';
+		self::section( $lines, 'PRODUCTOS', $items );
+
+		$amounts = array();
 		foreach ( $data['totals']['rows'] as $row ) {
-			if ( '' !== $row['formatted'] ) {
-				$lines[] = $row['label'] . ': ' . $row['formatted'];
+			if ( '' === $row['formatted'] ) {
+				continue;
 			}
+			$amounts[] = ( 'shipping' === $row['key'] && $is_pickup ) ? 'Recogida: Sin costo' : $row['label'] . ': ' . $row['formatted'];
 		}
-		$lines[] = '*Total a pagar: ' . implode( ' + ', $data['totals']['total_lines'] ) . '*';
-		$lines[] = '';
-		$lines[] = '💳 *Pago:* A coordinar por WhatsApp';
+		self::section( $lines, 'IMPORTES', $amounts );
+
+		if ( $is_pickup ) {
+			self::section( $lines, 'RECOGIDA', array( $address ? '📍 ' . $address[0] : '', 'Te confirmaremos por este chat cuándo estará listo.' ) );
+		} else {
+			$street = isset( $address[1] ) ? $address[0] : '';
+			$place  = isset( $address[1] ) ? $address[1] : ( $address[0] ?? '' );
+			self::section(
+				$lines,
+				'ENTREGA',
+				array(
+					$place ? '📍 ' . $place : '',
+					$street ? 'Dirección: ' . $street : '',
+					$data['delivery']['reference'] ? 'Referencia: ' . $data['delivery']['reference'] : '',
+					$data['delivery']['action_url'] ? 'Ubicación: ' . $data['delivery']['action_url'] : '',
+				)
+			);
+		}
+
+		self::section(
+			$lines,
+			'CLIENTE',
+			array(
+				$data['customer']['name'] ? '👤 ' . $data['customer']['name'] : '',
+				$data['customer']['phone'] ? '📞 ' . $data['customer']['phone'] : '',
+			)
+		);
+
 		if ( ! empty( $data['extras']['tracking_url'] ) ) {
-			$lines[] = '';
-			$lines[] = '🔎 *Seguimiento:*';
-			$lines[] = $data['extras']['tracking_url'];
+			self::section( $lines, 'SEGUIMIENTO', array( $data['extras']['tracking_url'] ) );
 		}
+
+		self::section(
+			$lines,
+			'PARA CONFIRMAR EL PEDIDO',
+			array(
+				'1. Disponibilidad de los productos',
+				'2. Total final y forma de pago',
+				'3. Horario estimado de ' . ( $is_pickup ? 'recogida' : 'entrega' ),
+			)
+		);
 		$lines[] = '';
-		$lines[] = '✅ Por favor confirma disponibilidad, envío y pago.';
+		$lines[] = '_Pedido registrado en Casa Viva. Conserva la referencia #' . $number . '._';
 
 		$message = implode( "\n", $lines );
 		return (string) apply_filters( 'cvd_whatsapp_receipt_text', $message, $order, $data );
+	}
+
+	/**
+	 * Añade «*TÍTULO*» y sus líneas no vacías, separado por una línea en blanco.
+	 */
+	private static function section( array &$lines, string $title, array $rows ): void {
+		$rows = array_values( array_filter( $rows, static fn( $row ): bool => '' !== (string) $row ) );
+		if ( ! $rows ) {
+			return;
+		}
+		$lines[] = '';
+		$lines[] = '*' . $title . '*';
+		foreach ( $rows as $row ) {
+			$lines[] = $row;
+		}
 	}
 
 	/**
