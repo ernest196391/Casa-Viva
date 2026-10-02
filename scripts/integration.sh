@@ -125,6 +125,8 @@ case "$command_name" in
 	"${sync[@]}" env CVD_SYNC_MODE=apply wp eval-file /var/www/html/catalog-scripts/biznecubano-sync.php
 	"${sync[@]}" env CVD_SYNC_MODE=apply wp eval-file /var/www/html/catalog-scripts/biznecubano-sync.php
 	wp eval-file /var/www/html/integration-tests/catalog-sync-verify.php applied
+	"${sync[@]}" env CVD_SYNC_MODE=restore wp eval-file /var/www/html/catalog-scripts/biznecubano-sync.php
+	wp eval-file /var/www/html/integration-tests/catalog-sync-verify.php restored
     wp eval-file /var/www/html/integration-tests/failure-store.php
     "${compose[@]}" exec -T db mariadb -ucasa_viva_test -pcasa_viva_test_only casa_viva_test -e 'SHOW CREATE TABLE cvt_cvd_order_events\G'
     ;;

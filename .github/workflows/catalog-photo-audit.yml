@@ -1,0 +1,52 @@
+name: Auditoría de fotos del catálogo
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['cv-catalog-sync-*']
+    paths: ['scripts/catalog/photo-audit.mjs', '.github/workflows/catalog-photo-audit.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-photo-audit
+  cancel-in-progress: true
+
+jobs:
+  photos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Instalar Playwright y Chromium
+        run: |
+          npm install --no-save @playwright/test@1.54.2
+          npx playwright install --with-deps chromium
+
+      - name: Descargar fotos y generar hojas de contacto (solo lectura)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin evidence/catalog-snapshot
+          git show FETCH_HEAD:biznecubano.json > biznecubano.json
+          node scripts/catalog/photo-audit.mjs
+
+      - name: Publicar en la rama evidence/catalog-photos
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd catalog-photos
+          git init -q -b evidence
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "evidence: fotos del catálogo ${GITHUB_RUN_ID}"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/evidence/catalog-photos
