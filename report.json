@@ -1,0 +1,225 @@
+{
+  "base_url": "https://casavivadecuba.com",
+  "generated_at": "2026-10-02T20:25:14.854Z",
+  "steps": [
+    {
+      "name": "portada",
+      "ok": true,
+      "note": "",
+      "ms": 1334,
+      "screenshot": "01-portada.png",
+      "console_errors": [],
+      "url": "https://casavivadecuba.com/",
+      "title": "Casa Viva | Tienda online para el hogar en La Habana",
+      "scroll_x": false,
+      "small_taps": 61
+    },
+    {
+      "name": "categoria",
+      "ok": true,
+      "note": "https://casavivadecuba.com/categoria-producto/habitacion/",
+      "ms": 960,
+      "screenshot": "02-categoria.png",
+      "console_errors": [],
+      "url": "https://casavivadecuba.com/categoria-producto/habitacion/",
+      "title": "Habitación – casavivadecuba.com",
+      "scroll_x": false,
+      "small_taps": 13
+    },
+    {
+      "name": "producto",
+      "ok": true,
+      "note": "https://casavivadecuba.com/producto/albornoz-talla-l-azul/",
+      "ms": 945,
+      "screenshot": "03-producto.png",
+      "console_errors": [],
+      "url": "https://casavivadecuba.com/producto/albornoz-talla-l-azul/",
+      "title": "Albornoz (talla L) azul – casavivadecuba.com",
+      "scroll_x": false,
+      "small_taps": 13
+    },
+    {
+      "name": "producto-detalle",
+      "ok": true,
+      "note": "{\"gallery\":1,\"description\":0,\"stock\":\"Disponible\",\"price\":\"$38.00\",\"variable\":false,\"reviews\":false}",
+      "ms": 82,
+      "screenshot": "04-producto-detalle.png",
+      "console_errors": [],
+      "url": "https://casavivadecuba.com/producto/albornoz-talla-l-azul/",
+      "title": "Albornoz (talla L) azul – casavivadecuba.com",
+      "scroll_x": false,
+      "small_taps": 13
+    },
+    {
+      "name": "anadir-al-carrito",
+      "ok": true,
+      "note": "“Albornoz (talla L) azul” se ha añadido a tu carrito. Ver carrito",
+      "ms": 10917,
+      "screenshot": "05-anadir-al-carrito.png",
+      "console_errors": [],
+      "url": "https://casavivadecuba.com/producto/albornoz-talla-l-azul/",
+      "title": "Albornoz (talla L) azul – casavivadecuba.com",
+      "scroll_x": false,
+      "small_taps": 13
+    },
+    {
+      "name": "carrito",
+      "ok": true,
+      "note": "2 artículo(s)",
+      "ms": 1195,
+      "screenshot": "06-carrito.png",
+      "console_errors": [],
+      "url": "https://casavivadecuba.com/carrito/",
+      "title": "Carrito – casavivadecuba.com",
+      "scroll_x": false,
+      "small_taps": 7
+    },
+    {
+      "name": "checkout-sin-confirmar",
+      "ok": true,
+      "note": "22 campos visibles",
+      "ms": 932,
+      "screenshot": "07-checkout-sin-confirmar.png",
+      "console_errors": [],
+      "url": "https://casavivadecuba.com/finalizar-compra/",
+      "title": "Finalizar compra – casavivadecuba.com",
+      "scroll_x": false,
+      "small_taps": 14
+    },
+    {
+      "name": "cliente-pregunta-curru",
+      "ok": true,
+      "note": "",
+      "ms": 3028,
+      "screenshot": "10-cliente-pregunta-curru.png",
+      "console_errors": [],
+      "url": "https://casavivadecuba.com/",
+      "title": "Casa Viva | Tienda online para el hogar en La Habana",
+      "scroll_x": false,
+      "small_taps": 61
+    }
+  ],
+  "curru": [
+    {
+      "who": "cliente",
+      "question": "¿Tienen toallas? ¿Cuántas quedan?",
+      "ms": 1369,
+      "status": 200,
+      "ai": true,
+      "answer": "Tenemos varias toallas disponibles, desde grandes hasta pequeñas, en colores como verde, rosado, azul y beige. Algunas están en últimas unidades, así que aprovecha. ¿Quieres que te muestre algunas?",
+      "products": [
+        {
+          "name": "Toalla Cisne Blanco 70x140 cm ( verde)",
+          "price": "$18.00",
+          "inStock": true,
+          "stock": null
+        },
+        {
+          "name": "Toalla Cisne Blanco 70x140 cm (rosada)",
+          "price": "$18.00",
+          "inStock": true,
+          "stock": null
+        },
+        {
+          "name": "Toalla Cisne Blanco 70x140 cm (azul)",
+          "price": "$18.00",
+          "inStock": true,
+          "stock": null
+        },
+        {
+          "name": "Toalla Cisne Blanco 70x140 cm (beige)",
+          "price": "$18.00",
+          "inStock": true,
+          "stock": null
+        }
+      ],
+      "links": [],
+      "screenshot": "08-curru-cliente.png"
+    },
+    {
+      "who": "cliente",
+      "question": "¿Cuánto cuesta el envío a Playa?",
+      "ms": 983,
+      "status": 200,
+      "ai": true,
+      "answer": "El envío a Playa cuesta 1800 CUP. Puedes ver más tarifas por zona si quieres.",
+      "products": [],
+      "links": [
+        "Ver tarifas por zona"
+      ],
+      "screenshot": "09-curru-cliente.png"
+    }
+  ],
+  "issues": [],
+  "product": {
+    "url": "https://casavivadecuba.com/producto/albornoz-talla-l-azul/",
+    "gallery": 1,
+    "description": 0,
+    "stock": "Disponible",
+    "price": "$38.00",
+    "variable": false,
+    "reviews": false
+  },
+  "buybar": {
+    "exists": true,
+    "hidden": false,
+    "display": "flex",
+    "bar": {
+      "top": 703,
+      "bottom": 772,
+      "height": 69
+    },
+    "submit": {
+      "top": 746,
+      "bottom": 798,
+      "height": 52
+    },
+    "nav": {
+      "top": 765,
+      "bottom": 844,
+      "height": 79
+    },
+    "viewport": 844,
+    "bodyClass": true,
+    "script": true,
+    "scrollY": 0
+  },
+  "cart": {
+    "items": 2,
+    "total": "Total estimado"
+  },
+  "checkout": {
+    "url": "https://casavivadecuba.com/finalizar-compra/",
+    "fields": 22,
+    "required": 9,
+    "labels": [
+      "¿Cómo quieres recibir tu compra? *",
+      "Recogida en tienda *",
+      "Nombre de quien recibe *",
+      "Apellidos de quien recibe *",
+      "WhatsApp o teléfono de quien recibe *",
+      "Teléfono alternativo (opcional)",
+      "Nombre de quien compra o paga (opcional)",
+      "Correo de quien compra (opcional)",
+      "Provincia *",
+      "Municipio *",
+      "Reparto o localidad *",
+      "Calle, número y edificio *",
+      "Entre calles, apartamento o piso (opcional)",
+      "Punto de referencia para el mensajero (opcional)",
+      "Fecha solicitada de entrega (opcional)",
+      "Horario preferido (opcional)",
+      "Necesita vuelto de (opcional)",
+      "Moneda del vuelto (opcional)",
+      "Ubicación exacta (opcional)",
+      "Indicaciones adicionales (opcional)",
+      "Confirmar y coordinar por WhatsApp",
+      "Pago por transferencia"
+    ],
+    "payment": [
+      "Confirmar y coordinar por WhatsApp",
+      "Pago por transferencia"
+    ],
+    "guest": true
+  }
+}
