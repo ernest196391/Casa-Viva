@@ -3,7 +3,7 @@
 /* Portada */
 .cvd-hero{position:relative;display:grid;align-items:end;min-height:min(56vh,480px);margin:0 0 28px;overflow:hidden;border-radius:0 0 28px 28px;background:var(--cvd-sand);isolation:isolate}
 .cvd-hero__img{position:absolute;inset:0;z-index:-2;width:100%;height:100%;object-fit:cover;object-position:center 60%}
-.cvd-hero::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(15,61,58,0) 30%,rgba(15,40,36,.72) 100%)}
+.cvd-hero::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(15,40,36,0) 10%,rgba(15,40,36,.45) 40%,rgba(15,40,36,.8) 100%)}
 .cvd-hero__body{display:grid;gap:10px;max-width:560px;padding:28px 22px 30px;color:#fff}
 .cvd-hero__eyebrow{margin:0;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;opacity:.9}
 .cvd-hero__title{margin:0;color:#fff;font-family:Georgia,"Times New Roman",serif;font-size:clamp(32px,9vw,54px);font-weight:500;line-height:1.05;letter-spacing:-.01em}
@@ -51,7 +51,7 @@
  /* Curru sube por encima de la barra para no tapar el botón */
  .cvd-buybar-on .cvd-assistant-launcher{bottom:178px!important}
  .cvd-buybar-on .cvd-curru-nudge{display:none!important}
- .single-product .cvd-curru-nudge,.post-type-archive-product .cvd-curru-nudge,.tax-product_cat .cvd-curru-nudge{display:none!important}
+ .single-product .cvd-curru-nudge,.home .cvd-curru-nudge,.post-type-archive-product .cvd-curru-nudge,.tax-product_cat .cvd-curru-nudge{display:none!important}
 }
 @keyframes cvdBarIn{from{transform:translateY(100%)}to{transform:none}}
 
