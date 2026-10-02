@@ -22,6 +22,8 @@ final class CVD_Premium_Storefront {
 		add_filter( 'woocommerce_get_availability_text', array( __CLASS__, 'availability_text' ), 20, 2 );
 		add_filter( 'woocommerce_sale_flash', array( __CLASS__, 'sale_flash' ), 20, 3 );
 		add_action( 'woocommerce_product_query', array( __CLASS__, 'only_offers' ) );
+		// La tienda se ve igual para todos: sin la barra negra de WordPress encima (el panel sigue en /wp-admin/).
+		add_filter( 'show_admin_bar', '__return_false' );
 	}
 
 	/** /tienda/?cvd_ofertas=1 muestra solo productos rebajados. */
