@@ -80,7 +80,7 @@ final class CVD_Contextual_Assistant {
 		return file_exists( CVD_DIR . 'assets/curru-avatar.svg' ) ? CVD_URL . 'assets/curru-avatar.svg' : '';
 	}
 
-	private static function context(): string {
+	public static function context(): string {
 		if ( ! is_user_logged_in() ) { return 'visitante'; }
 		$user = wp_get_current_user();
 		$program = class_exists( 'CVD_Registration' ) ? CVD_Registration::program_type( $user ) : '';
@@ -200,7 +200,8 @@ final class CVD_Contextual_Assistant {
 		if ( '' === $question ) {
 			return new WP_Error( 'cvd_curru_empty', 'Escribe tu pregunta.', array( 'status' => 422 ) );
 		}
-		$answer = CVD_Curru_AI::improve( $question, self::answer( $question, self::context() ), CVD_Curru_AI::history( $request->get_param( 'history' ) ), self::name() );
+		$context = self::context();
+		$answer = CVD_Curru_AI::improve( $question, self::answer( $question, $context ), CVD_Curru_AI::history( $request->get_param( 'history' ) ), self::name(), $context );
 		$response = rest_ensure_response( $answer );
 		$response->header( 'Cache-Control', 'no-store' );
 		return $response;
@@ -243,18 +244,42 @@ final class CVD_Contextual_Assistant {
 		}
 
 		$ids = CVD_Product_Search::search( $question, 6 );
-		if ( ! $ids && self::find_place( $q ) ) {
+		$stock_question = (bool) preg_match( '/\b(quedan?|existencias?|stock|disponib\w*|unidades|cuant[oa]s|modelos?)\b/', $q );
+		// «modelo» también es un reparto: una pregunta de existencias no se responde con mensajería.
+		if ( ! $ids && ! $stock_question && self::find_place( $q ) ) {
 			return self::shipping_answer( $q, $urls );
 		}
 		if ( $ids ) {
-			$cards = CVD_Product_Search::cards( $ids );
+			$exact = self::sees_stock( $context );
+			$cards = CVD_Product_Search::cards( $ids, $exact );
 			$count = count( $cards );
+			if ( $exact && $stock_question ) {
+				return $reply( 'Existencias ahora mismo: ' . self::stock_summary( $cards ), array(), $cards );
+			}
 			return $reply( 1 === $count ? 'Encontré este producto:' : "Encontré {$count} productos que te pueden servir:", array(), $cards );
 		}
 		return $reply(
 			'No encontré eso en la tienda. Prueba con otra palabra o pregúntanos por WhatsApp si lo podemos conseguir.',
 			array_merge( array( array( 'label' => 'Ver toda la tienda', 'url' => $urls['shopUrl'] ) ), $help_link )
 		);
+	}
+
+	/** Gestoras y operación ven las unidades exactas; clientes solo disponible, últimas unidades o agotado. */
+	public static function sees_stock( string $context ): bool {
+		return in_array( $context, array( 'gestora', 'operacion' ), true );
+	}
+
+	/** Resumen breve de existencias por producto y modelo, para gestoras. */
+	private static function stock_summary( array $cards ): string {
+		$parts = array();
+		foreach ( $cards as $card ) {
+			$line = $card['name'] . ': ' . mb_strtolower( $card['stockLabel'] );
+			if ( ! empty( $card['variants'] ) ) {
+				$line .= ' (' . implode( ', ', array_map( static fn( $v ) => $v['name'] . ' ' . ( null === $v['stock'] ? ( $v['inStock'] ? 'disponible' : 'agotado' ) : $v['stock'] ), $card['variants'] ) ) . ')';
+			}
+			$parts[] = $line;
+		}
+		return implode( ' · ', $parts ) . '.';
 	}
 
 	/** Busca un municipio o reparto oficial mencionado en el texto. */

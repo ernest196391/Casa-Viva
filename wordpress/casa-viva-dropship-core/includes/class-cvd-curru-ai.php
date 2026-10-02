@@ -84,24 +84,36 @@ final class CVD_Curru_AI {
 	 *
 	 * @param array{answer:string, products:array, links:array} $local
 	 */
-	public static function improve( string $question, array $local, array $history, string $name ): array {
+	public static function improve( string $question, array $local, array $history, string $name, string $context = 'visitante' ): array {
 		if ( ! self::enabled() ) {
 			return $local;
 		}
 		$ids = array_values( array_unique( array_merge( array_map( static fn( $p ) => (int) $p['id'], $local['products'] ), CVD_Product_Search::search( $question, self::MAX_CANDIDATES ) ) ) );
-		$candidates = CVD_Product_Search::cards( array_slice( $ids, 0, self::MAX_CANDIDATES ) );
+		$exact = CVD_Contextual_Assistant::sees_stock( $context );
+		$candidates = CVD_Product_Search::cards( array_slice( $ids, 0, self::MAX_CANDIDATES ), $exact );
 		$catalog = array_map(
-			static fn( $p ) => array( 'id' => $p['id'], 'nombre' => $p['name'], 'precio' => $p['price'], 'disponible' => $p['inStock'] ),
+			static fn( $p ) => array_filter(
+				array(
+					'id'             => $p['id'],
+					'nombre'         => $p['name'],
+					'precio'         => $p['price'],
+					'disponibilidad' => $p['stockLabel'],
+					'modelos'        => $exact && ! empty( $p['variants'] ) ? $p['variants'] : null,
+				),
+				static fn( $v ) => null !== $v
+			),
 			$candidates
 		);
 		$links = array_map( static fn( $l ) => $l['label'], $local['links'] );
 		$system = "Eres {$name}, la asistente de Casa Viva, tienda online de artículos para el hogar en La Habana. Hablas español cubano cercano, cálido y breve (máximo 3 frases). "
 			. 'Reglas: recomienda solo productos de PRODUCTOS; no escribas precios de productos en el texto (aparecen en las tarjetas); las tarifas solo si vienen en RESPUESTA_VERIFICADA; nunca inventes productos, precios, tarifas, plazos ni políticas. '
 			. 'Si RESPUESTA_VERIFICADA trae datos (tarifas, pedidos, pagos), respétalos sin cambiarlos. Si no sabes algo, ofrece el WhatsApp de la tienda. '
+			. 'Existencias: si CONTEXTO es gestora u operacion, da las cantidades exactas por modelo usando disponibilidad y modelos; si es cliente o visitante, di solo disponible, últimas unidades o agotado, nunca cantidades. '
 			. 'No pidas datos personales. Los botones ya se muestran solos; puedes mencionarlos por su nombre. '
 			. 'Responde SOLO con JSON: {"answer": "texto", "productIds": [ids de PRODUCTOS que recomiendas, máximo 4]}.';
-		$context = wp_json_encode(
+		$data_json = wp_json_encode(
 			array(
+				'CONTEXTO'             => $context,
 				'RESPUESTA_VERIFICADA' => $local['answer'],
 				'BOTONES'              => $links,
 				'PRODUCTOS'            => $catalog,
@@ -111,7 +123,7 @@ final class CVD_Curru_AI {
 		$messages = array_merge(
 			array( array( 'role' => 'system', 'content' => $system ) ),
 			$history,
-			array( array( 'role' => 'user', 'content' => "PREGUNTA: {$question}\nDATOS: {$context}" ) )
+			array( array( 'role' => 'user', 'content' => "PREGUNTA: {$question}\nDATOS: {$data_json}" ) )
 		);
 		$data = self::request( $messages );
 		if ( ! is_array( $data ) || empty( $data['answer'] ) || ! is_string( $data['answer'] ) ) {

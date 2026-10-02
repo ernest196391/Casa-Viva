@@ -28,6 +28,7 @@
 .cvd-curru-product>a{display:grid;gap:6px;color:#2b2420;text-decoration:none}
 .cvd-curru-product img{width:100%;aspect-ratio:1/1;object-fit:contain;border-radius:10px;background:#f8f6f1}
 .cvd-curru-product b{font-size:12.5px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cvd-curru-stock{font-size:12px;font-weight:700;color:#2e7d4f}.cvd-curru-stock.is-out{color:#9a3b2f}
 .cvd-curru-price{font-size:13px;color:#0d3b45}.cvd-curru-price s{color:#7a716b;font-size:12px}
 .cvd-curru-add{display:block;margin:auto 0 0;padding:9px 6px;border:1.5px solid #006068;border-radius:999px;background:#006068;color:#fff;font:inherit;font-size:12.5px;font-weight:700;text-align:center;text-decoration:none;cursor:pointer}
 .cvd-curru-add.is-secondary,.cvd-curru-add:disabled{background:#fff;color:#006068}
