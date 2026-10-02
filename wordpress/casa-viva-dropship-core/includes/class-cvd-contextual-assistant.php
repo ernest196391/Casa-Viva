@@ -11,6 +11,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class CVD_Contextual_Assistant {
 	private const RATE_LIMIT = 30;
+	private const DEFAULT_AVATAR = 'https://d8j0ntlcm91z4.cloudfront.net/user_3JKeIPPvD2MrM6gfmHcWhePZrny/hf_20261002_160940_c68a53bc-a02e-49eb-874c-33a1286b7e1b_min.webp';
 	private const RATE_WINDOW = 300;
 
 	public static function register(): void {
@@ -60,18 +61,23 @@ final class CVD_Contextual_Assistant {
 		return (string) apply_filters( 'cvd_assistant_name', 'Curru' );
 	}
 
-	/** Foto de Curru: opción configurable o el archivo del plugin si existe. Vacío = inicial. */
+	/** Foto de Curru: opción de wp-admin, archivo del plugin, ilustración por defecto o dibujo SVG. Vacío = inicial. */
 	public static function avatar_url(): string {
 		$option = (string) get_option( 'cvd_assistant_avatar_url', '' );
 		if ( $option ) {
 			return esc_url_raw( $option );
 		}
-		foreach ( array( 'curru-avatar.webp', 'curru-avatar.jpg', 'curru-avatar.png', 'curru-avatar.svg' ) as $file ) {
+		foreach ( array( 'curru-avatar.webp', 'curru-avatar.jpg', 'curru-avatar.png' ) as $file ) {
 			if ( file_exists( CVD_DIR . 'assets/' . $file ) ) {
 				return CVD_URL . 'assets/' . $file;
 			}
 		}
-		return '';
+		// Ilustración 3D de Curru generada en Higgsfield (2026-10-02). Si no carga, el navegador usa el dibujo incluido.
+		$remote = (string) apply_filters( 'cvd_curru_default_avatar', self::DEFAULT_AVATAR );
+		if ( $remote ) {
+			return esc_url_raw( $remote );
+		}
+		return file_exists( CVD_DIR . 'assets/curru-avatar.svg' ) ? CVD_URL . 'assets/curru-avatar.svg' : '';
 	}
 
 	private static function context(): string {
@@ -128,7 +134,7 @@ final class CVD_Contextual_Assistant {
 		$avatar = self::avatar_url();
 		$photo = static function ( string $class ) use ( $name, $avatar ): string {
 			$initial = '<span class="cvd-curru-initial" aria-hidden="true">' . esc_html( mb_substr( $name, 0, 1 ) ) . '</span>';
-			return $avatar ? '<img class="' . esc_attr( $class ) . '" src="' . esc_url( $avatar ) . '" alt="" width="96" height="96" decoding="async" loading="lazy">' . $initial : $initial;
+			return $avatar ? '<img class="' . esc_attr( $class ) . '" src="' . esc_url( $avatar ) . '" data-fallback="' . esc_url( CVD_URL . 'assets/curru-avatar.svg' ) . '" alt="" width="96" height="96" decoding="async" loading="lazy">' . $initial : $initial;
 		};
 		?>
 		<div class="cvd-curru-nudge" data-cvd-curru-nudge hidden><button type="button" data-cvd-curru-open>¿Te ayudo a encontrar algo? <span aria-hidden="true">👋</span></button></div>
