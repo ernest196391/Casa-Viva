@@ -85,6 +85,22 @@ test('clienta en móvil: portada → categoría → producto → carrito → che
       reviews: Boolean(document.querySelector('#reviews, .woocommerce-product-rating')),
     }));
     report.product = { url: productUrl, ...info };
+    report.buybar = await page.evaluate(() => {
+      const rect = (el) => (el ? (({ top, bottom, height }) => ({ top: Math.round(top), bottom: Math.round(bottom), height: Math.round(height) }))(el.getBoundingClientRect()) : null);
+      const bar = document.querySelector('[data-cvd-buybar]');
+      return {
+        exists: Boolean(bar),
+        hidden: bar ? bar.hidden : null,
+        display: bar ? getComputedStyle(bar).display : null,
+        bar: rect(bar),
+        submit: rect(document.querySelector('form.cart button[type="submit"]')),
+        nav: rect(document.querySelector('.cvd-customer-nav')),
+        viewport: window.innerHeight,
+        bodyClass: document.body.className.includes('cvd-customer-navigation-visible'),
+        script: Boolean(document.querySelector('script[src*="premium-storefront.js"]')),
+        scrollY: window.scrollY,
+      };
+    });
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight / 2));
     return JSON.stringify(info);
   }, errors);
