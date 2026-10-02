@@ -12,7 +12,7 @@ PRODUCCIÓN ANTERIOR (rollback): 85225e3 (3.11.0)
 NOTA: al fusionar cambios solo documentales, `main` puede avanzar sin que producción cambie
 DEPLOY: auditoría móvil #37027870189 SUCCESS (14 páginas sin scroll horizontal ni imágenes rotas) y #37027916280: Curru responde «sartén» con producto real; el buscador de /tienda/ sugiere «Juego de ollas» al escribir «paila»
 DECISIÓN: Ernesto aprobó el 2026-10-01 trabajar sin pedir permiso y el 2026-10-02 amplió la autorización a «lo que necesites para avanzar»; mejorará él las fotos (no usar Higgsfield); la foto de Curru la sube él en WooCommerce › Curru
-BLOQUEO: IA generativa de Curru espera que Ernesto elija proveedor (OpenAI o Gemini) y ponga la clave en wp-admin
+BLOQUEO: la IA de Curru (3.12.0) se activa cuando Ernesto pegue la clave de OpenAI en WooCommerce › Curru
 ```
 
 ## CV-CURRU — Asistente y buscador (2026-10-02)
@@ -21,7 +21,8 @@ Referencias auditadas: 23 y 28 (asistente «Veci») y Colo Shop (asistente «Col
 
 - 3.11.0 (PR #128): `CVD_Product_Search` (REST `casa-viva/v1/products/search`), Curru (`casa-viva/v1/curru/ask`, reglas locales: productos, mensajería por zona, pedidos, pagos, gestora, mensajero, WhatsApp), página WooCommerce › Curru para la foto.
 - 3.11.1: buscador de la tienda (tienda, categorías y resultados) con sugerencias con foto y precio, combobox accesible por teclado; también mejora los buscadores del tema. La búsqueda de la tienda usa el mismo motor tolerante («pailas» encuentra sartenes). La auditoría móvil de producción abre Curru (`curru.png`) y prueba el buscador (`buscador.png`).
-- Pendiente: foto de Curru (Ernesto), IA generativa con clave en wp-admin (respuesta JSON con IDs; precios siempre del servidor; reglas locales como respaldo).
+- 3.12.0: Curru con dibujo propio (`assets/curru-avatar.svg`, se usa si no hay URL de foto en wp-admin) e IA compatible con OpenAI (`CVD_Curru_AI`). Ernesto eligió OpenAI el 2026-10-02. La clave la pega él en WooCommerce › Curru (nunca en el repo ni el chat). La IA solo redacta sobre la respuesta local verificada y elige productos de una lista cerrada; tarjetas y precios salen de WooCommerce; si falla, responde la regla local.
+- Pendiente: Ernesto pega la clave de OpenAI en WooCommerce › Curru.
 
 ## CV-CATALOG-SYNC — Catálogo real desde BizneCubano (2026-10-02)
 

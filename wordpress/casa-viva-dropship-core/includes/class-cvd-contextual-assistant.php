@@ -28,6 +28,7 @@ final class CVD_Contextual_Assistant {
 
 	public static function admin_settings(): void {
 		register_setting( 'cvd_curru', 'cvd_assistant_avatar_url', array( 'type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => '' ) );
+		CVD_Curru_AI::register_settings();
 	}
 
 	public static function admin_page(): void {
@@ -43,10 +44,11 @@ final class CVD_Contextual_Assistant {
 						<th scope="row"><label for="cvd_assistant_avatar_url">Foto de Curru</label></th>
 						<td>
 							<input class="regular-text code" id="cvd_assistant_avatar_url" name="cvd_assistant_avatar_url" type="url" value="<?php echo esc_attr( (string) get_option( 'cvd_assistant_avatar_url', '' ) ); ?>" placeholder="https://casavivadecuba.com/wp-content/uploads/…">
-							<p class="description">Sube la foto en Medios › Añadir, copia su URL y pégala aquí. Mejor cuadrada, centrada en la cara. Vacío = inicial "C".</p>
+							<p class="description">Vacío = dibujo de Curru incluido en la tienda. Para usar otra imagen, súbela en Medios › Añadir, copia su URL y pégala aquí (mejor cuadrada).</p>
 							<?php if ( $avatar ) : ?><p><img src="<?php echo esc_url( $avatar ); ?>" alt="" width="72" height="72" style="border-radius:50%;object-fit:cover"></p><?php endif; ?>
 						</td>
 					</tr>
+					<?php CVD_Curru_AI::admin_rows(); ?>
 				</table>
 				<?php submit_button( 'Guardar' ); ?>
 			</form>
@@ -64,7 +66,7 @@ final class CVD_Contextual_Assistant {
 		if ( $option ) {
 			return esc_url_raw( $option );
 		}
-		foreach ( array( 'curru-avatar.webp', 'curru-avatar.jpg', 'curru-avatar.png' ) as $file ) {
+		foreach ( array( 'curru-avatar.webp', 'curru-avatar.jpg', 'curru-avatar.png', 'curru-avatar.svg' ) as $file ) {
 			if ( file_exists( CVD_DIR . 'assets/' . $file ) ) {
 				return CVD_URL . 'assets/' . $file;
 			}
@@ -192,7 +194,8 @@ final class CVD_Contextual_Assistant {
 		if ( '' === $question ) {
 			return new WP_Error( 'cvd_curru_empty', 'Escribe tu pregunta.', array( 'status' => 422 ) );
 		}
-		$response = rest_ensure_response( self::answer( $question, self::context() ) );
+		$answer = CVD_Curru_AI::improve( $question, self::answer( $question, self::context() ), CVD_Curru_AI::history( $request->get_param( 'history' ) ), self::name() );
+		$response = rest_ensure_response( $answer );
 		$response->header( 'Cache-Control', 'no-store' );
 		return $response;
 	}
