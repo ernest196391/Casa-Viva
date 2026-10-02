@@ -11,6 +11,7 @@ defined( 'ABSPATH' ) || exit;
 final class CVD_Product_Search {
 	private const CACHE_KEY = 'cvd_product_search_index_v1';
 	private const MAX_RESULTS = 12;
+	private const MAX_SHOP_RESULTS = 200;
 
 	private const STOPWORDS = array( 'de', 'del', 'la', 'las', 'el', 'los', 'un', 'una', 'unos', 'unas', 'y', 'o', 'para', 'con', 'en', 'por', 'que', 'me', 'mi', 'quiero', 'busco', 'necesito', 'tienen', 'tienes', 'hay', 'algo', 'alguna', 'algun', 'precio', 'cuanto', 'cuesta', 'vale', 'venden', 'vendes', 'favor', 'hola', 'buenas' );
 
@@ -49,9 +50,77 @@ final class CVD_Product_Search {
 
 	public static function register(): void {
 		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
+		add_action( 'pre_get_posts', array( __CLASS__, 'tolerant_shop_search' ), 20 );
+		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 36 );
+		add_action( 'woocommerce_before_shop_loop', array( __CLASS__, 'render_form' ), 5 );
+		add_action( 'woocommerce_no_products_found', array( __CLASS__, 'render_form' ), 5 );
 		foreach ( array( 'save_post_product', 'woocommerce_update_product', 'woocommerce_product_set_stock_status', 'deleted_post', 'edited_product_cat' ) as $hook ) {
 			add_action( $hook, array( __CLASS__, 'flush' ) );
 		}
+	}
+
+	private static function is_store_surface(): bool {
+		if ( is_admin() || wp_doing_ajax() ) {
+			return false;
+		}
+		return ( function_exists( 'is_shop' ) && is_shop() )
+			|| ( function_exists( 'is_product_taxonomy' ) && is_product_taxonomy() )
+			|| ( is_search() && 'product' === get_query_var( 'post_type' ) );
+	}
+
+	/** Sugerencias en el buscador de la tienda y en los buscadores del tema. */
+	public static function assets(): void {
+		if ( is_admin() ) {
+			return;
+		}
+		wp_enqueue_style( 'cvd-product-search', CVD_URL . 'assets/product-search.css', array(), CVD_VERSION );
+		wp_enqueue_script( 'cvd-product-search', CVD_URL . 'assets/product-search.js', array(), CVD_VERSION, true );
+		wp_localize_script( 'cvd-product-search', 'cvdProductSearch', array( 'url' => esc_url_raw( rest_url( 'casa-viva/v1/products/search' ) ), 'home' => esc_url_raw( home_url( '/' ) ) ) );
+	}
+
+	public static function render_form(): void {
+		static $done = false;
+		if ( $done || ! self::is_store_surface() ) {
+			return;
+		}
+		$done = true;
+		$query = get_search_query();
+		?>
+		<form class="cvd-store-search" role="search" method="get" action="<?php echo esc_url( home_url( '/' ) ); ?>" data-cvd-product-search>
+			<label class="screen-reader-text" for="cvd-store-search-input">Buscar productos</label>
+			<input id="cvd-store-search-input" type="search" name="s" value="<?php echo esc_attr( $query ); ?>" placeholder="Busca: sartén, toalla, alfombra…" autocomplete="off" enterkeyhint="search">
+			<input type="hidden" name="post_type" value="product">
+			<button type="submit" aria-label="Buscar"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm5.4-2.1L21 21"/></svg></button>
+		</form>
+		<?php
+		if ( $query && ! have_posts() ) {
+			echo '<p class="cvd-store-search-empty">¿No lo encuentras? <button type="button" data-cvd-curru-open>Pregúntale a ' . esc_html( class_exists( 'CVD_Contextual_Assistant' ) ? CVD_Contextual_Assistant::name() : 'Curru' ) . '</button></p>';
+		}
+	}
+
+	/** La búsqueda de la tienda usa el mismo motor tolerante que Curru (acentos, plurales, sinónimos). */
+	public static function tolerant_shop_search( WP_Query $query ): void {
+		if ( is_admin() || ! $query->is_main_query() || ! $query->is_search() || 'product' !== $query->get( 'post_type' ) ) {
+			return;
+		}
+		$ids = self::search( (string) $query->get( 's' ), self::MAX_SHOP_RESULTS );
+		if ( ! $ids ) {
+			return;
+		}
+		$query->set( 'post__in', $ids );
+		// Si el cliente eligió un orden (precio, novedades), se respeta; si no, va por relevancia.
+		if ( empty( $_GET['orderby'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$query->set( 'orderby', 'post__in' );
+			$query->set( 'order', 'ASC' );
+		}
+		add_filter(
+			'posts_search',
+			static function ( $search, $current ) use ( $query ) {
+				return $current === $query ? '' : $search;
+			},
+			20,
+			2
+		);
 	}
 
 	public static function flush(): void {

@@ -26,6 +26,14 @@ $assert( array( $towel ) === array_values( array_intersect( CVD_Product_Search::
 $assert( ! in_array( $hidden, CVD_Product_Search::search( 'sarten' ), true ), 'no debe mostrar productos privados.' );
 $assert( array() === CVD_Product_Search::search( 'de la para' ), 'solo palabras vacías no busca nada.' );
 
+// La búsqueda de la tienda usa el mismo motor (consulta principal de producto).
+global $wp_the_query, $wp_query;
+$shop = new WP_Query();
+$wp_the_query = $shop; // is_main_query() compara con esta consulta.
+$shop->query( array( 's' => 'pailas', 'post_type' => 'product', 'fields' => 'ids', 'posts_per_page' => 20 ) );
+$assert( in_array( $pan, $shop->posts, true ) && ! in_array( $hidden, $shop->posts, true ), 'el buscador de la tienda debe encontrar la sartén con «pailas».' );
+$wp_the_query = $wp_query;
+
 $cards = CVD_Product_Search::cards( array( $blend ) );
 $assert( 1 === count( $cards ) && false !== strpos( $cards[0]['price'], '35' ) && $cards[0]['quickAdd'], 'la tarjeta usa el precio real de WooCommerce.' );
 
