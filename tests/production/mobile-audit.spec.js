@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 // Auditoría móvil de solo lectura contra un sitio desplegado.
-// Solo navega con GET: no añade al carrito, no envía formularios ni inicia sesión.
+// Solo navega con GET (salvo una consulta a Curru): no añade al carrito, no envía formularios ni inicia sesión.
 const fs = require('node:fs');
 const path = require('node:path');
 const { test, expect } = require('@playwright/test');
@@ -240,4 +240,32 @@ test('auditoría móvil de producción', async ({ page }) => {
     expect.soft(p.fatal_marker, `${p.url} error fatal`).toBe(false);
     expect.soft(p.scroll_width, `${p.url} scroll horizontal en móvil`).toBeLessThanOrEqual(p.client_width + 1);
   }
+});
+
+// Curru: abre el asistente y hace una pregunta de catálogo. Solo consulta (POST de lectura); no añade al carrito.
+test('Curru responde con productos', async ({ page }) => {
+  test.setTimeout(2 * 60 * 1000);
+  await page.goto(`${baseURL}/`, { waitUntil: 'domcontentloaded' });
+  const curru = { launcher: false, opened: false, answer: '', products: 0, photo: false };
+  const launcher = page.locator('.cvd-assistant-launcher');
+  curru.launcher = await launcher.isVisible().catch(() => false);
+  curru.photo = await page.locator('.cvd-assistant-launcher.has-photo').count() > 0;
+  if (curru.launcher) {
+    await launcher.click();
+    const panel = page.locator('#cvd-contextual-assistant');
+    curru.opened = await panel.isVisible().catch(() => false);
+    if (curru.opened) {
+      await page.fill('#cvd-contextual-question', 'sartén');
+      await page.press('#cvd-contextual-question', 'Enter');
+      await page.waitForSelector('.cvd-curru-reply', { timeout: 30000 }).catch(() => {});
+      curru.answer = (await page.locator('.cvd-curru-reply .cvd-curru-bubble').first().textContent().catch(() => '')) || '';
+      curru.products = await page.locator('.cvd-curru-reply .cvd-curru-product').count();
+      await page.waitForTimeout(800);
+    }
+  }
+  await page.screenshot({ path: path.join(outDir, 'curru.png') });
+  report.curru = curru;
+  expect.soft(curru.launcher, 'Curru visible').toBe(true);
+  expect.soft(curru.opened, 'Curru abre').toBe(true);
+  expect.soft(curru.products, 'Curru muestra productos').toBeGreaterThan(0);
 });
