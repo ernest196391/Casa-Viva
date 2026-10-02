@@ -1,0 +1,92 @@
+name: Sincronizar catálogo BizneCubano
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: dry-run (solo informe) o apply (actualiza precios y crea borradores)
+        required: true
+        default: dry-run
+        type: choice
+        options: [dry-run, apply]
+      limit:
+        description: Máximo de productos nuevos a crear (0 = sin límite)
+        required: false
+        default: '0'
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-sync
+  cancel-in-progress: false
+
+env:
+  WP_PATH: /home/u824654880/domains/casavivadecuba.com/public_html
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Obtener la última instantánea de BizneCubano
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin evidence/catalog-snapshot
+          git show FETCH_HEAD:biznecubano.json > biznecubano.json
+          jq -e '.products | length > 0' biznecubano.json >/dev/null
+          echo "Instantánea: $(jq -r .generated_at biznecubano.json) · $(jq '.products|length' biznecubano.json) productos"
+
+      - name: Preparar SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '\n' >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Ejecutar sincronización (${{ inputs.mode }})
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          MODE: ${{ inputs.mode }}
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          set -euo pipefail
+          scp -P "$SSH_PORT" biznecubano.json "$SSH_USER@$SSH_HOST:/tmp/cvd-biznecubano.json"
+          scp -P "$SSH_PORT" scripts/catalog/biznecubano-sync.php "$SSH_USER@$SSH_HOST:/tmp/cvd-biznecubano-sync.php"
+          mkdir -p catalog-sync
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "cd '$WP_PATH' && CVD_SYNC_FILE=/tmp/cvd-biznecubano.json CVD_SYNC_MODE='$MODE' CVD_SYNC_LIMIT='${LIMIT:-0}' wp eval-file /tmp/cvd-biznecubano-sync.php" \
+            > catalog-sync/report.json
+          jq -e .totals catalog-sync/report.json >/dev/null
+          jq -r '"::notice title=Catálogo (\(.mode))::\(.totals | to_entries | map("\(.key)=\(.value)") | join(" · "))"' catalog-sync/report.json
+          jq -r '.errors[]? | "::warning title=\(.sku)::\(.error)"' catalog-sync/report.json | head -20
+
+      - name: Publicar informe en la rama evidence/catalog-sync
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f catalog-sync/report.json || exit 0
+          cp biznecubano.json catalog-sync/source.json
+          cd catalog-sync
+          git init -q -b evidence
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "evidence: sincronización de catálogo ${{ inputs.mode }} ${GITHUB_RUN_ID}"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/evidence/catalog-sync
