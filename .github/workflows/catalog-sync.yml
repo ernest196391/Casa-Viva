@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: dry-run (solo informe) o apply (actualiza precios y crea borradores)
+        description: dry-run (solo informe) o apply (precios, stock, publica lo de BizneCubano y oculta lo demás)
         required: true
         default: dry-run
         type: choice

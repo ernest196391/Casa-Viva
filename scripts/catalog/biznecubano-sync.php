@@ -4,13 +4,15 @@
  *
  * Uso (WP-CLI): CVD_SYNC_FILE=/tmp/biznecubano.json CVD_SYNC_MODE=dry-run wp eval-file biznecubano-sync.php
  *
- * Reglas:
- * - solo toca productos con SKU `BC-*` (nunca NEXO ni otros);
- * - productos existentes: actualiza precio normal y de oferta;
- * - productos nuevos: se crean como BORRADOR con foto, descripción y categoría;
- * - no cambia cantidades de stock (las gestiona el motor de inventario), no borra nada
- *   y no toca pedidos, comisiones ni payouts;
- * - idempotente: repetirlo no duplica productos.
+ * Reglas (BizneCubano es la fuente del catálogo de Casa Viva; aprobado por Ernesto el 2026-10-02):
+ * - productos `BC-*` existentes: precio normal y de oferta, stock y publicación;
+ * - productos nuevos: se publican con foto, descripción y categoría;
+ * - stock: agotado => 0; "quedan N" => N; disponible sin cantidad => disponible sin control.
+ *   Cada cambio de cantidad queda en el libro de movimientos de inventario como conteo;
+ * - lo publicado que no está en BizneCubano (BC retirados, NEXO y otros) se oculta como privado,
+ *   guardando el estado anterior en `_cvd_sync_hidden_from` para poder restaurarlo;
+ * - nunca borra nada ni toca pedidos, comisiones ni payouts;
+ * - idempotente: repetirlo no duplica productos ni movimientos.
  */
 
 defined( 'ABSPATH' ) || exit( 1 );
@@ -92,15 +94,97 @@ function cvd_sync_image( string $url, int $product_id, string $name ): int {
 	return is_wp_error( $id ) ? 0 : (int) $id;
 }
 
+function cvd_sync_stock_target( array $p ): array {
+	if ( ! empty( $p['out_of_stock'] ) ) {
+		return array( 'manage' => true, 'qty' => 0, 'status' => 'outofstock' );
+	}
+	if ( is_int( $p['stock_hint'] ?? null ) && $p['stock_hint'] > 0 ) {
+		return array( 'manage' => true, 'qty' => $p['stock_hint'], 'status' => 'instock' );
+	}
+	return array( 'manage' => false, 'qty' => null, 'status' => 'instock' );
+}
+
+/** Devuelve el cambio de stock necesario (o null) y lo aplica si $apply. */
+function cvd_sync_stock( WC_Product $product, array $p, bool $apply ): ?array {
+	global $wpdb;
+	$target = cvd_sync_stock_target( $p );
+	$before = array(
+		'manage' => $product->get_manage_stock(),
+		'qty'    => $product->get_manage_stock() ? (int) $product->get_stock_quantity() : null,
+		'status' => $product->get_stock_status(),
+	);
+	// Disponible sin cantidad: si ya hay existencias controladas positivas, se respetan.
+	if ( ! $target['manage'] && $before['manage'] && $before['qty'] > 0 ) {
+		return null;
+	}
+	if ( $before['manage'] === $target['manage'] && $before['qty'] === $target['qty'] && $before['status'] === $target['status'] ) {
+		return null;
+	}
+	if ( $apply ) {
+		if ( $target['manage'] ) {
+			$product->set_manage_stock( true );
+			$product->save();
+			wc_update_product_stock( $product, $target['qty'], 'set' );
+			$table = $wpdb->prefix . 'cvd_inventory_movements';
+			if ( $table === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
+				$from = (float) ( $before['qty'] ?? 0 );
+				$wpdb->insert(
+					$table,
+					array(
+						'movement_uuid'  => wp_generate_uuid4(),
+						'product_id'     => $product->get_id(),
+						'variation_id'   => 0,
+						'movement_type'  => 'count',
+						'quantity_delta' => $target['qty'] - $from,
+						'stock_before'   => $from,
+						'stock_after'    => $target['qty'],
+						'reason'         => 'Sincronización con BizneCubano',
+						'reference_type' => 'biznecubano',
+						'reference_id'   => 0,
+						'actor_user_id'  => 0,
+						'created_at'     => current_time( 'mysql', true ),
+						'metadata'       => wp_json_encode( array( 'source' => 'biznecubano-sync', 'url' => $p['url'] ?? '' ) ),
+					),
+					array( '%s', '%d', '%d', '%s', '%f', '%f', '%f', '%s', '%s', '%d', '%d', '%s', '%s' )
+				);
+			}
+		} else {
+			$product->set_manage_stock( false );
+			$product->set_stock_status( 'instock' );
+			$product->save();
+		}
+	}
+	return array( 'id' => $product->get_id(), 'sku' => $product->get_sku(), 'name' => $product->get_name(), 'before' => $before, 'after' => $target );
+}
+
+/** Publica un producto que está en BizneCubano si estaba en borrador u oculto por la sincronización. */
+function cvd_sync_publish( WC_Product $product, bool $apply ): bool {
+	$hidden_from = (string) $product->get_meta( '_cvd_sync_hidden_from' );
+	if ( 'publish' === $product->get_status() && '' === $hidden_from ) {
+		return false;
+	}
+	if ( ! in_array( $product->get_status(), array( 'draft', 'pending', 'private', 'publish' ), true ) ) {
+		return false;
+	}
+	if ( $apply ) {
+		$product->set_status( 'publish' );
+		$product->delete_meta_data( '_cvd_sync_hidden_from' );
+		$product->save();
+	}
+	return true;
+}
+
 $report = array(
 	'mode'            => $mode,
 	'source_count'    => count( $products ),
 	'price_updates'   => array(),
-	'created_drafts'  => array(),
+	'created'         => array(),
+	'published'       => array(),
+	'stock_updates'   => array(),
+	'hidden'          => array(),
+	'no_image'        => array(),
 	'unchanged'       => 0,
 	'skipped'         => array(),
-	'stock_mismatch'  => array(),
-	'not_in_source'   => array(),
 	'categories_new'  => array(),
 	'errors'          => array(),
 );
@@ -123,16 +207,30 @@ foreach ( $products as $p ) {
 	try {
 		if ( $product_id ) {
 			$product = wc_get_product( $product_id );
-			if ( ! $product || $product->is_type( 'variable' ) ) {
-				$report['skipped'][] = array( 'sku' => $sku, 'name' => $p['name'], 'reason' => 'producto variable o ilegible' );
+			if ( ! $product ) {
+				$report['skipped'][] = array( 'sku' => $sku, 'name' => $p['name'], 'reason' => 'producto ilegible' );
 				continue;
+			}
+			$from_status = $product->get_status();
+			if ( cvd_sync_publish( $product, $apply ) ) {
+				$report['published'][] = array( 'id' => $product_id, 'sku' => $sku, 'name' => $product->get_name(), 'from' => $from_status );
+				$product = wc_get_product( $product_id );
+			}
+			if ( ! $product->get_image_id() ) {
+				$report['no_image'][] = array( 'id' => $product_id, 'sku' => $sku, 'name' => $product->get_name() );
+			}
+			if ( $product->is_type( 'variable' ) ) {
+				// Precio y stock viven en cada variante; BizneCubano no las expone por separado.
+				$report['skipped'][] = array( 'sku' => $sku, 'name' => $p['name'], 'reason' => 'producto variable: precio y stock por variante' );
+				continue;
+			}
+			$stock_change = cvd_sync_stock( $product, $p, $apply );
+			if ( $stock_change ) {
+				$report['stock_updates'][] = $stock_change;
+				$product = wc_get_product( $product_id );
 			}
 			$before = array( 'regular' => $product->get_regular_price(), 'sale' => $product->get_sale_price() );
 			$after  = array( 'regular' => cvd_sync_money( $regular ), 'sale' => $on_sale ? cvd_sync_money( $price ) : '' );
-			$source_out = ! empty( $p['out_of_stock'] );
-			if ( $source_out === $product->is_in_stock() ) {
-				$report['stock_mismatch'][] = array( 'id' => $product_id, 'sku' => $sku, 'name' => $product->get_name(), 'woocommerce' => $product->get_stock_status(), 'biznecubano' => $source_out ? 'agotado' : 'disponible', 'stock_hint' => $p['stock_hint'] ?? null );
-			}
 			if ( (float) $before['regular'] === (float) $after['regular'] && (float) $before['sale'] === (float) $after['sale'] && ( '' === $before['sale'] ) === ( '' === $after['sale'] ) ) {
 				$report['unchanged']++;
 				continue;
@@ -156,16 +254,16 @@ foreach ( $products as $p ) {
 		if ( $apply ) {
 			$product = new WC_Product_Simple();
 			$product->set_name( (string) $p['name'] );
-			$product->set_status( 'draft' );
+			$product->set_status( 'publish' );
 			$product->set_sku( $sku );
 			$product->set_regular_price( $entry['regular'] );
 			$product->set_sale_price( $entry['sale'] );
 			$product->set_description( cvd_sync_description( (string) ( $p['description'] ?? '' ) ) );
-			$product->set_stock_status( ! empty( $p['out_of_stock'] ) ? 'outofstock' : 'instock' );
 			$product->set_category_ids( $term_ids );
 			$product->update_meta_data( '_cvd_biznecubano_url', esc_url_raw( (string) $p['url'] ) );
 			$product->update_meta_data( '_cvd_biznecubano_synced_at', gmdate( 'c' ) );
 			$new_id = $product->save();
+			cvd_sync_stock( wc_get_product( $new_id ), $p, true );
 			if ( ! empty( $p['image'] ) ) {
 				$image_id = cvd_sync_image( (string) $p['image'], $new_id, (string) $p['name'] );
 				if ( $image_id ) {
@@ -174,33 +272,42 @@ foreach ( $products as $p ) {
 					$product->save();
 				} else {
 					$report['errors'][] = array( 'sku' => $sku, 'error' => 'no se pudo descargar la foto' );
+					$report['no_image'][] = array( 'id' => $new_id, 'sku' => $sku, 'name' => (string) $p['name'] );
 				}
 			}
 			$entry['id'] = $new_id;
 		}
 		$created_count++;
-		$report['created_drafts'][] = $entry;
+		$report['created'][] = $entry;
 	} catch ( Throwable $e ) {
 		$report['errors'][] = array( 'sku' => $sku, 'error' => $e->getMessage() );
 	}
 }
 
-// Productos BC-* que ya no están en BizneCubano: solo se informan.
-$existing = wc_get_products( array( 'limit' => -1, 'status' => array( 'publish', 'draft', 'private' ), 'return' => 'objects' ) );
+// Todo lo publicado que no está en BizneCubano (BC retirados, NEXO y otros) se oculta como privado.
+$existing = wc_get_products( array( 'limit' => -1, 'status' => array( 'publish' ), 'return' => 'objects' ) );
 foreach ( $existing as $product ) {
 	$sku = (string) $product->get_sku();
-	if ( 0 === strpos( $sku, 'BC-' ) && empty( $seen_skus[ $sku ] ) ) {
-		$report['not_in_source'][] = array( 'id' => $product->get_id(), 'sku' => $sku, 'name' => $product->get_name(), 'status' => $product->get_status(), 'stock' => $product->get_stock_status() );
+	if ( ! empty( $seen_skus[ $sku ] ) ) {
+		continue;
 	}
+	if ( $apply ) {
+		$product->update_meta_data( '_cvd_sync_hidden_from', $product->get_status() );
+		$product->set_status( 'private' );
+		$product->save();
+	}
+	$report['hidden'][] = array( 'id' => $product->get_id(), 'sku' => $sku, 'name' => $product->get_name(), 'reason' => 0 === strpos( $sku, 'BC-' ) ? 'ya no está en BizneCubano' : 'no está en BizneCubano' );
 }
 $report['categories_new'] = array_keys( $created_terms );
 $report['totals'] = array(
 	'price_updates'  => count( $report['price_updates'] ),
-	'created_drafts' => count( $report['created_drafts'] ),
+	'created'        => count( $report['created'] ),
+	'published'      => count( $report['published'] ),
+	'stock_updates'  => count( $report['stock_updates'] ),
+	'hidden'         => count( $report['hidden'] ),
+	'no_image'       => count( $report['no_image'] ),
 	'unchanged'      => $report['unchanged'],
 	'skipped'        => count( $report['skipped'] ),
-	'stock_mismatch' => count( $report['stock_mismatch'] ),
-	'not_in_source'  => count( $report['not_in_source'] ),
 	'errors'         => count( $report['errors'] ),
 );
 echo wp_json_encode( $report, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) . "\n";
