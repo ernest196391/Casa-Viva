@@ -5,10 +5,10 @@
 ```text
 FASE: 0 — Casa Viva Core estable
 SUBFASE ACTUAL: CV-PREMIUM-001 — Auditoría de recorrido y tienda premium móvil (3.13.x)
-ESTADO: 3.13.5 DESPLEGADO (PR #139 = 1a431dd, deploy 37059902632, auditoría móvil 37060328418 y recorrido 37060378920 SUCCESS): pedido recibido, carrito y vale de WhatsApp al estilo Colo Shop, más Curru y WhatsApp alineados (PR #138 cerrado, incluido en #139)
+ESTADO: 3.13.6 DESPLEGADO (PR #141 = 69a532a, deploy 37063169963 al segundo intento: el primero, 37062764245, falló en el vale sintético por arranque en frío de NEXO y se revirtió solo). 3.13.5 (PR #139 = 1a431dd) quedó verificado con auditorías 37060328418 y 37060378920. Pedidos de prueba 2608 y 2609 cancelados con stock repuesto y catálogo resincronizado con BizneCubano (run 37062661847: 9 cambios de stock, 3 creados, 11 ocultos)
 SUBFASES ANTERIORES: CV-CURRU (3.11.0–3.12.1), CV-LAUNCH-POLISH-002, CV-CATALOG-SYNC y CV-LAUNCH-POLISH-001 — CERRADAS
-SHA DESPLEGADO: 1a431dd (plugin 3.13.5)
-PRODUCCIÓN ANTERIOR (rollback): 3ddea86 (3.13.3)
+SHA DESPLEGADO: 69a532a (plugin 3.13.6)
+PRODUCCIÓN ANTERIOR (rollback): 1a431dd (3.13.5)
 NOTA: al fusionar cambios solo documentales, `main` puede avanzar sin que producción cambie
 DECISIÓN: Ernesto (2026-10-02): checkout sin confirmar pedido; Curru da existencias exactas a gestoras y solo estados a clientes; mantener identidad beige/verde; Higgsfield hasta 50 créditos, nunca para fotos de producto; destacar con ventana las ofertas ya existentes
 BLOQUEO: prueba en vivo como gestora requiere que Ernesto cree una cuenta de gestora de prueba y guarde JOURNEY_GESTORA_USER / JOURNEY_GESTORA_PASS como secretos de GitHub
