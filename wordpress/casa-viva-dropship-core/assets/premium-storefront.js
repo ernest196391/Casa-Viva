@@ -16,10 +16,11 @@
     // El margen inferior descuenta la barra de navegación: un botón tapado por ella cuenta como oculto.
     const navHeight = () => (document.querySelector(".cvd-customer-nav")?.getBoundingClientRect().height || 0) + 8;
     const observer = new IntersectionObserver(([entry]) => {
-      const show = !entry.isIntersecting;
+      // isIntersecting es verdadero aunque se vea solo una parte; la barra sale si el botón no se ve entero.
+      const show = entry.intersectionRatio < 0.99;
       bar.hidden = !show;
       root.classList.toggle("cvd-buybar-on", show);
-    }, { rootMargin: `0px 0px -${Math.round(navHeight())}px 0px`, threshold: 1 });
+    }, { rootMargin: `0px 0px -${Math.round(navHeight())}px 0px`, threshold: [0, 0.99, 1] });
     observer.observe(submit);
     bar.querySelector("[data-cvd-buybar-go]").addEventListener("click", (event) => {
       const variable = event.currentTarget.dataset.variable === "1";

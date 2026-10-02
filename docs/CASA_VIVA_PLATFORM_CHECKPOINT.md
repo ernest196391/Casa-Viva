@@ -5,10 +5,10 @@
 ```text
 FASE: 0 — Casa Viva Core estable
 SUBFASE ACTUAL: CV-PREMIUM-001 — Auditoría de recorrido y tienda premium móvil (3.13.x)
-ESTADO: 3.13.0 DESPLEGADO Y VERIFICADO (PR #134, deploy 37045024385, auditoría móvil 37045089686 y recorrido 37045147856 SUCCESS); 3.13.1 en PR (barra fija visible cuando la barra inferior tapa el botón)
+ESTADO: 3.13.1 DESPLEGADO (PR #135, 05ac537, deploy 37045916920, recorrido 37046304477 y auditoría móvil 37046289218 SUCCESS); 3.13.2 en PR: la barra fija seguía oculta porque `isIntersecting` es verdadero con el botón visto solo en parte
 SUBFASES ANTERIORES: CV-CURRU (3.11.0–3.12.1), CV-LAUNCH-POLISH-002, CV-CATALOG-SYNC y CV-LAUNCH-POLISH-001 — CERRADAS
-SHA DESPLEGADO: e78a73d (plugin 3.13.0)
-PRODUCCIÓN ANTERIOR (rollback): 7484eb2 (3.12.1)
+SHA DESPLEGADO: 05ac537 (plugin 3.13.1)
+PRODUCCIÓN ANTERIOR (rollback): e78a73d (3.13.0)
 NOTA: al fusionar cambios solo documentales, `main` puede avanzar sin que producción cambie
 DECISIÓN: Ernesto (2026-10-02): checkout sin confirmar pedido; Curru da existencias exactas a gestoras y solo estados a clientes; mantener identidad beige/verde; Higgsfield hasta 50 créditos, nunca para fotos de producto; destacar con ventana las ofertas ya existentes
 BLOQUEO: prueba en vivo como gestora requiere que Ernesto cree una cuenta de gestora de prueba y guarde JOURNEY_GESTORA_USER / JOURNEY_GESTORA_PASS como secretos de GitHub
@@ -23,6 +23,7 @@ Auditoría `customer-journey-audit.yml` (run 37041230617) como clienta en móvil
 - Portada: imagen generada con Higgsfield (sin productos, enlace remoto `_min.webp`, filtro `cvd_home_hero_image`), titular, botón a la tienda y línea de entrega.
 - Ofertas: ventana una vez por sesión (al bajar más de la mitad o a los 15 s; nunca en ficha, carrito, checkout ni cuenta) con hasta 4 productos rebajados reales; insignias con porcentaje real; `/tienda/?cvd_ofertas=1` lista solo ofertas.
 - Verificación 3.13.0 en producción: portada con imagen, opciones de entrega como tarjetas, Curru a la clienta dice «algunas están en últimas unidades» sin cifras; 14 páginas sin scroll horizontal ni imágenes rotas. Hallazgo: la barra fija no aparecía porque el botón quedaba tapado pero «visible» bajo la barra inferior; 3.13.1 descuenta la barra inferior, oscurece el degradado de la portada y oculta el saludo de Curru en la portada móvil (tapaba el buscador).
+- 3.13.2: la barra fija se muestra cuando el botón no se ve entero (`intersectionRatio < 0.99`); el recorrido de auditoría registra `report.buybar` (existencia, visibilidad y posiciones del botón y la barra inferior).
 - Marca: botones de carrito, checkout y añadir en verde Casa Viva; precio en verde, rebaja en terracota; opciones de entrega del checkout como tarjetas con radio propio.
 
 ## CV-CURRU — Asistente y buscador (2026-10-02)
