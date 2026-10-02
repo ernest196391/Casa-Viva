@@ -1,0 +1,60 @@
+name: Instantánea de catálogo BizneCubano
+
+on:
+  workflow_dispatch:
+    inputs:
+      discovery:
+        description: Modo descubrimiento (solo 3 productos con respuestas de red)
+        required: false
+        default: '0'
+        type: string
+  push:
+    branches: ['cv-catalog-sync-*']
+    paths: ['scripts/catalog/**', '.github/workflows/catalog-source-snapshot.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-source-snapshot
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OUT_DIR: catalog-snapshot
+      DISCOVERY: ${{ inputs.discovery || (github.event_name == 'push' && '1') || '0' }}
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Instalar Playwright y Chromium
+        run: |
+          npm install --no-save @playwright/test@1.54.2
+          npx playwright install --with-deps chromium
+
+      - name: Extraer catálogos (solo lectura)
+        shell: bash
+        run: node scripts/catalog/biznecubano-snapshot.mjs 2>&1 | tee catalog-snapshot.log
+
+      - name: Publicar instantánea en la rama evidence/catalog-snapshot
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p catalog-snapshot
+          cp catalog-snapshot.log catalog-snapshot/ 2>/dev/null || true
+          cd catalog-snapshot
+          git init -q -b evidence
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "evidence: instantánea de catálogo ${GITHUB_RUN_ID}"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/evidence/catalog-snapshot
