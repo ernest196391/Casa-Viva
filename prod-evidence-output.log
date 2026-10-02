@@ -1,0 +1,7 @@
+
+Running 3 tests using 1 worker
+
+[1A[2K[1/3] tests/production/mobile-audit.spec.js:218:1 › auditoría móvil de producción
+[1A[2K[2/3] tests/production/mobile-audit.spec.js:246:1 › Curru responde con productos
+[1A[2K[3/3] tests/production/mobile-audit.spec.js:274:1 › buscador sugiere productos
+[1A[2K  3 passed (25.5s)

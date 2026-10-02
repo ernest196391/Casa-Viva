@@ -1,0 +1,618 @@
+{
+  "base_url": "https://casavivadecuba.com",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "generated_at": "2026-10-02T20:52:25.772Z",
+  "pages": [
+    {
+      "url": "https://casavivadecuba.com/",
+      "final_url": "https://casavivadecuba.com/",
+      "status": 200,
+      "load_ms": 2081,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Casa Viva | Tienda online para el hogar en La Habana",
+      "h1": [
+        "Casa Viva — tienda online para el hogar en La Habana"
+      ],
+      "meta_description": [
+        "Compra productos para el hogar en Casa Viva con precios visibles, catálogo online, recogida en Nuevo Vedado y entrega en La Habana."
+      ],
+      "canonical": [
+        "https://casavivadecuba.com/"
+      ],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [
+        "a right=426",
+        "span right=411",
+        "svg right=399",
+        "path right=395",
+        "strong right=422",
+        "a right=510",
+        "span right=495",
+        "svg right=483"
+      ],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 42,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 8,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casavivadecuba.com/producto/base-para-electrodomesticos/",
+        "https://casavivadecuba.com/producto/soporte-tv-14-42/",
+        "https://casavivadecuba.com/producto/aceite-capilar-de-batana-hoegoa/"
+      ],
+      "category_links": [
+        "https://casavivadecuba.com/categoria-producto/habitacion/",
+        "https://casavivadecuba.com/categoria-producto/sala-y-muebles/",
+        "https://casavivadecuba.com/categoria-producto/cocina/",
+        "https://casavivadecuba.com/categoria-producto/bano/",
+        "https://casavivadecuba.com/categoria-producto/organizacion/",
+        "https://casavivadecuba.com/categoria-producto/electrodomesticos/"
+      ],
+      "launch_assets": true,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casavivadecuba.com/tienda/",
+      "final_url": "https://casavivadecuba.com/tienda/",
+      "status": 200,
+      "load_ms": 1588,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Tienda – casavivadecuba.com",
+      "h1": [
+        "Tienda"
+      ],
+      "meta_description": [],
+      "canonical": [],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 24,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 1,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casavivadecuba.com/producto/aceite-capilar-de-batana-hoegoa/",
+        "https://casavivadecuba.com/producto/aceite-corporal/",
+        "https://casavivadecuba.com/producto/albornoz-talla-l-azul/"
+      ],
+      "category_links": [],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casavivadecuba.com/tarifas-mensajeria/",
+      "final_url": "https://casavivadecuba.com/tarifas-mensajeria/",
+      "status": 200,
+      "load_ms": 1423,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Tarifas de mensajería – casavivadecuba.com",
+      "h1": [
+        "Tarifas de mensajería"
+      ],
+      "meta_description": [],
+      "canonical": [
+        "https://casavivadecuba.com/tarifas-mensajeria/"
+      ],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 8,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 0,
+      "has_customer_nav": true,
+      "has_quote": true,
+      "product_links": [
+        "https://casavivadecuba.com/producto/crema-facial-arcilla-vit-c-y-curcuma/",
+        "https://casavivadecuba.com/producto/rasuradora-portatil-recargable/",
+        "https://casavivadecuba.com/producto/cortinero-expandible-plateado/"
+      ],
+      "category_links": [],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casavivadecuba.com/mi-cuenta/",
+      "final_url": "https://casavivadecuba.com/mi-cuenta/",
+      "status": 200,
+      "load_ms": 1173,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Mi cuenta – casavivadecuba.com",
+      "h1": [
+        "Mi cuenta"
+      ],
+      "meta_description": [],
+      "canonical": [
+        "https://casavivadecuba.com/mi-cuenta/"
+      ],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 4,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 2,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [],
+      "category_links": [],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casavivadecuba.com/area-gestoras/",
+      "final_url": "https://casavivadecuba.com/mi-cuenta/?acceso=gestoras#cv-customer-login",
+      "status": 200,
+      "load_ms": 1116,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Mi cuenta – casavivadecuba.com",
+      "h1": [
+        "Mi cuenta"
+      ],
+      "meta_description": [],
+      "canonical": [
+        "https://casavivadecuba.com/mi-cuenta/"
+      ],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 4,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 2,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [],
+      "category_links": [],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casavivadecuba.com/area-mensajeros/",
+      "final_url": "https://casavivadecuba.com/mi-cuenta/?acceso=mensajeros#cv-customer-login",
+      "status": 200,
+      "load_ms": 1216,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Mi cuenta – casavivadecuba.com",
+      "h1": [
+        "Mi cuenta"
+      ],
+      "meta_description": [],
+      "canonical": [
+        "https://casavivadecuba.com/mi-cuenta/"
+      ],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 4,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 2,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [],
+      "category_links": [],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casavivadecuba.com/categoria-producto/habitacion/",
+      "final_url": "https://casavivadecuba.com/categoria-producto/habitacion/",
+      "status": 200,
+      "load_ms": 1287,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Habitación – casavivadecuba.com",
+      "h1": [
+        "Habitación"
+      ],
+      "meta_description": [],
+      "canonical": [],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 24,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 0,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casavivadecuba.com/producto/albornoz-talla-l-azul/",
+        "https://casavivadecuba.com/producto/albornoz-talla-l-beige/",
+        "https://casavivadecuba.com/producto/albornoz-talla-l-beige-oscuro/"
+      ],
+      "category_links": [
+        "https://casavivadecuba.com/categoria-producto/habitacion/?add-to-cart=2363",
+        "https://casavivadecuba.com/categoria-producto/habitacion/?add-to-cart=2391",
+        "https://casavivadecuba.com/categoria-producto/habitacion/?add-to-cart=2365",
+        "https://casavivadecuba.com/categoria-producto/habitacion/?add-to-cart=2393",
+        "https://casavivadecuba.com/categoria-producto/habitacion/?add-to-cart=611",
+        "https://casavivadecuba.com/categoria-producto/habitacion/?add-to-cart=813",
+        "https://casavivadecuba.com/categoria-producto/habitacion/?add-to-cart=2375",
+        "https://casavivadecuba.com/categoria-producto/habitacion/?add-to-cart=2377"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casavivadecuba.com/categoria-producto/sala-y-muebles/",
+      "final_url": "https://casavivadecuba.com/categoria-producto/sala-y-muebles/",
+      "status": 200,
+      "load_ms": 1401,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Sala y muebles – casavivadecuba.com",
+      "h1": [
+        "Sala y muebles"
+      ],
+      "meta_description": [],
+      "canonical": [],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 24,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 0,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casavivadecuba.com/producto/alfombra-120x180-cisne-blanco-beige/",
+        "https://casavivadecuba.com/producto/alfombra-120x180-majestic-imperial-beige/",
+        "https://casavivadecuba.com/producto/alfombra-bienvenido-45x75-cm/"
+      ],
+      "category_links": [
+        "https://casavivadecuba.com/categoria-producto/sala-y-muebles/?add-to-cart=2393",
+        "https://casavivadecuba.com/categoria-producto/sala-y-muebles/?add-to-cart=2397",
+        "https://casavivadecuba.com/categoria-producto/sala-y-muebles/?add-to-cart=611",
+        "https://casavivadecuba.com/categoria-producto/sala-y-muebles/?add-to-cart=813",
+        "https://casavivadecuba.com/categoria-producto/sala-y-muebles/?add-to-cart=2371",
+        "https://casavivadecuba.com/categoria-producto/sala-y-muebles/?add-to-cart=2373",
+        "https://casavivadecuba.com/categoria-producto/sala-y-muebles/?add-to-cart=2399",
+        "https://casavivadecuba.com/categoria-producto/sala-y-muebles/?add-to-cart=2375"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casavivadecuba.com/categoria-producto/cocina/",
+      "final_url": "https://casavivadecuba.com/categoria-producto/cocina/",
+      "status": 200,
+      "load_ms": 1320,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Cocina – casavivadecuba.com",
+      "h1": [
+        "Cocina"
+      ],
+      "meta_description": [],
+      "canonical": [],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 24,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 0,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casavivadecuba.com/producto/alfombra-con-piecitos/",
+        "https://casavivadecuba.com/producto/azulejo-incefra/",
+        "https://casavivadecuba.com/producto/base-para-electrodomesticos/"
+      ],
+      "category_links": [
+        "https://casavivadecuba.com/categoria-producto/cocina/?add-to-cart=2371",
+        "https://casavivadecuba.com/categoria-producto/cocina/?add-to-cart=260",
+        "https://casavivadecuba.com/categoria-producto/cocina/?add-to-cart=67",
+        "https://casavivadecuba.com/categoria-producto/cocina/?add-to-cart=2419",
+        "https://casavivadecuba.com/categoria-producto/cocina/?add-to-cart=161",
+        "https://casavivadecuba.com/categoria-producto/cocina/?add-to-cart=609",
+        "https://casavivadecuba.com/categoria-producto/cocina/?add-to-cart=674",
+        "https://casavivadecuba.com/categoria-producto/cocina/?add-to-cart=2409"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casavivadecuba.com/categoria-producto/bano/",
+      "final_url": "https://casavivadecuba.com/categoria-producto/bano/",
+      "status": 200,
+      "load_ms": 1284,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Baño – casavivadecuba.com",
+      "h1": [
+        "Baño"
+      ],
+      "meta_description": [],
+      "canonical": [],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 24,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 0,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casavivadecuba.com/producto/albornoz-talla-l-azul/",
+        "https://casavivadecuba.com/producto/albornoz-talla-l-beige/",
+        "https://casavivadecuba.com/producto/albornoz-talla-l-beige-oscuro/"
+      ],
+      "category_links": [
+        "https://casavivadecuba.com/categoria-producto/bano/?add-to-cart=2363",
+        "https://casavivadecuba.com/categoria-producto/bano/?add-to-cart=2391",
+        "https://casavivadecuba.com/categoria-producto/bano/?add-to-cart=2365",
+        "https://casavivadecuba.com/categoria-producto/bano/?add-to-cart=2369",
+        "https://casavivadecuba.com/categoria-producto/bano/?add-to-cart=2371",
+        "https://casavivadecuba.com/categoria-producto/bano/?add-to-cart=2375",
+        "https://casavivadecuba.com/categoria-producto/bano/?add-to-cart=2377",
+        "https://casavivadecuba.com/categoria-producto/bano/?add-to-cart=2401"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casavivadecuba.com/categoria-producto/organizacion/",
+      "final_url": "https://casavivadecuba.com/categoria-producto/organizacion/",
+      "status": 200,
+      "load_ms": 1424,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Organización – casavivadecuba.com",
+      "h1": [
+        "Organización"
+      ],
+      "meta_description": [],
+      "canonical": [],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 24,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 0,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casavivadecuba.com/producto/brazalete-deportivo-para-celular/",
+        "https://casavivadecuba.com/producto/bucaro-blanco/",
+        "https://casavivadecuba.com/producto/carreton-negro/"
+      ],
+      "category_links": [
+        "https://casavivadecuba.com/categoria-producto/organizacion/?add-to-cart=278",
+        "https://casavivadecuba.com/categoria-producto/organizacion/?add-to-cart=794",
+        "https://casavivadecuba.com/categoria-producto/organizacion/?add-to-cart=52",
+        "https://casavivadecuba.com/categoria-producto/organizacion/?add-to-cart=809",
+        "https://casavivadecuba.com/categoria-producto/organizacion/?add-to-cart=706",
+        "https://casavivadecuba.com/categoria-producto/organizacion/?add-to-cart=727",
+        "https://casavivadecuba.com/categoria-producto/organizacion/?add-to-cart=426",
+        "https://casavivadecuba.com/categoria-producto/organizacion/?add-to-cart=534"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casavivadecuba.com/categoria-producto/electrodomesticos/",
+      "final_url": "https://casavivadecuba.com/categoria-producto/electrodomesticos/",
+      "status": 200,
+      "load_ms": 1048,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Electrodomésticos – casavivadecuba.com",
+      "h1": [
+        "Electrodomésticos"
+      ],
+      "meta_description": [],
+      "canonical": [],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 12,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 0,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casavivadecuba.com/producto/licuadora-mld-999/",
+        "https://casavivadecuba.com/producto/ventilador-recargable-f6-naranja/",
+        "https://casavivadecuba.com/producto/ventilador-recargable-f6-negro/"
+      ],
+      "category_links": [
+        "https://casavivadecuba.com/categoria-producto/electrodomesticos/?add-to-cart=293",
+        "https://casavivadecuba.com/categoria-producto/electrodomesticos/?add-to-cart=2585",
+        "https://casavivadecuba.com/categoria-producto/electrodomesticos/?add-to-cart=2601",
+        "https://casavivadecuba.com/categoria-producto/electrodomesticos/?add-to-cart=2587"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casavivadecuba.com/producto/aceite-capilar-de-batana-hoegoa/",
+      "final_url": "https://casavivadecuba.com/producto/aceite-capilar-de-batana-hoegoa/",
+      "status": 200,
+      "load_ms": 1224,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Aceite capilar de batana HOEGOA – casavivadecuba.com",
+      "h1": [
+        "Aceite capilar de batana HOEGOA"
+      ],
+      "meta_description": [],
+      "canonical": [
+        "https://casavivadecuba.com/producto/aceite-capilar-de-batana-hoegoa/"
+      ],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [
+        "img.zoomImg right=1036"
+      ],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 11,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 1,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casavivadecuba.com/producto/faja-reductora/",
+        "https://casavivadecuba.com/producto/aceite-capilar-de-batana-hoegoa/?add-to-cart=727",
+        "https://casavivadecuba.com/producto/kit-de-skincare-3-piezas-vitamina-c/"
+      ],
+      "category_links": [
+        "https://casavivadecuba.com/categoria-producto/cuidado-personal/"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casavivadecuba.com/producto/aceite-corporal/",
+      "final_url": "https://casavivadecuba.com/producto/aceite-corporal/",
+      "status": 200,
+      "load_ms": 1170,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Aceite corporal – casavivadecuba.com",
+      "h1": [
+        "Aceite corporal"
+      ],
+      "meta_description": [],
+      "canonical": [
+        "https://casavivadecuba.com/producto/aceite-corporal/"
+      ],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [
+        "img.zoomImg right=795"
+      ],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 15,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 1,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casavivadecuba.com/producto/crema-hoygy-vit-c-curcuma-y-5-hialuronico/",
+        "https://casavivadecuba.com/producto/aceite-corporal/?add-to-cart=340",
+        "https://casavivadecuba.com/producto/cepillos-alisadores-recargables/"
+      ],
+      "category_links": [
+        "https://casavivadecuba.com/categoria-producto/cuidado-personal/"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    }
+  ],
+  "curru": {
+    "launcher": true,
+    "opened": true,
+    "answer": "No tenemos sartenes ahora, pero te recomiendo nuestro juego de ollas, disponible en últimas unidades. Para más info, puedes escribirnos por WhatsApp.",
+    "products": 1,
+    "photo": true
+  },
+  "search": {
+    "form": true,
+    "suggestions": 1,
+    "first": "Juego de ollas"
+  }
+}
