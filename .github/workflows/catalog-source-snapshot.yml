@@ -1,6 +1,9 @@
 name: Instantánea de catálogo BizneCubano
 
 on:
+  # Cada hora: NEXO Business importa esta instantánea a los :50 (solo lectura).
+  schedule:
+    - cron: '5 * * * *'
   workflow_dispatch:
     inputs:
       discovery:
