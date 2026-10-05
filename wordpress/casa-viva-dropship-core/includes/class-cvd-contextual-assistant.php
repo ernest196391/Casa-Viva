@@ -113,12 +113,13 @@ final class CVD_Contextual_Assistant {
 	}
 
 	private static function vivabot_rate_limited(): bool {
-		$key = 'cvd_curru_rl_vivabot';
+		// Ventana fija por minuto de reloj: cada minuto tiene su propio contador y el TTL no se alarga.
+		$key = 'cvd_curru_rl_vivabot_' . intdiv( time(), self::VIVABOT_WINDOW );
 		$count = (int) get_transient( $key );
 		if ( $count >= self::VIVABOT_LIMIT ) {
 			return true;
 		}
-		set_transient( $key, $count + 1, self::VIVABOT_WINDOW );
+		set_transient( $key, $count + 1, 2 * self::VIVABOT_WINDOW );
 		return false;
 	}
 
