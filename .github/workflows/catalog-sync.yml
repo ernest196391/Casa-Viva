@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  WP_PATH: /home/u824654880/domains/casavivadecuba.com/public_html
+  WP_PATH: /home/u824654880/domains/casaviva.company/public_html
 
 jobs:
   sync:
