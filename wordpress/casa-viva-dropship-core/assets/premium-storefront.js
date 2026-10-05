@@ -1,11 +1,26 @@
 (() => {
   const root = document.documentElement;
 
-  // Portada: si el tema no pintó la imagen dentro del contenido, se coloca arriba del contenido principal.
+  // Portada: si el tema no pintó las ofertas dentro del contenido, se colocan arriba del contenido principal.
   const template = document.getElementById("cvd-hero-template");
-  if (template && !document.querySelector(".cvd-hero")) {
+  if (template && !document.querySelector(".cvd-deliver")) {
     const target = document.querySelector("main .entry-content, main, #content, .site-content");
     if (target) target.prepend(template.content.cloneNode(true));
+  }
+
+  // Aparición suave de las tarjetas y secciones al entrar en pantalla. Sin script o sin
+  // IntersectionObserver todo se ve igual, solo que sin animación.
+  const reveal = [...document.querySelectorAll(".cvd-deal, main.cv-market-home > .cv-market-section, main.cv-market-home > .cv-container, main.cv-market-home > .cv-market-benefits")];
+  if (reveal.length && "IntersectionObserver" in window && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    root.classList.add("cvd-anim");
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("is-in");
+        io.unobserve(entry.target);
+      });
+    }, { rootMargin: "0px 0px -6% 0px", threshold: 0.05 });
+    reveal.forEach((el) => io.observe(el));
   }
 
   // Barra fija de compra: aparece cuando el botón original sale de la pantalla.

@@ -242,6 +242,26 @@ test('auditoría móvil de producción', async ({ page }) => {
   }
 });
 
+// Portada (CV-HOME-DEALS): como en Amazon o las tiendas Shopify que más venden, la primera pantalla
+// del móvil enseña un producto con precio y su botón, por encima de la barra inferior.
+test('portada: producto con precio en la primera pantalla', async ({ page }) => {
+  await page.goto(`${baseURL}/`, { waitUntil: 'load' });
+  const fold = await page.evaluate(() => {
+    const nav = document.querySelector('.cvd-customer-nav');
+    const limit = window.innerHeight - (nav ? nav.getBoundingClientRect().height : 0);
+    const price = document.querySelector('.cvd-deal__price, main .price');
+    const add = document.querySelector('.cvd-deal__add');
+    const rect = (el) => (el ? Math.round(el.getBoundingClientRect().bottom) : null);
+    return { limit: Math.round(limit), price_bottom: rect(price), add_bottom: rect(add), deals: document.querySelectorAll('.cvd-deal').length, old_hero: !!document.querySelector('.cvd-hero') };
+  });
+  await page.screenshot({ path: path.join(outDir, 'portada.png') });
+  report.home_fold = fold;
+  expect.soft(fold.old_hero, 'la foto con «Comprar ahora» ya no está').toBe(false);
+  expect.soft(fold.price_bottom, 'hay un precio visible sin hacer scroll').not.toBeNull();
+  expect.soft(fold.price_bottom, 'el primer precio queda por encima de la barra inferior').toBeLessThanOrEqual(fold.limit);
+  if (fold.deals) expect.soft(fold.add_bottom, 'el botón Añadir de la primera oferta se ve entero').toBeLessThanOrEqual(fold.limit);
+});
+
 // Curru: abre el asistente y hace una pregunta de catálogo. Solo consulta (POST de lectura); no añade al carrito.
 test('Curru responde con productos', async ({ page }) => {
   test.setTimeout(2 * 60 * 1000);
@@ -255,6 +275,12 @@ test('Curru responde con productos', async ({ page }) => {
     const panel = page.locator('#cvd-contextual-assistant');
     curru.opened = await panel.isVisible().catch(() => false);
     if (curru.opened) {
+      // La caja de escribir no puede quedar debajo de la barra inferior (fallo corregido en 3.13.8).
+      curru.input_on_top = await page.evaluate(() => {
+        const input = document.getElementById('cvd-contextual-question');
+        const r = input.getBoundingClientRect();
+        return document.elementFromPoint(r.left + 20, r.top + r.height / 2) === input;
+      });
       await page.fill('#cvd-contextual-question', 'sartén');
       await page.press('#cvd-contextual-question', 'Enter');
       await page.waitForSelector('.cvd-curru-reply', { timeout: 30000 }).catch(() => {});
@@ -267,6 +293,7 @@ test('Curru responde con productos', async ({ page }) => {
   report.curru = curru;
   expect.soft(curru.launcher, 'Curru visible').toBe(true);
   expect.soft(curru.opened, 'Curru abre').toBe(true);
+  expect.soft(curru.input_on_top, 'la caja de escribir de Curru se puede tocar').toBe(true);
   expect.soft(curru.products, 'Curru muestra productos').toBeGreaterThan(0);
 });
 
