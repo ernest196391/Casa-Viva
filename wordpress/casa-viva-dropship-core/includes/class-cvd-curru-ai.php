@@ -88,7 +88,8 @@ final class CVD_Curru_AI {
 		if ( ! self::enabled() ) {
 			return $local;
 		}
-		$ids = array_values( array_unique( array_merge( array_map( static fn( $p ) => (int) $p['id'], $local['products'] ), CVD_Product_Search::search( $question, self::MAX_CANDIDATES ) ) ) );
+		// Si la respuesta verificada no es de productos (mensajería, pagos, recogida…), la IA no recomienda ninguno.
+		$ids = $local['products'] ? array_values( array_unique( array_merge( array_map( static fn( $p ) => (int) $p['id'], $local['products'] ), CVD_Product_Search::search( $question, self::MAX_CANDIDATES ) ) ) ) : array();
 		$exact = CVD_Contextual_Assistant::sees_stock( $context );
 		$candidates = CVD_Product_Search::cards( array_slice( $ids, 0, self::MAX_CANDIDATES ), $exact );
 		$catalog = array_map(

@@ -11,6 +11,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class CVD_Contextual_Assistant {
 	private const RATE_LIMIT = 30;
+	public const PICKUP_ADDRESS = 'Calle Conill A esquina 45 #864, Nuevo Vedado, La Habana';
 	private const DEFAULT_AVATAR = 'https://d8j0ntlcm91z4.cloudfront.net/user_3JKeIPPvD2MrM6gfmHcWhePZrny/hf_20261002_160940_c68a53bc-a02e-49eb-874c-33a1286b7e1b_min.webp';
 	private const RATE_WINDOW = 300;
 	// VivaBot (el bot de WhatsApp de Casa Viva) entra con su propia clave y su propio límite.
@@ -306,6 +307,10 @@ final class CVD_Contextual_Assistant {
 		$reply = static fn( string $answer, array $links = array(), array $products = array() ): array => array( 'answer' => $answer, 'links' => $links, 'products' => $products );
 		$help_link = $whatsapp ? array( array( 'label' => 'Escribir por WhatsApp', 'url' => $whatsapp ) ) : array();
 
+		// Recogida en tienda: dirección del pie de la web y horario confirmado por Ernesto (2026-10-05).
+		if ( preg_match( '/\b(recog\w*|recojo|recojer|direccion|donde estan|ubicad\w*|horario|abren|cierran)\b/', $q ) && ! preg_match( '/\b(mensajeria|envio|domicilio|tarifa|zona|municipio)\b/', $q ) ) {
+			return $reply( 'Puedes recoger tu pedido en ' . self::PICKUP_ADDRESS . ', de 9:00 a 17:00. Al pagar elige «Recogida» y ven cuando en Mis pedidos aparezca como listo.', array_merge( array( array( 'label' => 'Mis pedidos', 'url' => $urls['ordersUrl'] ) ), $help_link ) );
+		}
 		if ( preg_match( '/\b(pedido|orden|estado|seguimiento|donde esta|llega|rastrear)\b/', $q ) ) {
 			if ( 'mensajero' === $context ) {
 				return $reply( 'Abre tu Ruta para ver solo tus entregas, contactos y cobros.', array( array( 'label' => 'Abrir Ruta', 'url' => $urls['routeUrl'] ) ) );
