@@ -20,7 +20,7 @@ for (const marker of [
   'ssh-keygen -y -f ~/.ssh/id_ed25519',
   'command -v php >/dev/null',
   'json_decode(file_get_contents("/tmp/release-manifest.json")',
-  '/home/u824654880/domains/casavivadecuba.com/public_html',
+  '/home/u824654880/domains/casaviva.company/public_html',
   'casa-viva-dropship-core',
   '.cvd-deployed-sha',
   '.cvd-deployed-archive-sha256',
