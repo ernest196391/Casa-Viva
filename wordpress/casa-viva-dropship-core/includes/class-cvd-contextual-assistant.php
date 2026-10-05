@@ -13,6 +13,11 @@ final class CVD_Contextual_Assistant {
 	private const RATE_LIMIT = 30;
 	private const DEFAULT_AVATAR = 'https://d8j0ntlcm91z4.cloudfront.net/user_3JKeIPPvD2MrM6gfmHcWhePZrny/hf_20261002_160940_c68a53bc-a02e-49eb-874c-33a1286b7e1b_min.webp';
 	private const RATE_WINDOW = 300;
+	// VivaBot (el bot de WhatsApp de Casa Viva) entra con su propia clave y su propio límite.
+	private const VIVABOT_OPTION = 'cvd_vivabot_key_hash';
+	private const VIVABOT_LIMIT = 600;
+	private const VIVABOT_WINDOW = 60;
+	private const VIVABOT_CONTEXTS = array( 'cliente', 'gestora' );
 
 	public static function register(): void {
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 90 );
@@ -21,6 +26,7 @@ final class CVD_Contextual_Assistant {
 		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 		add_action( 'admin_init', array( __CLASS__, 'admin_settings' ) );
+		add_action( 'admin_post_cvd_vivabot_key', array( __CLASS__, 'vivabot_key_action' ) );
 	}
 
 	public static function admin_menu(): void {
@@ -53,8 +59,67 @@ final class CVD_Contextual_Assistant {
 				</table>
 				<?php submit_button( 'Guardar' ); ?>
 			</form>
+			<?php self::vivabot_admin_section(); ?>
 		</div>
 		<?php
+	}
+
+	/** Clave de VivaBot: se genera aquí, se muestra una sola vez y solo se guarda su hash. */
+	private static function vivabot_admin_section(): void {
+		$new_key = (string) get_transient( 'cvd_vivabot_new_key_' . get_current_user_id() );
+		if ( $new_key ) {
+			delete_transient( 'cvd_vivabot_new_key_' . get_current_user_id() );
+		}
+		$has_key = '' !== (string) get_option( self::VIVABOT_OPTION, '' );
+		$action = admin_url( 'admin-post.php' );
+		?>
+		<h2>Clave de VivaBot</h2>
+		<p>VivaBot (WhatsApp) usa esta clave para preguntarle a Curru como cliente o como gestora, sin el límite de los visitantes.</p>
+		<?php if ( $new_key ) : ?>
+			<div class="notice notice-warning inline"><p><strong>Cópiala ahora, no se volverá a mostrar:</strong></p><p><input class="large-text code" type="text" readonly value="<?php echo esc_attr( $new_key ); ?>" onclick="this.select()"></p><p>Pégala en VivaBot como cabecera <code>X-VivaBot-Key</code>. La clave anterior ya no funciona.</p></div>
+		<?php endif; ?>
+		<p><strong>Estado:</strong> <?php echo $has_key ? 'clave activa' : 'sin clave (VivaBot no puede entrar)'; ?></p>
+		<form method="post" action="<?php echo esc_url( $action ); ?>" style="display:inline-block;margin-right:8px">
+			<?php wp_nonce_field( 'cvd_vivabot_key' ); ?>
+			<input type="hidden" name="action" value="cvd_vivabot_key"><input type="hidden" name="do" value="generate">
+			<?php submit_button( $has_key ? 'Generar clave nueva (anula la actual)' : 'Generar clave', 'primary', 'submit', false ); ?>
+		</form>
+		<?php if ( $has_key ) : ?>
+		<form method="post" action="<?php echo esc_url( $action ); ?>" style="display:inline-block" onsubmit="return confirm('¿Borrar la clave? VivaBot dejará de poder preguntar a Curru.')">
+			<?php wp_nonce_field( 'cvd_vivabot_key' ); ?>
+			<input type="hidden" name="action" value="cvd_vivabot_key"><input type="hidden" name="do" value="revoke">
+			<?php submit_button( 'Borrar clave', 'secondary', 'submit', false ); ?>
+		</form>
+		<?php endif;
+	}
+
+	public static function vivabot_key_action(): void {
+		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( 'Sin permiso.', 403 ); }
+		check_admin_referer( 'cvd_vivabot_key' );
+		if ( 'revoke' === ( $_POST['do'] ?? '' ) ) {
+			delete_option( self::VIVABOT_OPTION );
+		} else {
+			$key = 'vb_' . bin2hex( random_bytes( 24 ) );
+			update_option( self::VIVABOT_OPTION, hash( 'sha256', $key ), false );
+			set_transient( 'cvd_vivabot_new_key_' . get_current_user_id(), $key, 300 );
+		}
+		wp_safe_redirect( admin_url( 'admin.php?page=cvd-curru' ) );
+		exit;
+	}
+
+	private static function vivabot_key_valid( string $key ): bool {
+		$hash = (string) get_option( self::VIVABOT_OPTION, '' );
+		return '' !== $hash && '' !== $key && hash_equals( $hash, hash( 'sha256', $key ) );
+	}
+
+	private static function vivabot_rate_limited(): bool {
+		$key = 'cvd_curru_rl_vivabot';
+		$count = (int) get_transient( $key );
+		if ( $count >= self::VIVABOT_LIMIT ) {
+			return true;
+		}
+		set_transient( $key, $count + 1, self::VIVABOT_WINDOW );
+		return false;
 	}
 
 	public static function name(): string {
@@ -200,14 +265,32 @@ final class CVD_Contextual_Assistant {
 	}
 
 	public static function ask( WP_REST_Request $request ) {
-		if ( self::rate_limited() ) {
+		$bot_key = $request->get_header( 'x_vivabot_key' );
+		$is_bot = null !== $bot_key && '' !== $bot_key;
+		if ( $is_bot ) {
+			// Una clave equivocada nunca cae al modo visitante.
+			if ( ! self::vivabot_key_valid( (string) $bot_key ) ) {
+				return new WP_Error( 'cvd_vivabot_unauthorized', 'Clave de VivaBot no válida.', array( 'status' => 401 ) );
+			}
+			if ( self::vivabot_rate_limited() ) {
+				return new WP_Error( 'cvd_curru_busy', 'Demasiadas preguntas de VivaBot. Reintenta en un minuto.', array( 'status' => 429 ) );
+			}
+			$context = (string) $request->get_param( 'context' );
+			if ( ! in_array( $context, self::VIVABOT_CONTEXTS, true ) ) {
+				return new WP_Error( 'cvd_vivabot_context', 'context debe ser cliente o gestora.', array( 'status' => 422 ) );
+			}
+		} elseif ( self::rate_limited() ) {
 			return new WP_Error( 'cvd_curru_busy', 'Has hecho muchas preguntas seguidas. Espera un momento y vuelve a intentarlo.', array( 'status' => 429 ) );
 		}
 		$question = trim( mb_substr( sanitize_text_field( (string) $request->get_param( 'question' ) ), 0, 240 ) );
 		if ( '' === $question ) {
 			return new WP_Error( 'cvd_curru_empty', 'Escribe tu pregunta.', array( 'status' => 422 ) );
 		}
-		$context = self::context();
+		if ( $is_bot ) {
+			error_log( 'Curru VivaBot: context=' . $context ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- auditoría, sin el texto de la pregunta.
+		} else {
+			$context = self::context();
+		}
 		$answer = CVD_Curru_AI::improve( $question, self::answer( $question, $context ), CVD_Curru_AI::history( $request->get_param( 'history' ) ), self::name(), $context );
 		$response = rest_ensure_response( $answer );
 		$response->header( 'Cache-Control', 'no-store' );
