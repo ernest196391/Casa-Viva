@@ -6,7 +6,7 @@ on:
       production_url:
         description: URL HTTPS pública a auditar
         required: false
-        default: https://casavivadecuba.com
+        default: https://casaviva.company
         type: string
   workflow_run:
     workflows: [Deploy prototype Casa Viva]
@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      PRODUCTION_URL: ${{ inputs.production_url || 'https://casavivadecuba.com' }}
+      PRODUCTION_URL: ${{ inputs.production_url || 'https://casaviva.company' }}
       PRODUCTION_EVIDENCE_DIR: prod-evidence
     steps:
       - name: Descargar repositorio

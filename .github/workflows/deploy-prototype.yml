@@ -12,9 +12,9 @@ permissions:
   contents: read
 
 env:
-  WP_PATH: /home/u824654880/domains/casavivadecuba.com/public_html
+  WP_PATH: /home/u824654880/domains/casaviva.company/public_html
   PLUGIN_SLUG: casa-viva-dropship-core
-  PROTOTYPE_URL: https://casavivadecuba.com
+  PROTOTYPE_URL: https://casaviva.company
   DEPLOY_SHA: ${{ inputs.expected_sha }}
 
 jobs:

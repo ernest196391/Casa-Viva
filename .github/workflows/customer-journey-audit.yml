@@ -8,7 +8,7 @@ on:
       production_url:
         description: URL HTTPS pública a recorrer
         required: false
-        default: https://casavivadecuba.com
+        default: https://casaviva.company
         type: string
 
 permissions:
@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      PRODUCTION_URL: ${{ inputs.production_url || 'https://casavivadecuba.com' }}
+      PRODUCTION_URL: ${{ inputs.production_url || 'https://casaviva.company' }}
       JOURNEY_EVIDENCE_DIR: journey-evidence
       JOURNEY_GESTORA_USER: ${{ secrets.JOURNEY_GESTORA_USER }}
       JOURNEY_GESTORA_PASS: ${{ secrets.JOURNEY_GESTORA_PASS }}
