@@ -1,0 +1,62 @@
+name: Aplicar fotos ampliadas del catálogo
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: dry-run (solo informe), apply (pone las fotos de data/catalog/upscaled-photos.json) o revert (vuelve a la foto anterior)
+        required: true
+        default: dry-run
+        type: choice
+        options: [dry-run, apply, revert]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-photos-apply
+  cancel-in-progress: false
+
+env:
+  WP_PATH: /home/u824654880/domains/casaviva.company/public_html
+
+jobs:
+  photos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '\n' >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Aplicar fotos (${{ inputs.mode }})
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          scp -P "$SSH_PORT" data/catalog/upscaled-photos.json "$SSH_USER@$SSH_HOST:/tmp/cvd-photos.json"
+          scp -P "$SSH_PORT" scripts/catalog/apply-photos.php "$SSH_USER@$SSH_HOST:/tmp/cvd-apply-photos.php"
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "cd '$WP_PATH' && CVD_PHOTOS_FILE=/tmp/cvd-photos.json CVD_PHOTOS_MODE='$MODE' wp eval-file /tmp/cvd-apply-photos.php" \
+            > raw-output.txt
+          sed -n '/^{/,$p' raw-output.txt > report.json
+          jq -r '"::notice title=Fotos (\(.mode))::\(.totals | to_entries | map("\(.key)=\(.value)") | join(" · "))"' report.json
+          jq -r '.errors[]? | "::warning title=\(.sku)::\(.error)"' report.json
+          jq -e '.totals.errors == 0' report.json >/dev/null
