@@ -48,6 +48,10 @@
 .cvd-curru-mic[hidden]{display:none}.cvd-curru-mic[aria-pressed=true]{background:#a35a1f;color:#fff}
 .cvd-curru-send{background:#006068;color:#fff}
 html.cvd-curru-open{overflow:hidden}
+/* Curru abierto: por encima de la barra inferior, la barra fija de compra y WhatsApp (la caja de escribir quedaba tapada en móvil). */
+html.cvd-curru-open .cvd-contextual-assistant{z-index:10000}
+html.cvd-curru-open .cvd-curru-backdrop{z-index:9999}
+html.cvd-curru-open .cvd-customer-nav,html.cvd-curru-open .cv-whatsapp{visibility:hidden}
 @keyframes cvdCurruIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @media(max-width:640px){.cvd-assistant-launcher{right:28px;bottom:108px;width:54px;height:54px}.cvd-curru-nudge{right:14px;bottom:172px}.cvd-contextual-assistant{width:100%;box-shadow:none}.cvd-curru-backdrop{display:none!important}}
 @media(prefers-reduced-motion:reduce){.cvd-curru-nudge button{animation:none}}

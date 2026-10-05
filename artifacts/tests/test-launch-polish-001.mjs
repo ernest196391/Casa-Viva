@@ -11,7 +11,7 @@ function must(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-must(plugin.includes("Version: 3.13.7") && plugin.includes("CVD_VERSION', '3.13.7"), 'La versión 3.13.7 debe identificar el candidato de launch polish.');
+must(plugin.includes("Version: 3.13.8") && plugin.includes("CVD_VERSION', '3.13.8"), 'La versión 3.13.8 debe identificar el candidato de launch polish.');
 must(plugin.includes('class-cvd-launch-polish.php') && plugin.includes('CVD_Launch_Polish::register()'), 'Launch polish debe cargarse y registrarse desde el Core.');
 must(php.includes('is_front_page()') && php.includes("$_SERVER['REQUEST_URI']") && php.includes("home_url( '/' )"), 'El alcance SEO/assets debe limitarse a la URL canónica de portada.');
 must(php.includes('pre_get_document_title'), 'Falta título técnico de portada.');
