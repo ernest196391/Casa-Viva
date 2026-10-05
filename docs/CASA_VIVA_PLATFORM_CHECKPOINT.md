@@ -4,15 +4,27 @@
 
 ```text
 FASE: 0 — Casa Viva Core estable
-SUBFASE ACTUAL: CV-PREMIUM-001 — Auditoría de recorrido y tienda premium móvil (3.13.x)
-ESTADO: 3.13.3 DESPLEGADO (PR #137, 3ddea86, deploy 37054576417 tras un reintento por fallo SSH, recorrido 37055066479 SUCCESS: barra fija visible y portada nueva); 3.13.4 en PR #138: Curru y WhatsApp alineados; 3.13.5 en PR (apilado sobre #138): pedido recibido, carrito y vale de WhatsApp al estilo Colo Shop
-SUBFASES ANTERIORES: CV-CURRU (3.11.0–3.12.1), CV-LAUNCH-POLISH-002, CV-CATALOG-SYNC y CV-LAUNCH-POLISH-001 — CERRADAS
-SHA DESPLEGADO: 3ddea86 (plugin 3.13.3)
-PRODUCCIÓN ANTERIOR (rollback): 16764a8 (3.13.2)
+SUBFASE ACTUAL: CV-HOME-DEALS — Portada con ofertas reales y tienda sin distracciones (3.13.9)
+DOMINIO: https://casaviva.company (WP_PATH /home/u824654880/domains/casaviva.company/public_html; workflows corregidos en PR #144)
+ESTADO: 3.13.7 DESPLEGADO (deploy 37298131338; el primer intento falló porque NEXO en Render estaba dormido y se revirtió solo). 3.13.9 en PR #146 (incluye 3.13.8, Curru en móvil), CI verde, pendiente de fusionar y desplegar
+SUBFASES ANTERIORES: CV-PREMIUM-001 (3.13.0–3.13.7), CV-CURRU (3.11.0–3.12.1), CV-LAUNCH-POLISH-002, CV-CATALOG-SYNC y CV-LAUNCH-POLISH-001 — CERRADAS
 NOTA: al fusionar cambios solo documentales, `main` puede avanzar sin que producción cambie
-DECISIÓN: Ernesto (2026-10-02): checkout sin confirmar pedido; Curru da existencias exactas a gestoras y solo estados a clientes; mantener identidad beige/verde; Higgsfield hasta 50 créditos, nunca para fotos de producto; destacar con ventana las ofertas ya existentes
-BLOQUEO: prueba en vivo como gestora requiere que Ernesto cree una cuenta de gestora de prueba y guarde JOURNEY_GESTORA_USER / JOURNEY_GESTORA_PASS como secretos de GitHub
+DECISIÓN: Ernesto (2026-10-02): checkout sin confirmar pedido; Curru da existencias exactas a gestoras y solo estados a clientes; mantener identidad beige/verde; destacar con ventana las ofertas ya existentes
+DECISIÓN: Ernesto (2026-10-05): quitar de la tienda todo lo que no lleve a la compra ni ayude a navegar; Higgsfield permitido para fotos y vídeos sin abuso; animaciones y ventanas orgánicas manteniendo la marca; número del negocio/bot 5354056173; recogida en la dirección de la web (Calle Conill A esquina 45 #864, Nuevo Vedado), 9:00–17:00; OpenAI ya activo en Curru
+CATÁLOGO: Sobrecama tiwn (BC-102299) retenida con `catalog-sync.yml` modo hold (run 37301636740); Aspiradora de Mano Inalámbrica ya oculta (no está en BizneCubano)
+PENDIENTE ANTES DE ENTREGAR: política de cambios, devoluciones y garantía; respuestas de las preguntas frecuentes de VivaBot (FALTAN); prueba real de VivaBot con Curru
+BLOQUEO: cuentas de prueba de gestora y dependienta las crea Ernesto en wp-admin y guarda JOURNEY_GESTORA_USER / JOURNEY_GESTORA_PASS como secretos de GitHub
 ```
+
+## CV-HOME-DEALS — Portada con ofertas reales (2026-10-05)
+
+Auditoría en móvil (390×844) de Amazon, Gymshark y Brooklinen (Shein y Temu bloquean con captcha): ninguna usa una foto con «Comprar ahora»; la primera pantalla enseña buscador, categorías, a dónde entregan y productos con precio. En Casa Viva el primer precio estaba a 1.381 px.
+
+- 3.13.8: Curru en móvil, la barra inferior (z-index 9998) tapaba la caja de escribir del panel (80). Con Curru abierto el panel sube a 10000 y se ocultan la barra inferior y el WhatsApp flotante.
+- 3.13.9: portada = buscador y categorías → «📍 Entregamos en La Habana · mira cuánto cuesta en tu zona» (tarifario) → «Ofertas de hoy» (hasta 8 rebajas reales de WooCommerce con -%, precio y Añadir/Elegir) → Más vendidos → Nuevos → Regala desde fuera → Ventajas. Sin rebajas solo sale la línea de entrega. Se ocultan la foto con «Comprar ahora», la estantería de ofertas repetida, «Comprar por habitación» y el Blog en la cabecera; la ventana de ofertas ya no sale en la portada. Reordenado con CSS sobre el tema `casa-viva-storefront` (no versionado en el repo). Primer precio a 657 px y botón Añadir a 731 px en la copia local verificada.
+- Curru: responde la dirección y el horario de recogida; la IA ya no recomienda productos en respuestas de mensajería, pagos o recogida.
+- Auditoría móvil de producción: nuevas comprobaciones de precio visible sin scroll y caja de Curru tocable.
+- `catalog-sync.yml`: modos `hold`/`unhold` con `skus`; lo retenido (`_cvd_hold`) no se republica.
 
 ## CV-PREMIUM-001 — Auditoría de recorrido y tienda premium (2026-10-02)
 
