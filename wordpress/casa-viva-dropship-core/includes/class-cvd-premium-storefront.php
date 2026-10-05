@@ -3,15 +3,14 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Capa visual premium de la tienda pública: portada con imagen, barra fija de compra en móvil,
+ * Capa visual premium de la tienda pública: portada con ofertas reales, barra fija de compra en móvil,
  * garantías junto al botón, disponibilidad honesta y aviso de ofertas reales.
  *
  * Solo presentación: no cambia productos, precios, stock, tarifas ni pedidos.
  */
 final class CVD_Premium_Storefront {
-	/** Imagen de portada generada para Casa Viva (sin productos). Se puede cambiar con el filtro cvd_home_hero_image. */
-	private const HERO_IMAGE = 'https://d8j0ntlcm91z4.cloudfront.net/user_3JKeIPPvD2MrM6gfmHcWhePZrny/hf_20261002_173408_6116c57a-ea84-4ced-b167-23cc7404b179_min.webp';
 	private const MAX_OFFERS = 4;
+	private const MAX_DEALS  = 8;
 	private static bool $hero_done = false;
 
 	public static function register(): void {
@@ -47,34 +46,58 @@ final class CVD_Premium_Storefront {
 		if ( is_admin() ) { return; }
 		wp_enqueue_style( 'cvd-premium-storefront', CVD_URL . 'assets/premium-storefront.css', array(), CVD_VERSION );
 		wp_enqueue_script( 'cvd-premium-storefront', CVD_URL . 'assets/premium-storefront.js', array(), CVD_VERSION, true );
-		if ( self::is_home() ) {
-			// La imagen de portada es lo primero que se ve: se pide antes que el resto.
-			add_action( 'wp_head', static fn() => print( '<link rel="preload" as="image" href="' . esc_url( self::hero_image() ) . '" fetchpriority="high">' . "\n" ), 2 );
-		}
 	}
 
-	private static function hero_image(): string {
-		return (string) apply_filters( 'cvd_home_hero_image', self::HERO_IMAGE );
-	}
-
+	/**
+	 * Portada: como Amazon o las tiendas Shopify que más venden, la primera pantalla enseña productos
+	 * reales con precio en lugar de una foto con «Comprar ahora». Arriba, a dónde entregamos y cuánto
+	 * cuesta; después, las ofertas reales de WooCommerce. Si no hay rebajas, solo sale la línea de entrega
+	 * y los «Más vendidos» del tema pasan a ser lo primero.
+	 */
 	public static function hero_html(): string {
-		$shop = function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'shop' ) : home_url( '/tienda/' );
-		// El segundo botón solo aparece si hay rebajas reales.
-		$offers = function_exists( 'wc_get_product_ids_on_sale' ) && wc_get_product_ids_on_sale() ? add_query_arg( 'cvd_ofertas', '1', $shop ) : '';
+		$shop   = function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'shop' ) : home_url( '/tienda/' );
+		$deals  = self::offers( self::MAX_DEALS );
+		$top    = 0;
+		foreach ( $deals as $product ) {
+			$top = max( $top, self::discount( $product ) );
+		}
 		ob_start();
 		?>
-		<section class="cvd-hero" aria-labelledby="cvd-hero-title">
-			<img class="cvd-hero__img" src="<?php echo esc_url( self::hero_image() ); ?>" alt="" width="1024" height="1536" fetchpriority="high" decoding="async">
-			<div class="cvd-hero__body">
-				<h2 id="cvd-hero-title" class="cvd-hero__title">Todo para tu casa, sin salir de ella.</h2>
-				<p class="cvd-hero__text">Pides en minutos y te lo llevamos en La Habana.</p>
-				<div class="cvd-hero__actions">
-					<a class="cvd-hero__cta" href="<?php echo esc_url( $shop ); ?>">Comprar ahora</a>
-					<?php if ( $offers ) : ?><a class="cvd-hero__cta cvd-hero__cta--ghost" href="<?php echo esc_url( $offers ); ?>">Ver ofertas</a><?php endif; ?>
+		<a class="cvd-deliver" href="<?php echo esc_url( home_url( '/tarifas-mensajeria/' ) ); ?>">
+			<span class="cvd-deliver__pin" aria-hidden="true">📍</span>
+			<span>Entregamos en La Habana · <strong>mira cuánto cuesta en tu zona</strong></span>
+			<span aria-hidden="true">›</span>
+		</a>
+		<?php if ( $deals ) : ?>
+		<section class="cvd-deals" aria-labelledby="cvd-deals-title">
+			<div class="cvd-deals__head">
+				<div>
+					<p class="cvd-deals__eyebrow">Ofertas de hoy</p>
+					<h2 id="cvd-deals-title" class="cvd-deals__title"><?php echo $top ? esc_html( sprintf( 'Hasta -%d%% en cosas para tu casa', $top ) ) : 'Precios rebajados para tu casa'; ?></h2>
 				</div>
-				<p class="cvd-hero__trust">✓ Confirmas tu pedido por WhatsApp</p>
+				<a class="cvd-deals__all" href="<?php echo esc_url( add_query_arg( 'cvd_ofertas', '1', $shop ) ); ?>">Ver todas</a>
 			</div>
+			<ul class="cvd-deals__rail">
+				<?php foreach ( $deals as $i => $product ) : $off = self::discount( $product ); ?>
+				<li class="cvd-deal" style="--i:<?php echo (int) $i; ?>">
+					<a class="cvd-deal__link" href="<?php echo esc_url( $product->get_permalink() ); ?>">
+						<span class="cvd-deal__media">
+							<?php echo wp_kses_post( $product->get_image( 'woocommerce_thumbnail', array( 'loading' => $i < 2 ? 'eager' : 'lazy', 'fetchpriority' => 0 === $i ? 'high' : 'auto', 'alt' => '' ) ) ); ?>
+							<?php if ( $off ) : ?><span class="cvd-deal__badge">-<?php echo esc_html( (string) $off ); ?>%</span><?php endif; ?>
+						</span>
+						<span class="cvd-deal__name"><?php echo esc_html( $product->get_name() ); ?></span>
+						<span class="cvd-deal__price"><?php echo wp_kses_post( $product->get_price_html() ); ?></span>
+					</a>
+					<?php if ( $product->is_type( 'simple' ) && $product->is_purchasable() && $product->is_in_stock() ) : ?>
+						<a class="cvd-deal__add add_to_cart_button ajax_add_to_cart" href="<?php echo esc_url( $product->add_to_cart_url() ); ?>" data-product_id="<?php echo esc_attr( (string) $product->get_id() ); ?>" data-quantity="1" rel="nofollow" aria-label="<?php echo esc_attr( 'Añadir ' . $product->get_name() . ' al carrito' ); ?>">Añadir</a>
+					<?php else : ?>
+						<a class="cvd-deal__add cvd-deal__add--ghost" href="<?php echo esc_url( $product->get_permalink() ); ?>" aria-label="<?php echo esc_attr( 'Elegir modelo de ' . $product->get_name() ); ?>">Elegir</a>
+					<?php endif; ?>
+				</li>
+				<?php endforeach; ?>
+			</ul>
 		</section>
+		<?php endif; ?>
 		<?php
 		return (string) ob_get_clean();
 	}
@@ -155,7 +178,7 @@ final class CVD_Premium_Storefront {
 	}
 
 	/** @return WC_Product[] */
-	private static function offers(): array {
+	private static function offers( int $max = self::MAX_OFFERS ): array {
 		$out = array();
 		foreach ( wc_get_product_ids_on_sale() as $id ) {
 			$product = wc_get_product( $id );
@@ -168,7 +191,7 @@ final class CVD_Premium_Storefront {
 			if ( 'publish' === $product->get_status() && $product->is_visible() && $product->is_in_stock() ) {
 				$out[ $product->get_id() ] = $product;
 			}
-			if ( count( $out ) >= self::MAX_OFFERS ) {
+			if ( count( $out ) >= $max ) {
 				break;
 			}
 		}
@@ -176,7 +199,8 @@ final class CVD_Premium_Storefront {
 	}
 
 	private static function offers_dialog(): void {
-		if ( ! self::shopper() || is_cart() || is_checkout() || is_account_page() || is_product() || ! empty( $_GET['cvd_ofertas'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		// En la portada las ofertas ya son lo primero que se ve: la ventana solo sale en tienda y categorías.
+		if ( ! self::shopper() || self::is_home() || is_cart() || is_checkout() || is_account_page() || is_product() || ! empty( $_GET['cvd_ofertas'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			return;
 		}
 		$offers = self::offers();

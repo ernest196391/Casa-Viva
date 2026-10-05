@@ -43,6 +43,8 @@ $shipping = CVD_Contextual_Assistant::answer( '¿Cuánto cuesta la mensajería?'
 $assert( array() === $shipping['products'] && ! empty( $shipping['links'] ), 'la mensajería responde con la tabla oficial, sin productos.' );
 $none = CVD_Contextual_Assistant::answer( 'xilofono cuantico', 'visitante' );
 $assert( array() === $none['products'] && false !== strpos( $none['answer'], 'No encontré' ), 'sin resultados lo dice claramente.' );
+$pickup = CVD_Contextual_Assistant::answer( '¿Dónde recojo mi pedido?', 'cliente' );
+$assert( false !== strpos( $pickup['answer'], 'Conill' ) && array() === $pickup['products'], 'la recogida da la dirección de la tienda, sin productos.' );
 $order = CVD_Contextual_Assistant::answer( 'dónde está mi pedido', 'mensajero' );
 $assert( false !== strpos( $order['links'][0]['url'], 'ruta-cv' ), 'el mensajero va a su Ruta.' );
 

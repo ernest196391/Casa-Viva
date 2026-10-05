@@ -11,6 +11,8 @@
  *   Cada cambio de cantidad queda en el libro de movimientos de inventario como conteo;
  * - lo publicado que no está en BizneCubano (BC retirados, NEXO y otros) se oculta como privado,
  *   guardando el estado anterior en `_cvd_sync_hidden_from` para poder restaurarlo;
+ * - lo retenido a mano (modo hold, meta `_cvd_hold`) sigue privado aunque esté en BizneCubano;
+ *   el modo unhold lo devuelve a la sincronización normal;
  * - nunca borra nada ni toca pedidos, comisiones ni payouts;
  * - idempotente: repetirlo no duplica productos ni movimientos.
  */
@@ -18,7 +20,7 @@
 defined( 'ABSPATH' ) || exit( 1 );
 
 $file  = getenv( 'CVD_SYNC_FILE' ) ?: '/tmp/biznecubano.json';
-$mode  = in_array( getenv( 'CVD_SYNC_MODE' ), array( 'apply', 'restore' ), true ) ? getenv( 'CVD_SYNC_MODE' ) : 'dry-run';
+$mode  = in_array( getenv( 'CVD_SYNC_MODE' ), array( 'apply', 'restore', 'hold', 'unhold' ), true ) ? getenv( 'CVD_SYNC_MODE' ) : 'dry-run';
 $limit = (int) ( getenv( 'CVD_SYNC_LIMIT' ) ?: 0 );
 $apply = 'apply' === $mode;
 
@@ -35,6 +37,30 @@ if ( 'restore' === $mode ) {
 		$restored[] = array( 'id' => $product->get_id(), 'sku' => $product->get_sku(), 'name' => $product->get_name() );
 	}
 	echo wp_json_encode( array( 'mode' => 'restore', 'restored' => $restored, 'totals' => array( 'restored' => count( $restored ) ) ), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) . "\n";
+	return;
+}
+
+// Retener: oculta los SKU indicados y evita que la sincronización los vuelva a publicar.
+if ( 'hold' === $mode || 'unhold' === $mode ) {
+	$skus = array_filter( array_map( 'trim', explode( ',', (string) getenv( 'CVD_SYNC_SKUS' ) ) ) );
+	$done = array();
+	foreach ( $skus as $sku ) {
+		$id      = wc_get_product_id_by_sku( $sku );
+		$product = $id ? wc_get_product( $id ) : null;
+		if ( ! $product instanceof WC_Product ) {
+			$done[] = array( 'sku' => $sku, 'error' => 'no existe' );
+			continue;
+		}
+		if ( 'hold' === $mode ) {
+			$product->update_meta_data( '_cvd_hold', gmdate( 'c' ) );
+			$product->set_status( 'private' );
+		} else {
+			$product->delete_meta_data( '_cvd_hold' );
+		}
+		$product->save();
+		$done[] = array( 'id' => $product->get_id(), 'sku' => $sku, 'name' => $product->get_name(), 'status' => $product->get_status() );
+	}
+	echo wp_json_encode( array( 'mode' => $mode, 'products' => $done, 'totals' => array( $mode => count( $done ) ) ), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) . "\n";
 	return;
 }
 
@@ -175,6 +201,9 @@ function cvd_sync_stock( WC_Product $product, array $p, bool $apply ): ?array {
 
 /** Publica un producto que está en BizneCubano si estaba en borrador u oculto por la sincronización. */
 function cvd_sync_publish( WC_Product $product, bool $apply ): bool {
+	if ( '' !== (string) $product->get_meta( '_cvd_hold' ) ) {
+		return false;
+	}
 	$hidden_from = (string) $product->get_meta( '_cvd_sync_hidden_from' );
 	if ( 'publish' === $product->get_status() && '' === $hidden_from ) {
 		return false;

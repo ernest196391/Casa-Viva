@@ -4,15 +4,20 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: dry-run (solo informe) apply (precios, stock, publica lo de BizneCubano y oculta lo demás) o restore (vuelve a mostrar lo ocultado)
+        description: dry-run (solo informe) apply (precios, stock, publica lo de BizneCubano y oculta lo demás) restore (vuelve a mostrar lo ocultado), hold (oculta los SKU indicados y no los republica) o unhold
         required: true
         default: dry-run
         type: choice
-        options: [dry-run, apply, restore]
+        options: [dry-run, apply, restore, hold, unhold]
       limit:
         description: Máximo de productos nuevos a crear (0 = sin límite)
         required: false
         default: '0'
+        type: string
+      skus:
+        description: SKU separados por comas (solo hold/unhold), p. ej. BC-102299
+        required: false
+        default: ''
         type: string
 
 permissions:
@@ -64,13 +69,14 @@ jobs:
           SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
           MODE: ${{ inputs.mode }}
           LIMIT: ${{ inputs.limit }}
+          SKUS: ${{ inputs.skus }}
         run: |
           set -euo pipefail
           scp -P "$SSH_PORT" biznecubano.json "$SSH_USER@$SSH_HOST:/tmp/cvd-biznecubano.json"
           scp -P "$SSH_PORT" scripts/catalog/biznecubano-sync.php "$SSH_USER@$SSH_HOST:/tmp/cvd-biznecubano-sync.php"
           mkdir -p catalog-sync
           ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            "cd '$WP_PATH' && CVD_SYNC_FILE=/tmp/cvd-biznecubano.json CVD_SYNC_MODE='$MODE' CVD_SYNC_LIMIT='${LIMIT:-0}' wp eval-file /tmp/cvd-biznecubano-sync.php" \
+            "cd '$WP_PATH' && CVD_SYNC_FILE=/tmp/cvd-biznecubano.json CVD_SYNC_MODE='$MODE' CVD_SYNC_LIMIT='${LIMIT:-0}' CVD_SYNC_SKUS='${SKUS}' wp eval-file /tmp/cvd-biznecubano-sync.php" \
             > catalog-sync/raw-output.txt
           # Plugins de caché del hosting imprimen avisos ("Success: ...") antes del JSON.
           sed -n '/^{/,$p' catalog-sync/raw-output.txt > catalog-sync/report.json

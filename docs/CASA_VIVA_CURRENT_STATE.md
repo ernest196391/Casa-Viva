@@ -73,7 +73,7 @@ Flujo validado:
 
 Evidencia operativa final:
 
-- sitio prototipo: `https://casavivadecuba.com`;
+- sitio prototipo: `https://casavivadecuba.com` (desde octubre de 2026 la tienda está en `https://casaviva.company`, WP_PATH `/home/u824654880/domains/casaviva.company/public_html`, PR #144);
 - WordPress observado: `7.0.4`;
 - PHP CLI observado: `8.2.30`;
 - WooCommerce observado: `10.9.4`;
