@@ -13,7 +13,7 @@ main.cv-market-home>#ofertas{order:7}
 main.cv-market-home>.cv-market-benefits{order:8}
 main.cv-market-home:has(>.cvd-deals)>#ofertas,main.cv-market-home>#habitaciones{display:none}
 /* Cabecera de ordenador: logo a la izquierda y menú a la derecha; centrado con márgenes automáticos, el menú se montaba sobre el logo en ventanas medianas. */
-@media(min-width:821px){.cv-header__inner{justify-content:space-between!important;gap:24px}.cv-header__inner>.cv-brand{margin:0!important;flex-shrink:0}.cv-header__inner>.cv-nav{flex-shrink:0;white-space:nowrap}}
+@media(min-width:821px){.cv-header__inner{justify-content:space-between!important;gap:24px}.cv-header__inner>.cv-brand{margin:0!important;flex:0 0 auto;width:auto!important;min-width:max-content}.cv-header__inner>.cv-nav{flex:1 1 auto;min-width:0;flex-wrap:wrap;justify-content:flex-end;row-gap:8px;white-space:nowrap}}
 /* El blog no ayuda a comprar: fuera de la cabecera y del menú (sigue en el pie). */
 header li:has(>a[href*="/blog"]),header a[href*="/blog"]{display:none!important}
 
@@ -55,14 +55,12 @@ header li:has(>a[href*="/blog"]),header a[href*="/blog"]{display:none!important}
  .cvd-deals__rail{grid-auto-flow:row;grid-template-columns:repeat(4,minmax(0,1fr));margin:0;padding:2px 0;overflow:visible}
 }
 
-/* Animaciones suaves al aparecer (solo si el script está activo y la persona no pidió menos movimiento) */
+/* Animación de entrada de las ofertas: solo CSS y siempre termina visible (antes dependía de detectar el scroll y en algunos móviles dejaba secciones en blanco). */
 @media(prefers-reduced-motion:no-preference){
- .cvd-anim .cvd-deal{opacity:0;transform:translateY(14px)}
- .cvd-anim .cvd-deal.is-in{opacity:1;transform:none;transition:opacity .45s ease calc(var(--i,0) * 70ms),transform .45s cubic-bezier(.2,.7,.2,1) calc(var(--i,0) * 70ms)}
- .cvd-anim .cvd-deal.is-in .cvd-deal__badge{animation:cvdBadgePop .5s cubic-bezier(.3,1.6,.5,1) calc(var(--i,0) * 70ms + .3s) both}
- .cvd-anim main.cv-market-home>.cv-market-section,.cvd-anim main.cv-market-home>.cv-container,.cvd-anim main.cv-market-home>.cv-market-benefits{opacity:0;transform:translateY(18px);transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.2,1)}
- .cvd-anim main.cv-market-home>.is-in{opacity:1;transform:none}
+ .cvd-deal{animation:cvdDealIn .45s cubic-bezier(.2,.7,.2,1) calc(var(--i,0) * 70ms) both}
+ .cvd-deal__badge{animation:cvdBadgePop .5s cubic-bezier(.3,1.6,.5,1) calc(var(--i,0) * 70ms + .3s) both}
 }
+@keyframes cvdDealIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 @keyframes cvdBadgePop{from{transform:scale(.4);opacity:0}to{transform:none;opacity:1}}
 
 /* Precios y ofertas con los colores de la marca */

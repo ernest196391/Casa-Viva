@@ -8,21 +8,6 @@
     if (target) target.prepend(template.content.cloneNode(true));
   }
 
-  // Aparición suave de las tarjetas y secciones al entrar en pantalla. Sin script o sin
-  // IntersectionObserver todo se ve igual, solo que sin animación.
-  const reveal = [...document.querySelectorAll(".cvd-deal, main.cv-market-home > .cv-market-section, main.cv-market-home > .cv-container, main.cv-market-home > .cv-market-benefits")];
-  if (reveal.length && "IntersectionObserver" in window && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    root.classList.add("cvd-anim");
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        entry.target.classList.add("is-in");
-        io.unobserve(entry.target);
-      });
-    }, { rootMargin: "0px 0px -6% 0px", threshold: 0.05 });
-    reveal.forEach((el) => io.observe(el));
-  }
-
   // Barra fija de compra: aparece cuando el botón original sale de la pantalla.
   const bar = document.querySelector("[data-cvd-buybar]");
   const form = document.querySelector("form.cart");
