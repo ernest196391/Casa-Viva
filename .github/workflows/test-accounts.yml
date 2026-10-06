@@ -1,0 +1,57 @@
+name: Cuentas de prueba (gestora)
+
+# Solo para la auditoría automática: lista las cuentas de prueba o crea la gestora de prueba con el
+# usuario y la contraseña guardados en los secretos JOURNEY_GESTORA_USER / JOURNEY_GESTORA_PASS.
+# La contraseña viaja por la entrada estándar de SSH: no aparece en la línea de comandos ni en el log.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: list (ver usuarios de prueba) o create-gestora (crear o actualizar la gestora de prueba)
+        required: true
+        default: list
+        type: choice
+        options: [list, create-gestora]
+
+permissions:
+  contents: read
+
+env:
+  WP_PATH: /home/u824654880/domains/casaviva.company/public_html
+
+jobs:
+  accounts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Preparar SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '\n' >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Cuentas (${{ inputs.mode }})
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          GESTORA_USER: ${{ secrets.JOURNEY_GESTORA_USER }}
+          GESTORA_PASS: ${{ secrets.JOURNEY_GESTORA_PASS }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [ "$MODE" = "create-gestora" ]; then
+            printf '%s' "$GESTORA_PASS" | ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+              "cd '$WP_PATH' && PASS=\$(cat) && if wp user get '$GESTORA_USER' --field=ID >/dev/null 2>&1; then wp user update '$GESTORA_USER' --user_pass=\"\$PASS\" --role=cvd_gestora --skip-email; else wp user create '$GESTORA_USER' '$GESTORA_USER@casaviva.company' --role=cvd_gestora --display_name='Gestora Prueba' --user_pass=\"\$PASS\" --porcelain; fi"
+          fi
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "cd '$WP_PATH' && wp user list --role__in=cvd_gestora,cvd_clerk,cvd_messenger --fields=user_login,roles,user_registered --format=table"
