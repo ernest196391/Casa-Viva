@@ -1,12 +1,12 @@
 // Instantánea de solo lectura del catálogo público de Casa Viva en BizneCubano
-// y del catálogo WooCommerce público de casavivadecuba.com (Store API).
+// y del catálogo WooCommerce público de casaviva.company (Store API).
 // No inicia sesión, no añade al carrito y no envía formularios.
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from '@playwright/test';
 
 const SOURCE = (process.env.SOURCE_URL || 'https://casaviva.biznecubano.com').replace(/\/$/, '');
-const TARGET = (process.env.TARGET_URL || 'https://casavivadecuba.com').replace(/\/$/, '');
+const TARGET = (process.env.TARGET_URL || 'https://casaviva.company').replace(/\/$/, '');
 const OUT = process.env.OUT_DIR || 'catalog-snapshot';
 const MAX_PAGES = Number(process.env.MAX_PAGES || 30);
 const DISCOVERY = process.env.DISCOVERY === '1';
@@ -111,12 +111,14 @@ for (const url of urls) {
   if (DISCOVERY) Object.assign(entry, { raw: data, api: apiLog.map((a) => ({ ...a })) });
   if (DISCOVERY) entry.api = apiLog.map((a) => ({ ...a }));
   products.push(entry);
-  console.log(`producto ${products.length}/${urls.length}: ${entry.title}`);
+  console.log(`producto ${products.length}/${urls.length}: ${entry.name || entry.code}`);
 }
 fs.writeFileSync(path.join(OUT, 'biznecubano.json'), JSON.stringify({ source: SOURCE, generated_at: new Date().toISOString(), count: products.length, products }, null, 2));
 
 // 3. Catálogo WooCommerce público actual (Store API, solo lectura).
+// Si la tienda no responde, la instantánea de BizneCubano (lo que importa NEXO Business) se publica igual.
 const woo = [];
+try {
 for (let n = 1; n <= 50; n++) {
   const res = await context.request.get(`${TARGET}/wp-json/wc/store/v1/products?per_page=100&page=${n}`);
   if (!res.ok()) { console.log(`woo página ${n}: HTTP ${res.status()}`); break; }
@@ -129,6 +131,9 @@ for (let n = 1; n <= 50; n++) {
     images: (p.images || []).map((i) => i.src), short_description: p.short_description,
   })));
   if (items.length < 100) break;
+}
+} catch (e) {
+  console.log(`woo: no se pudo leer ${TARGET} (${e.message.split('\n')[0]})`);
 }
 fs.writeFileSync(path.join(OUT, 'woocommerce.json'), JSON.stringify({ target: TARGET, generated_at: new Date().toISOString(), count: woo.length, products: woo }, null, 2));
 console.log(`BizneCubano: ${products.length} productos · WooCommerce: ${woo.length} productos`);

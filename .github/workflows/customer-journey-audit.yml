@@ -61,6 +61,8 @@ jobs:
           cp journey-output.log journey-evidence/ 2>/dev/null || true
           cd journey-evidence
           git init -q -b evidence
+          # Estas ramas solo guardan datos: que Vercel no intente publicarlas
+          printf '{"git":{"deploymentEnabled":false}}\n' > vercel.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
