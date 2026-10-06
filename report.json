@@ -1,0 +1,309 @@
+{
+  "base_url": "https://casaviva.company",
+  "generated_at": "2026-10-06T01:24:10.611Z",
+  "steps": [
+    {
+      "name": "portada",
+      "ok": true,
+      "note": "",
+      "ms": 1718,
+      "screenshot": "01-portada.png",
+      "console_errors": [],
+      "url": "https://casaviva.company/",
+      "title": "Casa Viva | Tienda online para el hogar en La Habana",
+      "scroll_x": true,
+      "small_taps": 50
+    },
+    {
+      "name": "categoria",
+      "ok": true,
+      "note": "https://casaviva.company/categoria-producto/habitacion/",
+      "ms": 850,
+      "screenshot": "02-categoria.png",
+      "console_errors": [],
+      "url": "https://casaviva.company/categoria-producto/habitacion/",
+      "title": "Habitación – casaviva.company",
+      "scroll_x": false,
+      "small_taps": 12
+    },
+    {
+      "name": "producto",
+      "ok": true,
+      "note": "https://casaviva.company/producto/albornoz-talla-l-beige/",
+      "ms": 834,
+      "screenshot": "03-producto.png",
+      "console_errors": [],
+      "url": "https://casaviva.company/producto/albornoz-talla-l-beige/",
+      "title": "Albornoz (talla L) beige – casaviva.company",
+      "scroll_x": false,
+      "small_taps": 12
+    },
+    {
+      "name": "producto-detalle",
+      "ok": true,
+      "note": "{\"gallery\":1,\"description\":0,\"stock\":\"Disponible\",\"price\":\"US$38.00\",\"variable\":false,\"reviews\":false}",
+      "ms": 120,
+      "screenshot": "04-producto-detalle.png",
+      "console_errors": [],
+      "url": "https://casaviva.company/producto/albornoz-talla-l-beige/",
+      "title": "Albornoz (talla L) beige – casaviva.company",
+      "scroll_x": false,
+      "small_taps": 12
+    },
+    {
+      "name": "anadir-al-carrito",
+      "ok": true,
+      "note": "“Albornoz (talla L) beige” se ha añadido a tu carrito. Ver carrito",
+      "ms": 3533,
+      "screenshot": "05-anadir-al-carrito.png",
+      "console_errors": [],
+      "url": "https://casaviva.company/producto/albornoz-talla-l-beige/",
+      "title": "Albornoz (talla L) beige – casaviva.company",
+      "scroll_x": false,
+      "small_taps": 12
+    },
+    {
+      "name": "carrito",
+      "ok": true,
+      "note": "2 artículo(s)",
+      "ms": 1294,
+      "screenshot": "06-carrito.png",
+      "console_errors": [],
+      "url": "https://casaviva.company/carrito/",
+      "title": "Carrito – casaviva.company",
+      "scroll_x": false,
+      "small_taps": 7
+    },
+    {
+      "name": "checkout-sin-confirmar",
+      "ok": true,
+      "note": "22 campos visibles",
+      "ms": 1014,
+      "screenshot": "07-checkout-sin-confirmar.png",
+      "console_errors": [],
+      "url": "https://casaviva.company/finalizar-compra/",
+      "title": "Finalizar compra – casaviva.company",
+      "scroll_x": false,
+      "small_taps": 14
+    },
+    {
+      "name": "cliente-pregunta-curru",
+      "ok": true,
+      "note": "",
+      "ms": 3384,
+      "screenshot": "10-cliente-pregunta-curru.png",
+      "console_errors": [],
+      "url": "https://casaviva.company/",
+      "title": "Casa Viva | Tienda online para el hogar en La Habana",
+      "scroll_x": true,
+      "small_taps": 50
+    },
+    {
+      "name": "gestora-login",
+      "ok": true,
+      "note": "",
+      "ms": 2084,
+      "screenshot": "11-gestora-login.png",
+      "console_errors": [],
+      "url": "https://casaviva.company/area-gestoras/",
+      "title": "Gestoras · Acceso – casaviva.company",
+      "scroll_x": false,
+      "small_taps": 7
+    },
+    {
+      "name": "gestora-area",
+      "ok": true,
+      "note": "https://casaviva.company/area-gestoras/",
+      "ms": 606,
+      "screenshot": "12-gestora-area.png",
+      "console_errors": [],
+      "url": "https://casaviva.company/area-gestoras/",
+      "title": "Gestoras · Acceso – casaviva.company",
+      "scroll_x": false,
+      "small_taps": 7
+    },
+    {
+      "name": "gestora-pregunta-curru",
+      "ok": true,
+      "note": "",
+      "ms": 3665,
+      "screenshot": "15-gestora-pregunta-curru.png",
+      "console_errors": [],
+      "url": "https://casaviva.company/",
+      "title": "Casa Viva | Tienda online para el hogar en La Habana",
+      "scroll_x": true,
+      "small_taps": 50
+    }
+  ],
+  "curru": [
+    {
+      "who": "cliente",
+      "question": "¿Tienen toallas? ¿Cuántas quedan?",
+      "ms": 1414,
+      "status": 200,
+      "ai": true,
+      "answer": "Tenemos varias toallas disponibles, desde tamaño pequeño hasta 70x140 cm en varios colores. Algunas están en últimas unidades, así que aprovecha. ¿Quieres que te muestre las opciones?",
+      "products": [
+        {
+          "name": "Toalla Cisne Blanco 70x140 cm ( verde)",
+          "price": "US$18.00",
+          "inStock": true,
+          "stock": null
+        },
+        {
+          "name": "Toalla Cisne Blanco 70x140 cm (rosada)",
+          "price": "US$18.00",
+          "inStock": true,
+          "stock": null
+        },
+        {
+          "name": "Toalla Cisne Blanco 70x140 cm (azul)",
+          "price": "US$18.00",
+          "inStock": true,
+          "stock": null
+        },
+        {
+          "name": "Toalla Cisne Blanco 70x140 cm (beige)",
+          "price": "US$18.00",
+          "inStock": true,
+          "stock": null
+        }
+      ],
+      "links": [],
+      "screenshot": "08-curru-cliente.png"
+    },
+    {
+      "who": "cliente",
+      "question": "¿Cuánto cuesta el envío a Playa?",
+      "ms": 1284,
+      "status": 200,
+      "ai": true,
+      "answer": "El envío a Playa cuesta 1800 CUP. Si quieres, puedes ver más tarifas por zona.",
+      "products": [],
+      "links": [
+        "Ver tarifas por zona"
+      ],
+      "screenshot": "09-curru-cliente.png"
+    },
+    {
+      "who": "gestora",
+      "question": "¿Hay albornoces? ¿Cuántos quedan de cada modelo?",
+      "ms": 1695,
+      "status": 200,
+      "ai": true,
+      "answer": "Claro, tenemos albornoces talla L beige y beige oscuro, quedan 2 de cada uno. El albornoz azul está agotado, pero hay batas de baño en varios colores con 14 unidades en total.",
+      "products": [
+        {
+          "name": "Albornoz (talla L) beige",
+          "price": "US$38.00",
+          "inStock": true,
+          "stock": 2
+        },
+        {
+          "name": "Albornoz (talla L) beige oscuro",
+          "price": "US$38.00",
+          "inStock": true,
+          "stock": 2
+        },
+        {
+          "name": "Bata de baño",
+          "price": "US$20.00",
+          "inStock": true,
+          "stock": null
+        }
+      ],
+      "links": [],
+      "screenshot": "13-curru-gestora.png"
+    },
+    {
+      "who": "gestora",
+      "question": "¿Cuántas sartenes quedan en existencia?",
+      "ms": 1114,
+      "status": 200,
+      "ai": true,
+      "answer": "Actualmente tenemos 2 juegos de ollas disponibles en existencia.",
+      "products": [
+        {
+          "name": "Juego de ollas",
+          "price": "US$50.00",
+          "inStock": true,
+          "stock": 2
+        }
+      ],
+      "links": [],
+      "screenshot": "14-curru-gestora.png"
+    }
+  ],
+  "issues": [],
+  "product": {
+    "url": "https://casaviva.company/producto/albornoz-talla-l-beige/",
+    "gallery": 1,
+    "description": 0,
+    "stock": "Disponible",
+    "price": "US$38.00",
+    "variable": false,
+    "reviews": false
+  },
+  "buybar": {
+    "exists": true,
+    "hidden": false,
+    "display": "flex",
+    "bar": {
+      "top": 706,
+      "bottom": 772,
+      "height": 66
+    },
+    "submit": {
+      "top": 752,
+      "bottom": 799,
+      "height": 47
+    },
+    "nav": {
+      "top": 765,
+      "bottom": 844,
+      "height": 79
+    },
+    "viewport": 844,
+    "bodyClass": true,
+    "script": true,
+    "scrollY": 0
+  },
+  "cart": {
+    "items": 2,
+    "total": "Total estimado"
+  },
+  "checkout": {
+    "url": "https://casaviva.company/finalizar-compra/",
+    "fields": 22,
+    "required": 9,
+    "labels": [
+      "¿Cómo quieres recibir tu compra? *",
+      "Recogida en tienda *",
+      "Nombre de quien recibe *",
+      "Apellidos de quien recibe *",
+      "WhatsApp o teléfono de quien recibe *",
+      "Teléfono alternativo (opcional)",
+      "Nombre de quien compra o paga (opcional)",
+      "Correo de quien compra (opcional)",
+      "Provincia *",
+      "Municipio *",
+      "Reparto o localidad *",
+      "Calle, número y edificio *",
+      "Entre calles, apartamento o piso (opcional)",
+      "Punto de referencia para el mensajero (opcional)",
+      "Fecha solicitada de entrega (opcional)",
+      "Horario preferido (opcional)",
+      "Necesita vuelto de (opcional)",
+      "Moneda del vuelto (opcional)",
+      "Ubicación exacta (opcional)",
+      "Indicaciones adicionales (opcional)",
+      "Confirmar y coordinar por WhatsApp",
+      "Pago por transferencia"
+    ],
+    "payment": [
+      "Confirmar y coordinar por WhatsApp",
+      "Pago por transferencia"
+    ],
+    "guest": true
+  }
+}
