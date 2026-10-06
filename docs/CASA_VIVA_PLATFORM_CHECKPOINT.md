@@ -13,7 +13,8 @@ DECISIÓN: Ernesto (2026-10-02): checkout sin confirmar pedido; Curru da existen
 DECISIÓN: Ernesto (2026-10-05): quitar de la tienda todo lo que no lleve a la compra ni ayude a navegar; Higgsfield permitido para fotos y vídeos sin abuso; animaciones y ventanas orgánicas manteniendo la marca; número del negocio/bot 5354056173; recogida en la dirección de la web (Calle Conill A esquina 45 #864, Nuevo Vedado), 9:00–17:00; OpenAI ya activo en Curru
 CATÁLOGO: Sobrecama tiwn (BC-102299) retenida con `catalog-sync.yml` modo hold (run 37301636740); Aspiradora de Mano Inalámbrica ya oculta (no está en BizneCubano)
 PENDIENTE ANTES DE ENTREGAR: política de cambios, devoluciones y garantía; respuestas de las preguntas frecuentes de VivaBot (FALTAN); prueba real de VivaBot con Curru
-BLOQUEO: cuentas de prueba de gestora y dependienta las crea Ernesto en wp-admin y guarda JOURNEY_GESTORA_USER / JOURNEY_GESTORA_PASS como secretos de GitHub
+CUENTAS DE PRUEBA: gestora de prueba creada con `test-accounts.yml` (secretos JOURNEY_GESTORA_*); recorrido clienta + gestora 100 % verde el 2026-10-06; dependienta piloto existente: cv_dependienta_piloto
+FOTOS: 44 fotos reales ampliadas a 2K con Higgsfield (118 créditos) aplicadas con `catalog-photos-apply.yml` (revert disponible); 15 descartadas porque la IA deformaba etiquetas o texto
 ```
 
 ## CV-HOME-DEALS — Portada con ofertas reales (2026-10-05)
