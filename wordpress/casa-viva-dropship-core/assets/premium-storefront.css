@@ -26,9 +26,9 @@ header li:has(>a[href*="/blog"]),header a[href*="/blog"]{display:none!important}
 .cvd-deals__eyebrow{margin:0 0 2px;text-align:left;color:var(--cvd-sale);font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
 .cvd-deals__title{margin:0;text-align:left;color:var(--cvd-green);font-family:Georgia,"Times New Roman",serif;font-size:clamp(22px,6vw,30px);font-weight:500;line-height:1.1}
 .cvd-deals__all{flex:0 0 auto;color:var(--cvd-green)!important;font-size:14px;font-weight:800;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
-.cvd-deals__rail{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(150px,44%);gap:12px;margin:0 -16px;padding:2px 16px 10px;list-style:none;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scroll-padding:0 16px;scrollbar-width:none}
+.cvd-deals__rail{position:relative;contain:paint;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(150px,44%);gap:12px;margin:0 -16px;padding:2px 16px 10px;list-style:none;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scroll-padding:0 16px;scrollbar-width:none}
 .cvd-deals__rail::-webkit-scrollbar{display:none}
-.cvd-deal{display:grid;grid-template-rows:1fr auto;gap:8px;margin:0;padding:8px;border:1px solid var(--cvd-line);border-radius:18px;background:#fff;scroll-snap-align:start}
+.cvd-deal{position:relative;display:grid;grid-template-rows:1fr auto;gap:8px;margin:0;padding:8px;border:1px solid var(--cvd-line);border-radius:18px;background:#fff;scroll-snap-align:start}
 .cvd-deal__link{display:grid;align-content:start;gap:6px;color:var(--cvd-ink)!important;text-decoration:none!important}
 .cvd-deal__media{position:relative;display:block;overflow:hidden;border-radius:12px;background:#f4efe6}
 .cvd-deal__media img{display:block;width:100%;height:auto;aspect-ratio:1/1;object-fit:cover;transition:transform .5s ease}
