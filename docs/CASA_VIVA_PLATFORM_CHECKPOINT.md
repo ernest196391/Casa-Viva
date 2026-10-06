@@ -4,15 +4,17 @@
 
 ```text
 FASE: 0 — Casa Viva Core estable
-SUBFASE ACTUAL: CV-HOME-DEALS — Portada con ofertas reales y tienda sin distracciones (3.13.9)
+SUBFASE ACTUAL: CV-ENTREGA — Entrega a la dueña (ver docs/CASA_VIVA_ENTREGA_DUENA.md)
 DOMINIO: https://casaviva.company (WP_PATH /home/u824654880/domains/casaviva.company/public_html; workflows corregidos en PR #144)
-ESTADO: 3.13.7 DESPLEGADO (deploy 37298131338; el primer intento falló porque NEXO en Render estaba dormido y se revirtió solo). 3.13.9 en PR #146 (incluye 3.13.8, Curru en móvil), CI verde, pendiente de fusionar y desplegar
+ESTADO: 3.13.9 DESPLEGADO (deploy 37328697869: portada con ofertas reales). En main sin desplegar: 3.13.10 (#151, scroll horizontal en móvil) y 3.13.11 en PR #152 (cabecera de ordenador, ventana de ofertas solo en tienda/categorías, sin «Inicio» duplicado). Recorrido clienta + gestora verde el 2026-10-06
 SUBFASES ANTERIORES: CV-PREMIUM-001 (3.13.0–3.13.7), CV-CURRU (3.11.0–3.12.1), CV-LAUNCH-POLISH-002, CV-CATALOG-SYNC y CV-LAUNCH-POLISH-001 — CERRADAS
 NOTA: al fusionar cambios solo documentales, `main` puede avanzar sin que producción cambie
 DECISIÓN: Ernesto (2026-10-02): checkout sin confirmar pedido; Curru da existencias exactas a gestoras y solo estados a clientes; mantener identidad beige/verde; destacar con ventana las ofertas ya existentes
 DECISIÓN: Ernesto (2026-10-05): quitar de la tienda todo lo que no lleve a la compra ni ayude a navegar; Higgsfield permitido para fotos y vídeos sin abuso; animaciones y ventanas orgánicas manteniendo la marca; número del negocio/bot 5354056173; recogida en la dirección de la web (Calle Conill A esquina 45 #864, Nuevo Vedado), 9:00–17:00; OpenAI ya activo en Curru
+DECISIÓN: Ernesto (2026-10-06): garantía y devoluciones las atiende una persona caso a caso hasta tener política; al por mayor → WhatsApp de Lennys (53 5688 5368) con resumen; la tienda no se elimina (catálogo), solo se quita «Inicio» del menú
+VIVABOT: 34/34 preguntas activas en nexo-production; servidor en d39b1d1 con CURRU_KEY; pendiente git pull de 1571947, prueba desde otro teléfono y cambio de claves expuestas en capturas
 CATÁLOGO: Sobrecama tiwn (BC-102299) retenida con `catalog-sync.yml` modo hold (run 37301636740); Aspiradora de Mano Inalámbrica ya oculta (no está en BizneCubano)
-PENDIENTE ANTES DE ENTREGAR: política de cambios, devoluciones y garantía; respuestas de las preguntas frecuentes de VivaBot (FALTAN); prueba real de VivaBot con Curru
+PENDIENTE ANTES DE ENTREGAR: ver la lista final de docs/CASA_VIVA_ENTREGA_DUENA.md
 CUENTAS DE PRUEBA: gestora de prueba creada con `test-accounts.yml` (secretos JOURNEY_GESTORA_*); recorrido clienta + gestora 100 % verde el 2026-10-06; dependienta piloto existente: cv_dependienta_piloto
 FOTOS: 44 fotos reales ampliadas a 2K con Higgsfield (118 créditos) aplicadas con `catalog-photos-apply.yml` (revert disponible); 15 descartadas porque la IA deformaba etiquetas o texto
 ```
