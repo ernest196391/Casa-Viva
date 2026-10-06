@@ -53,7 +53,8 @@ jobs:
           set -euo pipefail
           scp -P "$SSH_PORT" data/catalog/upscaled-photos.json "$SSH_USER@$SSH_HOST:/tmp/cvd-photos.json"
           scp -P "$SSH_PORT" scripts/catalog/apply-photos.php "$SSH_USER@$SSH_HOST:/tmp/cvd-apply-photos.php"
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+          # Descargar 2 MB por foto y generar miniaturas tarda: la conexión se mantiene viva para que no se corte.
+          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=40 -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
             "cd '$WP_PATH' && CVD_PHOTOS_FILE=/tmp/cvd-photos.json CVD_PHOTOS_MODE='$MODE' wp eval-file /tmp/cvd-apply-photos.php" \
             > raw-output.txt
           sed -n '/^{/,$p' raw-output.txt > report.json
