@@ -46,6 +46,9 @@ final class CVD_Premium_Storefront {
 		if ( is_admin() ) { return; }
 		wp_enqueue_style( 'cvd-premium-storefront', CVD_URL . 'assets/premium-storefront.css', array(), CVD_VERSION );
 		wp_enqueue_script( 'cvd-premium-storefront', CVD_URL . 'assets/premium-storefront.js', array(), CVD_VERSION, true );
+		// «Inicio» en el menú repite el logo (y la barra inferior en móvil): se quita para dejar Tienda como único destino de compra.
+		$home = esc_url( home_url( '/' ) );
+		wp_add_inline_style( 'cvd-premium-storefront', ".cv-nav a[href=\"{$home}\"],.cv-mobile-nav a[href=\"{$home}\"]{display:none!important}" );
 	}
 
 	/**
@@ -199,8 +202,10 @@ final class CVD_Premium_Storefront {
 	}
 
 	private static function offers_dialog(): void {
-		// En la portada las ofertas ya son lo primero que se ve: la ventana solo sale en tienda y categorías.
-		if ( ! self::shopper() || self::is_home() || is_cart() || is_checkout() || is_account_page() || is_product() || ! empty( $_GET['cvd_ofertas'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		// Solo mientras se compra (tienda y categorías). En la portada las ofertas ya se ven arriba, y en
+		// páginas como el registro de gestoras, el tarifario o el blog la ventana solo estorba.
+		$browsing = ( function_exists( 'is_shop' ) && is_shop() ) || ( function_exists( 'is_product_category' ) && is_product_category() );
+		if ( ! self::shopper() || ! $browsing || ! empty( $_GET['cvd_ofertas'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			return;
 		}
 		$offers = self::offers();
