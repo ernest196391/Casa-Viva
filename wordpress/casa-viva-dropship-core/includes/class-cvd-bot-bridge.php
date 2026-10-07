@@ -30,6 +30,52 @@ final class CVD_Bot_Bridge {
 		register_rest_route( self::NS, '/bot/gestora', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'gestora_link' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/gestora/orders', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'gestora_orders' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/partners', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'partners' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/partners/(?P<id>\d+)/status', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'partner_status' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/partners/(?P<id>\d+)/welcome', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'partner_welcome' ), 'permission_callback' => $auth ) );
+	}
+
+	private static function partner( WP_REST_Request $request ) {
+		$user = get_user_by( 'id', absint( $request['id'] ) );
+		if ( ! $user || ! array_intersect( array( 'cvd_gestora', 'cvd_messenger' ), (array) $user->roles ) ) {
+			return new WP_Error( 'cvd_partner', 'No es una gestora ni un mensajero.', array( 'status' => 404 ) );
+		}
+		return $user;
+	}
+
+	/**
+	 * Aprobar o rechazar desde WhatsApp (APRUEBA / RECHAZA, o según el modo de altas del bot).
+	 * Hace lo mismo que la página de Solicitudes: estado, código de referido y correo de aviso.
+	 */
+	public static function partner_status( WP_REST_Request $request ) {
+		$user = self::partner( $request );
+		if ( is_wp_error( $user ) ) { return $user; }
+		$status = sanitize_key( (string) $request->get_param( 'status' ) );
+		if ( ! in_array( $status, array( 'approved', 'rejected' ), true ) ) { return new WP_Error( 'cvd_partner_status', 'Estado no válido.', array( 'status' => 422 ) ); }
+		update_user_meta( $user->ID, '_cvd_account_status', $status );
+		if ( 'approved' === $status && in_array( 'cvd_gestora', (array) $user->roles, true ) && ! get_user_meta( $user->ID, '_cvd_referral_code', true ) ) {
+			update_user_meta( $user->ID, '_cvd_referral_code', 'CV' . $user->ID . strtoupper( substr( preg_replace( '/[^A-Z0-9]/i', '', $user->user_login ), 0, 8 ) ) );
+		}
+		clean_user_cache( $user->ID );
+		update_user_meta( $user->ID, '_cvd_status_changed_by', 'vivabot:' . sanitize_text_field( (string) $request->get_param( 'by' ) ) );
+		return self::no_cache( array( 'ok' => true, 'status' => $status ) );
+	}
+
+	/**
+	 * Datos para la bienvenida por WhatsApp: enlace de gestora y enlace de acceso seguro (7 días,
+	 * sin contraseña). Nunca se crea enlace de acceso para cuentas de administración.
+	 */
+	public static function partner_welcome( WP_REST_Request $request ) {
+		$user = self::partner( $request );
+		if ( is_wp_error( $user ) ) { return $user; }
+		if ( 'approved' !== get_user_meta( $user->ID, '_cvd_account_status', true ) ) { return new WP_Error( 'cvd_partner_pending', 'La cuenta no está aprobada.', array( 'status' => 409 ) ); }
+		$is_staff = (bool) array_intersect( array( 'administrator', 'shop_manager' ), (array) $user->roles );
+		$code = (string) get_user_meta( $user->ID, '_cvd_referral_code', true );
+		return self::no_cache( array(
+			'name'       => $user->display_name,
+			'link'       => $code && in_array( 'cvd_gestora', (array) $user->roles, true ) ? add_query_arg( 'ref', rawurlencode( $code ), home_url( '/tienda/' ) ) : '',
+			'accessLink' => ! $is_staff && class_exists( 'CVD_Registration' ) ? CVD_Registration::create_secure_access_link( $user ) : '',
+			'panel'      => in_array( 'cvd_messenger', (array) $user->roles, true ) ? home_url( '/area-mensajeros/' ) : home_url( '/area-gestoras/' ),
+		) );
 	}
 
 	/** Gestoras y mensajeros con su estado de alta: el bot avisa de solicitudes nuevas y da la bienvenida al aprobar. */
@@ -89,7 +135,7 @@ final class CVD_Bot_Bridge {
 		if ( ! $gestora ) { return self::no_cache( array( 'found' => false ) ); }
 		$code = (string) get_user_meta( $gestora->ID, '_cvd_referral_code', true );
 		if ( '' === $code ) { return self::no_cache( array( 'found' => true, 'name' => $gestora->display_name, 'link' => '' ) ); }
-		return self::no_cache( array( 'found' => true, 'name' => $gestora->display_name, 'code' => $code, 'link' => add_query_arg( 'ref', rawurlencode( $code ), home_url( '/' ) ) ) );
+		return self::no_cache( array( 'found' => true, 'name' => $gestora->display_name, 'code' => $code, 'link' => add_query_arg( 'ref', rawurlencode( $code ), home_url( '/tienda/' ) ) ) );
 	}
 
 	/**
