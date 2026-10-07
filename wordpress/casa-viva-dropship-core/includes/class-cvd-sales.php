@@ -57,6 +57,7 @@ final class CVD_Sales {
 		$search = sanitize_text_field( (string) $request->get_param( 'search' ) );
 		$args = array(
 			'limit' => 50,
+			'type' => 'shop_order',
 			'orderby' => 'date',
 			'order' => 'DESC',
 			'status' => array( 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed' ),

@@ -108,6 +108,11 @@ final class CVD_Contextual_Assistant {
 		exit;
 	}
 
+	/** Para otras puertas del bot (CVD_Bot_Bridge): misma clave, mismo hash. */
+	public static function vivabot_key_matches( string $key ): bool {
+		return self::vivabot_key_valid( $key );
+	}
+
 	private static function vivabot_key_valid( string $key ): bool {
 		$hash = (string) get_option( self::VIVABOT_OPTION, '' );
 		return '' !== $hash && '' !== $key && hash_equals( $hash, hash( 'sha256', $key ) );

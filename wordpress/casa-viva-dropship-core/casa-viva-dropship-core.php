@@ -35,6 +35,7 @@ require_once CVD_DIR . 'includes/class-cvd-messenger-feed-guard.php';
 require_once CVD_DIR . 'includes/class-cvd-product-search.php';
 require_once CVD_DIR . 'includes/class-cvd-contextual-assistant.php';
 require_once CVD_DIR . 'includes/class-cvd-premium-storefront.php';
+require_once CVD_DIR . 'includes/class-cvd-bot-bridge.php';
 
 register_activation_hook( __FILE__, array( 'CVD_Plugin', 'activate' ) );
 
@@ -59,6 +60,7 @@ add_action(
 			CVD_Product_Search::register();
 			CVD_Contextual_Assistant::register();
 			CVD_Premium_Storefront::register();
+			CVD_Bot_Bridge::register();
 		}
 	}
 );

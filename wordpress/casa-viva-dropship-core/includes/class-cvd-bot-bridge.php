@@ -1,0 +1,243 @@
+<?php
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Puerta de VivaBot (WhatsApp) hacia Core (D29 · "un pedido, un hilo, 4 momentos").
+ *
+ * El bot es solo un canal: publica en el grupo las ofertas que Core ya abrió, pide a Core
+ * que asigne al primer mensajero que responde, entrega el vale y registra hora y entrega.
+ * Todas las escrituras pasan por CVD_Order_Transition_Service con el mensajero como actor,
+ * así que Core sigue decidiendo quién gana la carrera y qué transición es válida.
+ * Autenticación: cabecera X-Vivabot-Key (la misma clave que usa el asistente Curru).
+ */
+final class CVD_Bot_Bridge {
+	private const NS = 'casa-viva/v1';
+
+	public static function register(): void {
+		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
+	}
+
+	public static function routes(): void {
+		$auth = array( __CLASS__, 'authorized' );
+		register_rest_route( self::NS, '/bot/dispatch', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'dispatch' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/announced', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'announced' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/claim', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'claim' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/eta', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'eta' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/delivered', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'delivered' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'order_status' ), 'permission_callback' => $auth ) );
+	}
+
+	public static function authorized( WP_REST_Request $request ): bool {
+		$key = (string) $request->get_header( 'x_vivabot_key' );
+		return '' !== $key && CVD_Contextual_Assistant::vivabot_key_matches( $key );
+	}
+
+	/** Ofertas abiertas en Core: lo que el bot debe publicar en el grupo (sin datos del cliente). */
+	public static function dispatch(): WP_REST_Response {
+		$orders = wc_get_orders( array( 'limit' => 30, 'type' => 'shop_order', 'orderby' => 'date', 'order' => 'ASC', 'meta_key' => '_cvd_delivery_status', 'meta_value' => 'offered' ) );
+		$offers = array();
+		foreach ( $orders as $order ) {
+			if ( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { continue; }
+			$offers[] = array(
+				'id'         => $order->get_id(),
+				'zone'       => CVD_Delivery::destination_zone( $order ),
+				'items'      => self::items( $order ),
+				'earningCup' => CVD_Delivery::courier_amount( $order ),
+				'window'     => self::window( $order ),
+				'offeredAt'  => (string) $order->get_meta( '_cvd_delivery_offered_at', true ),
+				'announced'  => '' !== (string) $order->get_meta( '_cvd_bot_announced_at', true ),
+			);
+		}
+		return self::no_cache( array( 'offers' => $offers ) );
+	}
+
+	public static function announced( WP_REST_Request $request ) {
+		$order = self::order( $request );
+		if ( is_wp_error( $order ) ) { return $order; }
+		if ( ! $order->get_meta( '_cvd_bot_announced_at', true ) ) {
+			$order->update_meta_data( '_cvd_bot_announced_at', current_time( 'mysql', true ) );
+			$order->add_order_note( 'VivaBot: oferta publicada en el grupo de mensajeros.' );
+			$order->save();
+		}
+		return self::no_cache( array( 'ok' => true ) );
+	}
+
+	/** "Yo" en el grupo: Core asigna al primero; los demás reciben "ya está cogido". */
+	public static function claim( WP_REST_Request $request ) {
+		$order = self::order( $request );
+		if ( is_wp_error( $order ) ) { return $order; }
+		$messenger = self::messenger_by_phone( (string) $request->get_param( 'phone' ) );
+		if ( ! $messenger ) { return self::no_cache( array( 'result' => 'not_messenger' ) ); }
+		$current_owner = absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
+		if ( $current_owner === $messenger->ID ) { return self::no_cache( array( 'result' => 'yours', 'voucher' => self::voucher( $order ) ) ); }
+		if ( $current_owner || 'offered' !== CVD_Delivery::status( $order ) ) { return self::no_cache( array( 'result' => 'taken' ) ); }
+		$result = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'accepted', array(
+			'actor_user_id'   => $messenger->ID,
+			'idempotency_key' => 'bot-claim:' . $order->get_id() . ':' . $messenger->ID,
+			'source'          => 'cvd_bot_bridge_claim',
+			'metadata'        => array( 'messenger' => $messenger->ID, 'source' => 'whatsapp_group' ),
+			'precondition'    => static function ( WC_Order $locked, string $current ) use ( $messenger ) {
+				$assigned = absint( $locked->get_meta( '_cvd_messenger_user_id', true ) );
+				if ( ( $assigned && $assigned !== $messenger->ID ) || 'offered' !== $current ) { return CVD_Order_Transition_Service::CONFLICT; }
+				return true;
+			},
+			'atomic_mutation' => static function ( WC_Order $locked, $from, $to, $actor, $at ) use ( $messenger ): void {
+				$locked->update_meta_data( '_cvd_messenger_user_id', $messenger->ID );
+				$locked->update_meta_data( '_cvd_delivery_accepted_at', $at );
+				$locked->add_order_note( 'Carrera aceptada por ' . $messenger->display_name . ' desde el grupo de WhatsApp.' );
+				update_user_meta( $messenger->ID, '_cvd_last_delivery_accepted_at', time() );
+			},
+		) );
+		if ( empty( $result['success'] ) ) { return self::no_cache( array( 'result' => 'taken' ) ); }
+		$fresh = wc_get_order( $order->get_id() );
+		return self::no_cache( array( 'result' => 'won', 'messenger' => $messenger->display_name, 'voucher' => self::voucher( $fresh ) ) );
+	}
+
+	/** Hora a la que el mensajero dice que puede ir: queda en el pedido y en el seguimiento. */
+	public static function eta( WP_REST_Request $request ) {
+		$order = self::order( $request );
+		if ( is_wp_error( $order ) ) { return $order; }
+		$messenger = self::assigned_messenger( $order, (string) $request->get_param( 'phone' ) );
+		if ( ! $messenger ) { return new WP_Error( 'cvd_not_assigned', 'Ese pedido no está asignado a este mensajero.', array( 'status' => 403 ) ); }
+		$text = sanitize_text_field( (string) $request->get_param( 'text' ) );
+		if ( '' === $text ) { return new WP_Error( 'cvd_eta_empty', 'Falta la hora.', array( 'status' => 400 ) ); }
+		$order->update_meta_data( '_cvd_bot_eta', mb_substr( $text, 0, 120 ) );
+		$order->update_meta_data( '_cvd_bot_eta_at', current_time( 'mysql', true ) );
+		$order->add_order_note( 'VivaBot: ' . $messenger->display_name . ' puede ir ' . mb_substr( $text, 0, 120 ) . '.' );
+		$order->save();
+		return self::no_cache( array( 'ok' => true, 'customer' => self::customer( $order ) ) );
+	}
+
+	/**
+	 * "Entregado": el mensajero declara lo que cobró. Respeta la custodia de Core: si la tienda
+	 * aún no confirmó que le dio el paquete (picked_up), no se puede marcar entregado.
+	 */
+	public static function delivered( WP_REST_Request $request ) {
+		$order = self::order( $request );
+		if ( is_wp_error( $order ) ) { return $order; }
+		$messenger = self::assigned_messenger( $order, (string) $request->get_param( 'phone' ) );
+		if ( ! $messenger ) { return new WP_Error( 'cvd_not_assigned', 'Ese pedido no está asignado a este mensajero.', array( 'status' => 403 ) ); }
+		$status = CVD_Delivery::status( $order );
+		if ( 'delivered' === $status ) { return self::no_cache( array( 'result' => 'already' ) ); }
+		if ( in_array( $status, array( 'accepted', 'to_store' ), true ) ) { return self::no_cache( array( 'result' => 'needs_pickup' ) ); }
+		$usd    = (float) wc_format_decimal( $request->get_param( 'usd' ) ?? 0, 2 );
+		$cup    = (float) wc_format_decimal( $request->get_param( 'cup' ) ?? 0, 2 );
+		$method = sanitize_key( (string) $request->get_param( 'method' ) );
+		if ( ! in_array( $method, array( 'cash_usd', 'cash_cup', 'transfer', 'mixed', 'other' ), true ) ) { $method = $usd > 0 && $cup > 0 ? 'mixed' : ( $usd > 0 ? 'cash_usd' : 'cash_cup' ); }
+		if ( $usd <= 0 && $cup <= 0 ) { return self::no_cache( array( 'result' => 'needs_amount' ) ); }
+		if ( 'picked_up' === $status ) {
+			$step = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'handed_over', array( 'actor_user_id' => $messenger->ID, 'idempotency_key' => 'bot-handed:' . $order->get_id(), 'source' => 'cvd_bot_bridge_delivered',
+				'atomic_mutation' => static function ( WC_Order $locked, $from, $to, $actor, $at ): void { $locked->update_meta_data( '_cvd_to_customer_at', $at ); } ) );
+			if ( empty( $step['success'] ) ) { return self::no_cache( array( 'result' => 'error', 'code' => $step['error_code'] ?? '' ) ); }
+		}
+		$done = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'delivered', array(
+			'actor_user_id'        => $messenger->ID,
+			'idempotency_key'      => 'bot-delivered:' . $order->get_id(),
+			'source'               => 'cvd_bot_bridge_delivered',
+			'metadata'             => array( 'collection_method' => $method, 'collected_usd' => $usd, 'collected_cup' => $cup, 'channel' => 'whatsapp' ),
+			'coupled_payment_state'=> 'pending_return',
+			'atomic_mutation'      => static function ( WC_Order $locked, $from, $to, WP_User $actor, string $at ) use ( $method, $usd, $cup ): void {
+				$locked->update_meta_data( '_cvd_delivered_by', $actor->ID );
+				$locked->update_meta_data( '_cvd_delivered_at', $at );
+				$locked->update_meta_data( '_cvd_collection_method', $method );
+				$locked->update_meta_data( '_cvd_collection_amount_usd', wc_format_decimal( $usd, 2 ) );
+				$locked->update_meta_data( '_cvd_collection_amount_cup', wc_format_decimal( $cup, 2 ) );
+				$locked->update_meta_data( '_cvd_collection_note', 'Declarado por WhatsApp' );
+				$locked->update_meta_data( '_cvd_collection_received_by', $actor->ID );
+				$locked->update_meta_data( '_cvd_collection_received_at', $at );
+			},
+		) );
+		if ( empty( $done['success'] ) ) { return self::no_cache( array( 'result' => 'error', 'code' => $done['error_code'] ?? '' ) ); }
+		return self::no_cache( array( 'result' => 'delivered', 'customer' => self::customer( $order ) ) );
+	}
+
+	/** Estado para el bot y Curru: dónde va el pedido, sin datos sensibles. */
+	public static function order_status( WP_REST_Request $request ) {
+		$order = self::order( $request );
+		if ( is_wp_error( $order ) ) { return $order; }
+		$messenger = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
+		$status = CVD_Delivery::status( $order );
+		return self::no_cache( array(
+			'id' => $order->get_id(), 'status' => $status, 'label' => CVD_Delivery::label( $status ),
+			'operation' => sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) ),
+			'messenger' => $messenger ? $messenger->display_name : null,
+			'eta' => (string) $order->get_meta( '_cvd_bot_eta', true ),
+			'tracking' => CVD_Delivery::tracking_url( $order ),
+		) );
+	}
+
+	private static function order( WP_REST_Request $request ) {
+		$order = wc_get_order( absint( $request['id'] ) );
+		return $order instanceof WC_Order && ! $order instanceof WC_Order_Refund ? $order : new WP_Error( 'cvd_order_not_found', 'Pedido no encontrado.', array( 'status' => 404 ) );
+	}
+
+	private static function phone_key( string $phone ): string {
+		$digits = preg_replace( '/\D+/', '', $phone );
+		return strlen( $digits ) >= 8 ? substr( $digits, -8 ) : '';
+	}
+
+	/** Mensajero aprobado cuyo WhatsApp (o teléfono de facturación) coincide en los últimos 8 dígitos. */
+	public static function messenger_by_phone( string $phone ): ?WP_User {
+		$key = self::phone_key( $phone );
+		if ( '' === $key ) { return null; }
+		$users = get_users( array( 'role' => 'cvd_messenger', 'meta_key' => '_cvd_account_status', 'meta_value' => 'approved' ) );
+		foreach ( $users as $user ) {
+			foreach ( array( '_cvd_whatsapp', 'billing_phone' ) as $meta ) {
+				if ( $key === self::phone_key( (string) get_user_meta( $user->ID, $meta, true ) ) ) { return $user; }
+			}
+		}
+		return null;
+	}
+
+	private static function assigned_messenger( WC_Order $order, string $phone ): ?WP_User {
+		$messenger = self::messenger_by_phone( $phone );
+		return $messenger && $messenger->ID === absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ? $messenger : null;
+	}
+
+	private static function items( WC_Order $order ): string {
+		$items = array();
+		foreach ( $order->get_items( 'line_item' ) as $item ) { $items[] = $item->get_quantity() . ' × ' . $item->get_name(); }
+		return implode( ', ', $items );
+	}
+
+	private static function window( WC_Order $order ): string {
+		return trim( (string) $order->get_meta( '_cvd_delivery_date', true ) . ' ' . (string) $order->get_meta( '_cvd_delivery_window', true ) );
+	}
+
+	private static function customer( WC_Order $order ): array {
+		$phone = $order->get_shipping_phone() ?: $order->get_billing_phone();
+		return array( 'name' => trim( $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name() ) ?: $order->get_formatted_billing_full_name(), 'phone' => preg_replace( '/\D+/', '', (string) $phone ) );
+	}
+
+	/** Vale completo: solo se entrega al mensajero que ganó la carrera. */
+	private static function voucher( WC_Order $order ): array {
+		$address = trim( implode( ', ', array_filter( array( $order->get_shipping_address_1() ?: $order->get_billing_address_1(), $order->get_shipping_address_2() ?: $order->get_billing_address_2() ) ) ) );
+		$change = 'yes' === $order->get_meta( '_cvd_change_required', true ) ? trim( $order->get_meta( '_cvd_change_amount', true ) . ' ' . $order->get_meta( '_cvd_change_currency', true ) ) : '';
+		return array(
+			'id'          => $order->get_id(),
+			'customer'    => self::customer( $order ),
+			'altPhone'    => preg_replace( '/\D+/', '', (string) $order->get_meta( '_cvd_alternate_phone', true ) ),
+			'zone'        => CVD_Delivery::destination_zone( $order ),
+			'address'     => $address,
+			'reference'   => (string) $order->get_meta( '_cvd_reference', true ),
+			'mapUrl'      => (string) $order->get_meta( '_cvd_map_url', true ),
+			'items'       => self::items( $order ),
+			'productsUsd' => wc_format_decimal( $order->get_total(), 2 ),
+			'shippingCup' => (int) ( class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_fee( $order ) : 0 ),
+			'earningCup'  => CVD_Delivery::courier_amount( $order ),
+			'change'      => $change,
+			'window'      => self::window( $order ),
+			'note'        => wp_strip_all_tags( (string) $order->get_customer_note() ),
+			'pickup'      => 'Casa Viva · Calle Conill A esq. 45 #864, Nuevo Vedado',
+			'tracking'    => CVD_Delivery::tracking_url( $order ),
+			'app'         => home_url( '/area-mensajeros/' ),
+		);
+	}
+
+	private static function no_cache( array $data ): WP_REST_Response {
+		$response = rest_ensure_response( $data );
+		$response->header( 'Cache-Control', 'no-store' );
+		return $response;
+	}
+}
