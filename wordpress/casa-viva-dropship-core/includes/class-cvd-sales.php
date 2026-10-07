@@ -50,6 +50,46 @@ final class CVD_Sales {
 			'callback' => array( __CLASS__, 'change_status' ),
 			'permission_callback' => array( __CLASS__, 'can_view' ),
 		) );
+		register_rest_route( 'casa-viva/v1', '/sales/(?P<id>\d+)/return', array(
+			'methods' => 'POST',
+			'callback' => array( __CLASS__, 'register_return' ),
+			'permission_callback' => static fn(): bool => current_user_can( 'manage_woocommerce' ),
+		) );
+	}
+
+	/**
+	 * Devolución de un pedido ya cerrado (D30, opción A). Regla: vuelve el stock, se anula la
+	 * comisión de la gestora (el cliente no se quedó el producto) y la ganancia del mensajero se
+	 * mantiene salvo que administración marque lo contrario. Queda escrito el dinero devuelto.
+	 */
+	public static function register_return( WP_REST_Request $request ) {
+		$order = wc_get_order( absint( $request['id'] ) );
+		if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund ) { return new WP_Error( 'cvd_return_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
+		if ( ! $order->has_status( 'completed' ) ) { return new WP_Error( 'cvd_return_state', 'Solo se registran devoluciones de pedidos completados.', array( 'status' => 409 ) ); }
+		if ( $order->get_meta( '_cvd_return', true ) ) { return new WP_Error( 'cvd_return_done', 'Este pedido ya tiene una devolución registrada.', array( 'status' => 409 ) ); }
+		$reason = sanitize_textarea_field( (string) $request->get_param( 'reason' ) );
+		if ( '' === trim( $reason ) ) { return new WP_Error( 'cvd_return_reason', 'Escribe el motivo de la devolución.', array( 'status' => 422 ) ); }
+		$usd = (float) wc_format_decimal( $request->get_param( 'refundUsd' ) ?: 0, 2 );
+		$cup = (float) wc_format_decimal( $request->get_param( 'refundCup' ) ?: 0, 2 );
+		$void_messenger = rest_sanitize_boolean( $request->get_param( 'voidMessenger' ) );
+		$actor = wp_get_current_user();
+		$messenger_note = 'se mantiene';
+		if ( $void_messenger && class_exists( 'CVD_Messenger_Accounting' ) ) {
+			if ( ! CVD_Messenger_Accounting::can_void_order( $order ) ) { return new WP_Error( 'cvd_return_paid', 'La ganancia del mensajero ya está liquidada; no se puede anular desde aquí.', array( 'status' => 409 ) ); }
+			try { CVD_Messenger_Accounting::void_order_atomic( $order ); } catch ( Throwable $e ) { return new WP_Error( 'cvd_return_ledger', 'No se pudo anular la ganancia del mensajero.', array( 'status' => 409 ) ); }
+			$order->update_meta_data( '_cvd_messenger_earning_status', 'cancelled' );
+			$messenger_note = 'anulada';
+		}
+		if ( function_exists( 'wc_increase_stock_levels' ) ) { wc_increase_stock_levels( $order ); }
+		$order->update_meta_data( '_cvd_return', array( 'at' => current_time( 'mysql', true ), 'by' => $actor->ID, 'refund_usd' => $usd, 'refund_cup' => $cup, 'reason' => $reason, 'messenger_earning' => $messenger_note ) );
+		$order->update_meta_data( '_cvd_return_in_progress', 'yes' ); // deja pasar el freno de D30 solo para esta devolución
+		$order->add_order_note( sprintf( 'Devolución registrada por %s: se devolvió al cliente %s USD + %s CUP. Motivo: %s. Stock repuesto; comisión de la gestora anulada; ganancia del mensajero %s.', $actor->display_name, $usd, $cup, $reason, $messenger_note ) );
+		$order->save();
+		$order->update_status( 'refunded', 'Devolución registrada en el Centro de ventas.' );
+		$order = wc_get_order( $order->get_id() );
+		$order->delete_meta_data( '_cvd_return_in_progress' );
+		$order->save();
+		return rest_ensure_response( array( 'message' => 'Devolución registrada.', 'order' => self::payload( $order ) ) );
 	}
 
 	public static function orders( WP_REST_Request $request ) {
@@ -256,6 +296,7 @@ final class CVD_Sales {
 			'commissionStatus' => sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ?: 'none',
 			'shippingCup' => 'pickup' === $fulfillment ? 0 : ( class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_fee( $order ) : absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) ) ),
 			'orderCode' => 'CV-PEDIDO-' . $order->get_id(),
+			'canReturn' => current_user_can( 'manage_woocommerce' ) && $order->has_status( 'completed' ) && ! $order->get_meta( '_cvd_return', true ),
 			'declaredUsd' => (string) $order->get_meta( '_cvd_declared_usd', true ),
 			'declaredCup' => (string) $order->get_meta( '_cvd_declared_cup', true ),
 			'deliveryStatus' => 'pickup' === $fulfillment ? '' : ( class_exists( 'CVD_Delivery' ) ? CVD_Delivery::label( $delivery_status ) : '' ),

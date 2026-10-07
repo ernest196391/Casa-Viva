@@ -48,7 +48,7 @@
     list.innerHTML = data.orders.map(function (order) {
       var phone = order.phone ? '<a href="tel:' + escapeText(order.phone) + '">' + escapeText(order.phone) + "</a>" : "";
       var wa = order.phone ? '<a class="cvd-sale-wa" target="_blank" rel="noopener" href="https://wa.me/' + escapeText(order.phone.replace(/\D/g, "")) + '">WhatsApp</a>' : "";
-      return '<article class="cvd-sale-card"><div class="cvd-sale-top"><div><span class="cvd-sale-status is-' + order.status + '">' + escapeText(order.statusLabel) + '</span><h2>Pedido #' + escapeText(order.number) + '</h2><small>' + escapeText(order.date) + '</small></div><div class="cvd-sale-code"><canvas data-order-code="' + escapeText(order.orderCode) + '"></canvas><small>' + escapeText(order.orderCode) + '</small></div><strong>' + escapeText(order.total) + (order.shippingCup && !/CUP/i.test(order.total) ? ' + ' + escapeText(order.shippingCup) + ' CUP' : '') + '</strong></div><div class="cvd-sale-data"><p><b>Cliente</b><span>' + escapeText(order.customer) + " · " + phone + '</span></p><p><b>Entrega</b><span>' + escapeText(order.fulfillment + " · " + order.address) + '</span></p><p><b>Productos</b><span>' + productLinks(order.products) + '</span></p><p><b>Mensajería</b><span>' + escapeText(order.deliveryStatus || "No aplica") + '</span></p>' + commercialData(order) + '</div><div class="cvd-sale-actions">' + actionButtons(order) + (order.trackingUrl ? '<button type="button" data-copy-tracking="' + escapeText(order.trackingUrl) + '">Copiar seguimiento</button>' : '') + wa + (cvdSales.isAdmin && order.adminUrl ? '<a href="' + escapeText(order.adminUrl) + '" target="_blank" rel="noopener">Ver pedido</a>' : '') + '</div></article>';
+      return '<article class="cvd-sale-card"><div class="cvd-sale-top"><div><span class="cvd-sale-status is-' + order.status + '">' + escapeText(order.statusLabel) + '</span><h2>Pedido #' + escapeText(order.number) + '</h2><small>' + escapeText(order.date) + '</small></div><div class="cvd-sale-code"><canvas data-order-code="' + escapeText(order.orderCode) + '"></canvas><small>' + escapeText(order.orderCode) + '</small></div><strong>' + escapeText(order.total) + (order.shippingCup && !/CUP/i.test(order.total) ? ' + ' + escapeText(order.shippingCup) + ' CUP' : '') + '</strong></div><div class="cvd-sale-data"><p><b>Cliente</b><span>' + escapeText(order.customer) + " · " + phone + '</span></p><p><b>Entrega</b><span>' + escapeText(order.fulfillment + " · " + order.address) + '</span></p><p><b>Productos</b><span>' + productLinks(order.products) + '</span></p><p><b>Mensajería</b><span>' + escapeText(order.deliveryStatus || "No aplica") + '</span></p>' + commercialData(order) + '</div><div class="cvd-sale-actions">' + actionButtons(order) + (order.canReturn ? '<button type="button" class="cvd-sale-return is-warning" data-return-order="' + order.id + '">Devolución</button>' : '') + (order.trackingUrl ? '<button type="button" data-copy-tracking="' + escapeText(order.trackingUrl) + '">Copiar seguimiento</button>' : '') + wa + (cvdSales.isAdmin && order.adminUrl ? '<a href="' + escapeText(order.adminUrl) + '" target="_blank" rel="noopener">Ver pedido</a>' : '') + '</div></article>';
     }).join("");
     if (window.CVQRCode) document.querySelectorAll("[data-order-code]").forEach(function (canvas) { window.CVQRCode.toCanvas(canvas, canvas.dataset.orderCode, { width: 84, margin: 1 }); });
   }
@@ -63,6 +63,21 @@
   list.addEventListener("click", async function (event) {
     var copy = event.target.closest('[data-copy-tracking]');
     if (copy) { try { await navigator.clipboard.writeText(copy.dataset.copyTracking); copy.textContent = 'Copiado'; } catch (error) { message.textContent = 'No se pudo copiar el enlace.'; } return; }
+    // Devolución de un pedido cerrado (D30): vuelve el stock, se anula la comisión de la gestora y,
+    // si se indica, la ganancia del mensajero. Queda escrito el dinero devuelto al cliente.
+    var ret = event.target.closest("[data-return-order]");
+    if (ret) {
+      var reason = window.prompt("Devolución del pedido #" + ret.dataset.returnOrder + "\n\n¿Por qué se devuelve? (obligatorio)");
+      if (!reason || !reason.trim()) return;
+      var refundUsd = window.prompt("¿Cuántos USD se le devuelven al cliente? (0 si ninguno)", "0"); if (refundUsd === null) return;
+      var refundCup = window.prompt("¿Cuántos CUP se le devuelven al cliente? (0 si ninguno)", "0"); if (refundCup === null) return;
+      var voidMessenger = window.confirm("¿Anular también la ganancia del mensajero?\n\nAceptar = sí, se anula (por ejemplo, entrega mal hecha)\nCancelar = no, se le paga (hizo su trabajo)");
+      if (!window.confirm("Confirmar devolución del #" + ret.dataset.returnOrder + ":\n• Se devuelve " + refundUsd + " USD + " + refundCup + " CUP\n• El producto vuelve al stock\n• Se anula la comisión de la gestora\n• Ganancia del mensajero: " + (voidMessenger ? "ANULADA" : "se mantiene"))) return;
+      ret.disabled = true; message.textContent = "Registrando devolución…";
+      try { await api(cvdSales.url + "/" + ret.dataset.returnOrder + "/return", { method: "POST", body: JSON.stringify({ reason: reason, refundUsd: refundUsd, refundCup: refundCup, voidMessenger: voidMessenger }) }); message.textContent = "Devolución registrada."; await load(); }
+      catch (error) { message.textContent = error.message; message.className = "is-error"; ret.disabled = false; }
+      return;
+    }
     var button = event.target.closest(".cvd-sale-action"); if (!button) return;
     var status = button.dataset.status;
     if (status === "delivered") {

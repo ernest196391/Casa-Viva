@@ -34,6 +34,7 @@ final class CVD_Delivery {
 	 */
 	public static function guard_closed_cancellation( $order ): void {
 		if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund || ! $order->get_id() ) { return; }
+		if ( 'yes' === $order->get_meta( '_cvd_return_in_progress', true ) ) { return; } // devolución registrada desde /ventas/
 		$changes = $order->get_changes();
 		if ( empty( $changes['status'] ) || ! in_array( $changes['status'], array( 'cancelled', 'refunded' ), true ) ) { return; }
 		$closed = 'closed' === sanitize_key( (string) $order->get_meta( '_cvd_delivery_status', true ) ) || 'verified' === sanitize_key( (string) $order->get_meta( '_cvd_cash_status', true ) );
