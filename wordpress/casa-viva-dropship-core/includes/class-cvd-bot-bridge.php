@@ -121,7 +121,7 @@ final class CVD_Bot_Bridge {
 			$list[] = array(
 				'id' => $o->get_id(), 'date' => $o->get_date_created() ? $o->get_date_created()->date_i18n( 'd/m' ) : '',
 				'customer' => $o->get_formatted_billing_full_name(), 'items' => self::items( $o ),
-				'status' => 'cancelled' === $o->get_status() ? 'Cancelado' : ( 'pickup' === $o->get_meta( '_cvd_fulfillment_type', true ) ? ( 'completed' === $o->get_status() ? 'Recogido' : 'Para recoger en tienda' ) : CVD_Delivery::label( $delivery ) ),
+				'status' => 'cancelled' === $o->get_status() ? 'Cancelado' : ( 'refunded' === $o->get_status() ? 'Devuelto' : ( 'pickup' === $o->get_meta( '_cvd_fulfillment_type', true ) ? ( 'completed' === $o->get_status() ? 'Recogido' : 'Para recoger en tienda' ) : self::friendly( $delivery ) ) ),
 				'messenger' => $messenger ? $messenger->display_name : '', 'eta' => (string) $o->get_meta( '_cvd_bot_eta', true ),
 				'commission' => (float) $o->get_meta( '_cvd_commission_amount', true ), 'commissionStatus' => (string) $o->get_meta( '_cvd_commission_status', true ),
 			);
@@ -349,6 +349,18 @@ final class CVD_Bot_Bridge {
 			$day = $date === $today ? 'hoy' : ( gmdate( 'Y-m-d', strtotime( $today . ' +1 day' ) ) === $date ? 'mañana' : date_i18n( 'j \d\e F', strtotime( $date ) ) );
 		}
 		return trim( $day . ' ' . ( $slots[ $slot ] ?? $slot ) );
+	}
+
+	/** Estado de mensajería en palabras de gestora y cliente (no las etiquetas internas de la tienda). */
+	private static function friendly( string $delivery ): string {
+		$map = array(
+			'unassigned' => 'Recibido · la tienda lo está preparando', 'offered' => 'Listo · buscando mensajero',
+			'assigned' => 'Mensajero asignado', 'accepted' => 'Mensajero asignado', 'to_store' => 'El mensajero va a recogerlo',
+			'picked_up' => 'Salió de la tienda', 'handed_over' => 'En camino al cliente', 'delivered' => 'Entregado',
+			'cash_returned' => 'Entregado', 'closed' => 'Entregado ✅', 'incident' => 'Con una incidencia (la tienda lo revisa)',
+			'failed' => 'No se pudo entregar', 'returned' => 'Devuelto a la tienda', 'cancelled' => 'Cancelado',
+		);
+		return $map[ $delivery ] ?? CVD_Delivery::label( $delivery );
 	}
 
 	/** WhatsApp de la gestora dueña del pedido: recibe los mismos avisos que su cliente. */
