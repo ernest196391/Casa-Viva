@@ -252,6 +252,14 @@ final class CVD_Bot_Bridge {
 		return trim( $day . ' ' . ( $slots[ $slot ] ?? $slot ) );
 	}
 
+	/** WhatsApp de la gestora dueña del pedido: recibe los mismos avisos que su cliente. */
+	private static function gestora_phone( WC_Order $order ): string {
+		if ( 'gestora' !== sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) ) { return ''; }
+		$id = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
+		if ( ! $id ) { return ''; }
+		return preg_replace( '/\D+/', '', (string) ( get_user_meta( $id, '_cvd_whatsapp', true ) ?: get_user_meta( $id, 'billing_phone', true ) ) );
+	}
+
 	/** Vuelto pedido por el cliente: Core lo guarda como lista [{amount, currency}]. */
 	private static function change( WC_Order $order ): string {
 		$raw = $order->get_meta( '_cvd_change_required', true );
@@ -308,6 +316,7 @@ final class CVD_Bot_Bridge {
 			'app'         => home_url( '/area-mensajeros/' ),
 			'images'      => self::images( $order ),
 			'gestora'     => 'gestora' === sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) ? (string) $order->get_meta( '_cvd_owner_display_name', true ) : '',
+			'gestoraPhone'=> self::gestora_phone( $order ),
 		);
 	}
 
