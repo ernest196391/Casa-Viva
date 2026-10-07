@@ -264,12 +264,12 @@ final class CVD_Cuban_Checkout {
 			'class' => array( 'form-row-last', 'cvd-delivery-field' ), 'priority' => 122,
 		);
 		$fields['billing']['billing_cvd_change_amount'] = array(
-			'type' => 'number', 'label' => 'Necesita vuelto de', 'required' => false,
+			'type' => 'number', 'label' => '¿Con cuánto paga los productos? (para llevarle el vuelto)', 'placeholder' => 'Ej. 20 · vacío si paga exacto', 'required' => false,
 			'class' => array( 'form-row-first', 'cvd-delivery-field' ), 'priority' => 123,
 			'custom_attributes' => array( 'min' => '0', 'step' => '0.01', 'inputmode' => 'decimal' ),
 		);
 		$fields['billing']['billing_cvd_change_currency'] = array(
-			'type' => 'select', 'label' => 'Moneda del vuelto', 'required' => false,
+			'type' => 'select', 'label' => 'Moneda en que paga', 'required' => false,
 			'options' => array( '' => 'Elige la moneda', 'USD' => 'Dólares (USD)', 'CUP' => 'Pesos cubanos (CUP)', 'EUR' => 'Euros (EUR)' ), // sin moneda preseleccionada (prueba: 2 USD salieron como 2 CUP)
 			'class' => array( 'form-row-last', 'cvd-delivery-field' ), 'priority' => 124,
 		);
@@ -336,7 +336,11 @@ final class CVD_Cuban_Checkout {
 		if ( $date && ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) { $errors->add( 'billing_cvd_delivery_date', 'Selecciona una fecha de entrega válida.' ); }
 		$change_amount = (float) wc_format_decimal( wp_unslash( $_POST['billing_cvd_change_amount'] ?? 0 ), 2 );
 		$change_currency = strtoupper( sanitize_key( wp_unslash( $_POST['billing_cvd_change_currency'] ?? '' ) ) );
-		if ( $change_amount > 0 && ! in_array( $change_currency, array( 'USD', 'CUP', 'EUR' ), true ) ) { $errors->add( 'billing_cvd_change_currency', 'Elige en qué moneda necesitas el vuelto (dólares, pesos o euros).' ); }
+		if ( $change_amount > 0 && ! in_array( $change_currency, array( 'USD', 'CUP', 'EUR' ), true ) ) { $errors->add( 'billing_cvd_change_currency', 'Elige en qué moneda paga (dólares, pesos o euros).' ); }
+		$products_total = function_exists( 'WC' ) && WC()->cart ? (float) WC()->cart->get_total( 'edit' ) : 0;
+		if ( $change_amount > 0 && 'USD' === $change_currency && $products_total > 0 && $change_amount < $products_total ) {
+			$errors->add( 'billing_cvd_change_amount', sprintf( 'Con %s USD no alcanza: los productos cuestan %s USD. Escribe el billete con el que paga (o déjalo vacío si paga exacto).', wc_format_decimal( $change_amount, 2, true ), wc_format_decimal( $products_total, 2, true ) ) );
+		}
 
 		$required = array(
 			'billing_state'      => 'Selecciona la provincia de entrega.',
@@ -372,9 +376,19 @@ final class CVD_Cuban_Checkout {
 		$order->update_meta_data( '_cvd_delivery_date', sanitize_text_field( wp_unslash( $_POST['billing_cvd_delivery_date'] ?? '' ) ) );
 		$window = sanitize_key( wp_unslash( $_POST['billing_cvd_delivery_window'] ?? '' ) );
 		$order->update_meta_data( '_cvd_delivery_window', in_array( $window, array( 'morning', 'afternoon' ), true ) ? $window : '' );
-		$change_amount = (float) wc_format_decimal( wp_unslash( $_POST['billing_cvd_change_amount'] ?? 0 ), 2 );
-		$change_currency = strtoupper( sanitize_key( wp_unslash( $_POST['billing_cvd_change_currency'] ?? 'USD' ) ) );
-		$order->update_meta_data( '_cvd_change_required', $change_amount > 0 ? array( array( 'amount' => $change_amount, 'currency' => in_array( $change_currency, array( 'USD', 'CUP', 'EUR' ), true ) ? $change_currency : 'USD' ) ) : array() );
+		// El cliente dice con cuánto paga; si es en USD (moneda de los productos) el vuelto se calcula aquí.
+		$pay_with = (float) wc_format_decimal( wp_unslash( $_POST['billing_cvd_change_amount'] ?? 0 ), 2 );
+		$pay_currency = strtoupper( sanitize_key( wp_unslash( $_POST['billing_cvd_change_currency'] ?? '' ) ) );
+		$pay_currency = in_array( $pay_currency, array( 'USD', 'CUP', 'EUR' ), true ) ? $pay_currency : 'USD';
+		$change_required = array();
+		if ( $pay_with > 0 ) {
+			$order->update_meta_data( '_cvd_pay_with', array( 'amount' => $pay_with, 'currency' => $pay_currency ) );
+			if ( 'USD' === $pay_currency ) {
+				$change = round( $pay_with - (float) $order->get_total(), 2 );
+				if ( $change > 0 ) { $change_required[] = array( 'amount' => $change, 'currency' => 'USD' ); }
+			}
+		}
+		$order->update_meta_data( '_cvd_change_required', $change_required );
 		if ( 'pickup' === $type ) {
 			$order->add_order_note( 'Cliente seleccionó recogida en tienda.' );
 		}

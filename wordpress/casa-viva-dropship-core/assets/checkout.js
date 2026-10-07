@@ -211,6 +211,41 @@
 
 	$(document.body).on('change', 'input[name="payment_method"]', updateOrderButton);
 
+	// Resumen antes de finalizar (opinión de Lennys, aprobada por Ernesto): el pedido se crea al pulsar
+	// "Finalizar", así que primero se muestra todo para revisarlo y corregir sin perder el carrito.
+	var reviewed = false;
+	function fieldText(selector) { var el = $(selector); if (!el.length) return ''; return el.is('select') ? $.trim(el.find('option:selected').text()) : $.trim(el.val() || ''); }
+	function reviewSummary() {
+	  var rows = [];
+	  $('.woocommerce-checkout-review-order-table .cart_item').each(function () { rows.push($.trim($(this).find('.product-name').text().replace(/\s+/g, ' '))); });
+	  var total = $.trim($('.woocommerce-checkout-review-order-table .order-total .amount').first().text());
+	  var pickup = ($('select[name="billing_cvd_fulfillment_type"]').val() || $('input[name="billing_cvd_fulfillment_type"]:checked').val() || $('input[name="billing_cvd_fulfillment_type"]').val()) === 'pickup';
+	  var where = pickup ? 'Recogida en tienda' : [fieldText('#billing_address_1'), fieldText('#billing_cvd_locality'), fieldText('#billing_city')].filter(Boolean).join(', ');
+	  var when = [fieldText('#billing_cvd_delivery_date'), $('#billing_cvd_delivery_window').val() ? fieldText('#billing_cvd_delivery_window') : ''].filter(Boolean).join(' · ');
+	  var payWith = parseFloat($('#billing_cvd_change_amount').val() || '0');
+	  var payCurrency = $('#billing_cvd_change_currency').val();
+	  var totalNumber = parseFloat((total.match(/[\d.,]+/) || ['0'])[0].replace(/\.(?=\d{3}\b)/g, '').replace(',', '.'));
+	  var change = payWith > 0 ? (payCurrency === 'USD' ? (payWith - totalNumber > 0 ? 'Paga con ' + payWith + ' USD → vuelto ' + (payWith - totalNumber).toFixed(2) + ' USD' : 'Paga exacto') : 'Paga con ' + payWith + ' ' + (payCurrency || '¿moneda?')) : 'Paga exacto (sin vuelto)';
+	  var line = function (label, value) { return value ? '<p style="margin:.35em 0"><b>' + label + ':</b> ' + $('<span>').text(value).html() + '</p>' : ''; };
+	  return line('Productos', rows.join(' · ')) + line('Total productos', total) + line('Entrega', where) + line('Cuándo', when) + line('Pago', change) + line('Recibe', [fieldText('#billing_first_name'), fieldText('#billing_last_name')].join(' ') + ' · ' + fieldText('#billing_phone'));
+	}
+	function showReview(onConfirm) {
+	  $('#cvd-review').remove();
+	  var box = $('<div id="cvd-review" role="dialog" aria-modal="true" style="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px">' +
+	    '<div style="background:#fff;color:#222;max-width:440px;width:100%;border-radius:16px;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.3);max-height:90vh;overflow:auto">' +
+	    '<h3 style="margin:0 0 .6em">Revisa tu pedido antes de finalizar</h3>' + reviewSummary() +
+	    '<p style="margin:.8em 0 1em;font-size:.9em;opacity:.8">Al pulsar <b>Todo bien, finalizar</b> el pedido queda hecho.</p>' +
+	    '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="button" data-review="edit" style="flex:1">Corregir algo</button>' +
+	    '<button type="button" class="button alt" data-review="ok" style="flex:1">Todo bien, finalizar</button></div></div></div>');
+	  $('body').append(box);
+	  box.on('click', '[data-review]', function () { var ok = $(this).data('review') === 'ok'; box.remove(); if (ok) onConfirm(); });
+	}
+	$('form.checkout').on('checkout_place_order', function () {
+	  if (reviewed) { reviewed = false; return true; }
+	  showReview(function () { reviewed = true; $('#place_order').trigger('click'); });
+	  return false;
+	});
+
   $(function () {
     if (!$('#billing_state').val()) $('#billing_state').val(cvdCheckout.defaultState);
     populateMunicipalities(true);

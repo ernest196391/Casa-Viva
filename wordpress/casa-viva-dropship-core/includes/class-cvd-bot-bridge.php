@@ -371,7 +371,14 @@ final class CVD_Bot_Bridge {
 		} elseif ( 'yes' === $raw ) {
 			$parts[] = trim( $order->get_meta( '_cvd_change_amount', true ) . ' ' . $order->get_meta( '_cvd_change_currency', true ) );
 		}
-		return implode( ' + ', array_filter( $parts ) );
+		$change = implode( ' + ', array_filter( $parts ) );
+		// Desde 3.13.20 el cliente dice con cuánto paga: el vale lo muestra junto al vuelto calculado.
+		$pay = $order->get_meta( '_cvd_pay_with', true );
+		if ( is_array( $pay ) && (float) ( $pay['amount'] ?? 0 ) > 0 ) {
+			$with = wc_format_decimal( (float) $pay['amount'], 2, true ) . ' ' . strtoupper( (string) ( $pay['currency'] ?? '' ) );
+			return $change ? $change . ' (paga con ' . $with . ')' : ( 'USD' === strtoupper( (string) $pay['currency'] ) ? 'no (paga exacto: ' . $with . ')' : 'paga con ' . $with . ' · calcula el vuelto' );
+		}
+		return $change;
 	}
 
 	/** Foto principal de cada producto, para que tienda y mensajero no confundan productos parecidos. */
