@@ -27,6 +27,16 @@ final class CVD_Bot_Bridge {
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/delivered', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'delivered' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'order_status' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)/whatsapp', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'verified_whatsapp' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/gestora', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'gestora_link' ), 'permission_callback' => $auth ) );
+	}
+
+	/** Enlace personal de una gestora aprobada (por su WhatsApp): sus clientes compran desde ahí y la venta es suya. */
+	public static function gestora_link( WP_REST_Request $request ) {
+		$gestora = self::user_by_phone( (string) $request->get_param( 'phone' ), 'cvd_gestora' );
+		if ( ! $gestora ) { return self::no_cache( array( 'found' => false ) ); }
+		$code = (string) get_user_meta( $gestora->ID, '_cvd_referral_code', true );
+		if ( '' === $code ) { return self::no_cache( array( 'found' => true, 'name' => $gestora->display_name, 'link' => '' ) ); }
+		return self::no_cache( array( 'found' => true, 'name' => $gestora->display_name, 'code' => $code, 'link' => add_query_arg( 'ref', rawurlencode( $code ), home_url( '/' ) ) ) );
 	}
 
 	/**
@@ -203,9 +213,13 @@ final class CVD_Bot_Bridge {
 
 	/** Mensajero aprobado cuyo WhatsApp (o teléfono de facturación) coincide en los últimos 8 dígitos. */
 	public static function messenger_by_phone( string $phone ): ?WP_User {
+		return self::user_by_phone( $phone, 'cvd_messenger' );
+	}
+
+	private static function user_by_phone( string $phone, string $role ): ?WP_User {
 		$key = self::phone_key( $phone );
 		if ( '' === $key ) { return null; }
-		$users = get_users( array( 'role' => 'cvd_messenger', 'meta_key' => '_cvd_account_status', 'meta_value' => 'approved' ) );
+		$users = get_users( array( 'role' => $role, 'meta_key' => '_cvd_account_status', 'meta_value' => 'approved' ) );
 		foreach ( $users as $user ) {
 			foreach ( array( '_cvd_whatsapp', 'billing_phone' ) as $meta ) {
 				if ( $key === self::phone_key( (string) get_user_meta( $user->ID, $meta, true ) ) ) { return $user; }
@@ -293,6 +307,7 @@ final class CVD_Bot_Bridge {
 			'tracking'    => CVD_Delivery::tracking_url( $order ),
 			'app'         => home_url( '/area-mensajeros/' ),
 			'images'      => self::images( $order ),
+			'gestora'     => 'gestora' === sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) ? (string) $order->get_meta( '_cvd_owner_display_name', true ) : '',
 		);
 	}
 

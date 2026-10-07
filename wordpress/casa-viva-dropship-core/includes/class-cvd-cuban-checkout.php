@@ -270,7 +270,7 @@ final class CVD_Cuban_Checkout {
 		);
 		$fields['billing']['billing_cvd_change_currency'] = array(
 			'type' => 'select', 'label' => 'Moneda del vuelto', 'required' => false,
-			'options' => array( 'USD' => 'USD', 'CUP' => 'CUP', 'EUR' => 'EUR' ),
+			'options' => array( '' => 'Elige la moneda', 'USD' => 'Dólares (USD)', 'CUP' => 'Pesos cubanos (CUP)', 'EUR' => 'Euros (EUR)' ), // sin moneda preseleccionada (prueba: 2 USD salieron como 2 CUP)
 			'class' => array( 'form-row-last', 'cvd-delivery-field' ), 'priority' => 124,
 		);
 		$fields['billing']['billing_cvd_map_url'] = array(
@@ -334,6 +334,9 @@ final class CVD_Cuban_Checkout {
 		if ( $alternate && strlen( $alternate ) < 8 ) { $errors->add( 'billing_cvd_alternate_phone', 'Escribe un teléfono alternativo válido.' ); }
 		$date = sanitize_text_field( wp_unslash( $_POST['billing_cvd_delivery_date'] ?? '' ) );
 		if ( $date && ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) { $errors->add( 'billing_cvd_delivery_date', 'Selecciona una fecha de entrega válida.' ); }
+		$change_amount = (float) wc_format_decimal( wp_unslash( $_POST['billing_cvd_change_amount'] ?? 0 ), 2 );
+		$change_currency = strtoupper( sanitize_key( wp_unslash( $_POST['billing_cvd_change_currency'] ?? '' ) ) );
+		if ( $change_amount > 0 && ! in_array( $change_currency, array( 'USD', 'CUP', 'EUR' ), true ) ) { $errors->add( 'billing_cvd_change_currency', 'Elige en qué moneda necesitas el vuelto (dólares, pesos o euros).' ); }
 
 		$required = array(
 			'billing_state'      => 'Selecciona la provincia de entrega.',
