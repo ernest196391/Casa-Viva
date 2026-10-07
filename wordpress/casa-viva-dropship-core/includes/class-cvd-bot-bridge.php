@@ -28,6 +28,59 @@ final class CVD_Bot_Bridge {
 		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'order_status' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)/whatsapp', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'verified_whatsapp' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/gestora', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'gestora_link' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/gestora/orders', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'gestora_orders' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/partners', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'partners' ), 'permission_callback' => $auth ) );
+	}
+
+	/** Gestoras y mensajeros con su estado de alta: el bot avisa de solicitudes nuevas y da la bienvenida al aprobar. */
+	public static function partners(): WP_REST_Response {
+		$rows = array();
+		foreach ( array( 'cvd_gestora' => 'gestora', 'cvd_messenger' => 'mensajero' ) as $role => $kind ) {
+			foreach ( get_users( array( 'role' => $role, 'orderby' => 'registered', 'order' => 'DESC', 'number' => 200 ) ) as $user ) {
+				$rows[] = array(
+					'id'     => $user->ID,
+					'kind'   => $kind,
+					'name'   => $user->display_name,
+					'phone'  => preg_replace( '/\D+/', '', (string) ( get_user_meta( $user->ID, '_cvd_whatsapp', true ) ?: get_user_meta( $user->ID, 'billing_phone', true ) ) ),
+					'status' => sanitize_key( (string) get_user_meta( $user->ID, '_cvd_account_status', true ) ) ?: 'pending',
+					'since'  => $user->user_registered,
+				);
+			}
+		}
+		return self::no_cache( array( 'partners' => $rows, 'approveUrl' => admin_url( 'admin.php?page=cvd-gestoras' ) ) );
+	}
+
+	/** Lo que una gestora pregunta por WhatsApp: sus últimos pedidos, en qué punto van y su comisión. */
+	public static function gestora_orders( WP_REST_Request $request ) {
+		$gestora = self::user_by_phone( (string) $request->get_param( 'phone' ), 'cvd_gestora' );
+		if ( ! $gestora ) { return self::no_cache( array( 'found' => false ) ); }
+		$only = absint( $request->get_param( 'order' ) );
+		if ( $only ) {
+			// Un pedido concreto: solo si es de esta gestora (nunca se muestran pedidos ajenos).
+			$one = wc_get_order( $only );
+			$orders = $one instanceof WC_Order && ! $one instanceof WC_Order_Refund && absint( $one->get_meta( '_cvd_owner_user_id', true ) ) === $gestora->ID ? array( $one ) : array();
+		} else {
+			$orders = wc_get_orders( array( 'limit' => 8, 'type' => 'shop_order', 'orderby' => 'date', 'order' => 'DESC', 'meta_key' => '_cvd_owner_user_id', 'meta_value' => $gestora->ID ) );
+		}
+		$list = array();
+		$pending = 0.0; $approved = 0.0;
+		foreach ( wc_get_orders( array( 'limit' => 200, 'type' => 'shop_order', 'return' => 'objects', 'meta_key' => '_cvd_owner_user_id', 'meta_value' => $gestora->ID, 'status' => array( 'pending', 'processing', 'on-hold', 'completed' ) ) ) as $o ) {
+			$amount = (float) $o->get_meta( '_cvd_commission_amount', true );
+			$state = sanitize_key( (string) $o->get_meta( '_cvd_commission_status', true ) );
+			if ( 'approved' === $state ) { $approved += $amount; } elseif ( in_array( $state, array( '', 'pending' ), true ) ) { $pending += $amount; }
+		}
+		foreach ( $orders as $o ) {
+			$delivery = CVD_Delivery::status( $o );
+			$messenger = get_userdata( absint( $o->get_meta( '_cvd_messenger_user_id', true ) ) );
+			$list[] = array(
+				'id' => $o->get_id(), 'date' => $o->get_date_created() ? $o->get_date_created()->date_i18n( 'd/m' ) : '',
+				'customer' => $o->get_formatted_billing_full_name(), 'items' => self::items( $o ),
+				'status' => 'cancelled' === $o->get_status() ? 'Cancelado' : ( 'pickup' === $o->get_meta( '_cvd_fulfillment_type', true ) ? ( 'completed' === $o->get_status() ? 'Recogido' : 'Para recoger en tienda' ) : CVD_Delivery::label( $delivery ) ),
+				'messenger' => $messenger ? $messenger->display_name : '', 'eta' => (string) $o->get_meta( '_cvd_bot_eta', true ),
+				'commission' => (float) $o->get_meta( '_cvd_commission_amount', true ), 'commissionStatus' => (string) $o->get_meta( '_cvd_commission_status', true ),
+			);
+		}
+		return self::no_cache( array( 'found' => true, 'name' => $gestora->display_name, 'orders' => $list, 'commission' => array( 'pending' => round( $pending, 2 ), 'approved' => round( $approved, 2 ) ) ) );
 	}
 
 	/** Enlace personal de una gestora aprobada (por su WhatsApp): sus clientes compran desde ahí y la venta es suya. */
