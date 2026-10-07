@@ -23,6 +23,28 @@ final class CVD_Delivery {
 		add_action( 'woocommerce_order_status_refunded', array( __CLASS__, 'sync_cancelled' ), 40 );
 		add_action( 'woocommerce_order_status_failed', array( __CLASS__, 'sync_cancelled' ), 40 );
 		add_action( 'cvd_expand_delivery_offer', array( __CLASS__, 'expand_offer' ) );
+		add_action( 'woocommerce_before_order_object_save', array( __CLASS__, 'guard_closed_cancellation' ) );
+	}
+
+	/**
+	 * Un pedido cerrado (dinero verificado, comisión y ganancia aprobadas) no se cancela ni se
+	 * reembolsa desde WooCommerce: Core ya rechaza esa anulación, y sin este freno el pedido
+	 * quedaba "cancelado" con la comisión y la ganancia aprobadas. Las devoluciones irán por su
+	 * propio flujo (decisión de Ernesto, opción A, 2026-10-07).
+	 */
+	public static function guard_closed_cancellation( $order ): void {
+		if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund || ! $order->get_id() ) { return; }
+		$changes = $order->get_changes();
+		if ( empty( $changes['status'] ) || ! in_array( $changes['status'], array( 'cancelled', 'refunded' ), true ) ) { return; }
+		$closed = 'closed' === sanitize_key( (string) $order->get_meta( '_cvd_delivery_status', true ) ) || 'verified' === sanitize_key( (string) $order->get_meta( '_cvd_cash_status', true ) );
+		if ( ! $closed ) { return; }
+		$stored = wc_get_order( $order->get_id() );
+		$previous = $stored ? $stored->get_status() : 'completed';
+		if ( in_array( $previous, array( 'cancelled', 'refunded' ), true ) ) { return; }
+		$order->set_status( $previous );
+		// Sin transición pendiente: no se disparan correos ni hooks de "completado" otra vez.
+		( function () { $this->status_transition = false; } )->call( $order );
+		$order->add_order_note( 'Casa Viva: este pedido ya está cerrado (dinero verificado). No se puede cancelar ni reembolsar desde aquí; registra una devolución.' );
 	}
 
 	public static function routes(): void {
