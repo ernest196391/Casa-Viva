@@ -160,6 +160,16 @@ final class CVD_Sales {
 			$order->update_meta_data( '_cvd_collection_note', sanitize_textarea_field( (string) $request->get_param( 'collectionNote' ) ) );
 			$order->update_meta_data( '_cvd_collection_received_by', get_current_user_id() );
 			$order->update_meta_data( '_cvd_collection_received_at', current_time( 'mysql', true ) );
+			// ¿Cuadra con lo que declaró el mensajero por WhatsApp? Si no, queda escrito en el pedido.
+			$declared_usd = (string) $order->get_meta( '_cvd_declared_usd', true );
+			$declared_cup = (string) $order->get_meta( '_cvd_declared_cup', true );
+			if ( '' !== $declared_usd || '' !== $declared_cup ) {
+				$got_usd = (float) wc_format_decimal( $request->get_param( 'collectedUsd' ) ?: 0, 2 );
+				$got_cup = (float) wc_format_decimal( $request->get_param( 'collectedCup' ) ?: 0, 2 );
+				if ( abs( $got_usd - (float) $declared_usd ) > 0.009 || abs( $got_cup - (float) $declared_cup ) > 0.009 ) {
+					$order->add_order_note( sprintf( 'Caja NO cuadra: el mensajero declaró %s USD + %s CUP y la tienda registró %s USD + %s CUP.', $declared_usd ?: '0', $declared_cup ?: '0', $got_usd, $got_cup ) );
+				}
+			}
 		}
 
 		$order->update_meta_data( self::STATUS_META, $next );
@@ -246,6 +256,8 @@ final class CVD_Sales {
 			'commissionStatus' => sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ?: 'none',
 			'shippingCup' => 'pickup' === $fulfillment ? 0 : ( class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_fee( $order ) : absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) ) ),
 			'orderCode' => 'CV-PEDIDO-' . $order->get_id(),
+			'declaredUsd' => (string) $order->get_meta( '_cvd_declared_usd', true ),
+			'declaredCup' => (string) $order->get_meta( '_cvd_declared_cup', true ),
 			'deliveryStatus' => 'pickup' === $fulfillment ? '' : ( class_exists( 'CVD_Delivery' ) ? CVD_Delivery::label( $delivery_status ) : '' ),
 			'trackingUrl' => class_exists( 'CVD_Delivery' ) && 'pickup' !== $fulfillment ? CVD_Delivery::tracking_url( $order ) : '',
 			'actions' => array_values( array_unique( $actions ) ),

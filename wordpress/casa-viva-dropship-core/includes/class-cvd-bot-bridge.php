@@ -26,6 +26,27 @@ final class CVD_Bot_Bridge {
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/eta', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'eta' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/delivered', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'delivered' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'order_status' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)/whatsapp', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'verified_whatsapp' ), 'permission_callback' => $auth ) );
+	}
+
+	/**
+	 * El cliente mandó el vale desde su WhatsApp: ese número es seguro (el tecleado en la web puede
+	 * tener erratas). Se guarda aparte y es el que usan el vale y los avisos. Si no coincide, se anota.
+	 */
+	public static function verified_whatsapp( WP_REST_Request $request ) {
+		$order = self::order( $request );
+		if ( is_wp_error( $order ) ) { return $order; }
+		$phone = preg_replace( '/\D+/', '', (string) $request->get_param( 'phone' ) );
+		if ( strlen( $phone ) < 8 ) { return new WP_Error( 'cvd_phone', 'Teléfono no válido.', array( 'status' => 400 ) ); }
+		$typed = preg_replace( '/\D+/', '', (string) $order->get_billing_phone() );
+		if ( (string) $order->get_meta( '_cvd_whatsapp_verified', true ) !== $phone ) {
+			$order->update_meta_data( '_cvd_whatsapp_verified', $phone );
+			$order->add_order_note( substr( $typed, -8 ) === substr( $phone, -8 )
+				? 'VivaBot: el cliente envió el vale desde su WhatsApp (+' . $phone . ').'
+				: 'VivaBot: el cliente envió el vale desde +' . $phone . ', distinto del teléfono escrito en la web (' . $typed . '). Se usa el de WhatsApp.' );
+			$order->save();
+		}
+		return self::no_cache( array( 'ok' => true, 'matches' => substr( $typed, -8 ) === substr( $phone, -8 ) ) );
 	}
 
 	public static function authorized( WP_REST_Request $request ): bool {
@@ -144,6 +165,9 @@ final class CVD_Bot_Bridge {
 				$locked->update_meta_data( '_cvd_collection_amount_usd', wc_format_decimal( $usd, 2 ) );
 				$locked->update_meta_data( '_cvd_collection_amount_cup', wc_format_decimal( $cup, 2 ) );
 				$locked->update_meta_data( '_cvd_collection_note', 'Declarado por WhatsApp' );
+				// Lo que declaró el mensajero se conserva aparte: la tienda lo ve al cerrar y se avisa si no cuadra.
+				$locked->update_meta_data( '_cvd_declared_usd', wc_format_decimal( $usd, 2 ) );
+				$locked->update_meta_data( '_cvd_declared_cup', wc_format_decimal( $cup, 2 ) );
 				$locked->update_meta_data( '_cvd_collection_received_by', $actor->ID );
 				$locked->update_meta_data( '_cvd_collection_received_at', $at );
 			},
@@ -201,19 +225,55 @@ final class CVD_Bot_Bridge {
 		return implode( ', ', $items );
 	}
 
+	/** Fecha y franja que eligió el cliente al comprar, en palabras ("hoy por la tarde"). */
 	private static function window( WC_Order $order ): string {
-		return trim( (string) $order->get_meta( '_cvd_delivery_date', true ) . ' ' . (string) $order->get_meta( '_cvd_delivery_window', true ) );
+		$date = (string) $order->get_meta( '_cvd_delivery_date', true );
+		$slot = sanitize_key( (string) $order->get_meta( '_cvd_delivery_window', true ) );
+		$slots = array( 'morning' => 'por la mañana', 'afternoon' => 'por la tarde', 'evening' => 'por la noche', 'anytime' => 'a cualquier hora' );
+		$day = '';
+		if ( $date ) {
+			$today = current_time( 'Y-m-d' );
+			$day = $date === $today ? 'hoy' : ( gmdate( 'Y-m-d', strtotime( $today . ' +1 day' ) ) === $date ? 'mañana' : date_i18n( 'j \d\e F', strtotime( $date ) ) );
+		}
+		return trim( $day . ' ' . ( $slots[ $slot ] ?? $slot ) );
+	}
+
+	/** Vuelto pedido por el cliente: Core lo guarda como lista [{amount, currency}]. */
+	private static function change( WC_Order $order ): string {
+		$raw = $order->get_meta( '_cvd_change_required', true );
+		$parts = array();
+		if ( is_array( $raw ) ) {
+			foreach ( $raw as $line ) {
+				$amount = is_array( $line ) ? (float) ( $line['amount'] ?? 0 ) : 0;
+				if ( $amount > 0 ) { $parts[] = wc_format_decimal( $amount, 2, true ) . ' ' . strtoupper( (string) ( $line['currency'] ?? '' ) ); }
+			}
+		} elseif ( 'yes' === $raw ) {
+			$parts[] = trim( $order->get_meta( '_cvd_change_amount', true ) . ' ' . $order->get_meta( '_cvd_change_currency', true ) );
+		}
+		return implode( ' + ', array_filter( $parts ) );
+	}
+
+	/** Foto principal de cada producto, para que tienda y mensajero no confundan productos parecidos. */
+	private static function images( WC_Order $order ): array {
+		$images = array();
+		foreach ( $order->get_items( 'line_item' ) as $item ) {
+			$product = $item->get_product();
+			$id = $product ? ( $product->get_image_id() ?: ( $product->get_parent_id() ? wc_get_product( $product->get_parent_id() )->get_image_id() : 0 ) ) : 0;
+			$url = $id ? wp_get_attachment_image_url( $id, 'large' ) : '';
+			if ( $url ) { $images[] = array( 'url' => $url, 'caption' => $item->get_quantity() . ' × ' . $item->get_name() ); }
+		}
+		return array_slice( $images, 0, 5 );
 	}
 
 	private static function customer( WC_Order $order ): array {
-		$phone = $order->get_shipping_phone() ?: $order->get_billing_phone();
+		$phone = $order->get_meta( '_cvd_whatsapp_verified', true ) ?: ( $order->get_shipping_phone() ?: $order->get_billing_phone() );
 		return array( 'name' => trim( $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name() ) ?: $order->get_formatted_billing_full_name(), 'phone' => preg_replace( '/\D+/', '', (string) $phone ) );
 	}
 
 	/** Vale completo: solo se entrega al mensajero que ganó la carrera. */
 	private static function voucher( WC_Order $order ): array {
 		$address = trim( implode( ', ', array_filter( array( $order->get_shipping_address_1() ?: $order->get_billing_address_1(), $order->get_shipping_address_2() ?: $order->get_billing_address_2() ) ) ) );
-		$change = 'yes' === $order->get_meta( '_cvd_change_required', true ) ? trim( $order->get_meta( '_cvd_change_amount', true ) . ' ' . $order->get_meta( '_cvd_change_currency', true ) ) : '';
+		$change = self::change( $order );
 		return array(
 			'id'          => $order->get_id(),
 			'customer'    => self::customer( $order ),
@@ -232,6 +292,7 @@ final class CVD_Bot_Bridge {
 			'pickup'      => 'Casa Viva · Calle Conill A esq. 45 #864, Nuevo Vedado',
 			'tracking'    => CVD_Delivery::tracking_url( $order ),
 			'app'         => home_url( '/area-mensajeros/' ),
+			'images'      => self::images( $order ),
 		);
 	}
 

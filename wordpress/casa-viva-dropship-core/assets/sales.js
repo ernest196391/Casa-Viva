@@ -28,7 +28,7 @@
   function actionButtons(order) {
     return order.actions.filter(function (status) { return cvdSales.isAdmin || status !== "cancelled"; }).map(function (status) {
       var danger = status === "cancelled" || status === "incident" ? " is-warning" : status === "delivered" ? " is-success" : "";
-      return '<button class="cvd-sale-action' + danger + '" data-order="' + order.id + '" data-status="' + status + '" data-pickup="' + (order.fulfillment === "Recogida en tienda" ? "1" : "0") + '">' + escapeText(actionLabel(order, status)) + "</button>";
+      return '<button class="cvd-sale-action' + danger + '" data-order="' + order.id + '" data-status="' + status + '" data-pickup="' + (order.fulfillment === "Recogida en tienda" ? "1" : "0") + '" data-declared-usd="' + escapeText(order.declaredUsd || "") + '" data-declared-cup="' + escapeText(order.declaredCup || "") + '">' + escapeText(actionLabel(order, status)) + "</button>";
     }).join("");
   }
   function commercialData(order) {
@@ -76,6 +76,14 @@
       handover.checked = false;
       var card = button.closest(".cvd-sale-card");
       document.getElementById("cvd-money-usd").value = ((card && card.querySelector(".cvd-sale-top>strong").textContent.match(/[\d.,]+/)) || [""])[0].replace(",", ".");
+      // Lo que el mensajero declaró por WhatsApp: se propone tal cual; si la tienda cuenta otra cosa, Core lo anota.
+      var declaredUsd = button.dataset.declaredUsd, declaredCup = button.dataset.declaredCup;
+      if (declaredUsd || declaredCup) {
+        document.getElementById("cvd-money-usd").value = declaredUsd || "0";
+        document.getElementById("cvd-money-cup").value = declaredCup || "0";
+        document.getElementById("cvd-money-method").value = Number(declaredUsd) > 0 && Number(declaredCup) > 0 ? "mixed" : (Number(declaredUsd) > 0 ? "cash_usd" : "cash_cup");
+        document.getElementById("cvd-money-title").textContent = "Dinero recibido · el mensajero declaró " + (declaredUsd || 0) + " USD + " + (declaredCup || 0) + " CUP";
+      }
       moneyDialog.showModal(); return;
     }
     if (status === "cancelled" && !window.confirm("¿Cancelar el pedido? Se repondrá el stock y se cancelará la comisión.")) return;
