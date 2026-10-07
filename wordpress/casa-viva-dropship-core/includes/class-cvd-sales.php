@@ -117,6 +117,14 @@ final class CVD_Sales {
 			$key=sanitize_text_field((string)($request->get_header('X-CVD-Idempotency-Key')?:$request->get_param('idempotencyKey')));$result='incident'===$next?CVD_Order_Transition_Service::open_incident($order->get_id(),'operation',array('actor_user_id'=>get_current_user_id(),'idempotency_key'=>$key,'note'=>sanitize_textarea_field((string)$request->get_param('note')))):CVD_Order_Transition_Service::resolve_incident($order->get_id(),'operation',array('actor_user_id'=>get_current_user_id(),'idempotency_key'=>$key,'note'=>sanitize_textarea_field((string)$request->get_param('note'))));
 			if(empty($result['success'])||('incident'===$current&&$next!==$result['new_state'])){return new WP_Error('cvd_incident_conflict','No se pudo actualizar la incidencia sin inventar una etapa.',array('status'=>409,'transition'=>$result));}return rest_ensure_response(array('message'=>'Pedido actualizado.','order'=>self::payload(wc_get_order($order->get_id())),'transition'=>$result));
 		}
+		// Botón único "Listo para salir" (D29): desde Nuevo/Confirmado pasa por Preparando y luego Listo,
+		// para que Core conserve las dos etapas en su historial sin pedir dos toques a la tienda.
+		if ( 'ready' === $next && in_array( $current, array( 'new', 'confirmed' ), true ) && class_exists( 'CVD_Order_Transition_Service' ) && CVD_Order_Transition_Service::governs( 'operation', $current, 'preparing' ) ) {
+			$step = CVD_Order_Transition_Service::transition( $order->get_id(), 'operation', 'preparing', array( 'actor_user_id' => get_current_user_id(), 'idempotency_key' => 'one-tap-preparing:' . $order->get_id(), 'source' => 'cvd_sales_one_tap_ready' ) );
+			if ( empty( $step['success'] ) ) { return new WP_Error( 'cvd_transition_' . strtolower( $step['error_code'] ), 'No se pudo preparar el pedido.', array( 'status' => 409, 'transition' => $step ) ); }
+			$order = wc_get_order( $order->get_id() );
+			$current = 'preparing';
+		}
 		if ( class_exists( 'CVD_Order_Transition_Service' ) && CVD_Order_Transition_Service::governs( 'operation', $current, $next ) ) {
 			$idempotency_key = sanitize_text_field( (string) ( $request->get_header( 'X-CVD-Idempotency-Key' ) ?: $request->get_param( 'idempotencyKey' ) ) );
 			$result = CVD_Order_Transition_Service::transition( $order->get_id(), 'operation', $next, array(
@@ -212,6 +220,8 @@ final class CVD_Sales {
 		$operation_status = self::operation_status( $order );
 		$delivery_status = class_exists( 'CVD_Delivery' ) ? CVD_Delivery::status( $order ) : '';
 		$actions = self::allowed_transitions( $operation_status );
+		// Un solo toque: un pedido nuevo ofrece directamente "Listo para salir" (ver change_status).
+		if ( in_array( $operation_status, array( 'new', 'confirmed' ), true ) ) { $actions = array_map( static fn( string $a ): string => 'preparing' === $a ? 'ready' : $a, $actions ); }
 		if ( 'pickup' === $fulfillment && 'ready' === $operation_status ) { array_unshift( $actions, 'delivered' ); }
 		if ( 'pickup' !== $fulfillment && class_exists( 'CVD_Delivery' ) ) {
 			$actions = array_values( array_diff( $actions, array( 'with_courier', 'delivered' ) ) );

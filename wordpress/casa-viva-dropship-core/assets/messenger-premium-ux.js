@@ -18,11 +18,15 @@
 
   function installScreens(center) {
     const selectors = {
-      hoy: ['.cvd-messenger-today'],
+      // Las carreras abiertas van en "Hoy" y arriba del todo (D29): es lo primero que debe ver el mensajero.
+      hoy: ['#ofertas', '.cvd-messenger-today'],
       ruta: ['.cvd-messenger-route', '#entregas'],
       dinero: ['#ganancias', '.cvd-messenger-earnings', '#cierre', '.cvd-messenger-closeout', '#liquidaciones'],
-      mas: ['.cvd-messenger-contacts', '.cvd-messenger-preparation', '#asistente', '#ofertas', '#perfil'],
+      mas: ['.cvd-messenger-contacts', '.cvd-messenger-preparation', '#asistente', '#perfil'],
     };
+    const offersPanel = qs('#ofertas', center);
+    const todayPanel = qs('.cvd-messenger-today', center);
+    if (offersPanel && todayPanel) todayPanel.before(offersPanel);
 
     const allSections = new Set();
     Object.entries(selectors).forEach(([screen, entries]) => {
@@ -41,6 +45,7 @@
     const links = qsa('a', nav);
     const destination = new Map([
       ['#hoy', 'hoy'],
+      ['#ofertas', 'hoy'],
       ['#ruta', 'ruta'],
       ['#ganancias', 'dinero'],
       ['#liquidaciones', 'dinero'],
