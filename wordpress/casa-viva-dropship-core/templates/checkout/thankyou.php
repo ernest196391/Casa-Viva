@@ -27,6 +27,21 @@ defined( 'ABSPATH' ) || exit;
 					<a href="<?php echo esc_url( 'https://wa.me/' . $cvd_fix_phone . '?text=' . rawurlencode( $cvd_fix_text ) ); ?>" target="_blank" rel="noopener" style="text-decoration:underline">¿Te equivocaste en algo? Corrige tu pedido #<?php echo esc_html( $order->get_order_number() ); ?> sin rehacerlo</a>
 				</p>
 			<?php endif; ?>
+			<p class="cvd-thanks__back" style="margin-top:10px;text-align:center"><a class="button" href="<?php echo esc_url( home_url( '/tienda/' ) ); ?>">Volver a la tienda</a></p>
+			<script>
+			// Al volver de WhatsApp: el pedido ya está hecho; se dice claramente y se ofrece seguir comprando.
+			(function () {
+				var btn = document.querySelector('.cvd-thanks__whatsapp');
+				var lead = document.querySelector('[data-cvd-thanks-lead]');
+				if (!btn || !lead) return;
+				btn.addEventListener('click', function () {
+					setTimeout(function () {
+						lead.innerHTML = '<strong>¡Listo! Tu pedido está hecho.</strong> Si aún no enviaste el vale en WhatsApp, pulsa el botón verde otra vez.';
+						btn.textContent = 'Abrir WhatsApp otra vez';
+					}, 800);
+				});
+			})();
+			</script>
 		<?php endif; ?>
 		<?php
 		// Los detalles ya están arriba; se mantienen los ganchos para medición y otros plugins.

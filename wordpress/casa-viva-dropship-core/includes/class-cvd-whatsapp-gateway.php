@@ -44,9 +44,10 @@ final class CVD_WhatsApp_Gateway {
 		$fee       = $is_pickup || ! class_exists( 'CVD_Shipping_Rates' ) ? 0 : CVD_Shipping_Rates::order_fee( $order );
 
 		echo '<section class="cvd-thanks" aria-label="Pedido recibido">';
-		echo '<p class="cvd-thanks__ref">Pedido #' . esc_html( $order->get_order_number() ) . '</p>';
+		echo '<p class="cvd-thanks__ref">✅ Pedido #' . esc_html( $order->get_order_number() ) . ' finalizado</p>';
 		if ( $url ) {
-			echo '<p class="cvd-thanks__lead">Confírmalo por WhatsApp y coordinamos contigo la entrega y el pago.</p>';
+			// Lennys: dejar claro que falta un último paso (mandar el vale) y que el pedido ya está hecho.
+			echo '<p class="cvd-thanks__lead" data-cvd-thanks-lead><strong>Último paso:</strong> envía el vale por WhatsApp. Así lo tienes en tu chat y te avisamos de todo: quién lo lleva, a qué hora y cuándo se entregó.</p>';
 			// esc_url() strips encoded CR/LF sequences and destroys WhatsApp line breaks.
 			// whatsapp_url() validates the destination; esc_attr() only protects the HTML attribute.
 			echo '<a class="cvd-thanks__whatsapp" href="' . esc_attr( $url ) . '" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.4L3 20.4l1.3-4.7a8.5 8.5 0 1 1 16.2-4Zm-4.7 2.4c-.2-.1-1.4-.7-1.6-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.9 6.9 0 0 1-3.4-3c-.2-.3 0-.4.1-.5l.6-.7c.1-.2.1-.4 0-.5l-.8-2c-.1-.3-.3-.3-.5-.3h-.5c-.2 0-.5.1-.7.3-.2.2-.9.9-.9 2.2s.9 2.5 1 2.7c.1.2 1.8 2.8 4.5 3.9.6.3 1.1.4 1.5.5.6.2 1.2.2 1.7.1.5-.1 1.4-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.2-.2-.3-.2-.5-.3Z"/></svg><span>Confirmar por WhatsApp</span></a>';
