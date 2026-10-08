@@ -7,6 +7,13 @@ final class CVD_Registration {
 		add_shortcode( 'casa_viva_registro', array( __CLASS__, 'render' ) );
 		add_filter( 'wp_authenticate_user', array( __CLASS__, 'block_pending_login' ), 20 );
 		add_action( 'template_redirect', array( __CLASS__, 'handle_secure_access_link' ), 1 );
+		add_action( 'woocommerce_login_form_end', array( __CLASS__, 'whatsapp_access_hint' ) );
+	}
+
+	/** En la pantalla de entrada: las gestoras sin contraseña entran pidiendo su enlace por WhatsApp. */
+	public static function whatsapp_access_hint(): void {
+		$wa = 'https://wa.me/5354056173?text=' . rawurlencode( 'mi acceso' );
+		echo '<div class="cvd-notice" style="margin-top:14px"><strong>¿Eres gestora y no tienes contraseña?</strong><br>No hace falta: <a class="cvd-primary" style="display:inline-block;margin-top:8px" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener">Entrar con WhatsApp</a><br><small>Te mandamos al momento un enlace para entrar directo a tu panel.</small></div>';
 	}
 
 	public static function create_secure_access_link( WP_User $user ): string {
@@ -106,7 +113,7 @@ final class CVD_Registration {
 					<label>Nombre completo<input name="cvd_name" required type="text" value="<?php echo esc_attr( wp_unslash( $_POST['cvd_name'] ?? ( $current_user ? $current_user->display_name : '' ) ) ); ?>"></label>
 					<label>WhatsApp<input inputmode="tel" name="cvd_phone" placeholder="+53…" required type="tel" value="<?php echo esc_attr( wp_unslash( $_POST['cvd_phone'] ?? '' ) ); ?>"></label>
 					<label>Correo electrónico (opcional)<input name="cvd_email" type="email" value="<?php echo esc_attr( wp_unslash( $_POST['cvd_email'] ?? ( $current_user ? $current_user->user_email : '' ) ) ); ?>" <?php echo $current_user ? 'readonly' : ''; ?>></label>
-					<label>Municipio o zona<input name="cvd_zone" required type="text" value="<?php echo esc_attr( wp_unslash( $_POST['cvd_zone'] ?? '' ) ); ?>"></label>
+					<label>Municipio o zona<input name="cvd_zone" required type="text" placeholder="Ej.: Playa, Vedado, Centro Habana" value="<?php echo esc_attr( wp_unslash( $_POST['cvd_zone'] ?? '' ) ); ?>"></label>
 					<?php if ( 'mensajero' === $type ) : ?><label>Medio de transporte<select name="cvd_vehicle" required><option value="">Selecciona</option><option>Bicicleta</option><option>Moto</option><option>Auto</option><option>Otro</option></select></label><?php endif; ?>
 					<?php if ( ! $current_user ) : ?><label>Contraseña (opcional)<input minlength="8" name="cvd_password" type="password"><small>No hace falta: entras con el enlace que te mandamos por WhatsApp.</small></label><?php endif; ?>
 				</div>
