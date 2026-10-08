@@ -126,7 +126,7 @@ final class CVD_Bot_Bridge {
 				'commission' => (float) $o->get_meta( '_cvd_commission_amount', true ), 'commissionStatus' => (string) $o->get_meta( '_cvd_commission_status', true ),
 			);
 		}
-		return self::no_cache( array( 'found' => true, 'name' => $gestora->display_name, 'orders' => $list, 'commission' => array( 'pending' => round( $pending, 2 ), 'approved' => round( $approved, 2 ) ) ) );
+		return self::no_cache( array( 'found' => true, 'id' => $gestora->ID, 'approved' => 'approved' === get_user_meta( $gestora->ID, '_cvd_account_status', true ), 'name' => $gestora->display_name, 'orders' => $list, 'commission' => array( 'pending' => round( $pending, 2 ), 'approved' => round( $approved, 2 ) ) ) );
 	}
 
 	/** Enlace personal de una gestora aprobada (por su WhatsApp): sus clientes compran desde ahí y la venta es suya. */
