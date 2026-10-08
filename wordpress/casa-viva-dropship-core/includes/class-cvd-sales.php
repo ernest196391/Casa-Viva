@@ -81,6 +81,12 @@ final class CVD_Sales {
 			$messenger_note = 'anulada';
 		}
 		if ( function_exists( 'wc_increase_stock_levels' ) ) { wc_increase_stock_levels( $order ); }
+		// La comisión se anula aquí mismo: el paso a "reembolsado" no la toca en un pedido ya cerrado.
+		if ( 'paid' === sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ) {
+			$order->add_order_note( 'Devolución: la comisión de la gestora ya estaba pagada; descontarla en su próximo pago.' );
+		} elseif ( class_exists( 'CVD_Commissions' ) ) {
+			CVD_Commissions::cancel_for_order( $order, $actor->ID, current_time( 'mysql', true ), 'return:' . $order->get_id() );
+		}
 		$order->update_meta_data( '_cvd_return', array( 'at' => current_time( 'mysql', true ), 'by' => $actor->ID, 'refund_usd' => $usd, 'refund_cup' => $cup, 'reason' => $reason, 'messenger_earning' => $messenger_note ) );
 		$order->update_meta_data( '_cvd_return_in_progress', 'yes' ); // deja pasar el freno de D30 solo para esta devolución
 		$order->add_order_note( sprintf( 'Devolución registrada por %s: se devolvió al cliente %s USD + %s CUP. Motivo: %s. Stock repuesto; comisión de la gestora anulada; ganancia del mensajero %s.', $actor->display_name, $usd, $cup, $reason, $messenger_note ) );
