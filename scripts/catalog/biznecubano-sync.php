@@ -199,6 +199,156 @@ function cvd_sync_stock( WC_Product $product, array $p, bool $apply ): ?array {
 	return array( 'id' => $product->get_id(), 'sku' => $product->get_sku(), 'name' => $product->get_name(), 'before' => $before, 'after' => $target );
 }
 
+/** Libro de inventario: deja anotado un conteo hecho por la sincronización. */
+function cvd_sync_log_count( int $product_id, int $variation_id, float $from, float $to, string $url ): void {
+	global $wpdb;
+	$table = $wpdb->prefix . 'cvd_inventory_movements';
+	if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
+		return;
+	}
+	$wpdb->insert(
+		$table,
+		array(
+			'movement_uuid' => wp_generate_uuid4(), 'product_id' => $product_id, 'variation_id' => $variation_id,
+			'movement_type' => 'count', 'quantity_delta' => $to - $from, 'stock_before' => $from, 'stock_after' => $to,
+			'reason' => 'Sincronización con BizneCubano', 'reference_type' => 'biznecubano', 'reference_id' => 0,
+			'actor_user_id' => 0, 'created_at' => current_time( 'mysql', true ),
+			'metadata' => wp_json_encode( array( 'source' => 'biznecubano-sync', 'url' => $url ) ),
+		),
+		array( '%s', '%d', '%d', '%s', '%f', '%f', '%f', '%s', '%s', '%d', '%d', '%s', '%s' )
+	);
+}
+
+/**
+ * Colores (variantes) de BizneCubano → variaciones de WooCommerce con su cantidad.
+ * - si en la web era simple y en BizneCubano tiene colores, pasa a variable;
+ * - color que falta en la web y tiene existencias: se crea;
+ * - color que está en la web y ya no en BizneCubano (o con 0): queda agotado (nunca se borra).
+ * Devuelve la lista de cambios (y los aplica si $apply).
+ */
+function cvd_sync_variations( WC_Product $product, array $p, bool $apply ): array {
+	$source = array();
+	foreach ( (array) ( $p['variations'] ?? array() ) as $v ) {
+		$name = sanitize_title( (string) ( $v['name'] ?? '' ) );
+		if ( '' !== $name ) {
+			$source[ $name ] = $v;
+		}
+	}
+	if ( ! $source ) {
+		return array();
+	}
+	$changes = array();
+	$attr_key = 'color';
+
+	if ( ! $product->is_type( 'variable' ) ) {
+		$changes[] = array( 'action' => 'convertir a producto con colores', 'from' => $product->get_type() );
+		if ( ! $apply ) {
+			foreach ( $source as $name => $v ) {
+				if ( (int) $v['qty'] > 0 ) {
+					$changes[] = array( 'action' => 'crear color', 'color' => $name, 'qty' => (int) $v['qty'] );
+				}
+			}
+			return $changes;
+		}
+		$fallback_price = $product->get_regular_price();
+		wp_set_object_terms( $product->get_id(), 'variable', 'product_type' );
+		$product = new WC_Product_Variable( $product->get_id() );
+		$product->set_manage_stock( false );
+		$product->update_meta_data( '_cvd_sync_fallback_price', $fallback_price );
+		$product->save();
+	}
+
+	// Atributo "color" local con todas las opciones conocidas (las de la web y las de BizneCubano).
+	$attributes = $product->get_attributes();
+	foreach ( $attributes as $key => $attribute ) {
+		if ( ! $attribute->is_taxonomy() && $attribute->get_variation() ) {
+			$attr_key = $key;
+			break;
+		}
+	}
+	$existing = array();
+	foreach ( $product->get_children() as $child_id ) {
+		$variation = wc_get_product( $child_id );
+		if ( $variation ) {
+			$existing[ sanitize_title( (string) $variation->get_attribute( $attr_key ) ) ] = $variation;
+		}
+	}
+	$options = array_values( array_unique( array_merge( array_keys( $existing ), array_keys( $source ) ) ) );
+	if ( $apply ) {
+		$attribute = $attributes[ $attr_key ] ?? new WC_Product_Attribute();
+		$attribute->set_name( $attr_key );
+		$attribute->set_options( $options );
+		$attribute->set_visible( true );
+		$attribute->set_variation( true );
+		$attributes[ $attr_key ] = $attribute;
+		$product->set_attributes( $attributes );
+		$product->save();
+	}
+
+	$fallback = (string) ( $product->get_meta( '_cvd_sync_fallback_price' ) ?: $product->get_price() );
+	foreach ( $source as $name => $v ) {
+		$qty = max( 0, (int) $v['qty'] );
+		$variation = $existing[ $name ] ?? null;
+		if ( ! $variation ) {
+			if ( $qty <= 0 ) {
+				continue;
+			}
+			$changes[] = array( 'action' => 'crear color', 'color' => $name, 'qty' => $qty );
+			if ( $apply ) {
+				$variation = new WC_Product_Variation();
+				$variation->set_parent_id( $product->get_id() );
+				$variation->set_attributes( array( $attr_key => $name ) );
+				$regular = $v['regular_price'] ?? null;
+				$sale = $v['price'] ?? null;
+				$variation->set_regular_price( cvd_sync_money( $regular ?: $fallback ) );
+				if ( $sale && $regular && (float) $sale < (float) $regular ) {
+					$variation->set_sale_price( cvd_sync_money( $sale ) );
+				}
+				$variation->set_manage_stock( true );
+				$variation->set_stock_quantity( $qty );
+				$variation->set_stock_status( 'instock' );
+				$variation->set_status( 'publish' );
+				$new_id = $variation->save();
+				cvd_sync_log_count( $product->get_id(), $new_id, 0, $qty, (string) ( $p['url'] ?? '' ) );
+			}
+			continue;
+		}
+		$before = $variation->get_manage_stock() ? (int) $variation->get_stock_quantity() : null;
+		if ( $before === $qty && $variation->get_manage_stock() ) {
+			continue;
+		}
+		$changes[] = array( 'action' => 'cantidad', 'color' => $name, 'before' => $before, 'after' => $qty );
+		if ( $apply ) {
+			$variation->set_manage_stock( true );
+			$variation->save();
+			wc_update_product_stock( $variation, $qty, 'set' );
+			cvd_sync_log_count( $product->get_id(), $variation->get_id(), (float) ( $before ?? 0 ), $qty, (string) ( $p['url'] ?? '' ) );
+		}
+	}
+	// Colores que la web tiene y BizneCubano ya no: agotados.
+	foreach ( $existing as $name => $variation ) {
+		if ( isset( $source[ $name ] ) ) {
+			continue;
+		}
+		if ( $variation->get_manage_stock() && 0 === (int) $variation->get_stock_quantity() ) {
+			continue;
+		}
+		$changes[] = array( 'action' => 'agotar color (ya no está en BizneCubano)', 'color' => $name, 'before' => $variation->get_manage_stock() ? (int) $variation->get_stock_quantity() : null );
+		if ( $apply ) {
+			$before = (float) ( $variation->get_stock_quantity() ?? 0 );
+			$variation->set_manage_stock( true );
+			$variation->save();
+			wc_update_product_stock( $variation, 0, 'set' );
+			cvd_sync_log_count( $product->get_id(), $variation->get_id(), $before, 0, (string) ( $p['url'] ?? '' ) );
+		}
+	}
+	if ( $apply && $changes ) {
+		WC_Product_Variable::sync( $product->get_id() );
+		wc_delete_product_transients( $product->get_id() );
+	}
+	return $changes;
+}
+
 /** Publica un producto que está en BizneCubano si estaba en borrador u oculto por la sincronización. */
 function cvd_sync_publish( WC_Product $product, bool $apply ): bool {
 	if ( '' !== (string) $product->get_meta( '_cvd_hold' ) ) {
@@ -226,6 +376,7 @@ $report = array(
 	'created'         => array(),
 	'published'       => array(),
 	'stock_updates'   => array(),
+	'variation_updates' => array(),
 	'hidden'          => array(),
 	'no_image'        => array(),
 	'unchanged'       => 0,
@@ -264,9 +415,17 @@ foreach ( $products as $p ) {
 			if ( ! $product->get_image_id() ) {
 				$report['no_image'][] = array( 'id' => $product_id, 'sku' => $sku, 'name' => $product->get_name() );
 			}
+			if ( 'variable' === ( $p['type'] ?? '' ) && ! empty( $p['variations'] ) ) {
+				$var_changes = cvd_sync_variations( $product, $p, $apply );
+				if ( $var_changes ) {
+					$report['variation_updates'][] = array( 'id' => $product_id, 'sku' => $sku, 'name' => $product->get_name(), 'changes' => $var_changes );
+				} else {
+					$report['unchanged']++;
+				}
+				continue;
+			}
 			if ( $product->is_type( 'variable' ) ) {
-				// Precio y stock viven en cada variante; BizneCubano no las expone por separado.
-				$report['skipped'][] = array( 'sku' => $sku, 'name' => $p['name'], 'reason' => 'producto variable: precio y stock por variante' );
+				$report['skipped'][] = array( 'sku' => $sku, 'name' => $p['name'], 'reason' => 'en la web tiene colores y en BizneCubano no: revisar a mano' );
 				continue;
 			}
 			$stock_change = cvd_sync_stock( $product, $p, $apply );
@@ -295,7 +454,7 @@ foreach ( $products as $p ) {
 			continue;
 		}
 		$term_ids = cvd_sync_term_ids( (array) ( $p['categories'] ?? array() ), $apply, $created_terms );
-		$entry = array( 'sku' => $sku, 'name' => $p['name'], 'regular' => cvd_sync_money( $regular ), 'sale' => $on_sale ? cvd_sync_money( $price ) : '', 'categories' => $p['categories'] ?? array(), 'source' => $p['url'] );
+		$entry = array( 'sku' => $sku, 'name' => $p['name'], 'regular' => cvd_sync_money( $regular ), 'sale' => $on_sale ? cvd_sync_money( $price ) : '', 'categories' => $p['categories'] ?? array(), 'source' => $p['url'], 'qty' => $p['qty'] ?? null, 'colors' => array_map( static fn( $v ) => $v['name'] . ' ' . $v['qty'], (array) ( $p['variations'] ?? array() ) ) );
 		if ( $apply ) {
 			$product = new WC_Product_Simple();
 			$product->set_name( (string) $p['name'] );
@@ -308,7 +467,11 @@ foreach ( $products as $p ) {
 			$product->update_meta_data( '_cvd_biznecubano_url', esc_url_raw( (string) $p['url'] ) );
 			$product->update_meta_data( '_cvd_biznecubano_synced_at', gmdate( 'c' ) );
 			$new_id = $product->save();
-			cvd_sync_stock( wc_get_product( $new_id ), $p, true );
+			if ( 'variable' === ( $p['type'] ?? '' ) && ! empty( $p['variations'] ) ) {
+				cvd_sync_variations( wc_get_product( $new_id ), $p, true );
+			} else {
+				cvd_sync_stock( wc_get_product( $new_id ), $p, true );
+			}
 			if ( ! empty( $p['image'] ) ) {
 				$image_id = cvd_sync_image( (string) $p['image'], $new_id, (string) $p['name'] );
 				if ( $image_id ) {
@@ -349,6 +512,7 @@ $report['totals'] = array(
 	'created'        => count( $report['created'] ),
 	'published'      => count( $report['published'] ),
 	'stock_updates'  => count( $report['stock_updates'] ),
+	'variation_updates' => count( $report['variation_updates'] ),
 	'hidden'         => count( $report['hidden'] ),
 	'no_image'       => count( $report['no_image'] ),
 	'unchanged'      => $report['unchanged'],

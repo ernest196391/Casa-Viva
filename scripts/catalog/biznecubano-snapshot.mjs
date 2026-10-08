@@ -6,7 +6,20 @@ import path from 'node:path';
 import { chromium } from '@playwright/test';
 
 const SOURCE = (process.env.SOURCE_URL || 'https://casaviva.biznecubano.com').replace(/\/$/, '');
-const TARGET = (process.env.TARGET_URL || 'https://casavivadecuba.com').replace(/\/$/, '');
+const TARGET = (process.env.TARGET_URL || 'https://casaviva.company').replace(/\/$/, '');
+
+// Datos exactos del producto que BizneCubano deja en el HTML (atributo :product-prop):
+// cantidad (qty) y variantes con su cantidad y precio en centavos.
+function decodeEntities(s) {
+  return s.replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+}
+function productProp(html) {
+  const i = html.indexOf(':product-prop="');
+  if (i < 0) return null;
+  const raw = html.slice(i + 15, html.indexOf('"', i + 15));
+  try { return JSON.parse(decodeEntities(raw)); } catch { return null; }
+}
+const cents = (v) => (v === null || v === undefined || v === '' ? null : Number(v) / 100);
 const OUT = process.env.OUT_DIR || 'catalog-snapshot';
 const MAX_PAGES = Number(process.env.MAX_PAGES || 30);
 const DISCOVERY = process.env.DISCOVERY === '1';
@@ -108,10 +121,28 @@ for (const url of urls) {
     images: data.images,
     description: details,
   };
+  // Cantidades exactas y variantes (colores) desde el HTML del servidor.
+  const prop = productProp(await (await context.request.get(url)).text().catch(() => '')) || null;
+  if (prop) {
+    entry.bc_id = prop.id;
+    entry.type = prop.type === 'variable' ? 'variable' : 'simple';
+    entry.qty = prop.qty === null || prop.qty === undefined || prop.qty === '' ? null : Number(prop.qty);
+    entry.variations = (prop.variations || []).map((v) => ({
+      name: String(v.variationName || (v.attributeValues || []).join('-') || '').trim().toLowerCase(),
+      attribute: (v.attributeCodes || ['color'])[0] || 'color',
+      qty: Number(v.qty) || 0,
+      price: cents(v.discount_price) ?? cents(v.price),
+      regular_price: cents(v.price),
+    })).filter((v) => v.name);
+    if (entry.type === 'simple' && Number.isFinite(entry.qty)) {
+      entry.stock_hint = entry.qty;
+      entry.out_of_stock = entry.qty <= 0;
+    }
+    if (entry.type === 'variable') entry.out_of_stock = !entry.variations.some((v) => v.qty > 0);
+  }
   if (DISCOVERY) Object.assign(entry, { raw: data, api: apiLog.map((a) => ({ ...a })) });
-  if (DISCOVERY) entry.api = apiLog.map((a) => ({ ...a }));
   products.push(entry);
-  console.log(`producto ${products.length}/${urls.length}: ${entry.title}`);
+  console.log(`producto ${products.length}/${urls.length}: ${entry.name} · ${entry.type || '?'} · ${entry.type === 'variable' ? entry.variations.map((v) => `${v.name} ${v.qty}`).join(', ') : `qty ${entry.qty ?? 'sin dato'}`}`);
 }
 fs.writeFileSync(path.join(OUT, 'biznecubano.json'), JSON.stringify({ source: SOURCE, generated_at: new Date().toISOString(), count: products.length, products }, null, 2));
 
