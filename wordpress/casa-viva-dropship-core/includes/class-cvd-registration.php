@@ -88,7 +88,7 @@ final class CVD_Registration {
 		}
 
 		if ( $success ) {
-			return '<section class="cvd-auth-card"><p class="cvd-kicker">Solicitud recibida</p><h1>Tu cuenta ya fue creada.</h1><p>Ahora está pendiente de aprobación por Casa Viva. No necesitas registrarte otra vez. Te avisaremos por correo cuando sea aprobada.</p><a class="cvd-primary" href="' . esc_url( self::portal_url_for_type( $type ) ) . '">Consultar mi solicitud</a></section>';
+			return '<section class="cvd-auth-card"><p class="cvd-kicker">Solicitud recibida</p><h1>Tu cuenta ya fue creada.</h1><p>Ahora está pendiente de aprobación por Casa Viva. No necesitas registrarte otra vez. Te avisaremos por WhatsApp cuando sea aprobada, con tu enlace para entrar.</p><a class="cvd-primary" href="' . esc_url( self::portal_url_for_type( $type ) ) . '">Consultar mi solicitud</a></section>';
 		}
 
 		$title = 'mensajero' === $type ? 'Trabaja como mensajero de Casa Viva' : 'Vende con Casa Viva como gestora';
@@ -105,10 +105,10 @@ final class CVD_Registration {
 				<div class="cvd-form-grid">
 					<label>Nombre completo<input name="cvd_name" required type="text" value="<?php echo esc_attr( wp_unslash( $_POST['cvd_name'] ?? ( $current_user ? $current_user->display_name : '' ) ) ); ?>"></label>
 					<label>WhatsApp<input inputmode="tel" name="cvd_phone" placeholder="+53…" required type="tel" value="<?php echo esc_attr( wp_unslash( $_POST['cvd_phone'] ?? '' ) ); ?>"></label>
-					<label>Correo electrónico<input name="cvd_email" required type="email" value="<?php echo esc_attr( wp_unslash( $_POST['cvd_email'] ?? ( $current_user ? $current_user->user_email : '' ) ) ); ?>" <?php echo $current_user ? 'readonly' : ''; ?>></label>
+					<label>Correo electrónico (opcional)<input name="cvd_email" type="email" value="<?php echo esc_attr( wp_unslash( $_POST['cvd_email'] ?? ( $current_user ? $current_user->user_email : '' ) ) ); ?>" <?php echo $current_user ? 'readonly' : ''; ?>></label>
 					<label>Municipio o zona<input name="cvd_zone" required type="text" value="<?php echo esc_attr( wp_unslash( $_POST['cvd_zone'] ?? '' ) ); ?>"></label>
 					<?php if ( 'mensajero' === $type ) : ?><label>Medio de transporte<select name="cvd_vehicle" required><option value="">Selecciona</option><option>Bicicleta</option><option>Moto</option><option>Auto</option><option>Otro</option></select></label><?php endif; ?>
-					<?php if ( ! $current_user ) : ?><label>Contraseña<input minlength="8" name="cvd_password" required type="password"><small>Mínimo 8 caracteres.</small></label><?php endif; ?>
+					<?php if ( ! $current_user ) : ?><label>Contraseña (opcional)<input minlength="8" name="cvd_password" type="password"><small>No hace falta: entras con el enlace que te mandamos por WhatsApp.</small></label><?php endif; ?>
 				</div>
 				<label class="cvd-check"><input name="cvd_truth" required type="checkbox" value="1"> Confirmo que los datos proporcionados son correctos.</label>
 				<?php wp_nonce_field( 'cvd_register_' . $type, 'cvd_register_nonce' ); ?>
@@ -125,8 +125,25 @@ final class CVD_Registration {
 		$phone = preg_replace( '/\D+/', '', wp_unslash( $_POST['cvd_phone'] ?? '' ) );
 		$zone = sanitize_text_field( wp_unslash( $_POST['cvd_zone'] ?? '' ) );
 		$password = (string) wp_unslash( $_POST['cvd_password'] ?? '' );
-		if ( ! $name || ! is_email( $email ) || strlen( $phone ) < 8 || ! $zone || ( ! $current_user && strlen( $password ) < 8 ) ) {
-			return new WP_Error( 'invalid', 'Completa correctamente todos los campos obligatorios.' );
+		if ( 8 === strlen( $phone ) ) { $phone = '53' . $phone; }
+		if ( $current_user && '' === $email ) { $email = $current_user->user_email; }
+		if ( ! $name || strlen( $phone ) < 8 || ! $zone ) {
+			return new WP_Error( 'invalid', 'Escribe tu nombre, tu WhatsApp y tu municipio o zona.' );
+		}
+		if ( '' !== $email && ! is_email( $email ) ) {
+			return new WP_Error( 'invalid_email', 'El correo no es válido. Puedes dejarlo vacío.' );
+		}
+		if ( '' !== $password && strlen( $password ) < 8 ) {
+			return new WP_Error( 'short_password', 'La contraseña necesita al menos 8 caracteres. Puedes dejarla vacía.' );
+		}
+		if ( ! $current_user ) {
+			$same_phone = get_users( array( 'number' => 1, 'fields' => 'ID', 'meta_query' => array( array( 'key' => '_cvd_whatsapp', 'value' => substr( $phone, -8 ), 'compare' => 'LIKE' ) ) ) );
+			if ( $same_phone ) {
+				return new WP_Error( 'phone_exists', 'Ya hay una cuenta con este WhatsApp. Escríbenos por WhatsApp y te mandamos tu acceso.' );
+			}
+			// Sin correo ni contraseña: correo interno (no recibe mensajes) y contraseña aleatoria; se entra con el enlace de WhatsApp.
+			if ( '' === $email ) { $email = 'g' . $phone . '@gestoras.casaviva.company'; }
+			if ( '' === $password ) { $password = wp_generate_password( 24 ); }
 		}
 		if ( $current_user ) {
 			$existing_type = self::program_type( $current_user );
@@ -142,7 +159,8 @@ final class CVD_Registration {
 			$user->add_role( 'mensajero' === $type ? 'cvd_messenger' : 'cvd_gestora' );
 		} else {
 			if ( email_exists( $email ) ) { return new WP_Error( 'exists', 'Ya existe una cuenta con ese correo electrónico. Inicia sesión primero y vuelve a solicitar.' ); }
-			$base_login = sanitize_user( strtok( $email, '@' ), true ) ?: 'casaviva';
+			$from_name = str_ends_with( $email, '@gestoras.casaviva.company' ) ? preg_replace( '/[^a-z0-9]/', '', strtolower( remove_accents( $name ) ) ) : '';
+			$base_login = $from_name ?: ( sanitize_user( strtok( $email, '@' ), true ) ?: 'casaviva' );
 			$login = $base_login;
 			$counter = 1;
 			while ( username_exists( $login ) ) { $login = $base_login . $counter++; }
@@ -172,7 +190,8 @@ final class CVD_Registration {
 		$admin_url = admin_url( 'admin.php?page=cvd-gestoras' );
 		$applicant_subject = 'Casa Viva recibió tu solicitud';
 		$applicant_message = "Hola {$user->display_name},\n\nRecibimos tu solicitud para participar como {$program}.\n\nEstado: Pendiente de aprobación.\n\nPuedes consultar el estado aquí:\n" . self::portal_url_for_type( $type ) . "\n\nCasa Viva";
-		$applicant_sent = wp_mail( $user->user_email, $applicant_subject, $applicant_message );
+		$internal = str_ends_with( strtolower( $user->user_email ), '@gestoras.casaviva.company' );
+		$applicant_sent = $internal ? false : wp_mail( $user->user_email, $applicant_subject, $applicant_message );
 		update_user_meta( $user->ID, '_cvd_application_email_sent', $applicant_sent ? current_time( 'mysql', true ) : 'failed' );
 
 		if ( $admin_email ) {
