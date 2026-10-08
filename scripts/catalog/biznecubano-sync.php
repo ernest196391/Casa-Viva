@@ -67,6 +67,13 @@ if ( 'hold' === $mode || 'unhold' === $mode ) {
 $data = json_decode( (string) file_get_contents( $file ), true, 512, JSON_THROW_ON_ERROR );
 $products = $data['products'] ?? array();
 
+// Seguro: si la lectura de BizneCubano salió corta (caída, cambio de página), no se aplica nada.
+$published_bc = count( array_filter( wc_get_products( array( 'limit' => -1, 'status' => array( 'publish' ), 'return' => 'objects' ) ), static fn( $p ) => 0 === strpos( (string) $p->get_sku(), 'BC-' ) ) );
+if ( $apply && ( count( $products ) < 50 || count( $products ) < 0.7 * $published_bc ) ) {
+	echo wp_json_encode( array( 'mode' => $mode, 'aborted' => true, 'reason' => sprintf( 'La lectura de BizneCubano trae %d productos y la web tiene %d publicados: parece incompleta, no se aplica nada.', count( $products ), $published_bc ), 'errors' => array( array( 'sku' => '-', 'error' => 'lectura incompleta' ) ), 'totals' => array( 'aborted' => 1 ) ), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE ) . "\n";
+	return;
+}
+
 const CVD_SYNC_CATEGORY_MAP = array(
 	'Baño'                       => 'Baño',
 	'Cocina'                     => 'Cocina',
