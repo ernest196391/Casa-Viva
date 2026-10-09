@@ -66,15 +66,22 @@ final class CVD_Market_Bridge {
 		$item = absint( $request->get_param( 'item_id' ) );
 		$title = sanitize_text_field( (string) $request->get_param( 'title' ) );
 		$price = (float) $request->get_param( 'price' );
-		$commission = max( 0, (float) $request->get_param( 'commission' ) );
-		if ( ! $item || '' === $title || $price <= 0 ) {
-			return new WP_REST_Response( array( 'ok' => false, 'error' => 'Faltan item_id, title o price.' ), 400 );
+		$commission = (float) $request->get_param( 'commission' );
+		$version = absint( $request->get_param( 'version' ) );
+		if ( ! $item || '' === $title || $price <= 0 || ! $version ) {
+			return new WP_REST_Response( array( 'ok' => false, 'error' => 'Faltan item_id, title, price o version.' ), 400 );
+		}
+		// La comisión del gestor (mitad de la ganancia) debe ser positiva: un 0 explícito anularía la tarifa.
+		if ( $commission <= 0 || $commission >= $price ) {
+			return new WP_REST_Response( array( 'ok' => false, 'error' => 'La comisión debe ser mayor que 0 y menor que el precio.' ), 400 );
 		}
 		$description = sanitize_textarea_field( (string) $request->get_param( 'description' ) );
 		$images = array_values( array_filter( array_map( 'esc_url_raw', (array) $request->get_param( 'images' ) ), array( __CLASS__, 'allowed_image' ) ) );
 
 		$product = self::find( $item ) ?: new WC_Product_Simple();
 		$is_new = ! $product->get_id();
+		// Idempotente: un reintento viejo nunca pisa una versión más nueva (la versión la pone VivaBot).
+		if ( $stale = self::stale( $product, $version ) ) { return $stale; }
 		$product->set_name( $title );
 		$product->set_sku( self::SKU_PREFIX . $item );
 		$product->set_regular_price( wc_format_decimal( $price, 2 ) );
@@ -88,6 +95,7 @@ final class CVD_Market_Bridge {
 		$cat = self::category_id();
 		if ( $cat ) { $product->set_category_ids( array( $cat ) ); }
 		$product->update_meta_data( '_cvd_market_item_id', $item );
+		$product->update_meta_data( '_cvd_market_version', $version );
 		$product->update_meta_data( '_cvd_commission_type', 'fixed' );
 		$product->update_meta_data( '_cvd_commission_value', wc_format_decimal( $commission, 2 ) );
 		$product->delete_meta_data( '_cvd_sync_hidden_from' );
@@ -110,9 +118,22 @@ final class CVD_Market_Bridge {
 		return new WP_REST_Response( array( 'ok' => true, 'product_id' => $product_id, 'url' => get_permalink( $product_id ), 'new' => $is_new ), 200 );
 	}
 
+	/** Respuesta "ya aplicado" si llega una versión igual o anterior a la guardada. */
+	private static function stale( WC_Product $product, int $version ): ?WP_REST_Response {
+		$current = $product->get_id() ? absint( $product->get_meta( '_cvd_market_version', true ) ) : 0;
+		if ( $current && $version <= $current ) {
+			return new WP_REST_Response( array( 'ok' => true, 'stale' => true, 'product_id' => $product->get_id(), 'url' => get_permalink( $product->get_id() ), 'status' => $product->get_status() ), 200 );
+		}
+		return null;
+	}
+
 	public static function unpublish( WP_REST_Request $request ): WP_REST_Response {
+		$version = absint( $request->get_param( 'version' ) );
+		if ( ! $version ) { return new WP_REST_Response( array( 'ok' => false, 'error' => 'Falta version.' ), 400 ); }
 		$product = self::find( absint( $request['item'] ) );
 		if ( ! $product ) { return new WP_REST_Response( array( 'ok' => true, 'found' => false ), 200 ); }
+		if ( $stale = self::stale( $product, $version ) ) { return $stale; }
+		$product->update_meta_data( '_cvd_market_version', $version );
 		$product->set_status( 'private' );
 		$product->save();
 		return new WP_REST_Response( array( 'ok' => true, 'found' => true, 'product_id' => $product->get_id() ), 200 );

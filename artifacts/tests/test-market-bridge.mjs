@@ -14,4 +14,6 @@ must(php.includes('set_manage_stock( false )'), 'Sin control de stock: se confir
 must(/supabase\\\.co/.test(php), 'Solo imágenes de Supabase Storage.');
 must(!/seller|proveedor_tel|seller_phone/i.test(php.replace(/El proveedor nunca se guarda aquí/, '')), 'El proveedor no se guarda en la web.');
 must(sync.includes("0 === strpos( $sku, 'MK-' )"), 'La sincronización de BizneCubano no debe ocultar MK-*.');
+must(php.includes('_cvd_market_version') && php.includes('stale('), 'Publicar y retirar deben ser idempotentes por versión.');
+must(php.includes('$commission <= 0'), 'La comisión debe ser positiva.');
 console.log('Market bridge contract OK');
