@@ -119,7 +119,7 @@ case "$command_name" in
 	if [[ "$concurrent_count" != "1" ]]; then echo "Concurrencia creó $concurrent_count filas." >&2; exit 1; fi
 	echo "OK: dos inserciones concurrentes produjeron una fila."
 	wp eval-file /var/www/html/integration-tests/catalog-sync-bootstrap.php
-	sync=("${compose[@]}" run --rm --no-deps -e CVD_SYNC_FILE=/var/www/html/integration-tests/fixtures/biznecubano-sync.json cli)
+	sync=("${compose[@]}" run --rm --no-deps -e CVD_SYNC_FILE=/var/www/html/integration-tests/fixtures/biznecubano-sync.json -e CVD_SYNC_MIN_PRODUCTS=1 cli)
 	"${sync[@]}" env CVD_SYNC_MODE=dry-run wp eval-file /var/www/html/catalog-scripts/biznecubano-sync.php
 	wp eval-file /var/www/html/integration-tests/catalog-sync-verify.php dry-run
 	"${sync[@]}" env CVD_SYNC_MODE=apply wp eval-file /var/www/html/catalog-scripts/biznecubano-sync.php
