@@ -11,7 +11,11 @@ function must(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-must(plugin.includes("Version: 3.13.12") && plugin.includes("CVD_VERSION', '3.13.12"), 'La versión 3.13.12 debe identificar el candidato de launch polish.');
+// Launch polish llegó en 3.13.12; versiones posteriores lo conservan.
+const atLeast = (v) => { const [a, b, c] = v.split('.').map(Number); return a > 3 || (a === 3 && (b > 13 || (b === 13 && c >= 12))); };
+const header = plugin.match(/Version: (\d+\.\d+\.\d+)/)?.[1] || '0.0.0';
+const constant = plugin.match(/CVD_VERSION', '(\d+\.\d+\.\d+)/)?.[1] || '0.0.0';
+must(header === constant && atLeast(header), 'La versión del Core debe ser coherente y ≥ 3.13.12 (launch polish).');
 must(plugin.includes('class-cvd-launch-polish.php') && plugin.includes('CVD_Launch_Polish::register()'), 'Launch polish debe cargarse y registrarse desde el Core.');
 must(php.includes('is_front_page()') && php.includes("$_SERVER['REQUEST_URI']") && php.includes("home_url( '/' )"), 'El alcance SEO/assets debe limitarse a la URL canónica de portada.');
 must(php.includes('pre_get_document_title'), 'Falta título técnico de portada.');
