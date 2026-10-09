@@ -19,6 +19,14 @@ CUENTAS DE PRUEBA: gestora de prueba creada con `test-accounts.yml` (secretos JO
 FOTOS: 44 fotos reales ampliadas a 2K con Higgsfield (118 créditos) aplicadas con `catalog-photos-apply.yml` (revert disponible); 15 descartadas porque la IA deformaba etiquetas o texto
 ```
 
+## CV-EQUIPO-001 — Arreglos pedidos por Lennys y Thaly (3.13.25, 2026-10-09)
+
+- Vale de WhatsApp: nueva sección *PAGO* con forma de pago y vuelto (misma regla que el bot, `CVD_Bot_Bridge::change_label`), y enlace 📷 a cada producto para que mensajero y dependienta no confundan modelos parecidos.
+- Botón de ayuda (asistente contextual): quien entra por el enlace de una gestora ve el WhatsApp de esa gestora, no el central.
+- Ficha de producto: se ocultan al mostrar las líneas de la descripción con precio (vienen de BizneCubano); el precio válido es el de WooCommerce/gestora. No cambia datos.
+- Pendiente de comprobar en producción: botón «atrás» a mitad del pedido y vuelta tras «continuar por WhatsApp» (carrito vacío + «Volver a la tienda» ya existían).
+- Pruebas: `php -l` en los 4 archivos; prueba local de `strip_description_prices`. No se ejecutó el recorrido E2E.
+
 ## CV-HOME-DEALS — Portada con ofertas reales (2026-10-05)
 
 Auditoría en móvil (390×844) de Amazon, Gymshark y Brooklinen (Shein y Temu bloquean con captcha): ninguna usa una foto con «Comprar ahora»; la primera pantalla enseña buscador, categorías, a dónde entregan y productos con precio. En Casa Viva el primer precio estaba a 1.381 px.

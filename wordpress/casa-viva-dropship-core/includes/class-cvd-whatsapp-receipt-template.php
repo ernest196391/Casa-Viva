@@ -42,6 +42,10 @@ final class CVD_WhatsApp_Receipt_Template {
 			if ( $item['variations'] ) {
 				$items[] = '   _' . implode( ' · ', $item['variations'] ) . '_';
 			}
+			// Mensajero y dependienta ven la foto para no confundir productos parecidos.
+			if ( ! empty( $item['action_url'] ) ) {
+				$items[] = '   📷 ' . $item['action_url'];
+			}
 		}
 		self::section( $lines, 'PRODUCTOS', $items );
 
@@ -53,6 +57,16 @@ final class CVD_WhatsApp_Receipt_Template {
 			$amounts[] = ( 'shipping' === $row['key'] && $is_pickup ) ? 'Recogida: Sin costo' : $row['label'] . ': ' . $row['formatted'];
 		}
 		self::section( $lines, 'IMPORTES', $amounts );
+
+		$change = $order && class_exists( 'CVD_Bot_Bridge' ) ? CVD_Bot_Bridge::change_label( $order ) : '';
+		self::section(
+			$lines,
+			'PAGO',
+			array(
+				$data['payment']['label'] ? 'Forma de pago: ' . $data['payment']['label'] : '',
+				$change ? 'Vuelto: ' . $change : '',
+			)
+		);
 
 		if ( $is_pickup ) {
 			self::section( $lines, 'RECOGIDA', array( $address ? '📍 ' . $address[0] : '', 'Te confirmaremos por este chat cuándo estará listo.' ) );
