@@ -68,6 +68,7 @@ jobs:
           node artifacts/tests/test-order-success-access-7a.mjs
           node artifacts/tests/test-catalog-presentation-7c3.mjs
           node artifacts/tests/test-launch-polish-001.mjs
+          node artifacts/tests/test-market-bridge.mjs
 
       - name: Validar privacidad dependienta y administración
         run: node artifacts/tests/test-staff-privacy-5a.mjs
