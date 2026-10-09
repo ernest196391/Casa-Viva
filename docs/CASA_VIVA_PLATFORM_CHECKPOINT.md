@@ -19,6 +19,13 @@ CUENTAS DE PRUEBA: gestora de prueba creada con `test-accounts.yml` (secretos JO
 FOTOS: 44 fotos reales ampliadas a 2K con Higgsfield (118 créditos) aplicadas con `catalog-photos-apply.yml` (revert disponible); 15 descartadas porque la IA deformaba etiquetas o texto
 ```
 
+## CV-MERCADO-001 — Mercado «bajo pedido» (3.13.26, 2026-10-09)
+
+- `CVD_Market_Bridge`: `POST /casa-viva/v1/bot/market/publish` y `/bot/market/{item}/unpublish` (clave X-Vivabot-Key). SKU `MK-<id>`, categoría «Bajo pedido», sin control de stock, aviso «confirmamos disponibilidad en 1 hora», comisión fija = mitad de la ganancia (la calcula VivaBot). Fotos solo desde Supabase Storage. El proveedor no se guarda en la web.
+- La sincronización de BizneCubano ya no oculta los `MK-*`.
+- Decisiones de Ernesto: publicar en Casa Viva; proveedor +5/+10 USD, >300 USD +5 %; comisión del gestor = mitad; al vender, VivaBot pregunta a Ernesto antes de escribir al proveedor.
+- Pruebas: `php -l`, `test-market-bridge.mjs`. Sin prueba E2E contra producción todavía.
+
 ## CV-EQUIPO-001 — Arreglos pedidos por Lennys y Thaly (3.13.25, 2026-10-09)
 
 - Vale de WhatsApp: nueva sección *PAGO* con forma de pago y vuelto (misma regla que el bot, `CVD_Bot_Bridge::change_label`), y enlace 📷 a cada producto para que mensajero y dependienta no confundan modelos parecidos.

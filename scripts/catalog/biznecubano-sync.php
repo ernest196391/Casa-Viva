@@ -505,7 +505,8 @@ foreach ( $products as $p ) {
 $existing = wc_get_products( array( 'limit' => -1, 'status' => array( 'publish' ), 'return' => 'objects' ) );
 foreach ( $existing as $product ) {
 	$sku = (string) $product->get_sku();
-	if ( ! empty( $seen_skus[ $sku ] ) ) {
+	// Los artículos «bajo pedido» del mercado (MK-*) no vienen de BizneCubano: no se ocultan.
+	if ( ! empty( $seen_skus[ $sku ] ) || 0 === strpos( $sku, 'MK-' ) ) {
 		continue;
 	}
 	if ( $apply ) {
