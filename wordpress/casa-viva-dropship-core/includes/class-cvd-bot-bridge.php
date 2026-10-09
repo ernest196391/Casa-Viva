@@ -372,6 +372,11 @@ final class CVD_Bot_Bridge {
 	}
 
 	/** Vuelto pedido por el cliente: Core lo guarda como lista [{amount, currency}]. */
+	/** Vuelto legible para el vale de WhatsApp (misma regla que el bot). */
+	public static function change_label( WC_Order $order ): string {
+		return self::change( $order );
+	}
+
 	private static function change( WC_Order $order ): string {
 		$raw = $order->get_meta( '_cvd_change_required', true );
 		$parts = array();
