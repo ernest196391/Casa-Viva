@@ -18,7 +18,7 @@ final class CVD_Catalog_Presentation {
 	 */
 	public static function strip_description_prices( $html ) {
 		if ( ! is_string( $html ) || is_admin() || ! function_exists( 'is_product' ) || ! is_product() ) { return $html; }
-		$money = '/(💲|\d\s*\$|\$\s*\d|\d[\d.,]*\s*(usd|cup|mn|eur|euros?|d[oó]lares?|pesos)\b|precio)/iu';
+		$money = '/(💲|\d\s*\$|\$\s*\d|\d[\d.,]*\s*(usd|cup|mn|eur|euros?|d[oó]lares?|pesos)\b|precio\s*(:|de\s+tienda|\$|💲|\d))/iu';
 		$parts = preg_split( '/(<\/p>|<br\s*\/?>|\R)/iu', $html, -1, PREG_SPLIT_DELIM_CAPTURE );
 		$out = '';
 		for ( $i = 0, $n = count( $parts ); $i < $n; $i += 2 ) {
