@@ -19,6 +19,12 @@ CUENTAS DE PRUEBA: gestora de prueba creada con `test-accounts.yml` (secretos JO
 FOTOS: 44 fotos reales ampliadas a 2K con Higgsfield (118 créditos) aplicadas con `catalog-photos-apply.yml` (revert disponible); 15 descartadas porque la IA deformaba etiquetas o texto
 ```
 
+## CV-FOTOS-SYNC — Fotos cambiadas en BizneCubano (2026-10-10)
+
+- Lennys cambió fotos en BizneCubano (albornoz, alfombra persa, árbol de Navidad, cestos, mochilas, puertas de corredera…) y no llegaban: la sincronización solo copiaba la foto al crear el producto.
+- `cvd_sync_photo`: compara la foto de BizneCubano con `_cvd_bc_image` (o, la primera vez, con el `_source_url` de la foto original) y, si cambió, la descarga y la pone como principal (olvida la versión mejorada vieja). Informe: `photo_updates`.
+- La caja (NEXO) toma la miniatura de la web en su importación horaria.
+
 ## CV-MERCADO-001 — Mercado «bajo pedido» (3.13.26, 2026-10-09)
 
 - `CVD_Market_Bridge`: `POST /casa-viva/v1/bot/market/publish` y `/bot/market/{item}/unpublish` (clave X-Vivabot-Key). SKU `MK-<id>`, categoría «Bajo pedido», sin control de stock, aviso «confirmamos disponibilidad en 1 hora», comisión fija = mitad de la ganancia (la calcula VivaBot). Fotos solo desde Supabase Storage. El proveedor no se guarda en la web.

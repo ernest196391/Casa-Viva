@@ -5,7 +5,7 @@
  * Uso (WP-CLI): CVD_SYNC_FILE=/tmp/biznecubano.json CVD_SYNC_MODE=dry-run wp eval-file biznecubano-sync.php
  *
  * Reglas (BizneCubano es la fuente del catálogo de Casa Viva; aprobado por Ernesto el 2026-10-02):
- * - productos `BC-*` existentes: precio normal y de oferta, stock y publicación;
+ * - productos `BC-*` existentes: precio normal y de oferta, stock, publicación y foto principal;
  * - productos nuevos: se publican con foto, descripción y categoría;
  * - stock: agotado => 0; "quedan N" => N; disponible sin cantidad => disponible sin control.
  *   Cada cambio de cantidad queda en el libro de movimientos de inventario como conteo;
@@ -143,6 +143,53 @@ function cvd_sync_image( string $url, int $product_id, string $name ): int {
 	require_once ABSPATH . 'wp-admin/includes/image.php';
 	$id = media_sideload_image( $url, $product_id, $name, 'id' );
 	return is_wp_error( $id ) ? 0 : (int) $id;
+}
+
+/**
+ * Foto principal al día con BizneCubano (Lennys cambia fotos allí y no llegaban, 2026-10-10).
+ * Se compara la foto de BizneCubano con la última copiada (`_cvd_bc_image`) o, si no hay
+ * registro, con el origen de la foto actual (la original si se aplicó una mejorada).
+ * Si cambió: se descarga, pasa a ser la principal y se olvida la versión mejorada vieja.
+ * Devuelve '' si no hay cambio, 'replaced' o 'failed'.
+ */
+function cvd_sync_photo( WC_Product $product, string $url, bool $apply ): string {
+	if ( '' === $url ) {
+		return '';
+	}
+	$known = (string) $product->get_meta( '_cvd_bc_image' );
+	if ( '' === $known ) {
+		$att = (int) ( $product->get_meta( '_cvd_prev_image_id' ) ?: $product->get_image_id() );
+		$known = $att ? (string) get_post_meta( $att, '_source_url', true ) : '';
+		if ( '' === $known ) {
+			// Sin forma de saber de dónde vino: se apunta como referencia y no se toca.
+			if ( $apply ) {
+				$product->update_meta_data( '_cvd_bc_image', $url );
+				$product->save();
+			}
+			return '';
+		}
+	}
+	if ( $known === $url ) {
+		if ( $apply && '' === (string) $product->get_meta( '_cvd_bc_image' ) ) {
+			$product->update_meta_data( '_cvd_bc_image', $url );
+			$product->save();
+		}
+		return '';
+	}
+	if ( ! $apply ) {
+		return 'replaced';
+	}
+	$image_id = cvd_sync_image( $url, $product->get_id(), $product->get_name() );
+	if ( ! $image_id ) {
+		return 'failed';
+	}
+	update_post_meta( $image_id, '_wp_attachment_image_alt', $product->get_name() );
+	$product->set_image_id( $image_id );
+	$product->update_meta_data( '_cvd_bc_image', $url );
+	$product->delete_meta_data( '_cvd_upscaled_from' );
+	$product->delete_meta_data( '_cvd_prev_image_id' );
+	$product->save();
+	return 'replaced';
 }
 
 function cvd_sync_stock_target( array $p ): array {
@@ -388,6 +435,7 @@ $report = array(
 	'variation_updates' => array(),
 	'hidden'          => array(),
 	'no_image'        => array(),
+	'photo_updates'   => array(),
 	'unchanged'       => 0,
 	'skipped'         => array(),
 	'categories_new'  => array(),
@@ -419,6 +467,11 @@ foreach ( $products as $p ) {
 			$from_status = $product->get_status();
 			if ( cvd_sync_publish( $product, $apply ) ) {
 				$report['published'][] = array( 'id' => $product_id, 'sku' => $sku, 'name' => $product->get_name(), 'from' => $from_status );
+				$product = wc_get_product( $product_id );
+			}
+			$photo = cvd_sync_photo( $product, (string) ( $p['image'] ?? '' ), $apply );
+			if ( $photo ) {
+				$report['photo_updates'][] = array( 'id' => $product_id, 'sku' => $sku, 'name' => $product->get_name(), 'result' => $photo );
 				$product = wc_get_product( $product_id );
 			}
 			if ( ! $product->get_image_id() ) {
@@ -486,6 +539,7 @@ foreach ( $products as $p ) {
 				if ( $image_id ) {
 					$product = wc_get_product( $new_id );
 					$product->set_image_id( $image_id );
+					$product->update_meta_data( '_cvd_bc_image', (string) $p['image'] );
 					$product->save();
 				} else {
 					$report['errors'][] = array( 'sku' => $sku, 'error' => 'no se pudo descargar la foto' );
@@ -525,6 +579,7 @@ $report['totals'] = array(
 	'variation_updates' => count( $report['variation_updates'] ),
 	'hidden'         => count( $report['hidden'] ),
 	'no_image'       => count( $report['no_image'] ),
+	'photo_updates'  => count( $report['photo_updates'] ),
 	'unchanged'      => $report['unchanged'],
 	'skipped'        => count( $report['skipped'] ),
 	'errors'         => count( $report['errors'] ),
