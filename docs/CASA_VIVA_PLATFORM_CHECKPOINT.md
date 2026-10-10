@@ -211,3 +211,7 @@ Al retomar el proyecto:
 3. ejecutar solamente la próxima acción aprobada;
 4. actualizar estado, evidencia, costo y próxima compuerta;
 5. no avanzar de fase por inferencia ni por CI verde.
+
+## Cierre verificable 2026-10-10 — auditoría y Windows
+
+Base main eecbb922 (3.13.27), no implica SHA de producción. 31/31 contratos JS locales aprobados después de normalizar CRLF en la prueba de historial truncado. Recorrido público hasta checkout verificado sin confirmar pedido; Toallas pequeña limita carrito a 3 unidades. Recogida y opción transferencia comprobadas. Detalle y límites: docs/NEXO-CASA-VIVA-CIERRE.md. Producción sin cambios; fase 0 permanece abierta hasta prueba aislada de pedido y notificación.

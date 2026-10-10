@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const path = 'wordpress/casa-viva-dropship-core/includes/class-cvd-canonical-order-reader.php';
-const source = fs.readFileSync(path, 'utf8');
+// Git en Windows puede materializar CRLF; el contrato es independiente del salto de línea.
+const source = fs.readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
 const method = source.match(/private static function previous_stage[\s\S]*?\n\t}\n\n\tprivate static function validate_catalog/)?.[0] || '';
 
 assert.ok(method, 'No se encontró el recuperador de etapa de incidencia.');
