@@ -1,0 +1,151 @@
+{
+    "mode": "apply",
+    "source_count": 202,
+    "price_updates": [],
+    "created": [],
+    "published": [],
+    "stock_updates": [
+        {
+            "id": 2411,
+            "sku": "BC-120946",
+            "name": "Cesto de pedal negro (7 litros)",
+            "before": {
+                "manage": true,
+                "qty": 1,
+                "status": "instock"
+            },
+            "after": {
+                "manage": true,
+                "qty": 0,
+                "status": "outofstock"
+            }
+        },
+        {
+            "id": 2441,
+            "sku": "BC-119347",
+            "name": "Edulcorante",
+            "before": {
+                "manage": true,
+                "qty": 4,
+                "status": "instock"
+            },
+            "after": {
+                "manage": true,
+                "qty": 3,
+                "status": "instock"
+            }
+        },
+        {
+            "id": 2445,
+            "sku": "BC-85503",
+            "name": "Estante Organizador",
+            "before": {
+                "manage": true,
+                "qty": 4,
+                "status": "instock"
+            },
+            "after": {
+                "manage": true,
+                "qty": 3,
+                "status": "instock"
+            }
+        },
+        {
+            "id": 2479,
+            "sku": "BC-121943",
+            "name": "Mochila M-12",
+            "before": {
+                "manage": true,
+                "qty": 1,
+                "status": "instock"
+            },
+            "after": {
+                "manage": true,
+                "qty": 0,
+                "status": "outofstock"
+            }
+        },
+        {
+            "id": 2825,
+            "sku": "BC-116975",
+            "name": "Rasuradora portátil facial",
+            "before": {
+                "manage": true,
+                "qty": 3,
+                "status": "instock"
+            },
+            "after": {
+                "manage": true,
+                "qty": 2,
+                "status": "instock"
+            }
+        }
+    ],
+    "variation_updates": [
+        {
+            "id": 2858,
+            "sku": "BC-122554",
+            "name": "Paragua inverso estampado 8 varillas",
+            "changes": [
+                {
+                    "action": "cantidad",
+                    "color": "negro",
+                    "before": 3,
+                    "after": 2
+                }
+            ]
+        },
+        {
+            "id": 2573,
+            "sku": "BC-120658",
+            "name": "Set para baño 3 piezas, alfombra cesta y cortina",
+            "changes": [
+                {
+                    "action": "cantidad",
+                    "color": "carmelita",
+                    "before": 1,
+                    "after": 0
+                }
+            ]
+        },
+        {
+            "id": 747,
+            "sku": "BC-104720",
+            "name": "Utensilios de silicona con cuchillos",
+            "changes": [
+                {
+                    "action": "cantidad",
+                    "color": "rosado",
+                    "before": 1,
+                    "after": 0
+                }
+            ]
+        }
+    ],
+    "hidden": [],
+    "no_image": [],
+    "photo_updates": [],
+    "unchanged": 198,
+    "skipped": [
+        {
+            "sku": "BC-102299",
+            "name": "Sobrecama tiwn",
+            "reason": "sin precio en BizneCubano"
+        }
+    ],
+    "categories_new": [],
+    "errors": [],
+    "totals": {
+        "price_updates": 0,
+        "created": 0,
+        "published": 0,
+        "stock_updates": 5,
+        "variation_updates": 3,
+        "hidden": 0,
+        "no_image": 0,
+        "photo_updates": 0,
+        "unchanged": 198,
+        "skipped": 1,
+        "errors": 0
+    }
+}
