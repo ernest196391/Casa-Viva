@@ -1,0 +1,4241 @@
+{
+  "target": "https://casaviva.company",
+  "generated_at": "2026-10-10T22:34:49.135Z",
+  "count": 201,
+  "products": [
+    {
+      "id": 2858,
+      "name": "Paragua inverso estampado 8 varillas",
+      "slug": "paragua-inverso-estampado-8-varillas",
+      "sku": "BC-122554",
+      "permalink": "https://casaviva.company/producto/paragua-inverso-estampado-8-varillas/",
+      "price": "1500",
+      "regular_price": "1500",
+      "sale_price": "1500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/NdH-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2828,
+      "name": "Paragua inverso 8 varillas",
+      "slug": "paragua-inverso-8-varillas",
+      "sku": "BC-122536",
+      "permalink": "https://casaviva.company/producto/paragua-inverso-8-varillas/",
+      "price": "1500",
+      "regular_price": "1500",
+      "sale_price": "1500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/7qb-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2825,
+      "name": "Rasuradora portátil facial",
+      "slug": "rasuradora-portatil-facial",
+      "sku": "BC-116975",
+      "permalink": "https://casaviva.company/producto/rasuradora-portatil-facial/",
+      "price": "1200",
+      "regular_price": "1200",
+      "sale_price": "1200",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/SGa-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2823,
+      "name": "Depiladora portatil de cejas",
+      "slug": "depiladora-portatil-de-cejas",
+      "sku": "BC-116968",
+      "permalink": "https://casaviva.company/producto/depiladora-portatil-de-cejas/",
+      "price": "1200",
+      "regular_price": "1200",
+      "sale_price": "1200",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/igt-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2821,
+      "name": "Cápsulas para el cabello con vitamina A,C y E",
+      "slug": "capsulas-para-el-cabello-con-vitamina-ac-y-e",
+      "sku": "BC-122478",
+      "permalink": "https://casaviva.company/producto/capsulas-para-el-cabello-con-vitamina-ac-y-e/",
+      "price": "800",
+      "regular_price": "800",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/wZl-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2813,
+      "name": "Tabla de Planchar con Soporte para Plancha",
+      "slug": "tabla-de-planchar-con-soporte-para-plancha-4",
+      "sku": "BC-122274",
+      "permalink": "https://casaviva.company/producto/tabla-de-planchar-con-soporte-para-plancha-4/",
+      "price": "4500",
+      "regular_price": "4500",
+      "sale_price": "4500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/8UK-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2807,
+      "name": "Tabla de Planchar con Soporte para Plancha",
+      "slug": "tabla-de-planchar-con-soporte-para-plancha",
+      "sku": "BC-122270",
+      "permalink": "https://casaviva.company/producto/tabla-de-planchar-con-soporte-para-plancha/",
+      "price": "4500",
+      "regular_price": "4500",
+      "sale_price": "4500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/lbj-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2774,
+      "name": "MOCHILA M-6",
+      "slug": "mochila-m-6",
+      "sku": "BC-122363",
+      "permalink": "https://casaviva.company/producto/mochila-m-6/",
+      "price": "3000",
+      "regular_price": "3000",
+      "sale_price": "3000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/f2o-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2772,
+      "name": "MOCHILA M-4",
+      "slug": "mochila-m-4",
+      "sku": "BC-122361",
+      "permalink": "https://casaviva.company/producto/mochila-m-4/",
+      "price": "3000",
+      "regular_price": "3000",
+      "sale_price": "3000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/qoU-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2770,
+      "name": "MOCHILA M-2",
+      "slug": "mochila-m-2",
+      "sku": "BC-122358",
+      "permalink": "https://casaviva.company/producto/mochila-m-2/",
+      "price": "3000",
+      "regular_price": "3000",
+      "sale_price": "3000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/PbB-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2768,
+      "name": "MOCHILA M-14",
+      "slug": "mochila-m-14",
+      "sku": "BC-122365",
+      "permalink": "https://casaviva.company/producto/mochila-m-14/",
+      "price": "2500",
+      "regular_price": "2500",
+      "sale_price": "2500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/jMz-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2766,
+      "name": "MOCHILA M-10",
+      "slug": "mochila-m-10",
+      "sku": "BC-122364",
+      "permalink": "https://casaviva.company/producto/mochila-m-10/",
+      "price": "3000",
+      "regular_price": "3000",
+      "sale_price": "3000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/wCx-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2759,
+      "name": "MOCHILA M-5",
+      "slug": "mochila-m-5",
+      "sku": "BC-122362",
+      "permalink": "https://casaviva.company/producto/mochila-m-5/",
+      "price": "3000",
+      "regular_price": "3000",
+      "sale_price": "3000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/2iA-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2757,
+      "name": "MOCHILA M-3",
+      "slug": "mochila-m-3",
+      "sku": "BC-122359",
+      "permalink": "https://casaviva.company/producto/mochila-m-3/",
+      "price": "3000",
+      "regular_price": "3000",
+      "sale_price": "3000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/Pyr-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2755,
+      "name": "MOCHILA M-15",
+      "slug": "mochila-m-15",
+      "sku": "BC-122367",
+      "permalink": "https://casaviva.company/producto/mochila-m-15/",
+      "price": "2500",
+      "regular_price": "2500",
+      "sale_price": "2500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/3Vx-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2753,
+      "name": "MOCHILA ESTILO BOLSITA",
+      "slug": "mochila-estilo-bolsita",
+      "sku": "BC-122369",
+      "permalink": "https://casaviva.company/producto/mochila-estilo-bolsita/",
+      "price": "1300",
+      "regular_price": "1300",
+      "sale_price": "1300",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/xsl-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2729,
+      "name": "Escritorio de oficina",
+      "slug": "escritorio-de-oficina",
+      "sku": "BC-120943",
+      "permalink": "https://casaviva.company/producto/escritorio-de-oficina/",
+      "price": "23000",
+      "regular_price": "23000",
+      "sale_price": "23000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Otros",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/fPR-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2701,
+      "name": "Cojin decorativo",
+      "slug": "cojin-decorativo",
+      "sku": "BC-122454",
+      "permalink": "https://casaviva.company/producto/cojin-decorativo/",
+      "price": "1200",
+      "regular_price": "1200",
+      "sale_price": "1200",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/WGp-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2612,
+      "name": "Bolas Navideñas blanco verde rojo",
+      "slug": "bolas-navidenas-blanco-verde-rojo",
+      "sku": "BC-122010",
+      "permalink": "https://casaviva.company/producto/bolas-navidenas-blanco-verde-rojo/",
+      "price": "800",
+      "regular_price": "800",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/cWJ-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2610,
+      "name": "Bolas Navideñas rosado metálico",
+      "slug": "bolas-navidenas-rosado-metalico",
+      "sku": "BC-122011",
+      "permalink": "https://casaviva.company/producto/bolas-navidenas-rosado-metalico/",
+      "price": "800",
+      "regular_price": "800",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/HEt-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2603,
+      "name": "Zapatera 4 niveles",
+      "slug": "zapatera-4-niveles",
+      "sku": "BC-117400",
+      "permalink": "https://casaviva.company/producto/zapatera-4-niveles/",
+      "price": "2300",
+      "regular_price": "2300",
+      "sale_price": "2300",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/hf_20261005_194308_9b8af52c-8ad7-4039-95ba-024b1a834462.png"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2601,
+      "name": "Ventilador recargable F6 (negro)",
+      "slug": "ventilador-recargable-f6-negro",
+      "sku": "BC-118804",
+      "permalink": "https://casaviva.company/producto/ventilador-recargable-f6-negro/",
+      "price": "7000",
+      "regular_price": "7000",
+      "sale_price": "7000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Electrodomésticos"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/CYd-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2597,
+      "name": "Tendedero multifuncional plegable de acero",
+      "slug": "tendedero-multifuncional-plegable-de-acero",
+      "sku": "BC-120781",
+      "permalink": "https://casaviva.company/producto/tendedero-multifuncional-plegable-de-acero/",
+      "price": "5500",
+      "regular_price": "5500",
+      "sale_price": "5500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/rwb-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2595,
+      "name": "Soporte de TV 40&#8243;x80&#8243;",
+      "slug": "soporte-de-tv-40x80",
+      "sku": "BC-120947",
+      "permalink": "https://casaviva.company/producto/soporte-de-tv-40x80/",
+      "price": "4000",
+      "regular_price": "4000",
+      "sale_price": "4000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/5aB-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2593,
+      "name": "Silla de oficina (23_222)",
+      "slug": "silla-de-oficina-23_222",
+      "sku": "BC-120948",
+      "permalink": "https://casaviva.company/producto/silla-de-oficina-23_222/",
+      "price": "7500",
+      "regular_price": "7500",
+      "sale_price": "7500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Otros",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/ril-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2591,
+      "name": "🎄 Casas en Miniatura – 8 cm c- 89045",
+      "slug": "%f0%9f%8e%84-casas-en-miniatura-8-cm-c-89045",
+      "sku": "BC-91182",
+      "permalink": "https://casaviva.company/producto/%f0%9f%8e%84-casas-en-miniatura-8-cm-c-89045/",
+      "price": "500",
+      "regular_price": "700",
+      "sale_price": "500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/m8e-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2589,
+      "name": "Zapatera 5 niveles",
+      "slug": "zapatera-5-niveles",
+      "sku": "BC-117516",
+      "permalink": "https://casaviva.company/producto/zapatera-5-niveles/",
+      "price": "3500",
+      "regular_price": "3500",
+      "sale_price": "3500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/hf_20261005_194214_de047493-2a61-4d97-bed8-1eb44a5090e3.png"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2587,
+      "name": "Ventilador recargable F6 (verde)",
+      "slug": "ventilador-recargable-f6-verde",
+      "sku": "BC-118803",
+      "permalink": "https://casaviva.company/producto/ventilador-recargable-f6-verde/",
+      "price": "7000",
+      "regular_price": "7000",
+      "sale_price": "7000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Electrodomésticos"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/hOM-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2585,
+      "name": "Ventilador recargable F6 (naranja)",
+      "slug": "ventilador-recargable-f6-naranja",
+      "sku": "BC-118802",
+      "permalink": "https://casaviva.company/producto/ventilador-recargable-f6-naranja/",
+      "price": "7000",
+      "regular_price": "7000",
+      "sale_price": "7000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Electrodomésticos"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/mFF-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2583,
+      "name": "Toalla Cisne Blanco 70&#215;140 cm (rosada)",
+      "slug": "toalla-cisne-blanco-70x140-cm-rosada",
+      "sku": "BC-119723",
+      "permalink": "https://casaviva.company/producto/toalla-cisne-blanco-70x140-cm-rosada/",
+      "price": "1800",
+      "regular_price": "1800",
+      "sale_price": "1800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/Yod-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2581,
+      "name": "Toalla Cisne Blanco 70&#215;140 cm (azul)",
+      "slug": "toalla-cisne-blanco-70x140-cm-azul",
+      "sku": "BC-119730",
+      "permalink": "https://casaviva.company/producto/toalla-cisne-blanco-70x140-cm-azul/",
+      "price": "1800",
+      "regular_price": "1800",
+      "sale_price": "1800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/kTt-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2579,
+      "name": "Sombrilla rectangular para interior de auto",
+      "slug": "sombrilla-rectangular-para-interior-de-auto",
+      "sku": "BC-121733",
+      "permalink": "https://casaviva.company/producto/sombrilla-rectangular-para-interior-de-auto/",
+      "price": "1500",
+      "regular_price": "1500",
+      "sale_price": "1500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/K66-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2575,
+      "name": "Shampoo 2 en 1",
+      "slug": "shampoo-2-en-1",
+      "sku": "BC-119823",
+      "permalink": "https://casaviva.company/producto/shampoo-2-en-1/",
+      "price": "600",
+      "regular_price": "600",
+      "sale_price": "600",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/hU1-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2573,
+      "name": "Set para baño 3 piezas, alfombra cesta y cortina",
+      "slug": "set-para-bano-3-piezas-alfombra-cesta-y-cortina",
+      "sku": "BC-120658",
+      "permalink": "https://casaviva.company/producto/set-para-bano-3-piezas-alfombra-cesta-y-cortina/",
+      "price": "2800",
+      "regular_price": "2800",
+      "sale_price": "2800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/vpP-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2571,
+      "name": "Set de cuchillos 🔪 Con tabla",
+      "slug": "set-de-cuchillos-%f0%9f%94%aa-con-tabla",
+      "sku": "BC-119004",
+      "permalink": "https://casaviva.company/producto/set-de-cuchillos-%f0%9f%94%aa-con-tabla/",
+      "price": "1300",
+      "regular_price": "1300",
+      "sale_price": "1300",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/Kw9-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2567,
+      "name": "Set de 2 alfombras para cocina 3d",
+      "slug": "set-de-2-alfombras-para-cocina-3d-11",
+      "sku": "BC-120769",
+      "permalink": "https://casaviva.company/producto/set-de-2-alfombras-para-cocina-3d-11/",
+      "price": "1800",
+      "regular_price": "1800",
+      "sale_price": "1800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/pNX-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2565,
+      "name": "Set de 2 alfombras para cocina 3d",
+      "slug": "set-de-2-alfombras-para-cocina-3d-10",
+      "sku": "BC-120766",
+      "permalink": "https://casaviva.company/producto/set-de-2-alfombras-para-cocina-3d-10/",
+      "price": "1800",
+      "regular_price": "1800",
+      "sale_price": "1800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/2qc-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2563,
+      "name": "Set de 2 alfombras para cocina 3d",
+      "slug": "set-de-2-alfombras-para-cocina-3d-9",
+      "sku": "BC-120764",
+      "permalink": "https://casaviva.company/producto/set-de-2-alfombras-para-cocina-3d-9/",
+      "price": "1800",
+      "regular_price": "1800",
+      "sale_price": "1800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/lr6-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2561,
+      "name": "Set de 2 alfombras para cocina 3d",
+      "slug": "set-de-2-alfombras-para-cocina-3d-8",
+      "sku": "BC-120762",
+      "permalink": "https://casaviva.company/producto/set-de-2-alfombras-para-cocina-3d-8/",
+      "price": "1800",
+      "regular_price": "1800",
+      "sale_price": "1800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/WkB-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2559,
+      "name": "Set de 2 alfombras para cocina 3d",
+      "slug": "set-de-2-alfombras-para-cocina-3d-7",
+      "sku": "BC-120760",
+      "permalink": "https://casaviva.company/producto/set-de-2-alfombras-para-cocina-3d-7/",
+      "price": "1800",
+      "regular_price": "1800",
+      "sale_price": "1800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/XWv-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2557,
+      "name": "Sabana camera 100% luxury home",
+      "slug": "sabana-camera-100-luxury-home",
+      "sku": "BC-120653",
+      "permalink": "https://casaviva.company/producto/sabana-camera-100-luxury-home/",
+      "price": "2500",
+      "regular_price": "2500",
+      "sale_price": "2500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/3x1-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2555,
+      "name": "Puerta de corredera (blanca)",
+      "slug": "puerta-de-corredera-blanca",
+      "sku": "BC-121245",
+      "permalink": "https://casaviva.company/producto/puerta-de-corredera-blanca/",
+      "price": "6000",
+      "regular_price": "6000",
+      "sale_price": "6000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Cocina",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/VJl-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2551,
+      "name": "Power bank",
+      "slug": "power-bank",
+      "sku": "BC-120617",
+      "permalink": "https://casaviva.company/producto/power-bank/",
+      "price": "3000",
+      "regular_price": "3000",
+      "sale_price": "3000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/aoE-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2547,
+      "name": "Perchero Multifuncional 160x36x173cm",
+      "slug": "perchero-multifuncional-160x36x173cm",
+      "sku": "BC-108838",
+      "permalink": "https://casaviva.company/producto/perchero-multifuncional-160x36x173cm/",
+      "price": "3300",
+      "regular_price": "3300",
+      "sale_price": "3300",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/MlW-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2545,
+      "name": "Set de utensilios para cocina (5 piezas)",
+      "slug": "set-de-utensilios-para-cocina-5-piezas",
+      "sku": "BC-121736",
+      "permalink": "https://casaviva.company/producto/set-de-utensilios-para-cocina-5-piezas/",
+      "price": "800",
+      "regular_price": "800",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/GwS-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2543,
+      "name": "Set de cortina de baño + alfombra",
+      "slug": "set-de-cortina-de-bano-alfombra",
+      "sku": "BC-120780",
+      "permalink": "https://casaviva.company/producto/set-de-cortina-de-bano-alfombra/",
+      "price": "1600",
+      "regular_price": "1600",
+      "sale_price": "1600",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/cyo-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2541,
+      "name": "Set de 2 alfombras para cocina 3d",
+      "slug": "set-de-2-alfombras-para-cocina-3d-6",
+      "sku": "BC-120772",
+      "permalink": "https://casaviva.company/producto/set-de-2-alfombras-para-cocina-3d-6/",
+      "price": "1800",
+      "regular_price": "1800",
+      "sale_price": "1800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/uxq-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2539,
+      "name": "Set de 2 alfombras para cocina 3d",
+      "slug": "set-de-2-alfombras-para-cocina-3d-5",
+      "sku": "BC-120770",
+      "permalink": "https://casaviva.company/producto/set-de-2-alfombras-para-cocina-3d-5/",
+      "price": "1800",
+      "regular_price": "1800",
+      "sale_price": "1800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/wRm-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2537,
+      "name": "Set de 2 alfombras para cocina 3d",
+      "slug": "set-de-2-alfombras-para-cocina-3d-4",
+      "sku": "BC-120767",
+      "permalink": "https://casaviva.company/producto/set-de-2-alfombras-para-cocina-3d-4/",
+      "price": "1800",
+      "regular_price": "1800",
+      "sale_price": "1800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/cGp-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2535,
+      "name": "Set de 2 alfombras para cocina 3d",
+      "slug": "set-de-2-alfombras-para-cocina-3d-3",
+      "sku": "BC-120765",
+      "permalink": "https://casaviva.company/producto/set-de-2-alfombras-para-cocina-3d-3/",
+      "price": "1800",
+      "regular_price": "1800",
+      "sale_price": "1800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/y2Y-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2533,
+      "name": "Set de 2 alfombras para cocina 3d",
+      "slug": "set-de-2-alfombras-para-cocina-3d-2",
+      "sku": "BC-120763",
+      "permalink": "https://casaviva.company/producto/set-de-2-alfombras-para-cocina-3d-2/",
+      "price": "1800",
+      "regular_price": "1800",
+      "sale_price": "1800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": false,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/nFp-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2531,
+      "name": "Set de 2 alfombras para cocina 3d",
+      "slug": "set-de-2-alfombras-para-cocina-3d",
+      "sku": "BC-120761",
+      "permalink": "https://casaviva.company/producto/set-de-2-alfombras-para-cocina-3d/",
+      "price": "1800",
+      "regular_price": "1800",
+      "sale_price": "1800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/Qm8-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2529,
+      "name": "Set de 2 alfombras para baño",
+      "slug": "set-de-2-alfombras-para-bano",
+      "sku": "BC-120776",
+      "permalink": "https://casaviva.company/producto/set-de-2-alfombras-para-bano/",
+      "price": "1300",
+      "regular_price": "1300",
+      "sale_price": "1300",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/Jqn-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2527,
+      "name": "Riñonera",
+      "slug": "rinonera",
+      "sku": "BC-121734",
+      "permalink": "https://casaviva.company/producto/rinonera/",
+      "price": "1000",
+      "regular_price": "1000",
+      "sale_price": "1000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/D5c-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2525,
+      "name": "Puerta de corredera (gris)",
+      "slug": "puerta-de-corredera-gris",
+      "sku": "BC-121268",
+      "permalink": "https://casaviva.company/producto/puerta-de-corredera-gris/",
+      "price": "6000",
+      "regular_price": "6000",
+      "sale_price": "6000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Cocina",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/y78-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2523,
+      "name": "Protector de colchón king",
+      "slug": "protector-de-colchon-king",
+      "sku": "BC-109792",
+      "permalink": "https://casaviva.company/producto/protector-de-colchon-king/",
+      "price": "3800",
+      "regular_price": "3800",
+      "sale_price": "3800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/OPs-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2521,
+      "name": "Power bank con panel solar",
+      "slug": "power-bank-con-panel-solar",
+      "sku": "BC-120618",
+      "permalink": "https://casaviva.company/producto/power-bank-con-panel-solar/",
+      "price": "4500",
+      "regular_price": "4500",
+      "sale_price": "4500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/ci0-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2517,
+      "name": "Pesa electrónica corporal",
+      "slug": "pesa-electronica-corporal",
+      "sku": "BC-121737",
+      "permalink": "https://casaviva.company/producto/pesa-electronica-corporal/",
+      "price": "3500",
+      "regular_price": "3500",
+      "sale_price": "3500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/vlw-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2515,
+      "name": "Percha Doble con Zapatera 150x110x40cm",
+      "slug": "percha-doble-con-zapatera-150x110x40cm",
+      "sku": "BC-119820",
+      "permalink": "https://casaviva.company/producto/percha-doble-con-zapatera-150x110x40cm/",
+      "price": "3500",
+      "regular_price": "3500",
+      "sale_price": "3500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/hf_20261005_193906_669bc2a8-8e4c-43e7-9fca-4f228f297143.png"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2513,
+      "name": "Panel Solar Bifacial SKYMAX 620W N-TOPCon",
+      "slug": "panel-solar-bifacial-skymax-620w-n-topcon",
+      "sku": "BC-120379",
+      "permalink": "https://casaviva.company/producto/panel-solar-bifacial-skymax-620w-n-topcon/",
+      "price": "23000",
+      "regular_price": "23000",
+      "sale_price": "23000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/Yp4-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2511,
+      "name": "Organizador de Baño blanco",
+      "slug": "organizador-de-bano-blanco",
+      "sku": "BC-119023",
+      "permalink": "https://casaviva.company/producto/organizador-de-bano-blanco/",
+      "price": "2800",
+      "regular_price": "2800",
+      "sale_price": "2800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/hf_20261005_193903_8fb07057-d758-4d49-acb6-fc488e85a077.png"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2509,
+      "name": "Mochila M-9",
+      "slug": "mochila-m-9",
+      "sku": "BC-121914",
+      "permalink": "https://casaviva.company/producto/mochila-m-9/",
+      "price": "3000",
+      "regular_price": "3000",
+      "sale_price": "3000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/x4E-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2503,
+      "name": "Mochila M- 1",
+      "slug": "mochila-m-1",
+      "sku": "BC-121918",
+      "permalink": "https://casaviva.company/producto/mochila-m-1/",
+      "price": "1300",
+      "regular_price": "1300",
+      "sale_price": "1300",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/Vkg-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2501,
+      "name": "Masajeador corporal",
+      "slug": "masajeador-corporal",
+      "sku": "BC-120606",
+      "permalink": "https://casaviva.company/producto/masajeador-corporal/",
+      "price": "5600",
+      "regular_price": "5600",
+      "sale_price": "5600",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/hf_20261005_193654_a3c82a80-e903-4f9a-bae6-c46e8b40b35d.png"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2499,
+      "name": "Manta 240X260 cm (lisa)",
+      "slug": "manta-240x260-cm-lisa",
+      "sku": "BC-120779",
+      "permalink": "https://casaviva.company/producto/manta-240x260-cm-lisa/",
+      "price": "2600",
+      "regular_price": "2600",
+      "sale_price": "2600",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/Xqj-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2497,
+      "name": "Manta 180&#215;200 cm (lisa)",
+      "slug": "manta-180x200-cm-lisa",
+      "sku": "BC-120777",
+      "permalink": "https://casaviva.company/producto/manta-180x200-cm-lisa/",
+      "price": "2100",
+      "regular_price": "2100",
+      "sale_price": "2100",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/GKT-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2495,
+      "name": "Kit de skincare 3 piezas vitamina C",
+      "slug": "kit-de-skincare-3-piezas-vitamina-c",
+      "sku": "BC-120621",
+      "permalink": "https://casaviva.company/producto/kit-de-skincare-3-piezas-vitamina-c/",
+      "price": "1500",
+      "regular_price": "1500",
+      "sale_price": "1500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/PVi-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2493,
+      "name": "Kit de skincare 3 piezas aloe vera",
+      "slug": "kit-de-skincare-3-piezas-aloe-vera",
+      "sku": "BC-120622",
+      "permalink": "https://casaviva.company/producto/kit-de-skincare-3-piezas-aloe-vera/",
+      "price": "1500",
+      "regular_price": "1500",
+      "sale_price": "1500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/aGa-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2491,
+      "name": "Juego de sabanas Camera Majestic imperial",
+      "slug": "juego-de-sabanas-camera-majestic-imperial",
+      "sku": "BC-120773",
+      "permalink": "https://casaviva.company/producto/juego-de-sabanas-camera-majestic-imperial/",
+      "price": "2300",
+      "regular_price": "2300",
+      "sale_price": "2300",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/hf_20261005_152730_1b50348a-a394-4336-a6cc-d5760b422cb6-1.png"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2489,
+      "name": "Paragua infantil (55cm)",
+      "slug": "paragua-infantil-55cm",
+      "sku": "BC-121745",
+      "permalink": "https://casaviva.company/producto/paragua-infantil-55cm/",
+      "price": "800",
+      "regular_price": "800",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/hf_20261005_152658_5f4b34df-956e-4c7a-bd08-b2d5c0375f6e-1.png"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2487,
+      "name": "Organizador de Baño negro",
+      "slug": "organizador-de-bano-negro",
+      "sku": "BC-119020",
+      "permalink": "https://casaviva.company/producto/organizador-de-bano-negro/",
+      "price": "2800",
+      "regular_price": "2800",
+      "sale_price": "2800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/Mjg-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2485,
+      "name": "Organizador de 2 niveles",
+      "slug": "organizador-de-2-niveles",
+      "sku": "BC-117675",
+      "permalink": "https://casaviva.company/producto/organizador-de-2-niveles/",
+      "price": "1100",
+      "regular_price": "1200",
+      "sale_price": "1100",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/hf_20261005_193649_80679bf6-a457-4eb3-8537-f6048d5c2084.png"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2483,
+      "name": "Olla con tapa",
+      "slug": "olla-con-tapa",
+      "sku": "BC-105359",
+      "permalink": "https://casaviva.company/producto/olla-con-tapa/",
+      "price": "3800",
+      "regular_price": "3800",
+      "sale_price": "3800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/MFC-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2479,
+      "name": "Mochila M-12",
+      "slug": "mochila-m-12",
+      "sku": "BC-121943",
+      "permalink": "https://casaviva.company/producto/mochila-m-12/",
+      "price": "2000",
+      "regular_price": "2000",
+      "sale_price": "2000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": false,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/MVN-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2477,
+      "name": "Mochila M- 8",
+      "slug": "mochila-m-8",
+      "sku": "BC-121919",
+      "permalink": "https://casaviva.company/producto/mochila-m-8/",
+      "price": "1300",
+      "regular_price": "1300",
+      "sale_price": "1300",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/akB-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2475,
+      "name": "Masajeador facial y cuello",
+      "slug": "masajeador-facial-y-cuello",
+      "sku": "BC-120607",
+      "permalink": "https://casaviva.company/producto/masajeador-facial-y-cuello/",
+      "price": "5500",
+      "regular_price": "5500",
+      "sale_price": "5500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/Gs9-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2473,
+      "name": "Máquinas de pelar recargable",
+      "slug": "maquinas-de-pelar-recargable",
+      "sku": "BC-120615",
+      "permalink": "https://casaviva.company/producto/maquinas-de-pelar-recargable/",
+      "price": "2500",
+      "regular_price": "2500",
+      "sale_price": "2500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/I0y-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2471,
+      "name": "Manta 180X220 cm (estampada)",
+      "slug": "manta-180x220-cm-estampada",
+      "sku": "BC-120778",
+      "permalink": "https://casaviva.company/producto/manta-180x220-cm-estampada/",
+      "price": "2300",
+      "regular_price": "2300",
+      "sale_price": "2300",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/H2w-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2469,
+      "name": "Lámparas recargables con panel solar",
+      "slug": "lamparas-recargables-con-panel-solar",
+      "sku": "BC-120619",
+      "permalink": "https://casaviva.company/producto/lamparas-recargables-con-panel-solar/",
+      "price": "2500",
+      "regular_price": "2500",
+      "sale_price": "2500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/V1m-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2467,
+      "name": "Kit de skincare 3 piezas antimanchas",
+      "slug": "kit-de-skincare-3-piezas-antimanchas",
+      "sku": "BC-120620",
+      "permalink": "https://casaviva.company/producto/kit-de-skincare-3-piezas-antimanchas/",
+      "price": "1500",
+      "regular_price": "1500",
+      "sale_price": "1500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/jjR-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2465,
+      "name": "Fundas (2) blancas de almohadas",
+      "slug": "fundas-2-blancas-de-almohadas",
+      "sku": "BC-117518",
+      "permalink": "https://casaviva.company/producto/fundas-2-blancas-de-almohadas/",
+      "price": "800",
+      "regular_price": "800",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/ZNj-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2463,
+      "name": "Farol solar",
+      "slug": "farol-solar",
+      "sku": "BC-120484",
+      "permalink": "https://casaviva.company/producto/farol-solar/",
+      "price": "1100",
+      "regular_price": "1100",
+      "sale_price": "1100",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/sT1-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2461,
+      "name": "Estante esquinero para baño",
+      "slug": "estante-esquinero-para-bano",
+      "sku": "BC-68677",
+      "permalink": "https://casaviva.company/producto/estante-esquinero-para-bano/",
+      "price": "2600",
+      "regular_price": "2600",
+      "sale_price": "2600",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/nWx-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2459,
+      "name": "Espejo Led 60X80 CM",
+      "slug": "espejo-led-60x80-cm",
+      "sku": "BC-121243",
+      "permalink": "https://casaviva.company/producto/espejo-led-60x80-cm/",
+      "price": "6000",
+      "regular_price": "6000",
+      "sale_price": "6000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/gyc-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2457,
+      "name": "Edredón con juego de sabana (queen)",
+      "slug": "edredon-con-juego-de-sabana-queen",
+      "sku": "BC-120696",
+      "permalink": "https://casaviva.company/producto/edredon-con-juego-de-sabana-queen/",
+      "price": "5000",
+      "regular_price": "5000",
+      "sale_price": "5000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/byD-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2455,
+      "name": "Doyle Metalizado 45&#215;30 cm",
+      "slug": "doyle-metalizado-45x30-cm",
+      "sku": "BC-120694",
+      "permalink": "https://casaviva.company/producto/doyle-metalizado-45x30-cm/",
+      "price": "1300",
+      "regular_price": "1300",
+      "sale_price": "1300",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/Fuk-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2453,
+      "name": "Cortina roller enrollable 160X280",
+      "slug": "cortina-roller-enrollable-160x280",
+      "sku": "BC-120835",
+      "permalink": "https://casaviva.company/producto/cortina-roller-enrollable-160x280/",
+      "price": "6500",
+      "regular_price": "6500",
+      "sale_price": "6500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Cocina",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/yLa-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2451,
+      "name": "Cortina roller enrollable 100X160",
+      "slug": "cortina-roller-enrollable-100x160",
+      "sku": "BC-120838",
+      "permalink": "https://casaviva.company/producto/cortina-roller-enrollable-100x160/",
+      "price": "5500",
+      "regular_price": "5500",
+      "sale_price": "5500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Cocina",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/kqO-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2449,
+      "name": "Fundas Majestic Imperial",
+      "slug": "fundas-majestic-imperial",
+      "sku": "BC-120768",
+      "permalink": "https://casaviva.company/producto/fundas-majestic-imperial/",
+      "price": "1000",
+      "regular_price": "1000",
+      "sale_price": "1000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/ncZ-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2447,
+      "name": "Faja reductora (talla S)",
+      "slug": "faja-reductora-talla-s",
+      "sku": "BC-P-s1wqr",
+      "permalink": "https://casaviva.company/producto/faja-reductora-talla-s/",
+      "price": "1600",
+      "regular_price": "1600",
+      "sale_price": "1600",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/product-image-placeholder.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2445,
+      "name": "Estante Organizador",
+      "slug": "estante-organizador",
+      "sku": "BC-85503",
+      "permalink": "https://casaviva.company/producto/estante-organizador/",
+      "price": "2100",
+      "regular_price": "2100",
+      "sale_price": "2100",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/R4J-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2443,
+      "name": "Espejo Led 50X70 CM",
+      "slug": "espejo-led-50x70-cm",
+      "sku": "BC-121242",
+      "permalink": "https://casaviva.company/producto/espejo-led-50x70-cm/",
+      "price": "5500",
+      "regular_price": "5500",
+      "sale_price": "5500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/mMB-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2441,
+      "name": "Edulcorante",
+      "slug": "edulcorante",
+      "sku": "BC-119347",
+      "permalink": "https://casaviva.company/producto/edulcorante/",
+      "price": "800",
+      "regular_price": "800",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/z75-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2439,
+      "name": "Edredón con juego de sabana (camero)",
+      "slug": "edredon-con-juego-de-sabana-camero",
+      "sku": "BC-120695",
+      "permalink": "https://casaviva.company/producto/edredon-con-juego-de-sabana-camero/",
+      "price": "4000",
+      "regular_price": "4000",
+      "sale_price": "4000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/j1Z-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2437,
+      "name": "Doyle matizado 6 piezas 45&#215;30 cm",
+      "slug": "doyle-matizado-6-piezas-45x30-cm",
+      "sku": "BC-120693",
+      "permalink": "https://casaviva.company/producto/doyle-matizado-6-piezas-45x30-cm/",
+      "price": "1300",
+      "regular_price": "1300",
+      "sale_price": "1300",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/Gdf-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2433,
+      "name": "Cortina roller enrollable 172X280",
+      "slug": "cortina-roller-enrollable-172x280",
+      "sku": "BC-120836",
+      "permalink": "https://casaviva.company/producto/cortina-roller-enrollable-172x280/",
+      "price": "7000",
+      "regular_price": "7000",
+      "sale_price": "7000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Cocina",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/NOv-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2431,
+      "name": "Cortina roller enrollable 140X280",
+      "slug": "cortina-roller-enrollable-140x280",
+      "sku": "BC-120837",
+      "permalink": "https://casaviva.company/producto/cortina-roller-enrollable-140x280/",
+      "price": "6000",
+      "regular_price": "6000",
+      "sale_price": "6000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": false,
+      "categories": [
+        "Baño",
+        "Cocina",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/a9x-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2429,
+      "name": "Cortina de baño 180&#215;180 cm",
+      "slug": "cortina-de-bano-180x180-cm",
+      "sku": "BC-117402",
+      "permalink": "https://casaviva.company/producto/cortina-de-bano-180x180-cm/",
+      "price": "800",
+      "regular_price": "800",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/bDC-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2427,
+      "name": "Corral de bebé 11494",
+      "slug": "corral-de-bebe-11494",
+      "sku": "BC-118805",
+      "permalink": "https://casaviva.company/producto/corral-de-bebe-11494/",
+      "price": "11000",
+      "regular_price": "11000",
+      "sale_price": "11000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/hf_20261005_152248_60db70d7-c574-498e-9b96-7b22aa4d8e97.png"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2425,
+      "name": "Compresor portátil modelo 1",
+      "slug": "compresor-portatil-modelo-1",
+      "sku": "BC-120608",
+      "permalink": "https://casaviva.company/producto/compresor-portatil-modelo-1/",
+      "price": "5000",
+      "regular_price": "5000",
+      "sale_price": "5000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/mRT-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2423,
+      "name": "Cintas de luces bluetooth con RGB (5m)",
+      "slug": "cintas-de-luces-bluetooth-con-rgb-5m",
+      "sku": "BC-121735",
+      "permalink": "https://casaviva.company/producto/cintas-de-luces-bluetooth-con-rgb-5m/",
+      "price": "2000",
+      "regular_price": "2000",
+      "sale_price": "2000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/L6q-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2421,
+      "name": "Cesto de pedal negro (15 litros)",
+      "slug": "cesto-de-pedal-negro-15-litros",
+      "sku": "BC-120945",
+      "permalink": "https://casaviva.company/producto/cesto-de-pedal-negro-15-litros/",
+      "price": "1900",
+      "regular_price": "1900",
+      "sale_price": "1900",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Cocina",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/3IG-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2417,
+      "name": "Cepillos alisadores recargables",
+      "slug": "cepillos-alisadores-recargables",
+      "sku": "BC-120612",
+      "permalink": "https://casaviva.company/producto/cepillos-alisadores-recargables/",
+      "price": "3500",
+      "regular_price": "3500",
+      "sale_price": "3500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/oOM-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2415,
+      "name": "Colgador de ropa",
+      "slug": "colgador-de-ropa",
+      "sku": "BC-120774",
+      "permalink": "https://casaviva.company/producto/colgador-de-ropa/",
+      "price": "4300",
+      "regular_price": "4300",
+      "sale_price": "4300",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/vbY-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2413,
+      "name": "Cojin forma de flor",
+      "slug": "cojin-forma-de-flor",
+      "sku": "BC-119819",
+      "permalink": "https://casaviva.company/producto/cojin-forma-de-flor/",
+      "price": "2500",
+      "regular_price": "2500",
+      "sale_price": "2500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/hf_20261005_152104_f497e908-2cfd-4c67-82db-75a00d349abb.png"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2411,
+      "name": "Cesto de pedal negro (7 litros)",
+      "slug": "cesto-de-pedal-negro-7-litros",
+      "sku": "BC-120946",
+      "permalink": "https://casaviva.company/producto/cesto-de-pedal-negro-7-litros/",
+      "price": "1200",
+      "regular_price": "1200",
+      "sale_price": "1200",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": false,
+      "categories": [
+        "Baño",
+        "Cocina",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/FEj-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2409,
+      "name": "Cesto de basura encimera",
+      "slug": "cesto-de-basura-encimera",
+      "sku": "BC-119824",
+      "permalink": "https://casaviva.company/producto/cesto-de-basura-encimera/",
+      "price": "600",
+      "regular_price": "600",
+      "sale_price": "600",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina",
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/vmr-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2407,
+      "name": "Cama plegable portátil",
+      "slug": "cama-plegable-portatil",
+      "sku": "BC-121294",
+      "permalink": "https://casaviva.company/producto/cama-plegable-portatil/",
+      "price": "6000",
+      "regular_price": "6000",
+      "sale_price": "6000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/don-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2405,
+      "name": "Cable fotovoltaico negro",
+      "slug": "cable-fotovoltaico-negro",
+      "sku": "BC-120949",
+      "permalink": "https://casaviva.company/producto/cable-fotovoltaico-negro/",
+      "price": "14000",
+      "regular_price": "14000",
+      "sale_price": "14000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Ferretería"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/3QL-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2403,
+      "name": "Alfombra rombo 40&#215;60 cm",
+      "slug": "alfombra-rombo-40x60-cm",
+      "sku": "BC-117445",
+      "permalink": "https://casaviva.company/producto/alfombra-rombo-40x60-cm/",
+      "price": "800",
+      "regular_price": "800",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/kd2-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2401,
+      "name": "Alfombra peluche 50&#215;80 cm",
+      "slug": "alfombra-peluche-50x80-cm-2",
+      "sku": "BC-117517",
+      "permalink": "https://casaviva.company/producto/alfombra-peluche-50x80-cm-2/",
+      "price": "1000",
+      "regular_price": "1000",
+      "sale_price": "1000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/hf_20261005_151609_aa1ca911-7194-450f-af2c-98e0796d0a2a.png"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2399,
+      "name": "Alfombra de Sala estilo Persa",
+      "slug": "alfombra-de-sala-estilo-persa",
+      "sku": "BC-119022",
+      "permalink": "https://casaviva.company/producto/alfombra-de-sala-estilo-persa/",
+      "price": "5500",
+      "regular_price": "5500",
+      "sale_price": "5500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/5EN-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2397,
+      "name": "Alfombra Bienvenido 45&#215;75 cm",
+      "slug": "alfombra-bienvenido-45x75-cm",
+      "sku": "BC-120689",
+      "permalink": "https://casaviva.company/producto/alfombra-bienvenido-45x75-cm/",
+      "price": "1500",
+      "regular_price": "1500",
+      "sale_price": "1500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/3jn-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2391,
+      "name": "Albornoz (talla L) beige",
+      "slug": "albornoz-talla-l-beige",
+      "sku": "BC-120839",
+      "permalink": "https://casaviva.company/producto/albornoz-talla-l-beige/",
+      "price": "3800",
+      "regular_price": "3800",
+      "sale_price": "3800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/vMo-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2389,
+      "name": "Aceite corporal",
+      "slug": "aceite-corporal",
+      "sku": "BC-119346",
+      "permalink": "https://casaviva.company/producto/aceite-corporal/",
+      "price": "1600",
+      "regular_price": "1600",
+      "sale_price": "1600",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/7PZ-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2387,
+      "name": "Capas de moto (talla L)",
+      "slug": "capas-de-moto-talla-l",
+      "sku": "BC-121747",
+      "permalink": "https://casaviva.company/producto/capas-de-moto-talla-l/",
+      "price": "2000",
+      "regular_price": "2000",
+      "sale_price": "2000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/yYF-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2385,
+      "name": "Cable fotovoltaico rojo",
+      "slug": "cable-fotovoltaico-rojo",
+      "sku": "BC-120950",
+      "permalink": "https://casaviva.company/producto/cable-fotovoltaico-rojo/",
+      "price": "14000",
+      "regular_price": "14000",
+      "sale_price": "14000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Ferretería"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/Yi7-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2383,
+      "name": "Cable de carga multifuncional",
+      "slug": "cable-de-carga-multifuncional",
+      "sku": "BC-120586",
+      "permalink": "https://casaviva.company/producto/cable-de-carga-multifuncional/",
+      "price": "800",
+      "regular_price": "800",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Otros"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/WcJ-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2381,
+      "name": "Árbol de navidad (1,50 m)",
+      "slug": "arbol-de-navidad-150-m",
+      "sku": "BC-121746",
+      "permalink": "https://casaviva.company/producto/arbol-de-navidad-150-m/",
+      "price": "4000",
+      "regular_price": "4000",
+      "sale_price": "4000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/4fy-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2377,
+      "name": "Alfombra peluche 50&#215;80 cm",
+      "slug": "alfombra-peluche-50x80-cm",
+      "sku": "BC-117674",
+      "permalink": "https://casaviva.company/producto/alfombra-peluche-50x80-cm/",
+      "price": "1000",
+      "regular_price": "1000",
+      "sale_price": "1000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/hf_20261005_151255_a478fecc-f8be-4825-9bc1-0eb390ad5d5b.png"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2375,
+      "name": "Alfombra peluche 40&#215;60 cm",
+      "slug": "alfombra-peluche-40x60-cm",
+      "sku": "BC-117515",
+      "permalink": "https://casaviva.company/producto/alfombra-peluche-40x60-cm/",
+      "price": "800",
+      "regular_price": "800",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/hf_20261005_151532_f479f702-e150-4616-b1af-a39125bc9ed2.png"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2373,
+      "name": "Alfombra de entrada 40&#215;60 cm",
+      "slug": "alfombra-de-entrada-40x60-cm",
+      "sku": "BC-117441",
+      "permalink": "https://casaviva.company/producto/alfombra-de-entrada-40x60-cm/",
+      "price": "800",
+      "regular_price": "800",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/t2G-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2371,
+      "name": "Alfombra con piecitos",
+      "slug": "alfombra-con-piecitos",
+      "sku": "BC-120775",
+      "permalink": "https://casaviva.company/producto/alfombra-con-piecitos/",
+      "price": "1400",
+      "regular_price": "1400",
+      "sale_price": "1400",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Cocina",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/zr3-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2369,
+      "name": "Alfombra antirresbalante",
+      "slug": "alfombra-antirresbalante",
+      "sku": "BC-119003",
+      "permalink": "https://casaviva.company/producto/alfombra-antirresbalante/",
+      "price": "1100",
+      "regular_price": "1100",
+      "sale_price": "1100",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/FNd-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2365,
+      "name": "Albornoz (talla L) beige oscuro",
+      "slug": "albornoz-talla-l-beige-oscuro",
+      "sku": "BC-120840",
+      "permalink": "https://casaviva.company/producto/albornoz-talla-l-beige-oscuro/",
+      "price": "3800",
+      "regular_price": "3800",
+      "sale_price": "3800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/VtS-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 2363,
+      "name": "Albornoz (talla L) azul",
+      "slug": "albornoz-talla-l-azul",
+      "sku": "BC-120842",
+      "permalink": "https://casaviva.company/producto/albornoz-talla-l-azul/",
+      "price": "3800",
+      "regular_price": "3800",
+      "sale_price": "3800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/10/Ci6-product-cover.webp"
+      ],
+      "short_description": ""
+    },
+    {
+      "id": 822,
+      "name": "Soporte TV 14”-42”",
+      "slug": "soporte-tv-14-42",
+      "sku": "BC-115479",
+      "permalink": "https://casaviva.company/producto/soporte-tv-14-42/",
+      "price": "1200",
+      "regular_price": "1200",
+      "sale_price": "1200",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_194144_564df1a5-1175-4d51-b50b-51d636b21018.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/sdW-1000580172.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/PVh-1000580171.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/d5H-1000580154.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/w53-1000580153.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 813,
+      "name": "Alfombra Circular Decorativa – 180 cm — Diseño 4",
+      "slug": "alfombra-circular-decorativa-180-cm-diseno-4",
+      "sku": "BC-109866",
+      "permalink": "https://casaviva.company/producto/alfombra-circular-decorativa-180-cm-diseno-4/",
+      "price": "6000",
+      "regular_price": "6000",
+      "sale_price": "6000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_152324_04ebe4d0-4599-4946-8076-251ae204ec89.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/m3s-1000480539.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 809,
+      "name": "Carrito de Mandado Plegable Azul oscuro",
+      "slug": "carrito-de-mandado-plegable-azul-oscuro",
+      "sku": "BC-116502",
+      "permalink": "https://casaviva.company/producto/carrito-de-mandado-plegable-azul-oscuro/",
+      "price": "2500",
+      "regular_price": "2500",
+      "sale_price": "2500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Organización"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/lwx-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 801,
+      "name": "Alfombra de chenilla",
+      "slug": "alfombra-de-chenilla",
+      "sku": "BC-73346",
+      "permalink": "https://casaviva.company/producto/alfombra-de-chenilla/",
+      "price": "1000",
+      "regular_price": "1000",
+      "sale_price": "1000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_152327_d3fe08bb-482c-4a25-9a09-236984ab5678.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/ORU-IMG-20250205-WA1342.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/tdX-Screenshot_20250607_140644_Chrome.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/gXF-Screenshot_20250607_140803_Chrome.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/oUu-Screenshot_20250503_004034_Google.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/J3n-Screenshot_20250607_140321_Chrome.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 794,
+      "name": "Carretón negro",
+      "slug": "carreton-negro",
+      "sku": "BC-114041",
+      "permalink": "https://casaviva.company/producto/carreton-negro/",
+      "price": "8000",
+      "regular_price": "8000",
+      "sale_price": "8000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Organización"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/KxH-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/5gR-1003007144.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 775,
+      "name": "Válvula de paso mini HH 1/2 » GPLP83 (hembra)",
+      "slug": "valvula-de-paso-mini-hh-1-2-gplp83-hembra",
+      "sku": "BC-112710",
+      "permalink": "https://casaviva.company/producto/valvula-de-paso-mini-hh-1-2-gplp83-hembra/",
+      "price": "400",
+      "regular_price": "400",
+      "sale_price": "400",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Ferretería"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/3DC-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/Tdy-1002948018.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/wlj-1002948019.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 773,
+      "name": "Colchón de resorte 180x200cm Dawang",
+      "slug": "colchon-de-resorte-180x200cm-dawang",
+      "sku": "BC-105154",
+      "permalink": "https://casaviva.company/producto/colchon-de-resorte-180x200cm-dawang/",
+      "price": "32000",
+      "regular_price": "32000",
+      "sale_price": "32000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/AoQ-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 747,
+      "name": "Utensilios de silicona con cuchillos",
+      "slug": "utensilios-de-silicona-con-cuchillos",
+      "sku": "BC-104720",
+      "permalink": "https://casaviva.company/producto/utensilios-de-silicona-con-cuchillos/",
+      "price": "3000",
+      "regular_price": "4000",
+      "sale_price": "3000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": false,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_151455_9091a548-d543-41d6-8097-db3091d4d796.png"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 746,
+      "name": "Termo térmico 1L",
+      "slug": "termo-termico-1l",
+      "sku": "BC-107264",
+      "permalink": "https://casaviva.company/producto/termo-termico-1l/",
+      "price": "1700",
+      "regular_price": "1700",
+      "sale_price": "1700",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/Dwd-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/FHw-1000429893.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/AJ3-1000429898.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 745,
+      "name": "Sobrecama Queen",
+      "slug": "sobrecama-queen",
+      "sku": "BC-98568",
+      "permalink": "https://casaviva.company/producto/sobrecama-queen/",
+      "price": "3800",
+      "regular_price": "3800",
+      "sale_price": "3800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_151327_dad68ad2-0e75-44f1-b02b-4d6d003763a6.png"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 731,
+      "name": "Tendedero Plegable Rosa",
+      "slug": "tendedero-plegable-rosa",
+      "sku": "BC-116443",
+      "permalink": "https://casaviva.company/producto/tendedero-plegable-rosa/",
+      "price": "2300",
+      "regular_price": "2300",
+      "sale_price": "2300",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Organización"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_152218_6dabc77b-2302-46bc-8d2b-ebff94defb6e.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/oBu-1000598685.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 727,
+      "name": "Faja reductora",
+      "slug": "faja-reductora",
+      "sku": "BC-116979",
+      "permalink": "https://casaviva.company/producto/faja-reductora/",
+      "price": "1600",
+      "regular_price": "1600",
+      "sale_price": "1600",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal",
+        "Organización"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/tn5-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/JXw-1003117422.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/J9O-1003117383.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 712,
+      "name": "Colchón King + Almohada &#8211; EDSM A",
+      "slug": "colchon-king-almohada-edsm-a",
+      "sku": "BC-108761",
+      "permalink": "https://casaviva.company/producto/colchon-king-almohada-edsm-a/",
+      "price": "36500",
+      "regular_price": "36500",
+      "sale_price": "36500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/Q2u-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 706,
+      "name": "Cesta tipo mimbre rectangular",
+      "slug": "cesta-tipo-mimbre-rectangular",
+      "sku": "BC-107355",
+      "permalink": "https://casaviva.company/producto/cesta-tipo-mimbre-rectangular/",
+      "price": "1000",
+      "regular_price": "1000",
+      "sale_price": "1000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Organización"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/ocy-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/uWr-1000429774.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/Yby-1000429775.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/c8o-1000429773.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/227-1000429771.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 704,
+      "name": "Colchón &#8211; EDSM A &#8211; Camero",
+      "slug": "colchon-edsm-a-camero",
+      "sku": "BC-108755",
+      "permalink": "https://casaviva.company/producto/colchon-edsm-a-camero/",
+      "price": "29000",
+      "regular_price": "29000",
+      "sale_price": "29000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/jkj-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 695,
+      "name": "Toallas Cisne Blanco 40&#215;70",
+      "slug": "toallas-cisne-blanco-40x70",
+      "sku": "BC-113934",
+      "permalink": "https://casaviva.company/producto/toallas-cisne-blanco-40x70/",
+      "price": "800",
+      "regular_price": "800",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/Jsv-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/ZqZ-1000552812.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/eER-1000552825.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/cw4-1000552816.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/IoH-1000552818.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/Hrw-1000552815.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/Xa8-1000552817.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/13m-1000552814.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/qSv-1000552813.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/dAJ-1000552811.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 693,
+      "name": "Cortinero decorativo — Diseño 3",
+      "slug": "cortinero-decorativo-diseno-3",
+      "sku": "BC-111556",
+      "permalink": "https://casaviva.company/producto/cortinero-decorativo-diseno-3/",
+      "price": "1000",
+      "regular_price": "1000",
+      "sale_price": "1000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": false,
+      "categories": [
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_151732_cbb8e0b3-46fc-4443-97d8-bdf716f2f0e5.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/yB6-1000502749.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 692,
+      "name": "Cojín decorativo — Diseño 2",
+      "slug": "cojin-decorativo-diseno-2",
+      "sku": "BC-107268",
+      "permalink": "https://casaviva.company/producto/cojin-decorativo-diseno-2/",
+      "price": "1100",
+      "regular_price": "1100",
+      "sale_price": "1100",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Organización",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/zW3-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/ifu-1000429704.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/XXo-1000429703.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/ICl-1000429848.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/o6Q-1000429846.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/eXh-1000429844.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/AU2-1000430117.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 684,
+      "name": "Toallas pequeña",
+      "slug": "toallas-pequena",
+      "sku": "BC-98586",
+      "permalink": "https://casaviva.company/producto/toallas-pequena/",
+      "price": "1000",
+      "regular_price": "1000",
+      "sale_price": "1000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_194147_4a7fb8f1-dd08-4913-903a-a86386550a9f.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/29O-1002377544.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/Ijq-1002377547.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/oT4-1002377538.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/Jps-1002377593.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/6As-1002377594.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/1GJ-1002377547.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/ttK-1002377544.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 678,
+      "name": "Escamadora de pescado",
+      "slug": "escamadora-de-pescado",
+      "sku": "BC-116978",
+      "permalink": "https://casaviva.company/producto/escamadora-de-pescado/",
+      "price": "600",
+      "regular_price": "600",
+      "sale_price": "600",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/uh7-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/da8-1003117430.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/Aig-1003117420.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 676,
+      "name": "Aceite capilar de batana HOEGOA",
+      "slug": "aceite-capilar-de-batana-hoegoa",
+      "sku": "BC-116315",
+      "permalink": "https://casaviva.company/producto/aceite-capilar-de-batana-hoegoa/",
+      "price": "1100",
+      "regular_price": "1300",
+      "sale_price": "1100",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": false,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/0Rc-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 674,
+      "name": "Cesto de 12L — Diseño 3",
+      "slug": "cesto-de-12l-diseno-3",
+      "sku": "BC-111684",
+      "permalink": "https://casaviva.company/producto/cesto-de-12l-diseno-3/",
+      "price": "700",
+      "regular_price": "700",
+      "sale_price": "700",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/Q4g-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 634,
+      "name": "Sobrecama king",
+      "slug": "sobrecama-king",
+      "sku": "BC-98583",
+      "permalink": "https://casaviva.company/producto/sobrecama-king/",
+      "price": "4300",
+      "regular_price": "4300",
+      "sale_price": "4300",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_151443_e305e4ed-9efb-4366-ae44-6ef28352850d.png"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 629,
+      "name": "Grifo para fregadero doble GP 1311",
+      "slug": "grifo-para-fregadero-doble-gp-1311",
+      "sku": "BC-112637",
+      "permalink": "https://casaviva.company/producto/grifo-para-fregadero-doble-gp-1311/",
+      "price": "1400",
+      "regular_price": "1400",
+      "sale_price": "1400",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": false,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/rpo-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/6Fn-1002948211.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 611,
+      "name": "Alfombra Circular Decorativa – 180 cm — Diseño 3",
+      "slug": "alfombra-circular-decorativa-180-cm-diseno-3",
+      "sku": "BC-109862",
+      "permalink": "https://casaviva.company/producto/alfombra-circular-decorativa-180-cm-diseno-3/",
+      "price": "6000",
+      "regular_price": "6000",
+      "sale_price": "6000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_152251_3676cad4-cc29-4220-8d38-f71a2eb0c174.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/c15-1000481272.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/tRY-1000480538.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 609,
+      "name": "Cesto de 12L — Diseño 2",
+      "slug": "cesto-de-12l-diseno-2",
+      "sku": "BC-111682",
+      "permalink": "https://casaviva.company/producto/cesto-de-12l-diseno-2/",
+      "price": "700",
+      "regular_price": "700",
+      "sale_price": "700",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/kKK-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 577,
+      "name": "Juego de Sábanas Majestic Imperial – TWIN",
+      "slug": "juego-de-sabanas-majestic-imperial-twin",
+      "sku": "BC-85096",
+      "permalink": "https://casaviva.company/producto/juego-de-sabanas-majestic-imperial-twin/",
+      "price": "1400",
+      "regular_price": "1400",
+      "sale_price": "1400",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/IVt-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/ua4-1001516483.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/iwi-1001516487.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/cze-1001516416.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 574,
+      "name": "Colchón &#8211; EDSM A &#8211; Queen",
+      "slug": "colchon-edsm-a-queen",
+      "sku": "BC-108756",
+      "permalink": "https://casaviva.company/producto/colchon-edsm-a-queen/",
+      "price": "31000",
+      "regular_price": "31000",
+      "sale_price": "31000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/1bR-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 543,
+      "name": "Colchón Queen + Almohada &#8211; EDSM A",
+      "slug": "colchon-queen-almohada-edsm-a",
+      "sku": "BC-108760",
+      "permalink": "https://casaviva.company/producto/colchon-queen-almohada-edsm-a/",
+      "price": "33000",
+      "regular_price": "33000",
+      "sale_price": "33000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/C1K-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 538,
+      "name": "Válvula de paso miniHH 1/2&#8243; GPLP83 (hembra-macho))",
+      "slug": "valvula-de-paso-minihh-1-2-gplp83-hembra-macho",
+      "sku": "BC-112711",
+      "permalink": "https://casaviva.company/producto/valvula-de-paso-minihh-1-2-gplp83-hembra-macho/",
+      "price": "400",
+      "regular_price": "400",
+      "sale_price": "400",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Ferretería"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_152139_129d4b84-ffad-42da-8b10-33651284013a.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/V9u-1002948005.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/XiX-1002948006.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/6kp-1002948007.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 534,
+      "name": "Ramo de girasoles",
+      "slug": "ramo-de-girasoles",
+      "sku": "BC-105173",
+      "permalink": "https://casaviva.company/producto/ramo-de-girasoles/",
+      "price": "800",
+      "regular_price": "800",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Organización",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_194003_2b4e996e-2e10-4f69-a5fb-c5bcc86cd0a3.png"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 515,
+      "name": "Colcha navideña 180&#215;220",
+      "slug": "colcha-navidena-180x220",
+      "sku": "BC-100764",
+      "permalink": "https://casaviva.company/producto/colcha-navidena-180x220/",
+      "price": "1800",
+      "regular_price": "1800",
+      "sale_price": "1800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/tbE-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/645-1002503376.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/nDF-1002503375.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 514,
+      "name": "Mantel circular",
+      "slug": "mantel-circular",
+      "sku": "BC-107267",
+      "permalink": "https://casaviva.company/producto/mantel-circular/",
+      "price": "1600",
+      "regular_price": "1600",
+      "sale_price": "1600",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina",
+        "Organización",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_151309_c1c69e85-8ec8-4361-9d42-f9beb320f22b.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/noL-1000430159.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/qGO-1000430157.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 477,
+      "name": "Espumadera",
+      "slug": "espumadera",
+      "sku": "BC-112531",
+      "permalink": "https://casaviva.company/producto/espumadera/",
+      "price": "600",
+      "regular_price": "600",
+      "sale_price": "600",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_152511_0604a909-1ddb-4248-bc81-2eac98d05994-1.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/gUQ-1000524230.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/NKY-1000524228.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/aKu-1000524229.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 466,
+      "name": "Juego de cortina tapa sol Royale con diseño",
+      "slug": "juego-de-cortina-tapa-sol-royale-con-diseno",
+      "sku": "BC-100780",
+      "permalink": "https://casaviva.company/producto/juego-de-cortina-tapa-sol-royale-con-diseno/",
+      "price": "3000",
+      "regular_price": "3000",
+      "sale_price": "3000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/SuN-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 465,
+      "name": "Juego de sabanas Queen Majestic imperial",
+      "slug": "juego-de-sabanas-queen-majestic-imperial",
+      "sku": "BC-82193",
+      "permalink": "https://casaviva.company/producto/juego-de-sabanas-queen-majestic-imperial/",
+      "price": "2500",
+      "regular_price": "2500",
+      "sale_price": "2500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/nRo-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 463,
+      "name": "Bata de baño",
+      "slug": "bata-de-bano",
+      "sku": "BC-100628",
+      "permalink": "https://casaviva.company/producto/bata-de-bano/",
+      "price": "2000",
+      "regular_price": "2000",
+      "sale_price": "2000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/TMh-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/tmk-1002490156.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/gVu-1002490155.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/4ZF-1002490154.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/0jY-1002490152.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/sZu-1002490153.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/KOq-1002489631.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/1My-1002489621.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/TZO-1002489625.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 431,
+      "name": "Colchón &#8211; EDSM A &#8211; 3/4",
+      "slug": "colchon-edsm-a-3-4",
+      "sku": "BC-108754",
+      "permalink": "https://casaviva.company/producto/colchon-edsm-a-3-4/",
+      "price": "27500",
+      "regular_price": "27500",
+      "sale_price": "27500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/Dff-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 426,
+      "name": "Organizador Colgante de Tela – 5 Niveles",
+      "slug": "organizador-colgante-de-tela-5-niveles",
+      "sku": "BC-116750",
+      "permalink": "https://casaviva.company/producto/organizador-colgante-de-tela-5-niveles/",
+      "price": "1500",
+      "regular_price": "1500",
+      "sale_price": "1500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Organización"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/bzh-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 410,
+      "name": "Luminoliss",
+      "slug": "luminoliss",
+      "sku": "BC-116983",
+      "permalink": "https://casaviva.company/producto/luminoliss/",
+      "price": "1200",
+      "regular_price": "1200",
+      "sale_price": "1200",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/zvZ-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 408,
+      "name": "Colchón Camero + Almohada &#8211; EDSM A",
+      "slug": "colchon-camero-almohada-edsm-a",
+      "sku": "BC-108759",
+      "permalink": "https://casaviva.company/producto/colchon-camero-almohada-edsm-a/",
+      "price": "31000",
+      "regular_price": "31000",
+      "sale_price": "31000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/sBB-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 406,
+      "name": "Forro para 6 sillas + mesa rectangular",
+      "slug": "forro-para-6-sillas-mesa-rectangular",
+      "sku": "BC-107265",
+      "permalink": "https://casaviva.company/producto/forro-para-6-sillas-mesa-rectangular/",
+      "price": "6500",
+      "regular_price": "6500",
+      "sale_price": "6500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina",
+        "Organización",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_151300_edae7fe4-d5bc-4b6d-b139-bb09d7a5db82.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/5oA-1000430168.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/jhX-1000430170.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 405,
+      "name": "Cortinero decorativo — Diseño 2",
+      "slug": "cortinero-decorativo-diseno-2",
+      "sku": "BC-111555",
+      "permalink": "https://casaviva.company/producto/cortinero-decorativo-diseno-2/",
+      "price": "1000",
+      "regular_price": "1000",
+      "sale_price": "1000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": false,
+      "categories": [
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_151650_97159e5e-2907-4467-8320-d00d5e5a9e04.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/CTF-1000502743.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 391,
+      "name": "Cortinero Expandible plateado",
+      "slug": "cortinero-expandible-plateado",
+      "sku": "BC-100508",
+      "permalink": "https://casaviva.company/producto/cortinero-expandible-plateado/",
+      "price": "700",
+      "regular_price": "1000",
+      "sale_price": "700",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/0iU-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 389,
+      "name": "Corral cuna de bebé — Diseño 2",
+      "slug": "corral-cuna-de-bebe-diseno-2",
+      "sku": "BC-116018",
+      "permalink": "https://casaviva.company/producto/corral-cuna-de-bebe-diseno-2/",
+      "price": "17000",
+      "regular_price": "17000",
+      "sale_price": "17000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/Di1-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 367,
+      "name": "Soporte TV 14”-55”",
+      "slug": "soporte-tv-14-55",
+      "sku": "BC-115480",
+      "permalink": "https://casaviva.company/producto/soporte-tv-14-55/",
+      "price": "2000",
+      "regular_price": "2000",
+      "sale_price": "2000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": false,
+      "categories": [
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_194241_829e52aa-f819-4d37-9b82-3c70f1bad83d.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/MAp-1000580183.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/AH2-1000580152.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/0RA-1000580151.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 362,
+      "name": "Colchón &#8211; EDSM A &#8211; King",
+      "slug": "colchon-edsm-a-king",
+      "sku": "BC-108757",
+      "permalink": "https://casaviva.company/producto/colchon-edsm-a-king/",
+      "price": "34000",
+      "regular_price": "34000",
+      "sale_price": "34000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/pnc-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 346,
+      "name": "Doyle Elegante Rectangular (6 piezas)",
+      "slug": "doyle-elegante-rectangular-6-piezas",
+      "sku": "BC-98927",
+      "permalink": "https://casaviva.company/producto/doyle-elegante-rectangular-6-piezas/",
+      "price": "1000",
+      "regular_price": "1000",
+      "sale_price": "1000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/tlM-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 345,
+      "name": "Juego de Sábanas Majestic King",
+      "slug": "juego-de-sabanas-majestic-king",
+      "sku": "BC-82194",
+      "permalink": "https://casaviva.company/producto/juego-de-sabanas-majestic-king/",
+      "price": "2700",
+      "regular_price": "2700",
+      "sale_price": "2700",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_193651_44f96912-e629-41e3-b09a-52cf7bca9cd1.png"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 340,
+      "name": "Crema HOYGY vit.C curcuma y 5% hialuronico",
+      "slug": "crema-hoygy-vit-c-curcuma-y-5-hialuronico",
+      "sku": "BC-116327",
+      "permalink": "https://casaviva.company/producto/crema-hoygy-vit-c-curcuma-y-5-hialuronico/",
+      "price": "900",
+      "regular_price": "900",
+      "sale_price": "900",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/bal-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 316,
+      "name": "Toalla 100% algodón 70&#215;130 cm",
+      "slug": "toalla-100-algodon-70x130-cm",
+      "sku": "BC-115753",
+      "permalink": "https://casaviva.company/producto/toalla-100-algodon-70x130-cm/",
+      "price": "1800",
+      "regular_price": "1800",
+      "sale_price": "1800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/3h4-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 302,
+      "name": "Protector de colchón Queen",
+      "slug": "protector-de-colchon-queen",
+      "sku": "BC-109793",
+      "permalink": "https://casaviva.company/producto/protector-de-colchon-queen/",
+      "price": "3600",
+      "regular_price": "3600",
+      "sale_price": "3600",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/iPQ-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 299,
+      "name": "Rasuradora portatil recargable",
+      "slug": "rasuradora-portatil-recargable",
+      "sku": "BC-116949",
+      "permalink": "https://casaviva.company/producto/rasuradora-portatil-recargable/",
+      "price": "1400",
+      "regular_price": "1600",
+      "sale_price": "1400",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal",
+        "Ferretería"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/Yhe-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/QR5-1003117412.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 293,
+      "name": "Licuadora MLD 999",
+      "slug": "licuadora-mld-999",
+      "sku": "BC-112434",
+      "permalink": "https://casaviva.company/producto/licuadora-mld-999/",
+      "price": "3500",
+      "regular_price": "3500",
+      "sale_price": "3500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina",
+        "Electrodomésticos"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/SAF-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/U0v-1000521707.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/Iea-1000521533.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/NDk-1000521534.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/Vyo-1000521532.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 291,
+      "name": "Cortinero decorativo — Diseño 1",
+      "slug": "cortinero-decorativo-diseno-1",
+      "sku": "BC-111554",
+      "permalink": "https://casaviva.company/producto/cortinero-decorativo-diseno-1/",
+      "price": "1000",
+      "regular_price": "1000",
+      "sale_price": "1000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_151646_495fe745-0df5-452a-93bb-3e1c44a87a61.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/AW9-1000502738.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 290,
+      "name": "Juego de cortina tapa sol Royale",
+      "slug": "juego-de-cortina-tapa-sol-royale",
+      "sku": "BC-100779",
+      "permalink": "https://casaviva.company/producto/juego-de-cortina-tapa-sol-royale/",
+      "price": "2700",
+      "regular_price": "2700",
+      "sale_price": "2700",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/Z3s-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/QT3-1000486961.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/zl8-1000486967.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/uXh-1000486977.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/4W1-1000486982.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 278,
+      "name": "Bucaro blanco",
+      "slug": "bucaro-blanco",
+      "sku": "BC-107259",
+      "permalink": "https://casaviva.company/producto/bucaro-blanco/",
+      "price": "1700",
+      "regular_price": "1700",
+      "sale_price": "1700",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Organización",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/nX8-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/uk4-1000429699.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/6Sc-1000429909.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/Wg0-1000429910.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/FYw-1000429907.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/ek2-1000429908.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 276,
+      "name": "Colchón 3/4 + Almohada &#8211; EDSM A",
+      "slug": "colchon-3-4-almohada-edsm-a",
+      "sku": "BC-108758",
+      "permalink": "https://casaviva.company/producto/colchon-3-4-almohada-edsm-a/",
+      "price": "29000",
+      "regular_price": "29000",
+      "sale_price": "29000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/kCV-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 274,
+      "name": "Colchón 180x200cm Dawang + 2 almohadas hoteleras",
+      "slug": "colchon-180x200cm-dawang-2-almohadas-hoteleras",
+      "sku": "BC-107505",
+      "permalink": "https://casaviva.company/producto/colchon-180x200cm-dawang-2-almohadas-hoteleras/",
+      "price": "34000",
+      "regular_price": "34000",
+      "sale_price": "34000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/PyL-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 270,
+      "name": "Shampo + Acondicionador Oggy de Romero",
+      "slug": "shampo-acondicionador-oggy-de-romero",
+      "sku": "BC-108063",
+      "permalink": "https://casaviva.company/producto/shampo-acondicionador-oggy-de-romero/",
+      "price": "700",
+      "regular_price": "700",
+      "sale_price": "700",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hFF-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 268,
+      "name": "Crema facial arcilla, vit. C y curcuma",
+      "slug": "crema-facial-arcilla-vit-c-y-curcuma",
+      "sku": "BC-116321",
+      "permalink": "https://casaviva.company/producto/crema-facial-arcilla-vit-c-y-curcuma/",
+      "price": "800",
+      "regular_price": "1000",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/egX-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 260,
+      "name": "Azulejo INCEFRA",
+      "slug": "azulejo-incefra",
+      "sku": "BC-112438",
+      "permalink": "https://casaviva.company/producto/azulejo-incefra/",
+      "price": "3500",
+      "regular_price": "3500",
+      "sale_price": "3500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Cocina",
+        "Habitación",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/3QY-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/xeY-1000521780.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/cEL-1000521773.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/A3T-1000521776.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/TY3-1000521777.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/Uqw-1000521688.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/eNz-1000521691.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 233,
+      "name": "Rallador",
+      "slug": "rallador",
+      "sku": "BC-105181",
+      "permalink": "https://casaviva.company/producto/rallador/",
+      "price": "800",
+      "regular_price": "800",
+      "sale_price": "800",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/KSN-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/1k0-1000387553.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 226,
+      "name": "Balsamo facial de miel hidratante",
+      "slug": "balsamo-facial-de-miel-hidratante",
+      "sku": "BC-116316",
+      "permalink": "https://casaviva.company/producto/balsamo-facial-de-miel-hidratante/",
+      "price": "900",
+      "regular_price": "900",
+      "sale_price": "900",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cuidado personal"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/JEt-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 178,
+      "name": "Mantel cuadrado",
+      "slug": "mantel-cuadrado",
+      "sku": "BC-107266",
+      "permalink": "https://casaviva.company/producto/mantel-cuadrado/",
+      "price": "1600",
+      "regular_price": "1600",
+      "sale_price": "1600",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina",
+        "Organización",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_151439_eb221510-6b13-4b35-b37b-d721464deabb.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/toI-1000430147.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/3vR-1000430148.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/IPh-1000430149.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/92y-1000430150.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 177,
+      "name": "Set de alfombras para baño (3 piezas)",
+      "slug": "set-de-alfombras-para-bano-3-piezas",
+      "sku": "BC-109876",
+      "permalink": "https://casaviva.company/producto/set-de-alfombras-para-bano-3-piezas/",
+      "price": "1500",
+      "regular_price": "1500",
+      "sale_price": "1500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_194041_39c00be7-6c60-46cc-835f-254ef371069a.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/FVh-1000481780.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/XX1-1000481684.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/pMl-1000481663.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/gJ2-1000481782.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 161,
+      "name": "Cesto de 12L — Diseño 1",
+      "slug": "cesto-de-12l-diseno-1",
+      "sku": "BC-111683",
+      "permalink": "https://casaviva.company/producto/cesto-de-12l-diseno-1/",
+      "price": "700",
+      "regular_price": "700",
+      "sale_price": "700",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño",
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/iR0-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 145,
+      "name": "Cocina de Gas 2 quemadores",
+      "slug": "cocina-de-gas-2-quemadores",
+      "sku": "BC-113690",
+      "permalink": "https://casaviva.company/producto/cocina-de-gas-2-quemadores/",
+      "price": "3500",
+      "regular_price": "3500",
+      "sale_price": "3500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/YbK-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/Xzz-1000548370.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/JHU-1000548296.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 141,
+      "name": "Juego de ollas",
+      "slug": "juego-de-ollas",
+      "sku": "BC-112533",
+      "permalink": "https://casaviva.company/producto/juego-de-ollas/",
+      "price": "5000",
+      "regular_price": "5000",
+      "sale_price": "5000",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/WCp-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/a6E-1000524209.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/zbh-1000524210.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 119,
+      "name": "Maceta con suculenta",
+      "slug": "maceta-con-suculenta",
+      "sku": "BC-107285",
+      "permalink": "https://casaviva.company/producto/maceta-con-suculenta/",
+      "price": "1500",
+      "regular_price": "1500",
+      "sale_price": "1500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Organización",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/NlU-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 118,
+      "name": "Sobrecama lisa full",
+      "slug": "sobrecama-lisa-full",
+      "sku": "BC-98412",
+      "permalink": "https://casaviva.company/producto/sobrecama-lisa-full/",
+      "price": "3600",
+      "regular_price": "3600",
+      "sale_price": "3600",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/2X0-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 117,
+      "name": "Cojín decorativo — Diseño 1",
+      "slug": "cojin-decorativo-diseno-1",
+      "sku": "BC-107269",
+      "permalink": "https://casaviva.company/producto/cojin-decorativo-diseno-1/",
+      "price": "1100",
+      "regular_price": "1100",
+      "sale_price": "1100",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Habitación",
+        "Organización",
+        "Sala y muebles"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/tQ0-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/dw9-1000607929.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/brT-1000615604.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/xpJ-1000615606.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/7oh-1000615608.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 67,
+      "name": "Base para electrodomésticos",
+      "slug": "base-para-electrodomesticos",
+      "sku": "BC-114280",
+      "permalink": "https://casaviva.company/producto/base-para-electrodomesticos/",
+      "price": "2300",
+      "regular_price": "2300",
+      "sale_price": "2300",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Cocina"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/hf_20261005_150142_20799cc2-d5db-457d-b1e5-434e98e5e246.png",
+        "https://casaviva.company/wp-content/uploads/2026/08/NH2-1000560832.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/fRF-1000560824.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/qoi-1000560825.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/XrR-1000560826.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/tTu-1000560827.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/gPd-1000560828.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 52,
+      "name": "Carrito de Mandado Plegable Azul",
+      "slug": "carrito-de-mandado-plegable-azul",
+      "sku": "BC-116498",
+      "permalink": "https://casaviva.company/producto/carrito-de-mandado-plegable-azul/",
+      "price": "2500",
+      "regular_price": "2500",
+      "sale_price": "2500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Organización"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/iAZ-product-cover.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    },
+    {
+      "id": 43,
+      "name": "Asiento de Inodoro",
+      "slug": "asiento-de-inodoro",
+      "sku": "BC-89044",
+      "permalink": "https://casaviva.company/producto/asiento-de-inodoro/",
+      "price": "1500",
+      "regular_price": "1500",
+      "sale_price": "1500",
+      "currency": "USD",
+      "minor_unit": 2,
+      "in_stock": true,
+      "categories": [
+        "Baño"
+      ],
+      "images": [
+        "https://casaviva.company/wp-content/uploads/2026/08/ml6-product-cover.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/SzM-1000580150.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/JW8-1000580149.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/Jif-1000580148.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/nAH-1000580147.webp",
+        "https://casaviva.company/wp-content/uploads/2026/08/7AJ-1000580146.webp"
+      ],
+      "short_description": "<p>Consulta disponibilidad, variantes y opciones de recogida o mensajería en La Habana.</p>"
+    }
+  ]
+}
