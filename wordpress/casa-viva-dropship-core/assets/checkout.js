@@ -222,7 +222,7 @@
 	  var pickup = ($('select[name="billing_cvd_fulfillment_type"]').val() || $('input[name="billing_cvd_fulfillment_type"]:checked').val() || $('input[name="billing_cvd_fulfillment_type"]').val()) === 'pickup';
 	  var where = pickup ? 'Recogida en tienda' : [fieldText('#billing_address_1'), fieldText('#billing_cvd_locality'), fieldText('#billing_city')].filter(Boolean).join(', ');
 	  var when = [fieldText('#billing_cvd_delivery_date'), $('#billing_cvd_delivery_window').val() ? fieldText('#billing_cvd_delivery_window') : ''].filter(Boolean).join(' · ');
-	  var payWith = parseFloat($('#billing_cvd_change_amount').val() || '0');
+	  var payWith = pickup ? 0 : parseFloat($('#billing_cvd_change_amount').val() || '0');
 	  var payCurrency = $('#billing_cvd_change_currency').val();
 	  var totalNumber = parseFloat((total.match(/[\d.,]+/) || ['0'])[0].replace(/\.(?=\d{3}\b)/g, '').replace(',', '.'));
 	  var change = payWith > 0 ? (payCurrency === 'USD' ? (payWith - totalNumber > 0 ? 'Paga con ' + payWith + ' USD → vuelto ' + (payWith - totalNumber).toFixed(2) + ' USD' : 'Paga exacto') : 'Paga con ' + payWith + ' ' + (payCurrency || '¿moneda?')) : 'Paga exacto (sin vuelto)';
