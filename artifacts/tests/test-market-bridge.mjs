@@ -16,4 +16,5 @@ must(!/seller|proveedor_tel|seller_phone/i.test(php.replace(/El proveedor nunca 
 must(sync.includes("0 === strpos( $sku, 'MK-' )"), 'La sincronización de BizneCubano no debe ocultar MK-*.');
 must(php.includes('_cvd_market_version') && php.includes('stale('), 'Publicar y retirar deben ser idempotentes por versión.');
 must(php.includes('$commission <= 0'), 'La comisión debe ser positiva.');
+must(sync.includes('function cvd_sync_photo') && sync.includes('_cvd_bc_image'), 'La sincronización debe actualizar la foto cuando cambia en BizneCubano.');
 console.log('Market bridge contract OK');
