@@ -25,6 +25,10 @@ FOTOS: 44 fotos reales ampliadas a 2K con Higgsfield (118 créditos) aplicadas c
 - `cvd_sync_photo`: compara la foto de BizneCubano con `_cvd_bc_image` (o, la primera vez, con el `_source_url` de la foto original) y, si cambió, la descarga y la pone como principal (olvida la versión mejorada vieja). Informe: `photo_updates`.
 - La caja (NEXO) toma la miniatura de la web en su importación horaria.
 
+## Mejora #23 — Recogida sin datos de mensajería (3.13.27, 2026-10-10)
+
+En recogida en tienda el pedido ya no guarda dirección, reparto, mapa, fecha/horario ni vuelto precargados de pedidos anteriores; el resumen del formulario no muestra vuelto. Contrato en `test-store-pickup-5b.mjs`.
+
 ## CV-MERCADO-001 — Mercado «bajo pedido» (3.13.26, 2026-10-09)
 
 - `CVD_Market_Bridge`: `POST /casa-viva/v1/bot/market/publish` y `/bot/market/{item}/unpublish` (clave X-Vivabot-Key). SKU `MK-<id>`, categoría «Bajo pedido», sin control de stock, aviso «confirmamos disponibilidad en 1 hora», comisión fija = mitad de la ganancia (la calcula VivaBot). Fotos solo desde Supabase Storage. El proveedor no se guarda en la web.

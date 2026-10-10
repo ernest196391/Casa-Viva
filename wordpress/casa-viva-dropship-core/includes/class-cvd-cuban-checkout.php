@@ -366,13 +366,27 @@ final class CVD_Cuban_Checkout {
 		$state = isset( $data['billing_state'] ) ? sanitize_text_field( $data['billing_state'] ) : '';
 		$order->set_billing_country( 'CU' );
 		$order->update_meta_data( '_cvd_fulfillment_type', $type );
+		$order->update_meta_data( '_cvd_buyer_name', isset( $_POST['billing_cvd_buyer_name'] ) ? sanitize_text_field( wp_unslash( $_POST['billing_cvd_buyer_name'] ) ) : '' );
+		$order->update_meta_data( '_cvd_alternate_phone', sanitize_text_field( wp_unslash( $_POST['billing_cvd_alternate_phone'] ?? '' ) ) );
+		if ( 'pickup' === $type ) {
+			// Recogida: el formulario puede traer precargados dirección y vuelto de pedidos anteriores
+			// (campos ocultos). No se guardan en el pedido ni salen en el vale (mejora #23).
+			$order->set_billing_address_1( '' );
+			$order->set_billing_address_2( '' );
+			$order->set_billing_city( '' );
+			$order->set_billing_state( '' );
+			foreach ( array( '_cvd_province_name', '_cvd_locality', '_cvd_reference', '_cvd_map_url', '_cvd_map_accuracy', '_cvd_delivery_date', '_cvd_delivery_window', '_cvd_pay_with' ) as $key ) {
+				$order->delete_meta_data( $key );
+			}
+			$order->update_meta_data( '_cvd_change_required', array() );
+			$order->add_order_note( 'Cliente seleccionó recogida en tienda.' );
+			return;
+		}
 		$order->update_meta_data( '_cvd_province_name', self::provinces()[ $state ] ?? $state );
 		$order->update_meta_data( '_cvd_locality', isset( $_POST['billing_cvd_locality'] ) ? sanitize_text_field( wp_unslash( $_POST['billing_cvd_locality'] ) ) : '' );
 		$order->update_meta_data( '_cvd_reference', isset( $_POST['billing_cvd_reference'] ) ? sanitize_text_field( wp_unslash( $_POST['billing_cvd_reference'] ) ) : '' );
-		$order->update_meta_data( '_cvd_buyer_name', isset( $_POST['billing_cvd_buyer_name'] ) ? sanitize_text_field( wp_unslash( $_POST['billing_cvd_buyer_name'] ) ) : '' );
 		$order->update_meta_data( '_cvd_map_url', isset( $_POST['billing_cvd_map_url'] ) ? esc_url_raw( wp_unslash( $_POST['billing_cvd_map_url'] ) ) : '' );
 		$order->update_meta_data( '_cvd_map_accuracy', isset( $_POST['billing_cvd_map_accuracy'] ) ? absint( $_POST['billing_cvd_map_accuracy'] ) : 0 );
-		$order->update_meta_data( '_cvd_alternate_phone', sanitize_text_field( wp_unslash( $_POST['billing_cvd_alternate_phone'] ?? '' ) ) );
 		$order->update_meta_data( '_cvd_delivery_date', sanitize_text_field( wp_unslash( $_POST['billing_cvd_delivery_date'] ?? '' ) ) );
 		$window = sanitize_key( wp_unslash( $_POST['billing_cvd_delivery_window'] ?? '' ) );
 		$order->update_meta_data( '_cvd_delivery_window', in_array( $window, array( 'morning', 'afternoon' ), true ) ? $window : '' );
@@ -389,9 +403,6 @@ final class CVD_Cuban_Checkout {
 			}
 		}
 		$order->update_meta_data( '_cvd_change_required', $change_required );
-		if ( 'pickup' === $type ) {
-			$order->add_order_note( 'Cliente seleccionó recogida en tienda.' );
-		}
 	}
 
 	public static function admin_order_fields( WC_Order $order ): void {
