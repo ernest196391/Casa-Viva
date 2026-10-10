@@ -32,9 +32,9 @@ console.log('OK 5B: contrato de recogida en tienda canónica validado.');
   const co = fs2.readFileSync('wordpress/casa-viva-dropship-core/includes/class-cvd-cuban-checkout.php', 'utf8');
   const save = co.slice(co.indexOf('function save_order_fields'), co.indexOf('function admin_order_fields'));
   const pick = save.slice(save.indexOf("if ( 'pickup' === $type )"), save.indexOf('return;'));
-  if (!pick.includes("set_billing_address_1( '' )") || !pick.includes("'_cvd_pay_with'") || !pick.includes("'_cvd_change_required', array()")) throw new Error('#23: recogida debe limpiar dirección y vuelto.');
+  if (!pick.includes("set_billing_address_1( '' )") || !pick.includes("'_cvd_pay_with'") || !pick.includes("set_billing_city( '' )") || !pick.includes("'_cvd_province_name'") || !pick.includes("'_cvd_change_required', array()")) throw new Error('#23: recogida debe limpiar dirección y vuelto.');
   if (save.indexOf("if ( 'pickup' === $type )") > save.indexOf("'_cvd_locality', isset")) throw new Error('#23: la recogida debe salir antes de guardar campos de mensajería.');
   const js = fs2.readFileSync('wordpress/casa-viva-dropship-core/assets/checkout.js', 'utf8');
-  if (!js.includes('var payWith = pickup ? 0')) throw new Error('#23: el resumen no muestra vuelto en recogida.');
+  if (!js.includes("if (pickup) change = ''")) throw new Error('#23: el resumen no muestra vuelto en recogida.');
   console.log('Pickup ignores prefilled delivery fields OK');
 }
