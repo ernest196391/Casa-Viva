@@ -1,0 +1,622 @@
+{
+  "base_url": "https://casaviva.company",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "generated_at": "2026-10-10T03:47:15.821Z",
+  "pages": [
+    {
+      "url": "https://casaviva.company/",
+      "final_url": "https://casaviva.company/",
+      "status": 200,
+      "load_ms": 1502,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Casa Viva | Tienda online para el hogar en La Habana",
+      "h1": [
+        "Casa Viva — tienda online para el hogar en La Habana"
+      ],
+      "meta_description": [
+        "Compra productos para el hogar en Casa Viva con precios visibles, catálogo online, recogida en Nuevo Vedado y entrega en La Habana."
+      ],
+      "canonical": [
+        "https://casaviva.company/"
+      ],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [
+        "li.cvd-deal right=490",
+        "a.cvd-deal__link right=481",
+        "span.cvd-deal__media right=481",
+        "img.attachment-woocommerce_thumbnail.size-woocommerce_thumbnail right=481",
+        "span.cvd-deal__badge right=405",
+        "span.cvd-deal__name right=481",
+        "span.cvd-deal__price right=481",
+        "del right=403"
+      ],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 52,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 8,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casaviva.company/producto/crema-facial-arcilla-vit-c-y-curcuma/",
+        "https://casaviva.company/producto/rasuradora-portatil-recargable/",
+        "https://casaviva.company/producto/cortinero-expandible-plateado/"
+      ],
+      "category_links": [
+        "https://casaviva.company/categoria-producto/habitacion/",
+        "https://casaviva.company/categoria-producto/sala-y-muebles/",
+        "https://casaviva.company/categoria-producto/cocina/",
+        "https://casaviva.company/categoria-producto/bano/",
+        "https://casaviva.company/categoria-producto/organizacion/",
+        "https://casaviva.company/categoria-producto/electrodomesticos/"
+      ],
+      "launch_assets": true,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casaviva.company/tienda/",
+      "final_url": "https://casaviva.company/tienda/",
+      "status": 200,
+      "load_ms": 1397,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Tienda – casaviva.company",
+      "h1": [
+        "Tienda"
+      ],
+      "meta_description": [],
+      "canonical": [],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 24,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 1,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casaviva.company/producto/aceite-capilar-de-batana-hoegoa/",
+        "https://casaviva.company/producto/aceite-corporal/",
+        "https://casaviva.company/producto/albornoz-talla-l-azul/"
+      ],
+      "category_links": [],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casaviva.company/tarifas-mensajeria/",
+      "final_url": "https://casaviva.company/tarifas-mensajeria/",
+      "status": 200,
+      "load_ms": 809,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Tarifas de mensajería – casaviva.company",
+      "h1": [
+        "Tarifas de mensajería"
+      ],
+      "meta_description": [],
+      "canonical": [
+        "https://casaviva.company/tarifas-mensajeria/"
+      ],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 4,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 0,
+      "has_customer_nav": true,
+      "has_quote": true,
+      "product_links": [],
+      "category_links": [],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casaviva.company/mi-cuenta/",
+      "final_url": "https://casaviva.company/mi-cuenta/",
+      "status": 200,
+      "load_ms": 1028,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Mi cuenta – casaviva.company",
+      "h1": [
+        "Mi cuenta"
+      ],
+      "meta_description": [],
+      "canonical": [
+        "https://casaviva.company/mi-cuenta/"
+      ],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 4,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 2,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [],
+      "category_links": [],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casaviva.company/area-gestoras/",
+      "final_url": "https://casaviva.company/mi-cuenta/?acceso=gestoras#cv-customer-login",
+      "status": 200,
+      "load_ms": 1166,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Mi cuenta – casaviva.company",
+      "h1": [
+        "Mi cuenta"
+      ],
+      "meta_description": [],
+      "canonical": [
+        "https://casaviva.company/mi-cuenta/"
+      ],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 4,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 2,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [],
+      "category_links": [],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casaviva.company/area-mensajeros/",
+      "final_url": "https://casaviva.company/mi-cuenta/?acceso=mensajeros#cv-customer-login",
+      "status": 200,
+      "load_ms": 1191,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Mi cuenta – casaviva.company",
+      "h1": [
+        "Mi cuenta"
+      ],
+      "meta_description": [],
+      "canonical": [
+        "https://casaviva.company/mi-cuenta/"
+      ],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 4,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 2,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [],
+      "category_links": [],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casaviva.company/categoria-producto/habitacion/",
+      "final_url": "https://casaviva.company/categoria-producto/habitacion/",
+      "status": 200,
+      "load_ms": 1227,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Habitación – casaviva.company",
+      "h1": [
+        "Habitación"
+      ],
+      "meta_description": [],
+      "canonical": [],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 24,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 0,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casaviva.company/producto/albornoz-talla-l-azul/",
+        "https://casaviva.company/producto/albornoz-talla-l-beige/",
+        "https://casaviva.company/producto/albornoz-talla-l-beige-oscuro/"
+      ],
+      "category_links": [
+        "https://casaviva.company/categoria-producto/habitacion/?add-to-cart=2363",
+        "https://casaviva.company/categoria-producto/habitacion/?add-to-cart=2391",
+        "https://casaviva.company/categoria-producto/habitacion/?add-to-cart=2365",
+        "https://casaviva.company/categoria-producto/habitacion/?add-to-cart=611",
+        "https://casaviva.company/categoria-producto/habitacion/?add-to-cart=813",
+        "https://casaviva.company/categoria-producto/habitacion/?add-to-cart=2377",
+        "https://casaviva.company/categoria-producto/habitacion/?add-to-cart=260",
+        "https://casaviva.company/categoria-producto/habitacion/?add-to-cart=2407"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casaviva.company/categoria-producto/sala-y-muebles/",
+      "final_url": "https://casaviva.company/categoria-producto/sala-y-muebles/",
+      "status": 200,
+      "load_ms": 1216,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Sala y muebles – casaviva.company",
+      "h1": [
+        "Sala y muebles"
+      ],
+      "meta_description": [],
+      "canonical": [],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 24,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 0,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casaviva.company/producto/alfombra-bienvenido-45x75-cm/",
+        "https://casaviva.company/producto/alfombra-circular-decorativa-180-cm-diseno-3/",
+        "https://casaviva.company/producto/alfombra-circular-decorativa-180-cm-diseno-4/"
+      ],
+      "category_links": [
+        "https://casaviva.company/categoria-producto/sala-y-muebles/?add-to-cart=611",
+        "https://casaviva.company/categoria-producto/sala-y-muebles/?add-to-cart=813",
+        "https://casaviva.company/categoria-producto/sala-y-muebles/?add-to-cart=2399",
+        "https://casaviva.company/categoria-producto/sala-y-muebles/?add-to-cart=2377",
+        "https://casaviva.company/categoria-producto/sala-y-muebles/?add-to-cart=2381",
+        "https://casaviva.company/categoria-producto/sala-y-muebles/?add-to-cart=260",
+        "https://casaviva.company/categoria-producto/sala-y-muebles/?add-to-cart=278",
+        "https://casaviva.company/categoria-producto/sala-y-muebles/?add-to-cart=2421"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casaviva.company/categoria-producto/cocina/",
+      "final_url": "https://casaviva.company/categoria-producto/cocina/",
+      "status": 200,
+      "load_ms": 1180,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Cocina – casaviva.company",
+      "h1": [
+        "Cocina"
+      ],
+      "meta_description": [],
+      "canonical": [],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 24,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 0,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casaviva.company/producto/alfombra-con-piecitos/",
+        "https://casaviva.company/producto/azulejo-incefra/",
+        "https://casaviva.company/producto/base-para-electrodomesticos/"
+      ],
+      "category_links": [
+        "https://casaviva.company/categoria-producto/cocina/?add-to-cart=260",
+        "https://casaviva.company/categoria-producto/cocina/?add-to-cart=67",
+        "https://casaviva.company/categoria-producto/cocina/?add-to-cart=161",
+        "https://casaviva.company/categoria-producto/cocina/?add-to-cart=609",
+        "https://casaviva.company/categoria-producto/cocina/?add-to-cart=674",
+        "https://casaviva.company/categoria-producto/cocina/?add-to-cart=2409",
+        "https://casaviva.company/categoria-producto/cocina/?add-to-cart=2421",
+        "https://casaviva.company/categoria-producto/cocina/?add-to-cart=2411"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casaviva.company/categoria-producto/bano/",
+      "final_url": "https://casaviva.company/categoria-producto/bano/",
+      "status": 200,
+      "load_ms": 1197,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Baño – casaviva.company",
+      "h1": [
+        "Baño"
+      ],
+      "meta_description": [],
+      "canonical": [],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 24,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 0,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casaviva.company/producto/albornoz-talla-l-azul/",
+        "https://casaviva.company/producto/albornoz-talla-l-beige/",
+        "https://casaviva.company/producto/albornoz-talla-l-beige-oscuro/"
+      ],
+      "category_links": [
+        "https://casaviva.company/categoria-producto/bano/?add-to-cart=2363",
+        "https://casaviva.company/categoria-producto/bano/?add-to-cart=2391",
+        "https://casaviva.company/categoria-producto/bano/?add-to-cart=2365",
+        "https://casaviva.company/categoria-producto/bano/?add-to-cart=2377",
+        "https://casaviva.company/categoria-producto/bano/?add-to-cart=43",
+        "https://casaviva.company/categoria-producto/bano/?add-to-cart=260",
+        "https://casaviva.company/categoria-producto/bano/?add-to-cart=161",
+        "https://casaviva.company/categoria-producto/bano/?add-to-cart=609"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casaviva.company/categoria-producto/organizacion/",
+      "final_url": "https://casaviva.company/categoria-producto/organizacion/",
+      "status": 200,
+      "load_ms": 1672,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Organización – casaviva.company",
+      "h1": [
+        "Organización"
+      ],
+      "meta_description": [],
+      "canonical": [],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 23,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 0,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casaviva.company/producto/bucaro-blanco/",
+        "https://casaviva.company/producto/carreton-negro/",
+        "https://casaviva.company/producto/carrito-de-mandado-plegable-azul/"
+      ],
+      "category_links": [
+        "https://casaviva.company/categoria-producto/organizacion/?add-to-cart=278",
+        "https://casaviva.company/categoria-producto/organizacion/?add-to-cart=794",
+        "https://casaviva.company/categoria-producto/organizacion/?add-to-cart=52",
+        "https://casaviva.company/categoria-producto/organizacion/?add-to-cart=809",
+        "https://casaviva.company/categoria-producto/organizacion/?add-to-cart=706",
+        "https://casaviva.company/categoria-producto/organizacion/?add-to-cart=727",
+        "https://casaviva.company/categoria-producto/organizacion/?add-to-cart=426",
+        "https://casaviva.company/categoria-producto/organizacion/?add-to-cart=534"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casaviva.company/categoria-producto/electrodomesticos/",
+      "final_url": "https://casaviva.company/categoria-producto/electrodomesticos/",
+      "status": 200,
+      "load_ms": 947,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Electrodomésticos – casaviva.company",
+      "h1": [
+        "Electrodomésticos"
+      ],
+      "meta_description": [],
+      "canonical": [],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 12,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 0,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casaviva.company/producto/licuadora-mld-999/",
+        "https://casaviva.company/producto/ventilador-recargable-f6-naranja/",
+        "https://casaviva.company/producto/ventilador-recargable-f6-negro/"
+      ],
+      "category_links": [
+        "https://casaviva.company/categoria-producto/electrodomesticos/?add-to-cart=293",
+        "https://casaviva.company/categoria-producto/electrodomesticos/?add-to-cart=2585",
+        "https://casaviva.company/categoria-producto/electrodomesticos/?add-to-cart=2601",
+        "https://casaviva.company/categoria-producto/electrodomesticos/?add-to-cart=2587"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casaviva.company/producto/aceite-capilar-de-batana-hoegoa/",
+      "final_url": "https://casaviva.company/producto/aceite-capilar-de-batana-hoegoa/",
+      "status": 200,
+      "load_ms": 1128,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Aceite capilar de batana HOEGOA – casaviva.company",
+      "h1": [
+        "Aceite capilar de batana HOEGOA"
+      ],
+      "meta_description": [],
+      "canonical": [
+        "https://casaviva.company/producto/aceite-capilar-de-batana-hoegoa/"
+      ],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [
+        "img.zoomImg right=1036"
+      ],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 15,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 0,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casaviva.company/producto/cepillos-alisadores-recargables/",
+        "https://casaviva.company/producto/aceite-capilar-de-batana-hoegoa/?add-to-cart=2417",
+        "https://casaviva.company/producto/masajeador-corporal/"
+      ],
+      "category_links": [
+        "https://casaviva.company/categoria-producto/cuidado-personal/"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    },
+    {
+      "url": "https://casaviva.company/producto/aceite-corporal/",
+      "final_url": "https://casaviva.company/producto/aceite-corporal/",
+      "status": 200,
+      "load_ms": 1253,
+      "fatal_marker": false,
+      "console_errors": [],
+      "failed_requests": [],
+      "title": "Aceite corporal – casaviva.company",
+      "h1": [
+        "Aceite corporal"
+      ],
+      "meta_description": [],
+      "canonical": [
+        "https://casaviva.company/producto/aceite-corporal/"
+      ],
+      "scroll_width": 390,
+      "client_width": 390,
+      "overflow_elements": [
+        "img.zoomImg right=795"
+      ],
+      "overflow_roots": [],
+      "overflow_widest": [],
+      "body_overflow_x": "visible/visible",
+      "images_total": 19,
+      "images_broken": [],
+      "images_repaired": [],
+      "woo_placeholders": 0,
+      "images_without_alt": 0,
+      "small_tap_targets": 1,
+      "has_customer_nav": true,
+      "has_quote": false,
+      "product_links": [
+        "https://casaviva.company/producto/faja-reductora/",
+        "https://casaviva.company/producto/aceite-corporal/?add-to-cart=727",
+        "https://casaviva.company/producto/masajeador-facial-y-cuello/"
+      ],
+      "category_links": [
+        "https://casaviva.company/categoria-producto/cuidado-personal/"
+      ],
+      "launch_assets": false,
+      "overflow_culprit": []
+    }
+  ],
+  "home_fold": {
+    "limit": 765,
+    "price_bottom": 682,
+    "add_bottom": 732,
+    "deals": 6,
+    "old_hero": false
+  },
+  "curru": {
+    "launcher": true,
+    "opened": true,
+    "answer": "Tenemos un Juego de ollas que incluye sartenes, ideal para tu cocina. Está disponible en últimas unidades, ¡aprovecha!",
+    "products": 1,
+    "photo": true,
+    "input_on_top": true
+  },
+  "search": {
+    "form": true,
+    "suggestions": 1,
+    "first": "Juego de ollas"
+  }
+}
