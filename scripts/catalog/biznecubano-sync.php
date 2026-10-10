@@ -470,7 +470,10 @@ foreach ( $products as $p ) {
 				$product = wc_get_product( $product_id );
 			}
 			$photo = cvd_sync_photo( $product, (string) ( $p['image'] ?? '' ), $apply );
-			if ( $photo ) {
+			if ( 'failed' === $photo ) {
+				// Se reintenta en la próxima vuelta (no se apuntó la foto nueva).
+				$report['errors'][] = array( 'sku' => $sku, 'error' => 'no se pudo descargar la foto nueva de BizneCubano' );
+			} elseif ( $photo ) {
 				$report['photo_updates'][] = array( 'id' => $product_id, 'sku' => $sku, 'name' => $product->get_name(), 'result' => $photo );
 				$product = wc_get_product( $product_id );
 			}
