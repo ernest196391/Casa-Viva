@@ -17,6 +17,22 @@ final class CVD_Site_Privacy {
 		add_filter( 'wp_sitemaps_posts_query_args', array( __CLASS__, 'sitemap_exclude' ), 10, 2 );
 		add_filter( 'wp_robots', array( __CLASS__, 'noindex' ) );
 		add_action( 'woocommerce_review_order_before_order_total', array( __CLASS__, 'cup_note' ), 20 );
+		add_action( 'wp_head', array( __CLASS__, 'meta_description' ), 2 );
+	}
+
+	/** Descripción para Google en productos, tienda y categorías (la portada ya trae la suya). */
+	public static function meta_description(): void {
+		$text = '';
+		if ( function_exists( 'is_product' ) && is_product() ) {
+			$p = wc_get_product( get_queried_object_id() );
+			if ( $p ) { $text = wp_strip_all_tags( $p->get_short_description() ?: $p->get_description() ); if ( '' === trim( $text ) ) { $text = $p->get_name() . ' en Casa Viva, tienda para el hogar en La Habana. Entrega a domicilio o recogida en tienda.'; } }
+		} elseif ( function_exists( 'is_product_category' ) && is_product_category() ) {
+			$term = get_queried_object();
+			$text = $term && $term->description ? wp_strip_all_tags( $term->description ) : ( $term ? $term->name . ' para tu hogar en Casa Viva, La Habana. Entrega a domicilio o recogida en tienda.' : '' );
+		} elseif ( function_exists( 'is_shop' ) && is_shop() ) {
+			$text = 'Tienda online de Casa Viva: artículos para el hogar, baño, cocina y decoración en La Habana. Entrega a domicilio o recogida en tienda.';
+		}
+		if ( '' !== $text ) { echo '<meta name="description" content="' . esc_attr( wp_html_excerpt( $text, 158, '…' ) ) . '">' . "\n"; }
 	}
 
 	public static function hide_users( array $endpoints ): array {
