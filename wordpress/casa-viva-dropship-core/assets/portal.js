@@ -41,6 +41,7 @@
   window.addEventListener('hashchange', markActiveNav); markActiveNav();
 
   if (window.CVQRCode) document.querySelectorAll('[data-pickup-qr]').forEach(function (canvas) { window.CVQRCode.toCanvas(canvas, canvas.getAttribute('data-pickup-qr'), { width: 360, margin: 2, errorCorrectionLevel: 'M' }); });
+  if (window.CVQRCode) document.querySelectorAll('canvas[data-qr]').forEach(function (canvas) { window.CVQRCode.toCanvas(canvas, canvas.getAttribute('data-qr'), { width: 220, margin: 2, errorCorrectionLevel: 'M' }); });
   function closeExpandedQr() { var expanded = document.querySelector('.cvd-pickup-qr.is-expanded'); if (expanded) expanded.classList.remove('is-expanded'); document.body.classList.remove('cvd-qr-open'); }
   document.addEventListener('click', function (event) { var button = event.target.closest('[data-qr-expand]'); if (button) { var qr = button.closest('.cvd-pickup-qr'); var opening = !qr.classList.contains('is-expanded'); closeExpandedQr(); if (opening) { qr.classList.add('is-expanded'); document.body.classList.add('cvd-qr-open'); } return; } if (event.target.matches('.cvd-pickup-qr.is-expanded')) closeExpandedQr(); });
   document.addEventListener('keydown', function (event) { if (event.key === 'Escape') closeExpandedQr(); });

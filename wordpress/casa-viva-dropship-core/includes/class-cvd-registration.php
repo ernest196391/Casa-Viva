@@ -98,6 +98,7 @@ final class CVD_Registration {
 			return '<section class="cvd-auth-card"><p class="cvd-kicker">Solicitud recibida</p><h1>Tu cuenta ya fue creada.</h1><p>Ahora está pendiente de aprobación por Casa Viva. No necesitas registrarte otra vez. Te avisaremos por WhatsApp cuando sea aprobada, con tu enlace para entrar.</p><a class="cvd-primary" href="' . esc_url( self::portal_url_for_type( $type ) ) . '">Consultar mi solicitud</a></section>';
 		}
 
+		$inviter = 'gestora' === $type ? self::inviter_from_request() : null;
 		$title = 'mensajero' === $type ? 'Trabaja como mensajero de Casa Viva' : 'Vende con Casa Viva como gestora';
 		$intro = 'mensajero' === $type
 			? 'Recibe entregas asignadas, consulta direcciones y actualiza el estado de cada recorrido desde tu área privada.'
@@ -108,6 +109,7 @@ final class CVD_Registration {
 			<div class="cvd-auth-intro"><p class="cvd-kicker">Casa Viva</p><h1><?php echo esc_html( $title ); ?></h1><p><?php echo esc_html( $intro ); ?></p><ul><li>Registro gratuito sujeto a aprobación.</li><li>Información y actividad protegidas por usuario.</li><li>Soporte operativo de Casa Viva.</li></ul></div>
 			<form class="cvd-form" method="post">
 				<h2>Crear solicitud</h2>
+				<?php if ( $inviter ) : ?><p class="cvd-notice">Te invita <strong><?php echo esc_html( $inviter->display_name ); ?></strong>.</p><input name="cvd_invita" type="hidden" value="<?php echo esc_attr( (string) get_user_meta( $inviter->ID, '_cvd_referral_code', true ) ); ?>"><?php endif; ?>
 				<?php foreach ( $errors as $error ) : ?><p class="cvd-error"><?php echo esc_html( $error ); ?></p><?php endforeach; ?>
 				<div class="cvd-form-grid">
 					<label>Nombre completo<input name="cvd_name" required type="text" value="<?php echo esc_attr( wp_unslash( $_POST['cvd_name'] ?? ( $current_user ? $current_user->display_name : '' ) ) ); ?>"></label>
@@ -184,11 +186,32 @@ final class CVD_Registration {
 		update_user_meta( $user_id, '_cvd_account_status', 'pending' );
 		if ( 'gestora' === $type ) {
 			update_user_meta( $user_id, '_cvd_referral_code', self::unique_referral_code( $user_id, $login ) );
+			// Red de gestoras: quién la invitó (solo una gestora aprobada, nunca ella misma, y no se reescribe).
+			$inviter = self::inviter_from_request();
+			if ( $inviter && $inviter->ID !== $user_id && ! get_user_meta( $user_id, '_cvd_invited_by', true ) ) {
+				update_user_meta( $user_id, '_cvd_invited_by', $inviter->ID );
+			}
 		} else {
 			delete_user_meta( $user_id, '_cvd_referral_code' );
 		}
 		self::send_application_emails( $user, $type );
 		return $user_id;
+	}
+
+	/** Gestora aprobada dueña del código de ?invita= (o del campo oculto al enviar el formulario). */
+	private static function inviter_from_request(): ?WP_User {
+		$code = sanitize_text_field( wp_unslash( $_POST['cvd_invita'] ?? $_GET['invita'] ?? '' ) );
+		if ( '' === $code || strlen( $code ) > 40 ) { return null; }
+		$ids = get_users( array( 'number' => 1, 'fields' => 'ids', 'role' => 'cvd_gestora', 'meta_key' => '_cvd_referral_code', 'meta_value' => $code ) );
+		if ( ! $ids ) { return null; }
+		$user = get_userdata( (int) $ids[0] );
+		return $user && self::is_approved_gestora( $user ) ? $user : null;
+	}
+
+	/** Enlace que una gestora comparte para invitar a otras. */
+	public static function invite_url( WP_User $user ): string {
+		$code = (string) get_user_meta( $user->ID, '_cvd_referral_code', true );
+		return $code ? add_query_arg( 'invita', rawurlencode( $code ), home_url( '/registro-gestora/' ) ) : '';
 	}
 
 	private static function send_application_emails( WP_User $user, string $type ): void {
