@@ -83,6 +83,19 @@ body.cvga-body *,body.cvga-body *::before,body.cvga-body *::after{box-sizing:bor
 .cvga-tool.is-soon{background:transparent;border-style:dashed}
 .cvga-tool.is-soon .cvga-tool-ic{color:var(--ga-muted)}
 
+/* Buscar precios */
+.cvga-busca-form{display:flex;flex-direction:column;gap:12px}
+.cvga-field{display:flex;flex-direction:column;gap:5px;font-weight:600;font-size:14px}
+.cvga-field small{font-weight:400;color:var(--ga-muted)}
+.cvga-field input[type=text]{border:1px solid var(--ga-line);background:var(--ga-bg);border-radius:10px;padding:10px 12px;font:inherit;font-weight:400}
+.cvga-field input[type=file]{font:inherit;font-weight:400}
+.cvga-busca-preview{max-width:160px;max-height:160px;border-radius:10px;object-fit:cover}
+.cvga-busca-status{margin:0;padding:10px 12px;border-radius:10px;background:var(--ga-soft)}
+.cvga-busca-results{display:flex;flex-direction:column;gap:12px}
+.cvga-offers{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.cvga-offers p{margin:6px 0 2px}
+.cvga-questions{margin:6px 0 0;padding-left:20px}
+
 /* Secciones del portal clásico dentro de la app: sin cabecera, menú ni cifras repetidas. */
 .cvga .cvd-dashboard{display:flex!important;flex-direction:column;gap:16px;padding:0!important;margin:0!important;max-width:none!important;background:none!important;border:0!important;box-shadow:none!important}
 .cvga .cvd-dashboard-head,.cvga .cvd-app-nav,.cvga .cvd-dashboard>.cvd-stats,.cvga #dashboard,.cvga #catalogo{display:none!important}

@@ -72,6 +72,7 @@ final class CVD_Gestora_App {
 			array( 'precios', 'Mis precios', 'tag', '' ),
 			array( 'clientes', 'Clientes', 'people', '' ),
 			array( '', 'Herramientas', '', '' ),
+			array( 'buscar', 'Buscar precios', 'search', '' ),
 			array( 'curru', 'Pregúntale a Curru', 'chat', '' ),
 			array( 'materiales', 'Fotos y textos listos', 'doc', '' ),
 			array( 'herramientas', 'Más herramientas', 'spark', '' ),
@@ -114,6 +115,7 @@ final class CVD_Gestora_App {
 					<?php echo self::inicio( $user, $first, $link, $code ); // phpcs:ignore ?>
 					<?php echo self::tienda( $link ); // phpcs:ignore ?>
 					<?php echo self::herramientas(); // phpcs:ignore ?>
+					<?php echo self::buscar( $zone ); // phpcs:ignore ?>
 					<div class="cvga-legacy"><?php echo $legacy; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- salida del shortcode, ya escapada allí. ?></div>
 				</div>
 			</main>
@@ -208,7 +210,7 @@ final class CVD_Gestora_App {
 		$tools = array(
 			array( 'chat', 'Pregúntale a Curru', 'Precios, medidas y si hay en almacén. Responde al momento.', 'ready', 'curru' ),
 			array( 'doc', 'Fotos y textos listos', 'Publicaciones de Casa Viva para copiar y pegar en tu estado.', 'ready', 'materiales' ),
-			array( 'search', 'Buscar precios', 'Sube la foto de un producto y mira a cuánto lo venden en Revolico y otras tiendas.', 'soon', '' ),
+			array( 'search', 'Buscar precios', 'Sube la foto de un producto y mira a cuánto lo venden en Revolico y otras tiendas.', class_exists( 'CVD_Gestora_Busca' ) && CVD_Gestora_Busca::available() ? 'ready' : 'soon', 'buscar' ),
 			array( 'target', 'Cazadora de clientes', 'Encuentra gente que está pidiendo lo que vendes, para escribirle primero.', 'soon', '' ),
 			array( 'camera', 'Fotos de producto', 'Convierte una foto normal en una foto bonita para vender.', 'soon', '' ),
 		);
@@ -230,6 +232,26 @@ final class CVD_Gestora_App {
 				</article>
 				<?php endforeach; ?>
 			</div>
+		</section>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	private static function buscar( string $zone ): string {
+		$remaining = class_exists( 'CVD_Gestora_Busca' ) ? CVD_Gestora_Busca::remaining( get_current_user_id() ) : 0;
+		ob_start();
+		?>
+		<section class="cvga-view" data-view="buscar" id="cvga-buscar">
+			<div class="cvga-head"><h1>Buscar precios</h1><p>Sube la foto de un producto y te digo a cuánto lo venden en Revolico, Facebook y otras tiendas.</p></div>
+			<form class="cvga-card cvga-busca-form" data-cvga-busca data-endpoint="<?php echo esc_url( rest_url( 'casa-viva/v1/gestora/busca' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'wp_rest' ) ); ?>">
+				<label class="cvga-field" for="cvga-busca-img"><span>Foto del producto</span><input id="cvga-busca-img" name="image" type="file" accept="image/jpeg,image/png,image/webp" required></label>
+				<img class="cvga-busca-preview" alt="" hidden>
+				<label class="cvga-field" for="cvga-busca-ctx"><span>¿Qué buscas? <small>(opcional)</small></span><input id="cvga-busca-ctx" name="context" type="text" maxlength="300" placeholder="Ej.: ventilador recargable, color blanco"></label>
+				<label class="cvga-field" for="cvga-busca-zone"><span>Zona</span><input id="cvga-busca-zone" name="zone" type="text" maxlength="100" value="<?php echo esc_attr( $zone && ! is_email( $zone ) ? $zone : 'La Habana' ); ?>"></label>
+				<div class="cvga-actions"><button class="cvga-btn" type="submit">Buscar</button><small class="cvga-note" data-busca-left>Te quedan <?php echo esc_html( (string) $remaining ); ?> búsquedas hoy.</small></div>
+				<p class="cvga-busca-status" data-busca-status role="status" hidden></p>
+			</form>
+			<div class="cvga-busca-results" data-busca-results></div>
 		</section>
 		<?php
 		return (string) ob_get_clean();
