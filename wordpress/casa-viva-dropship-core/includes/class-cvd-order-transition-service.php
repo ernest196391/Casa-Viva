@@ -83,6 +83,9 @@ final class CVD_Order_Transition_Service {
 			$order->update_meta_data('_cvd_collection_amount_cup',wc_format_decimal($context['collected_cup']??0,2));
 			$order->update_meta_data('_cvd_collection_note',sanitize_textarea_field((string)($context['collection_note']??'')));
 			$order->update_meta_data('_cvd_collection_received_by',$actor_id);$order->update_meta_data('_cvd_collection_received_at',$at);
+			// 3.13.50: a qué tarjeta entró la transferencia y su número (ya normalizado por CVD_Sales::normalize_collection).
+			$order->update_meta_data('_cvd_collection_account',sanitize_key((string)($context['collection_account']??'')));$order->update_meta_data('_cvd_collection_account_name',sanitize_text_field((string)($context['collection_account_name']??'')));$order->update_meta_data('_cvd_collection_reference',sanitize_text_field((string)($context['collection_reference']??'')));
+			if(''!==(string)($context['collection_account_note']??'')){$order->add_order_note(sanitize_text_field((string)$context['collection_account_note']));}
 			$order->update_meta_data('_cvd_pickup_handed_over_by',$actor_id);$order->update_meta_data('_cvd_pickup_handed_over_at',$at);$order->update_meta_data('_cvd_pickup_handover_confirmed','yes');
 			$order->update_meta_data('_cvd_cash_status','verified');$order->update_meta_data('_cvd_commission_review_ready','yes');
 			self::write_state_and_history($order,'operation','ready','delivered',$actor_id,$at,$anchor,array('pickup_completion'=>true));

@@ -22,6 +22,160 @@ final class CVD_Sales {
 		return current_user_can( 'cvd_manage_sales' ) || current_user_can( 'manage_woocommerce' );
 	}
 
+	// ---------- Tarjetas de la tienda (3.13.50) ----------
+	// Lennys rota varias tarjetas CUP al día: al cerrar un cobro por transferencia se apunta a cuál entró
+	// y el número de la transferencia, para cuadrar luego con cada banco. Solo se guarda un nombre
+	// y los ÚLTIMOS 4 dígitos (nunca el número completo). No se borran: se desactivan, así los pedidos
+	// viejos siguen diciendo a qué tarjeta entró su dinero.
+	private const ACCOUNTS_OPTION = 'cvd_payment_accounts';
+	/** Cuentas fijas que no son tarjeta: Zelle y USDT (dólares) y «Otra». */
+	private const FIXED_ACCOUNTS = array( 'zelle' => 'Zelle', 'usdt' => 'USDT', 'other' => 'Otra cuenta' );
+
+	/** Todas las tarjetas guardadas (o solo las activas): id, label, last4, active. */
+	public static function payment_accounts( bool $only_active = false ): array {
+		$saved = get_option( self::ACCOUNTS_OPTION, false );
+		if ( false === $saved ) { $saved = self::seed_payment_accounts(); }
+		$out = array();
+		foreach ( is_array( $saved ) ? $saved : array() as $row ) {
+			if ( ! is_array( $row ) || empty( $row['id'] ) ) { continue; }
+			$card = array( 'id' => sanitize_key( (string) $row['id'] ), 'label' => sanitize_text_field( (string) ( $row['label'] ?? '' ) ), 'last4' => preg_replace( '/\D/', '', (string) ( $row['last4'] ?? '' ) ), 'active' => ! empty( $row['active'] ) );
+			if ( $only_active && ! $card['active'] ) { continue; }
+			$card['name'] = self::card_name( $card );
+			$out[] = $card;
+		}
+		return $out;
+	}
+
+	/**
+	 * Primera lectura (la opción aún no existe): las tarjetas que mandó Lennys el 11/10/2026, todas activas.
+	 * Solo nombre + últimos 4. Si la opción ya existe (aunque la dueña lo haya desactivado todo) no se toca.
+	 */
+	private static function seed_payment_accounts(): array {
+		$seed = array( array( 'MLC', '1884' ), array( 'MN BPA', '2677' ), array( 'MN Metro', '9359' ), array( 'TCP Bandec', '5538' ), array( 'Clásica', '2690' ), array( 'Marita Metro', '4223' ) );
+		$at = current_time( 'mysql', true );
+		$accounts = array();
+		foreach ( $seed as $i => $card ) { $accounts[] = array( 'id' => 'seed' . ( $i + 1 ), 'label' => $card[0], 'last4' => $card[1], 'active' => true, 'created_at' => $at ); }
+		add_option( self::ACCOUNTS_OPTION, $accounts, '', false ); // add_option no pisa si otra petición la creó a la vez
+		$saved = get_option( self::ACCOUNTS_OPTION, $accounts );
+		return is_array( $saved ) ? $saved : $accounts;
+	}
+
+	/** «MN BPA ·2677»: nombre + últimos 4 (si el nombre ya los lleva, no se repiten). */
+	private static function card_name( array $card ): string {
+		$label = trim( (string) $card['label'] );
+		return '' !== $card['last4'] && ! str_ends_with( $label, $card['last4'] ) ? trim( $label . ' ·' . $card['last4'] ) : $label;
+	}
+
+	/**
+	 * Lo que sale en «¿A qué tarjeta entró?»: tarjetas activas, Zelle, USDT y «Otra tarjeta…» (typed: se escribe
+	 * ahí mismo nombre + últimos 4). «Otra cuenta» (other) se sigue aceptando pero ya no se ofrece.
+	 */
+	public static function account_choices(): array {
+		$choices = array_map( static fn( array $c ): array => array( 'id' => $c['id'], 'name' => $c['name'] ), self::payment_accounts( true ) );
+		$choices[] = array( 'id' => 'zelle', 'name' => 'Zelle' );
+		$choices[] = array( 'id' => 'usdt', 'name' => 'USDT' );
+		$choices[] = array( 'id' => 'typed', 'name' => 'Otra tarjeta… (escribirla)' );
+		return $choices;
+	}
+
+	/** Nombre de una cuenta (también de una tarjeta ya desactivada); '' si no existe. */
+	public static function account_name( string $id ): string {
+		$id = sanitize_key( $id );
+		if ( isset( self::FIXED_ACCOUNTS[ $id ] ) ) { return self::FIXED_ACCOUNTS[ $id ]; }
+		foreach ( self::payment_accounts() as $card ) { if ( $card['id'] === $id ) { return $card['name']; } }
+		return '';
+	}
+
+	/** Añade una tarjeta (sin id) o cambia nombre / activa-desactiva una existente (con id). */
+	public static function save_payment_account( array $input ) {
+		$id = sanitize_key( (string) ( $input['id'] ?? '' ) );
+		$label = trim( preg_replace( '/\s+/', ' ', sanitize_text_field( (string) ( $input['label'] ?? '' ) ) ) );
+		$last4 = trim( (string) ( $input['last4'] ?? '' ) );
+		$active = ! array_key_exists( 'active', $input ) || rest_sanitize_boolean( $input['active'] );
+		// Nunca el número completo: si el nombre trae 5 o más cifras seguidas, se rechaza.
+		if ( preg_match( '/\d{5,}/', preg_replace( '/[\s.\-]/', '', $label ) ) ) { return new WP_Error( 'cvd_account_number', 'Pon solo un nombre (ej.: BPA de Lennys). El número completo de la tarjeta no se guarda; solo los últimos 4.', array( 'status' => 422 ) ); }
+		self::payment_accounts(); // si es la primera vez, siembra antes las tarjetas iniciales
+		$accounts = get_option( self::ACCOUNTS_OPTION, array() );
+		$accounts = is_array( $accounts ) ? array_values( array_filter( $accounts, 'is_array' ) ) : array();
+		if ( '' === $id ) {
+			if ( '' === $label || mb_strlen( $label ) > 40 ) { return new WP_Error( 'cvd_account_label', 'Pon un nombre corto para la tarjeta (ej.: BPA, Metropolitano).', array( 'status' => 422 ) ); }
+			if ( ! preg_match( '/^\d{4}$/', $last4 ) ) { return new WP_Error( 'cvd_account_last4', 'Escribe solo los últimos 4 números de la tarjeta.', array( 'status' => 422 ) ); }
+			if ( count( $accounts ) >= 30 ) { return new WP_Error( 'cvd_account_limit', 'Ya hay 30 tarjetas. Desactiva las que no uses.', array( 'status' => 422 ) ); }
+			foreach ( $accounts as $row ) { if ( $last4 === (string) ( $row['last4'] ?? '' ) && 0 === strcasecmp( $label, (string) ( $row['label'] ?? '' ) ) ) { return new WP_Error( 'cvd_account_duplicate', 'Esa tarjeta ya está en la lista.', array( 'status' => 409 ) ); } }
+			$accounts[] = array( 'id' => 'c' . strtolower( wp_generate_password( 8, false, false ) ), 'label' => $label, 'last4' => $last4, 'active' => true, 'created_at' => current_time( 'mysql', true ) );
+		} else {
+			$found = false;
+			foreach ( $accounts as &$row ) {
+				if ( sanitize_key( (string) ( $row['id'] ?? '' ) ) !== $id ) { continue; }
+				$found = true;
+				if ( '' !== $label ) { if ( mb_strlen( $label ) > 40 ) { return new WP_Error( 'cvd_account_label', 'El nombre es demasiado largo.', array( 'status' => 422 ) ); } $row['label'] = $label; }
+				if ( '' !== $last4 ) { if ( ! preg_match( '/^\d{4}$/', $last4 ) ) { return new WP_Error( 'cvd_account_last4', 'Escribe solo los últimos 4 números de la tarjeta.', array( 'status' => 422 ) ); } $row['last4'] = $last4; }
+				$row['active'] = $active;
+				$row['updated_at'] = current_time( 'mysql', true );
+			}
+			unset( $row );
+			if ( ! $found ) { return new WP_Error( 'cvd_account_missing', 'No encontré esa tarjeta.', array( 'status' => 404 ) ); }
+		}
+		update_option( self::ACCOUNTS_OPTION, $accounts, false );
+		return self::payment_accounts();
+	}
+
+	/**
+	 * Deja el cobro en forma estándar. Zelle y USDT son transferencias a una cuenta concreta: el método
+	 * sigue siendo 'transfer' (así la caja, los mensajeros y las obligaciones de pago no cambian) y la
+	 * cuenta va aparte. La tarjeta solo cuenta en transferencia o mixto; la referencia, también en «otro».
+	 * «Otra tarjeta…» (account 'typed'): la dependienta escribe nombre + últimos 4 ahí mismo y no se queda
+	 * bloqueada. Si coincide con una tarjeta de la lista se usa esa; si marca «Guardar en la lista» y es
+	 * administración, se añade a la lista; si no, queda solo en el pedido con account 'typed'.
+	 * Devuelve method, account (id), account_name y reference; WP_Error si la tarjeta escrita no vale.
+	 */
+	public static function normalize_collection( string $method, string $account, string $reference, array $typed = array() ) {
+		$method = sanitize_key( $method );
+		$account = sanitize_key( $account );
+		if ( in_array( $method, array( 'zelle', 'usdt' ), true ) ) { $account = $method; $method = 'transfer'; }
+		$reference = mb_substr( trim( sanitize_text_field( $reference ) ), 0, 60 );
+		if ( ! in_array( $method, array( 'transfer', 'mixed' ), true ) ) { $account = ''; }
+		if ( ! in_array( $method, array( 'transfer', 'mixed', 'other' ), true ) ) { $reference = ''; }
+		if ( 'typed' === $account ) {
+			$label = trim( preg_replace( '/\s+/', ' ', sanitize_text_field( (string) ( $typed['label'] ?? '' ) ) ) );
+			$last4 = trim( (string) ( $typed['last4'] ?? '' ) );
+			if ( '' === $label || mb_strlen( $label ) > 40 || ! preg_match( '/^\d{4}$/', $last4 ) ) { return new WP_Error( 'cvd_account_typed', 'En «Otra tarjeta» pon un nombre corto y los últimos 4 números.', array( 'status' => 422 ) ); }
+			if ( preg_match( '/\d{5,}/', preg_replace( '/[\s.\-]/', '', $label ) ) ) { return new WP_Error( 'cvd_account_number', 'Pon solo un nombre para la tarjeta; el número completo no se guarda, solo los últimos 4.', array( 'status' => 422 ) ); }
+			$match = static function () use ( $label, $last4 ): string {
+				foreach ( self::payment_accounts() as $card ) { if ( $card['last4'] === $last4 && 0 === strcasecmp( $card['label'], $label ) ) { return $card['id']; } }
+				return '';
+			};
+			$found = $match();
+			if ( '' === $found && ! empty( $typed['save'] ) && current_user_can( 'manage_woocommerce' ) ) {
+				$saved = self::save_payment_account( array( 'label' => $label, 'last4' => $last4 ) );
+				if ( ! is_wp_error( $saved ) ) { $found = $match(); }
+			}
+			if ( '' !== $found ) { $account = $found; }
+			else { return array( 'method' => $method, 'account' => 'typed', 'account_name' => self::card_name( array( 'label' => $label, 'last4' => $last4 ) ), 'reference' => $reference ); }
+		}
+		$name = '' !== $account ? self::account_name( $account ) : '';
+		if ( '' === $name ) { $account = ''; }
+		return array( 'method' => $method, 'account' => $account, 'account_name' => $name, 'reference' => $reference );
+	}
+
+	/** Lee del pedido REST lo que se cobró (método, tarjeta, referencia y, si la hay, la «Otra tarjeta» escrita). */
+	private static function collection_from_request( WP_REST_Request $request ) {
+		return self::normalize_collection(
+			(string) $request->get_param( 'collectionMethod' ), (string) $request->get_param( 'collectionAccount' ), (string) $request->get_param( 'collectionReference' ),
+			array( 'label' => (string) $request->get_param( 'collectionCardLabel' ), 'last4' => (string) $request->get_param( 'collectionCardLast4' ), 'save' => rest_sanitize_boolean( $request->get_param( 'collectionSaveCard' ) ) )
+		);
+	}
+
+	/** Texto para la nota del pedido: «Cobro por transferencia a BPA 2690 · ref 12345.» ('' si no hay nada que anotar). */
+	public static function collection_note( array $collection ): string {
+		if ( ! in_array( $collection['method'] ?? '', array( 'transfer', 'mixed', 'other' ), true ) ) { return ''; }
+		if ( '' === ( $collection['account_name'] ?? '' ) && '' === ( $collection['reference'] ?? '' ) ) {
+			return 'transfer' === $collection['method'] ? 'Cobro por transferencia sin decir a qué tarjeta entró.' : '';
+		}
+		$what = array( 'transfer' => 'Cobro por transferencia', 'mixed' => 'Cobro mixto (parte por transferencia)', 'other' => 'Cobro por otro medio' )[ $collection['method'] ];
+		return $what . ( '' !== $collection['account_name'] ? ' a ' . $collection['account_name'] : '' ) . ( '' !== $collection['reference'] ? ' · ref ' . $collection['reference'] : '' ) . '.';
+	}
+
 	public static function initialize_order( WC_Order $order ): void {
 		if ( ! $order->get_meta( self::STATUS_META, true ) ) {
 			$order->update_meta_data( self::STATUS_META, 'new' );
@@ -143,10 +297,17 @@ final class CVD_Sales {
 		$fulfillment = sanitize_key( (string) $order->get_meta( '_cvd_fulfillment_type', true ) );
 		if ( 'pickup' === $fulfillment && 'ready' === $current && 'delivered' === $next && class_exists( 'CVD_Order_Transition_Service' ) ) {
 			$idempotency_key = sanitize_text_field( (string) ( $request->get_header( 'X-CVD-Idempotency-Key' ) ?: $request->get_param( 'idempotencyKey' ) ) );
+			$collection = self::collection_from_request( $request );
+			if ( is_wp_error( $collection ) ) { return $collection; }
 			$result = CVD_Order_Transition_Service::complete_pickup( $order->get_id(), array(
 				'actor_user_id' => get_current_user_id(),
 				'idempotency_key' => $idempotency_key,
-				'collection_method' => sanitize_key( (string) $request->get_param( 'collectionMethod' ) ),
+				'collection_method' => $collection['method'],
+				// A qué tarjeta entró y su número de transferencia (3.13.50); el servicio lo guarda en la misma transacción.
+				'collection_account' => $collection['account'],
+				'collection_account_name' => $collection['account_name'],
+				'collection_reference' => $collection['reference'],
+				'collection_account_note' => self::collection_note( $collection ),
 				'collected_usd' => $request->get_param( 'collectedUsd' ),
 				'collected_cup' => $request->get_param( 'collectedCup' ),
 				'collection_note' => sanitize_textarea_field( (string) $request->get_param( 'collectionNote' ) ),
@@ -196,11 +357,20 @@ final class CVD_Sales {
 		}
 		if('cancelled'===$next){$order->update_status('cancelled','Cancelado por administración desde el Centro de ventas.');$fresh=wc_get_order($order->get_id());$coherent=$fresh&&'cancelled'===sanitize_key((string)$fresh->get_meta(self::STATUS_META,true));if(!$coherent){return new WP_Error('cvd_cancellation_failed','No se pudo cancelar el pedido de forma coherente.',array('status'=>409));}return rest_ensure_response(array('message'=>'Pedido actualizado.','order'=>self::payload($fresh)));}
 		if ( 'delivered' === $next ) {
-			$payment_method = sanitize_key( (string) $request->get_param( 'collectionMethod' ) );
+			// Zelle / USDT llegan como su propio método y se guardan como 'transfer' + cuenta (ver normalize_collection).
+			$collection = self::collection_from_request( $request );
+			if ( is_wp_error( $collection ) ) { return $collection; }
+			$payment_method = $collection['method'];
 			if ( ! in_array( $payment_method, array( 'cash_usd', 'cash_cup', 'transfer', 'mixed', 'other' ), true ) || ! rest_sanitize_boolean( $request->get_param( 'moneyConfirmed' ) ) ) {
 				return new WP_Error( 'cvd_money_confirmation', 'Confirma cómo se recibió el dinero antes de completar.', array( 'status' => 422 ) );
 			}
 			$order->update_meta_data( '_cvd_collection_method', $payment_method );
+			// A qué tarjeta entró y su número de transferencia (el nombre se copia: si luego se renombra la tarjeta, el pedido no cambia).
+			$order->update_meta_data( '_cvd_collection_account', $collection['account'] );
+			$order->update_meta_data( '_cvd_collection_account_name', $collection['account_name'] );
+			$order->update_meta_data( '_cvd_collection_reference', $collection['reference'] );
+			$account_note = self::collection_note( $collection );
+			if ( '' !== $account_note ) { $order->add_order_note( $account_note ); }
 			$order->update_meta_data( '_cvd_collection_amount_usd', wc_format_decimal( $request->get_param( 'collectedUsd' ) ?: 0, 2 ) );
 			$order->update_meta_data( '_cvd_collection_amount_cup', wc_format_decimal( $request->get_param( 'collectedCup' ) ?: 0, 2 ) );
 			$order->update_meta_data( '_cvd_collection_note', sanitize_textarea_field( (string) $request->get_param( 'collectionNote' ) ) );
@@ -320,6 +490,12 @@ final class CVD_Sales {
 			'timeline' => 'pickup' === $fulfillment ? array() : self::timeline( $order ),
 			'cashHandoverDeclaredAt' => '' !== $declared_handover && 'delivered' === $delivery_status ? get_date_from_gmt( $declared_handover, 'd/m H:i' ) : '',
 			'actions' => array_values( array_unique( $actions ) ),
+			// Cómo se cobró (si ya se cerró): método, a qué tarjeta entró y el número de la transferencia.
+			'collection' => '' !== (string) $order->get_meta( '_cvd_collection_method', true ) ? array(
+				'method' => sanitize_key( (string) $order->get_meta( '_cvd_collection_method', true ) ),
+				'account' => (string) $order->get_meta( '_cvd_collection_account_name', true ),
+				'reference' => (string) $order->get_meta( '_cvd_collection_reference', true ),
+			) : null,
 			'adminUrl' => admin_url( 'admin.php?page=wc-orders&action=edit&id=' . $order->get_id() ),
 		);
 	}
@@ -373,6 +549,7 @@ final class CVD_Sales {
 			'isAdmin' => current_user_can( 'manage_woocommerce' ),
 			'logoutUrl' => wp_logout_url( home_url( '/casa-viva-app/' ) ),
 			'notificationsUrl' => rest_url( 'casa-viva/v1/notifications' ),
+			'accounts' => self::account_choices(), // «¿A qué tarjeta entró?» (tarjetas activas + Zelle, USDT, Otra)
 		) );
 	}
 
@@ -382,6 +559,6 @@ final class CVD_Sales {
 		// Dependienta sin contraseña propia (entró con el enlace de «mi acceso»): que la ponga una vez.
 		$user = wp_get_current_user();
 		$hint = CVD_Registration::is_clerk( $user ) && ! get_user_meta( $user->ID, '_cvd_has_own_password', true ) ? '<p class="cvd-clerk-password-hint">Pon tu contraseña para entrar siempre con tu WhatsApp: <a href="' . esc_url( home_url( '/centro-operaciones/#cvd-clave' ) ) . '">Poner mi contraseña</a></p>' : '';
-		return '<section class="cvd-sales-app"><nav><a href="' . esc_url( home_url( '/centro-operaciones/' ) ) . '">Operaciones</a><button data-cvd-enable-notifications type="button">Activar alertas</button><a href="' . esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ) . '">Salir</a></nav>' . $hint . '<header><h1>Pedidos</h1></header><div class="cvd-sales-summary" id="cvd-sales-summary"></div><div class="cvd-sales-tools"><input id="cvd-sales-search" type="search" placeholder="Buscar pedido, cliente o producto"><select id="cvd-sales-filter"><option value="">Todos</option><option value="new">Nuevos</option><option value="preparing">Preparando</option><option value="ready">Listos</option><option value="with_courier">Con mensajero</option><option value="delivered">Completados</option><option value="incident">Incidencias</option><option value="cancelled">Cancelados</option></select><button id="cvd-sales-refresh" type="button">Actualizar</button><button id="cvd-scan-order" type="button">Escanear vale</button></div><video id="cvd-order-scanner" playsinline hidden></video><p id="cvd-sales-message" role="status"></p><div class="cvd-sales-list" id="cvd-sales-list"><p>Cargando pedidos…</p></div><dialog id="cvd-money-dialog"><form method="dialog" id="cvd-money-form"><h2 id="cvd-money-title">Dinero recibido</h2><input id="cvd-money-order" type="hidden"><input id="cvd-money-pickup" type="hidden" value="0"><label>Forma de cobro<select id="cvd-money-method" required><option value="">Selecciona</option><option value="cash_usd">Efectivo USD</option><option value="cash_cup">Efectivo CUP</option><option value="transfer">Transferencia</option><option value="mixed">Pago mixto</option><option value="other">Otro</option></select></label><label>Recibido en USD<input id="cvd-money-usd" min="0" step="0.01" type="number"></label><label>Recibido en CUP<input id="cvd-money-cup" min="0" step="1" type="number"></label><label>Observación<textarea id="cvd-money-note" rows="2"></textarea></label><label class="cvd-money-check"><input id="cvd-handover-confirmed" type="checkbox"> Confirmo que el producto fue entregado físicamente al cliente.</label><label class="cvd-money-check"><input id="cvd-money-confirmed" type="checkbox" required> Confirmo el dinero recibido.</label><div><button value="cancel">Volver</button><button id="cvd-money-submit" value="default">Completar</button></div></form></dialog></section>';
+		return '<section class="cvd-sales-app"><nav><a href="' . esc_url( home_url( '/centro-operaciones/' ) ) . '">Operaciones</a><button data-cvd-enable-notifications type="button">Activar alertas</button><a href="' . esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ) . '">Salir</a></nav>' . $hint . '<header><h1>Pedidos</h1></header><div class="cvd-sales-summary" id="cvd-sales-summary"></div><div class="cvd-sales-tools"><input id="cvd-sales-search" type="search" placeholder="Buscar pedido, cliente o producto"><select id="cvd-sales-filter"><option value="">Todos</option><option value="new">Nuevos</option><option value="preparing">Preparando</option><option value="ready">Listos</option><option value="with_courier">Con mensajero</option><option value="delivered">Completados</option><option value="incident">Incidencias</option><option value="cancelled">Cancelados</option></select><button id="cvd-sales-refresh" type="button">Actualizar</button><button id="cvd-scan-order" type="button">Escanear vale</button></div><video id="cvd-order-scanner" playsinline hidden></video><p id="cvd-sales-message" role="status"></p><div class="cvd-sales-list" id="cvd-sales-list"><p>Cargando pedidos…</p></div><dialog id="cvd-money-dialog"><form method="dialog" id="cvd-money-form"><h2 id="cvd-money-title">Dinero recibido</h2><input id="cvd-money-order" type="hidden"><input id="cvd-money-pickup" type="hidden" value="0"><label>Forma de cobro<select id="cvd-money-method" required><option value="">Selecciona</option><option value="cash_usd">Efectivo USD</option><option value="cash_cup">Efectivo CUP</option><option value="transfer">Transferencia a tarjeta (CUP)</option><option value="zelle">Zelle</option><option value="usdt">USDT</option><option value="mixed">Mixto (efectivo + transferencia)</option><option value="other">Otro</option></select></label><label id="cvd-money-account-row" hidden>¿A qué tarjeta entró?<select id="cvd-money-account"></select></label><div id="cvd-money-typed" hidden><label>Nombre de la tarjeta<input id="cvd-money-card-label" maxlength="40" autocomplete="off" placeholder="Ej.: MN BPA"></label><label>Últimos 4 números<input id="cvd-money-card-last4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" autocomplete="off" placeholder="2690"></label><label class="cvd-money-check" id="cvd-money-save-row"><input id="cvd-money-save-card" type="checkbox"> Guardar en la lista de tarjetas</label></div><label id="cvd-money-reference-row" hidden>Nº de transferencia / referencia<input id="cvd-money-reference" maxlength="60" autocomplete="off" placeholder="Ej.: el número que sale en el SMS"></label><label>Recibido en USD<input id="cvd-money-usd" min="0" step="0.01" type="number"></label><label>Recibido en CUP<input id="cvd-money-cup" min="0" step="1" type="number"></label><label>Observación<textarea id="cvd-money-note" rows="2"></textarea></label><label class="cvd-money-check"><input id="cvd-handover-confirmed" type="checkbox"> Confirmo que el producto fue entregado físicamente al cliente.</label><label class="cvd-money-check"><input id="cvd-money-confirmed" type="checkbox" required> Confirmo el dinero recibido.</label><div><button value="cancel" formnovalidate>Volver</button><button id="cvd-money-submit" value="default">Completar</button></div></form></dialog></section>';
 	}
 }

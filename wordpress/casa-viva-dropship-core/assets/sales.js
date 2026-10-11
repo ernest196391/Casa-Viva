@@ -8,6 +8,30 @@
   var message = document.getElementById("cvd-sales-message");
   var labels = { new: "Nuevo", confirmed: "Confirmar", preparing: "Preparar", ready: "Listo para salir", picked_up: "Entregado al mensajero", delivered: "Registrar dinero recibido", incident: "Incidencia", cancelled: "Cancelar" };
   var moneyDialog = document.getElementById("cvd-money-dialog");
+  // Tarjetas de la tienda (3.13.50): en transferencia o mixto se pregunta a qué tarjeta entró y el número
+  // de la transferencia, para cuadrar luego con cada banco. Zelle y USDT ya dicen la cuenta: solo piden el número.
+  var moneyMethod = document.getElementById("cvd-money-method");
+  var moneyAccount = document.getElementById("cvd-money-account");
+  var moneyReference = document.getElementById("cvd-money-reference");
+  if (moneyAccount) moneyAccount.innerHTML = '<option value="">Elige la tarjeta</option>' + (cvdSales.accounts || []).map(function (a) { return '<option value="' + escapeText(a.id) + '">' + escapeText(a.name) + "</option>"; }).join("");
+  function syncMoneyAccount() {
+    if (!moneyAccount) return;
+    var m = moneyMethod.value, card = m === "transfer" || m === "mixed", ref = card || m === "zelle" || m === "usdt" || m === "other";
+    document.getElementById("cvd-money-account-row").hidden = !card;
+    moneyAccount.required = m === "transfer"; // en mixto puede que no hubo transferencia
+    document.getElementById("cvd-money-reference-row").hidden = !ref;
+    if (!card) moneyAccount.value = "";
+    if (!ref) moneyReference.value = "";
+    // «Otra tarjeta…»: se escribe ahí mismo (nombre + últimos 4); solo administración puede guardarla en la lista.
+    var typed = card && moneyAccount.value === "typed";
+    document.getElementById("cvd-money-typed").hidden = !typed;
+    document.getElementById("cvd-money-card-label").required = typed;
+    document.getElementById("cvd-money-card-last4").required = typed;
+    document.getElementById("cvd-money-save-row").hidden = !cvdSales.isAdmin;
+    if (!typed) { document.getElementById("cvd-money-card-label").value = ""; document.getElementById("cvd-money-card-last4").value = ""; document.getElementById("cvd-money-save-card").checked = false; }
+  }
+  if (moneyMethod) moneyMethod.addEventListener("change", syncMoneyAccount);
+  if (moneyAccount) moneyAccount.addEventListener("change", syncMoneyAccount);
   var scanner = document.getElementById("cvd-order-scanner");
   var stream = null;
   if(cvdSales.notificationsUrl)fetch(cvdSales.notificationsUrl,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-WP-Nonce':cvdSales.nonce},body:JSON.stringify({id:0})}).catch(function(){});
@@ -99,7 +123,7 @@
         document.getElementById("cvd-money-method").value = Number(declaredUsd) > 0 && Number(declaredCup) > 0 ? "mixed" : (Number(declaredUsd) > 0 ? "cash_usd" : "cash_cup");
         document.getElementById("cvd-money-title").textContent = "Dinero recibido · el mensajero declaró " + (declaredUsd || 0) + " USD + " + (declaredCup || 0) + " CUP";
       }
-      moneyDialog.showModal(); return;
+      syncMoneyAccount(); moneyDialog.showModal(); return;
     }
     if (status === "cancelled" && !window.confirm("¿Cancelar el pedido? Se repondrá el stock y se cancelará la comisión.")) return;
     button.disabled = true; message.textContent = "Guardando…";
@@ -110,7 +134,7 @@
     if (event.submitter && event.submitter.value === "cancel") return;
     event.preventDefault(); var submit = document.getElementById("cvd-money-submit"); submit.disabled = true;
     var pickup = document.getElementById("cvd-money-pickup").value === "1";
-    try { await api(cvdSales.url + "/" + document.getElementById("cvd-money-order").value + "/status", { method: "POST", body: JSON.stringify({ status: "delivered", collectionMethod: document.getElementById("cvd-money-method").value, collectedUsd: document.getElementById("cvd-money-usd").value, collectedCup: document.getElementById("cvd-money-cup").value, collectionNote: document.getElementById("cvd-money-note").value, moneyConfirmed: document.getElementById("cvd-money-confirmed").checked, handoverConfirmed: pickup ? document.getElementById("cvd-handover-confirmed").checked : false }) }); moneyDialog.close(); event.target.reset(); document.getElementById("cvd-money-pickup").value = "0"; await load(); }
+    try { await api(cvdSales.url + "/" + document.getElementById("cvd-money-order").value + "/status", { method: "POST", body: JSON.stringify({ status: "delivered", collectionMethod: document.getElementById("cvd-money-method").value, collectedUsd: document.getElementById("cvd-money-usd").value, collectedCup: document.getElementById("cvd-money-cup").value, collectionNote: document.getElementById("cvd-money-note").value, collectionAccount: moneyAccount ? moneyAccount.value : "", collectionReference: moneyReference ? moneyReference.value : "", collectionCardLabel: document.getElementById("cvd-money-card-label").value, collectionCardLast4: document.getElementById("cvd-money-card-last4").value, collectionSaveCard: document.getElementById("cvd-money-save-card").checked, moneyConfirmed: document.getElementById("cvd-money-confirmed").checked, handoverConfirmed: pickup ? document.getElementById("cvd-handover-confirmed").checked : false }) }); moneyDialog.close(); event.target.reset(); syncMoneyAccount(); document.getElementById("cvd-money-pickup").value = "0"; await load(); }
     catch (error) { message.textContent = error.message; message.className = "is-error"; }
     finally { submit.disabled = false; }
   });

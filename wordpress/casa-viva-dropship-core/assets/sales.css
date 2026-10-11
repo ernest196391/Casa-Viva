@@ -206,6 +206,10 @@
 #cvd-money-form input, #cvd-money-form select, #cvd-money-form textarea { border: 1px solid #cdb8ad; border-radius: 11px; font: inherit; min-height: 44px; padding: 8px 11px; }
 #cvd-money-form .cvd-money-check { align-items: center; display: flex; }
 #cvd-money-form .cvd-money-check input { min-height: 0; }
+/* Sin esto, display:grid/flex de arriba gana al atributo hidden (tarjeta, referencia y «se llevó el producto»). */
+#cvd-money-form [hidden] { display: none; }
+/* «Otra tarjeta…»: nombre, últimos 4 y «Guardar en la lista», uno debajo de otro. */
+#cvd-money-form > #cvd-money-typed:not([hidden]) { display: grid; gap: 10px; }
 #cvd-money-form > div { display: flex; gap: 9px; }
 #cvd-money-form button { border: 0; border-radius: 999px; flex: 1; font-weight: 800; min-height: 45px; }
 #cvd-money-submit { background: #177d54; color: #fff; }

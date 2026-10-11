@@ -48,6 +48,59 @@ final class CVD_Panel_Bridge {
 		// Tarifas de mensajería por zona (CUP): las mismas que usa el checkout y el reparto.
 		register_rest_route( self::NS, '/panel/shipping-rates', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'shipping_rates' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/shipping-rates', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'shipping_rate_save' ), 'permission_callback' => $auth ) );
+		// Tarjetas de la tienda (3.13.50): la lista que sale en «¿A qué tarjeta entró?» y los cobros de la web por tarjeta.
+		register_rest_route( self::NS, '/panel/pay-accounts', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'pay_accounts' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/pay-accounts', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'pay_account_save' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/collections', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'collections' ), 'permission_callback' => $auth ) );
+	}
+
+	/** Todas las tarjetas (también las desactivadas, para poder reactivarlas) y lo que sale al cerrar un cobro. */
+	public static function pay_accounts(): WP_REST_Response {
+		return self::no_cache( array( 'accounts' => CVD_Sales::payment_accounts(), 'choices' => CVD_Sales::account_choices() ) );
+	}
+
+	/** Añadir tarjeta (nombre + últimos 4) o cambiarla / activar-desactivar (con id). Nunca el número completo. */
+	public static function pay_account_save( WP_REST_Request $request ) {
+		$params = array_intersect_key( (array) $request->get_json_params(), array_flip( array( 'id', 'label', 'last4', 'active' ) ) );
+		$result = CVD_Sales::save_payment_account( $params );
+		if ( is_wp_error( $result ) ) { return $result; }
+		return self::no_cache( array( 'accounts' => $result, 'choices' => CVD_Sales::account_choices() ) );
+	}
+
+	/**
+	 * Cobros de la web que no fueron en efectivo (transferencia, Zelle, USDT, mixto u otro) entre dos días
+	 * (Y-m-d, hora de la web), con a qué tarjeta entró y su número: para cuadrar con cada banco. Solo lectura.
+	 */
+	public static function collections( WP_REST_Request $request ): WP_REST_Response {
+		$tz = wp_timezone();
+		$today = new DateTimeImmutable( 'now', $tz );
+		$from_raw = (string) $request->get_param( 'from' );
+		$to_raw = (string) $request->get_param( 'to' );
+		$from = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $from_raw ) ? new DateTimeImmutable( $from_raw . ' 00:00:00', $tz ) : $today->setTime( 0, 0 );
+		$to = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $to_raw ) ? new DateTimeImmutable( $to_raw . ' 23:59:59', $tz ) : $today->setTime( 23, 59, 59 );
+		if ( $from < $today->modify( '-100 days' ) ) { $from = $today->modify( '-100 days' )->setTime( 0, 0 ); } // como la caja: 90 días y un margen
+		$from_gmt = $from->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
+		$to_gmt = $to->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
+		// El cobro se guarda al cerrar, así que el pedido se modificó después: se filtra por fecha de cambio y luego por la hora del cobro.
+		$orders = wc_get_orders( array( 'limit' => 400, 'type' => 'shop_order', 'orderby' => 'modified', 'order' => 'DESC', 'date_modified' => '>=' . $from->getTimestamp(), 'status' => array( 'completed', 'refunded' ) ) );
+		$labels = array( 'transfer' => 'Transferencia', 'mixed' => 'Mixto', 'other' => 'Otro' );
+		$rows = array();
+		foreach ( $orders as $order ) {
+			$method = sanitize_key( (string) $order->get_meta( '_cvd_collection_method', true ) );
+			$at = (string) $order->get_meta( '_cvd_collection_received_at', true );
+			if ( ! isset( $labels[ $method ] ) || '' === $at || $at < $from_gmt || $at > $to_gmt ) { continue; }
+			$account = sanitize_key( (string) $order->get_meta( '_cvd_collection_account', true ) );
+			$rows[] = array(
+				'id' => $order->get_id(), 'number' => $order->get_order_number(), 'at' => get_date_from_gmt( $at, 'c' ),
+				'method' => $method, 'methodLabel' => $labels[ $method ],
+				'account' => $account, 'accountName' => (string) $order->get_meta( '_cvd_collection_account_name', true ),
+				'reference' => (string) $order->get_meta( '_cvd_collection_reference', true ),
+				'usd' => (float) $order->get_meta( '_cvd_collection_amount_usd', true ), 'cup' => (float) $order->get_meta( '_cvd_collection_amount_cup', true ),
+				'customer' => $order->get_formatted_billing_full_name(), 'refunded' => $order->has_status( 'refunded' ),
+			);
+		}
+		usort( $rows, static fn( array $a, array $b ): int => strcmp( $b['at'], $a['at'] ) );
+		return self::no_cache( array( 'from' => $from->format( 'Y-m-d' ), 'to' => $to->format( 'Y-m-d' ), 'items' => $rows ) );
 	}
 
 	private const EDITABLE = array( 'pending', 'processing', 'on-hold' );
@@ -389,7 +442,7 @@ final class CVD_Panel_Bridge {
 	/** Cambiar el estado (Listo para salir, entregado al mensajero, dinero recibido, cancelar…) o registrar devolución. */
 	public static function sales_action( WP_REST_Request $request ) {
 		$params = (array) $request->get_json_params();
-		$allowed = array( 'status', 'collectionMethod', 'collectedUsd', 'collectedCup', 'collectionNote', 'moneyConfirmed', 'handoverConfirmed', 'idempotencyKey', 'reason', 'refundUsd', 'refundCup', 'voidMessenger' );
+		$allowed = array( 'status', 'collectionMethod', 'collectionAccount', 'collectionReference', 'collectionCardLabel', 'collectionCardLast4', 'collectionSaveCard', 'collectedUsd', 'collectedCup', 'collectionNote', 'moneyConfirmed', 'handoverConfirmed', 'idempotencyKey', 'reason', 'refundUsd', 'refundCup', 'voidMessenger' );
 		$params = array_intersect_key( $params, array_flip( $allowed ) );
 		return self::as_owner( 'POST', '/sales/' . absint( $request['id'] ) . '/' . ( 'return' === $request['what'] ? 'return' : 'status' ), $params );
 	}
