@@ -231,7 +231,7 @@ final class CVD_Cuban_Checkout {
 		$fields['billing']['billing_cvd_locality'] = array(
 			'type'        => 'text',
 			'label'       => 'Reparto o localidad',
-			'placeholder' => 'Escribe o elige una sugerencia',
+			'placeholder' => 'Toca y elige tu reparto de la lista',
 			'required'    => $is_delivery,
 			'class'       => array( 'form-row-wide', 'cvd-delivery-field' ),
 			'priority'    => 90,
@@ -348,7 +348,7 @@ final class CVD_Cuban_Checkout {
 		$required = array(
 			'billing_state'      => 'Selecciona la provincia de entrega.',
 			'billing_city'       => 'Selecciona el municipio de entrega.',
-			'billing_cvd_locality' => 'Selecciona o escribe el reparto de entrega.',
+			'billing_cvd_locality' => 'Elige el reparto de entrega de la lista.',
 			'billing_address_1'  => 'Escribe la calle, el número y el edificio.',
 		);
 		foreach ( $required as $key => $message ) {

@@ -15,6 +15,7 @@ final class CVD_Shipping_Rates {
 		add_action( 'woocommerce_checkout_update_order_review', array( __CLASS__, 'refresh_checkout_rate' ) );
 		add_action( 'woocommerce_review_order_before_order_total', array( __CLASS__, 'checkout_rate_row' ) );
 		add_action( 'woocommerce_checkout_create_order', array( __CLASS__, 'save_order_rate' ), 30, 2 );
+		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'note_locality' ), 20 );
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 		add_action( 'wp_ajax_cvd_address_search', array( __CLASS__, 'address_search' ) );
 		add_action( 'wp_ajax_nopriv_cvd_address_search', array( __CLASS__, 'address_search' ) );
@@ -133,18 +134,75 @@ final class CVD_Shipping_Rates {
 		return $out;
 	}
 
+	/**
+	 * Reparto escrito por el cliente → reparto oficial de la lista de ese municipio (3.13.53).
+	 * Pasó el día del lanzamiento: «Mitamar» (Playa) se guardó tal cual, tarifa 0 y el vale del mensajero salió sin mensajería.
+	 * Orden: igual sin acentos ni mayúsculas → igual sin «Reparto»/signos/el nombre del municipio → el nombre oficial
+	 * aparece entero dentro de lo escrito («Miramar, Playa») → errata (Levenshtein ≤ 2; ≤ 1 si el nombre es corto).
+	 * Solo vale si hay UN candidato claro; si no, zone = '' (queda «por confirmar con la tienda», nunca 0 en silencio).
+	 * Devuelve array( 'zone' => nombre oficial o '', 'how' => 'exact' | 'fuzzy' | 'none' ).
+	 */
+	public static function match_zone( string $municipality, string $zone ): array {
+		$none = array( 'zone' => '', 'how' => 'none' );
+		$municipality_key = self::normalize( $municipality ); $zone_key = self::normalize( $zone );
+		if ( '' === $municipality_key || '' === $zone_key ) { return $none; }
+		$official = array();
+		foreach ( self::rates() as $row ) {
+			if ( empty( $row['active'] ) || '' === (string) $row['zone'] || self::normalize( $row['municipality'] ) !== $municipality_key ) { continue; }
+			if ( self::normalize( $row['zone'] ) === $zone_key ) { return array( 'zone' => (string) $row['zone'], 'how' => 'exact' ); }
+			$official[] = (string) $row['zone'];
+		}
+		if ( ! $official ) { return $none; }
+		$typed = self::loose( $zone );
+		// «Kohly, Playa» con Playa elegido: el municipio escrito dentro del reparto no cuenta (si queda algo).
+		$municipality_loose = self::loose( $municipality );
+		$without_municipality = '' === $municipality_loose ? $typed : preg_replace( '/\b' . preg_quote( $municipality_loose, '/' ) . '\b/', ' ', $typed );
+		$without_municipality = trim( preg_replace( '/\s+/', ' ', $without_municipality ) );
+		if ( '' !== $without_municipality ) { $typed = $without_municipality; }
+		if ( '' === $typed ) { return $none; }
+		$best = array(); $best_distance = PHP_INT_MAX;
+		foreach ( $official as $name ) {
+			$key = self::loose( $name );
+			if ( '' === $key ) { continue; }
+			if ( $key === $typed || ( strlen( $key ) >= 4 && preg_match( '/(^| )' . preg_quote( $key, '/' ) . '( |$)/', $typed ) ) ) {
+				$distance = 0;
+			} else {
+				$allowed = strlen( $key ) >= 6 ? 2 : ( strlen( $key ) >= 4 ? 1 : 0 );
+				$distance = self::distance( $typed, $key );
+				if ( $distance > $allowed ) { continue; }
+			}
+			if ( $distance < $best_distance ) { $best_distance = $distance; $best = array( $key => $name ); }
+			elseif ( $distance === $best_distance && ! isset( $best[ $key ] ) ) { $best[ $key ] = $name; }
+		}
+		if ( ! $best ) { return $none; }
+		if ( count( $best ) > 1 ) {
+			// Varios con el nombre oficial dentro («Miramar Playa» ya sin Playa no llega aquí): gana el nombre más largo si es único.
+			if ( 0 !== $best_distance ) { return $none; }
+			$lengths = array_map( 'strlen', array_keys( $best ) ); $max = max( $lengths );
+			$longest = array_values( array_filter( array_keys( $best ), static fn( $k ) => strlen( $k ) === $max ) );
+			if ( 1 !== count( $longest ) ) { return $none; }
+			$best = array( $longest[0] => $best[ $longest[0] ] );
+		}
+		return array( 'zone' => (string) reset( $best ), 'how' => 'fuzzy' );
+	}
+
 	public static function quote( string $municipality, string $zone ): array {
 		$municipality_key = self::normalize( $municipality );
-		$zone_key = self::normalize( $zone );
+		$match = self::match_zone( $municipality, $zone );
+		$official_key = self::normalize( $match['zone'] );
 		$general = 0;
 		foreach ( self::rates() as $row ) {
 			if ( empty( $row['active'] ) || self::normalize( $row['municipality'] ) !== $municipality_key ) { continue; }
 			if ( '' === $row['zone'] ) { $general = absint( $row['fee'] ); continue; }
-			if ( $zone_key && self::normalize( $row['zone'] ) === $zone_key ) {
-				return array( 'fee' => absint( $row['fee'] ), 'status' => 'zone', 'label' => $row['zone'] );
+			if ( $official_key && self::normalize( $row['zone'] ) === $official_key ) {
+				$found = array( 'fee' => absint( $row['fee'] ), 'status' => 'zone', 'label' => $row['zone'] );
+				// Errata corregida: se guarda lo que escribió el cliente para que la tienda lo vea en la nota.
+				return 'fuzzy' === $match['how'] ? $found + array( 'typed' => $zone, 'matched' => 'fuzzy' ) : $found;
 			}
 		}
-		return array( 'fee' => 0, 'status' => 'pending', 'label' => $zone ?: $municipality, 'reference' => $general );
+		$pending = array( 'fee' => 0, 'status' => 'pending', 'label' => $zone ?: $municipality, 'reference' => $general );
+		// Escribió un reparto que no está en la lista de ese municipio: «por confirmar con la tienda» (no 0 en silencio).
+		return '' !== trim( $zone ) && '' !== $municipality_key ? $pending + array( 'unknown' => true ) : $pending;
 	}
 
 	public static function refresh_checkout_rate( string $post_data ): void {
@@ -179,6 +237,34 @@ final class CVD_Shipping_Rates {
 		$order->update_meta_data( '_cvd_shipping_rate_status', sanitize_key( $quote['status'] ?? 'pending' ) );
 		$order->update_meta_data( '_cvd_shipping_rate_label', sanitize_text_field( $quote['label'] ?? '' ) );
 		$order->update_meta_data( '_cvd_shipping_rate_version', self::VERSION );
+		self::flag_locality( $order, $quote, sanitize_text_field( wp_unslash( $_POST['billing_city'] ?? '' ) ) );
+	}
+
+	/**
+	 * Reparto del pedido frente a la lista oficial (3.13.53). Errata → se guarda el nombre oficial (y lo escrito aparte);
+	 * desconocido → se deja como lo escribió y se marca _cvd_locality_check = 'unknown' (vale: «por confirmar con la tienda»).
+	 * La nota se escribe al crear el pedido (note_locality): antes de guardarse aún no tiene número y la nota se perdería.
+	 */
+	private static function flag_locality( WC_Order $order, array $quote, string $municipality ): void {
+		if ( ! empty( $quote['typed'] ) && 'zone' === ( $quote['status'] ?? '' ) ) {
+			$order->update_meta_data( '_cvd_locality_typed', sanitize_text_field( (string) $quote['typed'] ) );
+			$order->update_meta_data( '_cvd_locality', sanitize_text_field( (string) $quote['label'] ) );
+			$order->update_meta_data( '_cvd_locality_check', 'fixed' );
+			$order->update_meta_data( '_cvd_locality_note', sprintf( 'Reparto corregido: el cliente escribió «%s» y se usó «%s» (%s) de la lista. Mensajería %s CUP.', $quote['typed'], $quote['label'], $municipality, number_format_i18n( absint( $quote['fee'] ?? 0 ), 0 ) ) );
+		} elseif ( ! empty( $quote['unknown'] ) ) {
+			$order->update_meta_data( '_cvd_locality_check', 'unknown' );
+			$order->update_meta_data( '_cvd_locality_note', sprintf( '⚠️ Reparto «%s» no está en la lista de %s: mensajería POR CONFIRMAR con la tienda (no se cobró nada de mensajería). Confirma la zona con el cliente antes de mandar el mensajero.', $quote['label'] ?? '', $municipality ?: 'ese municipio' ) );
+		}
+	}
+
+	/** Nota visible en el pedido (WooCommerce y panel) con lo que pasó con el reparto. */
+	public static function note_locality( $order ): void {
+		if ( ! $order instanceof WC_Order ) { return; }
+		$note = (string) $order->get_meta( '_cvd_locality_note', true );
+		if ( '' === $note ) { return; }
+		$order->add_order_note( $note );
+		$order->delete_meta_data( '_cvd_locality_note' );
+		$order->save();
 	}
 
 	public static function order_fee( WC_Order $order ): int {
@@ -186,14 +272,25 @@ final class CVD_Shipping_Rates {
 		if ( $fee || 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return $fee; }
 		$quote = self::quote( $order->get_billing_city(), (string) $order->get_meta( '_cvd_locality', true ) );
 		$fee = absint( $quote['fee'] ?? 0 );
+		// Errata en un pedido ya cerrado (entregado, cobrado o cancelado): no se le cambia la mensajería a posteriori.
+		if ( $fee && ! empty( $quote['typed'] ) && self::is_closed( $order ) ) { return 0; }
 		if ( $fee ) {
 			$order->update_meta_data( '_cvd_shipping_fee_cup', $fee );
 			$order->update_meta_data( '_cvd_shipping_rate_status', 'zone' );
 			$order->update_meta_data( '_cvd_shipping_rate_label', sanitize_text_field( $quote['label'] ?? '' ) );
 			$order->update_meta_data( '_cvd_shipping_rate_version', self::VERSION );
+			// Pedidos de antes de 3.13.53 con errata («Mitamar»): se corrige el reparto y queda nota para la tienda.
+			self::flag_locality( $order, $quote, $order->get_billing_city() );
 			$order->save();
+			self::note_locality( $order );
 		}
 		return $fee;
+	}
+
+	private static function is_closed( WC_Order $order ): bool {
+		if ( in_array( $order->get_status(), array( 'completed', 'cancelled', 'refunded', 'failed' ), true ) ) { return true; }
+		$delivery = sanitize_key( (string) $order->get_meta( '_cvd_delivery_status', true ) );
+		return in_array( $delivery, array( 'handed_over', 'delivered', 'cash_returned', 'closed', 'failed', 'returned', 'cancelled' ), true );
 	}
 
 	public static function order_item_totals( array $totals, WC_Order $order, string $tax_display ): array {
@@ -248,5 +345,27 @@ final class CVD_Shipping_Rates {
 
 	private static function normalize( string $value ): string {
 		return strtolower( trim( remove_accents( $value ) ) );
+	}
+
+	/** Letras distintas entre dos nombres (Levenshtein + dos letras cambiadas de sitio cuentan 1: «Kohly» ↔ «Kholy»). */
+	private static function distance( string $a, string $b ): int {
+		$la = strlen( $a ); $lb = strlen( $b ); $d = array();
+		for ( $i = 0; $i <= $la; $i++ ) { $d[ $i ][0] = $i; }
+		for ( $j = 0; $j <= $lb; $j++ ) { $d[0][ $j ] = $j; }
+		for ( $i = 1; $i <= $la; $i++ ) {
+			for ( $j = 1; $j <= $lb; $j++ ) {
+				$cost = $a[ $i - 1 ] === $b[ $j - 1 ] ? 0 : 1;
+				$d[ $i ][ $j ] = min( $d[ $i - 1 ][ $j ] + 1, $d[ $i ][ $j - 1 ] + 1, $d[ $i - 1 ][ $j - 1 ] + $cost );
+				if ( $i > 1 && $j > 1 && $a[ $i - 1 ] === $b[ $j - 2 ] && $a[ $i - 2 ] === $b[ $j - 1 ] ) { $d[ $i ][ $j ] = min( $d[ $i ][ $j ], $d[ $i - 2 ][ $j - 2 ] + 1 ); }
+			}
+		}
+		return $d[ $la ][ $lb ];
+	}
+
+	/** Para comparar repartos con erratas: sin acentos, sin signos, sin «Reparto»/«Rpto.» delante y con espacios simples. */
+	private static function loose( string $value ): string {
+		$value = preg_replace( '/[^a-z0-9]+/', ' ', self::normalize( $value ) );
+		$value = preg_replace( '/^(reparto|rpto|repto|barrio) /', '', trim( $value ) );
+		return trim( preg_replace( '/\s+/', ' ', $value ) );
 	}
 }

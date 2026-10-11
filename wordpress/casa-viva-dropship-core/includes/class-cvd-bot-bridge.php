@@ -34,6 +34,10 @@ final class CVD_Bot_Bridge {
 		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)/whatsapp', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'verified_whatsapp' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/gestora', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'gestora_link' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/gestora/orders', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'gestora_orders' ), 'permission_callback' => $auth ) );
+		// Aviso a la gestora cuando su pedido termina por CUALQUIER camino (3.13.53): recogida cerrada en /ventas/ o el panel,
+		// o «Entregado» marcado desde el área del mensajero. El «entregado» por WhatsApp avisa al momento y marca lo mismo.
+		register_rest_route( self::NS, '/bot/gestora/finished', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'gestora_finished' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/gestora/finished/(?P<id>\d+)/notified', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'gestora_finished_notified' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/partners', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'partners' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/partners/(?P<id>\d+)/status', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'partner_status' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/partners/(?P<id>\d+)/welcome', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'partner_welcome' ), 'permission_callback' => $auth ) );
@@ -197,6 +201,76 @@ final class CVD_Bot_Bridge {
 			);
 		}
 		return self::no_cache( array( 'found' => true, 'id' => $gestora->ID, 'approved' => 'approved' === CVD_Registration::status_for( $gestora, 'gestora' ), 'name' => $gestora->display_name, 'orders' => $list, 'commission' => array( 'pending' => round( $pending, 2 ), 'approved' => round( $approved, 2 ) ) ) );
+	}
+
+	/**
+	 * Pedidos de gestora que ya terminaron y a los que el bot aún no le avisó a la gestora (3.13.53).
+	 * Terminado = recogida en tienda cerrada («Lo recogió y pagó») o mensajería entregada (delivered, dinero recibido o cerrada).
+	 * since = desde cuándo mirar cambios (ISO o unix; por defecto 24 h, como mucho 3 días). Al cliente de la gestora nunca se le escribe.
+	 */
+	public static function gestora_finished( WP_REST_Request $request ): WP_REST_Response {
+		$raw = (string) $request->get_param( 'since' );
+		$since = '' === $raw ? 0 : ( is_numeric( $raw ) ? (int) $raw : (int) strtotime( $raw ) );
+		$floor = time() - 3 * DAY_IN_SECONDS;
+		if ( $since <= 0 ) { $since = time() - DAY_IN_SECONDS; }
+		$since = max( $since, $floor );
+		$orders = wc_get_orders( array( 'limit' => 100, 'type' => 'shop_order', 'orderby' => 'modified', 'order' => 'DESC', 'status' => array( 'processing', 'on-hold', 'completed' ),
+			'date_modified' => '>=' . $since, 'meta_key' => '_cvd_owner_type', 'meta_value' => 'gestora' ) );
+		$list = array();
+		foreach ( $orders as $order ) {
+			if ( ! $order instanceof WC_Order || '' !== (string) $order->get_meta( '_cvd_bot_gestora_done_notified_at', true ) ) { continue; }
+			$kind = self::finished_kind( $order );
+			$gestora_id = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
+			if ( '' === $kind || ! $gestora_id ) { continue; }
+			$gestora = get_userdata( $gestora_id );
+			$list[] = array(
+				'id'               => $order->get_id(),
+				'number'           => $order->get_order_number(),
+				'kind'             => $kind, // 'pickup' (se lo llevó de la tienda) o 'delivery' (lo entregó el mensajero)
+				'doneAt'           => self::finished_at( $order, $kind ), // 'Y-m-d H:i:s' UTC
+				'gestoraId'        => $gestora_id,
+				'gestoraName'      => $gestora ? $gestora->display_name : (string) $order->get_meta( '_cvd_owner_display_name', true ),
+				'gestoraPhone'     => self::gestora_phone( $order ),
+				'customerFirst'    => trim( (string) $order->get_billing_first_name() ),
+				'items'            => self::items( $order ),
+				'commission'       => round( (float) $order->get_meta( '_cvd_commission_amount', true ), 2 ),
+				'commissionStatus' => sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ),
+			);
+		}
+		return self::no_cache( array( 'finished' => $list, 'since' => gmdate( 'Y-m-d H:i:s', $since ) ) );
+	}
+
+	/** El bot ya le avisó a la gestora (por el aviso automático o por el «entregado» de WhatsApp): no se repite. */
+	public static function gestora_finished_notified( WP_REST_Request $request ) {
+		$order = self::order( $request );
+		if ( is_wp_error( $order ) ) { return $order; }
+		if ( 'gestora' !== sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) ) { return new WP_Error( 'cvd_not_gestora', 'Ese pedido no es de una gestora.', array( 'status' => 409 ) ); }
+		if ( '' !== (string) $order->get_meta( '_cvd_bot_gestora_done_notified_at', true ) ) { return self::no_cache( array( 'ok' => true, 'already' => true ) ); }
+		$via = 'whatsapp' === sanitize_key( (string) $request->get_param( 'via' ) ) ? 'whatsapp' : 'poll';
+		$order->update_meta_data( '_cvd_bot_gestora_done_notified_at', current_time( 'mysql', true ) );
+		$order->update_meta_data( '_cvd_bot_gestora_done_via', $via );
+		if ( ! $request->get_param( 'skipped' ) ) {
+			$order->add_order_note( 'whatsapp' === $via ? 'VivaBot: la gestora ya sabe que el pedido se entregó (aviso del «entregado» por WhatsApp).' : 'VivaBot: avisada la gestora por WhatsApp de que su pedido terminó.' );
+		}
+		$order->save();
+		return self::no_cache( array( 'ok' => true, 'already' => false ) );
+	}
+
+	/** 'pickup' | 'delivery' si el pedido ya terminó para la gestora; '' si todavía no. */
+	public static function finished_kind( WC_Order $order ): string {
+		if ( in_array( $order->get_status(), array( 'cancelled', 'refunded', 'failed' ), true ) ) { return ''; }
+		if ( 'pickup' === sanitize_key( (string) $order->get_meta( '_cvd_fulfillment_type', true ) ) ) {
+			return 'completed' === $order->get_status() || 'delivered' === sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) ) ? 'pickup' : '';
+		}
+		$delivery = class_exists( 'CVD_Delivery' ) ? CVD_Delivery::status( $order ) : sanitize_key( (string) $order->get_meta( '_cvd_delivery_status', true ) );
+		return in_array( $delivery, array( 'delivered', 'cash_returned', 'closed' ), true ) || 'completed' === $order->get_status() ? 'delivery' : '';
+	}
+
+	private static function finished_at( WC_Order $order, string $kind ): string {
+		$at = 'pickup' === $kind ? (string) $order->get_meta( '_cvd_pickup_handed_over_at', true ) : ( (string) $order->get_meta( '_cvd_delivered_at', true ) ?: (string) $order->get_meta( '_cvd_to_customer_at', true ) );
+		if ( '' !== $at ) { return $at; }
+		$date = $order->get_date_completed() ?: $order->get_date_modified();
+		return $date ? gmdate( 'Y-m-d H:i:s', $date->getTimestamp() ) : '';
 	}
 
 	/** Enlace personal de una gestora aprobada (por su WhatsApp): sus clientes compran desde ahí y la venta es suya. */
@@ -614,6 +688,7 @@ final class CVD_Bot_Bridge {
 	private static function voucher( WC_Order $order ): array {
 		$address = trim( implode( ', ', array_filter( array( $order->get_shipping_address_1() ?: $order->get_billing_address_1(), $order->get_shipping_address_2() ?: $order->get_billing_address_2() ) ) ) );
 		$change = self::change( $order );
+		$shipping = (int) ( class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_fee( $order ) : 0 );
 		return array(
 			'id'          => $order->get_id(),
 			'customer'    => self::customer( $order ),
@@ -624,7 +699,11 @@ final class CVD_Bot_Bridge {
 			'mapUrl'      => (string) $order->get_meta( '_cvd_map_url', true ),
 			'items'       => self::items( $order ),
 			'productsUsd' => wc_format_decimal( $order->get_total(), 2 ),
-			'shippingCup' => (int) ( class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_fee( $order ) : 0 ),
+			'shippingCup' => $shipping,
+			// 3.13.53: nunca «+ 0 CUP». Sin tarifa (reparto fuera de la lista) el vale dice «por confirmar con la tienda».
+			'shippingLabel'   => $shipping ? number_format_i18n( $shipping, 0 ) . ' CUP' : 'por confirmar con la tienda',
+			'shippingPending' => ! $shipping,
+			'zoneUnknown'     => 'unknown' === (string) $order->get_meta( '_cvd_locality_check', true ),
 			'earningCup'  => CVD_Delivery::courier_amount( $order ),
 			'change'      => $change,
 			'window'      => self::window( $order ),

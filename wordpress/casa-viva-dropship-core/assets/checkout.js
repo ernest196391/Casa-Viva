@@ -24,20 +24,94 @@
     if ($city.selectWoo) $city.selectWoo({ width: '100%', placeholder: 'Busca tu municipio' });
   }
 
+  // Reparto con errata (3.13.53): misma regla que CVD_Shipping_Rates::match_zone() en el servidor.
+  // Pasó: «Mitamar» (Playa) se guardó tal cual, sin tarifa, y el vale del mensajero salió sin mensajería.
+  function plainZone(v) { return String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(); }
+  function looseZone(v) { return plainZone(v).replace(/[^a-z0-9]+/g, ' ').trim().replace(/^(reparto|rpto|repto|barrio) /, '').replace(/\s+/g, ' ').trim(); }
+  // Letras distintas (dos letras cambiadas de sitio cuentan 1: «Kohly» ↔ «Kholy»), igual que en el servidor.
+  function lev(a, b) {
+    var d = [], i, j;
+    for (i = 0; i <= a.length; i++) { d[i] = [i]; }
+    for (j = 0; j <= b.length; j++) d[0][j] = j;
+    for (i = 1; i <= a.length; i++) {
+      for (j = 1; j <= b.length; j++) {
+        d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
+    }
+    return d[a.length][b.length];
+  }
+  function matchZone(city, typed) {
+    var list = (cvdCheckout.localities || {})[city] || [];
+    var key = plainZone(typed);
+    if (!key || !list.length) return { zone: '', how: 'none' };
+    for (var k = 0; k < list.length; k++) if (plainZone(list[k]) === key) return { zone: list[k], how: 'exact' };
+    var t = looseZone(typed), m = looseZone(city);
+    var without = m ? (' ' + t + ' ').split(' ' + m + ' ').join(' ').replace(/\s+/g, ' ').trim() : t;
+    if (without) t = without;
+    if (!t) return { zone: '', how: 'none' };
+    var best = {}, bestD = Infinity;
+    list.forEach(function (name) {
+      var o = looseZone(name), d;
+      if (!o) return;
+      if (o === t || (o.length >= 4 && (' ' + t + ' ').indexOf(' ' + o + ' ') !== -1)) d = 0;
+      else { d = lev(t, o); if (d > (o.length >= 6 ? 2 : o.length >= 4 ? 1 : 0)) return; }
+      if (d < bestD) { bestD = d; best = {}; best[o] = name; } else if (d === bestD && !best[o]) best[o] = name;
+    });
+    var keys = Object.keys(best);
+    if (!keys.length) return { zone: '', how: 'none' };
+    if (keys.length > 1) {
+      if (bestD !== 0) return { zone: '', how: 'none' };
+      var max = Math.max.apply(null, keys.map(function (x) { return x.length; }));
+      keys = keys.filter(function (x) { return x.length === max; });
+      if (keys.length !== 1) return { zone: '', how: 'none' };
+    }
+    return { zone: best[keys[0]], how: 'fuzzy' };
+  }
+  function localityHint(text, tone) {
+    var $field = $('#billing_cvd_locality_field');
+    var $hint = $('#cvd-locality-hint');
+    if (!text) { $hint.remove(); return; }
+    if (!$hint.length) $hint = $('<p>', { id: 'cvd-locality-hint', class: 'cvd-locality-hint', 'aria-live': 'polite' }).appendTo($field);
+    $hint.text(text).css({ margin: '6px 0 0', fontSize: '.9em', fontWeight: 600, color: tone === 'bad' ? '#b3261e' : '#2e7d32' });
+  }
+  // Al salir del campo: si no es exactamente uno de la lista, se corrige la errata o se avisa claro (no se bloquea la compra).
+  function checkLocality() {
+    var $locality = $('#billing_cvd_locality');
+    if (!$locality.length || typeof cvdCheckout === 'undefined') return;
+    var city = $('#billing_city').val(), typed = $.trim($locality.val() || '');
+    var list = (cvdCheckout.localities || {})[city] || [];
+    if (!typed || !list.length) { localityHint(''); return; }
+    var found = matchZone(city, typed);
+    if (found.how === 'exact') { localityHint(''); return; }
+    if (found.how === 'fuzzy') {
+      $locality.val(found.zone).attr('value', found.zone);
+      localityHint('Lo cambiamos a «' + found.zone + '», de la lista de ' + city + '. Si no es tu reparto, elige otro de la lista.', 'ok');
+      $(document.body).trigger('update_checkout');
+      return;
+    }
+    localityHint('«' + typed + '» no está en la lista de ' + city + '. Toca tu reparto en la lista para ver el precio de la mensajería. Si de verdad no aparece, déjalo así: la tienda te confirma la mensajería.', 'bad');
+  }
+
   function populateLocalities() {
     var $locality = $('#billing_cvd_locality');
     if (!$locality.length || typeof cvdCheckout === 'undefined') return;
 
     var city = $('#billing_city').val();
     var values = cvdCheckout.localities[city] || [];
-    var query = ($locality.val() || '').toLocaleLowerCase();
-    var filtered = values.filter(function (value) { return !query || value.toLocaleLowerCase().indexOf(query) !== -1; });
+    var query = plainZone($locality.val() || '');
+    var filtered = values.filter(function (value) { return !query || plainZone(value).indexOf(query) !== -1; });
+    // Nada coincide (errata): se enseña la lista entera del municipio para que elija de ahí.
+    var all = query && !filtered.length && values.length;
+    if (all) filtered = values;
     var $list = $('#cvd-locality-suggestions');
     if (!$list.length) {
       $list = $('<div>', { id: 'cvd-locality-suggestions', class: 'cvd-predictive-list', role: 'listbox' }).hide();
       $locality.attr({ autocomplete: 'off', role: 'combobox', 'aria-controls': 'cvd-locality-suggestions' }).after($list);
     }
+    $locality.attr('placeholder', values.length ? 'Toca y elige tu reparto de la lista' : 'Escribe tu reparto');
     $list.empty();
+    if (all) $list.append($('<div>', { class: 'cvd-predictive-status', text: 'No encontramos «' + $locality.val() + '». Repartos de ' + city + ':' }));
     filtered.forEach(function (value) {
       $list.append($('<button>', { type: 'button', class: 'cvd-predictive-option', role: 'option', text: value, 'data-value': value }));
     });
@@ -148,8 +222,11 @@
   });
   $(document.body).on('change', '#billing_city', function () {
     populateLocalities();
+    checkLocality();
     $(document.body).trigger('update_checkout');
   });
+  // Pequeña espera: si tocó una sugerencia (pointerdown), primero se pone esa y luego se revisa.
+  $(document.body).on('blur', '#billing_cvd_locality', function () { setTimeout(checkLocality, 180); });
   var localityTimer = null;
   $(document.body).on('input change', '#billing_cvd_locality', function () {
     populateLocalities();
@@ -166,6 +243,7 @@
     clearTimeout(localityTimer);
     $('#billing_cvd_locality').val(value).attr('value', value).attr('aria-expanded', 'false');
     $('#cvd-locality-suggestions').hide().empty();
+    localityHint('');
     $(document.body).trigger('update_checkout');
   }
   $(document.body).on('pointerdown', '.cvd-predictive-option[data-value]:not(.cvd-address-option)', chooseLocality);
@@ -251,7 +329,10 @@
 	  var change = payWith > 0 ? (payCurrency === 'USD' ? (payWith - totalNumber > 0 ? 'Paga con ' + payWith + ' USD → vuelto ' + (payWith - totalNumber).toFixed(2) + ' USD' : 'Paga exacto') : 'Paga con ' + payWith + ' ' + (payCurrency || '¿moneda?')) : 'Paga exacto (sin vuelto)';
 	  if (pickup) change = ''; // Recogida: sin fila de vuelto ni pago en efectivo (mejora #23).
 	  var line = function (label, value) { return value ? '<p style="margin:.35em 0"><b>' + label + ':</b> ' + $('<span>').text(value).html() + '</p>' : ''; };
-	  return line('Productos', rows.join(' · ')) + line('Total productos', total) + line('Entrega', where) + line('Cuándo', when) + line('Pago', change) + line('Recibe', [fieldText('#billing_first_name'), fieldText('#billing_last_name')].join(' ') + ' · ' + fieldText('#billing_phone'));
+	  // Mensajería (3.13.53): el precio de la lista o «por confirmar con la tienda» si el reparto no está en la lista.
+	  var fee = $.trim($('.cvd-shipping-cup td strong').first().text());
+	  var shipping = pickup ? '' : (/\d/.test(fee) ? fee : 'por confirmar con la tienda (tu reparto no está en la lista)');
+	  return line('Productos', rows.join(' · ')) + line('Total productos', total) + line('Mensajería', shipping) + line('Entrega', where) + line('Cuándo', when) + line('Pago', change) + line('Recibe', [fieldText('#billing_first_name'), fieldText('#billing_last_name')].join(' ') + ' · ' + fieldText('#billing_phone'));
 	}
 	function showReview(onConfirm) {
 	  $('#cvd-review').remove();
