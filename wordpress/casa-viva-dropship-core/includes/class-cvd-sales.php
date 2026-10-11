@@ -487,6 +487,9 @@ final class CVD_Sales {
 			'directAssignment' => 'pickup' !== $fulfillment && class_exists( 'CVD_Direct_Dispatch' ) && CVD_Direct_Dispatch::is_direct( $order ) && (bool) $messenger,
 			'preferredMessenger' => $preferred ? $preferred->display_name : '',
 			'eta' => 'pickup' === $fulfillment ? '' : (string) $order->get_meta( '_cvd_bot_eta', true ),
+			// Día de entrega (3.13.51): "mañana sáb 12/10 · por la mañana" o "lo antes posible"; futuro = para otro día.
+			'deliveryWhen' => 'pickup' === $fulfillment ? '' : CVD_Delivery_When::order_label( $order ),
+			'deliveryFuture' => 'pickup' !== $fulfillment && CVD_Delivery_When::for_order( $order )['future'],
 			'timeline' => 'pickup' === $fulfillment ? array() : self::timeline( $order ),
 			'cashHandoverDeclaredAt' => '' !== $declared_handover && 'delivered' === $delivery_status ? get_date_from_gmt( $declared_handover, 'd/m H:i' ) : '',
 			'actions' => array_values( array_unique( $actions ) ),

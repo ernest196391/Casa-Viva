@@ -96,6 +96,26 @@ body.cvga-body *,body.cvga-body *::before,body.cvga-body *::after{box-sizing:bor
 .cvga-offers p{margin:6px 0 2px}
 .cvga-questions{margin:6px 0 0;padding-left:20px}
 
+/* Calculadora y tasa del día (3.13.51) */
+.cvga-chip.is-warn{background:#f6e3c8;color:#7a4a12}
+.cvga-warn{margin:6px 0 0;padding:9px 12px;border-radius:10px;background:#f6e3c8;color:#5e3a0e;font-size:13.5px}
+.cvga-rate-big{margin:6px 0 0;font-size:20px;font-variant-numeric:tabular-nums}
+.cvga-rate-big b{color:var(--ga-brand)}
+.cvga-calc{display:flex;flex-direction:column;gap:10px}
+.cvga-calc-in{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:10px}
+.cvga-calc .cvga-field input{border:1px solid var(--ga-line);background:var(--ga-bg);border-radius:10px;padding:10px 12px;font:inherit;font-weight:600;font-size:20px;min-height:48px;width:100%;font-variant-numeric:tabular-nums}
+.cvga-calc-rate{margin:0;color:var(--ga-muted);font-size:13.5px}
+.cvga-calc-out,.cvga-rate-list{list-style:none;margin:0;padding:0}
+.cvga-calc-out li,.cvga-rate-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--ga-line)}
+.cvga-calc-out li:first-child,.cvga-rate-list li:first-child{border-top:0}
+.cvga-calc-out li span{min-width:0}
+.cvga-calc-out li small{display:block;color:var(--ga-muted);font-size:12.5px;font-weight:400}
+.cvga-calc-out li strong,.cvga-rate-list li b{font-size:18px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cvga-calc-out li.is-main strong{font-size:22px;color:var(--ga-brand)}
+.cvga-calc-out .cvga-calc-empty{color:var(--ga-muted);justify-content:flex-start}
+.cvga-rate-list li span{color:var(--ga-muted)}
+@media (max-width:420px){.cvga-calc-in{grid-template-columns:minmax(0,1fr)}}
+
 /* Secciones del portal clásico dentro de la app: sin cabecera, menú ni cifras repetidas. */
 .cvga .cvd-dashboard{display:flex!important;flex-direction:column;gap:16px;padding:0!important;margin:0!important;max-width:none!important;background:none!important;border:0!important;box-shadow:none!important}
 .cvga .cvd-dashboard-head,.cvga .cvd-app-nav,.cvga .cvd-dashboard>.cvd-stats,.cvga #dashboard,.cvga #catalogo{display:none!important}

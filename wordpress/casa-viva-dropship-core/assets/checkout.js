@@ -198,6 +198,7 @@
     toggleDeliveryFields();
     populateLocalities();
 	updateOrderButton();
+	prepareDayChips();
 	prepareLocationButton();
     prepareAddressAutocomplete();
     updateShippingPreview();
@@ -214,6 +215,28 @@
 	// Resumen antes de finalizar (opinión de Lennys, aprobada por Ernesto): el pedido se crea al pulsar
 	// "Finalizar", así que primero se muestra todo para revisarlo y corregir sin perder el carrito.
 	var reviewed = false;
+	// Día de entrega (3.13.51): "hoy", "mañana sáb 12/10", "lun 14/10" o "Lo antes posible"; "hoy" es el día de la web (min del campo).
+	var DAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+	function ymdDate(ymd) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd || ''); return m ? new Date(+m[1], m[2] - 1, +m[3]) : null; }
+	function ymdOf(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+	function dayText(ymd) {
+	  var d = ymdDate(ymd); if (!d) return 'Lo antes posible';
+	  var today = ymdDate($('#billing_cvd_delivery_date').attr('min')) || new Date(new Date().setHours(0, 0, 0, 0));
+	  var diff = Math.round((d - today) / 864e5), short = DAYS[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth() + 1);
+	  return diff === 0 ? 'Hoy' : diff === 1 ? 'Mañana ' + short : short;
+	}
+	function prepareDayChips() {
+	  var $input = $('#billing_cvd_delivery_date'); if (!$input.length || $input.siblings('.cvd-day-chips').length) return;
+	  var today = ymdDate($input.attr('min')) || new Date(new Date().setHours(0, 0, 0, 0));
+	  var tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+	  var chips = $('<span class="cvd-day-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"></span>');
+	  [['Hoy', ymdOf(today)], ['Mañana', ymdOf(tomorrow)], ['Lo antes posible', '']].forEach(function (c) {
+	    $('<button type="button" class="button" style="padding:4px 10px;font-size:.85em;line-height:1.4"></button>').text(c[0]).attr('data-day', c[1]).appendTo(chips);
+	  });
+	  $input.after(chips);
+	}
+	$(document.body).on('click', '.cvd-day-chips [data-day]', function () { $('#billing_cvd_delivery_date').val($(this).attr('data-day')).trigger('change'); });
+	$(prepareDayChips);
 	function fieldText(selector) { var el = $(selector); if (!el.length) return ''; return el.is('select') ? $.trim(el.find('option:selected').text()) : $.trim(el.val() || ''); }
 	function reviewSummary() {
 	  var rows = [];
@@ -221,7 +244,7 @@
 	  var total = $.trim($('.woocommerce-checkout-review-order-table .order-total .amount').first().text());
 	  var pickup = ($('select[name="billing_cvd_fulfillment_type"]').val() || $('input[name="billing_cvd_fulfillment_type"]:checked').val() || $('input[name="billing_cvd_fulfillment_type"]').val()) === 'pickup';
 	  var where = pickup ? 'Recogida en tienda' : [fieldText('#billing_address_1'), fieldText('#billing_cvd_locality'), fieldText('#billing_city')].filter(Boolean).join(', ');
-	  var when = pickup ? '' : [fieldText('#billing_cvd_delivery_date'), $('#billing_cvd_delivery_window').val() ? fieldText('#billing_cvd_delivery_window') : ''].filter(Boolean).join(' · ');
+	  var when = pickup ? '' : [dayText($('#billing_cvd_delivery_date').val()), $('#billing_cvd_delivery_window').val() ? fieldText('#billing_cvd_delivery_window') : ''].filter(Boolean).join(' · ');
 	  var payWith = parseFloat($('#billing_cvd_change_amount').val() || '0');
 	  var payCurrency = $('#billing_cvd_change_currency').val();
 	  var totalNumber = parseFloat((total.match(/[\d.,]+/) || ['0'])[0].replace(/\.(?=\d{3}\b)/g, '').replace(',', '.'));

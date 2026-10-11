@@ -255,11 +255,13 @@ final class CVD_Cuban_Checkout {
 			'priority'    => 120,
 		);
 		$fields['billing']['billing_cvd_delivery_date'] = array(
-			'type' => 'date', 'label' => 'Fecha solicitada de entrega', 'required' => false,
+			// Día de entrega (3.13.51): vacío = lo antes posible. Antes solo se veía la franja y un mensajero cogió para hoy un pedido de mañana.
+			'type' => 'date', 'label' => 'Día de entrega', 'required' => false, 'description' => 'Vacío = lo antes posible.',
 			'class' => array( 'form-row-first', 'cvd-delivery-field' ), 'priority' => 121,
+			'custom_attributes' => array( 'min' => CVD_Delivery_When::min_date(), 'max' => CVD_Delivery_When::max_date() ),
 		);
 		$fields['billing']['billing_cvd_delivery_window'] = array(
-			'type' => 'select', 'label' => 'Horario preferido', 'required' => false,
+			'type' => 'select', 'label' => 'Horario', 'required' => false,
 			'options' => array( '' => 'Sin preferencia', 'morning' => 'Mañana', 'afternoon' => 'Tarde' ),
 			'class' => array( 'form-row-last', 'cvd-delivery-field' ), 'priority' => 122,
 		);
@@ -333,7 +335,8 @@ final class CVD_Cuban_Checkout {
 		$alternate = isset( $_POST['billing_cvd_alternate_phone'] ) ? preg_replace( '/\D+/', '', wp_unslash( $_POST['billing_cvd_alternate_phone'] ) ) : '';
 		if ( $alternate && strlen( $alternate ) < 8 ) { $errors->add( 'billing_cvd_alternate_phone', 'Escribe un teléfono alternativo válido.' ); }
 		$date = sanitize_text_field( wp_unslash( $_POST['billing_cvd_delivery_date'] ?? '' ) );
-		if ( $date && ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) { $errors->add( 'billing_cvd_delivery_date', 'Selecciona una fecha de entrega válida.' ); }
+		$date_error = CVD_Delivery_When::error( $date );
+		if ( $date_error ) { $errors->add( 'billing_cvd_delivery_date', $date_error ); }
 		$change_amount = (float) wc_format_decimal( wp_unslash( $_POST['billing_cvd_change_amount'] ?? 0 ), 2 );
 		$change_currency = strtoupper( sanitize_key( wp_unslash( $_POST['billing_cvd_change_currency'] ?? '' ) ) );
 		if ( $change_amount > 0 && ! in_array( $change_currency, array( 'USD', 'CUP', 'EUR' ), true ) ) { $errors->add( 'billing_cvd_change_currency', 'Elige en qué moneda paga (dólares, pesos o euros).' ); }
@@ -387,7 +390,7 @@ final class CVD_Cuban_Checkout {
 		$order->update_meta_data( '_cvd_reference', isset( $_POST['billing_cvd_reference'] ) ? sanitize_text_field( wp_unslash( $_POST['billing_cvd_reference'] ) ) : '' );
 		$order->update_meta_data( '_cvd_map_url', isset( $_POST['billing_cvd_map_url'] ) ? esc_url_raw( wp_unslash( $_POST['billing_cvd_map_url'] ) ) : '' );
 		$order->update_meta_data( '_cvd_map_accuracy', isset( $_POST['billing_cvd_map_accuracy'] ) ? absint( $_POST['billing_cvd_map_accuracy'] ) : 0 );
-		$order->update_meta_data( '_cvd_delivery_date', sanitize_text_field( wp_unslash( $_POST['billing_cvd_delivery_date'] ?? '' ) ) );
+		$order->update_meta_data( '_cvd_delivery_date', CVD_Delivery_When::normalize( sanitize_text_field( wp_unslash( $_POST['billing_cvd_delivery_date'] ?? '' ) ) ) );
 		$window = sanitize_key( wp_unslash( $_POST['billing_cvd_delivery_window'] ?? '' ) );
 		$order->update_meta_data( '_cvd_delivery_window', in_array( $window, array( 'morning', 'afternoon' ), true ) ? $window : '' );
 		// El cliente dice con cuánto paga; si es en USD (moneda de los productos) el vuelto se calcula aquí.
@@ -410,7 +413,7 @@ final class CVD_Cuban_Checkout {
 		echo '<p><strong>Modalidad:</strong> ' . esc_html( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ? 'Recogida en tienda' : 'Mensajería' ) . '</p>';
 		$shipping_cup = class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_fee( $order ) : absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) );
 		echo '<p><strong>Tarifa guardada:</strong> ' . esc_html( $shipping_cup ? number_format_i18n( $shipping_cup, 0 ) . ' CUP' : 'Por confirmar' ) . '</p>';
-		foreach ( array( '_cvd_locality' => 'Reparto/localidad', '_cvd_reference' => 'Referencia', '_cvd_alternate_phone' => 'Teléfono alternativo', '_cvd_delivery_date' => 'Fecha solicitada', '_cvd_delivery_window' => 'Horario solicitado', '_cvd_map_url' => 'Ubicación en mapa', '_cvd_buyer_name' => 'Persona que compra/paga' ) as $key => $label ) {
+		foreach ( array( '_cvd_locality' => 'Reparto/localidad', '_cvd_reference' => 'Referencia', '_cvd_alternate_phone' => 'Teléfono alternativo', '_cvd_delivery_date' => 'Día de entrega', '_cvd_delivery_window' => 'Horario solicitado', '_cvd_map_url' => 'Ubicación en mapa', '_cvd_buyer_name' => 'Persona que compra/paga' ) as $key => $label ) {
 			$value = $order->get_meta( $key, true );
 			if ( $value ) {
 				echo '<p><strong>' . esc_html( $label ) . ':</strong> ';

@@ -77,6 +77,8 @@ final class CVD_WhatsApp_Receipt_Template {
 				$lines,
 				'ENTREGA',
 				array(
+					// Día de entrega (3.13.51): "📅 Entrega: mañana sáb 12/10 · por la tarde" o "lo antes posible".
+					$order && class_exists( 'CVD_Delivery_When' ) ? '📅 Entrega: ' . CVD_Delivery_When::order_label( $order ) : '',
 					$place ? '📍 ' . $place : '',
 					$street ? 'Dirección: ' . $street : '',
 					$data['delivery']['reference'] ? 'Referencia: ' . $data['delivery']['reference'] : '',

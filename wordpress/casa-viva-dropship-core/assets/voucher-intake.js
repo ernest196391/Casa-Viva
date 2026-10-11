@@ -16,7 +16,7 @@
     try { return await fetch(url, { ...options, signal: controller.signal }); }
     finally { window.clearTimeout(timer); }
   }
-  const scalar = [["orderCode", "ID pedido"], ["store", "Origen / tienda"], ["sourceUrl", "Enlace original"], ["manager", "Gestor/a"], ["managerCode", "Código"], ["customer", "Cliente"], ["address", "Dirección"], ["betweenStreets", "Entrecalles"], ["reference", "Referencia"], ["municipality", "Municipio"], ["zone", "Zona/reparto"], ["scheduledDate", "Fecha (AAAA-MM-DD)"], ["scheduledTime", "Horario"]];
+  const scalar = [["orderCode", "ID pedido"], ["store", "Origen / tienda"], ["sourceUrl", "Enlace original"], ["manager", "Gestor/a"], ["managerCode", "Código"], ["customer", "Cliente"], ["address", "Dirección"], ["betweenStreets", "Entrecalles"], ["reference", "Referencia"], ["municipality", "Municipio"], ["zone", "Zona/reparto"], ["scheduledDate", "Día de entrega (hoy, mañana, sábado, 12/10 · vacío = lo antes posible)"], ["scheduledTime", "Horario (mañana / tarde)"]];
   function field(label, value, name, tag = "input") { const wrap = document.createElement("label"); wrap.className = "cvd-voucher-field"; wrap.append(Object.assign(document.createElement("span"), { textContent: label })); const input = document.createElement(tag); input.value = value ?? ""; input.dataset.key = name; wrap.append(input); return wrap; }
   function choices(row, product, index) {
     const search = field("Buscar en catálogo", product.name, `search.${index}`), select = document.createElement("select"); select.dataset.productId = String(index); select.setAttribute("aria-label", `Producto Casa Viva para ${product.name}`); row.append(search, select, field("Cantidad", product.quantity, `product.${index}.quantity`));

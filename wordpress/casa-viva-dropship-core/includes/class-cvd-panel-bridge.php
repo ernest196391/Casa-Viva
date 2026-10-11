@@ -52,6 +52,16 @@ final class CVD_Panel_Bridge {
 		register_rest_route( self::NS, '/panel/pay-accounts', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'pay_accounts' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/pay-accounts', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'pay_account_save' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/collections', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'collections' ), 'permission_callback' => $auth ) );
+		// Tasa del día para las gestoras (3.13.51): la misma que VivaBot lee de «FORMAS DE PAGO»; la dueña la corrige aquí.
+		register_rest_route( self::NS, '/panel/daily-rates', array( 'methods' => 'GET', 'callback' => static fn() => self::no_cache( array( 'rates' => CVD_Daily_Rates::public_data(), 'recent' => CVD_Daily_Rates::recent() ) ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/daily-rates', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'daily_rates_save' ), 'permission_callback' => $auth ) );
+	}
+
+	/** Cambia solo las tasas que lleguen (cup, eur, clasica, zelle, paypalPct); las demás se quedan. */
+	public static function daily_rates_save( WP_REST_Request $request ) {
+		$result = CVD_Daily_Rates::save( (array) $request->get_json_params(), 'panel' );
+		if ( is_wp_error( $result ) ) { return $result; }
+		return self::no_cache( $result + array( 'recent' => CVD_Daily_Rates::recent() ) );
 	}
 
 	/** Todas las tarjetas (también las desactivadas, para poder reactivarlas) y lo que sale al cerrar un cobro. */

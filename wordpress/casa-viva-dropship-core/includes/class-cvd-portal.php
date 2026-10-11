@@ -355,7 +355,9 @@ final class CVD_Portal {
 			}
 			$status = sanitize_key( $order->get_meta( '_cvd_commission_status', true ) ) ?: 'pending';
 			$commission = (float) $order->get_meta( '_cvd_commission_amount', true );
-			$html .= '<tr><td>#' . esc_html( $order->get_order_number() ) . '</td><td>' . esc_html( wc_format_datetime( $order->get_date_created() ) ) . '</td><td>' . esc_html( $order->get_formatted_billing_full_name() ) . '</td><td>' . esc_html( implode( ', ', $products ) ) . '</td><td>' . wp_kses_post( $order->get_formatted_order_total() ) . '</td><td>' . wp_kses_post( wc_price( $commission, array( 'currency' => $order->get_currency() ) ) ) . '</td><td><span class="cvd-badge">' . esc_html( $labels[ $status ] ?? ucfirst( $status ) ) . '</span></td>' . ( $direct ? '<td>' . CVD_Direct_Dispatch::gestora_cell( $order ) . '</td>' : '' ) . '</tr>'; // gestora_cell ya escapa
+			// Día de entrega (3.13.51) debajo del número, sin columna nueva (la app de gestoras oculta columnas por posición).
+			$day = in_array( $order->get_status(), array( 'pending', 'processing', 'on-hold' ), true ) ? CVD_Delivery_When::order_label( $order ) : '';
+			$html .= '<tr><td>#' . esc_html( $order->get_order_number() ) . ( $day ? '<br><small class="cvd-delivery-day">📅 ' . esc_html( $day ) . '</small>' : '' ) . '</td><td>' . esc_html( wc_format_datetime( $order->get_date_created() ) ) . '</td><td>' . esc_html( $order->get_formatted_billing_full_name() ) . '</td><td>' . esc_html( implode( ', ', $products ) ) . '</td><td>' . wp_kses_post( $order->get_formatted_order_total() ) . '</td><td>' . wp_kses_post( wc_price( $commission, array( 'currency' => $order->get_currency() ) ) ) . '</td><td><span class="cvd-badge">' . esc_html( $labels[ $status ] ?? ucfirst( $status ) ) . '</span></td>' . ( $direct ? '<td>' . CVD_Direct_Dispatch::gestora_cell( $order ) . '</td>' : '' ) . '</tr>'; // gestora_cell ya escapa
 		}
 		return $html . '</tbody></table></div>';
 	}
@@ -490,9 +492,8 @@ final class CVD_Portal {
 	}
 
 	private static function messenger_schedule_label( WC_Order $order ): string {
-		$date = trim( (string) $order->get_meta( '_cvd_delivery_date', true ) ); $window = sanitize_key( (string) $order->get_meta( '_cvd_delivery_window', true ) );
-		$parts = array(); if ( $date ) { $parts[] = $date; } if ( $window ) { $parts[] = array( 'morning' => 'por la mañana', 'afternoon' => 'por la tarde' )[ $window ] ?? $window; }
-		return implode( ' ', $parts );
+		// 3.13.51: el día en palabras ("mañana sáb 12/10 · por la mañana", "lo antes posible"), igual que en el vale del bot.
+		return CVD_Delivery_When::order_label( $order );
 	}
 
 	/** Orden manual de sesión. No escribe el pedido ni sustituye una ruta canónica. */
@@ -519,7 +520,7 @@ final class CVD_Portal {
 			else { $html .= '<div class="cvd-customer-collectible"><span>Cobrar al cliente</span><strong>Por confirmar</strong><small>No se infiere del total.</small></div>'; }
 			$html .= '</div>';
 			$schedule = self::messenger_schedule_label( $order ); $change = self::messenger_change_label( $order );
-			$html .= '<div class="cvd-route-window"><span>Fecha / horario</span><strong>' . esc_html( $schedule ?: 'Sin preferencia registrada' ) . '</strong></div>';
+			$html .= '<div class="cvd-route-window"><span>📅 Día de entrega</span><strong>' . esc_html( $schedule ?: 'Sin preferencia registrada' ) . '</strong></div>';
 			if ( $change ) { $html .= '<div class="cvd-delivery-note" role="note"><b>Vuelto confirmado</b><p>Llevar ' . esc_html( $change ) . ' de vuelto.</p></div>'; }
 			if ( $note ) { $html .= '<div class="cvd-delivery-note" role="note"><b>Vuelto, nota o restricción</b><p>' . esc_html( $note ) . '</p></div>'; }
 			$html .= '<div class="cvd-messenger-tools">'; if ( $phone ) { $digits = preg_replace( '/\D+/', '', $phone ); $html .= '<a class="cvd-secondary" href="tel:' . esc_attr( $phone ) . '">Llamar</a><a class="cvd-secondary" href="https://wa.me/' . esc_attr( $digits ) . '?text=' . rawurlencode( self::messenger_whatsapp_message( $order ) ) . '" target="_blank" rel="noopener">WhatsApp</a>'; } if ( $map_url ) { $html .= '<a class="cvd-secondary" href="' . $map_url . '" target="_blank" rel="noopener">Abrir mapa</a>'; } $html .= '</div>';
@@ -570,7 +571,7 @@ final class CVD_Portal {
 			$html .= '<article data-delivery-id="' . esc_attr( $order->get_id() ) . '" data-delivery-status="' . esc_attr( $status ) . '" data-operation-status="' . esc_attr( $operation_status ) . '"><header><div><small class="cvd-delivery-zone">' . esc_html( $zone ?: 'Zona por confirmar' ) . '</small><strong>Pedido #' . esc_html( $order->get_order_number() ) . '</strong><small>' . esc_html( $order->get_formatted_billing_full_name() ) . ( $phone ? ' · ' . esc_html( $phone ) : '' ) . '</small></div><span class="cvd-badge">' . esc_html( CVD_Delivery::label( $status ) ) . '</span></header>';
 			$html .= '<div class="cvd-delivery-address"><strong>Entregar en</strong><p>' . ( $address ? wp_kses_post( $address ) : 'Dirección por confirmar' ) . '</p>' . ( $reference ? '<small><b>Referencia:</b> ' . esc_html( $reference ) . '</small>' : '' ) . '</div>';
 			$schedule = self::messenger_schedule_label( $order ); $change = self::messenger_change_label( $order );
-			if ( $schedule ) { $html .= '<div class="cvd-route-window"><span>Fecha / horario</span><strong>' . esc_html( $schedule ) . '</strong></div>'; }
+			if ( $schedule ) { $html .= '<div class="cvd-route-window"><span>📅 Día de entrega</span><strong>' . esc_html( $schedule ) . '</strong></div>'; }
 			$html .= '<div class="cvd-delivery-products"><strong>Productos</strong><ul>';
 			foreach ( $order->get_items( 'line_item' ) as $item ) { $html .= '<li><span>' . esc_html( max( 1, (int) $item->get_quantity() ) . ' × ' . $item->get_name() ) . '</span><b>' . wp_kses_post( $order->get_formatted_line_subtotal( $item ) ) . '</b></li>'; }
 			$order_total = wc_price( $order->get_total(), array( 'currency' => $order->get_currency() ) );

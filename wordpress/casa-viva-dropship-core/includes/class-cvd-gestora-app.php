@@ -72,6 +72,7 @@ final class CVD_Gestora_App {
 			array( 'precios', 'Mis precios', 'tag', '' ),
 			array( 'clientes', 'Clientes', 'people', '' ),
 			array( '', 'Herramientas', '', '' ),
+			array( 'calculadora', 'Calculadora', 'calc', '' ),
 			array( 'buscar', 'Buscar precios', 'search', '' ),
 			array( 'curru', 'Pregúntale a Curru', 'chat', '' ),
 			array( 'materiales', 'Fotos y textos listos', 'doc', '' ),
@@ -122,6 +123,7 @@ final class CVD_Gestora_App {
 					<?php echo self::inicio( $user, $first, $link, $code ); // phpcs:ignore ?>
 					<?php echo self::tienda( $link ); // phpcs:ignore ?>
 					<?php echo self::herramientas(); // phpcs:ignore ?>
+					<?php echo self::calculadora(); // phpcs:ignore ?>
 					<?php echo self::buscar( $zone ); // phpcs:ignore ?>
 					<div class="cvga-legacy"><?php echo $legacy; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- salida del shortcode, ya escapada allí. ?></div>
 				</div>
@@ -164,7 +166,7 @@ final class CVD_Gestora_App {
 						<?php $max = max( 1, (int) $top['items'][0]['qty'] ); foreach ( $top['items'] as $p ) : $p = self::for_gestora( $p, $user->ID, $code ); ?>
 						<li>
 							<?php if ( $p['image'] ) : ?><img src="<?php echo esc_url( $p['image'] ); ?>" alt="" width="48" height="48" loading="lazy"><?php else : ?><span class="cvga-thumb" aria-hidden="true"></span><?php endif; ?>
-							<div class="cvga-top-text"><b><?php echo esc_html( $p['name'] ); ?></b><small><?php echo $p['qty'] ? esc_html( $p['qty'] . ' vendidos · ' ) : ''; ?>ganas <?php echo esc_html( self::money( $p['earn'] ) ); ?> c/u</small><?php if ( $p['qty'] ) : ?><span class="cvga-bar"><i style="width:<?php echo esc_attr( (string) round( $p['qty'] / $max * 100 ) ); ?>%"></i></span><?php endif; ?></div>
+							<div class="cvga-top-text"><b><?php echo esc_html( $p['name'] ); ?></b><small><?php echo $p['qty'] ? esc_html( $p['qty'] . ' vendidos · ' ) : ''; ?><?php $cup = class_exists( 'CVD_Daily_Rates' ) ? CVD_Daily_Rates::cup_for( (float) $p['price_for_her'] ) : null; echo $cup ? esc_html( self::money( $p['price_for_her'] ) . ' (' . CVD_Daily_Rates::format_cup( $cup ) . ') · ' ) : ''; ?>ganas <?php echo esc_html( self::money( $p['earn'] ) ); ?> c/u</small><?php if ( $p['qty'] ) : ?><span class="cvga-bar"><i style="width:<?php echo esc_attr( (string) round( $p['qty'] / $max * 100 ) ); ?>%"></i></span><?php endif; ?></div>
 							<a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="<?php echo esc_url( 'https://wa.me/?text=' . rawurlencode( $share_text( $p ) ) ); ?>" target="_blank" rel="noopener">Compartir</a>
 						</li>
 						<?php endforeach; ?>
@@ -172,6 +174,7 @@ final class CVD_Gestora_App {
 					<?php endif; ?>
 				</section>
 				<div class="cvga-stack">
+					<?php echo self::rate_card(); // phpcs:ignore ?>
 					<section class="cvga-card">
 						<h2>Tu tienda</h2>
 						<p class="cvga-note">Quien compra con tu enlace queda como tu cliente.</p>
@@ -215,6 +218,7 @@ final class CVD_Gestora_App {
 
 	private static function herramientas(): string {
 		$tools = array(
+			array( 'calc', 'Calculadora', 'Pon el precio en USD y mira cuánto es en CUP, euros, tarjeta clásica, Zelle o PayPal con la tasa de hoy.', 'ready', 'calculadora' ),
 			array( 'chat', 'Pregúntale a Curru', 'Precios, medidas y si hay en almacén. Responde al momento.', 'ready', 'curru' ),
 			array( 'doc', 'Fotos y textos listos', 'Publicaciones de Casa Viva para copiar y pegar en tu estado.', 'ready', 'materiales' ),
 			array( 'search', 'Buscar precios', 'Sube la foto de un producto y mira a cuánto lo venden en Revolico y otras tiendas.', class_exists( 'CVD_Gestora_Busca' ) && CVD_Gestora_Busca::available() ? 'ready' : 'soon', 'buscar' ),
@@ -242,6 +246,89 @@ final class CVD_Gestora_App {
 		</section>
 		<?php
 		return (string) ob_get_clean();
+	}
+
+	/** Tasa del día en Inicio: 1 USD = N CUP, cuándo se actualizó y acceso a la calculadora. */
+	private static function rate_card(): string {
+		if ( ! class_exists( 'CVD_Daily_Rates' ) ) { return ''; }
+		$r = CVD_Daily_Rates::get();
+		$stale = CVD_Daily_Rates::is_stale( $r );
+		ob_start();
+		?>
+		<section class="cvga-card cvga-rate-card">
+			<div class="cvga-row"><h2>Tasa de hoy</h2><?php if ( $r['updated_at'] ) : ?><span class="cvga-chip<?php echo $stale ? ' is-warn' : ''; ?>"><?php echo esc_html( 'actualizada ' . self::rate_when( $r['updated_at'] ) ); ?></span><?php endif; ?></div>
+			<?php if ( $r['cup'] ) : ?>
+			<p class="cvga-rate-big">1 USD = <b><?php echo esc_html( CVD_Daily_Rates::format_cup( (int) round( $r['cup'] ) ) ); ?></b></p>
+			<p class="cvga-note"><?php echo esc_html( implode( ' · ', self::rate_bits( $r ) ) ); ?></p>
+			<?php if ( $stale ) : ?><p class="cvga-warn">Esta tasa tiene más de un día. Confírmala en el grupo General antes de cobrar.</p><?php endif; ?>
+			<?php else : ?>
+			<p class="cvga-empty">Aún no hay tasa del día. La tienda la publica cada mañana en el grupo General.</p>
+			<?php endif; ?>
+			<div class="cvga-actions"><a class="cvga-btn cvga-btn-sm" href="#calculadora" data-cvga-go="calculadora"><?php echo self::icon( 'calc' ); // phpcs:ignore ?>Calculadora</a></div>
+		</section>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Calculadora: precio en USD (+ mensajería en CUP, opcional) → cuánto cobrar en CUP, euros, tarjeta
+	 * clásica, Zelle y PayPal con la tasa del día. Las cuentas las hace gestora-app.js con data-rates.
+	 */
+	private static function calculadora(): string {
+		$rates = class_exists( 'CVD_Daily_Rates' ) ? CVD_Daily_Rates::public_data() : array( 'cup' => null, 'updatedTs' => 0, 'stale' => true );
+		$r = class_exists( 'CVD_Daily_Rates' ) ? CVD_Daily_Rates::get() : array();
+		ob_start();
+		?>
+		<section class="cvga-view" data-view="calculadora" id="cvga-calculadora">
+			<div class="cvga-head"><h1>Calculadora</h1><p>Pon el precio en USD y te digo cuánto cobrar en cada forma de pago, con la tasa de hoy.</p></div>
+			<form class="cvga-card cvga-calc" data-cvga-calc data-rates="<?php echo esc_attr( wp_json_encode( $rates ) ); ?>" autocomplete="off">
+				<div class="cvga-calc-in">
+					<label class="cvga-field" for="cvga-calc-usd"><span>Precio en USD</span><input id="cvga-calc-usd" name="usd" type="text" inputmode="decimal" placeholder="Ej.: 25" enterkeyhint="done"></label>
+					<label class="cvga-field" for="cvga-calc-ship"><span>Mensajería en CUP <small>(opcional)</small></span><input id="cvga-calc-ship" name="ship" type="text" inputmode="numeric" placeholder="Ej.: 500" enterkeyhint="done"></label>
+				</div>
+				<p class="cvga-calc-rate"><?php echo $rates['updatedTs'] ? esc_html( 'Tasa del día · actualizada ' . self::rate_when( (int) $rates['updatedTs'] ) ) : 'Aún no hay tasa del día.'; ?></p>
+				<?php if ( $rates['updatedTs'] && $rates['stale'] ) : ?><p class="cvga-warn">Ojo: esta tasa tiene más de <?php echo esc_html( (string) CVD_Daily_Rates::STALE_HOURS ); ?> horas. Confírmala en el grupo General antes de cobrar.</p><?php endif; ?>
+			</form>
+			<section class="cvga-card" aria-live="polite">
+				<ul class="cvga-calc-out" data-calc-out><li class="cvga-calc-empty">Escribe un precio para ver cuánto es.</li></ul>
+				<div class="cvga-actions"><button class="cvga-btn cvga-btn-soft cvga-btn-sm" type="button" data-calc-copy hidden>Copiar para el cliente</button><small class="cvga-note" data-calc-copied role="status"></small></div>
+			</section>
+			<?php if ( $r && $r['cup'] ) : ?>
+			<section class="cvga-card">
+				<h2>Tasas de hoy</h2>
+				<p class="cvga-note">Lo que paga el cliente por cada 1 USD del precio.</p>
+				<ul class="cvga-rate-list">
+					<li><span>CUP</span><b><?php echo esc_html( CVD_Daily_Rates::format_cup( (int) round( $r['cup'] ) ) ); ?></b></li>
+					<?php foreach ( self::rate_bits( $r, true ) as $label => $value ) : ?><li><span><?php echo esc_html( $label ); ?></span><b><?php echo esc_html( $value ); ?></b></li><?php endforeach; ?>
+					<li><span>USDT</span><b>Consultar</b></li>
+				</ul>
+			</section>
+			<?php endif; ?>
+		</section>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/** Euro, clásica, Zelle y PayPal en corto ("Clásica ×1,15"); con $long, etiqueta => valor. */
+	private static function rate_bits( array $r, bool $long = false ): array {
+		$n = static fn( float $v ): string => rtrim( rtrim( number_format( $v, 2, ',', '.' ), '0' ), ',' );
+		$bits = array();
+		if ( $r['eur'] ) { $bits['Euro'] = 1.0 === (float) $r['eur'] ? '1:1' : '×' . $n( $r['eur'] ); }
+		if ( $r['clasica'] ) { $bits['Tarjeta clásica'] = '×' . $n( $r['clasica'] ); }
+		if ( $r['zelle'] ) { $bits['Zelle'] = '×' . $n( $r['zelle'] ); }
+		if ( null !== $r['paypal_pct'] ) { $bits['PayPal'] = '+' . $n( $r['paypal_pct'] ) . ' %'; }
+		if ( $long ) { return $bits; }
+		$short = array();
+		foreach ( $bits as $label => $value ) { $short[] = ( 'Tarjeta clásica' === $label ? 'Clásica' : $label ) . ' ' . $value; }
+		return $short;
+	}
+
+	/** "hoy 08:15", "ayer 20:10" o "9 oct 08:15", en la hora de la web. */
+	private static function rate_when( int $ts ): string {
+		$day = wp_date( 'Y-m-d', $ts );
+		if ( wp_date( 'Y-m-d' ) === $day ) { return 'hoy ' . wp_date( 'H:i', $ts ); }
+		if ( wp_date( 'Y-m-d', time() - DAY_IN_SECONDS ) === $day ) { return 'ayer ' . wp_date( 'H:i', $ts ); }
+		return wp_date( 'j M H:i', $ts );
 	}
 
 	private static function buscar( string $zone ): string {
@@ -391,6 +478,7 @@ final class CVD_Gestora_App {
 			'search' => '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
 			'target' => '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
 			'truck'  => '<path d="M2 6h12v10H2z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
+			'calc'   => '<rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M8 6.5h8v3H8z"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/>',
 			'camera' => '<rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/>',
 		);
 		return '<svg class="cvga-ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' . ( $paths[ $name ] ?? '' ) . '</svg>';

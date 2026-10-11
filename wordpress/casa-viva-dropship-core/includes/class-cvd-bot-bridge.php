@@ -39,6 +39,19 @@ final class CVD_Bot_Bridge {
 		register_rest_route( self::NS, '/bot/partners/(?P<id>\d+)/welcome', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'partner_welcome' ), 'permission_callback' => $auth ) );
 		// «mi acceso» de una dependienta (3.13.49): enlace de un solo uso a Operaciones.
 		register_rest_route( self::NS, '/bot/clerk/access', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'clerk_access' ), 'permission_callback' => $auth ) );
+		// Tasa del día (3.13.51): lo que el bot lee del mensaje «FORMAS DE PAGO Y SUS CAMBIOS» del grupo General.
+		register_rest_route( self::NS, '/bot/rates', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'rates' ), 'permission_callback' => $auth ) );
+	}
+
+	/**
+	 * Guarda la tasa del día que leyó el bot. sentAt = hora del mensaje: el mismo mensaje (o uno más viejo)
+	 * no vuelve a aplicarse, así un reinicio del bot no pisa lo que la dueña corrigió en el panel.
+	 */
+	public static function rates( WP_REST_Request $request ) {
+		$params = (array) $request->get_json_params();
+		$result = CVD_Daily_Rates::save( array_intersect_key( $params, array_flip( array( 'cup', 'eur', 'clasica', 'zelle', 'paypal_pct', 'paypalPct' ) ) ), 'bot', sanitize_text_field( (string) ( $params['sentAt'] ?? '' ) ) );
+		if ( is_wp_error( $result ) ) { return $result; }
+		return self::no_cache( $result );
 	}
 
 	/**
@@ -179,7 +192,7 @@ final class CVD_Bot_Bridge {
 				'id' => $o->get_id(), 'date' => $o->get_date_created() ? $o->get_date_created()->date_i18n( 'd/m' ) : '',
 				'customer' => $o->get_formatted_billing_full_name(), 'items' => self::items( $o ),
 				'status' => 'cancelled' === $o->get_status() ? 'Cancelado' : ( 'refunded' === $o->get_status() ? 'Devuelto' : ( 'pickup' === $o->get_meta( '_cvd_fulfillment_type', true ) ? ( 'completed' === $o->get_status() ? 'Recogido' : 'Para recoger en tienda' ) : self::friendly( $delivery ) ) ),
-				'messenger' => $messenger ? $messenger->display_name : '', 'eta' => (string) $o->get_meta( '_cvd_bot_eta', true ),
+				'messenger' => $messenger ? $messenger->display_name : '', 'eta' => (string) $o->get_meta( '_cvd_bot_eta', true ), 'when' => CVD_Delivery_When::order_label( $o ),
 				'commission' => (float) $o->get_meta( '_cvd_commission_amount', true ), 'commissionStatus' => (string) $o->get_meta( '_cvd_commission_status', true ),
 			);
 		}
@@ -242,6 +255,7 @@ final class CVD_Bot_Bridge {
 				'items'      => self::items( $order ),
 				'earningCup' => CVD_Delivery::courier_amount( $order ),
 				'window'     => self::window( $order ),
+			) + self::when( $order ) + array(
 				'offeredAt'  => $offered_at,
 				// Si el pedido se volvió a ofertar (se quitó el mensajero y otra vez "Listo para salir"),
 				// el aviso anterior no cuenta: hay que publicarlo de nuevo. Ambas fechas son 'Y-m-d H:i:s' UTC.
@@ -517,17 +531,19 @@ final class CVD_Bot_Bridge {
 		return implode( ', ', $items );
 	}
 
-	/** Fecha y franja que eligió el cliente al comprar, en palabras ("hoy por la tarde"). */
+	/** Fecha y franja que eligió el cliente al comprar, en palabras ("mañana sáb 12/10 · por la tarde"); vacío si no eligió nada. */
 	private static function window( WC_Order $order ): string {
-		$date = (string) $order->get_meta( '_cvd_delivery_date', true );
-		$slot = sanitize_key( (string) $order->get_meta( '_cvd_delivery_window', true ) );
-		$slots = array( 'morning' => 'por la mañana', 'afternoon' => 'por la tarde', 'evening' => 'por la noche', 'anytime' => 'a cualquier hora' );
-		$day = '';
-		if ( $date ) {
-			$today = current_time( 'Y-m-d' );
-			$day = $date === $today ? 'hoy' : ( gmdate( 'Y-m-d', strtotime( $today . ' +1 day' ) ) === $date ? 'mañana' : date_i18n( 'j \d\e F', strtotime( $date ) ) );
-		}
-		return trim( $day . ' ' . ( $slots[ $slot ] ?? $slot ) );
+		$when = CVD_Delivery_When::for_order( $order );
+		return $when['date'] || $when['slot'] ? $when['label'] : '';
+	}
+
+	/**
+	 * Día de entrega para el bot (3.13.51): deliveryWhen siempre lleno ("hoy", "mañana sáb 12/10 · por la mañana",
+	 * "lo antes posible"); deliveryFuture = es para otro día (el bot lo dice al pedir la hora); deliveryDay = "mañana sábado".
+	 */
+	private static function when( WC_Order $order ): array {
+		$when = CVD_Delivery_When::for_order( $order );
+		return array( 'deliveryWhen' => $when['label'], 'deliveryDate' => $when['date'], 'deliveryFuture' => $when['future'], 'deliveryDay' => $when['dayName'] );
 	}
 
 	/** Estado de mensajería en palabras de gestora y cliente (no las etiquetas internas de la tienda). */
@@ -612,6 +628,7 @@ final class CVD_Bot_Bridge {
 			'earningCup'  => CVD_Delivery::courier_amount( $order ),
 			'change'      => $change,
 			'window'      => self::window( $order ),
+		) + self::when( $order ) + array(
 			'note'        => wp_strip_all_tags( (string) $order->get_customer_note() ),
 			'pickup'      => 'Casa Viva · Calle Conill A esq. 45 #864, Nuevo Vedado',
 			'tracking'    => CVD_Delivery::tracking_url( $order ),

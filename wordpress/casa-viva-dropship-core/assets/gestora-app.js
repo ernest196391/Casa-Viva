@@ -13,7 +13,7 @@
 
   // Enlaces viejos (redirecciones tras guardar) que apuntan a otra palabra.
   var alias = { dashboard: 'inicio', catalogo: 'tienda', clientes: 'clientes', 'mis-clientes': 'clientes', comisiones: 'ventas', mensajeria: 'ventas', pagos: 'cobrar' };
-  var titles = { inicio: 'Inicio', tienda: 'Mi tienda', precios: 'Mis precios', clientes: 'Clientes', herramientas: 'Herramientas', buscar: 'Buscar precios', materiales: 'Fotos y textos listos', ventas: 'Ventas', cobrar: 'Cobrar', invitar: 'Invitar gestoras', perfil: 'Mi perfil' };
+  var titles = { inicio: 'Inicio', tienda: 'Mi tienda', precios: 'Mis precios', clientes: 'Clientes', herramientas: 'Herramientas', calculadora: 'Calculadora', buscar: 'Buscar precios', materiales: 'Fotos y textos listos', ventas: 'Ventas', cobrar: 'Cobrar', invitar: 'Invitar gestoras', perfil: 'Mi perfil' };
   var views = Array.prototype.slice.call(document.querySelectorAll('[data-view]'));
   var titleEl = app.querySelector('[data-cvga-title]');
 
@@ -83,6 +83,53 @@
         .catch(function (err) { statusEl.hidden = false; statusEl.textContent = err.message; })
         .then(function () { button.disabled = false; });
     });
+  }
+
+  // Calculadora (3.13.51): precio en USD (+ mensajería en CUP) → cada forma de pago con la tasa del día.
+  var calc = app.querySelector('[data-cvga-calc]');
+  if (calc) {
+    var rates = {};
+    try { rates = JSON.parse(calc.getAttribute('data-rates') || '{}') || {}; } catch (ignore) {}
+    var calcOut = app.querySelector('[data-calc-out]'), copyBtn = app.querySelector('[data-calc-copy]'), copiedEl = app.querySelector('[data-calc-copied]');
+    var lastText = '';
+    function escHtml(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]; }); }
+    // "25", "25,5", "25.50", "1.250,50" o "1,250.50": el último separador es el decimal.
+    function usdValue(v) {
+      var s = String(v || '').replace(/[^\d.,]/g, '');
+      var dot = s.lastIndexOf('.'), comma = s.lastIndexOf(',');
+      if (dot > -1 && comma > -1) s = dot > comma ? s.replace(/,/g, '') : s.replace(/\./g, '').replace(',', '.');
+      else if (comma > -1) s = s.replace(/,(?=.*,)/g, '').replace(',', '.');
+      var n = parseFloat(s);
+      return isFinite(n) && n > 0 ? n : 0;
+    }
+    function cupValue(v) { var n = parseInt(String(v || '').replace(/\D/g, ''), 10); return isFinite(n) && n > 0 ? n : 0; }
+    function fmtCup(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' CUP'; }
+    function fmtMoney(n, cur) { var s = (Math.round(n * 100) / 100).toFixed(2).replace('.', ',').replace(/,00$/, ''); return s.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' ' + cur; }
+    function factor(v) { var n = Number(v); return isFinite(n) && n > 0 ? n : 0; }
+    function render() {
+      var usd = usdValue(calc.elements.usd.value), ship = cupValue(calc.elements.ship.value);
+      if (!usd) { calcOut.innerHTML = '<li class="cvga-calc-empty">Escribe un precio para ver cuánto es.</li>'; copyBtn.hidden = true; lastText = ''; return; }
+      var rows = [['Efectivo USD', fmtMoney(usd, 'USD'), '']];
+      if (factor(rates.cup)) rows.push(['CUP', fmtCup(usd * factor(rates.cup) + ship), ship ? 'Ya incluye ' + fmtCup(ship) + ' de mensajería' : 'Efectivo o transferencia', true]);
+      if (factor(rates.eur)) rows.push(['Euro', fmtMoney(usd * factor(rates.eur), 'EUR'), 'Efectivo en euros']);
+      if (factor(rates.clasica)) rows.push(['Tarjeta clásica', fmtMoney(usd * factor(rates.clasica), 'USD'), 'Transferencia a tarjeta clásica']);
+      if (factor(rates.zelle)) rows.push(['Zelle', fmtMoney(usd * factor(rates.zelle), 'USD'), '']);
+      if (rates.paypalPct !== null && rates.paypalPct !== undefined && isFinite(Number(rates.paypalPct))) rows.push(['PayPal', fmtMoney(usd * (1 + Number(rates.paypalPct) / 100), 'USD'), '']);
+      rows.push(['USDT', 'Consultar', 'Pregunta en el grupo General']);
+      calcOut.innerHTML = rows.map(function (r) { return '<li' + (r[3] ? ' class="is-main"' : '') + '><span><b>' + escHtml(r[0]) + '</b>' + (r[2] ? '<small>' + escHtml(r[2]) + '</small>' : '') + '</span><strong>' + escHtml(r[1]) + '</strong></li>'; }).join('') + (ship ? '<li class="cvga-calc-empty">Con las demás formas de pago, la mensajería (' + escHtml(fmtCup(ship)) + ') se paga aparte, en CUP, al mensajero.</li>' : '');
+      lastText = 'Precio: ' + fmtMoney(usd, 'USD') + (ship ? ' + mensajería ' + fmtCup(ship) : '') + '\n' + rows.filter(function (r) { return r[0] !== 'Efectivo USD' && r[1] !== 'Consultar'; }).map(function (r) { return '• ' + r[0] + ': ' + r[1] + (r[0] === 'CUP' && ship ? ' (con mensajería)' : ''); }).join('\n') + (ship ? '\nLa mensajería se paga en CUP al mensajero.' : '');
+      copyBtn.hidden = false; copiedEl.textContent = '';
+    }
+    calc.addEventListener('input', render);
+    calc.addEventListener('submit', function (e) { e.preventDefault(); render(); if (document.activeElement) document.activeElement.blur(); });
+    copyBtn.addEventListener('click', function () {
+      if (!lastText) return;
+      var done = function () { copiedEl.textContent = 'Copiado. Pégalo en el chat del cliente.'; };
+      if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(lastText).then(done, function () { window.prompt('Copia el texto:', lastText); }); }
+      else { window.prompt('Copia el texto:', lastText); }
+    });
+    if (!factor(rates.cup)) calc.elements.usd.placeholder = 'Ej.: 25 (aún sin tasa del día)';
+    render();
   }
 
   show(current(), false);
