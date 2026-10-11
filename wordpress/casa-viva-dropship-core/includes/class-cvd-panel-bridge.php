@@ -339,6 +339,8 @@ final class CVD_Panel_Bridge {
 				'sales'      => round( $s['sales'], 2 ),
 				'commission' => array( 'pending' => round( $s['pending'], 2 ), 'available' => round( $s['available'], 2 ), 'paid' => round( $s['paid'], 2 ) ),
 				'lastPaidAt' => $last[ $user->ID ] ?? null,
+				// Cuenta de prueba o del equipo (dueña, administración, piloto, sin WhatsApp): no se muestra ni va a la caja.
+				'test'       => '1' === get_user_meta( $user->ID, '_cvd_test_account', true ) || user_can( $user, 'manage_woocommerce' ) || str_contains( $user->user_login, 'piloto' ) || '' === preg_replace( '/\D+/', '', (string) ( get_user_meta( $user->ID, '_cvd_whatsapp', true ) ?: get_user_meta( $user->ID, 'billing_phone', true ) ) ),
 			);
 		}
 		return self::no_cache( array( 'gestoras' => $rows ) );
