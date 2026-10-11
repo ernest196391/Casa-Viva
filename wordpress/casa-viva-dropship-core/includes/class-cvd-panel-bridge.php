@@ -35,11 +35,58 @@ final class CVD_Panel_Bridge {
 		register_rest_route( self::NS, '/panel/stock/levels', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'stock_levels' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/price', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'set_price' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/save', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'save_product' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/messengers', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'messengers' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/messengers/(?P<id>\d+)/status', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'gestora_status' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/clients/bulk', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'clients_bulk' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/clients', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'clients' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/clients', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'client_save' ), 'permission_callback' => $auth ) );
 		// Tarifas de mensajería por zona (CUP): las mismas que usa el checkout y el reparto.
 		register_rest_route( self::NS, '/panel/shipping-rates', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'shipping_rates' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/shipping-rates', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'shipping_rate_save' ), 'permission_callback' => $auth ) );
+	}
+
+	/** Mensajeros: estado (aprobar/rechazar con la misma lógica que gestoras), zona, vehículo, disponibilidad, carreras y saldo. */
+	public static function messengers(): WP_REST_Response {
+		global $wpdb;
+		$done = array();
+		foreach ( (array) $wpdb->get_results( "SELECT meta_value AS uid, COUNT(*) AS n FROM {$wpdb->prefix}wc_orders_meta WHERE meta_key='_cvd_messenger_user_id' GROUP BY meta_value", ARRAY_A ) as $r ) { $done[ absint( $r['uid'] ) ] = (int) $r['n']; }
+		$rows = array();
+		foreach ( get_users( array( 'role' => 'cvd_messenger', 'orderby' => 'registered', 'order' => 'DESC', 'number' => 500 ) ) as $u ) {
+			$bal = class_exists( 'CVD_Messenger_Accounting' ) ? CVD_Messenger_Accounting::balances( $u->ID ) : array( 'available' => 0, 'paid' => 0 );
+			$rows[] = array(
+				'id' => $u->ID, 'name' => $u->display_name,
+				'phone' => preg_replace( '/\D+/', '', (string) ( get_user_meta( $u->ID, '_cvd_whatsapp', true ) ?: get_user_meta( $u->ID, 'billing_phone', true ) ) ),
+				'status' => sanitize_key( (string) get_user_meta( $u->ID, '_cvd_account_status', true ) ) ?: 'pending',
+				'zone' => (string) get_user_meta( $u->ID, '_cvd_zone', true ), 'vehicle' => (string) get_user_meta( $u->ID, '_cvd_vehicle', true ),
+				'available' => 'yes' === get_user_meta( $u->ID, '_cvd_messenger_available', true ),
+				'deliveries' => $done[ $u->ID ] ?? 0, 'owedCup' => round( (float) ( $bal['available'] ?? 0 ), 2 ), 'paidCup' => round( (float) ( $bal['paid'] ?? 0 ), 2 ),
+				'since' => $u->user_registered, 'pilot' => str_starts_with( $u->user_login, 'cv_' ) && str_contains( $u->user_login, 'piloto' ),
+			);
+		}
+		return self::no_cache( array( 'messengers' => $rows, 'signupUrl' => home_url( '/registro-mensajero/' ) ) );
+	}
+
+	/** Clientes que llegan de la caja o del bot: [{phone, name, ownerPhone, source, optOut}]. La gestora se busca por su WhatsApp. */
+	public static function clients_bulk( WP_REST_Request $request ): WP_REST_Response {
+		global $wpdb;
+		$owners = array();
+		foreach ( get_users( array( 'role' => 'cvd_gestora', 'number' => 1000 ) ) as $g ) {
+			$p = CVD_Clients::phone( (string) ( get_user_meta( $g->ID, '_cvd_whatsapp', true ) ?: get_user_meta( $g->ID, 'billing_phone', true ) ) );
+			if ( $p ) { $owners[ $p ] = $g->ID; }
+		}
+		$out = array( 'saved' => 0, 'skipped' => 0 );
+		foreach ( array_slice( (array) $request->get_param( 'items' ), 0, 500 ) as $item ) {
+			$owner = $owners[ CVD_Clients::phone( (string) ( $item['ownerPhone'] ?? '' ) ) ] ?? 0;
+			$r = CVD_Clients::upsert( (string) ( $item['phone'] ?? '' ), (string) ( $item['name'] ?? '' ), $owner, sanitize_key( (string) ( $item['source'] ?? 'caja' ) ) );
+			if ( isset( $r['error'] ) ) { $out['skipped']++; continue; }
+			if ( ! empty( $item['optOut'] ) ) { $wpdb->update( CVD_Clients::table(), array( 'opt_out' => 1 ), array( 'id' => $r['id'] ) ); }
+			if ( ! empty( $item['purchase'] ) ) {
+				$wpdb->query( $wpdb->prepare( 'UPDATE ' . CVD_Clients::table() . ' SET orders = orders + 1, spent = spent + %f, last_order_at = GREATEST(COALESCE(last_order_at, %s), %s) WHERE id=%d',
+					(float) ( $item['purchase']['usd'] ?? 0 ), gmdate( 'Y-m-d H:i:s', strtotime( (string) ( $item['purchase']['at'] ?? 'now' ) ) ), gmdate( 'Y-m-d H:i:s', strtotime( (string) ( $item['purchase']['at'] ?? 'now' ) ) ), $r['id'] ) );
+			}
+			$out['saved']++;
+		}
+		return self::no_cache( $out );
 	}
 
 	/** Todos los clientes (o de una gestora: ?owner=ID), con el nombre de su gestora. */
