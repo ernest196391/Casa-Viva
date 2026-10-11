@@ -77,7 +77,7 @@ final class CVD_Receipt_Links {
 	}
 
 	private static function map_target( WC_Order $order ): string {
-		$url = esc_url_raw( (string) $order->get_meta( '_cvd_map_url', true ) );
+		$url = esc_url_raw( (string) CVD_Shipping_Rates::order_map_url( $order ) );
 		if ( ! $url ) {
 			return '';
 		}

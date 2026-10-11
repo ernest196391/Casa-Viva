@@ -321,6 +321,7 @@ final class CVD_Bot_Bridge {
 		$offers = array();
 		foreach ( $orders as $order ) {
 			if ( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { continue; }
+			if ( CVD_Delivery::is_test_order( $order ) ) { continue; } // 3.13.54: un pedido de prueba nunca se anuncia en el grupo
 			$offered_at = (string) $order->get_meta( '_cvd_delivery_offered_at', true );
 			$announced_at = (string) $order->get_meta( '_cvd_bot_announced_at', true );
 			$offers[] = array(
@@ -363,6 +364,7 @@ final class CVD_Bot_Bridge {
 			$status = CVD_Delivery::status( $order );
 			// Si ya la aceptó desde la web antes de que el bot la viera, igual necesita el vale por WhatsApp.
 			if ( ! in_array( $status, array( 'assigned', 'accepted', 'to_store' ), true ) ) { continue; }
+			if ( CVD_Delivery::is_test_order( $order ) ) { continue; } // 3.13.54: ni vale por privado
 			$assigned_at = (string) $order->get_meta( '_cvd_direct_assigned_at', true );
 			$announced_at = (string) $order->get_meta( '_cvd_bot_direct_announced_at', true );
 			if ( '' !== $announced_at && $announced_at >= $assigned_at ) { continue; } // ambas 'Y-m-d H:i:s' UTC
@@ -405,7 +407,7 @@ final class CVD_Bot_Bridge {
 		if ( ! $messenger ) { return self::no_cache( array( 'result' => 'not_messenger' ) ); }
 		$current_owner = absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
 		if ( $current_owner === $messenger->ID ) { return self::no_cache( array( 'result' => 'yours', 'voucher' => self::voucher( $order ) ) ); }
-		if ( $current_owner || 'offered' !== CVD_Delivery::status( $order ) ) { return self::no_cache( array( 'result' => 'taken' ) ); }
+		if ( $current_owner || 'offered' !== CVD_Delivery::status( $order ) || CVD_Delivery::is_test_order( $order ) ) { return self::no_cache( array( 'result' => 'taken' ) ); }
 		$result = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'accepted', array(
 			'actor_user_id'   => $messenger->ID,
 			// Con la hora de la oferta: si la carrera se soltó (relevo) y el mismo mensajero la vuelve a
@@ -696,7 +698,7 @@ final class CVD_Bot_Bridge {
 			'zone'        => CVD_Delivery::destination_zone( $order ),
 			'address'     => $address,
 			'reference'   => (string) $order->get_meta( '_cvd_reference', true ),
-			'mapUrl'      => (string) $order->get_meta( '_cvd_map_url', true ),
+			'mapUrl'      => (string) CVD_Shipping_Rates::order_map_url( $order ),
 			'items'       => self::items( $order ),
 			'productsUsd' => wc_format_decimal( $order->get_total(), 2 ),
 			'shippingCup' => $shipping,

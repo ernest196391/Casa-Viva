@@ -150,6 +150,8 @@ final class CVD_Delivery {
 		// escritor legacy en vez de inventar una transición central nueva.
 		if ( ! $messenger_id ) { $order=wc_get_order($order_id); if(!$order){return;} $previous=absint($order->get_meta('_cvd_messenger_user_id',true)); $order->update_meta_data('_cvd_messenger_user_id',0); $order->delete_meta_data('_cvd_direct_assignment'); self::transition($order,'unassigned',array('previous_messenger'=>$previous,'messenger'=>0)); return; }
 		if ( ! class_exists( 'CVD_Order_Transition_Service' ) ) { return; }
+		$test = wc_get_order( $order_id );
+		if ( $test && self::refuse_test_order( $test ) ) { return; } // pedido de prueba: tampoco se asigna a mano
 		$user = get_userdata( $messenger_id );
 		$result = CVD_Order_Transition_Service::transition( $order_id, 'delivery', 'assigned', array(
 			'actor_user_id'=>get_current_user_id(), 'source'=>'cvd_delivery_assign',
@@ -165,8 +167,41 @@ final class CVD_Delivery {
 	}
 
 	/** Publish a prepared home-delivery order to every eligible, available messenger. */
+	/*
+	 * Pedidos de prueba (3.13.54). Pasó dos veces el 11-oct: pedidos de prueba (tutorial, Harley) llegaron a
+	 * mensajeros de verdad porque se pulsó «Listo para salir» sin leer el aviso. Un pedido con
+	 * `_cvd_test_order` (cualquier valor: 'tutorial', 'harley', 'auto'…) nunca sale al reparto:
+	 * ni oferta al grupo, ni asignación directa, ni asignación a mano, ni lo ve el bot.
+	 */
+	public const TEST_META = '_cvd_test_order';
+
+	public static function is_test_order( $order ): bool {
+		return is_object( $order ) && method_exists( $order, 'get_meta' ) && '' !== trim( (string) $order->get_meta( self::TEST_META, true ) );
+	}
+
+	/** true = es de prueba y se frenó (deja la nota una sola vez por petición). */
+	public static function refuse_test_order( WC_Order $order ): bool {
+		static $noted = array();
+		if ( ! self::is_test_order( $order ) ) { return false; }
+		if ( empty( $noted[ $order->get_id() ] ) ) {
+			$noted[ $order->get_id() ] = true;
+			$order->add_order_note( 'Pedido de prueba: no sale al reparto (no se publicó ni se asignó a ningún mensajero).' );
+			$order->save();
+		}
+		return true;
+	}
+
+	/** «PRUEBA» como palabra (mayúsculas o minúsculas) en el nombre o la nota del cliente → pedido de prueba automático. */
+	public static function looks_like_test( string ...$texts ): bool {
+		foreach ( $texts as $text ) {
+			if ( preg_match( '/(?<![\p{L}\p{N}])prueba(?![\p{L}\p{N}])/iu', $text ) ) { return true; }
+		}
+		return false;
+	}
+
 	public static function publish_offer( WC_Order $order ): bool {
 		if ( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return false; }
+		if ( self::refuse_test_order( $order ) ) { return false; }
 		if ( 'offered' === self::status( $order ) ) { return true; }
 		if ( 'unassigned' !== self::status( $order ) ) { return false; }
 		$eligible = self::eligible_messengers( $order );
@@ -194,6 +229,7 @@ final class CVD_Delivery {
 	 */
 	public static function dispatch_ready( WC_Order $order ): bool {
 		if ( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return false; }
+		if ( self::refuse_test_order( $order ) ) { return false; }
 		$preferred_id = class_exists( 'CVD_Direct_Dispatch' ) ? absint( $order->get_meta( CVD_Direct_Dispatch::PREFERRED_META, true ) ) : 0;
 		if ( ! $preferred_id || 'unassigned' !== self::status( $order ) || absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { return self::publish_offer( $order ); }
 		$messenger = CVD_Direct_Dispatch::preferred_messenger( $order );
@@ -210,6 +246,7 @@ final class CVD_Delivery {
 
 	/** Asignación directa pedida por la gestora: la misma transición «asignada» que la asignación manual de /mensajeria/. */
 	public static function assign_direct( WC_Order $order, WP_User $messenger ): bool {
+		if ( self::refuse_test_order( $order ) ) { return false; }
 		if ( 'unassigned' !== self::status( $order ) || ! class_exists( 'CVD_Order_Transition_Service' ) || ! class_exists( 'CVD_Direct_Dispatch' ) ) { return false; }
 		$requested_by = CVD_Direct_Dispatch::requested_by( $order );
 		$result = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'assigned', array(
@@ -295,7 +332,7 @@ final class CVD_Delivery {
 		$orders = array_values( array_filter( $orders, static function ( WC_Order $order ) use ( $messenger ): bool {
 			$rejected = array_map( 'absint', (array) $order->get_meta( '_cvd_delivery_rejected_by', true ) );
 			$invited = array_map( 'absint', (array) $order->get_meta( '_cvd_delivery_invited_messengers', true ) );
-			return in_array( $messenger->ID, $invited, true ) && ! in_array( $messenger->ID, $rejected, true ) && ! absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
+			return ! self::is_test_order( $order ) && in_array( $messenger->ID, $invited, true ) && ! in_array( $messenger->ID, $rejected, true ) && ! absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
 		} ) );
 		$messenger_zone = remove_accents( strtolower( (string) get_user_meta( $messenger->ID, '_cvd_zone', true ) ) );
 		usort( $orders, static function ( WC_Order $a, WC_Order $b ) use ( $messenger_zone ): int {
@@ -332,7 +369,7 @@ final class CVD_Delivery {
 		if ( 'accept' === $decision ) {
 			$transition=CVD_Order_Transition_Service::transition($order_id,'delivery','accepted',array(
 				'actor_user_id'=>$user->ID,'idempotency_key'=>sanitize_text_field((string)($_GET['idempotency_key']??'')),'source'=>'cvd_delivery_offer_decision','metadata'=>array('messenger'=>$user->ID,'source'=>'open_offer'),
-				'precondition'=>static function(WC_Order $order,string $current)use($user){$assigned=absint($order->get_meta('_cvd_messenger_user_id',true));if($assigned&&$assigned!==$user->ID){return CVD_Order_Transition_Service::CONFLICT;}if('offered'!==$current){return CVD_Order_Transition_Service::CONFLICT;}$invited=array_map('absint',(array)$order->get_meta('_cvd_delivery_invited_messengers',true));return in_array($user->ID,$invited,true)&&'yes'===get_user_meta($user->ID,'_cvd_messenger_available',true)?true:CVD_Order_Transition_Service::PRECONDITION_FAILED;},
+				'precondition'=>static function(WC_Order $order,string $current)use($user){if(self::is_test_order($order)){return CVD_Order_Transition_Service::PRECONDITION_FAILED;}$assigned=absint($order->get_meta('_cvd_messenger_user_id',true));if($assigned&&$assigned!==$user->ID){return CVD_Order_Transition_Service::CONFLICT;}if('offered'!==$current){return CVD_Order_Transition_Service::CONFLICT;}$invited=array_map('absint',(array)$order->get_meta('_cvd_delivery_invited_messengers',true));return in_array($user->ID,$invited,true)&&'yes'===get_user_meta($user->ID,'_cvd_messenger_available',true)?true:CVD_Order_Transition_Service::PRECONDITION_FAILED;},
 				'atomic_mutation'=>static function(WC_Order $order,$from,$to,$actor,$at)use($user):void{$order->update_meta_data('_cvd_messenger_user_id',$user->ID);$order->update_meta_data('_cvd_delivery_accepted_at',$at);$order->add_order_note('Carrera aceptada por '.$user->display_name.'.');update_user_meta($user->ID,'_cvd_last_delivery_accepted_at',time());},
 				'after_commit'=>static function(WC_Order $order):void{self::centralized_after_commit($order,'accepted');},
 			));
@@ -586,7 +623,7 @@ final class CVD_Delivery {
 		$courier = self::tracking_courier_text( $view );
 		$html .= '</ol><p class="cvd-tracking-courier" data-tracking-courier' . ( '' === $courier ? ' hidden' : '' ) . '>' . esc_html( $courier ) . '</p>';
 		$html .= '<div class="cvd-courier-location" data-courier-location hidden><strong>Ubicación del mensajero</strong><span data-location-time>Esperando actualización…</span><a class="cvd-secondary" data-location-link target="_blank" rel="noopener">Abrir en el mapa</a></div>';
-		$map = esc_url( (string) $order->get_meta( '_cvd_map_url', true ) );
+		$map = esc_url( (string) CVD_Shipping_Rates::order_map_url( $order ) );
 		if ( $map && $current_rank >= 4 ) { $html .= '<a class="cvd-primary" href="' . $map . '" target="_blank" rel="noopener">Abrir dirección de entrega</a>'; }
 		if ( in_array( $status, array( 'incident', 'failed', 'returned', 'cancelled' ), true ) ) { $html .= '<p class="cvd-tracking-alert">Casa Viva está revisando esta entrega. Te contactaremos si necesitamos confirmar algún dato.</p>'; }
 		$confirmed = (bool) $order->get_meta( '_cvd_customer_confirmed_at', true );

@@ -224,3 +224,7 @@
 .cvd-shipping-preview span { font-size: .92rem; }
 .cvd-shipping-preview strong { font-size: 1.05rem; text-align: right; }
 .cvd-total-shipping { display: block; margin-top: .2rem; color: #006068; font-size: .78em; line-height: 1.25; }
+
+/* 3.13.54: las sugerencias de calle van en su sitio (no flotan encima de «Entre calles»): un toque en ese campo no puede elegir una sugerencia. */
+.cvd-predictive-list.cvd-address-list { position: static; margin-top: .35rem; border-radius: 14px; box-shadow: none; }
+.cvd-day-chip[aria-pressed="true"] { background: #004042; color: #fff; border-color: #004042; }

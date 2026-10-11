@@ -19,6 +19,8 @@ final class CVD_Shipping_Rates {
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 		add_action( 'wp_ajax_cvd_address_search', array( __CLASS__, 'address_search' ) );
 		add_action( 'wp_ajax_nopriv_cvd_address_search', array( __CLASS__, 'address_search' ) );
+		// 3.13.54: un mapa de fuera de Cuba (pedidos viejos con Madrid) no sale en ningún sitio; queda la dirección escrita.
+		add_filter( 'woocommerce_order_get__cvd_map_url', array( __CLASS__, 'filter_order_map_url' ), 10, 1 );
 		add_filter( 'woocommerce_get_order_item_totals', array( __CLASS__, 'order_item_totals' ), 20, 3 );
 		add_filter( 'woocommerce_get_formatted_order_total', array( __CLASS__, 'formatted_order_total' ), 20, 2 );
 	}
@@ -58,27 +60,131 @@ final class CVD_Shipping_Rates {
 		<?php return (string) ob_get_clean();
 	}
 
+	/*
+	 * Mapas solo dentro de Cuba (3.13.54). Pasó en la prueba grabada del 11-oct: escribiendo «Calle 23»
+	 * con Plaza de la Revolución / El Vedado salieron calles de Madrid, Ciudad de México, Bogotá y Tordesillas;
+	 * al tocar una se guardó la ubicación de Madrid y el vale del mensajero abrió el mapa en Madrid.
+	 * Cajas en grados: oeste, sur, este, norte (lon, lat, lon, lat), el mismo orden que pide Photon en «bbox».
+	 */
+	private const CUBA_BOX = array( -85.3, 19.5, -73.8, 23.5 );
+	private const PROVINCE_BOXES = array(
+		'LH' => array( -82.62, 22.90, -82.00, 23.25 ), // La Habana (de Santa Fe a Guanabo, del litoral a Boyeros)
+	);
+
+	/** Caja de búsqueda de la provincia (La Habana por defecto); si no la tenemos, toda Cuba. */
+	public static function search_box( string $state ): array {
+		$state = strtoupper( sanitize_key( $state ) );
+		return self::PROVINCE_BOXES[ $state ?: 'LH' ] ?? self::CUBA_BOX;
+	}
+
+	public static function in_box( float $lat, float $lon, array $box ): bool {
+		return $lon >= $box[0] && $lat >= $box[1] && $lon <= $box[2] && $lat <= $box[3];
+	}
+
+	public static function in_cuba( float $lat, float $lon ): bool {
+		return self::in_box( $lat, $lon, self::CUBA_BOX );
+	}
+
+	/**
+	 * Pares [lat, lon] que se leen en un enlace de mapa: OpenStreetMap (mlat/mlon, #map=18/lat/lon),
+	 * Google Maps (?q=lat,lon · query= · ll= · /@lat,lon) y geo:lat,lon. Vacío si no trae números
+	 * (por ejemplo un enlace corto maps.app.goo.gl): ese no se puede comprobar y se deja como está.
+	 */
+	public static function map_coordinates( string $url ): array {
+		$u = rawurldecode( html_entity_decode( $url, ENT_QUOTES, 'UTF-8' ) );
+		$n = '(-?\d{1,3}(?:\.\d+)?)';
+		$pairs = array();
+		if ( preg_match( '/[?&]mlat=' . $n . '/i', $u, $lat ) && preg_match( '/[?&]mlon=' . $n . '/i', $u, $lon ) ) { $pairs[] = array( (float) $lat[1], (float) $lon[1] ); }
+		$patterns = array(
+			'/#map=\d+(?:\.\d+)?\/' . $n . '\/' . $n . '/',
+			'/[?&](?:q|query|ll|sll|center|daddr|destination)=(?:loc:)?\s*' . $n . '\s*,\s*' . $n . '/i',
+			'/\/@' . $n . ',' . $n . '/',
+			'/^geo:' . $n . ',' . $n . '/i',
+		);
+		foreach ( $patterns as $pattern ) {
+			if ( preg_match_all( $pattern, $u, $all, PREG_SET_ORDER ) ) {
+				foreach ( $all as $m ) { $pairs[] = array( (float) $m[1], (float) $m[2] ); }
+			}
+		}
+		return $pairs;
+	}
+
+	/** El enlace de mapa tal cual, o '' si alguna de sus coordenadas cae fuera de Cuba (nunca se guarda ni se enseña). */
+	public static function safe_map_url( string $url ): string {
+		$url = trim( $url );
+		if ( '' === $url ) { return ''; }
+		foreach ( self::map_coordinates( $url ) as $pair ) {
+			if ( ! self::in_cuba( $pair[0], $pair[1] ) ) { return ''; }
+		}
+		return $url;
+	}
+
+	/** Ubicación del pedido para vales, mensajeros, recibos y el bot: sin mapa si es de fuera de Cuba (queda la dirección escrita). */
+	public static function order_map_url( $order ): string {
+		return is_object( $order ) && method_exists( $order, 'get_meta' ) ? self::safe_map_url( (string) $order->get_meta( '_cvd_map_url', true ) ) : '';
+	}
+
+	/** Mismo filtro para cualquier otro sitio que lea `_cvd_map_url` con get_meta() (pedidos viejos con Madrid incluidos). */
+	public static function filter_order_map_url( $value ) {
+		return is_string( $value ) ? self::safe_map_url( $value ) : $value;
+	}
+
+	/** Respuesta de Photon → sugerencias [label, map], solo de Cuba (countrycode CU) y dentro de la caja de la provincia. */
+	public static function photon_items( array $body, array $box ): array {
+		$items = array();
+		foreach ( $body['features'] ?? array() as $feature ) {
+			$p = is_array( $feature['properties'] ?? null ) ? $feature['properties'] : array();
+			$coordinates = $feature['geometry']['coordinates'] ?? array();
+			if ( ! is_array( $coordinates ) || count( $coordinates ) < 2 || ! is_numeric( $coordinates[0] ) || ! is_numeric( $coordinates[1] ) ) { continue; }
+			$lon = (float) $coordinates[0]; $lat = (float) $coordinates[1];
+			$country = strtoupper( (string) ( $p['countrycode'] ?? '' ) );
+			if ( ( '' !== $country && 'CU' !== $country ) || ! self::in_cuba( $lat, $lon ) || ! self::in_box( $lat, $lon, $box ) ) { continue; }
+			$parts = array_filter( array( $p['name'] ?? '', $p['street'] ?? '', $p['housenumber'] ?? '', $p['locality'] ?? '', $p['district'] ?? '', $p['city'] ?? '' ), 'is_string' );
+			$label = implode( ', ', array_values( array_unique( array_filter( array_map( 'trim', $parts ) ) ) ) );
+			if ( ! $label ) { continue; }
+			$lat = round( $lat, 6 ); $lon = round( $lon, 6 );
+			$items[ $label ] = array( 'label' => $label, 'map' => 'https://www.openstreetmap.org/?mlat=' . $lat . '&mlon=' . $lon . '#map=18/' . $lat . '/' . $lon );
+		}
+		return array_values( $items );
+	}
+
+	/** URL de Photon: limitada a la caja (bbox) y centrada en ella. Sin «lang=es»: Photon no lo admite y contesta error. */
+	public static function photon_url( string $q, array $box ): string {
+		return add_query_arg(
+			array( 'q' => $q, 'limit' => 8, 'lat' => (string) round( ( $box[1] + $box[3] ) / 2, 4 ), 'lon' => (string) round( ( $box[0] + $box[2] ) / 2, 4 ), 'bbox' => implode( ',', $box ) ),
+			'https://photon.komoot.io/api/'
+		);
+	}
+
 	public static function address_search(): void {
 		check_ajax_referer( 'cvd_address_search', 'nonce' );
 		$query = sanitize_text_field( wp_unslash( $_GET['query'] ?? '' ) );
 		$municipality = sanitize_text_field( wp_unslash( $_GET['municipality'] ?? '' ) );
 		$zone = sanitize_text_field( wp_unslash( $_GET['zone'] ?? '' ) );
+		$state = strtoupper( sanitize_key( wp_unslash( $_GET['state'] ?? '' ) ) ) ?: 'LH';
 		if ( strlen( $query ) < 3 ) { wp_send_json_success( array() ); }
-		$cache_key = 'cvd_geo_' . md5( self::normalize( $query . '|' . $municipality . '|' . $zone ) );
+		// «geo2»: lo guardado antes de 3.13.54 podía traer sitios de fuera de Cuba; no se vuelve a usar.
+		$cache_key = 'cvd_geo2_' . md5( self::normalize( $query . '|' . $municipality . '|' . $zone . '|' . $state ) );
 		$cached = get_transient( $cache_key );
 		if ( is_array( $cached ) ) { wp_send_json_success( $cached ); }
-		$url = add_query_arg( array( 'q' => implode( ', ', array_filter( array( $query, $zone, $municipality, 'La Habana', 'Cuba' ) ) ), 'limit' => 5, 'lang' => 'es', 'lat' => '23.1136', 'lon' => '-82.3666', 'bbox' => '-82.62,22.90,-82.02,23.35' ), 'https://photon.komoot.io/api/' );
-		$response = wp_remote_get( $url, array( 'timeout' => 7, 'user-agent' => 'CasaViva/0.5.1 (' . home_url( '/' ) . ')' ) );
-		if ( is_wp_error( $response ) ) { wp_send_json_success( array() ); }
-		$body = json_decode( wp_remote_retrieve_body( $response ), true ); $items = array();
-		foreach ( $body['features'] ?? array() as $feature ) {
-			$p = $feature['properties'] ?? array(); $coordinates = $feature['geometry']['coordinates'] ?? array();
-			$parts = array_filter( array( $p['name'] ?? '', $p['street'] ?? '', $p['housenumber'] ?? '', $p['district'] ?? '', $p['city'] ?? '' ) );
-			$label = implode( ', ', array_values( array_unique( $parts ) ) );
-			if ( ! $label || count( $coordinates ) < 2 ) { continue; }
-			$items[] = array( 'label' => $label, 'map' => 'https://www.openstreetmap.org/?mlat=' . rawurlencode( $coordinates[1] ) . '&mlon=' . rawurlencode( $coordinates[0] ) . '#map=18/' . rawurlencode( $coordinates[1] ) . '/' . rawurlencode( $coordinates[0] ) );
+		$box = self::search_box( $state );
+		$province = class_exists( 'CVD_Cuban_Checkout' ) ? ( CVD_Cuban_Checkout::provinces()[ $state ] ?? '' ) : '';
+		// Primero con reparto, municipio y provincia; si no sale nada, solo la calle con el municipio (siempre dentro de la caja).
+		$tries = array_unique( array(
+			implode( ', ', array_filter( array( $query, $zone, $municipality, $province ?: 'La Habana', 'Cuba' ) ) ),
+			implode( ', ', array_filter( array( $query, $municipality ) ) ),
+		) );
+		$items = array(); $failed = false;
+		foreach ( $tries as $q ) {
+			$response = wp_remote_get( self::photon_url( $q, $box ), array( 'timeout' => 6, 'user-agent' => 'CasaViva/' . ( defined( 'CVD_VERSION' ) ? CVD_VERSION : '3' ) . ' (' . home_url( '/' ) . ')' ) );
+			if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) { $failed = true; continue; }
+			$body = json_decode( wp_remote_retrieve_body( $response ), true );
+			$items = self::photon_items( is_array( $body ) ? $body : array(), $box );
+			if ( $items ) { break; }
 		}
-		set_transient( $cache_key, $items, 12 * HOUR_IN_SECONDS );
+		$items = array_slice( $items, 0, 5 );
+		// Si Photon falló no se guarda el vacío 12 horas: se vuelve a intentar en la próxima búsqueda.
+		if ( $items || ! $failed ) { set_transient( $cache_key, $items, ( $items ? 12 : 1 ) * HOUR_IN_SECONDS ); }
 		wp_send_json_success( $items );
 	}
 

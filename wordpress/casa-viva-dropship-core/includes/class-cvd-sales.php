@@ -346,7 +346,7 @@ final class CVD_Sales {
 			if ( 'ready' === $next && 'pickup' !== $order->get_meta( '_cvd_fulfillment_type', true ) && class_exists( 'CVD_Delivery' ) ) {
 				CVD_Delivery::dispatch_ready( wc_get_order( $order->get_id() ) ); // directo al mensajero que eligió la gestora, o al grupo como siempre
 			}
-			return rest_ensure_response( array( 'message' => 'Pedido actualizado.', 'order' => self::payload( wc_get_order( $order->get_id() ) ), 'transition' => $result ) );
+			return rest_ensure_response( array( 'message' => 'Pedido actualizado.', 'notice' => self::test_notice( $order, $next ), 'order' => self::payload( wc_get_order( $order->get_id() ) ), 'transition' => $result ) );
 		}
 		$allowed = self::allowed_transitions( $current );
 		if ( ! in_array( $next, $allowed, true ) ) {
@@ -412,7 +412,12 @@ final class CVD_Sales {
 			$order = wc_get_order( $order->get_id() );
 			if ( $order && ! $order->has_status( 'completed' ) ) { $order->update_status( 'completed', 'Dinero recibido y operación completada.' ); }
 		}
-		return rest_ensure_response( array( 'message' => 'Pedido actualizado.', 'order' => self::payload( wc_get_order( $order->get_id() ) ) ) );
+		return rest_ensure_response( array( 'message' => 'Pedido actualizado.', 'notice' => self::test_notice( $order, $next ), 'order' => self::payload( wc_get_order( $order->get_id() ) ) ) );
+	}
+
+	/** 3.13.54: al pulsar «Listo para salir» en un pedido de prueba, la tienda lee claro que no salió al reparto. */
+	private static function test_notice( $order, string $next ): string {
+		return 'ready' === $next && class_exists( 'CVD_Delivery' ) && CVD_Delivery::is_test_order( $order ) && 'pickup' !== $order->get_meta( '_cvd_fulfillment_type', true ) ? 'Pedido de PRUEBA: quedó listo, pero NO salió al reparto (ningún mensajero lo recibe).' : '';
 	}
 
 	private static function allowed_transitions( string $current ): array {
@@ -477,6 +482,8 @@ final class CVD_Sales {
 			'commissionStatus' => sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ?: 'none',
 			'shippingCup' => 'pickup' === $fulfillment ? 0 : ( class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_fee( $order ) : absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) ) ),
 			'orderCode' => 'CV-PEDIDO-' . $order->get_id(),
+			// 3.13.54: pedido de prueba → cartel grande «PRUEBA — no preparar»; nunca sale al reparto.
+			'testOrder' => class_exists( 'CVD_Delivery' ) && CVD_Delivery::is_test_order( $order ),
 			'canReturn' => current_user_can( 'manage_woocommerce' ) && $order->has_status( 'completed' ) && ! $order->get_meta( '_cvd_return', true ),
 			'declaredUsd' => (string) $order->get_meta( '_cvd_declared_usd', true ),
 			'declaredCup' => (string) $order->get_meta( '_cvd_declared_cup', true ),

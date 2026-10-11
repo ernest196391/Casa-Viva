@@ -111,7 +111,7 @@ final class CVD_WhatsApp_Gateway {
 			if ( $reference ) {
 				echo '<p class="cvd-thanks__muted">Referencia: ' . esc_html( $reference ) . '</p>';
 			}
-			$map_url = (string) $order->get_meta( '_cvd_map_url', true );
+			$map_url = (string) CVD_Shipping_Rates::order_map_url( $order );
 			if ( $map_url ) {
 				echo '<a class="cvd-thanks__link" href="' . esc_url( $map_url ) . '" target="_blank" rel="noopener">Ver ubicación en el mapa</a>';
 			}

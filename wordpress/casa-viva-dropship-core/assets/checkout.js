@@ -137,24 +137,44 @@
     $address.attr({ autocomplete: 'off', role: 'combobox', 'aria-controls': 'cvd-address-suggestions' }).after($status).after($list);
   }
 
+  // Mapas solo de Cuba (3.13.54), igual que CVD_Shipping_Rates::safe_map_url() en el servidor.
+  // Pasó en la prueba grabada: «Calle 23» sugirió Madrid y el vale del mensajero abrió el mapa en Madrid.
+  function mapInCuba(url) {
+    var u = String(url || ''), lat = /[?&]mlat=(-?\d+(?:\.\d+)?)/i.exec(u), lon = /[?&]mlon=(-?\d+(?:\.\d+)?)/i.exec(u);
+    var pair = lat && lon ? [+lat[1], +lon[1]] : null;
+    if (!pair) { var q = /(?:[?&](?:q|query|ll)=|\/@)(-?\d+(?:\.\d+)?)\s*(?:,|%2C)\s*(-?\d+(?:\.\d+)?)/i.exec(u); if (q) pair = [+q[1], +q[2]]; }
+    if (!pair) return true; // sin números (enlace corto): no se puede comprobar aquí
+    return pair[0] >= 19.5 && pair[0] <= 23.5 && pair[1] >= -85.3 && pair[1] <= -73.8;
+  }
+  function hideAddressList() {
+    clearTimeout(addressTimer);
+    if (addressController) { addressController.abort(); addressController = null; }
+    $('#cvd-address-suggestions').hide().empty();
+  }
+
   function searchAddresses() {
-    var query = ($('#billing_address_1').val() || '').trim();
+    var $address = $('#billing_address_1');
+    var query = ($address.val() || '').trim();
     var $list = $('#cvd-address-suggestions');
     if (query.length < 3) { $list.hide().empty(); return; }
+    // Solo mientras la persona sigue escribiendo en la calle: una respuesta tardía no puede taparle «Entre calles».
+    if (!$address.is(':focus')) { hideAddressList(); return; }
     if (addressController) addressController.abort();
-    addressController = new AbortController();
+    var controller = addressController = new AbortController();
     $list.html('<div class="cvd-predictive-status">Buscando direcciones…</div>').show();
     var url = cvdCheckout.ajaxUrl + '?action=cvd_address_search&nonce=' + encodeURIComponent(cvdCheckout.addressNonce) +
       '&query=' + encodeURIComponent(query) + '&municipality=' + encodeURIComponent($('#billing_city').val() || '') +
-      '&zone=' + encodeURIComponent($('#billing_cvd_locality').val() || '');
-    fetch(url, { credentials: 'same-origin', signal: addressController.signal }).then(function (response) { return response.json(); }).then(function (response) {
+      '&zone=' + encodeURIComponent($('#billing_cvd_locality').val() || '') + '&state=' + encodeURIComponent($('#billing_state').val() || '');
+    fetch(url, { credentials: 'same-origin', signal: controller.signal }).then(function (response) { return response.json(); }).then(function (response) {
+      if (controller !== addressController || !$address.is(':focus') || ($address.val() || '').trim() !== query) return;
       var items = response && response.success && Array.isArray(response.data) ? response.data : [];
+      items = items.filter(function (item) { return item && item.label && mapInCuba(item.map); });
       $list.empty();
       if (!items.length) { $list.html('<div class="cvd-predictive-status">No aparece en el mapa. Puedes escribirla manualmente.</div>').show(); return; }
       items.forEach(function (item) {
         $list.append($('<button>', { type: 'button', class: 'cvd-predictive-option cvd-address-option', text: item.label, 'data-value': item.label, 'data-map': item.map }));
       });
-      $list.show();
+      $list.data('shownAt', Date.now()).show();
     }).catch(function (error) { if (error.name !== 'AbortError') $list.hide(); });
   }
 
@@ -202,7 +222,7 @@
 			$button.prop('disabled', false).text('Usar ubicación del lugar de entrega');
 			return;
 		  }
-		  $field.val('https://www.google.com/maps?q=' + lat + ',' + lng).trigger('change');
+		  $field.val('https://www.google.com/maps?q=' + lat + ',' + lng).removeAttr('data-cvd-source').trigger('change');
 		  $field.attr('type', 'hidden');
 		  $('#billing_cvd_map_accuracy').val(Math.round(position.coords.accuracy || 0));
 		  $view.attr('href', $field.val()).show();
@@ -251,14 +271,29 @@
     if (event.key === 'Enter' || event.key === ' ') chooseLocality.call(this, event);
   });
   $(document.body).on('input', '#billing_address_1', function () {
+    // Si cambia la calle a mano, la ubicación que vino de una sugerencia ya no vale (la del GPS sí se queda).
+    var $map = $('#billing_cvd_map_url');
+    if ($map.attr('data-cvd-source') === 'suggestion') { $map.val('').removeAttr('data-cvd-source').trigger('change'); $('.cvd-location-view').hide(); }
     clearTimeout(addressTimer); addressTimer = setTimeout(searchAddresses, 700);
   });
+  // Al salir de la calle se cierran las sugerencias y se corta la búsqueda pendiente.
+  $(document.body).on('blur', '#billing_address_1', function () { setTimeout(function () { if (!$('#billing_address_1').is(':focus')) hideAddressList(); }, 150); });
   function chooseAddress(event) {
+    var $list = $('#cvd-address-suggestions');
+    // Toque justo cuando la lista acaba de salir: era para el campo de abajo, no para la sugerencia.
+    if (event.type === 'pointerdown' && Date.now() - ($list.data('shownAt') || 0) < 400) { hideAddressList(); return; }
     event.preventDefault();
     event.stopPropagation();
+    var map = this.getAttribute('data-map') || '';
     $('#billing_address_1').val(this.getAttribute('data-value') || '').trigger('change');
-    $('#billing_cvd_map_url').val(this.getAttribute('data-map') || '').trigger('change');
-    $('#cvd-address-suggestions').hide();
+    if (map && mapInCuba(map)) {
+      $('#billing_cvd_map_url').val(map).attr('data-cvd-source', 'suggestion').trigger('change');
+      $('.cvd-location-view').attr('href', map).show();
+    }
+    hideAddressList();
+    // Lo próximo que escriba va a «Entre calles», no se pega al final de la calle («…Madridentre B y C»).
+    var $next = $('#billing_address_2');
+    if ($next.length) $next.trigger('focus'); else $('#billing_address_1').trigger('blur');
   }
   $(document.body).on('pointerdown', '.cvd-address-option', chooseAddress);
   $(document.body).on('keydown', '.cvd-address-option', function (event) {
@@ -297,23 +332,55 @@
 	var DAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 	function ymdDate(ymd) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd || ''); return m ? new Date(+m[1], m[2] - 1, +m[3]) : null; }
 	function ymdOf(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+	// Admite 2026-10-12 (lo normal en un campo de fecha) y 12/10/2026 (navegadores sin calendario, que lo dejan como texto).
+	function anyDate(v) {
+	  var d = ymdDate(v); if (d) return d;
+	  var m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/.exec($.trim(v || ''));
+	  return m ? new Date(+m[3], m[2] - 1, +m[1]) : null;
+	}
 	function dayText(ymd) {
-	  var d = ymdDate(ymd); if (!d) return 'Lo antes posible';
+	  if (!$.trim(ymd || '')) return 'Lo antes posible';
+	  var d = anyDate(ymd); if (!d) return $.trim(ymd); // algo escrito que no entendemos: se enseña tal cual, nunca «Lo antes posible»
 	  var today = ymdDate($('#billing_cvd_delivery_date').attr('min')) || new Date(new Date().setHours(0, 0, 0, 0));
 	  var diff = Math.round((d - today) / 864e5), short = DAYS[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth() + 1);
 	  return diff === 0 ? 'Hoy' : diff === 1 ? 'Mañana ' + short : short;
 	}
+	// Botones Hoy / Mañana / Lo antes posible (3.13.54): en la prueba grabada se tocó «Mañana» y la revisión dijo
+	// «Lo antes posible». Ahora el botón pone el día con el valor nativo del campo, avisa con input/change,
+	// queda marcado y debajo se lee «Elegido: …»; si el campo no acepta el valor, se escribe como texto.
+	function setDeliveryDay(value) {
+	  var input = document.getElementById('billing_cvd_delivery_date'); if (!input) return;
+	  input.value = value;
+	  if (value && input.value !== value) { try { input.type = 'text'; } catch (e) {} input.value = value; }
+	  input.setAttribute('value', value);
+	  $(input).trigger('input').trigger('change');
+	  syncDayChips();
+	}
+	function syncDayChips() {
+	  var $input = $('#billing_cvd_delivery_date'); if (!$input.length) return;
+	  var value = $.trim($input.val() || ''), d = anyDate(value), ymd = d ? ymdOf(d) : value;
+	  var $chips = $input.siblings('.cvd-day-chips');
+	  $chips.find('[data-day]').each(function () {
+	    var on = $(this).attr('data-day') === ymd;
+	    $(this).attr('aria-pressed', on ? 'true' : 'false').css({ background: on ? '#004042' : '', color: on ? '#fff' : '', borderColor: on ? '#004042' : '', fontWeight: on ? 700 : '' });
+	  });
+	  $input.siblings('.cvd-day-chosen').text('Elegido: ' + dayText(value));
+	}
 	function prepareDayChips() {
-	  var $input = $('#billing_cvd_delivery_date'); if (!$input.length || $input.siblings('.cvd-day-chips').length) return;
+	  var $input = $('#billing_cvd_delivery_date'); if (!$input.length) return;
+	  if ($input.siblings('.cvd-day-chips').length) { syncDayChips(); return; }
 	  var today = ymdDate($input.attr('min')) || new Date(new Date().setHours(0, 0, 0, 0));
 	  var tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-	  var chips = $('<span class="cvd-day-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"></span>');
-	  [['Hoy', ymdOf(today)], ['Mañana', ymdOf(tomorrow)], ['Lo antes posible', '']].forEach(function (c) {
-	    $('<button type="button" class="button" style="padding:4px 10px;font-size:.85em;line-height:1.4"></button>').text(c[0]).attr('data-day', c[1]).appendTo(chips);
+	  var chips = $('<span class="cvd-day-chips" role="group" aria-label="Día de entrega" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"></span>');
+	  [['Hoy', ymdOf(today)], ['Mañana ' + DAYS[tomorrow.getDay()], ymdOf(tomorrow)], ['Lo antes posible', '']].forEach(function (c) {
+	    $('<button type="button" class="button cvd-day-chip" aria-pressed="false" style="padding:4px 10px;font-size:.85em;line-height:1.4"></button>').text(c[0]).attr('data-day', c[1]).appendTo(chips);
 	  });
-	  $input.after(chips);
+	  // Enlazado en cada botón (no solo delegado en body): ningún otro script puede tragarse el toque.
+	  chips.on('click', '[data-day]', function (event) { event.preventDefault(); event.stopPropagation(); setDeliveryDay($(this).attr('data-day') || ''); });
+	  $input.after($('<small class="cvd-day-chosen" aria-live="polite" style="display:block;margin-top:4px;font-weight:600"></small>')).after(chips);
+	  syncDayChips();
 	}
-	$(document.body).on('click', '.cvd-day-chips [data-day]', function () { $('#billing_cvd_delivery_date').val($(this).attr('data-day')).trigger('change'); });
+	$(document.body).on('input change', '#billing_cvd_delivery_date', syncDayChips);
 	$(prepareDayChips);
 	function fieldText(selector) { var el = $(selector); if (!el.length) return ''; return el.is('select') ? $.trim(el.find('option:selected').text()) : $.trim(el.val() || ''); }
 	function reviewSummary() {

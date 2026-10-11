@@ -8,6 +8,8 @@ defined( 'ABSPATH' ) || exit;
  * El pedido siempre se guarda en WooCommerce antes de continuar a WhatsApp.
  */
 final class CVD_Cuban_Checkout {
+	/** Notas para el pedido que se está creando: en woocommerce_checkout_create_order aún no tiene número y add_order_note() no guardaría nada. */
+	private static array $pending_notes = array();
 	public static function register(): void {
 		add_filter( 'woocommerce_states', array( __CLASS__, 'register_provinces' ) );
 		add_filter( 'default_checkout_billing_country', array( __CLASS__, 'default_country' ) );
@@ -24,6 +26,7 @@ final class CVD_Cuban_Checkout {
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_action( 'woocommerce_after_checkout_validation', array( __CLASS__, 'validate' ), 10, 2 );
 		add_action( 'woocommerce_checkout_create_order', array( __CLASS__, 'save_order_fields' ), 20, 2 );
+		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'flush_notes' ), 5 );
 		add_action( 'woocommerce_admin_order_data_after_billing_address', array( __CLASS__, 'admin_order_fields' ) );
 		add_action( 'woocommerce_order_details_after_customer_details', array( __CLASS__, 'customer_order_fields' ) );
 	}
@@ -262,7 +265,8 @@ final class CVD_Cuban_Checkout {
 		);
 		$fields['billing']['billing_cvd_delivery_window'] = array(
 			'type' => 'select', 'label' => 'Horario', 'required' => false,
-			'options' => array( '' => 'Sin preferencia', 'morning' => 'Mañana', 'afternoon' => 'Tarde' ),
+			// 3.13.54: «Por la mañana», no «Mañana» a secas: en la prueba grabada se confundía con el DÍA de mañana.
+			'options' => array( '' => 'Sin preferencia', 'morning' => 'Por la mañana', 'afternoon' => 'Por la tarde' ),
 			'class' => array( 'form-row-last', 'cvd-delivery-field' ), 'priority' => 122,
 		);
 		$fields['billing']['billing_cvd_change_amount'] = array(
@@ -371,6 +375,14 @@ final class CVD_Cuban_Checkout {
 		$order->update_meta_data( '_cvd_fulfillment_type', $type );
 		$order->update_meta_data( '_cvd_buyer_name', isset( $_POST['billing_cvd_buyer_name'] ) ? sanitize_text_field( wp_unslash( $_POST['billing_cvd_buyer_name'] ) ) : '' );
 		$order->update_meta_data( '_cvd_alternate_phone', sanitize_text_field( wp_unslash( $_POST['billing_cvd_alternate_phone'] ?? '' ) ) );
+		// Pedido de prueba automático (3.13.54): «PRUEBA» en el nombre o la nota → nunca sale al reparto (ver CVD_Delivery::is_test_order).
+		if ( class_exists( 'CVD_Delivery' ) && ! CVD_Delivery::is_test_order( $order ) && CVD_Delivery::looks_like_test(
+			(string) ( $data['billing_first_name'] ?? '' ), (string) ( $data['billing_last_name'] ?? '' ), (string) ( $data['order_comments'] ?? '' ),
+			sanitize_text_field( wp_unslash( $_POST['billing_cvd_buyer_name'] ?? '' ) )
+		) ) {
+			$order->update_meta_data( CVD_Delivery::TEST_META, 'auto' );
+			self::note( $order, 'Pedido de prueba (el nombre o la nota dicen «PRUEBA»): no sale al reparto.' );
+		}
 		if ( 'pickup' === $type ) {
 			// Recogida: el formulario puede traer precargados dirección y vuelto de pedidos anteriores
 			// (campos ocultos). No se guardan en el pedido ni salen en el vale (mejora #23).
@@ -388,8 +400,12 @@ final class CVD_Cuban_Checkout {
 		$order->update_meta_data( '_cvd_province_name', self::provinces()[ $state ] ?? $state );
 		$order->update_meta_data( '_cvd_locality', isset( $_POST['billing_cvd_locality'] ) ? sanitize_text_field( wp_unslash( $_POST['billing_cvd_locality'] ) ) : '' );
 		$order->update_meta_data( '_cvd_reference', isset( $_POST['billing_cvd_reference'] ) ? sanitize_text_field( wp_unslash( $_POST['billing_cvd_reference'] ) ) : '' );
-		$order->update_meta_data( '_cvd_map_url', isset( $_POST['billing_cvd_map_url'] ) ? esc_url_raw( wp_unslash( $_POST['billing_cvd_map_url'] ) ) : '' );
-		$order->update_meta_data( '_cvd_map_accuracy', isset( $_POST['billing_cvd_map_accuracy'] ) ? absint( $_POST['billing_cvd_map_accuracy'] ) : 0 );
+		// 3.13.54: nunca se guarda una ubicación de fuera de Cuba (en la prueba del 11-oct se guardó Madrid y el vale abrió el mapa allí).
+		$map_raw = isset( $_POST['billing_cvd_map_url'] ) ? (string) esc_url_raw( wp_unslash( $_POST['billing_cvd_map_url'] ) ) : '';
+		$map_url = CVD_Shipping_Rates::safe_map_url( $map_raw );
+		$order->update_meta_data( '_cvd_map_url', $map_url );
+		$order->update_meta_data( '_cvd_map_accuracy', $map_url && isset( $_POST['billing_cvd_map_accuracy'] ) ? absint( $_POST['billing_cvd_map_accuracy'] ) : 0 );
+		if ( $map_raw && ! $map_url ) { self::note( $order, 'La ubicación del mapa estaba fuera de Cuba y no se guardó. El mensajero se guía por la dirección escrita.' ); }
 		$order->update_meta_data( '_cvd_delivery_date', CVD_Delivery_When::normalize( sanitize_text_field( wp_unslash( $_POST['billing_cvd_delivery_date'] ?? '' ) ) ) );
 		$window = sanitize_key( wp_unslash( $_POST['billing_cvd_delivery_window'] ?? '' ) );
 		$order->update_meta_data( '_cvd_delivery_window', in_array( $window, array( 'morning', 'afternoon' ), true ) ? $window : '' );
@@ -408,6 +424,17 @@ final class CVD_Cuban_Checkout {
 		$order->update_meta_data( '_cvd_change_required', $change_required );
 	}
 
+	private static function note( WC_Order $order, string $text ): void {
+		if ( $order->get_id() ) { $order->add_order_note( $text ); return; }
+		self::$pending_notes[] = $text;
+	}
+
+	public static function flush_notes( $order ): void {
+		$notes = self::$pending_notes; self::$pending_notes = array();
+		if ( ! $order instanceof WC_Order ) { return; }
+		foreach ( $notes as $text ) { $order->add_order_note( $text ); }
+	}
+
 	public static function admin_order_fields( WC_Order $order ): void {
 		echo '<div class="cvd-order-delivery"><h3>Entrega Casa Viva</h3>';
 		echo '<p><strong>Modalidad:</strong> ' . esc_html( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ? 'Recogida en tienda' : 'Mensajería' ) . '</p>';
@@ -415,6 +442,7 @@ final class CVD_Cuban_Checkout {
 		echo '<p><strong>Tarifa guardada:</strong> ' . esc_html( $shipping_cup ? number_format_i18n( $shipping_cup, 0 ) . ' CUP' : 'Por confirmar' ) . '</p>';
 		foreach ( array( '_cvd_locality' => 'Reparto/localidad', '_cvd_reference' => 'Referencia', '_cvd_alternate_phone' => 'Teléfono alternativo', '_cvd_delivery_date' => 'Día de entrega', '_cvd_delivery_window' => 'Horario solicitado', '_cvd_map_url' => 'Ubicación en mapa', '_cvd_buyer_name' => 'Persona que compra/paga' ) as $key => $label ) {
 			$value = $order->get_meta( $key, true );
+			if ( '_cvd_map_url' === $key ) { $value = CVD_Shipping_Rates::safe_map_url( (string) $value ); }
 			if ( $value ) {
 				echo '<p><strong>' . esc_html( $label ) . ':</strong> ';
 				echo '_cvd_map_url' === $key ? '<a href="' . esc_url( $value ) . '" target="_blank" rel="noopener">Abrir ubicación</a>' : esc_html( $value );
@@ -434,7 +462,7 @@ final class CVD_Cuban_Checkout {
 			echo esc_html( implode( ', ', array_filter( array( $order->get_billing_address_1(), $order->get_billing_address_2(), $order->get_meta( '_cvd_locality', true ), $order->get_billing_city(), $order->get_meta( '_cvd_province_name', true ) ) ) ) );
 		}
 		echo '</p>';
-		$map_url = $order->get_meta( '_cvd_map_url', true );
+		$map_url = CVD_Shipping_Rates::order_map_url( $order );
 		if ( $map_url ) { echo '<p><a class="button" href="' . esc_url( $map_url ) . '" target="_blank" rel="noopener">Abrir ubicación en el mapa</a></p>'; }
 		echo '</section>';
 	}

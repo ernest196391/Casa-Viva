@@ -325,7 +325,7 @@ final class CVD_Portal {
 			$change_label = self::messenger_change_label( $order ); if ( $change_label ) { $change[] = $number . ': ' . $change_label; }
 			$obligations = class_exists( 'CVD_Payment_Obligations' ) ? CVD_Payment_Obligations::for_order( $order ) : array();
 			$payers = array_unique( array_column( $obligations, 'payer' ) ); if ( count( $payers ) > 1 ) { $split[] = $number; }
-			$gaps = array(); if ( ! trim( (string) $order->get_billing_phone() ) ) { $gaps[] = 'teléfono'; } if ( ! trim( (string) $order->get_meta( '_cvd_map_url', true ) ) ) { $gaps[] = 'mapa'; } if ( ! CVD_Shipping_Rates::order_fee( $order ) ) { $gaps[] = 'tarifa'; } if ( $gaps ) { $missing[] = $number . ': ' . implode( ', ', $gaps ); }
+			$gaps = array(); if ( ! trim( (string) $order->get_billing_phone() ) ) { $gaps[] = 'teléfono'; } if ( ! trim( (string) CVD_Shipping_Rates::order_map_url( $order ) ) ) { $gaps[] = 'mapa'; } if ( ! CVD_Shipping_Rates::order_fee( $order ) ) { $gaps[] = 'tarifa'; } if ( $gaps ) { $missing[] = $number . ': ' . implode( ', ', $gaps ); }
 			$zone = CVD_Delivery::destination_zone( $order ); if ( $zone ) { $zones[ $zone ] = ( $zones[ $zone ] ?? 0 ) + 1; }
 			foreach ( $order->get_items( 'line_item' ) as $item ) { $name = wp_strip_all_tags( $item->get_name() ); $products[ $name ] = ( $products[ $name ] ?? 0 ) + max( 1, (int) $item->get_quantity() ); }
 		}
@@ -368,7 +368,7 @@ final class CVD_Portal {
 		foreach ( $orders as $order ) {
 			foreach ( $order->get_items( 'line_item' ) as $item ) { $products += max( 1, (int) $item->get_quantity() ); }
 			if ( trim( (string) $order->get_customer_note() ) ) { $notes++; }
-			if ( ! $order->get_meta( '_cvd_map_url', true ) ) { $without_map++; }
+			if ( ! CVD_Shipping_Rates::order_map_url( $order ) ) { $without_map++; }
 			if ( class_exists( 'CVD_Messenger_Contacts' ) && CVD_Messenger_Contacts::latest( $order ) ) { $contacted++; }
 			$operation = sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) );
 			$stage = self::messenger_delivery_stage( $order );
@@ -509,9 +509,9 @@ final class CVD_Portal {
 			$phone = trim( (string) $order->get_billing_phone() );
 			$reference = trim( (string) $order->get_meta( '_cvd_reference', true ) );
 			$note = trim( (string) $order->get_customer_note() );
-			$map_url = esc_url( (string) $order->get_meta( '_cvd_map_url', true ) );
+			$map_url = esc_url( (string) CVD_Shipping_Rates::order_map_url( $order ) );
 			$shipping_cup = class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_fee( $order ) : absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) );
-			$html .= '<article data-route-stop="' . esc_attr( $order->get_id() ) . '"><header><div><span class="cvd-route-position">Parada</span><strong>#' . esc_html( $order->get_order_number() ) . ' · ' . esc_html( CVD_Delivery::destination_zone( $order ) ?: 'Zona por confirmar' ) . '</strong></div><div class="cvd-route-order"><button type="button" data-route-up aria-label="Subir pedido ' . esc_attr( $order->get_order_number() ) . '">Subir</button><button type="button" data-route-down aria-label="Bajar pedido ' . esc_attr( $order->get_order_number() ) . '">Bajar</button></div></header>';
+			$html .= '<article data-route-stop="' . esc_attr( $order->get_id() ) . '">' . self::test_badge( $order ) . '<header><div><span class="cvd-route-position">Parada</span><strong>#' . esc_html( $order->get_order_number() ) . ' · ' . esc_html( CVD_Delivery::destination_zone( $order ) ?: 'Zona por confirmar' ) . '</strong></div><div class="cvd-route-order"><button type="button" data-route-up aria-label="Subir pedido ' . esc_attr( $order->get_order_number() ) . '">Subir</button><button type="button" data-route-down aria-label="Bajar pedido ' . esc_attr( $order->get_order_number() ) . '">Bajar</button></div></header>';
 			$html .= '<p class="cvd-route-address">' . ( $address ? wp_kses_post( $address ) : '<b>Dirección no registrada</b>' ) . '</p>' . ( $reference ? '<small><b>Referencia:</b> ' . esc_html( $reference ) . '</small>' : '<small>Referencia no registrada</small>' );
 			$html .= '<div class="cvd-route-items"><strong>Productos</strong><ul>'; foreach ( $order->get_items( 'line_item' ) as $item ) { $html .= '<li>' . esc_html( max( 1, (int) $item->get_quantity() ) . ' × ' . $item->get_name() ) . '</li>'; } $html .= '</ul></div>';
 			$html .= '<div class="cvd-delivery-money"><div><span>Pedido</span><strong>' . wp_kses_post( wc_price( $order->get_total(), array( 'currency' => $order->get_currency() ) ) ) . '</strong></div><div><span>Mensajería total</span><strong>' . esc_html( $shipping_cup ? number_format_i18n( $shipping_cup, 0 ) . ' CUP' : 'Por confirmar con la tienda' ) . '</strong></div>';
@@ -568,7 +568,7 @@ final class CVD_Portal {
 			$note = trim( (string) $order->get_customer_note() );
 			$zone = trim( (string) CVD_Delivery::destination_zone( $order ) );
 			$operation_status = sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) );
-			$html .= '<article data-delivery-id="' . esc_attr( $order->get_id() ) . '" data-delivery-status="' . esc_attr( $status ) . '" data-operation-status="' . esc_attr( $operation_status ) . '"><header><div><small class="cvd-delivery-zone">' . esc_html( $zone ?: 'Zona por confirmar' ) . '</small><strong>Pedido #' . esc_html( $order->get_order_number() ) . '</strong><small>' . esc_html( $order->get_formatted_billing_full_name() ) . ( $phone ? ' · ' . esc_html( $phone ) : '' ) . '</small></div><span class="cvd-badge">' . esc_html( CVD_Delivery::label( $status ) ) . '</span></header>';
+			$html .= '<article data-delivery-id="' . esc_attr( $order->get_id() ) . '" data-delivery-status="' . esc_attr( $status ) . '" data-operation-status="' . esc_attr( $operation_status ) . '">' . self::test_badge( $order ) . '<header><div><small class="cvd-delivery-zone">' . esc_html( $zone ?: 'Zona por confirmar' ) . '</small><strong>Pedido #' . esc_html( $order->get_order_number() ) . '</strong><small>' . esc_html( $order->get_formatted_billing_full_name() ) . ( $phone ? ' · ' . esc_html( $phone ) : '' ) . '</small></div><span class="cvd-badge">' . esc_html( CVD_Delivery::label( $status ) ) . '</span></header>';
 			$html .= '<div class="cvd-delivery-address"><strong>Entregar en</strong><p>' . ( $address ? wp_kses_post( $address ) : 'Dirección por confirmar' ) . '</p>' . ( $reference ? '<small><b>Referencia:</b> ' . esc_html( $reference ) . '</small>' : '' ) . '</div>';
 			$schedule = self::messenger_schedule_label( $order ); $change = self::messenger_change_label( $order );
 			if ( $schedule ) { $html .= '<div class="cvd-route-window"><span>📅 Día de entrega</span><strong>' . esc_html( $schedule ) . '</strong></div>'; }
@@ -578,7 +578,7 @@ final class CVD_Portal {
 			$html .= '</ul></div><div class="cvd-delivery-money"><div><span>Pedido</span><strong>' . wp_kses_post( $order_total ) . '</strong></div><div><span>Mensajería</span><strong>' . esc_html( $shipping_cup ? number_format_i18n( $shipping_cup, 0 ) . ' CUP' : 'Por confirmar' ) . '</strong></div></div>';
 			if ( $change ) { $html .= '<div class="cvd-delivery-note" role="note"><b>Vuelto confirmado</b><p>Llevar ' . esc_html( $change ) . ' de vuelto.</p></div>'; }
 			if ( $note ) { $html .= '<div class="cvd-delivery-note" role="note"><b>Nota operativa</b><p>' . esc_html( $note ) . '</p></div>'; }
-			$map_url = esc_url( (string) $order->get_meta( '_cvd_map_url', true ) );
+			$map_url = esc_url( (string) CVD_Shipping_Rates::order_map_url( $order ) );
 			if ( in_array( $status, array( 'accepted', 'to_store', 'picked_up', 'handed_over' ), true ) ) {
 				$html .= '<div class="cvd-messenger-tools">';
 				if ( $phone ) { $digits = preg_replace( '/\D+/', '', $phone ); $html .= '<a class="cvd-secondary" href="https://wa.me/' . esc_attr( $digits ) . '?text=' . rawurlencode( self::messenger_whatsapp_message( $order ) ) . '" target="_blank" rel="noopener">WhatsApp</a><a class="cvd-secondary" href="tel:' . esc_attr( $phone ) . '">Llamar</a>'; }
@@ -613,6 +613,12 @@ final class CVD_Portal {
 		return $html . '</div>';
 	}
 
+	/** 3.13.54: cartel grande en las tarjetas del mensajero si el pedido es de prueba (no se lleva). */
+	private static function test_badge( $order ): string {
+		if ( ! class_exists( 'CVD_Delivery' ) || ! CVD_Delivery::is_test_order( $order ) ) { return ''; }
+		return '<p class="cvd-test-badge" role="note" style="margin:0 0 10px;padding:10px 12px;border-radius:12px;background:#b3261e;color:#fff;font-weight:800;font-size:1.15em;text-align:center">PRUEBA — no preparar<br><small style="font-weight:600;font-size:.75em">Es un pedido de prueba: no se lleva.</small></p>';
+	}
+
 	private static function messenger_offers( array $offers ): string {
 		if ( ! $offers ) { return '<p class="cvd-empty-state">No hay carreras disponibles ahora.</p>'; }
 		$html = '<div class="cvd-offer-list">';
@@ -620,7 +626,7 @@ final class CVD_Portal {
 		foreach ( $offers as $order ) {
 			$items = 0; foreach ( $order->get_items( 'line_item' ) as $item ) { $items += max( 1, (int) $item->get_quantity() ); }
 			$match = CVD_Delivery::zone_matches( $user, $order );
-			$html .= '<article data-offer-id="' . esc_attr( $order->get_id() ) . '"><div><span class="cvd-badge">' . ( $match ? 'Cerca de tu zona' : 'Disponible' ) . '</span><h3>' . esc_html( CVD_Delivery::destination_zone( $order ) ) . '</h3><p>Recogida en Casa Viva · ' . esc_html( $items ) . ' producto' . ( 1 === $items ? '' : 's' ) . '</p></div><strong>' . esc_html( number_format_i18n( CVD_Delivery::courier_amount( $order ), 0 ) ) . ' CUP</strong><footer><a class="cvd-primary" href="' . esc_url( CVD_Delivery::offer_action_url( $order->get_id(), 'accept' ) ) . '">Aceptar</a><a class="cvd-secondary" href="' . esc_url( CVD_Delivery::offer_action_url( $order->get_id(), 'decline' ) ) . '">Ahora no</a></footer></article>';
+			$html .= '<article data-offer-id="' . esc_attr( $order->get_id() ) . '">' . self::test_badge( $order ) . '<div><span class="cvd-badge">' . ( $match ? 'Cerca de tu zona' : 'Disponible' ) . '</span><h3>' . esc_html( CVD_Delivery::destination_zone( $order ) ) . '</h3><p>Recogida en Casa Viva · ' . esc_html( $items ) . ' producto' . ( 1 === $items ? '' : 's' ) . '</p></div><strong>' . esc_html( number_format_i18n( CVD_Delivery::courier_amount( $order ), 0 ) ) . ' CUP</strong><footer><a class="cvd-primary" href="' . esc_url( CVD_Delivery::offer_action_url( $order->get_id(), 'accept' ) ) . '">Aceptar</a><a class="cvd-secondary" href="' . esc_url( CVD_Delivery::offer_action_url( $order->get_id(), 'decline' ) ) . '">Ahora no</a></footer></article>';
 		}
 		return $html . '</div>';
 	}

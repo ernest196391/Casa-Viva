@@ -200,7 +200,7 @@ final class CVD_WhatsApp_Receipt_Template {
 			$address_lines = array_values( array_filter( array( $street, $location ) ) );
 		}
 
-		$map_url = $is_pickup ? '' : esc_url_raw( (string) $order->get_meta( '_cvd_map_url', true ) );
+		$map_url = $is_pickup ? '' : esc_url_raw( (string) CVD_Shipping_Rates::order_map_url( $order ) );
 		return array(
 			'type'          => $fulfillment,
 			'label'         => $is_pickup ? 'Recogida en tienda' : 'Entrega a domicilio',
