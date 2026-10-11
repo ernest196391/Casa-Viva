@@ -34,6 +34,9 @@ final class CVD_Panel_Bridge {
 		register_rest_route( self::NS, '/panel/stock/web-sales', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'web_sales' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/stock/levels', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'stock_levels' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/price', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'set_price' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/products/prices', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'set_prices' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/curru/status', array( 'methods' => 'GET', 'callback' => static fn() => self::no_cache( array( 'enabled' => class_exists( 'CVD_Curru_AI' ) && CVD_Curru_AI::enabled() ) ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/curru/invoice', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'curru_invoice' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/save', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'save_product' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/messengers', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'messengers' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/messengers/(?P<id>\d+)/status', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'gestora_status' ), 'permission_callback' => $auth ) );
@@ -43,6 +46,32 @@ final class CVD_Panel_Bridge {
 		// Tarifas de mensajería por zona (CUP): las mismas que usa el checkout y el reparto.
 		register_rest_route( self::NS, '/panel/shipping-rates', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'shipping_rates' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/shipping-rates', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'shipping_rate_save' ), 'permission_callback' => $auth ) );
+	}
+
+	/** Precios en masa desde el panel: [{wooId, regular, sale|null}]. sale = precio de oferta (null la quita). */
+	public static function set_prices( WP_REST_Request $request ): WP_REST_Response {
+		$done = array();
+		foreach ( array_slice( (array) $request->get_param( 'items' ), 0, 500 ) as $it ) {
+			$product = wc_get_product( absint( $it['wooId'] ?? 0 ) );
+			$regular = (float) ( $it['regular'] ?? 0 );
+			$sale = isset( $it['sale'] ) && null !== $it['sale'] ? (float) $it['sale'] : null;
+			if ( ! $product || $regular <= 0 || ( null !== $sale && $sale >= $regular ) ) { $done[] = array( 'wooId' => absint( $it['wooId'] ?? 0 ), 'ok' => false ); continue; }
+			$product->set_regular_price( wc_format_decimal( $regular, 2 ) );
+			$product->set_sale_price( null === $sale ? '' : wc_format_decimal( $sale, 2 ) );
+			$product->save();
+			$done[] = array( 'wooId' => $product->get_id(), 'ok' => true );
+		}
+		return self::no_cache( array( 'items' => $done ) );
+	}
+
+	/** Curru lee una factura para "Llegó mercancía" del panel (misma IA que la tienda). */
+	public static function curru_invoice( WP_REST_Request $request ) {
+		$p = (array) $request->get_json_params();
+		$image = (string) ( $p['image'] ?? '' );
+		if ( strlen( $image ) > 1500000 ) { return new WP_Error( 'cvd_curru', 'Foto demasiado grande.', array( 'status' => 413 ) ); }
+		$data = class_exists( 'CVD_Curru_AI' ) ? CVD_Curru_AI::read_image( (string) ( $p['system'] ?? '' ), $image ) : null;
+		if ( null === $data ) { return new WP_Error( 'cvd_curru', 'Curru no pudo leerla.', array( 'status' => 502 ) ); }
+		return self::no_cache( $data );
 	}
 
 	/** Mensajeros: estado (aprobar/rechazar con la misma lógica que gestoras), zona, vehículo, disponibilidad, carreras y saldo. */

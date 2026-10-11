@@ -147,6 +147,39 @@ final class CVD_Curru_AI {
 		);
 	}
 
+	/**
+	 * Leer una imagen (factura) para el panel NEXO, con la misma clave y modelo que la Curru de la tienda.
+	 * La clave nunca sale del servidor: NEXO manda la foto y recibe solo el JSON leído.
+	 */
+	public static function read_image( string $system, string $image ): ?array {
+		if ( ! self::enabled() || ! preg_match( '#^data:image/(jpeg|png|webp);base64,#', $image ) ) { return null; }
+		$base = untrailingslashit( (string) get_option( self::OPTION_BASE, self::DEFAULT_BASE ) ?: self::DEFAULT_BASE );
+		$response = wp_remote_post( $base . '/chat/completions', array(
+			'timeout' => 60,
+			'headers' => array( 'Authorization' => 'Bearer ' . get_option( self::OPTION_KEY, '' ), 'Content-Type' => 'application/json' ),
+			'body'    => wp_json_encode( array(
+				'model'           => (string) get_option( self::OPTION_MODEL, self::DEFAULT_MODEL ) ?: self::DEFAULT_MODEL,
+				'temperature'     => 0,
+				'max_tokens'      => 1500,
+				'response_format' => array( 'type' => 'json_object' ),
+				'messages'        => array(
+					array( 'role' => 'system', 'content' => $system ),
+					array( 'role' => 'user', 'content' => array(
+						array( 'type' => 'text', 'text' => 'Lee esta factura.' ),
+						array( 'type' => 'image_url', 'image_url' => array( 'url' => $image ) ),
+					) ),
+				),
+			) ),
+		) );
+		if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
+			error_log( 'Curru factura: ' . ( is_wp_error( $response ) ? $response->get_error_code() : 'HTTP ' . wp_remote_retrieve_response_code( $response ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			return null;
+		}
+		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+		$data = json_decode( (string) ( $body['choices'][0]['message']['content'] ?? '' ), true );
+		return is_array( $data ) ? $data : null;
+	}
+
 	private static function request( array $messages ): ?array {
 		$base = untrailingslashit( (string) get_option( self::OPTION_BASE, self::DEFAULT_BASE ) ?: self::DEFAULT_BASE );
 		$response = wp_remote_post(
