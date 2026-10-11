@@ -29,6 +29,85 @@ final class CVD_Panel_Bridge {
 		// Pedidos: las mismas rutas del Centro de ventas (/sales), ejecutadas como la dueña.
 		register_rest_route( self::NS, '/panel/sales', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'sales' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/sales/(?P<id>\d+)/(?P<what>status|return)', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'sales_action' ), 'permission_callback' => $auth ) );
+		// Puente de existencias NEXO ↔ web (D37 fase 2: un solo stock). Solo movimientos, nunca totales a ciegas.
+		register_rest_route( self::NS, '/panel/stock/adjust', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'stock_adjust' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/stock/web-sales', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'web_sales' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/stock/levels', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'stock_levels' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/products/price', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'set_price' ), 'permission_callback' => $auth ) );
+	}
+
+	private static function keys_table(): string {
+		global $wpdb;
+		$table = $wpdb->prefix . 'cvd_nexo_stock_keys';
+		if ( get_option( 'cvd_nexo_stock_keys_v' ) !== '1' ) {
+			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+			dbDelta( "CREATE TABLE {$table} ( stock_key varchar(190) NOT NULL, product_id bigint(20) unsigned NOT NULL, delta int NOT NULL, applied_at datetime NOT NULL, PRIMARY KEY  (stock_key) ) {$wpdb->get_charset_collate()};" );
+			update_option( 'cvd_nexo_stock_keys_v', '1', false );
+		}
+		return $table;
+	}
+
+	/** Aplica movimientos de la caja a la web: [{key, wooId, delta}]. Cada key se aplica una sola vez. */
+	public static function stock_adjust( WP_REST_Request $request ) {
+		global $wpdb;
+		$table = self::keys_table();
+		$done = array();
+		foreach ( (array) $request->get_param( 'items' ) as $item ) {
+			$key = substr( sanitize_text_field( (string) ( $item['key'] ?? '' ) ), 0, 190 );
+			$id = absint( $item['wooId'] ?? 0 );
+			$delta = (int) ( $item['delta'] ?? 0 );
+			if ( '' === $key || ! $id || 0 === $delta ) { continue; }
+			// Reservar la clave antes de tocar el stock: si ya existe, ya se aplicó.
+			if ( ! $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$table} (stock_key, product_id, delta, applied_at) VALUES (%s,%d,%d,%s)", $key, $id, $delta, current_time( 'mysql', true ) ) ) ) {
+				$done[] = array( 'key' => $key, 'already' => true );
+				continue;
+			}
+			$product = wc_get_product( $id );
+			if ( ! $product || ! $product->managing_stock() ) {
+				$done[] = array( 'key' => $key, 'skipped' => 'sin control de stock' );
+				continue;
+			}
+			$new = wc_update_product_stock( $product, abs( $delta ), $delta < 0 ? 'decrease' : 'increase' );
+			$done[] = array( 'key' => $key, 'stock' => $new );
+		}
+		return self::no_cache( array( 'applied' => $done ) );
+	}
+
+	/** Líneas de pedidos web que descontaron (o devolvieron) stock, modificados desde ?since=. */
+	public static function web_sales( WP_REST_Request $request ): WP_REST_Response {
+		$since = sanitize_text_field( (string) $request->get_param( 'since' ) );
+		$orders = wc_get_orders( array( 'limit' => 200, 'type' => 'shop_order', 'orderby' => 'modified', 'order' => 'ASC', 'date_modified' => '>=' . ( strtotime( $since ) ?: time() - 86400 ), 'status' => array( 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed' ) ) );
+		$rows = array();
+		foreach ( $orders as $order ) {
+			$lines = array();
+			foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
+				$lines[] = array( 'itemId' => $item_id, 'wooId' => $item->get_variation_id() ?: $item->get_product_id(), 'qty' => (int) $item->get_quantity(), 'reduced' => (int) $item->get_meta( '_reduced_stock', true ) );
+			}
+			$rows[] = array( 'id' => $order->get_id(), 'number' => $order->get_order_number(), 'status' => $order->get_status(), 'modified' => $order->get_date_modified() ? $order->get_date_modified()->date( 'c' ) : null, 'lines' => $lines );
+		}
+		return self::no_cache( array( 'orders' => $rows, 'now' => gmdate( 'c' ) ) );
+	}
+
+	/** Existencias actuales de la web por producto (para comparar con la caja). */
+	public static function stock_levels(): WP_REST_Response {
+		$rows = array();
+		foreach ( wc_get_products( array( 'limit' => -1, 'status' => array( 'publish', 'private' ), 'type' => array( 'simple', 'variable' ) ) ) as $product ) {
+			$items = $product->is_type( 'variable' ) ? array_filter( array_map( 'wc_get_product', $product->get_children() ) ) : array( $product );
+			foreach ( $items as $p ) {
+				$rows[] = array( 'wooId' => $p->get_id(), 'stock' => $p->managing_stock() ? (int) $p->get_stock_quantity() : null, 'price' => (float) $p->get_regular_price(), 'status' => $product->get_status() );
+			}
+		}
+		return self::no_cache( array( 'products' => $rows ) );
+	}
+
+	/** Cambiar el precio normal de un producto o variante desde el panel. */
+	public static function set_price( WP_REST_Request $request ) {
+		$product = wc_get_product( absint( $request->get_param( 'wooId' ) ) );
+		$price = (float) $request->get_param( 'price' );
+		if ( ! $product || $price <= 0 ) { return new WP_Error( 'cvd_panel_price', 'Producto o precio no válido.', array( 'status' => 422 ) ); }
+		$product->set_regular_price( wc_format_decimal( $price, 2 ) );
+		$product->save();
+		return self::no_cache( array( 'ok' => true, 'price' => (float) wc_get_product( $product->get_id() )->get_regular_price() ) );
 	}
 
 	/** Ejecuta una ruta del Centro de ventas como la usuaria que firma el panel (sus permisos y reglas). */
