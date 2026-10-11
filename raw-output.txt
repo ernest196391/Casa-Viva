@@ -1,0 +1,35 @@
+{
+    "mode": "apply",
+    "source_count": 202,
+    "price_updates": [],
+    "created": [],
+    "published": [],
+    "stock_updates": [],
+    "variation_updates": [],
+    "hidden": [],
+    "no_image": [],
+    "photo_updates": [],
+    "unchanged": 201,
+    "skipped": [
+        {
+            "sku": "BC-102299",
+            "name": "Sobrecama tiwn",
+            "reason": "sin precio en BizneCubano"
+        }
+    ],
+    "categories_new": [],
+    "errors": [],
+    "totals": {
+        "price_updates": 0,
+        "created": 0,
+        "published": 0,
+        "stock_updates": 0,
+        "variation_updates": 0,
+        "hidden": 0,
+        "no_image": 0,
+        "photo_updates": 0,
+        "unchanged": 201,
+        "skipped": 1,
+        "errors": 0
+    }
+}
