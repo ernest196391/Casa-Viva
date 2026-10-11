@@ -34,6 +34,8 @@ final class CVD_Panel_Bridge {
 		register_rest_route( self::NS, '/panel/stock/web-sales', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'web_sales' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/stock/levels', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'stock_levels' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/price', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'set_price' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/sales/(?P<id>\d+)/edit', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'edit_order' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/sales/(?P<id>\d+)/detail', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'order_detail' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/prices', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'set_prices' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/curru/status', array( 'methods' => 'GET', 'callback' => static fn() => self::no_cache( array( 'enabled' => class_exists( 'CVD_Curru_AI' ) && CVD_Curru_AI::enabled() ) ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/curru/invoice', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'curru_invoice' ), 'permission_callback' => $auth ) );
@@ -46,6 +48,78 @@ final class CVD_Panel_Bridge {
 		// Tarifas de mensajería por zona (CUP): las mismas que usa el checkout y el reparto.
 		register_rest_route( self::NS, '/panel/shipping-rates', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'shipping_rates' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/shipping-rates', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'shipping_rate_save' ), 'permission_callback' => $auth ) );
+	}
+
+	private const EDITABLE = array( 'pending', 'processing', 'on-hold' );
+
+	/** Líneas y datos de entrega de un pedido, para editarlo desde el panel. */
+	public static function order_detail( WP_REST_Request $request ) {
+		$order = wc_get_order( absint( $request['id'] ) );
+		if ( ! $order || 'shop_order' !== $order->get_type() ) { return new WP_Error( 'cvd_panel_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
+		$lines = array();
+		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
+			$lines[] = array( 'itemId' => $item_id, 'name' => $item->get_name(), 'qty' => (int) $item->get_quantity(), 'total' => (float) $item->get_total() );
+		}
+		return self::no_cache( array( 'id' => $order->get_id(), 'number' => $order->get_order_number(), 'editable' => in_array( $order->get_status(), self::EDITABLE, true ),
+			'lines' => $lines, 'phone' => $order->get_billing_phone(), 'address' => $order->get_shipping_address_1() ?: $order->get_billing_address_1(), 'note' => $order->get_customer_note() ) );
+	}
+
+	/**
+	 * Editar un pedido abierto: cantidades (0 = quitar), añadir productos, teléfono, dirección y nota.
+	 * Ajusta el stock como en el administrador de WooCommerce y recalcula totales y comisión.
+	 */
+	public static function edit_order( WP_REST_Request $request ) {
+		$order = wc_get_order( absint( $request['id'] ) );
+		if ( ! $order || ! in_array( $order->get_status(), self::EDITABLE, true ) ) {
+			return new WP_Error( 'cvd_panel_order', 'Solo se pueden cambiar pedidos que aún no se han entregado ni cancelado.', array( 'status' => 409 ) );
+		}
+		require_once WC_ABSPATH . 'includes/admin/wc-admin-functions.php';
+		$p = (array) $request->get_json_params();
+		// Antes de tocar nada: el pedido no puede quedar vacío.
+		$final = array();
+		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) { $final[ $item_id ] = (int) $item->get_quantity(); }
+		foreach ( (array) ( $p['lines'] ?? array() ) as $l ) { if ( isset( $final[ absint( $l['itemId'] ?? 0 ) ] ) ) { $final[ absint( $l['itemId'] ) ] = max( 0, (int) ( $l['qty'] ?? 0 ) ); } }
+		if ( ! array_filter( $final ) && ! array_filter( (array) ( $p['add'] ?? array() ), static fn( $a ) => absint( $a['wooId'] ?? 0 ) > 0 ) ) {
+			return new WP_Error( 'cvd_panel_order', 'El pedido no puede quedar sin productos: cancélalo en su lugar.', array( 'status' => 422 ) );
+		}
+		$changes = array(); $stock = array();
+		foreach ( (array) ( $p['lines'] ?? array() ) as $l ) {
+			$item = $order->get_item( absint( $l['itemId'] ?? 0 ) );
+			$qty = max( 0, (int) ( $l['qty'] ?? -1 ) );
+			if ( ! $item instanceof WC_Order_Item_Product || (int) $item->get_quantity() === $qty ) { continue; }
+			$reduced = (int) $item->get_meta( '_reduced_stock', true );
+			$woo = $item->get_variation_id() ?: $item->get_product_id();
+			// La caja también debe sumar/restar la diferencia (el puente solo cuenta cada línea una vez).
+			if ( $reduced > 0 ) { $stock[] = array( 'itemId' => $item->get_id(), 'wooId' => $woo, 'delta' => (int) $item->get_quantity() - $qty ); }
+			if ( 0 === $qty ) {
+				wc_maybe_adjust_line_item_product_stock( $item, 0 );
+				$changes[] = 'Quitado: ' . $item->get_name();
+				$order->remove_item( $item->get_id() );
+				continue;
+			}
+			$unit = (float) $item->get_subtotal() / max( 1, (int) $item->get_quantity() );
+			$changes[] = $item->get_name() . ': ' . $item->get_quantity() . ' → ' . $qty;
+			$item->set_quantity( $qty ); $item->set_subtotal( $unit * $qty ); $item->set_total( $unit * $qty ); $item->save();
+			wc_maybe_adjust_line_item_product_stock( $item );
+		}
+		foreach ( (array) ( $p['add'] ?? array() ) as $a ) {
+			$product = wc_get_product( absint( $a['wooId'] ?? 0 ) );
+			$qty = max( 1, (int) ( $a['qty'] ?? 1 ) );
+			if ( ! $product ) { continue; }
+			$item_id = $order->add_product( $product, $qty );
+			$item = $order->get_item( $item_id );
+			if ( $item ) { wc_maybe_adjust_line_item_product_stock( $item ); }
+			$changes[] = 'Añadido: ' . $qty . '× ' . $product->get_name();
+		}
+		if ( isset( $p['phone'] ) && '' !== trim( (string) $p['phone'] ) && $p['phone'] !== $order->get_billing_phone() ) { $order->set_billing_phone( sanitize_text_field( (string) $p['phone'] ) ); $changes[] = 'Teléfono'; }
+		if ( isset( $p['address'] ) && '' !== trim( (string) $p['address'] ) ) { $order->set_shipping_address_1( sanitize_text_field( (string) $p['address'] ) ); $order->set_billing_address_1( sanitize_text_field( (string) $p['address'] ) ); $changes[] = 'Dirección'; }
+		if ( isset( $p['note'] ) ) { $order->set_customer_note( sanitize_textarea_field( (string) $p['note'] ) ); }
+		if ( ! $order->get_items( 'line_item' ) ) { return new WP_Error( 'cvd_panel_order', 'El pedido no puede quedar sin productos: cancélalo en su lugar.', array( 'status' => 422 ) ); }
+		$order->calculate_totals( false );
+		if ( $changes ) { $order->add_order_note( 'Cambiado desde el panel: ' . implode( '; ', $changes ) ); }
+		$order->save();
+		if ( class_exists( 'CVD_Commissions' ) ) { CVD_Commissions::mark_pending( $order->get_id() ); }
+		return self::no_cache( array( 'ok' => true, 'changes' => $changes, 'stock' => $stock, 'total' => (float) wc_get_order( $order->get_id() )->get_total() ) );
 	}
 
 	/** Precios en masa desde el panel: [{wooId, regular, sale|null}]. sale = precio de oferta (null la quita). */
