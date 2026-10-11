@@ -26,7 +26,7 @@ final class CVD_Messenger_Contacts {
 	public static function can_record( WP_REST_Request $request ): bool {
 		$user = wp_get_current_user();
 		$order = wc_get_order( absint( $request->get_param( 'id' ) ) );
-		if ( ! $user->exists() || ! $order || 'mensajero' !== CVD_Registration::program_type( $user ) || 'approved' !== get_user_meta( $user->ID, '_cvd_account_status', true ) ) { return false; }
+		if ( ! $user->exists() || ! $order || ! CVD_Registration::is_approved_messenger( $user ) ) { return false; }
 		if ( $user->ID !== absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { return false; }
 		$stage = 'yes' === $order->get_meta( '_cvd_delivery_incident_active', true ) ? sanitize_key( (string) $order->get_meta( '_cvd_delivery_incident_stage', true ) ) : sanitize_key( (string) $order->get_meta( '_cvd_delivery_status', true ) );
 		return in_array( $stage, array( 'accepted', 'to_store', 'picked_up', 'handed_over' ), true );

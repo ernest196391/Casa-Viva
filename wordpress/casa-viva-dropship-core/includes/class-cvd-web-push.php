@@ -29,7 +29,7 @@ final class CVD_Web_Push {
 	public static function can_subscribe(): bool {
 		$user = wp_get_current_user();
 		if ( ! $user->exists() ) { return false; }
-		if ( 'mensajero' === CVD_Registration::program_type( $user ) ) { return 'approved' === get_user_meta( $user->ID, '_cvd_account_status', true ); }
+		if ( CVD_Registration::has_program_account( $user, 'mensajero' ) ) { return CVD_Registration::is_approved_messenger( $user ); }
 		return (bool) array_intersect( array( 'administrator', 'shop_manager', 'cvd_clerk', 'cvd_operator' ), (array) $user->roles );
 	}
 

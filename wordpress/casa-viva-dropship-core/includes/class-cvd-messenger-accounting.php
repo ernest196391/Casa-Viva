@@ -80,7 +80,7 @@ final class CVD_Messenger_Accounting {
 		if ( ! is_user_logged_in() ) { wp_die( 'Debes iniciar sesión.' ); }
 		check_admin_referer( 'cvd_messenger_settlement' );
 		$user = wp_get_current_user();
-		if ( 'mensajero' !== CVD_Registration::program_type( $user ) ) { wp_die( 'Esta cuenta no es de mensajero.' ); }
+		if ( ! CVD_Registration::has_program_account( $user, 'mensajero' ) ) { wp_die( 'Esta cuenta no es de mensajero.' ); }
 		$result = self::create_settlement( $user->ID, sanitize_key( wp_unslash( $_POST['method'] ?? '' ) ) );
 		wp_safe_redirect( add_query_arg( 'liquidacion', is_wp_error( $result ) ? 'error' : 'creada', home_url( '/area-mensajeros/#liquidaciones' ) ) ); exit;
 	}

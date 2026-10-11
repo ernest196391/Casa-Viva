@@ -159,7 +159,8 @@ final class CVD_Panel_Bridge {
 			$rows[] = array(
 				'id' => $u->ID, 'name' => $u->display_name,
 				'phone' => preg_replace( '/\D+/', '', (string) ( get_user_meta( $u->ID, '_cvd_whatsapp', true ) ?: get_user_meta( $u->ID, 'billing_phone', true ) ) ),
-				'status' => sanitize_key( (string) get_user_meta( $u->ID, '_cvd_account_status', true ) ) ?: 'pending',
+				// Estado como mensajero (en una cuenta doble no es el de gestora).
+				'status' => sanitize_key( CVD_Registration::status_for( $u, 'mensajero' ) ) ?: 'pending', 'dual' => CVD_Registration::is_dual( $u ),
 				'zone' => (string) get_user_meta( $u->ID, '_cvd_zone', true ), 'vehicle' => (string) get_user_meta( $u->ID, '_cvd_vehicle', true ),
 				'available' => 'yes' === get_user_meta( $u->ID, '_cvd_messenger_available', true ),
 				'deliveries' => $done[ $u->ID ] ?? 0, 'owedCup' => round( (float) ( $bal['available'] ?? 0 ), 2 ), 'paidCup' => round( (float) ( $bal['paid'] ?? 0 ), 2 ),
@@ -434,7 +435,8 @@ final class CVD_Panel_Bridge {
 				'id'         => $user->ID,
 				'name'       => $user->display_name,
 				'phone'      => preg_replace( '/\D+/', '', (string) ( get_user_meta( $user->ID, '_cvd_whatsapp', true ) ?: get_user_meta( $user->ID, 'billing_phone', true ) ) ),
-				'status'     => sanitize_key( (string) get_user_meta( $user->ID, '_cvd_account_status', true ) ) ?: 'pending',
+				'status'     => sanitize_key( CVD_Registration::status_for( $user, 'gestora' ) ) ?: 'pending',
+				'dual'       => CVD_Registration::is_dual( $user ), // También es mensajero (sale en las dos listas).
 				'code'       => (string) get_user_meta( $user->ID, '_cvd_referral_code', true ),
 				'since'      => $user->user_registered,
 				'invitedBy'  => $inviter_user ? $inviter_user->display_name : null,
@@ -455,6 +457,8 @@ final class CVD_Panel_Bridge {
 		$forward->set_url_params( array( 'id' => absint( $request['id'] ) ) );
 		$forward->set_param( 'status', (string) $request->get_param( 'status' ) );
 		$forward->set_param( 'by', 'panel' );
+		// Cuenta doble: la lista de mensajeros cambia su estado de mensajero; la de gestoras, el de gestora.
+		$forward->set_param( 'kind', false !== strpos( (string) $request->get_route(), '/panel/messengers/' ) ? 'mensajero' : 'gestora' );
 		$result = CVD_Bot_Bridge::partner_status( $forward );
 		if ( ! is_wp_error( $result ) ) { update_user_meta( absint( $request['id'] ), '_cvd_status_changed_by', 'panel' ); }
 		return $result;

@@ -119,7 +119,7 @@ final class CVD_Voucher_Intake {
 
 	public static function can_parse(): bool {
 		if ( self::can_confirm() ) { return true; }
-		return is_user_logged_in() && 'mensajero' === CVD_Registration::program_type( wp_get_current_user() );
+		return is_user_logged_in() && CVD_Registration::has_program_account( wp_get_current_user(), 'mensajero' );
 	}
 
 	/** Compatibilidad con pruebas y llamadas existentes. */

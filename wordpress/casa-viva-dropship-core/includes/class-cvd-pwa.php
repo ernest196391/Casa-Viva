@@ -86,7 +86,7 @@ final class CVD_PWA {
 			'pushSubscriptionUrl' => rest_url('casa-viva/v1/push/subscription'),
 			'notificationsUrl' => rest_url('casa-viva/v1/notifications'),
 			'restNonce' => is_user_logged_in() ? wp_create_nonce('wp_rest') : '',
-			'isMessenger' => is_user_logged_in() && 'mensajero' === CVD_Registration::program_type(wp_get_current_user()),
+			'isMessenger' => is_user_logged_in() && 'mensajero' === CVD_Registration::context_type(wp_get_current_user()),
 			'canPush' => is_user_logged_in() && class_exists('CVD_Web_Push') && CVD_Web_Push::can_subscribe(),
 		) );
 	}
@@ -117,7 +117,8 @@ final class CVD_PWA {
 
 	public static function destination( WP_User $user ): string {
 		$roles = (array) $user->roles;
-		$program = CVD_Registration::program_type( $user );
+		// Cuenta doble: el área elegida en la entrada (por defecto, gestora).
+		$program = CVD_Registration::entry_type( $user );
 		if ( 'gestora' === $program ) { return home_url( '/area-gestoras/' ); }
 		if ( 'mensajero' === $program ) { return home_url( '/area-mensajeros/' ); }
 		if ( in_array( 'cvd_clerk', $roles, true ) ) { return home_url( '/centro-operaciones/' ); }

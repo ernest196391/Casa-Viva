@@ -82,6 +82,11 @@ final class CVD_Gestora_App {
 			array( '', 'Mi equipo', '', '' ),
 			array( 'invitar', 'Invitar gestoras', 'invite', '' ),
 		);
+		// Cuenta doble (gestora y mensajero aprobado): enlace directo a su área de entregas.
+		if ( CVD_Registration::is_dual( $user ) && CVD_Registration::is_approved_messenger( $user ) ) {
+			$nav[] = array( '', 'Mensajería', '', '' );
+			$nav[] = array( 'entregas', 'Mis entregas', 'truck', home_url( '/area-mensajeros/' ) );
+		}
 		ob_start();
 		?>
 		<div class="cvga" id="cvga" data-cvga>
@@ -95,6 +100,8 @@ final class CVD_Gestora_App {
 				<nav class="cvga-nav">
 					<?php foreach ( $nav as $item ) : if ( '' === $item[0] ) : ?><p class="cvga-group"><?php echo esc_html( $item[1] ); ?></p><?php elseif ( 'curru' === $item[0] ) : ?>
 					<a class="cvga-link" href="#herramientas" data-cvga-curru><?php echo self::icon( $item[2] ); // phpcs:ignore ?><span class="cvga-label"><?php echo esc_html( $item[1] ); ?></span></a>
+					<?php elseif ( '' !== $item[3] ) : // Enlace a otra página (no es una vista de esta app). ?>
+					<a class="cvga-link" href="<?php echo esc_url( $item[3] ); ?>"><?php echo self::icon( $item[2] ); // phpcs:ignore ?><span class="cvga-label"><?php echo esc_html( $item[1] ); ?></span></a>
 					<?php else : ?>
 					<a class="cvga-link" href="#<?php echo esc_attr( $item[0] ); ?>" data-cvga-go="<?php echo esc_attr( $item[0] ); ?>"><?php echo self::icon( $item[2] ); // phpcs:ignore ?><span class="cvga-label"><?php echo esc_html( $item[1] ); ?></span></a>
 					<?php endif; endforeach; ?>
@@ -383,6 +390,7 @@ final class CVD_Gestora_App {
 			'x'      => '<path d="M6 6l12 12M18 6L6 18"/>',
 			'search' => '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
 			'target' => '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+			'truck'  => '<path d="M2 6h12v10H2z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
 			'camera' => '<rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/>',
 		);
 		return '<svg class="cvga-ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' . ( $paths[ $name ] ?? '' ) . '</svg>';

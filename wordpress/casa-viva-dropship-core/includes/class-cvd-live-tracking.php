@@ -34,7 +34,7 @@ final class CVD_Live_Tracking {
 		wp_localize_script( 'cvd-live-tracking', 'cvdLiveTracking', array(
 			'baseUrl' => rest_url( 'casa-viva/v1/delivery/' ),
 			'restNonce' => is_user_logged_in() ? wp_create_nonce( 'wp_rest' ) : '',
-			'isMessenger' => is_user_logged_in() && 'mensajero' === CVD_Registration::program_type( wp_get_current_user() ),
+			'isMessenger' => is_user_logged_in() && 'mensajero' === CVD_Registration::context_type( wp_get_current_user() ),
 		) );
 	}
 
@@ -43,7 +43,7 @@ final class CVD_Live_Tracking {
 		$user = wp_get_current_user();
 		return $order instanceof WC_Order
 			&& $user->exists()
-			&& 'mensajero' === CVD_Registration::program_type( $user )
+			&& CVD_Registration::has_program_account( $user, 'mensajero' )
 			&& $user->ID === absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
 	}
 

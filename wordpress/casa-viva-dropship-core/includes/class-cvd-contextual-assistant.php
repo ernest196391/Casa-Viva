@@ -155,7 +155,8 @@ final class CVD_Contextual_Assistant {
 	public static function context(): string {
 		if ( ! is_user_logged_in() ) { return 'visitante'; }
 		$user = wp_get_current_user();
-		$program = class_exists( 'CVD_Registration' ) ? CVD_Registration::program_type( $user ) : '';
+		// Cuenta doble: mensajero en su área de entregas, gestora en lo demás.
+		$program = class_exists( 'CVD_Registration' ) ? CVD_Registration::context_type( $user ) : '';
 		if ( 'mensajero' === $program ) { return 'mensajero'; }
 		if ( 'gestora' === $program ) { return 'gestora'; }
 		if ( array_intersect( array( 'administrator', 'shop_manager', 'cvd_operator', 'cvd_clerk' ), (array) $user->roles ) ) { return 'operacion'; }

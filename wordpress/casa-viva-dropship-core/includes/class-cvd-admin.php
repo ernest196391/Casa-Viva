@@ -107,7 +107,7 @@ final class CVD_Admin {
 				if ( $user ) {
 					clean_user_cache( $user_id );
 					$user = get_user_by( 'id', $user_id );
-					$access_link = 'approved' === $status && $user ? CVD_Registration::create_secure_access_link( $user ) : '';
+					$access_link = 'approved' === $status && $user ? CVD_Registration::create_secure_access_link( $user, 'gestora' ) : '';
 					$email_notice = self::send_status_email( $user, $status, $access_link ) ? ' Se envió el aviso por correo.' : ' El estado cambió, pero WordPress no pudo enviar el correo.';
 					$phone = preg_replace( '/\D+/', '', (string) get_user_meta( $user_id, '_cvd_whatsapp', true ) );
 					if ( 'approved' === $status && $phone && $access_link ) {
@@ -170,8 +170,14 @@ final class CVD_Admin {
 			</tr>
 			<tr>
 				<th><label for="_cvd_account_status">Estado de la cuenta</label></th>
-				<td><select id="_cvd_account_status" name="_cvd_account_status"><option value="pending" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'pending' ); ?>>Pendiente</option><option value="approved" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'approved' ); ?>>Aprobada</option><option value="suspended" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'suspended' ); ?>>Suspendida</option><option value="rejected" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'rejected' ); ?>>Rechazada</option></select><p class="description">Solo las cuentas aprobadas pueden entrar en su portal.</p></td>
+				<td><select id="_cvd_account_status" name="_cvd_account_status"><option value="pending" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'pending' ); ?>>Pendiente</option><option value="approved" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'approved' ); ?>>Aprobada</option><option value="suspended" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'suspended' ); ?>>Suspendida</option><option value="rejected" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'rejected' ); ?>>Rechazada</option></select><p class="description">Solo las cuentas aprobadas pueden entrar en su portal.<?php echo CVD_Registration::is_dual( $user ) ? ' En esta cuenta doble es el estado como gestora.' : ''; ?></p></td>
 			</tr>
+			<?php if ( CVD_Registration::is_dual( $user ) ) : $messenger_status = CVD_Registration::status_for( $user, 'mensajero' ); // Cuenta doble: estado propio como mensajero. ?>
+			<tr>
+				<th><label for="_cvd_messenger_status">Estado como mensajero</label></th>
+				<td><select id="_cvd_messenger_status" name="_cvd_messenger_status"><?php foreach ( array( 'pending' => 'Pendiente', 'approved' => 'Aprobada', 'suspended' => 'Suspendida', 'rejected' => 'Rechazada' ) as $value => $label ) : ?><option value="<?php echo esc_attr( $value ); ?>" <?php selected( $messenger_status, $value ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select><p class="description">Esta cuenta es gestora y mensajero a la vez: cada programa tiene su estado.</p></td>
+			</tr>
+			<?php endif; ?>
 			<tr>
 				<th><label for="_cvd_zone">Municipio o zona</label></th>
 				<td><input class="regular-text" id="_cvd_zone" name="_cvd_zone" type="text" value="<?php echo esc_attr( get_user_meta( $user->ID, '_cvd_zone', true ) ); ?>"></td>
@@ -207,6 +213,12 @@ final class CVD_Admin {
 		if ( isset( $_POST['_cvd_account_status'] ) ) {
 			$status = sanitize_key( wp_unslash( $_POST['_cvd_account_status'] ) );
 			if ( in_array( $status, array( 'pending', 'approved', 'suspended', 'rejected' ), true ) ) { update_user_meta( $user_id, '_cvd_account_status', $status ); }
+		}
+		// Cuenta doble: estado como mensajero (solo existe si ya tenía _cvd_messenger_status; nunca se vacía).
+		$edited = get_userdata( $user_id );
+		if ( isset( $_POST['_cvd_messenger_status'] ) && $edited && CVD_Registration::is_dual( $edited ) ) {
+			$status = sanitize_key( wp_unslash( $_POST['_cvd_messenger_status'] ) );
+			if ( in_array( $status, array( 'pending', 'approved', 'suspended', 'rejected' ), true ) ) { update_user_meta( $user_id, '_cvd_messenger_status', $status ); }
 		}
 		foreach ( array( '_cvd_zone', '_cvd_vehicle' ) as $field ) {
 			if ( isset( $_POST[ $field ] ) ) { update_user_meta( $user_id, $field, sanitize_text_field( wp_unslash( $_POST[ $field ] ) ) ); }

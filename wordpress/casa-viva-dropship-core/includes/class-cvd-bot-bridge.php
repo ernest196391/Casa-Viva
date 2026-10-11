@@ -43,6 +43,23 @@ final class CVD_Bot_Bridge {
 	}
 
 	/**
+	 * Programa al que se refiere la aprobación o la bienvenida. Con un solo programa, el suyo.
+	 * Cuenta doble: el que se manda en "kind" (gestora | mensajero). Si no se manda: al cambiar
+	 * el estado, el único programa pendiente; en la bienvenida, el último que cambió. Si no, gestora.
+	 */
+	private static function partner_kind( WP_User $user, WP_REST_Request $request, bool $welcome = false ): string {
+		if ( ! CVD_Registration::is_dual( $user ) ) { return CVD_Registration::program_type( $user ); }
+		$kind = sanitize_key( (string) $request->get_param( 'kind' ) );
+		if ( in_array( $kind, array( 'gestora', 'mensajero' ), true ) ) { return $kind; }
+		if ( $welcome ) {
+			$last = sanitize_key( (string) get_user_meta( $user->ID, '_cvd_status_changed_program', true ) );
+			return 'mensajero' === $last ? 'mensajero' : 'gestora';
+		}
+		$pending = array_values( array_filter( array( 'gestora', 'mensajero' ), static fn( string $type ): bool => ! in_array( CVD_Registration::status_for( $user, $type ), array( 'approved', 'suspended', 'rejected' ), true ) ) );
+		return 1 === count( $pending ) ? $pending[0] : 'gestora';
+	}
+
+	/**
 	 * Aprobar o rechazar desde WhatsApp (APRUEBA / RECHAZA, o según el modo de altas del bot).
 	 * Hace lo mismo que la página de Solicitudes: estado, código de referido y correo de aviso.
 	 */
@@ -51,18 +68,21 @@ final class CVD_Bot_Bridge {
 		if ( is_wp_error( $user ) ) { return $user; }
 		$status = sanitize_key( (string) $request->get_param( 'status' ) );
 		if ( ! in_array( $status, array( 'approved', 'rejected' ), true ) ) { return new WP_Error( 'cvd_partner_status', 'Estado no válido.', array( 'status' => 422 ) ); }
-		update_user_meta( $user->ID, '_cvd_account_status', $status );
-		if ( 'approved' === $status && in_array( 'cvd_gestora', (array) $user->roles, true ) && ! get_user_meta( $user->ID, '_cvd_referral_code', true ) ) {
+		// Cuenta doble: cada programa tiene su estado (gestora en _cvd_account_status, mensajero en _cvd_messenger_status).
+		$kind = self::partner_kind( $user, $request );
+		CVD_Registration::set_status( $user, $kind, $status );
+		if ( 'approved' === $status && 'gestora' === $kind && ! get_user_meta( $user->ID, '_cvd_referral_code', true ) ) {
 			update_user_meta( $user->ID, '_cvd_referral_code', 'CV' . $user->ID . strtoupper( substr( preg_replace( '/[^A-Z0-9]/i', '', $user->user_login ), 0, 8 ) ) );
 		}
 		// Mensajero recién aprobado: queda "Disponible". Sin esto, si ningún mensajero aprobado lo está,
 		// "Listo para salir" no abre la oferta (CVD_Delivery::publish_offer) y el bot no publica nada en el grupo.
-		if ( 'approved' === $status && in_array( 'cvd_messenger', (array) $user->roles, true ) && '' === (string) get_user_meta( $user->ID, '_cvd_messenger_available', true ) ) {
+		if ( 'approved' === $status && 'mensajero' === $kind && '' === (string) get_user_meta( $user->ID, '_cvd_messenger_available', true ) ) {
 			update_user_meta( $user->ID, '_cvd_messenger_available', 'yes' );
 		}
 		clean_user_cache( $user->ID );
 		update_user_meta( $user->ID, '_cvd_status_changed_by', 'vivabot:' . sanitize_text_field( (string) $request->get_param( 'by' ) ) );
-		return self::no_cache( array( 'ok' => true, 'status' => $status ) );
+		update_user_meta( $user->ID, '_cvd_status_changed_program', $kind );
+		return self::no_cache( array( 'ok' => true, 'status' => $status, 'kind' => $kind ) );
 	}
 
 	/**
@@ -72,14 +92,16 @@ final class CVD_Bot_Bridge {
 	public static function partner_welcome( WP_REST_Request $request ) {
 		$user = self::partner( $request );
 		if ( is_wp_error( $user ) ) { return $user; }
-		if ( 'approved' !== get_user_meta( $user->ID, '_cvd_account_status', true ) ) { return new WP_Error( 'cvd_partner_pending', 'La cuenta no está aprobada.', array( 'status' => 409 ) ); }
+		$kind = self::partner_kind( $user, $request, true );
+		if ( 'approved' !== CVD_Registration::status_for( $user, $kind ) ) { return new WP_Error( 'cvd_partner_pending', 'La cuenta no está aprobada.', array( 'status' => 409 ) ); }
 		$is_staff = (bool) array_intersect( array( 'administrator', 'shop_manager' ), (array) $user->roles );
 		$code = (string) get_user_meta( $user->ID, '_cvd_referral_code', true );
 		return self::no_cache( array(
 			'name'       => $user->display_name,
-			'link'       => $code && in_array( 'cvd_gestora', (array) $user->roles, true ) ? add_query_arg( 'ref', rawurlencode( $code ), home_url( '/tienda/' ) ) : '',
-			'accessLink' => ! $is_staff && class_exists( 'CVD_Registration' ) ? CVD_Registration::create_secure_access_link( $user ) : '',
-			'panel'      => in_array( 'cvd_messenger', (array) $user->roles, true ) ? home_url( '/area-mensajeros/' ) : home_url( '/area-gestoras/' ),
+			'kind'       => $kind,
+			'link'       => $code && 'gestora' === $kind ? add_query_arg( 'ref', rawurlencode( $code ), home_url( '/tienda/' ) ) : '',
+			'accessLink' => ! $is_staff && class_exists( 'CVD_Registration' ) ? CVD_Registration::create_secure_access_link( $user, $kind ) : '',
+			'panel'      => 'mensajero' === $kind ? home_url( '/area-mensajeros/' ) : home_url( '/area-gestoras/' ),
 		) );
 	}
 
@@ -93,7 +115,9 @@ final class CVD_Bot_Bridge {
 					'kind'   => $kind,
 					'name'   => $user->display_name,
 					'phone'  => preg_replace( '/\D+/', '', (string) ( get_user_meta( $user->ID, '_cvd_whatsapp', true ) ?: get_user_meta( $user->ID, 'billing_phone', true ) ) ),
-					'status' => sanitize_key( (string) get_user_meta( $user->ID, '_cvd_account_status', true ) ) ?: 'pending',
+					// Una cuenta doble sale en las dos listas, cada vez con el estado de ese programa.
+					'status' => sanitize_key( CVD_Registration::status_for( $user, $kind ) ) ?: 'pending',
+					'dual'   => CVD_Registration::is_dual( $user ),
 					'since'  => $user->user_registered,
 				);
 			}
@@ -131,7 +155,7 @@ final class CVD_Bot_Bridge {
 				'commission' => (float) $o->get_meta( '_cvd_commission_amount', true ), 'commissionStatus' => (string) $o->get_meta( '_cvd_commission_status', true ),
 			);
 		}
-		return self::no_cache( array( 'found' => true, 'id' => $gestora->ID, 'approved' => 'approved' === get_user_meta( $gestora->ID, '_cvd_account_status', true ), 'name' => $gestora->display_name, 'orders' => $list, 'commission' => array( 'pending' => round( $pending, 2 ), 'approved' => round( $approved, 2 ) ) ) );
+		return self::no_cache( array( 'found' => true, 'id' => $gestora->ID, 'approved' => 'approved' === CVD_Registration::status_for( $gestora, 'gestora' ), 'name' => $gestora->display_name, 'orders' => $list, 'commission' => array( 'pending' => round( $pending, 2 ), 'approved' => round( $approved, 2 ) ) ) );
 	}
 
 	/** Enlace personal de una gestora aprobada (por su WhatsApp): sus clientes compran desde ahí y la venta es suya. */
@@ -336,8 +360,11 @@ final class CVD_Bot_Bridge {
 	private static function user_by_phone( string $phone, string $role, bool $approved_only = true ): ?WP_User {
 		$key = self::phone_key( $phone );
 		if ( '' === $key ) { return null; }
-		$users = get_users( $approved_only ? array( 'role' => $role, 'meta_key' => '_cvd_account_status', 'meta_value' => 'approved' ) : array( 'role' => $role ) );
+		$users = get_users( array( 'role' => $role ) );
+		// Aprobado en el programa de ese rol (una cuenta doble tiene un estado por programa).
+		$program = 'cvd_messenger' === $role ? 'mensajero' : 'gestora';
 		foreach ( $users as $user ) {
+			if ( $approved_only && 'approved' !== CVD_Registration::status_for( $user, $program ) ) { continue; }
 			foreach ( array( '_cvd_whatsapp', 'billing_phone' ) as $meta ) {
 				if ( $key === self::phone_key( (string) get_user_meta( $user->ID, $meta, true ) ) ) { return $user; }
 			}

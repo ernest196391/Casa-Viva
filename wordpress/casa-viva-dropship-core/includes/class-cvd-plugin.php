@@ -342,6 +342,8 @@ final class CVD_Plugin {
 			$roles = (array) $user->roles;
 			$gestora = in_array( 'cvd_gestora', $roles, true );
 			$messenger = in_array( 'cvd_messenger', $roles, true );
+			// Cuenta doble a propósito (gestora y mensajero, con su estado propio de mensajero): no se toca.
+			if ( $gestora && $messenger && '' !== (string) get_user_meta( $user->ID, '_cvd_messenger_status', true ) ) { continue; }
 			$type = sanitize_key( (string) get_user_meta( $user->ID, '_cvd_program_type', true ) );
 			$has_gestora_prices = (bool) $wpdb->get_var(
 				$wpdb->prepare( "SELECT 1 FROM {$wpdb->prefix}cvd_gestora_prices WHERE gestora_user_id = %d LIMIT 1", $user->ID )

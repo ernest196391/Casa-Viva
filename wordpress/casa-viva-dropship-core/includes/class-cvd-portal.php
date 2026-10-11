@@ -17,7 +17,8 @@ final class CVD_Portal {
 	public static function role_login_redirect( string $redirect_to, string $requested, $user ): string {
 		if ( ! $user instanceof WP_User ) { return $redirect_to; }
 		$roles = (array) $user->roles;
-		$type = CVD_Registration::program_type( $user );
+		// Cuenta doble: el área elegida en el selector de la entrada (por defecto, gestora).
+		$type = CVD_Registration::entry_type( $user );
 		if ( 'mensajero' === $type ) { return home_url( '/area-mensajeros/' ); }
 		if ( 'gestora' === $type ) { return home_url( '/area-gestoras/' ); }
 		if ( array_intersect( array( 'cvd_clerk', 'cvd_operator' ), $roles ) ) { return home_url( '/centro-operaciones/' ); }
@@ -38,8 +39,9 @@ final class CVD_Portal {
 		$program = CVD_Registration::program_type( $user );
 		$roles = (array) $user->roles;
 		$staff = (bool) array_intersect( array( 'administrator', 'shop_manager', 'cvd_clerk', 'cvd_operator' ), $roles );
-		$valid = ( 'gestoras' === $selected && 'gestora' === $program )
-			|| ( 'mensajeros' === $selected && 'mensajero' === $program )
+		// Una cuenta doble vale para los dos accesos: gestoras y mensajeros.
+		$valid = ( 'gestoras' === $selected && CVD_Registration::has_program_account( $user, 'gestora' ) )
+			|| ( 'mensajeros' === $selected && CVD_Registration::has_program_account( $user, 'mensajero' ) )
 			|| ( 'clientes' === $selected && ! $program && ! $staff );
 		if ( $valid ) { return $user; }
 		$label = array( 'clientes' => 'cliente', 'gestoras' => 'gestora', 'mensajeros' => 'mensajero' )[ $selected ];
@@ -58,7 +60,7 @@ final class CVD_Portal {
 			'messengerContactUrl' => rest_url( 'casa-viva/v1/messenger/orders/' ),
 			'voucherUrl' => home_url( '/interpretar-vale/' ),
 				'restNonce' => wp_create_nonce( 'wp_rest' ),
-				'isMessenger' => is_user_logged_in() && 'mensajero' === CVD_Registration::program_type( wp_get_current_user() ),
+				'isMessenger' => is_user_logged_in() && 'mensajero' === CVD_Registration::context_type( wp_get_current_user() ),
 			) );
 		}
 	}
@@ -72,7 +74,7 @@ final class CVD_Portal {
 		}
 		if ( ! function_exists( 'is_account_page' ) || ! is_account_page() ) { return; }
 		$user = wp_get_current_user();
-		if ( 'gestora' === CVD_Registration::program_type( $user ) && ! is_wc_endpoint_url( 'customer-logout' ) ) {
+		if ( 'gestora' === CVD_Registration::entry_type( $user ) && ! is_wc_endpoint_url( 'customer-logout' ) ) {
 			wp_safe_redirect( home_url( '/area-gestoras/' ) );
 			exit;
 		}
@@ -80,7 +82,7 @@ final class CVD_Portal {
 			wp_safe_redirect( home_url( '/centro-operaciones/' ) );
 			exit;
 		}
-		if ( 'mensajero' === CVD_Registration::program_type( $user ) ) {
+		if ( 'mensajero' === CVD_Registration::entry_type( $user ) ) {
 			wp_safe_redirect( home_url( '/area-mensajeros/' ) );
 			exit;
 		}
@@ -140,10 +142,16 @@ final class CVD_Portal {
 			$destination = 'mensajero' === $correct ? home_url( '/area-mensajeros/' ) : ( 'gestora' === $correct ? home_url( '/area-gestoras/' ) : home_url( '/mi-cuenta/' ) );
 			return '<section class="cvd-auth-card"><h1>Acceso incorrecto</h1><p>Esta cuenta pertenece a otra área.</p><a class="cvd-primary" href="' . esc_url( $destination ) . '">Ir a mi cuenta</a><a class="cvd-secondary" href="' . esc_url( wp_logout_url( home_url( '/mi-cuenta/' ) ) ) . '">Usar otra cuenta</a></section>';
 		}
-		$status = get_user_meta( $user->ID, '_cvd_account_status', true );
-		if ( ! $status || 'pending' === $status ) { return '<section class="cvd-auth-card"><p class="cvd-kicker">Cuenta de ' . esc_html( $type ) . '</p><h1>Solicitud pendiente</h1><p>Tu cuenta está creada correctamente. Casa Viva la revisará y te avisará por WhatsApp con tu enlace para entrar. No necesitas registrarte otra vez.</p><a class="cvd-secondary" href="' . esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ) . '">Cambiar cuenta</a></section>'; }
-		if ( 'suspended' === $status ) { return '<div class="cvd-notice cvd-error">Esta cuenta está suspendida. Contacta con Casa Viva.</div>'; }
-		if ( 'rejected' === $status ) { return '<div class="cvd-notice cvd-error">Esta solicitud no fue aprobada. Contacta con Casa Viva.</div>'; }
+		// Estado de este programa (en una cuenta doble, gestora y mensajero tienen cada uno el suyo).
+		$status = CVD_Registration::status_for( $user, $type );
+		// Cuenta doble con este programa sin abrir: enlace al área que sí tiene aprobada.
+		$other = 'mensajero' === $type ? 'gestora' : 'mensajero';
+		$other_link = CVD_Registration::is_dual( $user ) && 'approved' === CVD_Registration::status_for( $user, $other )
+			? '<a class="cvd-primary" href="' . esc_url( home_url( 'mensajero' === $other ? '/area-mensajeros/' : '/area-gestoras/' ) ) . '">' . esc_html( 'mensajero' === $other ? 'Ir a mis entregas' : 'Ir a mi área de gestora' ) . '</a>'
+			: '';
+		if ( ! $status || 'pending' === $status ) { return '<section class="cvd-auth-card"><p class="cvd-kicker">Cuenta de ' . esc_html( $type ) . '</p><h1>Solicitud pendiente</h1><p>Tu cuenta está creada correctamente. Casa Viva la revisará y te avisará por WhatsApp con tu enlace para entrar. No necesitas registrarte otra vez.</p>' . $other_link . '<a class="cvd-secondary" href="' . esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ) . '">Cambiar cuenta</a></section>'; }
+		if ( 'suspended' === $status ) { return '<div class="cvd-notice cvd-error">Esta cuenta está suspendida. Contacta con Casa Viva.</div>' . $other_link; }
+		if ( 'rejected' === $status ) { return '<div class="cvd-notice cvd-error">Esta solicitud no fue aprobada. Contacta con Casa Viva.</div>' . $other_link; }
 		return 'mensajero' === $type ? self::messenger_portal( $user ) : self::gestora_portal( $user );
 	}
 
@@ -203,7 +211,7 @@ final class CVD_Portal {
 		<section class="cvd-dashboard cvd-app-shell">
 			<?php if ( $notice ) : ?><div class="cvd-notice" role="status"><?php echo esc_html( $notice ); ?></div><?php endif; ?>
 			<header class="cvd-dashboard-head"><div><p class="cvd-kicker">Casa Viva · Gestoras</p><h1>Hola, <?php echo esc_html( $user->display_name ); ?>.</h1><p>Tu centro de ventas, clientes, catálogo y comisiones.</p></div><a class="cvd-secondary" href="<?php echo esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ); ?>" onclick="return confirm('¿Salir de tu cuenta? Para volver a entrar sin contraseña escribe *mi acceso* al WhatsApp 5354056173.');">Salir</a></header>
-			<nav class="cvd-app-nav" aria-label="Panel de gestora"><a href="#dashboard">Inicio</a><a href="#catalogo">Mi tienda</a><a href="#mis-clientes">Clientes</a><a href="#invitar">Invitar</a><a href="#precios">Mis precios</a><a href="#ventas">Ventas</a><a href="#mensajeria">Mensajería</a><a href="#pagos">Pagos</a><a href="#materiales">Materiales</a><a href="#perfil">Perfil</a></nav>
+			<nav class="cvd-app-nav" aria-label="Panel de gestora"><a href="#dashboard">Inicio</a><a href="#catalogo">Mi tienda</a><a href="#mis-clientes">Clientes</a><a href="#invitar">Invitar</a><a href="#precios">Mis precios</a><a href="#ventas">Ventas</a><a href="#mensajeria">Mensajería</a><a href="#pagos">Pagos</a><a href="#materiales">Materiales</a><a href="#perfil">Perfil</a><?php if ( CVD_Registration::is_dual( $user ) && CVD_Registration::is_approved_messenger( $user ) ) : // Cuenta doble: también es mensajero. ?><a href="<?php echo esc_url( home_url( '/area-mensajeros/' ) ); ?>">Mis entregas</a><?php endif; ?></nav>
 			<div class="cvd-stats" id="dashboard"><article><span>Por verificar</span><strong><?php echo wp_kses_post( wc_price( $totals['pending'] ) ); ?></strong><small>Se aprueba cuando el cliente recibe y Casa Viva confirma el dinero</small></article><article><span>Aprobada</span><strong><?php echo wp_kses_post( wc_price( $totals['approved'] ) ); ?></strong><small>Ya puedes pedir que te la paguen</small></article><article><span>Pagada</span><strong><?php echo wp_kses_post( wc_price( $totals['paid'] ) ); ?></strong><small>Ya la cobraste</small></article><article id="clientes"><span>Mis clientes</span><strong><?php echo esc_html( $clients ); ?></strong><small><a href="#mis-clientes">Ver la lista</a></small></article></div>
 			<?php // Clase extra a propósito: CVD_Gestora_Financial_View busca '<section class="cvd-panel" id="catalogo">' justo tras las cifras y borraría lo de en medio. ?>
 			<section class="cvd-panel cvd-store-link-panel" id="catalogo"><div><p class="cvd-kicker">Tu tienda</p><h2>Tu enlace para vender</h2><p>Comparte este enlace: tus clientes ven tus precios y lo que compren con él cuenta para ti. Para mandar un solo producto, ábrelo desde «Ver mi tienda» y copia el enlace de esa página: ya lleva tu código.</p></div><div class="cvd-referral"><input aria-label="Enlace personal" id="cvd-store-link" readonly value="<?php echo esc_attr( $link ); ?>"><div class="cvd-inline-actions"><button class="cvd-secondary" data-copy-target="cvd-store-link" type="button">Copiar</button><a class="cvd-primary" href="<?php echo esc_url( $link ); ?>" target="_blank" rel="noopener">Ver mi tienda</a></div><a class="cvd-secondary" href="<?php echo esc_url( 'https://wa.me/?text=' . rawurlencode( 'Mira mi tienda Casa Viva: ' . $link ) ); ?>" target="_blank" rel="noopener">Compartir por WhatsApp</a><small>Tu código: <?php echo esc_html( $code ); ?></small></div></section>
@@ -254,7 +262,7 @@ final class CVD_Portal {
 			<?php if ( isset( $_GET['oferta'] ) ) : $offer_result = sanitize_key( wp_unslash( $_GET['oferta'] ) ); ?><div class="cvd-notice" role="status"><?php echo esc_html( 'accepted' === $offer_result ? 'Carrera aceptada. Presenta el QR en la tienda.' : ( 'declined' === $offer_result ? 'Oferta descartada.' : 'La carrera ya no está disponible.' ) ); ?></div><?php endif; ?>
 			<header class="cvd-dashboard-head cvd-messenger-head"><div><p class="cvd-kicker">Casa Viva · Mensajería</p><h1>Hola, <?php echo esc_html( $user->display_name ); ?>.</h1><p><?php echo esc_html( $offers ? 'Tienes una carrera por responder.' : ( $active ? 'Este es tu trabajo activo de hoy.' : 'Estás listo para recibir carreras.' ) ); ?></p></div><a class="cvd-secondary" href="<?php echo esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ); ?>" onclick="return confirm('¿Salir de tu cuenta? Para volver a entrar sin contraseña escribe *mi acceso* al WhatsApp 5354056173.');">Salir</a></header>
 			<nav class="cvd-app-nav cvd-messenger-nav" aria-label="Panel del mensajero"><a href="#hoy">Inicio</a><a href="#contactos">Contactos</a><a href="#preparar">Preparar</a><a href="#ruta">Mi ruta</a><a href="#asistente">Asistente</a></nav>
-			<section class="cvd-messenger-launchpad" aria-label="Acciones rápidas"><a class="cvd-primary cvd-upload-voucher" href="<?php echo esc_url( home_url( '/interpretar-vale/' ) ); ?>"><span aria-hidden="true">＋</span> Subir vale</a><a class="cvd-secondary" href="#asistente">Asistente</a></section>
+			<section class="cvd-messenger-launchpad" aria-label="Acciones rápidas"><a class="cvd-primary cvd-upload-voucher" href="<?php echo esc_url( home_url( '/interpretar-vale/' ) ); ?>"><span aria-hidden="true">＋</span> Subir vale</a><a class="cvd-secondary" href="#asistente">Asistente</a><?php if ( CVD_Registration::is_dual( $user ) && CVD_Registration::is_approved_gestora( $user ) ) : // Cuenta doble: también es gestora. ?><a class="cvd-secondary cvd-dual-area-link" href="<?php echo esc_url( home_url( '/area-gestoras/' ) ); ?>">Mi área de gestora</a><?php endif; ?></section>
 			<?php echo self::messenger_today_summary( $active, $offers ); ?>
 			<?php echo self::messenger_assistant( $active ); ?>
 			<div class="cvd-messenger-alert-control"><button class="cvd-secondary" id="cvd-enable-notifications" type="button">Activar alertas</button></div>

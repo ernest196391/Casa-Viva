@@ -59,8 +59,7 @@ final class CVD_Delivery {
 	public static function can_read_messenger_feed(): bool {
 		$user = wp_get_current_user();
 		return $user->exists()
-			&& 'mensajero' === CVD_Registration::program_type( $user )
-			&& 'approved' === get_user_meta( $user->ID, '_cvd_account_status', true );
+			&& CVD_Registration::is_approved_messenger( $user ); // Cuenta doble: vale su estado de mensajero.
 	}
 
 	/** Datos mínimos para refrescar ofertas sin revelar al cliente antes de aceptar. */
@@ -156,7 +155,7 @@ final class CVD_Delivery {
 			'actor_user_id'=>get_current_user_id(), 'source'=>'cvd_delivery_assign',
 			'metadata'=>array( 'messenger'=>$messenger_id ),
 			'precondition'=>static function( WC_Order $order ) use ( $messenger_id, $user ) {
-				if ( ! $user || ! in_array( 'cvd_messenger', (array) $user->roles, true ) || 'approved' !== get_user_meta( $messenger_id, '_cvd_account_status', true ) ) { return CVD_Order_Transition_Service::PRECONDITION_FAILED; }
+				if ( ! $user || ! in_array( 'cvd_messenger', (array) $user->roles, true ) || 'approved' !== CVD_Registration::status_for( $user, 'mensajero' ) ) { return CVD_Order_Transition_Service::PRECONDITION_FAILED; }
 				$existing=absint($order->get_meta('_cvd_messenger_user_id',true)); return $existing && $existing!==$messenger_id ? CVD_Order_Transition_Service::CONFLICT : true;
 			},
 			'atomic_mutation'=>static function( WC_Order $order ) use ( $messenger_id, $user ): void { $order->update_meta_data('_cvd_messenger_user_id',$messenger_id); $order->add_order_note('Entrega asignada a '.$user->display_name.'.'); },
@@ -214,7 +213,7 @@ final class CVD_Delivery {
 	}
 
 	public static function offers_for( WP_User $messenger ): array {
-		if ( 'yes' !== get_user_meta( $messenger->ID, '_cvd_messenger_available', true ) || 'approved' !== get_user_meta( $messenger->ID, '_cvd_account_status', true ) ) { return array(); }
+		if ( 'yes' !== get_user_meta( $messenger->ID, '_cvd_messenger_available', true ) || 'approved' !== CVD_Registration::status_for( $messenger, 'mensajero' ) ) { return array(); }
 		$orders = wc_get_orders( array( 'limit' => 30, 'orderby' => 'date', 'order' => 'ASC', 'meta_key' => '_cvd_delivery_status', 'meta_value' => 'offered' ) );
 		$orders = array_values( array_filter( $orders, static function ( WC_Order $order ) use ( $messenger ): bool {
 			$rejected = array_map( 'absint', (array) $order->get_meta( '_cvd_delivery_rejected_by', true ) );
@@ -251,7 +250,7 @@ final class CVD_Delivery {
 		$decision = sanitize_key( wp_unslash( $_GET['decision'] ?? '' ) );
 		check_admin_referer( 'cvd_delivery_offer_' . $order_id . '_' . $decision );
 		$user = wp_get_current_user();
-		if ( 'mensajero' !== CVD_Registration::program_type( $user ) || 'approved' !== get_user_meta( $user->ID, '_cvd_account_status', true ) ) { wp_die( 'Esta cuenta no es un mensajero aprobado.' ); }
+		if ( ! CVD_Registration::is_approved_messenger( $user ) ) { wp_die( 'Esta cuenta no es un mensajero aprobado.' ); }
 		if ( ! in_array( $decision, array( 'accept', 'decline' ), true ) ) { wp_die( 'Decisión no válida.' ); }
 		if ( 'accept' === $decision ) {
 			$transition=CVD_Order_Transition_Service::transition($order_id,'delivery','accepted',array(
@@ -463,7 +462,8 @@ final class CVD_Delivery {
 	public static function action_url( int $order_id, string $status ): string { return wp_nonce_url( admin_url( 'admin-post.php?action=cvd_delivery_status&order_id=' . $order_id . '&status=' . $status ), 'cvd_delivery_' . $order_id . '_' . $status ); }
 	public static function status( WC_Order $order ): string { if('yes'===$order->get_meta('_cvd_delivery_incident_active',true)){return 'incident';}$value = sanitize_key( (string) $order->get_meta( '_cvd_delivery_status', true ) ); return in_array( $value, self::STATUSES, true ) ? $value : 'unassigned'; }
 	public static function label( string $status ): string { $labels = array( 'unassigned'=>'Por ofertar','offered'=>'Oferta abierta','assigned'=>'Asignada','accepted'=>'Aceptada','to_store'=>'Va a recoger','picked_up'=>'Entregado al mensajero','handed_over'=>'En camino al cliente','delivered'=>'Entregada · dinero pendiente','cash_returned'=>'Dinero recibido','closed'=>'Cerrada','incident'=>'Con incidencia','failed'=>'No entregada','returned'=>'Devuelta a tienda','cancelled'=>'Cancelada' ); return $labels[ $status ] ?? ucfirst( $status ); }
-	private static function messengers(): array { return get_users( array( 'role' => 'cvd_messenger', 'orderby' => 'display_name', 'meta_key' => '_cvd_account_status', 'meta_value' => 'approved' ) ); }
+	/** Mensajeros aprobados: se filtra por su estado de mensajero (en una cuenta doble no es _cvd_account_status). */
+	private static function messengers(): array { return array_values( array_filter( get_users( array( 'role' => 'cvd_messenger', 'orderby' => 'display_name' ) ), array( 'CVD_Registration', 'is_approved_messenger' ) ) ); }
 	public static function available_messengers(): array { return array_values( array_filter( self::messengers(), static fn( WP_User $user ): bool => 'yes' === get_user_meta( $user->ID, '_cvd_messenger_available', true ) ) ); }
 	private static function eligible_messengers( WC_Order $order ): array {
 		$users = self::available_messengers();
