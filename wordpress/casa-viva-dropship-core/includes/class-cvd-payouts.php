@@ -29,7 +29,7 @@ final class CVD_Payouts {
 		ob_start();
 		?>
 		<section class="cvd-panel cvd-payout-panel" id="pagos">
-			<div class="cvd-section-title"><p class="cvd-kicker">Liquidaciones</p><h2>Solicitar pago</h2><p>Solo incluye comisiones aprobadas por ventas entregadas. Casa Viva revisará y registrará la transferencia.</p></div>
+			<div class="cvd-section-title"><p class="cvd-kicker">Tus pagos</p><h2>Pedir que te paguen</h2><p>1. Guarda cómo quieres cobrar. 2. Toca «Solicitar pago disponible». Solo entra lo aprobado: pedidos entregados y cobrados por Casa Viva. Casa Viva te paga y lo verás en el historial.</p></div>
 			<?php if ( $notice ) : ?><div class="cvd-notice" role="status"><?php echo esc_html( $notice ); ?></div><?php endif; ?>
 			<div class="cvd-payout-balance">
 				<?php if ( $available ) : foreach ( $available as $currency => $amount ) : ?><article><span>Disponible</span><strong><?php echo wp_kses_post( wc_price( $amount, array( 'currency' => $currency ) ) ); ?></strong></article><?php endforeach; else : ?><article><span>Disponible</span><strong>0</strong><small>No hay comisiones aprobadas sin liquidar.</small></article><?php endif; ?>
@@ -277,7 +277,7 @@ final class CVD_Payouts {
 		}
 
 		$owner = get_userdata( (int) $payout['owner_user_id'] );
-		if ( $owner ) { wp_mail( $owner->user_email, 'Actualización de tu pago Casa Viva', 'Tu liquidación #' . $payout_id . ' cambió a: ' . $next . ( $reference ? "\nReferencia: " . $reference : '' ) . "\n\nConsulta tu historial: " . home_url( '/area-gestoras/#pagos' ) ); }
+		if ( $owner ) { wp_mail( $owner->user_email, 'Actualización de tu pago Casa Viva', 'Tu pago #' . $payout_id . ': ' . ( array( 'approved' => 'aprobado', 'paid' => 'pagado', 'rejected' => 'rechazado' )[ $next ] ?? $next ) . ( $reference ? "\nReferencia: " . $reference : '' ) . "\n\nConsulta tu historial: " . home_url( '/area-gestoras/#pagos' ) ); }
 		return true;
 	}
 

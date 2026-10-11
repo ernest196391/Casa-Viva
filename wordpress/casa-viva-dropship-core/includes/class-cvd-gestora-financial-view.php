@@ -100,7 +100,7 @@ final class CVD_Gestora_Financial_View {
 			return '<p>Todavía no hay pedidos vinculados a tu cuenta.</p>';
 		}
 		$labels = array( 'pending' => 'Por verificar', 'approved' => 'Aprobada', 'paid' => 'Pagada', 'cancelled' => 'Cancelada' );
-		$html = '<div class="cvd-table-wrap"><table><thead><tr><th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Importe</th><th>Comisión base</th><th>Margen propio</th><th>Total</th><th>Regla aplicada</th><th>Estado</th></tr></thead><tbody>';
+		$html = '<div class="cvd-table-wrap"><table><thead><tr><th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Importe</th><th>Comisión</th><th>Lo que subiste</th><th>Ganas</th><th>Cómo se calcula</th><th>Estado</th></tr></thead><tbody>';
 		foreach ( $orders as $order ) {
 			if ( ! $order instanceof WC_Order ) { continue; }
 			$products = array();
@@ -131,11 +131,9 @@ final class CVD_Gestora_Financial_View {
 			if ( ! is_array( $line ) ) { continue; }
 			$type = sanitize_key( (string) ( $line['type'] ?? '' ) );
 			$value = (float) ( $line['value'] ?? 0 );
-			$source = sanitize_key( (string) ( $line['policy_source'] ?? '' ) );
-			$source_label = in_array( $source, array( 'product', 'parent_product' ), true ) ? 'producto' : 'tasa de gestora';
 			$label = 'fixed' === $type
-				? wc_format_localized_decimal( $value ) . ' fijo por unidad · ' . $source_label
-				: wc_format_localized_decimal( $value ) . '% · ' . $source_label;
+				? wc_format_localized_decimal( $value ) . ' ' . $order->get_currency() . ' por unidad'
+				: wc_format_localized_decimal( $value ) . ' % de la venta';
 			$rules[ $label ] = true;
 		}
 		return $rules ? implode( '; ', array_keys( $rules ) ) : 'Regla guardada en la venta';

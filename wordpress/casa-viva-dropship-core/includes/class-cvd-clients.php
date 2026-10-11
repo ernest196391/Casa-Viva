@@ -78,7 +78,8 @@ final class CVD_Clients {
 		$update = array( 'updated_at' => $now );
 		if ( '' === $row->name && '' !== trim( $name ) ) { $update['name'] = sanitize_text_field( $name ); }
 		if ( ! (int) $row->owner_user_id && $owner ) { $update['owner_user_id'] = $owner; }
-		if ( '' !== trim( $note ) ) { $update['note'] = sanitize_text_field( $note ); }
+		// La nota solo la cambia la dueña del cliente (o el panel sin gestora): otra gestora no pisa la nota ajena.
+		if ( '' !== trim( $note ) && ( ! $owner || ! (int) $row->owner_user_id || (int) $row->owner_user_id === $owner ) ) { $update['note'] = sanitize_text_field( $note ); }
 		$wpdb->update( self::table(), $update, array( 'id' => $row->id ) );
 		$final = (int) ( $update['owner_user_id'] ?? $row->owner_user_id );
 		return array( 'ok' => true, 'id' => (int) $row->id, 'owner' => $final, 'taken' => $owner && $final && $final !== $owner );
@@ -127,7 +128,8 @@ final class CVD_Clients {
 		$user = wp_get_current_user();
 		check_admin_referer( 'cvd_gestora_add_client' );
 		$back = wp_get_referer() ?: home_url( '/' );
-		if ( ! $user->ID || ! in_array( 'cvd_gestora', (array) $user->roles, true ) ) { wp_safe_redirect( $back ); exit; }
+		// Solo gestoras aprobadas: una pendiente o suspendida no puede quedarse clientes.
+		if ( ! $user->ID || ! CVD_Registration::is_approved_gestora( $user ) ) { wp_safe_redirect( $back ); exit; }
 		$r = self::upsert( (string) wp_unslash( $_POST['phone'] ?? '' ), (string) wp_unslash( $_POST['name'] ?? '' ), $user->ID, 'gestora', (string) wp_unslash( $_POST['note'] ?? '' ) );
 		$flag = isset( $r['error'] ) ? 'error' : ( ! empty( $r['taken'] ) ? 'taken' : 'ok' );
 		wp_safe_redirect( add_query_arg( 'cliente', $flag, remove_query_arg( 'cliente', $back ) ) . '#mis-clientes' );
@@ -140,7 +142,7 @@ final class CVD_Clients {
 		$flag = sanitize_key( wp_unslash( $_GET['cliente'] ?? '' ) );
 		$notes = array( 'ok' => 'Cliente guardado.', 'taken' => 'Ese cliente ya lo trajo otra gestora: no se puede pasar a tu lista.', 'error' => 'Escribe un teléfono válido (8 cifras).' );
 		ob_start(); ?>
-		<section class="cvd-panel" id="mis-clientes"><div><p class="cvd-kicker">Tus clientes</p><h2>Mis clientes (<?php echo esc_html( count( $rows ) ); ?>)</h2><p>Quien compra con tu código queda aquí solo. También puedes añadirlos tú. Escríbeles por WhatsApp cuando haya algo que les guste.</p></div>
+		<section class="cvd-panel" id="mis-clientes"><div><p class="cvd-kicker">Tus clientes</p><h2>Mis clientes (<?php echo esc_html( count( $rows ) ); ?>)</h2><p>Quien compra con tu enlace aparece aquí sin que hagas nada. También puedes añadirlos tú. Un cliente que ya es de otra gestora sigue siendo de ella. Escríbeles por WhatsApp cuando haya algo que les guste.</p></div>
 			<?php if ( isset( $notes[ $flag ] ) ) : ?><div class="cvd-notice" role="status"><?php echo esc_html( $notes[ $flag ] ); ?></div><?php endif; ?>
 			<details><summary class="cvd-secondary">Añadir un cliente</summary>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="cvd-client-form">

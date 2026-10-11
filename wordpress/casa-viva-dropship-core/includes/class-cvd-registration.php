@@ -13,6 +13,9 @@ final class CVD_Registration {
 	/** En la pantalla de entrada: las gestoras sin contraseña entran pidiendo su enlace por WhatsApp. */
 	public static function whatsapp_access_hint(): void {
 		$wa = 'https://wa.me/5354056173?text=' . rawurlencode( 'mi acceso' );
+		if ( isset( $_GET['cvd_access'] ) && 'invalid' === sanitize_key( wp_unslash( $_GET['cvd_access'] ) ) ) {
+			echo '<div class="cvd-notice cvd-error" role="alert" style="margin-top:14px">Ese enlace para entrar ya se usó o venció. Pide otro: escribe <strong>mi acceso</strong> al WhatsApp 5354056173.</div>';
+		}
 		echo '<div class="cvd-notice" style="margin-top:14px"><strong>¿Eres gestora y no tienes contraseña?</strong><br>No hace falta: <a class="cvd-primary" style="display:inline-block;margin-top:8px" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener">Entrar con WhatsApp</a><br><small>Te mandamos al momento un enlace para entrar directo a tu panel.</small></div>';
 	}
 
@@ -43,9 +46,10 @@ final class CVD_Registration {
 			&& $hash
 			&& $expires >= time()
 			&& wp_check_password( $token, $hash )
-			&& self::is_approved_gestora( $user );
+			&& ( self::is_approved_gestora( $user ) || self::is_approved_messenger( $user ) );
 		if ( ! $is_valid ) {
-			wp_safe_redirect( add_query_arg( 'cvd_access', 'invalid', home_url( '/area-gestoras/' ) ) );
+			$area = $user && self::has_program_account( $user, 'mensajero' ) ? '/area-mensajeros/' : '/area-gestoras/';
+			wp_safe_redirect( add_query_arg( 'cvd_access', 'invalid', home_url( $area ) ) );
 			exit;
 		}
 
@@ -55,7 +59,7 @@ final class CVD_Registration {
 		wp_set_current_user( $user_id );
 		wp_set_auth_cookie( $user_id, true, is_ssl() );
 		do_action( 'wp_login', $user->user_login, $user );
-		wp_safe_redirect( home_url( '/area-gestoras/' ) );
+		wp_safe_redirect( self::portal_url_for_type( self::program_type( $user ) ) );
 		exit;
 	}
 
@@ -75,6 +79,9 @@ final class CVD_Registration {
 	public static function render( array $atts = array() ): string {
 		$atts = shortcode_atts( array( 'role' => 'gestora' ), $atts );
 		$type = 'mensajero' === $atts['role'] ? 'mensajero' : 'gestora';
+		// El formulario lleva un nonce: si la caché guarda la página más de un día, a todas les sale "la sesión venció".
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) { define( 'DONOTCACHEPAGE', true ); }
+		do_action( 'litespeed_control_set_nocache', 'Casa Viva registro: formulario con nonce' );
 		$current_user = is_user_logged_in() ? wp_get_current_user() : null;
 		if ( $current_user && self::has_program_account( $current_user, $type ) ) {
 			$url = self::portal_url_for_type( $type );
@@ -95,7 +102,7 @@ final class CVD_Registration {
 		}
 
 		if ( $success ) {
-			return '<section class="cvd-auth-card"><p class="cvd-kicker">Solicitud recibida</p><h1>Tu cuenta ya fue creada.</h1><p>Ahora está pendiente de aprobación por Casa Viva. No necesitas registrarte otra vez. Te avisaremos por WhatsApp cuando sea aprobada, con tu enlace para entrar.</p><a class="cvd-primary" href="' . esc_url( self::portal_url_for_type( $type ) ) . '">Consultar mi solicitud</a></section>';
+			return '<section class="cvd-auth-card"><p class="cvd-kicker">Solicitud recibida</p><h1>Tu cuenta ya fue creada.</h1><p>Ahora está pendiente de aprobación por Casa Viva. No necesitas registrarte otra vez. Te avisaremos por WhatsApp cuando sea aprobada, con tu enlace para entrar.</p><a class="cvd-primary" href="' . esc_url( home_url( '/tienda/' ) ) . '">Ver la tienda mientras tanto</a></section>';
 		}
 
 		$inviter = 'gestora' === $type ? self::inviter_from_request() : null;
@@ -106,10 +113,11 @@ final class CVD_Registration {
 		ob_start();
 		?>
 		<section class="cvd-auth-layout">
-			<div class="cvd-auth-intro"><p class="cvd-kicker">Casa Viva</p><h1><?php echo esc_html( $title ); ?></h1><p><?php echo esc_html( $intro ); ?></p><ul><li>Registro gratuito sujeto a aprobación.</li><li>Información y actividad protegidas por usuario.</li><li>Soporte operativo de Casa Viva.</li></ul></div>
+			<div class="cvd-auth-intro"><p class="cvd-kicker">Casa Viva</p><h1><?php echo esc_html( $title ); ?></h1><p><?php echo esc_html( $intro ); ?></p><?php if ( 'gestora' === $type ) : ?><ul><li>Es gratis. Casa Viva revisa tu solicitud y te avisa por WhatsApp.</li><li>Ganas el 10 % de cada venta (algunos productos tienen un monto fijo).</li><li>Puedes subir tus precios: la diferencia es tuya.</li><li>Entras con tu WhatsApp, sin contraseña.</li></ul><?php else : ?><ul><li>Registro gratuito sujeto a aprobación.</li><li>Información y actividad protegidas por usuario.</li><li>Soporte operativo de Casa Viva.</li></ul><?php endif; ?></div>
 			<form class="cvd-form" method="post">
 				<h2>Crear solicitud</h2>
 				<?php if ( $inviter ) : ?><p class="cvd-notice">Te invita <strong><?php echo esc_html( $inviter->display_name ); ?></strong>.</p><input name="cvd_invita" type="hidden" value="<?php echo esc_attr( (string) get_user_meta( $inviter->ID, '_cvd_referral_code', true ) ); ?>"><?php endif; ?>
+				<?php if ( ! $inviter && 'gestora' === $type && '' !== (string) ( $_GET['invita'] ?? '' ) ) : ?><p class="cvd-notice">Este enlace de invitación ya no vale. Puedes registrarte igual.</p><?php endif; ?>
 				<?php foreach ( $errors as $error ) : ?><p class="cvd-error"><?php echo esc_html( $error ); ?></p><?php endforeach; ?>
 				<div class="cvd-form-grid">
 					<label>Nombre completo<input name="cvd_name" required type="text" value="<?php echo esc_attr( wp_unslash( $_POST['cvd_name'] ?? ( $current_user ? $current_user->display_name : '' ) ) ); ?>"></label>
@@ -139,6 +147,12 @@ final class CVD_Registration {
 		if ( ! $name || strlen( $phone ) < 8 || ! $zone ) {
 			return new WP_Error( 'invalid', 'Escribe tu nombre, tu WhatsApp y tu municipio o zona.' );
 		}
+		// WhatsApp de verdad: móvil cubano (53 + 5/6 + 7 cifras) o número extranjero con código de país. "00000000" ya no entra.
+		$cuban_mobile = (bool) preg_match( '/^53[56]\d{7}$/', $phone );
+		$foreign = ! str_starts_with( $phone, '53' ) && strlen( $phone ) >= 10 && strlen( $phone ) <= 15;
+		if ( ( ! $cuban_mobile && ! $foreign ) || preg_match( '/(\d)\1{6,}/', $phone ) ) {
+			return new WP_Error( 'invalid_phone', 'Ese WhatsApp no parece válido. Escribe tus 8 cifras (por ejemplo 5XXXXXXX) o, si es de fuera de Cuba, el número con su código de país.' );
+		}
 		if ( '' !== $email && ! is_email( $email ) ) {
 			return new WP_Error( 'invalid_email', 'El correo no es válido. Puedes dejarlo vacío.' );
 		}
@@ -148,7 +162,7 @@ final class CVD_Registration {
 		if ( ! $current_user ) {
 			$same_phone = get_users( array( 'number' => 1, 'fields' => 'ID', 'meta_query' => array( array( 'key' => '_cvd_whatsapp', 'value' => substr( $phone, -8 ), 'compare' => 'LIKE' ) ) ) );
 			if ( $same_phone ) {
-				return new WP_Error( 'phone_exists', 'Ya hay una cuenta con este WhatsApp. Escríbenos por WhatsApp y te mandamos tu acceso.' );
+				return new WP_Error( 'phone_exists', 'Ya hay una cuenta con este WhatsApp. Entra en Mi cuenta → Gestoras → «Entrar con WhatsApp» y te mandamos tu enlace.' );
 			}
 			// Sin correo ni contraseña: correo interno (no recibe mensajes) y contraseña aleatoria; se entra con el enlace de WhatsApp.
 			if ( '' === $email ) { $email = 'g' . $phone . '@gestoras.casaviva.company'; }
@@ -252,6 +266,11 @@ final class CVD_Registration {
 
 	public static function is_approved_gestora( WP_User $user ): bool {
 		return self::has_program_account( $user, 'gestora' )
+			&& 'approved' === get_user_meta( $user->ID, '_cvd_account_status', true );
+	}
+
+	public static function is_approved_messenger( WP_User $user ): bool {
+		return self::has_program_account( $user, 'mensajero' )
 			&& 'approved' === get_user_meta( $user->ID, '_cvd_account_status', true );
 	}
 

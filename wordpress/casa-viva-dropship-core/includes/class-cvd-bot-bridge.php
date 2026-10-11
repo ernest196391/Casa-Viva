@@ -55,6 +55,11 @@ final class CVD_Bot_Bridge {
 		if ( 'approved' === $status && in_array( 'cvd_gestora', (array) $user->roles, true ) && ! get_user_meta( $user->ID, '_cvd_referral_code', true ) ) {
 			update_user_meta( $user->ID, '_cvd_referral_code', 'CV' . $user->ID . strtoupper( substr( preg_replace( '/[^A-Z0-9]/i', '', $user->user_login ), 0, 8 ) ) );
 		}
+		// Mensajero recién aprobado: queda "Disponible". Sin esto, si ningún mensajero aprobado lo está,
+		// "Listo para salir" no abre la oferta (CVD_Delivery::publish_offer) y el bot no publica nada en el grupo.
+		if ( 'approved' === $status && in_array( 'cvd_messenger', (array) $user->roles, true ) && '' === (string) get_user_meta( $user->ID, '_cvd_messenger_available', true ) ) {
+			update_user_meta( $user->ID, '_cvd_messenger_available', 'yes' );
+		}
 		clean_user_cache( $user->ID );
 		update_user_meta( $user->ID, '_cvd_status_changed_by', 'vivabot:' . sanitize_text_field( (string) $request->get_param( 'by' ) ) );
 		return self::no_cache( array( 'ok' => true, 'status' => $status ) );
@@ -98,7 +103,7 @@ final class CVD_Bot_Bridge {
 
 	/** Lo que una gestora pregunta por WhatsApp: sus últimos pedidos, en qué punto van y su comisión. */
 	public static function gestora_orders( WP_REST_Request $request ) {
-		$gestora = self::user_by_phone( (string) $request->get_param( 'phone' ), 'cvd_gestora' );
+		$gestora = self::user_by_phone( (string) $request->get_param( 'phone' ), 'cvd_gestora', false ); // también pendientes: el bot les dice que esperen la aprobación (si no, les pedía registrarse otra vez)
 		if ( ! $gestora ) { return self::no_cache( array( 'found' => false ) ); }
 		$only = absint( $request->get_param( 'order' ) );
 		if ( $only ) {
@@ -148,7 +153,15 @@ final class CVD_Bot_Bridge {
 		$phone = preg_replace( '/\D+/', '', (string) $request->get_param( 'phone' ) );
 		if ( strlen( $phone ) < 8 ) { return new WP_Error( 'cvd_phone', 'Teléfono no válido.', array( 'status' => 400 ) ); }
 		$typed = preg_replace( '/\D+/', '', (string) $order->get_billing_phone() );
-		if ( (string) $order->get_meta( '_cvd_whatsapp_verified', true ) !== $phone ) {
+		$current = (string) $order->get_meta( '_cvd_whatsapp_verified', true );
+		// Solo cuenta el primero que manda el vale (el cliente, justo al comprar). Si después otro número
+		// manda un texto con el mismo "Pedido #N", no se le desvían los avisos ni el teléfono del vale del mensajero.
+		if ( '' !== $current && substr( $current, -8 ) !== substr( $phone, -8 ) ) {
+			$order->add_order_note( 'VivaBot: +' . $phone . ' envió el vale de este pedido, pero ya estaba verificado +' . $current . '. No se cambia.' );
+			$order->save();
+			return self::no_cache( array( 'ok' => false, 'locked' => true, 'matches' => substr( $typed, -8 ) === substr( $phone, -8 ) ) );
+		}
+		if ( $current !== $phone ) {
 			$order->update_meta_data( '_cvd_whatsapp_verified', $phone );
 			$order->add_order_note( substr( $typed, -8 ) === substr( $phone, -8 )
 				? 'VivaBot: el cliente envió el vale desde su WhatsApp (+' . $phone . ').'
@@ -169,14 +182,18 @@ final class CVD_Bot_Bridge {
 		$offers = array();
 		foreach ( $orders as $order ) {
 			if ( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { continue; }
+			$offered_at = (string) $order->get_meta( '_cvd_delivery_offered_at', true );
+			$announced_at = (string) $order->get_meta( '_cvd_bot_announced_at', true );
 			$offers[] = array(
 				'id'         => $order->get_id(),
 				'zone'       => CVD_Delivery::destination_zone( $order ),
 				'items'      => self::items( $order ),
 				'earningCup' => CVD_Delivery::courier_amount( $order ),
 				'window'     => self::window( $order ),
-				'offeredAt'  => (string) $order->get_meta( '_cvd_delivery_offered_at', true ),
-				'announced'  => '' !== (string) $order->get_meta( '_cvd_bot_announced_at', true ),
+				'offeredAt'  => $offered_at,
+				// Si el pedido se volvió a ofertar (se quitó el mensajero y otra vez "Listo para salir"),
+				// el aviso anterior no cuenta: hay que publicarlo de nuevo. Ambas fechas son 'Y-m-d H:i:s' UTC.
+				'announced'  => '' !== $announced_at && $announced_at >= $offered_at,
 			);
 		}
 		return self::no_cache( array( 'offers' => $offers ) );
@@ -185,7 +202,8 @@ final class CVD_Bot_Bridge {
 	public static function announced( WP_REST_Request $request ) {
 		$order = self::order( $request );
 		if ( is_wp_error( $order ) ) { return $order; }
-		if ( ! $order->get_meta( '_cvd_bot_announced_at', true ) ) {
+		$previous = (string) $order->get_meta( '_cvd_bot_announced_at', true );
+		if ( '' === $previous || $previous < (string) $order->get_meta( '_cvd_delivery_offered_at', true ) ) {
 			$order->update_meta_data( '_cvd_bot_announced_at', current_time( 'mysql', true ) );
 			$order->add_order_note( 'VivaBot: oferta publicada en el grupo de mensajeros.' );
 			$order->save();
@@ -315,10 +333,10 @@ final class CVD_Bot_Bridge {
 		return self::user_by_phone( $phone, 'cvd_messenger' );
 	}
 
-	private static function user_by_phone( string $phone, string $role ): ?WP_User {
+	private static function user_by_phone( string $phone, string $role, bool $approved_only = true ): ?WP_User {
 		$key = self::phone_key( $phone );
 		if ( '' === $key ) { return null; }
-		$users = get_users( array( 'role' => $role, 'meta_key' => '_cvd_account_status', 'meta_value' => 'approved' ) );
+		$users = get_users( $approved_only ? array( 'role' => $role, 'meta_key' => '_cvd_account_status', 'meta_value' => 'approved' ) : array( 'role' => $role ) );
 		foreach ( $users as $user ) {
 			foreach ( array( '_cvd_whatsapp', 'billing_phone' ) as $meta ) {
 				if ( $key === self::phone_key( (string) get_user_meta( $user->ID, $meta, true ) ) ) { return $user; }

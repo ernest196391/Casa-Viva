@@ -82,10 +82,23 @@ final class CVD_Gestora_Store {
 	/** Gestora usada exclusivamente para presentar precios de tienda espejo. */
 	private static function pricing_owner_from_request(): ?array {
 		$raw = isset( $_GET['ref'] ) ? wp_unslash( $_GET['ref'] ) : ( isset( $_GET['cv_ref'] ) ? wp_unslash( $_GET['cv_ref'] ) : '' );
+		// "Añadir al carrito" desde la lista va por AJAX (/?wc-ajax=add_to_cart) sin ?ref=: se lee de la página que lo pidió.
+		// Sin esto el carrito no fijaba el precio de la gestora y el pedido salía al precio de Casa Viva.
+		if ( '' === $raw && wp_doing_ajax() ) { $raw = self::referral_from_referer(); }
 		$code = strtoupper( preg_replace( '/[^A-Z0-9_-]/i', '', trim( (string) $raw ) ) );
 		if ( ! $code ) { return null; }
 		$owner = CVD_Attribution::current_referral_owner();
 		return $owner && hash_equals( (string) ( $owner['referral_code'] ?? '' ), $code ) ? $owner : null;
+	}
+
+	/** Código ?ref= de la página de esta misma web desde la que se hizo la petición AJAX. */
+	private static function referral_from_referer(): string {
+		$referer = (string) wp_get_raw_referer();
+		if ( '' === $referer || wp_parse_url( $referer, PHP_URL_HOST ) !== wp_parse_url( home_url( '/' ), PHP_URL_HOST ) ) { return ''; }
+		$query = array();
+		parse_str( (string) wp_parse_url( $referer, PHP_URL_QUERY ), $query );
+		$value = $query['ref'] ?? ( $query['cv_ref'] ?? '' );
+		return is_string( $value ) ? $value : '';
 	}
 
 	public static function customer_price( $price, WC_Product $product ) {
@@ -122,27 +135,30 @@ final class CVD_Gestora_Store {
 		}
 		$price = null !== $custom ? (float) $custom : $base * ( 1 + ( (float) get_user_meta( $gestora_id, '_cvd_global_markup_percent', true ) / 100 ) );
 		$min = (float) $product->get_meta( '_cvd_min_price', true );
-		$max = (float) $product->get_meta( '_cvd_max_price', true );
 		$min = $min > 0 ? $min : $base;
-		if ( $max <= 0 ) {
-			$user_max = (float) get_user_meta( $gestora_id, '_cvd_max_markup_percent', true );
-			$max_percent = $user_max > 0 ? $user_max : (float) get_option( 'cvd_default_max_markup_percent', 30 );
-			$max = $base * ( 1 + $max_percent / 100 );
-		}
-		return wc_format_decimal( min( $max, max( $min, $price ) ), wc_get_price_decimals() );
+		$max = self::max_price( $product, $gestora_id, $base );
+		$price = max( $min, $price );
+		if ( $max > 0 ) { $price = min( $max, $price ); }
+		return wc_format_decimal( $price, wc_get_price_decimals() );
 	}
 
+	/** 'max' = 0 significa sin tope (regla de Casa Viva desde 2026-10-11: la gestora sube lo que quiera). */
 	public static function limits( WC_Product $product, int $gestora_id ): array {
 		$base = self::base_price( $product );
 		$min = (float) $product->get_meta( '_cvd_min_price', true );
-		$max = (float) $product->get_meta( '_cvd_max_price', true );
 		$min = $min > 0 ? $min : $base;
-		if ( $max <= 0 ) {
-			$user_max = (float) get_user_meta( $gestora_id, '_cvd_max_markup_percent', true );
-			$percent = $user_max > 0 ? $user_max : (float) get_option( 'cvd_default_max_markup_percent', 30 );
-			$max = $base * ( 1 + $percent / 100 );
-		}
-		return array( 'base' => $base, 'min' => $min, 'max' => $max );
+		return array( 'base' => $base, 'min' => $min, 'max' => self::max_price( $product, $gestora_id, $base ) );
+	}
+
+	/**
+	 * Tope solo si Casa Viva lo puso a mano en el producto (_cvd_max_price) o a esa gestora
+	 * (_cvd_max_markup_percent). El "aumento máximo predeterminado" general (30 %) ya no se aplica.
+	 */
+	private static function max_price( WC_Product $product, int $gestora_id, float $base ): float {
+		$max = (float) $product->get_meta( '_cvd_max_price', true );
+		if ( $max > 0 ) { return $max; }
+		$percent = (float) get_user_meta( $gestora_id, '_cvd_max_markup_percent', true );
+		return $percent > 0 ? $base * ( 1 + $percent / 100 ) : 0.0;
 	}
 
 	private static function base_price( WC_Product $product ): float {
@@ -165,7 +181,7 @@ final class CVD_Gestora_Store {
 			$raw_price = trim( (string) $raw_price );
 			if ( '' === $raw_price ) { $wpdb->delete( $table, array( 'gestora_user_id' => $gestora_id, 'product_id' => $product->get_id() ), array( '%d', '%d' ) ); continue; }
 			$price = (float) wc_format_decimal( $raw_price ); $limits = self::limits( $product, $gestora_id );
-			if ( $price < $limits['min'] || $price > $limits['max'] ) { $errors[] = $product->get_name(); continue; }
+			if ( $price < $limits['min'] || ( $limits['max'] > 0 && $price > $limits['max'] ) ) { $errors[] = $product->get_name(); continue; }
 			$wpdb->replace( $table, array( 'gestora_user_id' => $gestora_id, 'product_id' => $product->get_id(), 'price' => $price, 'created_at' => $now, 'updated_at' => $now ), array( '%d', '%d', '%f', '%s', '%s' ) ); $saved++;
 		}
 		if ( $saved || $posted ) {

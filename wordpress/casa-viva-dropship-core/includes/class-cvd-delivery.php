@@ -496,7 +496,7 @@ final class CVD_Delivery {
 
 	public static function render_tracking(): string {
 		$order = self::tracking_order();
-		if ( ! $order ) { return '<section class="cvd-tracking cvd-tracking-empty"><h1>Seguir pedido</h1><form data-tracking-link-form><label for="cvd-tracking-link">Pega el enlace recibido</label><input id="cvd-tracking-link" type="url" inputmode="url" placeholder="https://casavivadecuba.com/seguimiento/?pedido=…" required><button class="cvd-primary" type="submit">Consultar</button><span data-tracking-link-error role="alert"></span></form></section>'; }
+		if ( ! $order ) { return '<section class="cvd-tracking cvd-tracking-empty"><h1>Seguir pedido</h1><form data-tracking-link-form><label for="cvd-tracking-link">Pega el enlace recibido</label><input id="cvd-tracking-link" type="url" inputmode="url" placeholder="https://casaviva.company/seguimiento/?pedido=…" required><button class="cvd-primary" type="submit">Consultar</button><span data-tracking-link-error role="alert"></span></form></section>'; }
 		$status = self::status( $order );
 		$steps = array(
 			'confirmed' => 'Pedido confirmado',
