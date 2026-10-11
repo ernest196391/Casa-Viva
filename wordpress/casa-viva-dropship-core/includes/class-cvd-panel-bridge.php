@@ -34,6 +34,27 @@ final class CVD_Panel_Bridge {
 		register_rest_route( self::NS, '/panel/stock/web-sales', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'web_sales' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/stock/levels', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'stock_levels' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/price', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'set_price' ), 'permission_callback' => $auth ) );
+		// Tarifas de mensajería por zona (CUP): las mismas que usa el checkout y el reparto.
+		register_rest_route( self::NS, '/panel/shipping-rates', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'shipping_rates' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/shipping-rates', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'shipping_rate_save' ), 'permission_callback' => $auth ) );
+	}
+
+	public static function shipping_rates(): WP_REST_Response {
+		$log = get_option( 'cvd_shipping_rates_log', array() );
+		return self::no_cache( array(
+			'rates'           => array_values( CVD_Shipping_Rates::rates() ),
+			'platformPercent' => (float) get_option( 'cvd_shipping_platform_percent', 10 ),
+			'recent'          => array_reverse( array_slice( is_array( $log ) ? $log : array(), -10 ) ),
+		) );
+	}
+
+	public static function shipping_rate_save( WP_REST_Request $request ) {
+		$result = CVD_Shipping_Rates::save_rate(
+			(string) $request->get_param( 'municipality' ), (string) $request->get_param( 'zone' ),
+			(int) $request->get_param( 'fee' ), (bool) $request->get_param( 'active' ), 'panel'
+		);
+		if ( isset( $result['error'] ) ) { return new WP_Error( 'cvd_panel_rate', $result['error'], array( 'status' => 422 ) ); }
+		return self::no_cache( $result );
 	}
 
 	private static function keys_table(): string {

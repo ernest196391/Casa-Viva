@@ -100,6 +100,29 @@ final class CVD_Shipping_Rates {
 		return is_array( $rates ) ? $rates : array();
 	}
 
+	/**
+	 * Crea o cambia una fila (municipio + zona) desde el panel de la dueña. Zona vacía = referencia municipal.
+	 * Ojo: si se sube VERSION, install_defaults() vuelve a cargar el CSV y pisa estos cambios.
+	 */
+	public static function save_rate( string $municipality, string $zone, int $fee, bool $active, string $by = 'panel' ): array {
+		$municipality = sanitize_text_field( $municipality ); $zone = sanitize_text_field( $zone );
+		if ( '' === trim( $municipality ) ) { return array( 'error' => 'Falta el municipio.' ); }
+		if ( $fee < 0 || $fee > 100000 ) { return array( 'error' => 'La tarifa debe estar entre 0 y 100000 CUP.' ); }
+		$rates = self::rates(); $before = null; $found = false;
+		foreach ( $rates as &$row ) {
+			if ( self::normalize( $row['municipality'] ) === self::normalize( $municipality ) && self::normalize( $row['zone'] ) === self::normalize( $zone ) ) {
+				$before = $row; $row['fee'] = $fee; $row['active'] = $active; $found = true; break;
+			}
+		}
+		unset( $row );
+		if ( ! $found ) { $rates[] = array( 'municipality' => $municipality, 'zone' => $zone, 'fee' => $fee, 'active' => $active ); }
+		update_option( self::OPTION, $rates, false );
+		$log = get_option( 'cvd_shipping_rates_log', array() );
+		$log = array_slice( array_merge( is_array( $log ) ? $log : array(), array( array( 'at' => gmdate( 'c' ), 'by' => $by, 'municipality' => $municipality, 'zone' => $zone, 'before' => $before, 'fee' => $fee, 'active' => $active ) ) ), -300 );
+		update_option( 'cvd_shipping_rates_log', $log, false );
+		return array( 'ok' => true, 'created' => ! $found, 'before' => $before );
+	}
+
 	public static function localities(): array {
 		$out = array();
 		foreach ( self::rates() as $row ) {
