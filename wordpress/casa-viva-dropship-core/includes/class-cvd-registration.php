@@ -16,7 +16,8 @@ final class CVD_Registration {
 		if ( isset( $_GET['cvd_access'] ) && 'invalid' === sanitize_key( wp_unslash( $_GET['cvd_access'] ) ) ) {
 			echo '<div class="cvd-notice cvd-error" role="alert" style="margin-top:14px">Ese enlace para entrar ya se usó o venció. Pide otro: escribe <strong>mi acceso</strong> al WhatsApp 5354056173.</div>';
 		}
-		echo '<div class="cvd-notice" style="margin-top:14px"><strong>¿Eres gestora y no tienes contraseña?</strong><br>No hace falta: <a class="cvd-primary" style="display:inline-block;margin-top:8px" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener">Entrar con WhatsApp</a><br><small>Te mandamos al momento un enlace para entrar directo a tu panel.</small></div>';
+		echo '<div class="cvd-notice" style="margin-top:14px"><strong>¿Gestora o mensajero?</strong> Escribe tu número de WhatsApp arriba, en lugar del correo, con la contraseña que pusiste en <em>Mi perfil</em>.</div>';
+		echo '<div class="cvd-notice" style="margin-top:14px"><strong>¿Aún no tienes contraseña o la olvidaste?</strong><br><a class="cvd-primary" style="display:inline-block;margin-top:8px" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener">Entrar con WhatsApp</a><br><small>Te mandamos un enlace para entrar. Dentro, en <em>Mi perfil</em>, pon tu contraseña y ya no tendrás que pedirlo más.</small></div>';
 	}
 
 	public static function create_secure_access_link( WP_User $user ): string {

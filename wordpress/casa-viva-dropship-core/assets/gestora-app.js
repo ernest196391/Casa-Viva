@@ -6,7 +6,7 @@
   // Secciones del portal clásico → vista de la app.
   var legacy = {
     'mis-clientes': 'clientes', precios: 'precios', invitar: 'invitar', ventas: 'ventas', mensajeria: 'ventas',
-    pagos: 'cobrar', materiales: 'materiales', perfil: 'perfil'
+    pagos: 'cobrar', materiales: 'materiales', perfil: 'perfil', 'cvd-clave': 'perfil'
   };
   Object.keys(legacy).forEach(function (id) { var el = document.getElementById(id); if (el) el.setAttribute('data-view', legacy[id]); });
   var perProduct = document.querySelector('.cvd-products-pricing'); if (perProduct) perProduct.setAttribute('data-view', 'precios');
