@@ -26,6 +26,38 @@ final class CVD_Panel_Bridge {
 		register_rest_route( self::NS, '/panel/gestoras/(?P<id>\d+)/status', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'gestora_status' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/payouts', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'payouts' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/payouts/(?P<id>\d+)', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'payout_action' ), 'permission_callback' => $auth ) );
+		// Pedidos: las mismas rutas del Centro de ventas (/sales), ejecutadas como la dueña.
+		register_rest_route( self::NS, '/panel/sales', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'sales' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/sales/(?P<id>\d+)/(?P<what>status|return)', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'sales_action' ), 'permission_callback' => $auth ) );
+	}
+
+	/** Ejecuta una ruta del Centro de ventas como la usuaria que firma el panel (sus permisos y reglas). */
+	private static function as_owner( string $method, string $route, array $params ) {
+		$actor = absint( get_option( self::ACTOR_OPTION, 0 ) );
+		if ( ! $actor || ! user_can( $actor, 'manage_woocommerce' ) ) {
+			return new WP_Error( 'cvd_panel_actor', 'Falta configurar quién firma las acciones del panel.', array( 'status' => 500 ) );
+		}
+		wp_set_current_user( $actor );
+		$inner = new WP_REST_Request( $method, '/' . self::NS . $route );
+		foreach ( $params as $key => $value ) { $inner->set_param( $key, $value ); }
+		$response = rest_do_request( $inner );
+		if ( $response->is_error() ) { return $response->as_error(); }
+		return self::no_cache( (array) $response->get_data() );
+	}
+
+	public static function sales( WP_REST_Request $request ) {
+		return self::as_owner( 'GET', '/sales', array(
+			'status' => sanitize_key( (string) $request->get_param( 'status' ) ),
+			'search' => sanitize_text_field( (string) $request->get_param( 'search' ) ),
+		) );
+	}
+
+	/** Cambiar el estado (Listo para salir, entregado al mensajero, dinero recibido, cancelar…) o registrar devolución. */
+	public static function sales_action( WP_REST_Request $request ) {
+		$params = (array) $request->get_json_params();
+		$allowed = array( 'status', 'collectionMethod', 'collectedUsd', 'collectedCup', 'collectionNote', 'moneyConfirmed', 'handoverConfirmed', 'idempotencyKey', 'reason', 'refundUsd', 'refundCup', 'voidMessenger' );
+		$params = array_intersect_key( $params, array_flip( $allowed ) );
+		return self::as_owner( 'POST', '/sales/' . absint( $request['id'] ) . '/' . ( 'return' === $request['what'] ? 'return' : 'status' ), $params );
 	}
 
 	public static function authorized( WP_REST_Request $request ): bool {
