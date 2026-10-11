@@ -35,9 +35,36 @@ final class CVD_Panel_Bridge {
 		register_rest_route( self::NS, '/panel/stock/levels', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'stock_levels' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/price', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'set_price' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/save', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'save_product' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/clients', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'clients' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/clients', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'client_save' ), 'permission_callback' => $auth ) );
 		// Tarifas de mensajería por zona (CUP): las mismas que usa el checkout y el reparto.
 		register_rest_route( self::NS, '/panel/shipping-rates', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'shipping_rates' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/shipping-rates', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'shipping_rate_save' ), 'permission_callback' => $auth ) );
+	}
+
+	/** Todos los clientes (o de una gestora: ?owner=ID), con el nombre de su gestora. */
+	public static function clients( WP_REST_Request $request ): WP_REST_Response {
+		$names = array();
+		$rows = array();
+		foreach ( CVD_Clients::list( absint( $request->get_param( 'owner' ) ), sanitize_text_field( (string) $request->get_param( 'search' ) ), 2000 ) as $c ) {
+			$owner = (int) $c->owner_user_id;
+			if ( $owner && ! isset( $names[ $owner ] ) ) { $u = get_userdata( $owner ); $names[ $owner ] = $u ? $u->display_name : '#' . $owner; }
+			$rows[] = array( 'id' => (int) $c->id, 'phone' => $c->phone, 'name' => $c->name, 'ownerId' => $owner, 'owner' => $owner ? $names[ $owner ] : null,
+				'source' => $c->source, 'orders' => (int) $c->orders, 'spent' => (float) $c->spent, 'lastOrderAt' => $c->last_order_at, 'note' => $c->note, 'optOut' => (bool) $c->opt_out, 'since' => $c->created_at );
+		}
+		return self::no_cache( array( 'clients' => $rows ) );
+	}
+
+	/** La dueña añade o corrige un cliente (nombre, nota, "no quiere mensajes", gestora si aún no tiene). */
+	public static function client_save( WP_REST_Request $request ) {
+		global $wpdb;
+		$r = CVD_Clients::upsert( (string) $request->get_param( 'phone' ), (string) $request->get_param( 'name' ), absint( $request->get_param( 'ownerId' ) ), 'panel', (string) $request->get_param( 'note' ) );
+		if ( isset( $r['error'] ) ) { return new WP_Error( 'cvd_panel_client', $r['error'], array( 'status' => 422 ) ); }
+		$update = array();
+		if ( null !== $request->get_param( 'optOut' ) ) { $update['opt_out'] = $request->get_param( 'optOut' ) ? 1 : 0; }
+		if ( '' !== trim( (string) $request->get_param( 'name' ) ) ) { $update['name'] = sanitize_text_field( (string) $request->get_param( 'name' ) ); }
+		if ( $update ) { $wpdb->update( CVD_Clients::table(), $update, array( 'id' => $r['id'] ) ); }
+		return self::no_cache( $r );
 	}
 
 	public static function shipping_rates(): WP_REST_Response {
