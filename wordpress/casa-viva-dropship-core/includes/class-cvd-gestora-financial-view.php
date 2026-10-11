@@ -43,7 +43,7 @@ final class CVD_Gestora_Financial_View {
 		) );
 		$clients = self::linked_client_count( $orders );
 		$summary = self::summary_html( $orders, $clients );
-		$history = '<section class="cvd-panel cvd-history-panel" id="ventas"><span id="comisiones"></span><h2>Historial de ventas y comisiones</h2>' . self::history_html( array_slice( $orders, 0, 100 ) ) . '</section>';
+		$history = '<section class="cvd-panel cvd-history-panel" id="ventas"><span id="comisiones"></span><h2>Tus ventas</h2>' . self::history_html( array_slice( $orders, 0, 100 ) ) . '</section>';
 
 		$output = preg_replace(
 			'~<div class="cvd-stats" id="dashboard">.*?</div>(?=\s*<section class="cvd-panel" id="catalogo">)~s',

@@ -142,7 +142,7 @@ final class CVD_Clients {
 		$flag = sanitize_key( wp_unslash( $_GET['cliente'] ?? '' ) );
 		$notes = array( 'ok' => 'Cliente guardado.', 'taken' => 'Ese cliente ya lo trajo otra gestora: no se puede pasar a tu lista.', 'error' => 'Escribe un teléfono válido (8 cifras).' );
 		ob_start(); ?>
-		<section class="cvd-panel" id="mis-clientes"><div><p class="cvd-kicker">Tus clientes</p><h2>Mis clientes (<?php echo esc_html( count( $rows ) ); ?>)</h2><p>Quien compra con tu enlace aparece aquí sin que hagas nada. También puedes añadirlos tú. Un cliente que ya es de otra gestora sigue siendo de ella. Escríbeles por WhatsApp cuando haya algo que les guste.</p></div>
+		<section class="cvd-panel" id="mis-clientes"><div><p class="cvd-kicker">Tus clientes</p><h2>Mis clientes (<?php echo esc_html( count( $rows ) ); ?>)</h2><p>Quien compra con tu enlace aparece aquí solo. También puedes añadirlos tú.</p></div>
 			<?php if ( isset( $notes[ $flag ] ) ) : ?><div class="cvd-notice" role="status"><?php echo esc_html( $notes[ $flag ] ); ?></div><?php endif; ?>
 			<details><summary class="cvd-secondary">Añadir un cliente</summary>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="cvd-client-form">

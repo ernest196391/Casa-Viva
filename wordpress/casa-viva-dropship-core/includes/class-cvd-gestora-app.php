@@ -72,8 +72,9 @@ final class CVD_Gestora_App {
 			array( 'precios', 'Mis precios', 'tag', '' ),
 			array( 'clientes', 'Clientes', 'people', '' ),
 			array( '', 'Herramientas', '', '' ),
-			array( 'herramientas', 'Herramientas', 'spark', '' ),
+			array( 'curru', 'Pregúntale a Curru', 'chat', '' ),
 			array( 'materiales', 'Fotos y textos listos', 'doc', '' ),
+			array( 'herramientas', 'Más herramientas', 'spark', '' ),
 			array( '', 'Mi dinero', '', '' ),
 			array( 'ventas', 'Ventas', 'chart', '' ),
 			array( 'cobrar', 'Cobrar', 'card', '' ),
@@ -91,7 +92,9 @@ final class CVD_Gestora_App {
 					<button class="cvga-icon-btn cvga-close" type="button" data-cvga-close aria-label="Cerrar menú"><?php echo self::icon( 'x' ); // phpcs:ignore ?></button>
 				</div>
 				<nav class="cvga-nav">
-					<?php foreach ( $nav as $item ) : if ( '' === $item[0] ) : ?><p class="cvga-group"><?php echo esc_html( $item[1] ); ?></p><?php else : ?>
+					<?php foreach ( $nav as $item ) : if ( '' === $item[0] ) : ?><p class="cvga-group"><?php echo esc_html( $item[1] ); ?></p><?php elseif ( 'curru' === $item[0] ) : ?>
+					<a class="cvga-link" href="#herramientas" data-cvga-curru><?php echo self::icon( $item[2] ); // phpcs:ignore ?><span class="cvga-label"><?php echo esc_html( $item[1] ); ?></span></a>
+					<?php else : ?>
 					<a class="cvga-link" href="#<?php echo esc_attr( $item[0] ); ?>" data-cvga-go="<?php echo esc_attr( $item[0] ); ?>"><?php echo self::icon( $item[2] ); // phpcs:ignore ?><span class="cvga-label"><?php echo esc_html( $item[1] ); ?></span></a>
 					<?php endif; endforeach; ?>
 				</nav>
@@ -139,7 +142,7 @@ final class CVD_Gestora_App {
 		<section class="cvga-view" data-view="inicio" id="cvga-inicio">
 			<div class="cvga-head"><h1>Hola, <?php echo esc_html( $first ); ?></h1><p>Esto es lo que llevas este mes.</p></div>
 			<div class="cvga-kpis">
-				<article class="cvga-card cvga-kpi"><small>Ganado este mes</small><strong><?php echo esc_html( $money['month'] ); ?></strong><span>Incluye ventas aún sin entregar</span></article>
+				<article class="cvga-card cvga-kpi"><small>Ganado</small><strong><?php echo esc_html( $money['month'] ); ?></strong><span>Incluye ventas aún sin entregar</span></article>
 				<article class="cvga-card cvga-kpi"><small>Por cobrar</small><strong><?php echo esc_html( $money['approved'] ); ?></strong><span>De pedidos ya entregados</span></article>
 				<article class="cvga-card cvga-kpi"><small>Clientes</small><strong><?php echo esc_html( (string) count( $clients ) ); ?></strong><span><a href="#clientes" data-cvga-go="clientes">Ver la lista</a></span></article>
 			</div>

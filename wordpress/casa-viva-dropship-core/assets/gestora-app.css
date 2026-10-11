@@ -11,6 +11,7 @@ body.cvga-body *,body.cvga-body *::before,body.cvga-body *::after{box-sizing:bor
 .cvga.is-mini{--ga-side-w:68px}
 .cvga-ic{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .cvga :focus-visible{outline:2px solid var(--ga-gold);outline-offset:2px}
+.cvga [hidden]{display:none!important}
 
 /* Menú lateral */
 .cvga-side{position:sticky;top:0;height:100vh;height:100dvh;overflow-y:auto;background:var(--ga-side);color:var(--ga-side-ink);display:flex;flex-direction:column;gap:2px;padding:14px 10px calc(14px + env(safe-area-inset-bottom,0px));z-index:40}
@@ -94,6 +95,11 @@ body.cvga-body *,body.cvga-body *::before,body.cvga-body *::after{box-sizing:bor
 .cvga .cvd-table-wrap{overflow-x:auto}
 .cvga .cvd-notice{border-radius:10px}
 .cvga-legacy{display:contents}
+.cvga .cvd-panel,.cvga .cvd-panel h2,.cvga .cvd-panel h3,.cvga .cvd-panel p,.cvga .cvd-section-title{text-align:left!important}
+.cvga .cvd-payout-balance article{border-radius:12px;background:var(--ga-soft)!important;max-width:280px}
+.cvga .cvd-payout-balance small{display:block}
+/* Ventas: solo lo que la gestora necesita (pedido, cliente, producto, lo que gana, estado). */
+.cvga #ventas th:nth-child(2),.cvga #ventas td:nth-child(2),.cvga #ventas th:nth-child(5),.cvga #ventas td:nth-child(5),.cvga #ventas th:nth-child(6),.cvga #ventas td:nth-child(6),.cvga #ventas th:nth-child(7),.cvga #ventas td:nth-child(7),.cvga #ventas th:nth-child(9),.cvga #ventas td:nth-child(9){display:none}
 
 /* Botones flotantes de la tienda: Curru se queda, encima del menú de abajo en el móvil. */
 body.cvga-body .cvd-customer-nav{display:none!important}

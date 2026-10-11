@@ -29,20 +29,20 @@ final class CVD_Payouts {
 		ob_start();
 		?>
 		<section class="cvd-panel cvd-payout-panel" id="pagos">
-			<div class="cvd-section-title"><p class="cvd-kicker">Tus pagos</p><h2>Pedir que te paguen</h2><p>1. Guarda cómo quieres cobrar. 2. Toca «Solicitar pago disponible». Solo entra lo aprobado: pedidos entregados y cobrados por Casa Viva. Casa Viva te paga y lo verás en el historial.</p></div>
+			<div class="cvd-section-title"><p class="cvd-kicker">Tus pagos</p><h2>Pide tu dinero</h2><p>Entra lo de los pedidos ya entregados y cobrados. Te avisamos cuando te paguemos.</p></div>
 			<?php if ( $notice ) : ?><div class="cvd-notice" role="status"><?php echo esc_html( $notice ); ?></div><?php endif; ?>
 			<div class="cvd-payout-balance">
-				<?php if ( $available ) : foreach ( $available as $currency => $amount ) : ?><article><span>Disponible</span><strong><?php echo wp_kses_post( wc_price( $amount, array( 'currency' => $currency ) ) ); ?></strong></article><?php endforeach; else : ?><article><span>Disponible</span><strong>0</strong><small>No hay comisiones aprobadas sin liquidar.</small></article><?php endif; ?>
+				<?php if ( $available ) : foreach ( $available as $currency => $amount ) : ?><article><span>Disponible</span><strong><?php echo wp_kses_post( wc_price( $amount, array( 'currency' => $currency ) ) ); ?></strong></article><?php endforeach; else : ?><article><span>Disponible</span><strong>0</strong><small>Aún no tienes dinero para cobrar.</small></article><?php endif; ?>
 			</div>
 			<?php $debits = class_exists( 'CVD_Payment_Obligations' ) ? CVD_Payment_Obligations::open_debits_by_currency( $user->ID ) : array(); if ( $debits ) : ?><div class="cvd-notice" role="status"><strong>Descuentos pendientes</strong><?php foreach ( $debits as $currency => $amount ) : ?><br><?php echo esc_html( wc_format_decimal( $amount, 2 ) . ' ' . $currency ); ?><?php endforeach; ?><br><small>Se compensan solo con comisiones de la misma moneda; no se aplica conversión.</small></div><?php endif; ?>
 			<form class="cvd-payout-profile" method="post" enctype="multipart/form-data">
-				<h3>Destino del pago</h3>
+				<h3>Dónde te pagamos</h3>
 				<label>Método<select name="cvd_payout_method" required><option value="">Selecciona</option><?php foreach ( array( 'transfermovil' => 'Transfermóvil', 'transferencia' => 'Transferencia bancaria', 'zelle' => 'Zelle', 'tropipay' => 'TropiPay', 'cash' => 'Efectivo', 'otro' => 'Otro' ) as $value => $label ) : ?><option value="<?php echo esc_attr( $value ); ?>" <?php selected( $method, $value ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></label>
 				<label>Tarjeta, teléfono o cuenta<input name="cvd_payout_account" autocomplete="off" required value="<?php echo esc_attr( $account ); ?>"><small>Dato privado: solo tú y administración pueden verlo.</small></label>
 				<label>QR de Transfermóvil (opcional)<input accept="image/jpeg,image/png,image/webp" name="cvd_payout_qr" type="file"><?php if ( $qr_id ) : ?><span class="cvd-qr-saved">QR guardado ✓</span><?php endif; ?></label>
-				<?php wp_nonce_field( 'cvd_save_payout_profile', 'cvd_payout_nonce' ); ?><button class="cvd-secondary" name="cvd_payout_action" value="save_profile">Guardar destino</button>
+				<?php wp_nonce_field( 'cvd_save_payout_profile', 'cvd_payout_nonce' ); ?><button class="cvd-secondary" name="cvd_payout_action" value="save_profile">Guardar</button>
 			</form>
-			<form class="cvd-payout-request" method="post"><?php wp_nonce_field( 'cvd_request_payout', 'cvd_payout_nonce' ); ?><button class="cvd-primary" name="cvd_payout_action" value="request" <?php disabled( ! $available || ! $method || ! $account ); ?>>Solicitar pago disponible</button><?php if ( ! $method || ! $account ) : ?><small>Guarda primero el destino del pago.</small><?php endif; ?></form>
+			<form class="cvd-payout-request" method="post"><?php wp_nonce_field( 'cvd_request_payout', 'cvd_payout_nonce' ); ?><button class="cvd-primary" name="cvd_payout_action" value="request" <?php disabled( ! $available || ! $method || ! $account ); ?>>Pedir mi pago</button><?php if ( ! $method || ! $account ) : ?><small>Antes guarda dónde te pagamos.</small><?php endif; ?></form>
 			<?php echo self::render_history( $payouts, false ); ?>
 		</section>
 		<?php
