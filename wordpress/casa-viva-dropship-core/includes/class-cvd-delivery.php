@@ -148,7 +148,7 @@ final class CVD_Delivery {
 	private static function assign( int $order_id, int $messenger_id ): void {
 		// La desasignación no forma parte del mapa 1C.1; conserva exactamente su
 		// escritor legacy en vez de inventar una transición central nueva.
-		if ( ! $messenger_id ) { $order=wc_get_order($order_id); if(!$order){return;} $previous=absint($order->get_meta('_cvd_messenger_user_id',true)); $order->update_meta_data('_cvd_messenger_user_id',0); self::transition($order,'unassigned',array('previous_messenger'=>$previous,'messenger'=>0)); return; }
+		if ( ! $messenger_id ) { $order=wc_get_order($order_id); if(!$order){return;} $previous=absint($order->get_meta('_cvd_messenger_user_id',true)); $order->update_meta_data('_cvd_messenger_user_id',0); $order->delete_meta_data('_cvd_direct_assignment'); self::transition($order,'unassigned',array('previous_messenger'=>$previous,'messenger'=>0)); return; }
 		if ( ! class_exists( 'CVD_Order_Transition_Service' ) ) { return; }
 		$user = get_userdata( $messenger_id );
 		$result = CVD_Order_Transition_Service::transition( $order_id, 'delivery', 'assigned', array(
@@ -181,10 +181,87 @@ final class CVD_Delivery {
 		$metadata=array('eligible_messengers'=>count($eligible),'first_wave'=>count($first_wave));
 		$result=CVD_Order_Transition_Service::transition($order->get_id(),'delivery','offered',array(
 			'actor_user_id'=>get_current_user_id(),'source'=>'cvd_delivery_publish_offer','metadata'=>$metadata,
-			'atomic_mutation'=>static function(WC_Order $locked_order)use($first_wave,$eligible):void{$locked_order->update_meta_data('_cvd_delivery_offered_at',current_time('mysql',true));$locked_order->delete_meta_data('_cvd_messenger_user_id');$locked_order->update_meta_data('_cvd_delivery_invited_messengers',wp_list_pluck($first_wave,'ID'));$locked_order->update_meta_data('_cvd_delivery_rank_snapshot',self::rank_snapshot($eligible,$locked_order));},
+			'atomic_mutation'=>static function(WC_Order $locked_order)use($first_wave,$eligible):void{$locked_order->update_meta_data('_cvd_delivery_offered_at',current_time('mysql',true));$locked_order->delete_meta_data('_cvd_messenger_user_id');$locked_order->delete_meta_data('_cvd_direct_assignment');$locked_order->update_meta_data('_cvd_delivery_invited_messengers',wp_list_pluck($first_wave,'ID'));$locked_order->update_meta_data('_cvd_delivery_rank_snapshot',self::rank_snapshot($eligible,$locked_order));},
 			'after_commit'=>static function(WC_Order $saved_order)use($first_wave,$eligible):void{self::centralized_after_commit($saved_order,'offered');self::notify_offer($saved_order,$first_wave);if(count($eligible)>count($first_wave)&&!wp_next_scheduled('cvd_expand_delivery_offer',array($saved_order->get_id()))){wp_schedule_single_event(time()+max(30,absint(get_option('cvd_dispatch_wave_delay_seconds',90))),'cvd_expand_delivery_offer',array($saved_order->get_id()));}},
 		));
 		return !empty($result['success']);
+	}
+
+	/**
+	 * «Listo para salir» de un pedido a domicilio (3.13.48). Si la gestora (o la nota del cliente)
+	 * eligió mensajero y sigue aprobado, se le asigna directo y NO sale al grupo. Si ya no está
+	 * aprobado o la asignación falla, se publica la oferta como siempre. Sin elección: publish_offer().
+	 */
+	public static function dispatch_ready( WC_Order $order ): bool {
+		if ( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return false; }
+		$preferred_id = class_exists( 'CVD_Direct_Dispatch' ) ? absint( $order->get_meta( CVD_Direct_Dispatch::PREFERRED_META, true ) ) : 0;
+		if ( ! $preferred_id || 'unassigned' !== self::status( $order ) || absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { return self::publish_offer( $order ); }
+		$messenger = CVD_Direct_Dispatch::preferred_messenger( $order );
+		if ( $messenger && self::assign_direct( $order, $messenger ) ) { return true; }
+		$fresh = wc_get_order( $order->get_id() );
+		if ( ! $fresh ) { return false; }
+		$chosen = get_userdata( $preferred_id );
+		$fresh->add_order_note( $messenger
+			? 'No se pudo asignar directo a ' . $messenger->display_name . '; el pedido sale al grupo de mensajeros.'
+			: 'El mensajero elegido (' . ( $chosen ? $chosen->display_name : '#' . $preferred_id ) . ') ya no está aprobado; el pedido sale al grupo de mensajeros.' );
+		$fresh->save();
+		return self::publish_offer( $fresh );
+	}
+
+	/** Asignación directa pedida por la gestora: la misma transición «asignada» que la asignación manual de /mensajeria/. */
+	public static function assign_direct( WC_Order $order, WP_User $messenger ): bool {
+		if ( 'unassigned' !== self::status( $order ) || ! class_exists( 'CVD_Order_Transition_Service' ) || ! class_exists( 'CVD_Direct_Dispatch' ) ) { return false; }
+		$requested_by = CVD_Direct_Dispatch::requested_by( $order );
+		$result = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'assigned', array(
+			'actor_user_id' => get_current_user_id(), 'source' => 'cvd_delivery_direct_assign',
+			'metadata' => array( 'messenger' => $messenger->ID, 'direct' => true ),
+			'precondition' => static function ( WC_Order $locked, string $current ) use ( $messenger ) {
+				if ( 'unassigned' !== $current || absint( $locked->get_meta( '_cvd_messenger_user_id', true ) ) ) { return CVD_Order_Transition_Service::CONFLICT; }
+				return CVD_Direct_Dispatch::is_valid_messenger( $messenger ) ? true : CVD_Order_Transition_Service::PRECONDITION_FAILED;
+			},
+			'atomic_mutation' => static function ( WC_Order $locked, $from, $to, $actor, string $at ) use ( $messenger, $requested_by ): void {
+				$locked->update_meta_data( '_cvd_messenger_user_id', $messenger->ID );
+				$locked->update_meta_data( '_cvd_direct_assignment', 1 );
+				$locked->update_meta_data( '_cvd_direct_assigned_at', $at );
+				$locked->delete_meta_data( '_cvd_bot_direct_announced_at' );
+				$locked->add_order_note( 'Entrega asignada directamente a ' . $messenger->display_name . ' (lo pidió ' . $requested_by . '). No se publicó en el grupo de mensajeros.' );
+			},
+			'after_commit' => static function ( WC_Order $saved, array $transition ) use ( $messenger ): void {
+				self::centralized_after_commit( $saved, 'assigned' );
+				if ( ! empty( $transition['idempotent_replay'] ) ) { return; }
+				if ( class_exists( 'CVD_Web_Push' ) ) { CVD_Web_Push::send_offer( $saved, array( $messenger ) ); }
+				if ( $messenger->user_email ) { wp_mail( $messenger->user_email, 'Nueva entrega Casa Viva · Pedido #' . $saved->get_order_number(), "Tienes una entrega asignada.\n\nRevisar:\n" . home_url( '/area-mensajeros/' ) ); }
+			},
+		) );
+		return ! empty( $result['success'] ) && 'assigned' === ( $result['new_state'] ?? '' );
+	}
+
+	/**
+	 * El mensajero de una entrega «asignada» la acepta sin pasar por la web: al dar la hora por
+	 * WhatsApp o cuando la tienda le entrega el paquete. Actúa él mismo (Core valida que es el asignado).
+	 */
+	public static function accept_assigned( WC_Order $order, int $messenger_id, string $source, string $how ): bool {
+		$messenger = $messenger_id ? get_userdata( $messenger_id ) : false;
+		if ( ! $messenger || ! class_exists( 'CVD_Order_Transition_Service' ) ) { return false; }
+		$result = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'accepted', array(
+			'actor_user_id' => $messenger_id, 'source' => sanitize_key( $source ),
+			'metadata' => array( 'messenger' => $messenger_id, 'source' => sanitize_key( $source ) ),
+			'precondition' => static function ( WC_Order $locked, string $current ) use ( $messenger_id ) {
+				return 'assigned' === $current && $messenger_id === absint( $locked->get_meta( '_cvd_messenger_user_id', true ) ) ? true : CVD_Order_Transition_Service::CONFLICT;
+			},
+			'atomic_mutation' => static function ( WC_Order $locked, $from, $to, $actor, string $at ) use ( $messenger, $how ): void {
+				$locked->update_meta_data( '_cvd_delivery_accepted_at', $at );
+				$locked->add_order_note( 'Carrera aceptada por ' . $messenger->display_name . ' ' . $how . '.' );
+				update_user_meta( $messenger->ID, '_cvd_last_delivery_accepted_at', time() );
+			},
+			'after_commit' => static function ( WC_Order $saved ): void { self::centralized_after_commit( $saved, 'accepted' ); },
+		) );
+		return ! empty( $result['success'] );
+	}
+
+	/** Consecuencias posteriores (aviso web push, nota al cliente, reputación) para transiciones hechas fuera de esta clase, p. ej. VivaBot. */
+	public static function after_commit_effects( WC_Order $order, string $next ): void {
+		self::centralized_after_commit( $order, sanitize_key( $next ) );
 	}
 
 	private static function notify_offer( WC_Order $order, array $messengers ): void {
@@ -307,6 +384,10 @@ final class CVD_Delivery {
 	public static function handover_by_staff( WC_Order $order, int $user_id, string $source = 'manual' ): bool {
 		$user = get_userdata( $user_id );
 		if ( ! $user || ( ! user_can( $user, 'cvd_manage_sales' ) && ! user_can( $user, 'manage_woocommerce' ) ) ) { return false; }
+		// Asignación directa sin «Aceptar» todavía: recoger el paquete en la tienda equivale a aceptarlo.
+		if ( 'assigned' === self::status( $order ) && class_exists( 'CVD_Direct_Dispatch' ) && CVD_Direct_Dispatch::is_direct( $order ) ) {
+			if ( ! self::accept_assigned( $order, absint( $order->get_meta( '_cvd_messenger_user_id', true ) ), 'cvd_delivery_direct_pickup', 'al recogerlo en la tienda' ) ) { return false; }
+		}
 		$method=sanitize_key($source)?:'manual';
 		$result=CVD_Order_Transition_Service::transition($order->get_id(),'delivery','picked_up',array(
 			'actor_user_id'=>$user_id,'idempotency_key'=>'pickup:'.$order->get_id().':'.$method,'source'=>'cvd_delivery_handover_by_staff','metadata'=>array('verified_by'=>$user_id,'method'=>$method),'coupled_operation_state'=>'with_courier',
@@ -325,7 +406,7 @@ final class CVD_Delivery {
 		$current = self::status( $order ); $user = wp_get_current_user();
 		if ( ! self::allowed_for_user( $order, $user, $current, $next ) ) { wp_die( 'No tienes permiso para realizar este cambio.' ); }
 		if ( 'offered' === $next ) {
-			self::publish_offer( $order );
+			self::dispatch_ready( $order ); // sin mensajero elegido por la gestora = publish_offer() de siempre
 			wp_safe_redirect( home_url( '/mensajeria/?actualizado=1' ) ); exit;
 		}
 		$note = isset( $_POST['note'] ) ? sanitize_textarea_field( wp_unslash( $_POST['note'] ) ) : '';
@@ -497,21 +578,16 @@ final class CVD_Delivery {
 	public static function render_tracking(): string {
 		$order = self::tracking_order();
 		if ( ! $order ) { return '<section class="cvd-tracking cvd-tracking-empty"><h1>Seguir pedido</h1><form data-tracking-link-form><label for="cvd-tracking-link">Pega el enlace recibido</label><input id="cvd-tracking-link" type="url" inputmode="url" placeholder="https://casaviva.company/seguimiento/?pedido=…" required><button class="cvd-primary" type="submit">Consultar</button><span data-tracking-link-error role="alert"></span></form></section>'; }
-		$status = self::status( $order );
-		$steps = array(
-			'confirmed' => 'Pedido confirmado',
-			'accepted' => 'Mensajero asignado',
-			'picked_up' => 'Recogido',
-			'handed_over' => 'En camino',
-			'delivered' => 'Entregado',
-		);
-		$rank = array( 'unassigned'=>0, 'offered'=>0, 'assigned'=>1, 'accepted'=>1, 'to_store'=>1, 'picked_up'=>2, 'handed_over'=>3, 'delivered'=>4, 'cash_returned'=>4, 'closed'=>4 );
-		$current_rank = $rank[ $status ] ?? -1;
-		$html = '<section class="cvd-tracking" data-customer-tracking="' . esc_attr( $order->get_id() ) . '" data-tracking-key="' . esc_attr( $order->get_order_key() ) . '"><p class="cvd-kicker">Pedido #' . esc_html( $order->get_order_number() ) . '</p><h1 data-tracking-title>' . esc_html( self::customer_status_label( $status ) ) . '</h1><p class="cvd-tracking-updated">Última actualización: ' . esc_html( $order->get_date_modified() ? wc_format_datetime( $order->get_date_modified() ) : '' ) . '</p><ol class="cvd-tracking-steps">';
-		foreach ( array_values( $steps ) as $index => $label ) { $html .= '<li class="' . ( $index <= $current_rank ? 'is-complete' : '' ) . '"><span></span><strong>' . esc_html( $label ) . '</strong></li>'; }
-		$html .= '</ol><div class="cvd-courier-location" data-courier-location hidden><strong>Ubicación del mensajero</strong><span data-location-time>Esperando actualización…</span><a class="cvd-secondary" data-location-link target="_blank" rel="noopener">Abrir en el mapa</a></div>';
+		$view = self::tracking_view( $order );
+		$status = $view['status'];
+		$current_rank = $view['rank'];
+		$html = '<section class="cvd-tracking" data-customer-tracking="' . esc_attr( $order->get_id() ) . '" data-tracking-key="' . esc_attr( $order->get_order_key() ) . '"><p class="cvd-kicker">Pedido #' . esc_html( $order->get_order_number() ) . '</p><h1 data-tracking-title>' . esc_html( $view['title'] ) . '</h1><p class="cvd-tracking-updated">Última actualización: ' . esc_html( $order->get_date_modified() ? wc_format_datetime( $order->get_date_modified() ) : '' ) . '</p><ol class="cvd-tracking-steps" data-tracking-steps>';
+		foreach ( $view['steps'] as $step ) { $html .= '<li class="' . ( $step['done'] ? 'is-complete' : '' ) . '"><span></span><strong>' . esc_html( $step['label'] ) . '</strong></li>'; }
+		$courier = self::tracking_courier_text( $view );
+		$html .= '</ol><p class="cvd-tracking-courier" data-tracking-courier' . ( '' === $courier ? ' hidden' : '' ) . '>' . esc_html( $courier ) . '</p>';
+		$html .= '<div class="cvd-courier-location" data-courier-location hidden><strong>Ubicación del mensajero</strong><span data-location-time>Esperando actualización…</span><a class="cvd-secondary" data-location-link target="_blank" rel="noopener">Abrir en el mapa</a></div>';
 		$map = esc_url( (string) $order->get_meta( '_cvd_map_url', true ) );
-		if ( $map && $current_rank >= 2 ) { $html .= '<a class="cvd-primary" href="' . $map . '" target="_blank" rel="noopener">Abrir dirección de entrega</a>'; }
+		if ( $map && $current_rank >= 4 ) { $html .= '<a class="cvd-primary" href="' . $map . '" target="_blank" rel="noopener">Abrir dirección de entrega</a>'; }
 		if ( in_array( $status, array( 'incident', 'failed', 'returned', 'cancelled' ), true ) ) { $html .= '<p class="cvd-tracking-alert">Casa Viva está revisando esta entrega. Te contactaremos si necesitamos confirmar algún dato.</p>'; }
 		$confirmed = (bool) $order->get_meta( '_cvd_customer_confirmed_at', true );
 		if ( in_array( $status, array( 'delivered', 'cash_returned', 'closed' ), true ) ) {
@@ -519,6 +595,38 @@ final class CVD_Delivery {
 			else { $html .= '<form class="cvd-delivery-rating" data-delivery-rating><h2>Confirma tu entrega</h2><p>Tu confirmación no libera pagos automáticamente; Casa Viva verificará la operación.</p><label>Evaluación<select name="rating" required><option value="">Selecciona</option><option value="5">5 · Excelente</option><option value="4">4 · Muy buena</option><option value="3">3 · Buena</option><option value="2">2 · Regular</option><option value="1">1 · Mala</option></select></label><label>Comentario opcional<textarea name="comment" maxlength="400" rows="3"></textarea></label><button class="cvd-primary" type="submit">Confirmar entrega</button><span data-rating-status></span></form>'; }
 		}
 		return $html . '</section>';
+	}
+
+	/**
+	 * Lo que ve el cliente en /seguimiento/ (la página y cada consulta de live-tracking.js):
+	 * título, pasos (también Preparando y Listo para salir), primer nombre del mensajero y su hora.
+	 */
+	public static function tracking_view( WC_Order $order ): array {
+		$status = self::status( $order );
+		$operation = sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) );
+		$labels = array( 'Pedido confirmado', 'Preparando', 'Listo para salir', 'Mensajero asignado', 'Recogido', 'En camino', 'Entregado' );
+		$delivery_rank = array( 'unassigned'=>0, 'offered'=>2, 'assigned'=>3, 'accepted'=>3, 'to_store'=>3, 'picked_up'=>4, 'handed_over'=>5, 'delivered'=>6, 'cash_returned'=>6, 'closed'=>6 );
+		$operation_rank = array( 'preparing'=>1, 'ready'=>2, 'with_courier'=>4, 'delivered'=>6 );
+		$rank = isset( $delivery_rank[ $status ] ) ? max( $delivery_rank[ $status ], $operation_rank[ $operation ] ?? 0 ) : -1;
+		$steps = array();
+		foreach ( $labels as $index => $label ) { $steps[] = array( 'label' => $label, 'done' => $index <= $rank ); }
+		$title = self::customer_status_label( $status );
+		if ( in_array( $status, array( 'unassigned', 'offered' ), true ) && $rank >= 2 ) { $title = 'Tu pedido está listo para salir'; }
+		$messenger = '';
+		$eta = '';
+		if ( $rank >= 3 ) {
+			$user = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
+			$messenger = $user ? (string) explode( ' ', trim( (string) $user->display_name ) )[0] : '';
+			if ( $rank < 6 ) { $eta = trim( (string) $order->get_meta( '_cvd_bot_eta', true ) ); }
+		}
+		return array( 'status' => $status, 'title' => $title, 'rank' => $rank, 'steps' => $steps, 'messenger' => $messenger, 'eta' => $eta );
+	}
+
+	public static function tracking_courier_text( array $view ): string {
+		$parts = array();
+		if ( ! empty( $view['messenger'] ) ) { $parts[] = 'Te lo lleva ' . $view['messenger']; }
+		if ( ! empty( $view['eta'] ) ) { $parts[] = 'Hora prevista: ' . $view['eta']; }
+		return implode( ' · ', $parts );
 	}
 
 	private static function customer_status_label( string $status ): string {

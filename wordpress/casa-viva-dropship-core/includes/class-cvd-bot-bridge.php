@@ -22,6 +22,9 @@ final class CVD_Bot_Bridge {
 		$auth = array( __CLASS__, 'authorized' );
 		register_rest_route( self::NS, '/bot/dispatch', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'dispatch' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/announced', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'announced' ), 'permission_callback' => $auth ) );
+		// Asignación directa (la gestora eligió mensajero): el vale va por privado, nunca al grupo.
+		register_rest_route( self::NS, '/bot/dispatch/direct', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'direct' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/direct-announced', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'direct_announced' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/claim', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'claim' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/eta', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'eta' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/delivered', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'delivered' ), 'permission_callback' => $auth ) );
@@ -235,6 +238,51 @@ final class CVD_Bot_Bridge {
 		return self::no_cache( array( 'ok' => true ) );
 	}
 
+	/**
+	 * Asignaciones directas que el bot todavía no avisó: el bot manda el vale por privado al
+	 * mensajero (mismo vale que tras un "Yo"), guarda el hilo y llama a direct-announced.
+	 */
+	public static function direct(): WP_REST_Response {
+		$orders = wc_get_orders( array( 'limit' => 30, 'type' => 'shop_order', 'orderby' => 'date', 'order' => 'DESC', 'status' => array( 'pending', 'processing', 'on-hold' ), 'meta_key' => '_cvd_direct_assignment', 'meta_value' => '1' ) );
+		$list = array();
+		foreach ( $orders as $order ) {
+			$status = CVD_Delivery::status( $order );
+			// Si ya la aceptó desde la web antes de que el bot la viera, igual necesita el vale por WhatsApp.
+			if ( ! in_array( $status, array( 'assigned', 'accepted', 'to_store' ), true ) ) { continue; }
+			$assigned_at = (string) $order->get_meta( '_cvd_direct_assigned_at', true );
+			$announced_at = (string) $order->get_meta( '_cvd_bot_direct_announced_at', true );
+			if ( '' !== $announced_at && $announced_at >= $assigned_at ) { continue; } // ambas 'Y-m-d H:i:s' UTC
+			$messenger = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
+			if ( ! $messenger ) { continue; }
+			$list[] = array(
+				'id'             => $order->get_id(),
+				'status'         => $status,
+				'assignedAt'     => $assigned_at,
+				'messengerId'    => $messenger->ID,
+				'messengerName'  => $messenger->display_name,
+				'messengerPhone' => preg_replace( '/\D+/', '', (string) ( get_user_meta( $messenger->ID, '_cvd_whatsapp', true ) ?: get_user_meta( $messenger->ID, 'billing_phone', true ) ) ),
+				'gestora'        => class_exists( 'CVD_Direct_Dispatch' ) ? CVD_Direct_Dispatch::gestora_name( $order ) : '',
+				'requestedBy'    => class_exists( 'CVD_Direct_Dispatch' ) ? CVD_Direct_Dispatch::requested_by( $order ) : '',
+				'voucher'        => self::voucher( $order ),
+			);
+		}
+		return self::no_cache( array( 'direct' => $list ) );
+	}
+
+	public static function direct_announced( WP_REST_Request $request ) {
+		$order = self::order( $request );
+		if ( is_wp_error( $order ) ) { return $order; }
+		if ( '1' !== (string) $order->get_meta( '_cvd_direct_assignment', true ) ) { return new WP_Error( 'cvd_not_direct', 'Ese pedido no tiene asignación directa.', array( 'status' => 409 ) ); }
+		$previous = (string) $order->get_meta( '_cvd_bot_direct_announced_at', true );
+		if ( '' === $previous || $previous < (string) $order->get_meta( '_cvd_direct_assigned_at', true ) ) {
+			$messenger = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
+			$order->update_meta_data( '_cvd_bot_direct_announced_at', current_time( 'mysql', true ) );
+			$order->add_order_note( 'VivaBot: vale enviado por privado a ' . ( $messenger ? $messenger->display_name : 'el mensajero' ) . ' (asignación directa, no salió al grupo).' );
+			$order->save();
+		}
+		return self::no_cache( array( 'ok' => true ) );
+	}
+
 	/** "Yo" en el grupo: Core asigna al primero; los demás reciben "ya está cogido". */
 	public static function claim( WP_REST_Request $request ) {
 		$order = self::order( $request );
@@ -260,6 +308,8 @@ final class CVD_Bot_Bridge {
 				$locked->add_order_note( 'Carrera aceptada por ' . $messenger->display_name . ' desde el grupo de WhatsApp.' );
 				update_user_meta( $messenger->ID, '_cvd_last_delivery_accepted_at', time() );
 			},
+			// Mismos avisos que cuando se acepta desde la web (web push, reputación).
+			'after_commit'    => static function ( WC_Order $saved ): void { CVD_Delivery::after_commit_effects( $saved, 'accepted' ); },
 		) );
 		if ( empty( $result['success'] ) ) { return self::no_cache( array( 'result' => 'taken' ) ); }
 		$fresh = wc_get_order( $order->get_id() );
@@ -278,6 +328,10 @@ final class CVD_Bot_Bridge {
 		$order->update_meta_data( '_cvd_bot_eta_at', current_time( 'mysql', true ) );
 		$order->add_order_note( 'VivaBot: ' . $messenger->display_name . ' puede ir ' . mb_substr( $text, 0, 120 ) . '.' );
 		$order->save();
+		// Entrega asignada (p. ej. directa por la gestora): dar la hora por WhatsApp es aceptarla.
+		if ( 'assigned' === CVD_Delivery::status( $order ) ) {
+			CVD_Delivery::accept_assigned( $order, $messenger->ID, 'cvd_bot_bridge_eta', 'por WhatsApp al dar la hora' );
+		}
 		return self::no_cache( array( 'ok' => true, 'customer' => self::customer( $order ) ) );
 	}
 
@@ -292,7 +346,7 @@ final class CVD_Bot_Bridge {
 		if ( ! $messenger ) { return new WP_Error( 'cvd_not_assigned', 'Ese pedido no está asignado a este mensajero.', array( 'status' => 403 ) ); }
 		$status = CVD_Delivery::status( $order );
 		if ( 'delivered' === $status ) { return self::no_cache( array( 'result' => 'already' ) ); }
-		if ( in_array( $status, array( 'accepted', 'to_store' ), true ) ) { return self::no_cache( array( 'result' => 'needs_pickup' ) ); }
+		if ( in_array( $status, array( 'assigned', 'accepted', 'to_store' ), true ) ) { return self::no_cache( array( 'result' => 'needs_pickup' ) ); }
 		$usd    = (float) wc_format_decimal( $request->get_param( 'usd' ) ?? 0, 2 );
 		$cup    = (float) wc_format_decimal( $request->get_param( 'cup' ) ?? 0, 2 );
 		$method = sanitize_key( (string) $request->get_param( 'method' ) );
@@ -300,7 +354,8 @@ final class CVD_Bot_Bridge {
 		if ( $usd <= 0 && $cup <= 0 ) { return self::no_cache( array( 'result' => 'needs_amount' ) ); }
 		if ( 'picked_up' === $status ) {
 			$step = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'handed_over', array( 'actor_user_id' => $messenger->ID, 'idempotency_key' => 'bot-handed:' . $order->get_id(), 'source' => 'cvd_bot_bridge_delivered',
-				'atomic_mutation' => static function ( WC_Order $locked, $from, $to, $actor, $at ): void { $locked->update_meta_data( '_cvd_to_customer_at', $at ); } ) );
+				'atomic_mutation' => static function ( WC_Order $locked, $from, $to, $actor, $at ): void { $locked->update_meta_data( '_cvd_to_customer_at', $at ); },
+				'after_commit'    => static function ( WC_Order $saved ): void { CVD_Delivery::after_commit_effects( $saved, 'handed_over' ); } ) );
 			if ( empty( $step['success'] ) ) { return self::no_cache( array( 'result' => 'error', 'code' => $step['error_code'] ?? '' ) ); }
 		}
 		$done = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'delivered', array(
@@ -322,6 +377,8 @@ final class CVD_Bot_Bridge {
 				$locked->update_meta_data( '_cvd_collection_received_by', $actor->ID );
 				$locked->update_meta_data( '_cvd_collection_received_at', $at );
 			},
+			// Mismos avisos que el «Entregado» de la web: web push y nota al cliente con el seguimiento.
+			'after_commit'         => static function ( WC_Order $saved ): void { CVD_Delivery::after_commit_effects( $saved, 'delivered' ); },
 		) );
 		if ( empty( $done['success'] ) ) { return self::no_cache( array( 'result' => 'error', 'code' => $done['error_code'] ?? '' ) ); }
 		return self::no_cache( array( 'result' => 'delivered', 'customer' => self::customer( $order ) ) );

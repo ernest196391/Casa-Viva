@@ -12,6 +12,7 @@ final class CVD_Portal {
 		add_action( 'woocommerce_login_form', array( __CLASS__, 'selected_access_field' ) );
 		add_action( 'wp_ajax_cvd_save_gestora_price', array( __CLASS__, 'ajax_save_gestora_price' ) );
 		add_action( 'admin_post_cvd_gestora_publish_delivery', array( __CLASS__, 'gestora_publish_delivery' ) );
+		add_action( 'admin_post_cvd_messenger_cash_handover', array( __CLASS__, 'messenger_cash_handover' ) );
 	}
 
 	public static function role_login_redirect( string $redirect_to, string $requested, $user ): string {
@@ -120,10 +121,39 @@ final class CVD_Portal {
 			&& 'pickup' !== $order->get_meta( '_cvd_fulfillment_type', true )
 			&& 'ready' === sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) )
 			&& 'unassigned' === CVD_Delivery::status( $order )
-			&& CVD_Delivery::publish_offer( $order ) ) {
+			&& CVD_Delivery::dispatch_ready( $order ) ) { // si eligió mensajero, va directo a él
 			$result = 'offered';
 		}
 		wp_safe_redirect( add_query_arg( 'mensajeria', $result, home_url( '/area-gestoras/#mensajeria' ) ) );
+		exit;
+	}
+
+	/**
+	 * «Entregué el dinero en la tienda» del mensajero asignado. Solo deja constancia (hora, nota y aviso
+	 * en el panel): NO toca _cvd_cash_status ni la entrega. La tienda confirma con «Dinero recibido».
+	 */
+	public static function messenger_cash_handover(): void {
+		$user = wp_get_current_user();
+		$order_id = absint( $_POST['order_id'] ?? 0 );
+		if ( ! $user->exists() || ! CVD_Registration::is_approved_messenger( $user ) ) { wp_die( 'No tienes permiso para este pedido.', 403 ); }
+		check_admin_referer( 'cvd_messenger_cash_handover_' . $order_id );
+		$order = wc_get_order( $order_id );
+		$result = 'no';
+		if ( $order instanceof WC_Order && ! $order instanceof WC_Order_Refund
+			&& $user->ID === absint( $order->get_meta( '_cvd_messenger_user_id', true ) )
+			&& 'delivered' === CVD_Delivery::status( $order )
+			&& in_array( sanitize_key( (string) $order->get_meta( '_cvd_cash_status', true ) ), array( '', 'pending_return' ), true ) ) {
+			if ( '' === (string) $order->get_meta( '_cvd_cash_handover_declared_at', true ) ) {
+				$usd = (string) ( $order->get_meta( '_cvd_declared_usd', true ) ?: $order->get_meta( '_cvd_collection_amount_usd', true ) );
+				$cup = (string) ( $order->get_meta( '_cvd_declared_cup', true ) ?: $order->get_meta( '_cvd_collection_amount_cup', true ) );
+				$order->update_meta_data( '_cvd_cash_handover_declared_at', current_time( 'mysql', true ) );
+				$order->update_meta_data( '_cvd_cash_handover_declared_by', $user->ID );
+				$order->add_order_note( sprintf( 'El mensajero %s dice que ya entregó el dinero en la tienda (%s USD + %s CUP). Falta que la tienda lo confirme con «Dinero recibido».', $user->display_name, '' !== $usd ? $usd : '0', '' !== $cup ? $cup : '0' ) );
+				$order->save();
+			}
+			$result = 'avisado';
+		}
+		wp_safe_redirect( add_query_arg( 'dinero', $result, home_url( '/area-mensajeros/' ) ) . '#cierre' );
 		exit;
 	}
 
@@ -260,6 +290,7 @@ final class CVD_Portal {
 		?>
 		<section class="cvd-dashboard cvd-app-shell cvd-messenger-center">
 			<?php if ( isset( $_GET['oferta'] ) ) : $offer_result = sanitize_key( wp_unslash( $_GET['oferta'] ) ); ?><div class="cvd-notice" role="status"><?php echo esc_html( 'accepted' === $offer_result ? 'Carrera aceptada. Presenta el QR en la tienda.' : ( 'declined' === $offer_result ? 'Oferta descartada.' : 'La carrera ya no está disponible.' ) ); ?></div><?php endif; ?>
+			<?php if ( isset( $_GET['dinero'] ) ) : ?><div class="cvd-notice" role="status"><?php echo esc_html( 'avisado' === sanitize_key( wp_unslash( $_GET['dinero'] ) ) ? 'Anotado: avisaste que entregaste el dinero. La tienda lo confirma con «Dinero recibido».' : 'No se pudo anotar. Puede que la tienda ya haya recibido el dinero.' ); ?></div><?php endif; ?>
 			<header class="cvd-dashboard-head cvd-messenger-head"><div><p class="cvd-kicker">Casa Viva · Mensajería</p><h1>Hola, <?php echo esc_html( $user->display_name ); ?>.</h1><p><?php echo esc_html( $offers ? 'Tienes una carrera por responder.' : ( $active ? 'Este es tu trabajo activo de hoy.' : 'Estás listo para recibir carreras.' ) ); ?></p></div><a class="cvd-secondary" href="<?php echo esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ); ?>" onclick="return confirm('¿Salir de tu cuenta? Para volver a entrar sin contraseña escribe *mi acceso* al WhatsApp 5354056173.');">Salir</a></header>
 			<nav class="cvd-app-nav cvd-messenger-nav" aria-label="Panel del mensajero"><a href="#hoy">Inicio</a><a href="#contactos">Contactos</a><a href="#preparar">Preparar</a><a href="#ruta">Mi ruta</a><a href="#asistente">Asistente</a></nav>
 			<section class="cvd-messenger-launchpad" aria-label="Acciones rápidas"><a class="cvd-primary cvd-upload-voucher" href="<?php echo esc_url( home_url( '/interpretar-vale/' ) ); ?>"><span aria-hidden="true">＋</span> Subir vale</a><a class="cvd-secondary" href="#asistente">Asistente</a><?php if ( CVD_Registration::is_dual( $user ) && CVD_Registration::is_approved_gestora( $user ) ) : // Cuenta doble: también es gestora. ?><a class="cvd-secondary cvd-dual-area-link" href="<?php echo esc_url( home_url( '/area-gestoras/' ) ); ?>">Mi área de gestora</a><?php endif; ?></section>
@@ -313,7 +344,8 @@ final class CVD_Portal {
 			return '<p>Todavía no hay pedidos vinculados a tu cuenta.</p>';
 		}
 		$labels = array( 'pending' => 'Por verificar', 'approved' => 'Aprobada', 'paid' => 'Pagada', 'cancelled' => 'Cancelada' );
-		$html = '<div class="cvd-table-wrap"><table><thead><tr><th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Importe</th><th>Comisión</th><th>Estado</th></tr></thead><tbody>';
+		$direct = class_exists( 'CVD_Direct_Dispatch' );
+		$html = ( $direct ? CVD_Direct_Dispatch::gestora_notice() : '' ) . '<div class="cvd-table-wrap"><table><thead><tr><th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Importe</th><th>Comisión</th><th>Estado</th>' . ( $direct ? '<th>Mensajero</th>' : '' ) . '</tr></thead><tbody>';
 		foreach ( $orders as $order ) {
 			$products = array();
 			foreach ( $order->get_items( 'line_item' ) as $item ) {
@@ -321,7 +353,7 @@ final class CVD_Portal {
 			}
 			$status = sanitize_key( $order->get_meta( '_cvd_commission_status', true ) ) ?: 'pending';
 			$commission = (float) $order->get_meta( '_cvd_commission_amount', true );
-			$html .= '<tr><td>#' . esc_html( $order->get_order_number() ) . '</td><td>' . esc_html( wc_format_datetime( $order->get_date_created() ) ) . '</td><td>' . esc_html( $order->get_formatted_billing_full_name() ) . '</td><td>' . esc_html( implode( ', ', $products ) ) . '</td><td>' . wp_kses_post( $order->get_formatted_order_total() ) . '</td><td>' . wp_kses_post( wc_price( $commission, array( 'currency' => $order->get_currency() ) ) ) . '</td><td><span class="cvd-badge">' . esc_html( $labels[ $status ] ?? ucfirst( $status ) ) . '</span></td></tr>';
+			$html .= '<tr><td>#' . esc_html( $order->get_order_number() ) . '</td><td>' . esc_html( wc_format_datetime( $order->get_date_created() ) ) . '</td><td>' . esc_html( $order->get_formatted_billing_full_name() ) . '</td><td>' . esc_html( implode( ', ', $products ) ) . '</td><td>' . wp_kses_post( $order->get_formatted_order_total() ) . '</td><td>' . wp_kses_post( wc_price( $commission, array( 'currency' => $order->get_currency() ) ) ) . '</td><td><span class="cvd-badge">' . esc_html( $labels[ $status ] ?? ucfirst( $status ) ) . '</span></td>' . ( $direct ? '<td>' . CVD_Direct_Dispatch::gestora_cell( $order ) . '</td>' : '' ) . '</tr>'; // gestora_cell ya escapa
 		}
 		return $html . '</tbody></table></div>';
 	}
@@ -509,6 +541,13 @@ final class CVD_Portal {
 			$html .= '<article><header><div><strong>Pedido #' . esc_html( $order->get_order_number() ) . '</strong><small>' . esc_html( $time ? get_date_from_gmt( $time, 'j M Y · H:i' ) : 'Hora no registrada' ) . '</small></div><span class="cvd-badge">' . esc_html( CVD_Delivery::label( $status ) ) . '</span></header><div class="cvd-closeout-state"><span>Conciliación</span><strong>' . esc_html( 'verified' === $cash ? 'Verificada' : ( 'returned' === $cash ? 'Dinero recibido por Casa Viva' : 'Pendiente de entregar a Casa Viva' ) ) . '</strong></div>';
 			if ( $method || '' !== $usd || '' !== $cup ) { $html .= '<dl><div><dt>Medio registrado</dt><dd>' . esc_html( $method_labels[ $method ] ?? ( $method ?: 'No especificado' ) ) . '</dd></div><div><dt>Recibido USD</dt><dd>' . esc_html( '' !== $usd ? number_format_i18n( (float) $usd, 2 ) . ' USD' : 'No registrado' ) . '</dd></div><div><dt>Recibido CUP</dt><dd>' . esc_html( '' !== $cup ? number_format_i18n( (float) $cup, 2 ) . ' CUP' : 'No registrado' ) . '</dd></div></dl>'; }
 			else { $html .= '<p class="cvd-domain-gap">Core no registra todavía el cobro estructurado por moneda/medio desde la acción del mensajero. No se infiere del total.</p>'; }
+			// «Entregué el dinero en la tienda»: solo es un aviso. No cambia el estado del dinero ni de la entrega;
+			// la tienda lo confirma con su «Dinero recibido» de siempre.
+			if ( 'delivered' === $status && in_array( $cash, array( '', 'pending_return' ), true ) ) {
+				$declared = (string) $order->get_meta( '_cvd_cash_handover_declared_at', true );
+				if ( '' !== $declared ) { $html .= '<p class="cvd-next-step"><strong>Avisaste que entregaste el dinero</strong> <small>' . esc_html( get_date_from_gmt( $declared, 'j M · H:i' ) ) . ' · falta que la tienda lo confirme.</small></p>'; }
+				else { $html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="cvd_messenger_cash_handover"><input type="hidden" name="order_id" value="' . esc_attr( $order->get_id() ) . '">' . wp_nonce_field( 'cvd_messenger_cash_handover_' . $order->get_id(), '_wpnonce', true, false ) . '<button class="cvd-primary" type="submit">Entregué el dinero en la tienda</button></form>'; }
+			}
 			$html .= '<small>El mensajero no puede cerrar la conciliación: Casa Viva conserva verificación, auditoría y arqueo.</small></article>';
 		}
 		return $html . '</div></section>';

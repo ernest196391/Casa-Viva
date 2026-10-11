@@ -43,7 +43,7 @@ final class CVD_Gestora_Financial_View {
 		) );
 		$clients = self::linked_client_count( $orders );
 		$summary = self::summary_html( $orders, $clients );
-		$history = '<section class="cvd-panel cvd-history-panel" id="ventas"><span id="comisiones"></span><h2>Tus ventas</h2>' . self::history_html( array_slice( $orders, 0, 100 ) ) . '</section>';
+		$history = '<section class="cvd-panel cvd-history-panel" id="ventas"><span id="comisiones"></span><h2>Tus ventas</h2>' . ( class_exists( 'CVD_Direct_Dispatch' ) ? CVD_Direct_Dispatch::gestora_notice() : '' ) . self::history_html( array_slice( $orders, 0, 100 ) ) . '</section>';
 
 		$output = preg_replace(
 			'~<div class="cvd-stats" id="dashboard">.*?</div>(?=\s*<section class="cvd-panel" id="catalogo">)~s',
@@ -100,7 +100,7 @@ final class CVD_Gestora_Financial_View {
 			return '<p>Todavía no hay pedidos vinculados a tu cuenta.</p>';
 		}
 		$labels = array( 'pending' => 'Por verificar', 'approved' => 'Aprobada', 'paid' => 'Pagada', 'cancelled' => 'Cancelada' );
-		$html = '<div class="cvd-table-wrap"><table><thead><tr><th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Importe</th><th>Comisión</th><th>Lo que subiste</th><th>Ganas</th><th>Cómo se calcula</th><th>Estado</th></tr></thead><tbody>';
+		$html = '<div class="cvd-table-wrap"><table><thead><tr><th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Importe</th><th>Comisión</th><th>Lo que subiste</th><th>Ganas</th><th>Cómo se calcula</th><th>Estado</th>' . ( class_exists( 'CVD_Direct_Dispatch' ) ? '<th>Mensajero</th>' : '' ) . '</tr></thead><tbody>';
 		foreach ( $orders as $order ) {
 			if ( ! $order instanceof WC_Order ) { continue; }
 			$products = array();
@@ -113,7 +113,7 @@ final class CVD_Gestora_Financial_View {
 			$margin = (float) $order->get_meta( '_cvd_margin_amount', true );
 			$total = (float) $order->get_meta( '_cvd_commission_amount', true );
 			$rules = self::human_rules( $order );
-			$html .= '<tr><td>#' . esc_html( $order->get_order_number() ) . '</td><td>' . esc_html( wc_format_datetime( $order->get_date_created() ) ) . '</td><td>' . esc_html( $order->get_formatted_billing_full_name() ) . '</td><td>' . esc_html( implode( ', ', $products ) ) . '</td><td>' . wp_kses_post( $order->get_formatted_order_total() ) . '</td><td>' . self::money_with_code( $base, $currency ) . '</td><td>' . self::money_with_code( $margin, $currency ) . '</td><td><strong>' . self::money_with_code( $total, $currency ) . '</strong></td><td>' . esc_html( $rules ) . '</td><td><span class="cvd-badge">' . esc_html( $labels[ $status ] ?? ucfirst( $status ) ) . '</span></td></tr>';
+			$html .= '<tr><td>#' . esc_html( $order->get_order_number() ) . '</td><td>' . esc_html( wc_format_datetime( $order->get_date_created() ) ) . '</td><td>' . esc_html( $order->get_formatted_billing_full_name() ) . '</td><td>' . esc_html( implode( ', ', $products ) ) . '</td><td>' . wp_kses_post( $order->get_formatted_order_total() ) . '</td><td>' . self::money_with_code( $base, $currency ) . '</td><td>' . self::money_with_code( $margin, $currency ) . '</td><td><strong>' . self::money_with_code( $total, $currency ) . '</strong></td><td>' . esc_html( $rules ) . '</td><td><span class="cvd-badge">' . esc_html( $labels[ $status ] ?? ucfirst( $status ) ) . '</span></td>' . ( class_exists( 'CVD_Direct_Dispatch' ) ? '<td>' . CVD_Direct_Dispatch::gestora_cell( $order ) . '</td>' : '' ) . '</tr>'; // gestora_cell ya escapa
 		}
 		return $html . '</tbody></table></div>';
 	}

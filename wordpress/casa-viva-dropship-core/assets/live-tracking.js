@@ -77,7 +77,26 @@
 
   function updateCustomer(payload) {
     var title = tracking.querySelector('[data-tracking-title]');
-    if (title && titles[payload.status]) title.textContent = titles[payload.status];
+    if (title && (payload.title || titles[payload.status])) title.textContent = payload.title || titles[payload.status];
+    // Los pasos se vuelven a pintar en cada consulta (antes solo cambiaba el título).
+    var stepsList = tracking.querySelector('[data-tracking-steps]');
+    if (stepsList && Array.isArray(payload.steps)) {
+      stepsList.textContent = '';
+      payload.steps.forEach(function (step) {
+        var li = document.createElement('li');
+        if (step.done) li.className = 'is-complete';
+        var strong = document.createElement('strong');
+        strong.textContent = step.label;
+        li.appendChild(document.createElement('span'));
+        li.appendChild(strong);
+        stepsList.appendChild(li);
+      });
+    }
+    var courier = tracking.querySelector('[data-tracking-courier]');
+    if (courier && typeof payload.courierText === 'string') {
+      courier.textContent = payload.courierText;
+      courier.hidden = !payload.courierText;
+    }
     var locationBox = tracking.querySelector('[data-courier-location]');
     if (locationBox) {
       locationBox.hidden = !payload.location;

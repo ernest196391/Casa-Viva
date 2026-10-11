@@ -183,7 +183,7 @@ final class CVD_Sales {
 				return new WP_Error( 'cvd_transition_' . strtolower( $result['error_code'] ), 'No se pudo actualizar el pedido.', array( 'status' => $status, 'transition' => $result ) );
 			}
 			if ( 'ready' === $next && 'pickup' !== $order->get_meta( '_cvd_fulfillment_type', true ) && class_exists( 'CVD_Delivery' ) ) {
-				CVD_Delivery::publish_offer( wc_get_order( $order->get_id() ) );
+				CVD_Delivery::dispatch_ready( wc_get_order( $order->get_id() ) ); // directo al mensajero que eligió la gestora, o al grupo como siempre
 			}
 			return rest_ensure_response( array( 'message' => 'Pedido actualizado.', 'order' => self::payload( wc_get_order( $order->get_id() ) ), 'transition' => $result ) );
 		}
@@ -229,7 +229,7 @@ final class CVD_Sales {
 		$last_event = end( $history );
 		do_action( 'cvd_order_transition_observed', $order->get_id(), 'operation', $current, $next, 'cvd_sales_change_status', array(), (string) ( $last_event['event_anchor'] ?? $last_event['at'] ?? '' ) );
 		if ( 'ready' === $next && 'pickup' !== $order->get_meta( '_cvd_fulfillment_type', true ) && class_exists( 'CVD_Delivery' ) ) {
-			CVD_Delivery::publish_offer( $order );
+			CVD_Delivery::dispatch_ready( $order ); // directo al mensajero que eligió la gestora, o al grupo como siempre
 		}
 
 		if ( 'delivered' === $next ) {
@@ -281,10 +281,15 @@ final class CVD_Sales {
 		if ( 'pickup' === $fulfillment && 'ready' === $operation_status ) { array_unshift( $actions, 'delivered' ); }
 		if ( 'pickup' !== $fulfillment && class_exists( 'CVD_Delivery' ) ) {
 			$actions = array_values( array_diff( $actions, array( 'with_courier', 'delivered' ) ) );
-			if ( in_array( $delivery_status, array( 'accepted', 'to_store' ), true ) ) { array_unshift( $actions, 'picked_up' ); }
+			$direct = class_exists( 'CVD_Direct_Dispatch' ) && CVD_Direct_Dispatch::is_direct( $order );
+			// Asignación directa: la tienda puede entregárselo aunque aún no haya pulsado «Aceptar» (ver handover_by_staff).
+			if ( in_array( $delivery_status, array( 'accepted', 'to_store' ), true ) || ( 'assigned' === $delivery_status && $direct ) ) { array_unshift( $actions, 'picked_up' ); }
 			if ( 'delivered' === $delivery_status ) { array_unshift( $actions, 'delivered' ); }
 		}
 		$phone = preg_replace( '/[^0-9+]/', '', $order->get_billing_phone() );
+		$messenger = 'pickup' === $fulfillment ? false : get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
+		$preferred = 'pickup' !== $fulfillment && ! $messenger && class_exists( 'CVD_Direct_Dispatch' ) ? CVD_Direct_Dispatch::preferred_messenger( $order ) : null;
+		$declared_handover = (string) $order->get_meta( '_cvd_cash_handover_declared_at', true );
 		return array(
 			'id' => $order->get_id(),
 			'number' => $order->get_order_number(),
@@ -307,8 +312,48 @@ final class CVD_Sales {
 			'declaredCup' => (string) $order->get_meta( '_cvd_declared_cup', true ),
 			'deliveryStatus' => 'pickup' === $fulfillment ? '' : ( class_exists( 'CVD_Delivery' ) ? CVD_Delivery::label( $delivery_status ) : '' ),
 			'trackingUrl' => class_exists( 'CVD_Delivery' ) && 'pickup' !== $fulfillment ? CVD_Delivery::tracking_url( $order ) : '',
+			// Reparto (3.13.48): quién lo lleva, a qué hora, sus pasos y si el mensajero dice que ya entregó el dinero.
+			'messengerName' => $messenger ? $messenger->display_name : '',
+			'directAssignment' => 'pickup' !== $fulfillment && class_exists( 'CVD_Direct_Dispatch' ) && CVD_Direct_Dispatch::is_direct( $order ) && (bool) $messenger,
+			'preferredMessenger' => $preferred ? $preferred->display_name : '',
+			'eta' => 'pickup' === $fulfillment ? '' : (string) $order->get_meta( '_cvd_bot_eta', true ),
+			'timeline' => 'pickup' === $fulfillment ? array() : self::timeline( $order ),
+			'cashHandoverDeclaredAt' => '' !== $declared_handover && 'delivered' === $delivery_status ? get_date_from_gmt( $declared_handover, 'd/m H:i' ) : '',
 			'actions' => array_values( array_unique( $actions ) ),
 			'adminUrl' => admin_url( 'admin.php?page=wc-orders&action=edit&id=' . $order->get_id() ),
+		);
+	}
+
+	/** Últimos 8 pasos del pedido (tienda y mensajería) con hora local, para el panel de la dueña. Solo lectura. */
+	private static function timeline( WC_Order $order ): array {
+		$steps = array();
+		$operation = $order->get_meta( '_cvd_operation_history', true );
+		foreach ( is_array( $operation ) ? $operation : array() as $event ) {
+			$to = sanitize_key( (string) ( $event['to'] ?? '' ) );
+			// «Con mensajero» y «Completado» ya salen como pasos de la mensajería.
+			if ( ! $to || empty( $event['at'] ) || in_array( $to, array( 'with_courier', 'delivered' ), true ) ) { continue; }
+			$steps[] = array( 'at' => (string) $event['at'], 'label' => self::label( $to ) );
+		}
+		$delivery = $order->get_meta( '_cvd_delivery_history', true );
+		foreach ( is_array( $delivery ) ? $delivery : array() as $event ) {
+			$to = sanitize_key( (string) ( $event['to'] ?? '' ) );
+			if ( ! $to || empty( $event['at'] ) || $to === sanitize_key( (string) ( $event['from'] ?? '' ) ) ) { continue; } // repeticiones de la oferta (oleadas, rechazos)
+			$label = class_exists( 'CVD_Delivery' ) ? CVD_Delivery::label( $to ) : $to;
+			$who = absint( $event['data']['messenger'] ?? 0 );
+			$who = $who && in_array( $to, array( 'assigned', 'accepted' ), true ) ? get_userdata( $who ) : false;
+			if ( $who ) { $label .= ' · ' . $who->display_name; }
+			if ( 'assigned' === $to && ! empty( $event['data']['direct'] ) ) { $label .= ' (directo, lo eligió la gestora)'; }
+			$steps[] = array( 'at' => (string) $event['at'], 'label' => $label );
+		}
+		$eta = trim( (string) $order->get_meta( '_cvd_bot_eta', true ) );
+		$eta_at = (string) $order->get_meta( '_cvd_bot_eta_at', true );
+		if ( '' !== $eta && '' !== $eta_at ) { $steps[] = array( 'at' => $eta_at, 'label' => 'El mensajero dio la hora: ' . $eta ); }
+		$declared = (string) $order->get_meta( '_cvd_cash_handover_declared_at', true );
+		if ( '' !== $declared ) { $steps[] = array( 'at' => $declared, 'label' => 'El mensajero dice que entregó el dinero en la tienda' ); }
+		usort( $steps, static fn( array $a, array $b ): int => strcmp( $a['at'], $b['at'] ) );
+		return array_map(
+			static fn( array $step ): array => array( 'time' => get_date_from_gmt( $step['at'], 'd/m H:i' ), 'label' => $step['label'] ),
+			array_slice( $steps, -8 )
 		);
 	}
 

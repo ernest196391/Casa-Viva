@@ -106,10 +106,17 @@ final class CVD_Live_Tracking {
 			$row = $wpdb->get_row( $wpdb->prepare( 'SELECT latitude,longitude,accuracy,recorded_at FROM ' . self::table() . ' WHERE order_id=%d ORDER BY id DESC LIMIT 1', $order->get_id() ), ARRAY_A );
 			if ( $row ) { $location = array( 'latitude'=>(float)$row['latitude'], 'longitude'=>(float)$row['longitude'], 'accuracy'=>(float)$row['accuracy'], 'recordedAt'=>mysql_to_rfc3339( $row['recorded_at'] ) ); }
 		}
+		$view = CVD_Delivery::tracking_view( $order );
 		return array(
 			'orderId'=>$order->get_id(),
 			'status'=>$status,
 			'statusLabel'=>CVD_Delivery::label( $status ),
+			// Para que la página vuelva a pintar los pasos en cada consulta (no solo el título).
+			'title'=>$view['title'],
+			'steps'=>$view['steps'],
+			'messenger'=>$view['messenger'],
+			'eta'=>$view['eta'],
+			'courierText'=>CVD_Delivery::tracking_courier_text( $view ),
 			'location'=>$location,
 			'customerConfirmed'=>(bool)$order->get_meta( '_cvd_customer_confirmed_at', true ),
 			'rating'=>absint( $order->get_meta( '_cvd_customer_rating', true ) ),
