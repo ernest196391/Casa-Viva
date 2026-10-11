@@ -48,7 +48,7 @@
 
   document.addEventListener('click', function (event) {
     var action = event.target.closest('[data-confirm-delivery]'); if (!action) return;
-    var labels = { to_store: 'Confirma que vas a recoger el pedido.', handed_over: 'Confirma que vas en camino al cliente.', delivered: 'Confirma que entregaste el pedido al cliente.', failed: 'Confirma que la entrega no pudo completarse.', returned: 'Confirma que devolviste el pedido a Casa Viva.' };
+    var labels = { to_store: 'Confirma que vas a recoger el pedido.', picked_up: 'Confirma que ya tienes el paquete en la mano (la tienda verá «Entregado al mensajero»).', handed_over: 'Confirma que vas en camino al cliente.', delivered: 'Confirma que entregaste el pedido al cliente.', failed: 'Confirma que la entrega no pudo completarse.', returned: 'Confirma que devolviste el pedido a Casa Viva.' };
     if (!window.confirm(labels[action.getAttribute('data-confirm-delivery')] || '¿Confirmas este cambio?')) event.preventDefault();
   });
   document.addEventListener('click', function (event) { if (event.target.closest('[data-cvd-refresh-preparation]')) window.location.reload(); });

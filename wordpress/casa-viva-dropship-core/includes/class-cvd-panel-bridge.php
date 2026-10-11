@@ -60,6 +60,20 @@ final class CVD_Panel_Bridge {
 		// Tasa del día para las gestoras (3.13.51): la misma que VivaBot lee de «FORMAS DE PAGO»; la dueña la corrige aquí.
 		register_rest_route( self::NS, '/panel/daily-rates', array( 'methods' => 'GET', 'callback' => static fn() => self::no_cache( array( 'rates' => CVD_Daily_Rates::public_data(), 'recent' => CVD_Daily_Rates::recent() ) ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/daily-rates', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'daily_rates_save' ), 'permission_callback' => $auth ) );
+		// 3.13.55: «Dinero por entregar a la tienda»: qué dinero tiene cada mensajero (solo lo registrado) y «Recibido».
+		register_rest_route( self::NS, '/panel/messenger-cash', array( 'methods' => 'GET', 'callback' => static fn() => self::no_cache( CVD_Messenger_Cash::report() ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/messenger-cash/(?P<id>\d+)/received', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'messenger_cash_received' ), 'permission_callback' => $auth ) );
+	}
+
+	/** «Recibido» desde el panel: firma el usuario del panel y se guarda el nombre de quien lo pulsó ({by}). */
+	public static function messenger_cash_received( WP_REST_Request $request ) {
+		$actor = absint( get_option( self::ACTOR_OPTION, 0 ) );
+		if ( ! $actor || ! user_can( $actor, 'manage_woocommerce' ) ) {
+			return new WP_Error( 'cvd_panel_actor', 'Falta configurar quién firma las acciones del panel.', array( 'status' => 500 ) );
+		}
+		$result = CVD_Messenger_Cash::mark_received( absint( $request['id'] ), $actor, self::by( (array) $request->get_json_params() ) );
+		if ( is_wp_error( $result ) ) { return $result; }
+		return self::no_cache( $result );
 	}
 
 	/** Cambia solo las tasas que lleguen (cup, eur, clasica, zelle, paypalPct); las demás se quedan. */

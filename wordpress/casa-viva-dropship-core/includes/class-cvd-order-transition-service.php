@@ -229,6 +229,10 @@ final class CVD_Order_Transition_Service {
 		// Relevo: volver a «oferta abierta» desde asignada/aceptada/va a recoger solo lo hace el propio
 		// mensajero asignado y solo por la puerta del bot (messenger_release); la tienda no ve ese botón.
 		if('offered'===$to&&'unassigned'!==$from){return !empty($context['messenger_release'])&&in_array($from,array('assigned','accepted','to_store'),true)&&in_array('cvd_messenger',(array)$actor->roles,true)&&$actor->ID===absint($order->get_meta('_cvd_messenger_user_id',true));}
+		// 3.13.55: el mensajero asignado dice que ya tiene el paquete (WhatsApp o «Ya lo recogí» en su área) y queda
+		// «Entregado al mensajero» sin esperar a la dependienta. Solo por CVD_Delivery::messenger_confirms_pickup
+		// (messenger_pickup) y nunca en un pedido de prueba.
+		if('picked_up'===$to&&!empty($context['messenger_pickup'])){return in_array($from,array('accepted','to_store'),true)&&in_array('cvd_messenger',(array)$actor->roles,true)&&$actor->ID===absint($order->get_meta('_cvd_messenger_user_id',true))&&!(class_exists('CVD_Delivery')&&CVD_Delivery::is_test_order($order));}
 		if(in_array($to,array('offered','assigned','picked_up','cash_returned'),true)){return $is_admin||$is_staff;}
 		if('closed'===$to){return $is_admin||($is_staff&&!empty($context['allow_staff_closeout']));}
 		$is_assigned=$actor->ID===absint($order->get_meta('_cvd_messenger_user_id',true)); $is_messenger=in_array('cvd_messenger',(array)$actor->roles,true);

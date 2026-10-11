@@ -30,6 +30,8 @@ final class CVD_Bot_Bridge {
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/release', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'release' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/eta', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'eta' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/delivered', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'delivered' ), 'permission_callback' => $auth ) );
+		// 3.13.55: el mensajero dice que ya tiene el paquete → «Entregado al mensajero» automático.
+		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/picked-up', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'picked_up' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'order_status' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)/whatsapp', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'verified_whatsapp' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/gestora', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'gestora_link' ), 'permission_callback' => $auth ) );
@@ -503,8 +505,22 @@ final class CVD_Bot_Bridge {
 	}
 
 	/**
-	 * "Entregado": el mensajero declara lo que cobró. Respeta la custodia de Core: si la tienda
-	 * aún no confirmó que le dio el paquete (picked_up), no se puede marcar entregado.
+	 * 3.13.55: el mensajero asignado avisa por WhatsApp que ya tiene el paquete («lo tengo», «recogido #N»).
+	 * Marca «Entregado al mensajero» con la nota «automático: confirmó el mensajero» (la dependienta no tiene
+	 * que hacerlo). result: picked_up | already | test_order | too_early | error.
+	 */
+	public static function picked_up( WP_REST_Request $request ) {
+		$order = self::order( $request );
+		if ( is_wp_error( $order ) ) { return $order; }
+		$messenger = self::assigned_messenger( $order, (string) $request->get_param( 'phone' ) );
+		if ( ! $messenger ) { return new WP_Error( 'cvd_not_assigned', 'Ese pedido no está asignado a este mensajero.', array( 'status' => 403 ) ); }
+		$result = CVD_Delivery::messenger_confirms_pickup( $order, $messenger, 'cvd_bot_bridge_picked_up', 'dijo por WhatsApp que ya tiene el paquete' );
+		return self::no_cache( array( 'result' => $result ) );
+	}
+
+	/**
+	 * "Entregado": el mensajero declara lo que cobró. Si la tienda aún no marcó que le dio el paquete,
+	 * se marca solo (3.13.55, CVD_Delivery::messenger_confirms_pickup): quien entregó, lo tenía.
 	 */
 	public static function delivered( WP_REST_Request $request ) {
 		$order = self::order( $request );
@@ -512,13 +528,20 @@ final class CVD_Bot_Bridge {
 		$messenger = self::assigned_messenger( $order, (string) $request->get_param( 'phone' ) );
 		if ( ! $messenger ) { return new WP_Error( 'cvd_not_assigned', 'Ese pedido no está asignado a este mensajero.', array( 'status' => 403 ) ); }
 		$status = CVD_Delivery::status( $order );
-		if ( 'delivered' === $status ) { return self::no_cache( array( 'result' => 'already' ) ); }
-		if ( in_array( $status, array( 'assigned', 'accepted', 'to_store' ), true ) ) { return self::no_cache( array( 'result' => 'needs_pickup' ) ); }
+		if ( in_array( $status, array( 'delivered', 'cash_returned', 'closed' ), true ) ) { return self::no_cache( array( 'result' => 'already' ) ); }
 		$usd    = (float) wc_format_decimal( $request->get_param( 'usd' ) ?? 0, 2 );
 		$cup    = (float) wc_format_decimal( $request->get_param( 'cup' ) ?? 0, 2 );
 		$method = sanitize_key( (string) $request->get_param( 'method' ) );
 		if ( ! in_array( $method, array( 'cash_usd', 'cash_cup', 'transfer', 'mixed', 'other' ), true ) ) { $method = $usd > 0 && $cup > 0 ? 'mixed' : ( $usd > 0 ? 'cash_usd' : 'cash_cup' ); }
 		if ( $usd <= 0 && $cup <= 0 ) { return self::no_cache( array( 'result' => 'needs_amount' ) ); }
+		// 3.13.55: si ya lo entregó, es que tenía el paquete. Si la dependienta no marcó «Entregado al mensajero»,
+		// se marca solo («automático: confirmó el mensajero») en vez de pedirle que vuelva a escribir. Nunca en pruebas.
+		if ( in_array( $status, array( 'assigned', 'accepted', 'to_store' ), true ) ) {
+			$picked = CVD_Delivery::messenger_confirms_pickup( $order, $messenger, 'cvd_bot_bridge_delivered', 'dijo por WhatsApp que ya lo entregó' );
+			if ( ! in_array( $picked, array( 'picked_up', 'already' ), true ) ) { return self::no_cache( array( 'result' => 'test_order' === $picked ? 'test_order' : 'needs_pickup', 'code' => $picked ) ); }
+			$order  = wc_get_order( $order->get_id() );
+			$status = CVD_Delivery::status( $order );
+		}
 		if ( 'picked_up' === $status ) {
 			$step = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'handed_over', array( 'actor_user_id' => $messenger->ID, 'idempotency_key' => 'bot-handed:' . $order->get_id(), 'source' => 'cvd_bot_bridge_delivered',
 				'atomic_mutation' => static function ( WC_Order $locked, $from, $to, $actor, $at ): void { $locked->update_meta_data( '_cvd_to_customer_at', $at ); },

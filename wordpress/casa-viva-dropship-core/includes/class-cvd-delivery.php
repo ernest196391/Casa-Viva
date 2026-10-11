@@ -296,6 +296,48 @@ final class CVD_Delivery {
 		return ! empty( $result['success'] );
 	}
 
+	public const AUTO_PICKUP_NOTE = 'automático: confirmó el mensajero';
+
+	/**
+	 * 3.13.55 (pedido de Nana: en días de mucho trabajo no da tiempo a marcar cada paso). El mensajero
+	 * asignado confirma que ya tiene el paquete —escribe «entregado» por WhatsApp, avisa que lo recogió
+	 * o pulsa «Ya lo recogí» en su área— y el paso de la dependienta «Entregado al mensajero» se marca
+	 * solo, con la nota «automático: confirmó el mensajero». Una asignación sin aceptar se acepta antes.
+	 * Nunca en pedidos de prueba. Devuelve: picked_up | already | test_order | not_assigned | too_early | error.
+	 */
+	public static function messenger_confirms_pickup( WC_Order $order, WP_User $messenger, string $source, string $how ): string {
+		if ( self::is_test_order( $order ) ) { return 'test_order'; }
+		if ( $messenger->ID !== absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { return 'not_assigned'; }
+		if ( ! class_exists( 'CVD_Order_Transition_Service' ) ) { return 'error'; }
+		$status = self::status( $order );
+		if ( in_array( $status, array( 'picked_up', 'handed_over', 'delivered', 'cash_returned', 'closed' ), true ) ) { return 'already'; }
+		$source = sanitize_key( $source ) ?: 'cvd_delivery_messenger_pickup';
+		if ( 'assigned' === $status ) {
+			if ( ! self::accept_assigned( $order, $messenger->ID, $source, $how ) ) { return 'error'; }
+			$order = wc_get_order( $order->get_id() );
+			if ( ! $order ) { return 'error'; }
+			$status = self::status( $order );
+		}
+		if ( ! in_array( $status, array( 'accepted', 'to_store' ), true ) ) { return 'too_early'; } // incidencia abierta, cancelado…
+		$result = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'picked_up', array(
+			'actor_user_id'           => $messenger->ID,
+			'idempotency_key'         => 'pickup:' . $order->get_id() . ':messenger:' . $messenger->ID,
+			'source'                  => $source,
+			'messenger_pickup'        => true,
+			'metadata'                => array( 'method' => 'messenger_confirmed', 'auto' => true, 'note' => self::AUTO_PICKUP_NOTE ),
+			'coupled_operation_state' => 'with_courier',
+			'precondition'            => static fn( WC_Order $locked ) => self::is_test_order( $locked ) ? CVD_Order_Transition_Service::PRECONDITION_FAILED : true,
+			'atomic_mutation'         => static function ( WC_Order $locked, $from, $to, $actor, string $at ) use ( $messenger, $how ): void {
+				$locked->update_meta_data( '_cvd_handed_over_by', $messenger->ID );
+				$locked->update_meta_data( '_cvd_handed_over_at', $at );
+				$locked->update_meta_data( '_cvd_handed_over_auto', 'messenger' );
+				$locked->add_order_note( 'Entregado al mensajero (' . self::AUTO_PICKUP_NOTE . '): ' . $messenger->display_name . ' ' . $how . '. La dependienta no tuvo que marcarlo.' );
+			},
+			'after_commit'            => static function ( WC_Order $saved ): void { self::centralized_after_commit( $saved, 'picked_up' ); },
+		) );
+		return ! empty( $result['success'] ) ? 'picked_up' : 'error';
+	}
+
 	/** Consecuencias posteriores (aviso web push, nota al cliente, reputación) para transiciones hechas fuera de esta clase, p. ej. VivaBot. */
 	public static function after_commit_effects( WC_Order $order, string $next ): void {
 		self::centralized_after_commit( $order, sanitize_key( $next ) );
@@ -446,6 +488,12 @@ final class CVD_Delivery {
 			self::dispatch_ready( $order ); // sin mensajero elegido por la gestora = publish_offer() de siempre
 			wp_safe_redirect( home_url( '/mensajeria/?actualizado=1' ) ); exit;
 		}
+		// 3.13.55: «Ya lo recogí» del propio mensajero = «Entregado al mensajero» automático (la tienda sigue pudiendo marcarlo).
+		if ( 'picked_up' === $next && ! user_can( $user, 'cvd_manage_sales' ) && ! user_can( $user, 'manage_woocommerce' ) ) {
+			$picked = self::messenger_confirms_pickup( $order, $user, 'cvd_delivery_messenger_area', 'pulsó «Ya lo recogí» en su área' );
+			if ( ! in_array( $picked, array( 'picked_up', 'already' ), true ) ) { wp_die( 'No se pudo marcar como recogido. Avisa a la tienda.' ); }
+			wp_safe_redirect( home_url( '/area-mensajeros/?actualizado=1' ) ); exit;
+		}
 		$note = isset( $_POST['note'] ) ? sanitize_textarea_field( wp_unslash( $_POST['note'] ) ) : '';
 		if ( 'incident' === $next && '' === trim( $note ) ) { wp_die( 'Describe brevemente la incidencia para poder registrarla.' ); }
 		$collection_method = sanitize_key( (string) ( $_POST['collection_method'] ?? '' ) );
@@ -537,7 +585,7 @@ final class CVD_Delivery {
 		);
 		if ( ! in_array( $next, $map[ $current ] ?? array(), true ) ) { return false; }
 		if ( $is_admin ) { return true; }
-		if ( $is_messenger ) { return in_array( $next, array( 'accepted', 'to_store', 'handed_over', 'delivered', 'failed', 'returned', 'incident' ), true ); }
+		if ( $is_messenger ) { return in_array( $next, array( 'accepted', 'to_store', 'picked_up', 'handed_over', 'delivered', 'failed', 'returned', 'incident' ), true ) && ! ( 'picked_up' === $next && self::is_test_order( $order ) ); }
 		if ( $is_staff ) { return in_array( $next, array( 'offered', 'picked_up', 'cash_returned', 'incident' ), true ); }
 		return false;
 	}

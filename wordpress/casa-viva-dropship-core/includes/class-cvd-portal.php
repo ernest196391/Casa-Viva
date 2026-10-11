@@ -548,7 +548,9 @@ final class CVD_Portal {
 			// la tienda lo confirma con su «Dinero recibido» de siempre.
 			if ( 'delivered' === $status && in_array( $cash, array( '', 'pending_return' ), true ) ) {
 				$declared = (string) $order->get_meta( '_cvd_cash_handover_declared_at', true );
-				if ( '' !== $declared ) { $html .= '<p class="cvd-next-step"><strong>Avisaste que entregaste el dinero</strong> <small>' . esc_html( get_date_from_gmt( $declared, 'j M · H:i' ) ) . ' · falta que la tienda lo confirme.</small></p>'; }
+				$store_got = class_exists( 'CVD_Messenger_Cash' ) ? CVD_Messenger_Cash::received_at( $order ) : '';
+				if ( '' !== $store_got ) { $html .= '<p class="cvd-next-step"><strong>La tienda ya recibió tu dinero</strong> <small>' . esc_html( get_date_from_gmt( $store_got, 'j M · H:i' ) ) . '</small></p>'; }
+				elseif ( '' !== $declared ) { $html .= '<p class="cvd-next-step"><strong>Avisaste que entregaste el dinero</strong> <small>' . esc_html( get_date_from_gmt( $declared, 'j M · H:i' ) ) . ' · falta que la tienda lo confirme.</small></p>'; }
 				else { $html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="cvd_messenger_cash_handover"><input type="hidden" name="order_id" value="' . esc_attr( $order->get_id() ) . '">' . wp_nonce_field( 'cvd_messenger_cash_handover_' . $order->get_id(), '_wpnonce', true, false ) . '<button class="cvd-primary" type="submit">Entregué el dinero en la tienda</button></form>'; }
 			}
 			$html .= '<small>El mensajero no puede cerrar la conciliación: Casa Viva conserva verificación, auditoría y arqueo.</small></article>';
@@ -588,13 +590,13 @@ final class CVD_Portal {
 			if ( 'handed_over' === $status ) { $html .= '<div class="cvd-live-control" data-live-order="' . esc_attr( $order->get_id() ) . '"><div><strong>Ubicación durante la carrera</strong><small data-live-status>Desactivada</small></div><button class="cvd-primary" type="button" data-live-toggle>Compartir ubicación</button><p>Déjala activa hasta entregar. La aplicación debe permanecer abierta.</p></div>'; }
 			$pickup_url = CVD_Delivery::pickup_url( $order );
 			if ( $pickup_url ) { $html .= '<div class="cvd-pickup-qr"><button type="button" class="cvd-qr-expand" data-qr-expand aria-label="Ampliar QR de recogida"><canvas data-pickup-qr="' . esc_attr( $pickup_url ) . '"></canvas><span>Ampliar QR</span></button><div><strong>QR de recogida</strong><small>Tócalo para ampliarlo. La dependienta lo abre con la cámara y su cuenta iniciada. Si falla, busca el pedido #' . esc_html( $order->get_order_number() ) . '.</small></div></div>'; }
-			if ( 'to_store' === $status ) { $html .= '<div class="cvd-next-step"><strong>Esperando a Casa Viva</strong><small>La tienda confirma cuando recibas el pedido. Esta pantalla se actualizará sola.</small></div>'; }
+			if ( 'to_store' === $status ) { $html .= '<div class="cvd-next-step"><strong>Cuando tengas el paquete</strong><small>Pulsa «Ya lo recogí» (o la dependienta lo marca). Esta pantalla se actualizará sola.</small></div>'; }
 			if ( 'picked_up' === $status ) { $html .= '<div class="cvd-next-step"><strong>Pedido recibido</strong><small>Confirma cuando salgas hacia el cliente.</small></div>'; }
 			$html .= '<footer>';
 			$actions = array();
 			if ( 'assigned' === $status ) { $actions = array( 'accepted' => 'Aceptar', 'incident' => 'Incidencia' ); }
-			if ( 'accepted' === $status ) { $actions = array( 'to_store' => 'Voy a recoger', 'incident' => 'Incidencia' ); }
-			if ( 'to_store' === $status ) { $actions = array( 'incident' => 'Incidencia' ); }
+			if ( 'accepted' === $status ) { $actions = array( 'to_store' => 'Voy a recoger', 'picked_up' => 'Ya lo recogí', 'incident' => 'Incidencia' ); }
+			if ( 'to_store' === $status ) { $actions = array( 'picked_up' => 'Ya lo recogí', 'incident' => 'Incidencia' ); }
 			if ( 'picked_up' === $status ) { $actions = array( 'handed_over' => 'En camino al cliente', 'incident' => 'Incidencia' ); }
 			if ( 'handed_over' === $status ) { $actions = array( 'incident' => 'Incidencia' ); }
 			if ( 'handed_over' === $status ) {
