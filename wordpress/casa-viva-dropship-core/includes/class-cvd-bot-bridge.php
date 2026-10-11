@@ -26,6 +26,8 @@ final class CVD_Bot_Bridge {
 		register_rest_route( self::NS, '/bot/dispatch/direct', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'direct' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/direct-announced', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'direct_announced' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/claim', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'claim' ), 'permission_callback' => $auth ) );
+		// Relevo (3.13.49): el mensajero asignado suelta la carrera antes de recogerla.
+		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/release', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'release' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/eta', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'eta' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/delivered', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'delivered' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'order_status' ), 'permission_callback' => $auth ) );
@@ -35,6 +37,29 @@ final class CVD_Bot_Bridge {
 		register_rest_route( self::NS, '/bot/partners', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'partners' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/partners/(?P<id>\d+)/status', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'partner_status' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/partners/(?P<id>\d+)/welcome', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'partner_welcome' ), 'permission_callback' => $auth ) );
+		// «mi acceso» de una dependienta (3.13.49): enlace de un solo uso a Operaciones.
+		register_rest_route( self::NS, '/bot/clerk/access', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'clerk_access' ), 'permission_callback' => $auth ) );
+	}
+
+	/**
+	 * Dependienta que escribe «mi acceso» al bot: enlace de acceso seguro (7 días, un solo uso) que la
+	 * deja en /centro-operaciones/ para poner su contraseña. Solo por su propio WhatsApp (_cvd_whatsapp)
+	 * y nunca para cuentas de administración.
+	 */
+	public static function clerk_access( WP_REST_Request $request ): WP_REST_Response {
+		$key = self::phone_key( (string) $request->get_param( 'phone' ) );
+		if ( '' === $key ) { return self::no_cache( array( 'found' => false ) ); }
+		foreach ( get_users( array( 'role' => 'cvd_clerk' ) ) as $user ) {
+			if ( $key !== self::phone_key( (string) get_user_meta( $user->ID, '_cvd_whatsapp', true ) ) ) { continue; }
+			if ( array_intersect( array( 'administrator', 'shop_manager' ), (array) $user->roles ) ) { return self::no_cache( array( 'found' => false ) ); }
+			return self::no_cache( array(
+				'found'      => true,
+				'name'       => $user->display_name,
+				'accessLink' => CVD_Registration::create_secure_access_link( $user ),
+				'panel'      => home_url( '/ventas/' ),
+			) );
+		}
+		return self::no_cache( array( 'found' => false ) );
 	}
 
 	private static function partner( WP_REST_Request $request ) {
@@ -223,7 +248,8 @@ final class CVD_Bot_Bridge {
 				'announced'  => '' !== $announced_at && $announced_at >= $offered_at,
 			);
 		}
-		return self::no_cache( array( 'offers' => $offers ) );
+		// Mensajeros aprobados y «Disponible»: el bot solo recuerda una carrera libre en el grupo si hay alguno.
+		return self::no_cache( array( 'offers' => $offers, 'availableMessengers' => count( CVD_Delivery::available_messengers() ) ) );
 	}
 
 	public static function announced( WP_REST_Request $request ) {
@@ -294,7 +320,9 @@ final class CVD_Bot_Bridge {
 		if ( $current_owner || 'offered' !== CVD_Delivery::status( $order ) ) { return self::no_cache( array( 'result' => 'taken' ) ); }
 		$result = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'accepted', array(
 			'actor_user_id'   => $messenger->ID,
-			'idempotency_key' => 'bot-claim:' . $order->get_id() . ':' . $messenger->ID,
+			// Con la hora de la oferta: si la carrera se soltó (relevo) y el mismo mensajero la vuelve a
+			// coger, no se repite el recibo viejo (que daría "ganada" sin asignarla de verdad).
+			'idempotency_key' => 'bot-claim:' . $order->get_id() . ':' . $messenger->ID . ':' . (string) $order->get_meta( '_cvd_delivery_offered_at', true ),
 			'source'          => 'cvd_bot_bridge_claim',
 			'metadata'        => array( 'messenger' => $messenger->ID, 'source' => 'whatsapp_group' ),
 			'precondition'    => static function ( WC_Order $locked, string $current ) use ( $messenger ) {
@@ -314,6 +342,55 @@ final class CVD_Bot_Bridge {
 		if ( empty( $result['success'] ) ) { return self::no_cache( array( 'result' => 'taken' ) ); }
 		$fresh = wc_get_order( $order->get_id() );
 		return self::no_cache( array( 'result' => 'won', 'messenger' => $messenger->display_name, 'voucher' => self::voucher( $fresh ) ) );
+	}
+
+	/**
+	 * Relevo (3.13.49): el mensajero asignado suelta la carrera (borró su «Yo» en el grupo o escribió
+	 * «suelto» / «no puedo» por privado). Solo él y solo antes de recoger el paquete (asignada, aceptada
+	 * o va a recoger). La entrega vuelve a «oferta abierta» sin mensajero; el bot se la pasa al siguiente
+	 * en reserva con el claim de siempre o la vuelve a anunciar en el grupo.
+	 */
+	public static function release( WP_REST_Request $request ) {
+		$order = self::order( $request );
+		if ( is_wp_error( $order ) ) { return $order; }
+		$messenger = self::assigned_messenger( $order, (string) $request->get_param( 'phone' ) );
+		if ( ! $messenger ) { return new WP_Error( 'cvd_not_assigned', 'Ese pedido no está asignado a este mensajero.', array( 'status' => 403 ) ); }
+		$status = CVD_Delivery::status( $order ); // 'incident' si hay una incidencia abierta: entonces no se suelta
+		if ( ! in_array( $status, array( 'assigned', 'accepted', 'to_store' ), true ) ) { return self::no_cache( array( 'result' => 'too_late', 'status' => $status ) ); }
+		$how = 'revoke' === sanitize_key( (string) $request->get_param( 'reason' ) ) ? 'borró su «Yo» en el grupo' : 'lo dijo por WhatsApp';
+		$result = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'offered', array(
+			'actor_user_id'     => $messenger->ID,
+			'source'            => 'cvd_bot_bridge_release',
+			'messenger_release' => true,
+			'metadata'          => array( 'messenger' => $messenger->ID, 'release' => true, 'source' => 'whatsapp' ),
+			'precondition'      => static function ( WC_Order $locked, string $current ) use ( $messenger ) {
+				if ( 'yes' === $locked->get_meta( '_cvd_delivery_incident_active', true ) ) { return CVD_Order_Transition_Service::PRECONDITION_FAILED; }
+				if ( ! in_array( $current, array( 'assigned', 'accepted', 'to_store' ), true ) || absint( $locked->get_meta( '_cvd_messenger_user_id', true ) ) !== $messenger->ID ) { return CVD_Order_Transition_Service::CONFLICT; }
+				return true;
+			},
+			'atomic_mutation'   => static function ( WC_Order $locked, $from, $to, $actor, string $at ) use ( $messenger, $how ): void {
+				$locked->delete_meta_data( '_cvd_messenger_user_id' );
+				$locked->delete_meta_data( '_cvd_direct_assignment' ); // ya no es directa: sale al grupo como cualquier oferta
+				$locked->delete_meta_data( '_cvd_delivery_accepted_at' );
+				$locked->delete_meta_data( '_cvd_to_store_at' );
+				$locked->delete_meta_data( '_cvd_bot_eta' );
+				$locked->delete_meta_data( '_cvd_bot_eta_at' );
+				// Oferta nueva: el bot la ve como no anunciada y el reloj de «oferta vieja» empieza otra vez.
+				$locked->update_meta_data( '_cvd_delivery_offered_at', $at );
+				// En la web: la ven todos los mensajeros disponibles, menos el que la soltó.
+				$invited = array_map( 'absint', (array) $locked->get_meta( '_cvd_delivery_invited_messengers', true ) );
+				$available = array_map( static fn( WP_User $user ): int => $user->ID, CVD_Delivery::available_messengers() );
+				$locked->update_meta_data( '_cvd_delivery_invited_messengers', array_values( array_unique( array_merge( $invited, $available ) ) ) );
+				$rejected = array_map( 'absint', (array) $locked->get_meta( '_cvd_delivery_rejected_by', true ) );
+				$locked->update_meta_data( '_cvd_delivery_rejected_by', array_values( array_unique( array_merge( $rejected, array( $messenger->ID ) ) ) ) );
+				$locked->add_order_note( 'Carrera soltada por ' . $messenger->display_name . ' (' . $how . '). Vuelve a estar libre para otro mensajero.' );
+			},
+			'after_commit'      => static function () use ( $messenger ): void {
+				if ( class_exists( 'CVD_Messenger_Reputation' ) ) { CVD_Messenger_Reputation::invalidate( $messenger->ID ); }
+			},
+		) );
+		if ( empty( $result['success'] ) ) { return self::no_cache( array( 'result' => 'error', 'code' => $result['error_code'] ?? '' ) ); }
+		return self::no_cache( array( 'result' => 'released', 'messenger' => $messenger->display_name ) );
 	}
 
 	/** Hora a la que el mensajero dice que puede ir: queda en el pedido y en el seguimiento. */

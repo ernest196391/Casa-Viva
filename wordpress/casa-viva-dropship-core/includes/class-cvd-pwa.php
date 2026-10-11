@@ -121,7 +121,8 @@ final class CVD_PWA {
 		$program = CVD_Registration::entry_type( $user );
 		if ( 'gestora' === $program ) { return home_url( '/area-gestoras/' ); }
 		if ( 'mensajero' === $program ) { return home_url( '/area-mensajeros/' ); }
-		if ( in_array( 'cvd_clerk', $roles, true ) ) { return home_url( '/centro-operaciones/' ); }
+		// Dependienta (3.13.49): entra directo a Pedidos, con los pedidos abiertos y sus botones («Listo para salir», «Entregado al mensajero»).
+		if ( in_array( 'cvd_clerk', $roles, true ) ) { return home_url( '/ventas/' ); }
 		if ( array_intersect( array( 'administrator', 'shop_manager', 'cvd_operator' ), $roles ) ) { return home_url( '/centro-operaciones/' ); }
 		$owner = CVD_Attribution::current_customer_owner();
 		if ( $owner && ! empty( $owner['referral_code'] ) ) { return add_query_arg( 'ref', $owner['referral_code'], wc_get_page_permalink( 'shop' ) ); }
@@ -153,7 +154,10 @@ final class CVD_PWA {
 		if ( isset( $_GET['offline'] ) ) { return '<section class="cvd-app-entry"><h1>Estás sin conexión</h1><p>Recupera la conexión para continuar.</p><button class="cvd-app-button" onclick="location.reload()">Volver a intentar</button></section>'; }
 		$login = wp_login_form( array( 'echo' => false, 'redirect' => home_url( '/casa-viva-app/' ), 'remember' => true ) );
 		$lost = wp_lostpassword_url( home_url( '/casa-viva-app/' ) );
-		return '<section class="cvd-app-entry"><img src="' . esc_url( CVD_URL . 'assets/pwa/icon-192.png' ) . '" alt="Casa Viva" width="112" height="112"><div class="cvd-app-login">' . $login . '<p class="cvd-app-recovery"><a href="' . esc_url( $lost ) . '">¿Olvidaste tu contraseña?</a></p></div></section>';
+		// Enlace de «mi acceso» vencido o ya usado (dependientas, 3.13.49): cómo pedir otro.
+		$invalid = isset( $_GET['cvd_access'] ) && 'invalid' === sanitize_key( wp_unslash( $_GET['cvd_access'] ) ) ? '<p class="cvd-app-recovery" role="alert">Ese enlace para entrar ya se usó o venció. Escribe <strong>mi acceso</strong> al WhatsApp de Casa Viva (5354056173) y te mandamos otro.</p>' : '';
+		$hint = '<p class="cvd-app-recovery">¿Trabajas en la tienda? Escribe tu número de WhatsApp en lugar del usuario, con tu contraseña.</p>';
+		return '<section class="cvd-app-entry"><img src="' . esc_url( CVD_URL . 'assets/pwa/icon-192.png' ) . '" alt="Casa Viva" width="112" height="112"><div class="cvd-app-login">' . $invalid . $login . $hint . '<p class="cvd-app-recovery"><a href="' . esc_url( $lost ) . '">¿Olvidaste tu contraseña?</a></p></div></section>';
 	}
 
 	public static function render_operations(): string {
@@ -164,6 +168,8 @@ final class CVD_PWA {
 		$unread = class_exists('CVD_Web_Push') ? absint( $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . CVD_Web_Push::notifications_table() . ' WHERE user_id=%d AND read_at IS NULL', $user->ID ) ) ) : 0;
 		$order_badge = $unread ? '<b class="cvd-operation-badge">' . esc_html( $unread ) . '</b>' : '';
 		$accounting = current_user_can( 'manage_woocommerce' ) ? '<a href="' . esc_url( home_url( '/contabilidad/' ) ) . '"><span>$</span><h2>Contabilidad</h2><p>Comisiones, solicitudes y pagos.</p></a>' : '';
-		return '<section class="cvd-operations"><header><h1>Operaciones</h1><div><button data-cvd-enable-notifications type="button">Activar alertas</button><a href="' . esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ) . '">Salir</a></div></header><div class="cvd-operation-grid"><a href="' . esc_url( home_url( '/inventario/' ) ) . '"><span>▦</span><h2>Inventario</h2></a><a href="' . esc_url( home_url( '/ventas/' ) ) . '"><span>✓</span><h2>Pedidos</h2>' . $order_badge . '</a><a href="' . esc_url( home_url( '/mensajeria/' ) ) . '"><span>↗</span><h2>Mensajería</h2></a>' . $accounting . '</div></section>';
+		// Dependienta (3.13.49): aquí pone su contraseña para entrar con su WhatsApp (como las gestoras).
+		$password = class_exists( 'CVD_Program_Login' ) && CVD_Registration::is_clerk( $user ) ? '<div id="perfil">' . CVD_Program_Login::form( $user ) . '</div>' : '';
+		return '<section class="cvd-operations"><header><h1>Operaciones</h1><div><button data-cvd-enable-notifications type="button">Activar alertas</button><a href="' . esc_url( wp_logout_url( home_url( '/casa-viva-app/' ) ) ) . '">Salir</a></div></header><div class="cvd-operation-grid"><a href="' . esc_url( home_url( '/inventario/' ) ) . '"><span>▦</span><h2>Inventario</h2></a><a href="' . esc_url( home_url( '/ventas/' ) ) . '"><span>✓</span><h2>Pedidos</h2>' . $order_badge . '</a><a href="' . esc_url( home_url( '/mensajeria/' ) ) . '"><span>↗</span><h2>Mensajería</h2></a>' . $accounting . '</div>' . $password . '</section>';
 	}
 }

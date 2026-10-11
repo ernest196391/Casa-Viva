@@ -47,9 +47,11 @@ final class CVD_Registration {
 			&& $hash
 			&& $expires >= time()
 			&& wp_check_password( $token, $hash )
-			&& ( self::is_approved_gestora( $user ) || self::is_approved_messenger( $user ) );
+			// Dependientas también (3.13.49), nunca una cuenta de administración aunque tenga ese rol.
+			&& ( self::is_approved_gestora( $user ) || self::is_approved_messenger( $user ) || ( self::is_clerk( $user ) && ! array_intersect( array( 'administrator', 'shop_manager' ), (array) $user->roles ) ) );
 		if ( ! $is_valid ) {
-			$area = $user && 'mensajero' === self::program_type( $user ) ? '/area-mensajeros/' : '/area-gestoras/';
+			// Dependienta: vuelve a la entrada de la tienda (casa-viva-app), que explica cómo pedir otro enlace.
+			$area = $user && self::is_clerk( $user ) && '' === self::program_type( $user ) ? '/casa-viva-app/' : ( $user && 'mensajero' === self::program_type( $user ) ? '/area-mensajeros/' : '/area-gestoras/' );
 			wp_safe_redirect( add_query_arg( 'cvd_access', 'invalid', home_url( $area ) ) );
 			exit;
 		}
@@ -63,8 +65,18 @@ final class CVD_Registration {
 		// Cuenta doble: el enlace puede pedir un área concreta (cvd_area); si no, la de entrada.
 		$area = isset( $_GET['cvd_area'] ) ? sanitize_key( wp_unslash( $_GET['cvd_area'] ) ) : '';
 		$type = self::is_dual( $user ) && in_array( $area, array( 'gestora', 'mensajero' ), true ) ? $area : self::entry_type( $user );
+		// Dependienta (3.13.49): a Operaciones, donde pone su contraseña y tiene Pedidos a un toque.
+		if ( '' === $type && self::is_clerk( $user ) ) {
+			wp_safe_redirect( home_url( '/centro-operaciones/#cvd-clave' ) );
+			exit;
+		}
 		wp_safe_redirect( self::portal_url_for_type( $type ) );
 		exit;
+	}
+
+	/** Dependienta de la tienda (rol cvd_clerk): trabaja en /centro-operaciones/ y /ventas/. */
+	public static function is_clerk( WP_User $user ): bool {
+		return in_array( 'cvd_clerk', (array) $user->roles, true );
 	}
 
 	public static function block_pending_login( WP_User $user ) {

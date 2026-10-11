@@ -20,8 +20,10 @@ final class CVD_Order_Transition_Service {
 	);
 	private const DELIVERY_TRANSITIONS = array(
 		'unassigned'=>array('offered','assigned'), 'offered'=>array('assigned','accepted'),
-		'assigned'=>array('accepted'), 'accepted'=>array('to_store','picked_up'),
-		'to_store'=>array('picked_up'), 'picked_up'=>array('handed_over'),
+		// Relevo (3.13.49): antes de recoger el paquete, el mensajero asignado puede soltar la carrera
+		// y vuelve a ser oferta abierta (solo con messenger_release, ver authorized()).
+		'assigned'=>array('accepted','offered'), 'accepted'=>array('to_store','picked_up','offered'),
+		'to_store'=>array('picked_up','offered'), 'picked_up'=>array('handed_over'),
 		'handed_over'=>array('delivered','failed','returned'), 'delivered'=>array('cash_returned'),
 		'cash_returned'=>array('closed'),
 	);
@@ -221,6 +223,9 @@ final class CVD_Order_Transition_Service {
 	private static function authorized( WC_Order $order,string $domain,string $from,string $to,WP_User $actor,array $context=array() ): bool {
 		$is_admin=user_can($actor,'manage_woocommerce'); $is_staff=user_can($actor,'cvd_manage_sales');
 		if('operation'===$domain){return $is_admin||$is_staff;} if('delivery'!==$domain){return false;}
+		// Relevo: volver a «oferta abierta» desde asignada/aceptada/va a recoger solo lo hace el propio
+		// mensajero asignado y solo por la puerta del bot (messenger_release); la tienda no ve ese botón.
+		if('offered'===$to&&'unassigned'!==$from){return !empty($context['messenger_release'])&&in_array($from,array('assigned','accepted','to_store'),true)&&in_array('cvd_messenger',(array)$actor->roles,true)&&$actor->ID===absint($order->get_meta('_cvd_messenger_user_id',true));}
 		if(in_array($to,array('offered','assigned','picked_up','cash_returned'),true)){return $is_admin||$is_staff;}
 		if('closed'===$to){return $is_admin||($is_staff&&!empty($context['allow_staff_closeout']));}
 		$is_assigned=$actor->ID===absint($order->get_meta('_cvd_messenger_user_id',true)); $is_messenger=in_array('cvd_messenger',(array)$actor->roles,true);

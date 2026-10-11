@@ -43,7 +43,9 @@ final class CVD_Portal {
 		// Una cuenta doble vale para los dos accesos: gestoras y mensajeros.
 		$valid = ( 'gestoras' === $selected && CVD_Registration::has_program_account( $user, 'gestora' ) )
 			|| ( 'mensajeros' === $selected && CVD_Registration::has_program_account( $user, 'mensajero' ) )
-			|| ( 'clientes' === $selected && ! $program && ! $staff );
+			|| ( 'clientes' === $selected && ! $program && ! $staff )
+			// Dependienta (3.13.49): puede entrar también desde Mi cuenta con su WhatsApp; va a Pedidos (/ventas/).
+			|| ( 'clientes' === $selected && ! $program && CVD_Registration::is_clerk( $user ) && ! array_intersect( array( 'administrator', 'shop_manager' ), $roles ) );
 		if ( $valid ) { return $user; }
 		$label = array( 'clientes' => 'cliente', 'gestoras' => 'gestora', 'mensajeros' => 'mensajero' )[ $selected ];
 		return new WP_Error( 'cvd_wrong_portal', 'Esta cuenta no pertenece al acceso de ' . $label . '. Selecciona el tipo de cuenta correcto.' );
