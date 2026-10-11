@@ -138,7 +138,9 @@ final class CVD_Web_Push {
 			'delivered'   => 'Tu pedido fue marcado como entregado.',
 		);
 		if ( isset( $customer_messages[ $status ] ) ) {
-			$order->add_order_note( $customer_messages[ $status ] . ' Seguimiento: ' . CVD_Delivery::tracking_url( $order ), true );
+			// Pedido de una gestora: al cliente no se le escribe (regla de Lennys, 11-oct); la nota queda interna y la gestora avisa ella.
+			$to_customer = ! absint( $order->get_meta( '_cvd_owner_user_id', true ) );
+			$order->add_order_note( $customer_messages[ $status ] . ' Seguimiento: ' . CVD_Delivery::tracking_url( $order ), $to_customer );
 		}
 	}
 
