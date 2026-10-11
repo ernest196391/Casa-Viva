@@ -40,6 +40,11 @@ final class CVD_Panel_Bridge {
 		register_rest_route( self::NS, '/panel/curru/status', array( 'methods' => 'GET', 'callback' => static fn() => self::no_cache( array( 'enabled' => class_exists( 'CVD_Curru_AI' ) && CVD_Curru_AI::enabled() ) ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/curru/invoice', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'curru_invoice' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/save', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'save_product' ), 'permission_callback' => $auth ) );
+		// 3.13.52: diseños y colores (variaciones) y «Dejar de vender» desde el panel. Nada se borra.
+		register_rest_route( self::NS, '/panel/products/(?P<id>\d+)/variations', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'product_variations' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/products/(?P<id>\d+)/variations', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'add_variation' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/products/variable', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'create_variable' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/products/visibility', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'set_visibility' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/messengers', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'messengers' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/messengers/(?P<id>\d+)/status', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'gestora_status' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/clients/bulk', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'clients_bulk' ), 'permission_callback' => $auth ) );
@@ -357,7 +362,8 @@ final class CVD_Panel_Bridge {
 		foreach ( wc_get_products( array( 'limit' => -1, 'status' => array( 'publish', 'private' ), 'type' => array( 'simple', 'variable' ) ) ) as $product ) {
 			$items = $product->is_type( 'variable' ) ? array_filter( array_map( 'wc_get_product', $product->get_children() ) ) : array( $product );
 			foreach ( $items as $p ) {
-				$rows[] = array( 'wooId' => $p->get_id(), 'stock' => $p->managing_stock() ? (int) $p->get_stock_quantity() : null, 'price' => (float) $p->get_regular_price(), 'status' => $product->get_status() );
+				// status = el del producto (padre); itemStatus = el de la variante (private = diseño retirado).
+				$rows[] = array( 'wooId' => $p->get_id(), 'stock' => $p->managing_stock() ? (int) $p->get_stock_quantity() : null, 'price' => (float) $p->get_regular_price(), 'status' => $product->get_status(), 'itemStatus' => $p->get_status() );
 			}
 		}
 		return self::no_cache( array( 'products' => $rows ) );
@@ -426,6 +432,343 @@ final class CVD_Panel_Bridge {
 			}
 		}
 		return self::no_cache( array( 'ok' => true, 'wooId' => $id, 'created' => ! $woo_id, 'url' => get_permalink( $product->is_type( 'variation' ) ? $product->get_parent_id() : $id ) ) );
+	}
+
+	// ---------- 3.13.52: diseños y colores (variaciones) ----------
+
+	/** El producto con diseños de un id (el del padre o el de una de sus variantes). */
+	private static function variable_parent( int $id ) {
+		$product = $id ? wc_get_product( $id ) : null;
+		if ( $product && $product->is_type( 'variation' ) ) { $product = wc_get_product( $product->get_parent_id() ); }
+		if ( ! $product ) { return new WP_Error( 'cvd_panel_product', 'Ese producto ya no está en la web.', array( 'status' => 404 ) ); }
+		if ( ! $product->is_type( 'variable' ) ) { return new WP_Error( 'cvd_panel_product', 'Este producto no tiene diseños ni colores en la web.', array( 'status' => 422 ) ); }
+		return $product;
+	}
+
+	private static function thumb( int $image_id ): ?string {
+		$url = $image_id ? wp_get_attachment_image_url( $image_id, 'woocommerce_thumbnail' ) : false;
+		return $url ? (string) $url : null;
+	}
+
+	/** Nombre visible de una variante: «rojo», «flores azules», «M / azul». */
+	private static function variation_label( WC_Product_Variation $v ): string {
+		$parts = array();
+		foreach ( $v->get_variation_attributes( false ) as $key => $value ) {
+			if ( '' === (string) $value ) { $parts[] = 'cualquiera'; continue; }
+			$term = taxonomy_exists( (string) $key ) ? get_term_by( 'slug', (string) $value, (string) $key ) : null;
+			$parts[] = $term && ! is_wp_error( $term ) ? $term->name : (string) $value;
+		}
+		return implode( ' / ', $parts );
+	}
+
+	private static function variation_row( WC_Product_Variation $v ): array {
+		return array(
+			'id' => $v->get_id(), 'label' => self::variation_label( $v ), 'sku' => (string) $v->get_sku(),
+			'price' => (float) $v->get_regular_price(), 'sale' => '' !== (string) $v->get_sale_price() ? (float) $v->get_sale_price() : null,
+			// null = la web no cuenta las unidades de este diseño.
+			'stock' => $v->get_manage_stock() ? (int) $v->get_stock_quantity() : null,
+			'status' => $v->get_status(), 'image' => self::thumb( (int) $v->get_image_id() ),
+			'retired' => 'private' === $v->get_status(),
+		);
+	}
+
+	/**
+	 * Líneas recientes (última hora) de pedidos web con estas variantes. Al enlazar un diseño con la caja,
+	 * NEXO las marca como ya contadas: la cantidad de la web ya las incluye y el puente no debe restarlas otra vez.
+	 */
+	private static function recent_lines( array $ids ): array {
+		$ids = array_map( 'absint', $ids );
+		$out = array();
+		if ( ! $ids ) { return $out; }
+		$orders = wc_get_orders( array( 'limit' => 300, 'type' => 'shop_order', 'date_modified' => '>=' . ( time() - HOUR_IN_SECONDS ), 'status' => array( 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed' ) ) );
+		foreach ( $orders as $order ) {
+			foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
+				$vid = (int) $item->get_variation_id();
+				if ( ! in_array( $vid, $ids, true ) ) { continue; }
+				$out[ $vid ][] = array( 'orderId' => $order->get_id(), 'itemId' => (int) $item_id, 'status' => $order->get_status(), 'reduced' => (int) $item->get_meta( '_reduced_stock', true ) );
+			}
+		}
+		return $out;
+	}
+
+	/** Diseños y colores de un producto, con su cantidad y estado en la web. */
+	public static function product_variations( WP_REST_Request $request ) {
+		$parent = self::variable_parent( absint( $request['id'] ) );
+		if ( is_wp_error( $parent ) ) { return $parent; }
+		$children = $parent->get_children();
+		$recent = self::recent_lines( $children );
+		$rows = array();
+		foreach ( $children as $child_id ) {
+			$v = wc_get_product( $child_id );
+			if ( ! $v instanceof WC_Product_Variation ) { continue; }
+			$rows[] = self::variation_row( $v ) + array( 'recent' => $recent[ $child_id ] ?? array() );
+		}
+		$attr = self::variation_attribute( $parent );
+		return self::no_cache( array(
+			'parent' => array(
+				'id' => $parent->get_id(), 'name' => $parent->get_name(), 'status' => $parent->get_status(),
+				'image' => self::thumb( (int) $parent->get_image_id() ), 'retired' => '' !== (string) $parent->get_meta( '_cvd_retired' ),
+				'url' => get_permalink( $parent->get_id() ),
+				// Se pueden añadir diseños si el producto varía en una sola cosa (color o diseño).
+				'canAdd' => ! is_wp_error( $attr ), 'cantAddReason' => is_wp_error( $attr ) ? $attr->get_error_message() : null,
+			),
+			'variations' => $rows,
+		) );
+	}
+
+	/** La única característica que cambia entre variantes (color o diseño). [clave, atributo] o error. */
+	private static function variation_attribute( WC_Product_Variable $parent ) {
+		$vars = array_filter( $parent->get_attributes(), static fn( $a ) => $a instanceof WC_Product_Attribute && $a->get_variation() );
+		if ( count( $vars ) > 1 ) {
+			return new WP_Error( 'cvd_panel_variation', 'Este producto cambia en varias cosas a la vez (por ejemplo talla y color). Para añadirle diseños pídeselo a Ernesto.', array( 'status' => 422 ) );
+		}
+		if ( ! $vars ) {
+			$attr = new WC_Product_Attribute();
+			$attr->set_name( 'Diseño' );
+			$attr->set_options( array() );
+			$attr->set_visible( true );
+			$attr->set_variation( true );
+			return array( 'diseno', $attr );
+		}
+		$key = (string) array_key_first( $vars );
+		return array( $key, $vars[ $key ] );
+	}
+
+	/** Añade la opción (término o texto) al producto si falta. Devuelve [clave, valor] para la variante. */
+	private static function add_option( WC_Product_Variable $parent, string $label ) {
+		$found = self::variation_attribute( $parent );
+		if ( is_wp_error( $found ) ) { return $found; }
+		list( $key, $attr ) = $found;
+		if ( $attr->is_taxonomy() ) {
+			$tax = $attr->get_name();
+			$term = get_term_by( 'name', $label, $tax ) ?: get_term_by( 'slug', sanitize_title( $label ), $tax );
+			if ( ! $term ) {
+				$new = wp_insert_term( $label, $tax );
+				if ( is_wp_error( $new ) ) { return new WP_Error( 'cvd_panel_variation', 'No se pudo crear ese color o diseño en la web.', array( 'status' => 500 ) ); }
+				$term = get_term( (int) $new['term_id'], $tax );
+			}
+			$ids = array_map( 'intval', $attr->get_options() );
+			if ( ! in_array( (int) $term->term_id, $ids, true ) ) {
+				$ids[] = (int) $term->term_id;
+				$attr->set_options( $ids );
+				wp_set_object_terms( $parent->get_id(), (int) $term->term_id, $tax, true );
+			}
+			$value = (string) $term->slug;
+		} else {
+			$options = $attr->get_options();
+			$value = null;
+			foreach ( $options as $o ) {
+				if ( sanitize_title( (string) $o ) === sanitize_title( $label ) ) { $value = (string) $o; }
+			}
+			if ( null === $value ) {
+				$options[] = $label;
+				$attr->set_options( $options );
+				$value = $label;
+			}
+		}
+		$attributes = $parent->get_attributes();
+		$attributes[ $key ] = $attr;
+		$parent->set_attributes( $attributes );
+		$parent->save();
+		return array( $key, $value );
+	}
+
+	/** Variante con ese valor (para no duplicar si se pulsa dos veces o el nombre ya existe). */
+	private static function find_variation( WC_Product_Variable $parent, string $key, string $value ): ?WC_Product_Variation {
+		foreach ( $parent->get_children() as $child_id ) {
+			$v = wc_get_product( $child_id );
+			if ( ! $v instanceof WC_Product_Variation ) { continue; }
+			$attrs = $v->get_variation_attributes( false );
+			if ( sanitize_title( (string) ( $attrs[ $key ] ?? '' ) ) === sanitize_title( $value ) ) { return $v; }
+		}
+		return null;
+	}
+
+	/** Crea la variante con 0 unidades (el puente de existencias le suma lo que diga la caja). */
+	private static function create_variation( WC_Product_Variable $parent, string $key, string $value, float $price, string $image, string $by ): array {
+		$existing = self::find_variation( $parent, $key, $value );
+		if ( $existing ) { return self::variation_row( $existing ) + array( 'existing' => true ); }
+		$v = new WC_Product_Variation();
+		$v->set_parent_id( $parent->get_id() );
+		$v->set_attributes( array( $key => $value ) );
+		$v->set_regular_price( wc_format_decimal( $price, 2 ) );
+		$v->set_manage_stock( true );
+		$v->set_stock_quantity( 0 );
+		$v->set_status( 'publish' );
+		$v->update_meta_data( '_cvd_panel_created', wp_json_encode( array( 'at' => gmdate( 'c' ), 'by' => $by ) ) );
+		$id = $v->save();
+		$att = self::sideload( $image, $parent->get_id(), $parent->get_name() . ' — ' . $value );
+		if ( $att ) {
+			$v = wc_get_product( $id );
+			$v->set_image_id( $att );
+			$v->save();
+		}
+		self::log_product( 'diseño añadido', $id, $parent->get_name() . ' — ' . $value, $by );
+		return self::variation_row( wc_get_product( $id ) ) + array( 'existing' => false );
+	}
+
+	private static function sideload( string $url, int $post_id, string $title ): int {
+		$url = esc_url_raw( $url );
+		if ( '' === $url ) { return 0; }
+		require_once ABSPATH . 'wp-admin/includes/media.php';
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+		$att = media_sideload_image( $url, $post_id, $title, 'id' );
+		return is_wp_error( $att ) ? 0 : (int) $att;
+	}
+
+	private static function by( array $p ): string {
+		return substr( sanitize_text_field( (string) ( $p['by'] ?? 'panel' ) ), 0, 120 ) ?: 'panel';
+	}
+
+	/** Añadir un diseño o color a un producto que ya tiene diseños: {label, price, imageUrl, by}. */
+	public static function add_variation( WP_REST_Request $request ) {
+		$parent = self::variable_parent( absint( $request['id'] ) );
+		if ( is_wp_error( $parent ) ) { return $parent; }
+		$p = (array) $request->get_json_params();
+		$label = trim( sanitize_text_field( (string) ( $p['label'] ?? '' ) ) );
+		$price = (float) ( $p['price'] ?? 0 );
+		if ( '' === $label || mb_strlen( $label ) > 60 ) { return new WP_Error( 'cvd_panel_variation', 'Escribe el nombre del diseño o color (máximo 60 letras).', array( 'status' => 422 ) ); }
+		if ( $price <= 0 ) { return new WP_Error( 'cvd_panel_variation', 'Escribe un precio mayor que 0.', array( 'status' => 422 ) ); }
+		$option = self::add_option( $parent, $label );
+		if ( is_wp_error( $option ) ) { return $option; }
+		$row = self::create_variation( $parent, $option[0], $option[1], $price, (string) ( $p['imageUrl'] ?? '' ), self::by( $p ) );
+		WC_Product_Variable::sync( $parent->get_id() );
+		wc_delete_product_transients( $parent->get_id() );
+		return self::no_cache( array( 'ok' => true, 'parentId' => $parent->get_id(), 'parentName' => $parent->get_name(), 'variation' => $row ) );
+	}
+
+	/**
+	 * Producto nuevo con diseños: {name, price, category, imageUrl, designs: [{label, imageUrl}], ref, by}.
+	 * `ref` (lo genera el panel) evita duplicarlo si se pulsa dos veces o se reintenta.
+	 */
+	public static function create_variable( WP_REST_Request $request ) {
+		$p = (array) $request->get_json_params();
+		$name = sanitize_text_field( (string) ( $p['name'] ?? '' ) );
+		$price = (float) ( $p['price'] ?? 0 );
+		$ref = substr( sanitize_key( (string) ( $p['ref'] ?? '' ) ), 0, 64 );
+		$by = self::by( $p );
+		$designs = array();
+		foreach ( array_slice( (array) ( $p['designs'] ?? array() ), 0, 30 ) as $d ) {
+			$label = trim( sanitize_text_field( (string) ( $d['label'] ?? '' ) ) );
+			if ( '' !== $label && mb_strlen( $label ) <= 60 ) { $designs[ sanitize_title( $label ) ] = array( 'label' => $label, 'imageUrl' => (string) ( $d['imageUrl'] ?? '' ) ); }
+		}
+		if ( '' === $name || $price <= 0 ) { return new WP_Error( 'cvd_panel_product', 'Falta el nombre o el precio.', array( 'status' => 422 ) ); }
+		if ( ! $designs ) { return new WP_Error( 'cvd_panel_product', 'Escribe al menos un diseño o color.', array( 'status' => 422 ) ); }
+		$existing = $ref ? wc_get_products( array( 'limit' => 1, 'return' => 'ids', 'status' => array( 'publish', 'private', 'draft' ), 'meta_key' => '_cvd_panel_ref', 'meta_value' => $ref ) ) : array();
+		if ( $existing ) {
+			$parent = wc_get_product( $existing[0] );
+		} else {
+			$parent = new WC_Product_Variable();
+			$parent->set_name( $name );
+			$parent->set_status( 'publish' );
+			$parent->set_manage_stock( false );
+			$attr = new WC_Product_Attribute();
+			$attr->set_name( 'Diseño' );
+			$attr->set_options( array_values( wp_list_pluck( $designs, 'label' ) ) );
+			$attr->set_visible( true );
+			$attr->set_variation( true );
+			$parent->set_attributes( array( 'diseno' => $attr ) );
+			$category = sanitize_text_field( (string) ( $p['category'] ?? '' ) );
+			if ( '' !== $category ) {
+				$term = term_exists( $category, 'product_cat' ) ?: wp_insert_term( $category, 'product_cat' );
+				if ( ! is_wp_error( $term ) ) { $parent->set_category_ids( array( (int) ( is_array( $term ) ? $term['term_id'] : $term ) ) ); }
+			}
+			if ( $ref ) { $parent->update_meta_data( '_cvd_panel_ref', $ref ); }
+			$parent->update_meta_data( '_cvd_panel_created', wp_json_encode( array( 'at' => gmdate( 'c' ), 'by' => $by ) ) );
+			$parent_id = $parent->save();
+			$att = self::sideload( (string) ( $p['imageUrl'] ?? '' ), $parent_id, $name );
+			$parent = wc_get_product( $parent_id );
+			if ( $att ) {
+				$parent->set_image_id( $att );
+				$parent->save();
+			}
+			self::log_product( 'producto con diseños creado', $parent_id, $name, $by );
+		}
+		if ( ! $parent instanceof WC_Product_Variable ) { return new WP_Error( 'cvd_panel_product', 'No se pudo crear el producto en la web.', array( 'status' => 500 ) ); }
+		$rows = array();
+		foreach ( $designs as $d ) {
+			$option = self::add_option( $parent, $d['label'] );
+			if ( is_wp_error( $option ) ) { return $option; }
+			$rows[] = self::create_variation( $parent, $option[0], $option[1], $price, $d['imageUrl'], $by );
+			$parent = wc_get_product( $parent->get_id() );
+		}
+		WC_Product_Variable::sync( $parent->get_id() );
+		wc_delete_product_transients( $parent->get_id() );
+		return self::no_cache( array( 'ok' => true, 'parentId' => $parent->get_id(), 'name' => $parent->get_name(), 'url' => get_permalink( $parent->get_id() ), 'variations' => $rows ) );
+	}
+
+	// ---------- 3.13.52: «Dejar de vender» / «Volver a vender» ----------
+
+	/**
+	 * {items: [wooId], sell: bool, by}. Retirar = privado (no sale en la tienda, el buscador, la tienda de las
+	 * gestoras ni el catálogo), oculto del catálogo y retenido (`_cvd_hold`) para que ninguna sincronización
+	 * lo vuelva a publicar. Una variante retirada queda desactivada (no se puede elegir). Nunca se borra nada.
+	 */
+	public static function set_visibility( WP_REST_Request $request ): WP_REST_Response {
+		$p = (array) $request->get_json_params();
+		$sell = ! empty( $p['sell'] );
+		$by = self::by( $p );
+		$done = array();
+		$parents = array();
+		foreach ( array_slice( array_unique( array_map( 'absint', (array) ( $p['items'] ?? array() ) ) ), 0, 300 ) as $id ) {
+			$product = $id ? wc_get_product( $id ) : null;
+			// Los artículos «bajo pedido» del mercado los publica VivaBot: aquí no se tocan.
+			if ( ! $product || '' !== (string) $product->get_meta( '_cvd_market_item_id' ) ) { $done[] = array( 'wooId' => $id, 'ok' => false ); continue; }
+			$sell ? self::put_on_sale( $product ) : self::retire( $product, $by );
+			if ( $product->is_type( 'variation' ) ) { $parents[ $product->get_parent_id() ] = true; }
+			self::log_product( $sell ? 'vuelve a la venta' : 'retirado (dejar de vender)', $id, $product->get_name(), $by );
+			$done[] = array( 'wooId' => $id, 'ok' => true, 'status' => get_post_status( $id ) );
+		}
+		foreach ( array_keys( $parents ) as $parent_id ) {
+			WC_Product_Variable::sync( $parent_id );
+			wc_delete_product_transients( $parent_id );
+		}
+		return self::no_cache( array( 'items' => $done ) );
+	}
+
+	private static function retire( WC_Product $product, string $by ): void {
+		$variation = $product->is_type( 'variation' );
+		if ( '' === (string) $product->get_meta( '_cvd_retired' ) ) {
+			$product->update_meta_data( '_cvd_retired', wp_json_encode( array(
+				'at' => gmdate( 'c' ), 'by' => $by, 'status' => $product->get_status(),
+				'visibility' => $variation ? '' : $product->get_catalog_visibility(),
+				'hold' => '' !== (string) $product->get_meta( '_cvd_hold' ),
+			) ) );
+		}
+		$product->set_status( 'private' );
+		if ( ! $variation ) {
+			$product->set_catalog_visibility( 'hidden' );
+			if ( '' === (string) $product->get_meta( '_cvd_hold' ) ) { $product->update_meta_data( '_cvd_hold', gmdate( 'c' ) ); }
+		}
+		// Si no, la reversión de la sincronización de BizneCubano lo volvería a publicar.
+		$product->delete_meta_data( '_cvd_sync_hidden_from' );
+		$product->save();
+	}
+
+	private static function put_on_sale( WC_Product $product ): void {
+		$old = json_decode( (string) $product->get_meta( '_cvd_retired' ), true );
+		$old = is_array( $old ) ? $old : array();
+		// Ya estaba a la venta y no lo retiró el panel: no se toca (no cambiar su visibilidad).
+		if ( ! $old && 'publish' === $product->get_status() ) { return; }
+		$product->set_status( 'publish' );
+		if ( ! $product->is_type( 'variation' ) ) {
+			$visibility = (string) ( $old['visibility'] ?? '' );
+			$product->set_catalog_visibility( '' !== $visibility && 'hidden' !== $visibility ? $visibility : 'visible' );
+			// Solo se quita la retención que puso «Dejar de vender», no una puesta a mano antes.
+			if ( $old && empty( $old['hold'] ) ) { $product->delete_meta_data( '_cvd_hold' ); }
+		}
+		$product->delete_meta_data( '_cvd_retired' );
+		$product->delete_meta_data( '_cvd_sync_hidden_from' );
+		$product->save();
+	}
+
+	/** Registro de cambios de productos hechos desde el panel (quién y cuándo), últimos 500. */
+	private static function log_product( string $action, int $id, string $name, string $by ): void {
+		$log = get_option( 'cvd_panel_product_log', array() );
+		$log = is_array( $log ) ? $log : array();
+		$log[] = array( 'at' => gmdate( 'c' ), 'by' => $by, 'action' => $action, 'wooId' => $id, 'name' => $name );
+		update_option( 'cvd_panel_product_log', array_slice( $log, -500 ), false );
 	}
 
 	/** Ejecuta una ruta del Centro de ventas como la usuaria que firma el panel (sus permisos y reglas). */
