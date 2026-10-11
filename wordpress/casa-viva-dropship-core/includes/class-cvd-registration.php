@@ -113,7 +113,7 @@ final class CVD_Registration {
 		ob_start();
 		?>
 		<section class="cvd-auth-layout">
-			<div class="cvd-auth-intro"><p class="cvd-kicker">Casa Viva</p><h1><?php echo esc_html( $title ); ?></h1><p><?php echo esc_html( $intro ); ?></p><?php if ( 'gestora' === $type ) : ?><ul><li>Es gratis. Casa Viva revisa tu solicitud y te avisa por WhatsApp.</li><li>Ganas el 10 % de cada venta (algunos productos tienen un monto fijo).</li><li>Puedes subir tus precios: la diferencia es tuya.</li><li>Entras con tu WhatsApp, sin contraseña.</li></ul><?php else : ?><ul><li>Registro gratuito sujeto a aprobación.</li><li>Información y actividad protegidas por usuario.</li><li>Soporte operativo de Casa Viva.</li></ul><?php endif; ?></div>
+			<div class="cvd-auth-intro"><h1><?php echo esc_html( $title ); ?></h1><p><?php echo esc_html( $intro ); ?></p><?php if ( 'gestora' === $type ) : ?><ul><li>Es gratis. Casa Viva revisa tu solicitud y te avisa por WhatsApp.</li><li>Ganas el 10 % de cada venta (algunos productos tienen un monto fijo).</li><li>Puedes subir tus precios: la diferencia es tuya.</li><li>Entras con tu WhatsApp, sin contraseña.</li></ul><?php else : ?><ul><li>Registro gratuito sujeto a aprobación.</li><li>Información y actividad protegidas por usuario.</li><li>Soporte operativo de Casa Viva.</li></ul><?php endif; ?></div>
 			<form class="cvd-form" method="post">
 				<h2>Crear solicitud</h2>
 				<?php if ( $inviter ) : ?><p class="cvd-notice">Te invita <strong><?php echo esc_html( $inviter->display_name ); ?></strong>.</p><input name="cvd_invita" type="hidden" value="<?php echo esc_attr( (string) get_user_meta( $inviter->ID, '_cvd_referral_code', true ) ); ?>"><?php endif; ?>
