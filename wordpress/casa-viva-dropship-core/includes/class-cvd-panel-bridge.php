@@ -34,6 +34,7 @@ final class CVD_Panel_Bridge {
 		register_rest_route( self::NS, '/panel/stock/web-sales', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'web_sales' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/stock/levels', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'stock_levels' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/price', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'set_price' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/products/save', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'save_product' ), 'permission_callback' => $auth ) );
 		// Tarifas de mensajería por zona (CUP): las mismas que usa el checkout y el reparto.
 		register_rest_route( self::NS, '/panel/shipping-rates', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'shipping_rates' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/shipping-rates', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'shipping_rate_save' ), 'permission_callback' => $auth ) );
@@ -129,6 +130,61 @@ final class CVD_Panel_Bridge {
 		$product->set_regular_price( wc_format_decimal( $price, 2 ) );
 		$product->save();
 		return self::no_cache( array( 'ok' => true, 'price' => (float) wc_get_product( $product->get_id() )->get_regular_price() ) );
+	}
+
+	/**
+	 * Crear (sin wooId) o actualizar (con wooId) un producto simple desde el panel (D39: la caja manda).
+	 * Al crear, el stock empieza en 0 con control de stock: el puente de existencias le suma lo que tenga la caja.
+	 * Campos: nexoId, name, price, category, imageUrl, active, sku.
+	 */
+	public static function save_product( WP_REST_Request $request ) {
+		$p = (array) $request->get_json_params();
+		$name = sanitize_text_field( (string) ( $p['name'] ?? '' ) );
+		$price = (float) ( $p['price'] ?? 0 );
+		$woo_id = absint( $p['wooId'] ?? 0 );
+		if ( '' === $name || $price <= 0 ) { return new WP_Error( 'cvd_panel_product', 'Falta el nombre o el precio.', array( 'status' => 422 ) ); }
+		if ( $woo_id ) {
+			$product = wc_get_product( $woo_id );
+			if ( ! $product ) { return new WP_Error( 'cvd_panel_product', 'Ese producto ya no está en la web.', array( 'status' => 404 ) ); }
+		} else {
+			$nexo_id = sanitize_text_field( (string) ( $p['nexoId'] ?? '' ) );
+			// Si ya se creó antes (reintento), no duplicar.
+			$existing = $nexo_id ? wc_get_products( array( 'limit' => 1, 'return' => 'ids', 'status' => array( 'publish', 'private', 'draft' ), 'meta_key' => '_cvd_nexo_product_id', 'meta_value' => $nexo_id ) ) : array();
+			$product = $existing ? wc_get_product( $existing[0] ) : new WC_Product_Simple();
+			if ( ! $existing ) {
+				$product->set_manage_stock( true );
+				$product->set_stock_quantity( 0 );
+				$product->update_meta_data( '_cvd_nexo_product_id', $nexo_id );
+			}
+		}
+		// El nombre de una variante lo pone WooCommerce desde el padre: no se toca.
+		if ( ! $product->is_type( 'variation' ) ) { $product->set_name( $name ); }
+		$product->set_regular_price( wc_format_decimal( $price, 2 ) );
+		$sku = sanitize_text_field( (string) ( $p['sku'] ?? '' ) );
+		if ( $sku && ! $product->get_sku() && ! wc_get_product_id_by_sku( $sku ) ) { $product->set_sku( $sku ); }
+		if ( ! $product->is_type( 'variation' ) ) {
+			$product->set_status( ( $p['active'] ?? true ) ? 'publish' : 'private' );
+			$category = sanitize_text_field( (string) ( $p['category'] ?? '' ) );
+			if ( '' !== $category ) {
+				$term = term_exists( $category, 'product_cat' ) ?: wp_insert_term( $category, 'product_cat' );
+				if ( ! is_wp_error( $term ) ) { $product->set_category_ids( array( (int) ( is_array( $term ) ? $term['term_id'] : $term ) ) ); }
+			}
+		}
+		$id = $product->save();
+		$image = esc_url_raw( (string) ( $p['imageUrl'] ?? '' ) );
+		if ( $image && $image !== get_post_meta( $id, '_cvd_nexo_image_url', true ) ) {
+			require_once ABSPATH . 'wp-admin/includes/media.php';
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			require_once ABSPATH . 'wp-admin/includes/image.php';
+			$att = media_sideload_image( $image, $id, $name, 'id' );
+			if ( ! is_wp_error( $att ) ) {
+				$product = wc_get_product( $id );
+				$product->set_image_id( $att );
+				$product->save();
+				update_post_meta( $id, '_cvd_nexo_image_url', $image );
+			}
+		}
+		return self::no_cache( array( 'ok' => true, 'wooId' => $id, 'created' => ! $woo_id, 'url' => get_permalink( $product->is_type( 'variation' ) ? $product->get_parent_id() : $id ) ) );
 	}
 
 	/** Ejecuta una ruta del Centro de ventas como la usuaria que firma el panel (sus permisos y reglas). */
