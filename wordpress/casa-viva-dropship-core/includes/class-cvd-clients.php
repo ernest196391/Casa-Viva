@@ -161,7 +161,8 @@ final class CVD_Clients {
 				<li data-client="<?php echo esc_attr( strtolower( remove_accents( $c->name . ' ' . $c->phone ) ) ); ?>">
 					<div><strong><?php echo esc_html( $c->name ?: 'Sin nombre' ); ?></strong>
 					<small><?php echo esc_html( $c->phone ); ?> · <?php echo esc_html( $c->orders ? $c->orders . ' compra' . ( 1 === (int) $c->orders ? '' : 's' ) : 'sin compras aún' ); ?><?php echo $c->last_order_at ? ' · última ' . esc_html( date_i18n( 'j M', strtotime( $c->last_order_at ) ) ) : ''; ?></small>
-					<?php if ( $c->note ) : ?><small><?php echo esc_html( $c->note ); ?></small><?php endif; ?></div>
+					<?php // Solo su propia nota: las de importación o del panel son internas. ?>
+					<?php if ( $c->note && 'gestora' === $c->source ) : ?><small><?php echo esc_html( $c->note ); ?></small><?php endif; ?></div>
 					<?php if ( ! $c->opt_out ) : ?><a class="cvd-primary" target="_blank" rel="noopener" href="<?php echo esc_url( self::wa( $c->phone ) . '?text=' . rawurlencode( $hello ) ); ?>">WhatsApp</a><?php else : ?><small>No quiere mensajes</small><?php endif; ?>
 				</li>
 			<?php endforeach; ?>

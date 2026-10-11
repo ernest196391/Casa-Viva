@@ -158,7 +158,7 @@ final class CVD_Portal {
 				$notice = 'Aumento general actualizado.';
 			} elseif ( 'products' === $price_action ) {
 				$result = CVD_Gestora_Store::save_prices( $user->ID, (array) ( $_POST['cvd_product_price'] ?? array() ) );
-				$notice = $result['saved'] . ' precios guardados.' . ( $result['errors'] ? ' No se guardaron (el precio no puede ser menor que el de Casa Viva): ' . implode( ', ', array_slice( $result['errors'], 0, 4 ) ) . '.' : '' );
+				$notice = ( $result['saved'] || ! $result['errors'] ? ( $result['saved'] ? $result['saved'] . ( 1 === (int) $result['saved'] ? ' precio guardado.' : ' precios guardados.' ) : 'No cambiaste ningún precio.' ) : '' ) . ( $result['errors'] ? ' No se guardaron (el precio no puede ser menor que el de Casa Viva): ' . implode( ', ', array_slice( $result['errors'], 0, 4 ) ) . '.' : '' );
 			}
 		}
 		$all_orders = wc_get_orders( array( 'limit' => -1, 'orderby' => 'date', 'order' => 'DESC', 'meta_key' => '_cvd_owner_user_id', 'meta_value' => $user->ID ) );
@@ -213,7 +213,7 @@ final class CVD_Portal {
 				<div class="cvd-referral"><input aria-label="Enlace para invitar" id="cvd-invite-link" readonly value="<?php echo esc_attr( $invite ); ?>"><div class="cvd-inline-actions"><button class="cvd-secondary" data-copy-target="cvd-invite-link" type="button">Copiar</button><a class="cvd-primary" href="<?php echo esc_url( 'https://wa.me/?text=' . rawurlencode( 'Vende conmigo en Casa Viva. Regístrate aquí: ' . $invite ) ); ?>" target="_blank" rel="noopener">Compartir por WhatsApp</a></div></div>
 				<div class="cvd-invite-qrs">
 					<figure><canvas data-qr="<?php echo esc_attr( $invite ); ?>" aria-label="QR para invitar"></canvas><figcaption>QR para invitar</figcaption></figure>
-					<figure><canvas data-qr="<?php echo esc_attr( $code ); ?>" aria-label="QR de tu código"></canvas><figcaption>Tu código en la tienda: <strong><?php echo esc_html( $code ); ?></strong></figcaption></figure>
+					<figure><canvas data-qr="<?php echo esc_attr( $link ); ?>" aria-label="QR de tu tienda"></canvas><figcaption>QR de tu tienda · código <strong><?php echo esc_html( $code ); ?></strong></figcaption></figure>
 				</div>
 			</section>
 			<?php endif; ?>
