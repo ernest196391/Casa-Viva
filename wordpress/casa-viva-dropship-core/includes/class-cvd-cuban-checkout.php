@@ -15,6 +15,7 @@ final class CVD_Cuban_Checkout {
 		add_filter( 'default_checkout_billing_country', array( __CLASS__, 'default_country' ) );
 		add_filter( 'default_checkout_shipping_country', array( __CLASS__, 'default_country' ) );
 		add_filter( 'woocommerce_checkout_get_value', array( __CLASS__, 'checkout_value' ), 10, 2 );
+		add_filter( 'woocommerce_checkout_update_customer_data', array( __CLASS__, 'keep_team_profile' ) );
 		add_filter( 'woocommerce_checkout_fields', array( __CLASS__, 'checkout_fields' ) );
 		add_filter( 'woocommerce_cart_needs_shipping_address', '__return_false' );
 		add_filter( 'woocommerce_cart_needs_shipping', '__return_false' );
@@ -43,6 +44,18 @@ final class CVD_Cuban_Checkout {
 			return strtoupper( (string) get_option( 'cvd_default_province', 'LH' ) );
 		}
 		return $value;
+	}
+
+	/**
+	 * 3.13.58: una gestora (o alguien del equipo) que compra para un cliente no guarda los datos del CLIENTE en su
+	 * propia cuenta. Antes el teléfono del cliente quedaba como teléfono de la gestora y el bot lo trataba como
+	 * gestora (8 cuentas afectadas el 12-oct, entre ellas Lennys con el cliente de los faroles).
+	 */
+	public static function keep_team_profile( $update ) {
+		$user = wp_get_current_user();
+		if ( ! $user->exists() ) { return $update; }
+		$team = array_intersect( (array) $user->roles, array( 'cvd_gestora', 'cvd_influencer', 'cvd_messenger', 'administrator', 'shop_manager' ) );
+		return $team ? false : $update;
 	}
 
 	public static function payment_gateways( array $gateways ): array {

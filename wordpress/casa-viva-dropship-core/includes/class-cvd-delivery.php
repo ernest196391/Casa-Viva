@@ -24,6 +24,53 @@ final class CVD_Delivery {
 		add_action( 'woocommerce_order_status_failed', array( __CLASS__, 'sync_cancelled' ), 40 );
 		add_action( 'cvd_expand_delivery_offer', array( __CLASS__, 'expand_offer' ) );
 		add_action( 'woocommerce_before_order_object_save', array( __CLASS__, 'guard_closed_cancellation' ) );
+		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'schedule_dispatch_on_create' ), 80 );
+		add_action( 'woocommerce_store_api_checkout_order_processed', array( __CLASS__, 'schedule_dispatch_on_create' ), 80 );
+		add_action( 'cvd_dispatch_new_order', array( __CLASS__, 'dispatch_new_order' ) );
+	}
+
+	/**
+	 * 3.13.58 (Lennys, 12-oct): la carrera sale al reparto al crear el pedido, sin esperar «Listo para salir»
+	 * («ralentiza el proceso»; lo que está en la web está en tienda). Interruptor `cvd_dispatch_on_create` (yes/no).
+	 * Un minuto después de la compra (para que el pago y el mensajero de la nota ya estén puestos) se llama a
+	 * dispatch_ready(): directo al mensajero elegido o al grupo. De 22:00 a 7:30 (Cuba) espera a las 7:30.
+	 * Al pulsar «Listo» después no se publica otra vez: publish_offer() solo publica lo que sigue «Por ofertar».
+	 */
+	public static function schedule_dispatch_on_create( $order ): void {
+		try {
+			if ( 'yes' !== get_option( 'cvd_dispatch_on_create', 'no' ) ) { return; }
+			if ( ! $order instanceof WC_Order ) { $order = wc_get_order( $order ); }
+			if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund ) { return; }
+			if ( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return; }
+			$args = array( $order->get_id() );
+			if ( ! wp_next_scheduled( 'cvd_dispatch_new_order', $args ) ) { wp_schedule_single_event( time() + 60, 'cvd_dispatch_new_order', $args ); }
+		} catch ( Throwable $error ) {
+			unset( $error ); // nunca se frena una compra por esto: sin publicar, sale al pulsar «Listo» como antes
+		}
+	}
+
+	/** Cuándo se puede publicar: ahora (7:30–22:00 en Cuba) o a las 7:30 siguientes. */
+	public static function dispatch_time( int $now ): int {
+		$local = ( new DateTimeImmutable( '@' . $now ) )->setTimezone( new DateTimeZone( 'America/Havana' ) );
+		$minutes = (int) $local->format( 'G' ) * 60 + (int) $local->format( 'i' );
+		if ( $minutes >= 450 && $minutes < 1320 ) { return $now; }
+		$next = $local->setTime( 7, 30 );
+		return ( $minutes >= 1320 ? $next->modify( '+1 day' ) : $next )->getTimestamp();
+	}
+
+	public static function dispatch_new_order( $order_id ): void {
+		$order = wc_get_order( absint( $order_id ) );
+		if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund || 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return; }
+		if ( ! in_array( $order->get_status(), array( 'on-hold', 'processing' ), true ) || 'unassigned' !== self::status( $order ) ) { return; }
+		$when = self::dispatch_time( time() );
+		if ( $when > time() + 60 ) {
+			if ( ! wp_next_scheduled( 'cvd_dispatch_new_order', array( $order->get_id() ) ) ) { wp_schedule_single_event( $when, 'cvd_dispatch_new_order', array( $order->get_id() ) ); }
+			return;
+		}
+		if ( self::dispatch_ready( $order ) ) {
+			$fresh = wc_get_order( $order->get_id() );
+			if ( $fresh ) { $fresh->add_order_note( 'Reparto: salió al crear el pedido, sin esperar «Listo para salir».' ); $fresh->save(); }
+		}
 	}
 
 	/**

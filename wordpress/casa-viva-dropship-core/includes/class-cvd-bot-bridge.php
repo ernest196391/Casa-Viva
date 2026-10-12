@@ -612,9 +612,11 @@ final class CVD_Bot_Bridge {
 		$program = 'cvd_messenger' === $role ? 'mensajero' : 'gestora';
 		foreach ( $users as $user ) {
 			if ( $approved_only && 'approved' !== CVD_Registration::status_for( $user, $program ) ) { continue; }
-			foreach ( array( '_cvd_whatsapp', 'billing_phone' ) as $meta ) {
-				if ( $key === self::phone_key( (string) get_user_meta( $user->ID, $meta, true ) ) ) { return $user; }
-			}
+			// Solo su WhatsApp; el teléfono de facturación solo si no tiene WhatsApp guardado. Al comprar para un
+			// cliente, WooCommerce guardaba el teléfono del CLIENTE en la cuenta de la gestora (Lennys, 12-oct:
+			// el bot trató al cliente de los faroles como gestora y podía enseñarle los pedidos de ella).
+			$own = (string) get_user_meta( $user->ID, '_cvd_whatsapp', true );
+			if ( $key === self::phone_key( '' !== self::phone_key( $own ) ? $own : (string) get_user_meta( $user->ID, 'billing_phone', true ) ) ) { return $user; }
 		}
 		return null;
 	}
