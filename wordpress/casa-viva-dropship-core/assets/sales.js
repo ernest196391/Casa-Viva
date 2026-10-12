@@ -6,7 +6,20 @@
   var filter = document.getElementById("cvd-sales-filter");
   var search = document.getElementById("cvd-sales-search");
   var message = document.getElementById("cvd-sales-message");
-  var labels = { new: "Nuevo", confirmed: "Confirmar", preparing: "Preparar", ready: "Listo para salir", picked_up: "Entregado al mensajero", delivered: "Registrar dinero recibido", incident: "Incidencia", cancelled: "Cancelar" };
+  // Pendientes / Cerrados (Nana, 12-oct): lo ya cerrado por caja va en su propia pestaña.
+  // «Cerrado» = estado final de CVD_Sales::operation_status, sin más pasos posibles:
+  // delivered (dinero recibido y completado, o recogido y pagado) y cancelled (cancelado, reembolsado o fallido).
+  var views = document.getElementById("cvd-sales-views");
+  var closedStatuses = ["delivered", "cancelled"];
+  var view = "open"; // pestaña elegida; «Actualizar» y el refresco automático la respetan
+  var lastData = null;
+  var loadSeq = 0;
+  function isClosed(status) { return closedStatuses.indexOf(status) !== -1; }
+  function setView(next) {
+    view = next === "closed" ? "closed" : "open";
+    if (views) views.querySelectorAll("[data-sales-view]").forEach(function (tab) { tab.setAttribute("aria-pressed", tab.dataset.salesView === view ? "true" : "false"); });
+  }
+  var labels ={ new: "Nuevo", confirmed: "Confirmar", preparing: "Preparar", ready: "Listo para salir", picked_up: "Entregado al mensajero", delivered: "Registrar dinero recibido", incident: "Incidencia", cancelled: "Cancelar" };
   var moneyDialog = document.getElementById("cvd-money-dialog");
   // Tarjetas de la tienda (3.13.50): en transferencia o mixto se pregunta a qué tarjeta entró y el número
   // de la transferencia, para cuadrar luego con cada banco. Zelle y USDT ya dicen la cuenta: solo piden el número.
@@ -68,8 +81,18 @@
   function paint(data) {
     var cards = [["new", "Nuevos"], ["preparing", "Preparando"], ["ready", "Listos"], ["with_courier", "En camino"]];
     summary.innerHTML = cards.map(function (x) { return '<button type="button" data-summary-status="' + x[0] + '"><span>' + x[1] + '</span><strong>' + (data.summary[x[0]] || 0) + "</strong></button>"; }).join("");
-    if (!data.orders.length) { list.innerHTML = "<p>No hay pedidos con este filtro.</p>"; return; }
-    list.innerHTML = data.orders.map(function (order) {
+    // Cuántos hay en cada pestaña (con la búsqueda aplicada) y solo las tarjetas de la pestaña elegida.
+    var counts = { open: 0, closed: 0 };
+    Object.keys(data.summary || {}).forEach(function (status) { counts[isClosed(status) ? "closed" : "open"] += Number(data.summary[status]) || 0; });
+    if (views) views.querySelectorAll("[data-sales-view]").forEach(function (tab) { var n = tab.querySelector("b"); if (n) n.textContent = counts[tab.dataset.salesView] || 0; });
+    var orders = data.orders.filter(function (order) { return isClosed(order.status) === (view === "closed"); });
+    if (!orders.length) {
+      var empty = filter.value || search.value.trim() ? "No hay pedidos con este filtro." : (view === "closed" ? "Todavía no hay pedidos cerrados." : "No hay pedidos pendientes.");
+      var other = view === "closed" ? counts.open : counts.closed;
+      if (search.value.trim() && other) empty += " Hay " + other + " en «" + (view === "closed" ? "Pendientes" : "Cerrados") + "».";
+      list.innerHTML = "<p>" + escapeText(empty) + "</p>"; return;
+    }
+    list.innerHTML = orders.map(function (order) {
       var phone = order.phone ? '<a href="tel:' + escapeText(order.phone) + '">' + escapeText(order.phone) + "</a>" : "";
       var wa = order.phone ? '<a class="cvd-sale-wa" target="_blank" rel="noopener" href="https://wa.me/' + escapeText(order.phone.replace(/\D/g, "")) + '">WhatsApp</a>' : "";
       // Pedido de prueba (3.13.54): cartel grande arriba; el servidor no lo deja salir al reparto.
@@ -79,12 +102,13 @@
     if (window.CVQRCode) document.querySelectorAll("[data-order-code]").forEach(function (canvas) { window.CVQRCode.toCanvas(canvas, canvas.dataset.orderCode, { width: 84, margin: 1 }); });
   }
   async function load() {
+    var mine = ++loadSeq; // si llegan dos respuestas, solo pinta la última pedida (no vuelve un filtro viejo)
     message.textContent = "Actualizando…";
     var params = new URLSearchParams();
     if (filter.value) params.set("status", filter.value);
     if (search.value.trim()) params.set("search", search.value.trim());
-    try { var data = await api(cvdSales.url + (params.toString() ? "?" + params : ""), { method: "GET" }); paint(data); message.textContent = ""; }
-    catch (error) { message.textContent = error.message; message.className = "is-error"; }
+    try { var data = await api(cvdSales.url + (params.toString() ? "?" + params : ""), { method: "GET" }); if (mine !== loadSeq) return; lastData = data; paint(data); message.textContent = ""; }
+    catch (error) { if (mine !== loadSeq) return; message.textContent = error.message; message.className = "is-error"; }
   }
   list.addEventListener("click", async function (event) {
     var copy = event.target.closest('[data-copy-tracking]');
@@ -136,7 +160,7 @@
     if (event.submitter && event.submitter.value === "cancel") return;
     event.preventDefault(); var submit = document.getElementById("cvd-money-submit"); submit.disabled = true;
     var pickup = document.getElementById("cvd-money-pickup").value === "1";
-    try { await api(cvdSales.url + "/" + document.getElementById("cvd-money-order").value + "/status", { method: "POST", body: JSON.stringify({ status: "delivered", collectionMethod: document.getElementById("cvd-money-method").value, collectedUsd: document.getElementById("cvd-money-usd").value, collectedCup: document.getElementById("cvd-money-cup").value, collectionNote: document.getElementById("cvd-money-note").value, collectionAccount: moneyAccount ? moneyAccount.value : "", collectionReference: moneyReference ? moneyReference.value : "", collectionCardLabel: document.getElementById("cvd-money-card-label").value, collectionCardLast4: document.getElementById("cvd-money-card-last4").value, collectionSaveCard: document.getElementById("cvd-money-save-card").checked, moneyConfirmed: document.getElementById("cvd-money-confirmed").checked, handoverConfirmed: pickup ? document.getElementById("cvd-handover-confirmed").checked : false }) }); moneyDialog.close(); event.target.reset(); syncMoneyAccount(); document.getElementById("cvd-money-pickup").value = "0"; await load(); }
+    try { await api(cvdSales.url + "/" + document.getElementById("cvd-money-order").value + "/status", { method: "POST", body: JSON.stringify({ status: "delivered", collectionMethod: document.getElementById("cvd-money-method").value, collectedUsd: document.getElementById("cvd-money-usd").value, collectedCup: document.getElementById("cvd-money-cup").value, collectionNote: document.getElementById("cvd-money-note").value, collectionAccount: moneyAccount ? moneyAccount.value : "", collectionReference: moneyReference ? moneyReference.value : "", collectionCardLabel: document.getElementById("cvd-money-card-label").value, collectionCardLast4: document.getElementById("cvd-money-card-last4").value, collectionSaveCard: document.getElementById("cvd-money-save-card").checked, moneyConfirmed: document.getElementById("cvd-money-confirmed").checked, handoverConfirmed: pickup ? document.getElementById("cvd-handover-confirmed").checked : false }) }); moneyDialog.close(); event.target.reset(); syncMoneyAccount(); document.getElementById("cvd-money-pickup").value = "0"; await load(); message.className = ""; message.textContent = "Pedido cerrado: ahora está en «Cerrados»."; }
     catch (error) { message.textContent = error.message; message.className = "is-error"; }
     finally { submit.disabled = false; }
   });
@@ -148,8 +172,17 @@
     try { var detector = new BarcodeDetector({ formats: ["qr_code", "code_128"] }); stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }); scanner.srcObject = stream; scanner.hidden = false; await scanner.play(); var detect = async function () { if (!stream) return; var codes = await detector.detect(scanner); if (codes.length) { var match = codes[0].rawValue.match(/(?:CV-PEDIDO-)?(\d+)/i); if (match) { search.value = match[1]; stopScanner(); load(); return; } } setTimeout(detect, 220); }; detect(); }
     catch (error) { stopScanner(); message.textContent = "No se pudo abrir la cámara."; }
   });
-  filter.addEventListener("change", load);
-  summary.addEventListener("click", function (event) { var card=event.target.closest('[data-summary-status]'); if(!card)return; filter.value=card.dataset.summaryStatus; load(); document.getElementById('cvd-sales-list').scrollIntoView({behavior:'smooth',block:'start'}); });
+  // Un estado del filtro elige su pestaña: «Completados»/«Cancelados» → Cerrados; los demás → Pendientes.
+  function syncViewToFilter() { if (filter.value) setView(isClosed(filter.value) ? "closed" : "open"); }
+  filter.addEventListener("change", function () { syncViewToFilter(); load(); });
+  summary.addEventListener("click", function (event) { var card=event.target.closest('[data-summary-status]'); if(!card)return; filter.value=card.dataset.summaryStatus; syncViewToFilter(); load(); document.getElementById('cvd-sales-list').scrollIntoView({behavior:'smooth',block:'start'}); });
+  if (views) views.addEventListener("click", function (event) {
+    var tab = event.target.closest("[data-sales-view]"); if (!tab || tab.dataset.salesView === view) return;
+    setView(tab.dataset.salesView);
+    // Un filtro de la otra pestaña (p. ej. «Completados» al volver a Pendientes) se quita.
+    if (filter.value && isClosed(filter.value) !== (view === "closed")) { filter.value = ""; load(); return; }
+    if (lastData) paint(lastData); else load(); // cambia al instante; el refresco automático trae lo nuevo
+  });
   document.getElementById("cvd-sales-refresh").addEventListener("click", load);
   search.addEventListener("keydown", function (event) { if (event.key === "Enter") load(); });
   var query = new URLSearchParams(location.search);
