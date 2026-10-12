@@ -31,6 +31,18 @@ final class CVD_Market_Bridge {
 		return 0 === strpos( $sku, self::SKU_PREFIX );
 	}
 
+	/**
+	 * ¿Lleva algún artículo «bajo pedido»? (3.13.63, 12-oct) Ese pedido no sale solo al grupo de mensajeros:
+	 * el producto no está en la tienda y primero hay que confirmarlo con el proveedor (VivaBot avisa a Ernesto).
+	 */
+	public static function order_has_market_items( WC_Order $order ): bool {
+		foreach ( $order->get_items() as $item ) {
+			$product = $item instanceof WC_Order_Item_Product ? $item->get_product() : null;
+			if ( $product instanceof WC_Product && self::is_market_sku( (string) $product->get_sku() ) ) { return true; }
+		}
+		return false;
+	}
+
 	private static function find( int $item ): ?WC_Product {
 		$id = wc_get_product_id_by_sku( self::SKU_PREFIX . $item );
 		$product = $id ? wc_get_product( $id ) : null;

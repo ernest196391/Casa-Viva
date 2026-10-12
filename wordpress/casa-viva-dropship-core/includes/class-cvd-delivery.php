@@ -42,6 +42,11 @@ final class CVD_Delivery {
 			if ( ! $order instanceof WC_Order ) { $order = wc_get_order( $order ); }
 			if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund ) { return; }
 			if ( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return; }
+			// Bajo pedido (3.13.63): no sale al grupo; primero se confirma con el proveedor (VivaBot avisa a Ernesto).
+			if ( class_exists( 'CVD_Market_Bridge' ) && CVD_Market_Bridge::order_has_market_items( $order ) ) {
+				$order->add_order_note( 'Pedido con producto bajo pedido: no sale solo al grupo de mensajeros. Primero se confirma con el proveedor.' );
+				return;
+			}
 			$args = array( $order->get_id() );
 			if ( ! wp_next_scheduled( 'cvd_dispatch_new_order', $args ) ) { wp_schedule_single_event( time() + 60, 'cvd_dispatch_new_order', $args ); }
 		} catch ( Throwable $error ) {
@@ -62,6 +67,7 @@ final class CVD_Delivery {
 		$order = wc_get_order( absint( $order_id ) );
 		if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund || 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return; }
 		if ( ! in_array( $order->get_status(), array( 'on-hold', 'processing' ), true ) || 'unassigned' !== self::status( $order ) ) { return; }
+		if ( class_exists( 'CVD_Market_Bridge' ) && CVD_Market_Bridge::order_has_market_items( $order ) ) { return; } // bajo pedido: ver schedule_dispatch_on_create()
 		$when = self::dispatch_time( time() );
 		if ( $when > time() + 60 ) {
 			if ( ! wp_next_scheduled( 'cvd_dispatch_new_order', array( $order->get_id() ) ) ) { wp_schedule_single_event( $when, 'cvd_dispatch_new_order', array( $order->get_id() ) ); }
