@@ -5,8 +5,9 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Reparto directo (3.13.48): la gestora puede elegir qué mensajero lleva su pedido.
  *
- * La elección queda en `_cvd_preferred_messenger_user_id`. Se pone de dos formas:
+ * La elección queda en `_cvd_preferred_messenger_user_id`. Se pone de tres formas:
  * - la gestora, en su área (Ventas), con el selector «Mensajero que lo lleva» de cada pedido suyo;
+ * - la gestora (o el equipo) al hacer el pedido, con «¿Tienes algún mensajero preferido?» del checkout (3.13.62);
  * - la nota del cliente al comprar: «mensajero: Nombre» (si el nombre es de un solo mensajero aprobado).
  * Al pulsar «Listo para salir», CVD_Delivery::dispatch_ready() asigna directo a ese mensajero
  * (no sale al grupo) y VivaBot le manda el vale por privado. Si ya no está aprobado, sale al grupo
@@ -16,9 +17,13 @@ final class CVD_Direct_Dispatch {
 	public const PREFERRED_META = '_cvd_preferred_messenger_user_id';
 	public const SOURCE_META    = '_cvd_preferred_messenger_source';
 	public const DIRECT_META    = '_cvd_direct_assignment';
+	/** Campo «¿Tienes algún mensajero preferido?» del checkout clásico (3.13.62). */
+	public const CHECKOUT_FIELD = 'cvd_preferred_messenger';
 
 	public static function register(): void {
 		add_action( 'admin_post_cvd_gestora_preferred_messenger', array( __CLASS__, 'save_from_gestora' ) );
+		// 55: antes de la nota del cliente (60, así gana el selector) y antes de programar el reparto (CVD_Delivery, 80).
+		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'from_checkout' ), 55 );
 		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'from_customer_note' ), 60 );
 		add_action( 'woocommerce_store_api_checkout_order_processed', array( __CLASS__, 'from_customer_note' ), 60 );
 	}
@@ -45,8 +50,11 @@ final class CVD_Direct_Dispatch {
 
 	/** Quién pidió la asignación directa, en palabras ("la gestora Ana", "la nota del cliente"). */
 	public static function requested_by( WC_Order $order ): string {
-		if ( 'note' === $order->get_meta( self::SOURCE_META, true ) ) { return 'la nota del cliente'; }
+		$source = $order->get_meta( self::SOURCE_META, true );
+		if ( 'note' === $source ) { return 'la nota del cliente'; }
 		$gestora = self::gestora_name( $order );
+		// Elegido en el checkout: «la gestora Ana al hacer el pedido» (o «la tienda…» si lo hizo alguien del equipo).
+		if ( 'checkout' === $source ) { return ( $gestora ? 'la gestora ' . $gestora : 'la tienda' ) . ' al hacer el pedido'; }
 		return $gestora ? 'la gestora ' . $gestora : 'la gestora';
 	}
 
@@ -131,6 +139,60 @@ final class CVD_Direct_Dispatch {
 		}
 		wp_safe_redirect( add_query_arg( 'mensajero', $result, home_url( '/area-gestoras/' ) ) . '#ventas' );
 		exit;
+	}
+
+	/**
+	 * Mensajero elegido al hacer el pedido (3.13.62, 12-oct, petición de Ernesto).
+	 * En el checkout, la gestora (o alguien del equipo) ve «¿Tienes algún mensajero preferido?» con los mensajeros
+	 * aprobados. Si elige uno, el pedido se le asigna directo y VivaBot le manda el vale por privado; con
+	 * «No, que salga al grupo» todo sigue igual. Un cliente nunca ve el selector ni los nombres de los mensajeros.
+	 *
+	 * ¿Esta cuenta ve el selector? Equipo (mismos roles que keep_team_profile) y, si es de un programa, aprobada.
+	 */
+	public static function can_choose_at_checkout( ?WP_User $user = null ): bool {
+		$user = $user ?: wp_get_current_user();
+		if ( ! $user->exists() || ! class_exists( 'CVD_Cuban_Checkout' ) ) { return false; }
+		$roles = (array) $user->roles;
+		if ( ! array_intersect( $roles, CVD_Cuban_Checkout::TEAM_ROLES ) ) { return false; }
+		if ( array_intersect( $roles, array( 'administrator', 'shop_manager' ) ) ) { return true; }
+		// Lo eligen quienes venden (gestora o influencer), no los mensajeros. Una solicitud de gestora ya tiene el rol,
+		// pero sigue pendiente: esa todavía no ve a los mensajeros.
+		return ( in_array( 'cvd_gestora', $roles, true ) && CVD_Registration::is_approved_gestora( $user ) )
+			|| ( in_array( 'cvd_influencer', $roles, true ) && 'approved' === get_user_meta( $user->ID, '_cvd_account_status', true ) );
+	}
+
+	/** Opciones del selector: «No, que salga al grupo» y luego los mensajeros aprobados por nombre. */
+	public static function checkout_options(): array {
+		$options = array( '0' => 'No, que salga al grupo' );
+		foreach ( self::approved_messengers() as $messenger ) {
+			$options[ (string) $messenger->ID ] = $messenger->display_name;
+		}
+		return $options;
+	}
+
+	/** Al crear el pedido: guarda el mensajero elegido en el checkout (gana a la nota del cliente). Recogida: se ignora. */
+	public static function from_checkout( $order ): void {
+		try {
+			if ( empty( $_POST[ self::CHECKOUT_FIELD ] ) ) { return; } // «No, que salga al grupo» o no lo vio
+			$messenger_id = absint( wp_unslash( $_POST[ self::CHECKOUT_FIELD ] ) );
+			if ( ! $messenger_id ) { return; }
+			// El mismo nonce con el que WooCommerce acepta el checkout clásico, y solo si quien compra puede ver el selector.
+			$nonce = sanitize_text_field( wp_unslash( $_POST['woocommerce-process-checkout-nonce'] ?? ( $_POST['_wpnonce'] ?? '' ) ) );
+			if ( '' === $nonce || ! wp_verify_nonce( $nonce, 'woocommerce-process_checkout' ) ) { return; }
+			$user = wp_get_current_user();
+			if ( ! self::can_choose_at_checkout( $user ) ) { return; }
+			if ( ! $order instanceof WC_Order ) { $order = wc_get_order( $order ); }
+			if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund || ! self::can_choose( $order ) ) { return; } // can_choose(): recogida no
+			$messenger = get_userdata( $messenger_id );
+			if ( ! $messenger instanceof WP_User || ! self::is_valid_messenger( $messenger ) ) { return; }
+			$order->update_meta_data( self::PREFERRED_META, $messenger->ID );
+			$order->update_meta_data( self::SOURCE_META, 'checkout' );
+			$order->add_order_note( 'Mensajero elegido al hacer el pedido: ' . $messenger->display_name . ' (lo eligió ' . $user->display_name . '). Se le asigna directo: no sale al grupo de mensajeros.' );
+			$order->save();
+		} catch ( Throwable $error ) {
+			// Nunca se frena una compra por esto: sin elección, el pedido sale al grupo como siempre.
+			unset( $error );
+		}
 	}
 
 	/** Al crear el pedido: «mensajero: Nombre» en la nota del cliente deja elegido a ese mensajero. */

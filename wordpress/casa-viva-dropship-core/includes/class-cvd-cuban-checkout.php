@@ -8,6 +8,8 @@ defined( 'ABSPATH' ) || exit;
  * El pedido siempre se guarda en WooCommerce antes de continuar a WhatsApp.
  */
 final class CVD_Cuban_Checkout {
+	/** Roles del equipo (venden o trabajan para la tienda). Los usan keep_team_profile() y el selector de mensajero (3.13.62). */
+	public const TEAM_ROLES = array( 'cvd_gestora', 'cvd_influencer', 'cvd_messenger', 'administrator', 'shop_manager' );
 	/** Notas para el pedido que se está creando: en woocommerce_checkout_create_order aún no tiene número y add_order_note() no guardaría nada. */
 	private static array $pending_notes = array();
 	public static function register(): void {
@@ -54,7 +56,7 @@ final class CVD_Cuban_Checkout {
 	public static function keep_team_profile( $update ) {
 		$user = wp_get_current_user();
 		if ( ! $user->exists() ) { return $update; }
-		$team = array_intersect( (array) $user->roles, array( 'cvd_gestora', 'cvd_influencer', 'cvd_messenger', 'administrator', 'shop_manager' ) );
+		$team = array_intersect( (array) $user->roles, self::TEAM_ROLES );
 		return $team ? false : $update;
 	}
 
@@ -306,6 +308,21 @@ final class CVD_Cuban_Checkout {
 			'required' => false,
 			'priority' => 131,
 		);
+		// 3.13.62 (12-oct, petición de Ernesto): la gestora (o alguien del equipo) elige al hacer el pedido qué mensajero
+		// lo lleva. Solo lo ve el equipo: un cliente nunca ve nombres de mensajeros. Es de mensajería (cvd-delivery-field:
+		// checkout.js lo oculta con «Recogida en tienda»). Sin prefijo billing_: no se copia al perfil ni a otro meta.
+		// Se guarda en CVD_Direct_Dispatch::from_checkout().
+		if ( class_exists( 'CVD_Direct_Dispatch' ) && CVD_Direct_Dispatch::can_choose_at_checkout() ) {
+			$messenger_options = CVD_Direct_Dispatch::checkout_options();
+			if ( count( $messenger_options ) > 1 ) {
+				$fields['billing'][ CVD_Direct_Dispatch::CHECKOUT_FIELD ] = array(
+					'type' => 'select', 'label' => '¿Tienes algún mensajero preferido?', 'required' => false,
+					'options' => $messenger_options, 'default' => '0',
+					'description' => 'Si eliges uno, el pedido le llega directo a él y no sale al grupo.',
+					'class' => array( 'form-row-wide', 'cvd-delivery-field' ), 'priority' => 132,
+				);
+			}
+		}
 		unset( $fields['billing']['billing_postcode'], $fields['billing']['billing_company'] );
 		if ( isset( $fields['order']['order_comments'] ) ) {
 			$fields['order']['order_comments']['label'] = 'Indicaciones adicionales';
