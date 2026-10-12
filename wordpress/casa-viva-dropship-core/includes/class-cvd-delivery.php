@@ -67,7 +67,19 @@ final class CVD_Delivery {
 			if ( ! wp_next_scheduled( 'cvd_dispatch_new_order', array( $order->get_id() ) ) ) { wp_schedule_single_event( $when, 'cvd_dispatch_new_order', array( $order->get_id() ) ); }
 			return;
 		}
-		if ( self::dispatch_ready( $order ) ) {
+		// La tarea corre sin usuario y publicar/asignar es cosa del equipo (permisos de la transición):
+		// se hace en nombre del administrador del sistema (opción cvd_system_actor_user_id; si no, el admin más antiguo).
+		$previous = get_current_user_id();
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			$actor = absint( get_option( 'cvd_system_actor_user_id', 0 ) ) ?: (int) ( get_users( array( 'role' => 'administrator', 'orderby' => 'ID', 'order' => 'ASC', 'number' => 1, 'fields' => 'ID' ) )[0] ?? 0 );
+			if ( $actor ) { wp_set_current_user( $actor ); }
+		}
+		try {
+			$sent = self::dispatch_ready( $order );
+		} finally {
+			wp_set_current_user( $previous );
+		}
+		if ( $sent ) {
 			$fresh = wc_get_order( $order->get_id() );
 			if ( $fresh ) { $fresh->add_order_note( 'Reparto: salió al crear el pedido, sin esperar «Listo para salir».' ); $fresh->save(); }
 		}
