@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.13.63
+ * Version: 3.13.64
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.13.63' );
+define( 'CVD_VERSION', '3.13.64' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -87,6 +87,7 @@ add_action(
 			CVD_Direct_Dispatch::register();
 			CVD_Messenger_Cash::register();
 			CVD_Fichas::register();
+			CVD_Daily_Rates::register(); // 3.13.64: cada pedido nuevo guarda la tasa CUP del día de la venta (regla de Ernesto, 12-oct).
 		}
 	}
 );

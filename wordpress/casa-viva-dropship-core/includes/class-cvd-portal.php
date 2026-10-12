@@ -355,9 +355,11 @@ final class CVD_Portal {
 			}
 			$status = sanitize_key( $order->get_meta( '_cvd_commission_status', true ) ) ?: 'pending';
 			$commission = (float) $order->get_meta( '_cvd_commission_amount', true );
+			// 3.13.64 (12-oct, regla de Ernesto): la comisión también en CUP con la tasa del día de la venta (pedidos viejos: solo USD).
+			$cup_text = class_exists( 'CVD_Commissions' ) ? CVD_Commissions::commission_cup_text( $order ) : '';
 			// Día de entrega (3.13.51) debajo del número, sin columna nueva (la app de gestoras oculta columnas por posición).
 			$day = in_array( $order->get_status(), array( 'pending', 'processing', 'on-hold' ), true ) ? CVD_Delivery_When::order_label( $order ) : '';
-			$html .= '<tr><td>#' . esc_html( $order->get_order_number() ) . ( $day ? '<br><small class="cvd-delivery-day">📅 ' . esc_html( $day ) . '</small>' : '' ) . '</td><td>' . esc_html( wc_format_datetime( $order->get_date_created() ) ) . '</td><td>' . esc_html( $order->get_formatted_billing_full_name() ) . '</td><td>' . esc_html( implode( ', ', $products ) ) . '</td><td>' . wp_kses_post( $order->get_formatted_order_total() ) . '</td><td>' . wp_kses_post( wc_price( $commission, array( 'currency' => $order->get_currency() ) ) ) . '</td><td><span class="cvd-badge">' . esc_html( $labels[ $status ] ?? ucfirst( $status ) ) . '</span></td>' . ( $direct ? '<td>' . CVD_Direct_Dispatch::gestora_cell( $order ) . '</td>' : '' ) . '</tr>'; // gestora_cell ya escapa
+			$html .= '<tr><td>#' . esc_html( $order->get_order_number() ) . ( $day ? '<br><small class="cvd-delivery-day">📅 ' . esc_html( $day ) . '</small>' : '' ) . '</td><td>' . esc_html( wc_format_datetime( $order->get_date_created() ) ) . '</td><td>' . esc_html( $order->get_formatted_billing_full_name() ) . '</td><td>' . esc_html( implode( ', ', $products ) ) . '</td><td>' . wp_kses_post( $order->get_formatted_order_total() ) . '</td><td>' . wp_kses_post( wc_price( $commission, array( 'currency' => $order->get_currency() ) ) ) . ( '' !== $cup_text ? '<br><small class="cvd-commission-cup">(' . esc_html( $cup_text ) . ')</small>' : '' ) . '</td><td><span class="cvd-badge">' . esc_html( $labels[ $status ] ?? ucfirst( $status ) ) . '</span></td>' . ( $direct ? '<td>' . CVD_Direct_Dispatch::gestora_cell( $order ) . '</td>' : '' ) . '</tr>'; // gestora_cell ya escapa
 		}
 		return $html . '</tbody></table></div>';
 	}

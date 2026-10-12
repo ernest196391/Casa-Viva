@@ -27,6 +27,45 @@ final class CVD_Daily_Rates {
 		'paypal_pct' => array( 0, 30 ),
 	);
 
+	/**
+	 * 3.13.64 (12-oct, regla de Ernesto): la comisión de la gestora es en USD; si la cobra en CUP se convierte
+	 * con la tasa del DÍA DE LA VENTA. Por eso cada pedido guarda al crearse la tasa CUP de ese momento
+	 * (_cvd_cup_rate) y de cuándo es esa tasa (_cvd_cup_rate_at). Nunca se pisa; los pedidos viejos no la tienen.
+	 * Caminos de creación: checkout clásico y vales (woocommerce_checkout_order_created) y Store API.
+	 */
+	public static function register(): void {
+		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'remember_order_rate' ), 6 );
+		add_action( 'woocommerce_store_api_checkout_order_processed', array( __CLASS__, 'remember_order_rate' ), 6 );
+	}
+
+	public static function remember_order_rate( $order ): void {
+		if ( ! $order instanceof WC_Order || '' !== (string) $order->get_meta( '_cvd_cup_rate', true ) ) { return; }
+		$rates = self::get();
+		if ( ! $rates['cup'] || $rates['cup'] <= 0 ) { return; }
+		$order->update_meta_data( '_cvd_cup_rate', (float) $rates['cup'] );
+		$order->update_meta_data( '_cvd_cup_rate_at', gmdate( 'c', $rates['updated_at'] ?: time() ) );
+		$order->save();
+	}
+
+	/** Tasa CUP guardada en el pedido el día de la venta (3.13.64), o null (pedidos viejos: solo USD). */
+	public static function order_rate( WC_Order $order ): ?float {
+		$rate = (float) $order->get_meta( '_cvd_cup_rate', true );
+		return $rate > 0 ? $rate : null;
+	}
+
+	/** "12-oct": día (hora de Cuba) de la tasa guardada en el pedido, o '' si no la tiene. */
+	public static function order_rate_day( WC_Order $order ): string {
+		$ts = strtotime( (string) $order->get_meta( '_cvd_cup_rate_at', true ) );
+		$month = $ts ? (int) wp_date( 'n', $ts ) : 0;
+		$names = array( 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic' );
+		return $month ? wp_date( 'j', $ts ) . '-' . $names[ $month - 1 ] : '';
+	}
+
+	/** 780 → "780"; 780.5 → "780,5". */
+	public static function format_rate( float $rate ): string {
+		return floor( $rate ) === $rate ? number_format( $rate, 0, ',', '.' ) : rtrim( rtrim( number_format( $rate, 2, ',', '.' ), '0' ), ',' );
+	}
+
 	public static function get(): array {
 		$stored = get_option( self::OPTION, array() );
 		$stored = is_array( $stored ) ? $stored : array();

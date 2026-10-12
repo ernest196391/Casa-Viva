@@ -62,6 +62,36 @@ final class CVD_Commissions {
 		return array( 'domain'=>'commission', 'from'=>$current, 'to'=>'approved' );
 	}
 
+	/**
+	 * 3.13.64 (12-oct, regla de Ernesto): la comisión es en USD; si la gestora la cobra en CUP va con la tasa
+	 * guardada en el pedido el día de la venta. Comisión USD × esa tasa, en CUP enteros. null si el pedido no
+	 * tiene tasa (pedidos viejos: solo USD) o la comisión no está en USD. No cambia ningún importe guardado.
+	 */
+	public static function commission_cup( WC_Order $order ): ?int {
+		$rate = class_exists( 'CVD_Daily_Rates' ) ? CVD_Daily_Rates::order_rate( $order ) : null;
+		$currency = strtoupper( (string) ( $order->get_meta( '_cvd_commission_currency', true ) ?: $order->get_currency() ) );
+		if ( null === $rate || 'USD' !== $currency ) { return null; }
+		// Sobre los USD en centavos que ve la gestora (5,00 USD), no sobre los 4 decimales guardados.
+		return (int) round( round( (float) $order->get_meta( '_cvd_commission_amount', true ), 2 ) * $rate );
+	}
+
+	/** 3.13.64: «3.900 CUP a 780, tasa del 12-oct» para poner junto a los USD; '' si no hay tasa guardada o la comisión es 0. */
+	public static function commission_cup_text( WC_Order $order ): string {
+		$cup = self::commission_cup( $order );
+		$rate = class_exists( 'CVD_Daily_Rates' ) ? CVD_Daily_Rates::order_rate( $order ) : null;
+		if ( ! $cup || $cup <= 0 || null === $rate ) { return ''; }
+		$day = CVD_Daily_Rates::order_rate_day( $order );
+		return CVD_Daily_Rates::format_cup( $cup ) . ' a ' . CVD_Daily_Rates::format_rate( $rate ) . ( '' !== $day ? ', tasa del ' . $day : '' );
+	}
+
+	/** 3.13.64: «5,00 USD (3.900 CUP a 780, tasa del 12-oct)»; solo «5,00 USD» si el pedido no guardó la tasa. */
+	public static function commission_text( WC_Order $order ): string {
+		$currency = strtoupper( (string) ( $order->get_meta( '_cvd_commission_currency', true ) ?: $order->get_currency() ) ) ?: 'USD';
+		$text = number_format( (float) $order->get_meta( '_cvd_commission_amount', true ), 2, ',', '.' ) . ' ' . $currency;
+		$cup = self::commission_cup_text( $order );
+		return '' !== $cup ? $text . ' (' . $cup . ')' : $text;
+	}
+
 	public static function mark_paid( int $order_id ): void {
 		$order = wc_get_order( $order_id );
 		if ( ! $order ) {

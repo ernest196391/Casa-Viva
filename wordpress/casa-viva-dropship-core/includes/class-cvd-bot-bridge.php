@@ -200,6 +200,8 @@ final class CVD_Bot_Bridge {
 				'status' => 'cancelled' === $o->get_status() ? 'Cancelado' : ( 'refunded' === $o->get_status() ? 'Devuelto' : ( 'pickup' === $o->get_meta( '_cvd_fulfillment_type', true ) ? ( 'completed' === $o->get_status() ? 'Recogido' : 'Para recoger en tienda' ) : self::friendly( $delivery ) ) ),
 				'messenger' => $messenger ? $messenger->display_name : '', 'eta' => (string) $o->get_meta( '_cvd_bot_eta', true ), 'when' => CVD_Delivery_When::order_label( $o ),
 				'commission' => (float) $o->get_meta( '_cvd_commission_amount', true ), 'commissionStatus' => (string) $o->get_meta( '_cvd_commission_status', true ),
+				// 3.13.64 (12-oct, regla de Ernesto): CUP con la tasa del día de la venta; null/solo USD en pedidos viejos sin tasa.
+				'commissionCup' => CVD_Commissions::commission_cup( $o ), 'cupRate' => CVD_Daily_Rates::order_rate( $o ), 'commissionText' => CVD_Commissions::commission_text( $o ),
 			);
 		}
 		return self::no_cache( array( 'found' => true, 'id' => $gestora->ID, 'approved' => 'approved' === CVD_Registration::status_for( $gestora, 'gestora' ), 'name' => $gestora->display_name, 'orders' => $list, 'commission' => array( 'pending' => round( $pending, 2 ), 'approved' => round( $approved, 2 ) ) ) );
@@ -237,6 +239,10 @@ final class CVD_Bot_Bridge {
 				'items'            => self::items( $order ),
 				'commission'       => round( (float) $order->get_meta( '_cvd_commission_amount', true ), 2 ),
 				'commissionStatus' => sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ),
+				// 3.13.64 (12-oct, regla de Ernesto): CUP con la tasa del día de la venta; null/solo USD en pedidos viejos sin tasa.
+				'commissionCup'    => CVD_Commissions::commission_cup( $order ),
+				'cupRate'          => CVD_Daily_Rates::order_rate( $order ),
+				'commissionText'   => CVD_Commissions::commission_text( $order ),
 			);
 		}
 		return self::no_cache( array( 'finished' => $list, 'since' => gmdate( 'Y-m-d H:i:s', $since ) ) );
