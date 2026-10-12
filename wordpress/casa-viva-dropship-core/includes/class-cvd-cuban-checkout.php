@@ -205,7 +205,9 @@ final class CVD_Cuban_Checkout {
 		$fields['billing']['billing_first_name']['label'] = 'Nombre de quien recibe';
 		$fields['billing']['billing_first_name']['class'] = array( 'form-row-wide' );
 		$fields['billing']['billing_first_name']['priority'] = 20;
-		$fields['billing']['billing_last_name']['label'] = 'Apellidos de quien recibe';
+		// Opcional (Dany, 12-oct): muchos clientes solo dan el nombre.
+		$fields['billing']['billing_last_name']['label'] = 'Apellidos de quien recibe (opcional)';
+		$fields['billing']['billing_last_name']['required'] = false;
 		$fields['billing']['billing_last_name']['class'] = array( 'form-row-wide' );
 		$fields['billing']['billing_last_name']['priority'] = 30;
 		$fields['billing']['billing_phone']['label'] = 'WhatsApp o teléfono de quien recibe';
