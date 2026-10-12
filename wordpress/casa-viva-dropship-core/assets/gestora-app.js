@@ -6,14 +6,14 @@
   // Secciones del portal clásico → vista de la app.
   var legacy = {
     'mis-clientes': 'clientes', precios: 'precios', invitar: 'invitar', ventas: 'ventas', mensajeria: 'ventas',
-    pagos: 'cobrar', materiales: 'materiales', perfil: 'perfil', 'cvd-clave': 'perfil'
+    pagos: 'cobrar', materiales: 'fotos', perfil: 'perfil', 'cvd-clave': 'perfil'
   };
   Object.keys(legacy).forEach(function (id) { var el = document.getElementById(id); if (el) el.setAttribute('data-view', legacy[id]); });
   var perProduct = document.querySelector('.cvd-products-pricing'); if (perProduct) perProduct.setAttribute('data-view', 'precios');
 
   // Enlaces viejos (redirecciones tras guardar) que apuntan a otra palabra.
-  var alias = { dashboard: 'inicio', catalogo: 'tienda', clientes: 'clientes', 'mis-clientes': 'clientes', comisiones: 'ventas', mensajeria: 'ventas', pagos: 'cobrar' };
-  var titles = { inicio: 'Inicio', tienda: 'Mi tienda', precios: 'Mis precios', clientes: 'Clientes', herramientas: 'Herramientas', calculadora: 'Calculadora', buscar: 'Buscar precios', materiales: 'Fotos y textos listos', ventas: 'Ventas', cobrar: 'Cobrar', invitar: 'Invitar gestoras', perfil: 'Mi perfil' };
+  var alias = { dashboard: 'inicio', catalogo: 'tienda', clientes: 'clientes', 'mis-clientes': 'clientes', comisiones: 'ventas', mensajeria: 'ventas', pagos: 'cobrar', materiales: 'fotos' };
+  var titles = { inicio: 'Inicio', tienda: 'Mi tienda', precios: 'Mis precios', clientes: 'Clientes', herramientas: 'Herramientas', calculadora: 'Calculadora', buscar: 'Buscar precios', fotos: 'Fotos para publicar', ventas: 'Ventas', cobrar: 'Cobrar', invitar: 'Invitar gestoras', perfil: 'Mi perfil' };
   var views = Array.prototype.slice.call(document.querySelectorAll('[data-view]'));
   var titleEl = app.querySelector('[data-cvga-title]');
 
@@ -130,6 +130,69 @@
     });
     if (!factor(rates.cup)) calc.elements.usd.placeholder = 'Ej.: 25 (aún sin tasa del día)';
     render();
+  }
+
+  // Fotos para publicar (3.13.57): las tarjetas se pintan al abrir cada categoría o al buscar.
+  var fotos = app.querySelector('[data-cvgf]');
+  if (fotos) {
+    var fdata = { items: [], cats: [] };
+    try { fdata = JSON.parse(fotos.querySelector('[data-cvgf-data]').textContent) || fdata; } catch (ignore) {}
+    // Material promocional viejo: solo se ve si hay algo publicado.
+    var mat = document.getElementById('materiales');
+    if (mat && !mat.querySelector('.cvd-resource-card')) { mat.hidden = true; if (views.indexOf(mat) > -1) views.splice(views.indexOf(mat), 1); }
+    var fq = fotos.querySelector('[data-cvgf-q]'), fres = fotos.querySelector('[data-cvgf-results]'), fcats = fotos.querySelector('[data-cvgf-cats]'), fcount = fotos.querySelector('[data-cvgf-count]');
+    var fesc = function (v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]; }); };
+    var fnorm = function (v) { return String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); };
+    var card = function (p) {
+      var thumbs = p.i.length > 1 ? '<div class="cvgf-thumbs">' + p.i.map(function (im, k) { return '<button type="button" class="cvgf-thumb' + (k ? '' : ' is-on') + '" data-k="' + k + '" aria-label="Foto ' + (k + 1) + '"><img src="' + fesc(im[0]) + '" alt="" loading="lazy" width="48" height="48"></button>'; }).join('') + '</div>' : '';
+      return '<article class="cvgf-item" data-id="' + p.id + '"><div class="cvgf-photo"><img src="' + fesc(p.i[0][0]) + '" alt="' + fesc(p.n) + '" loading="lazy" width="300" height="300"></div>' + thumbs +
+        '<div class="cvgf-body"><b class="cvgf-name">' + fesc(p.n) + '</b><span class="cvgf-price">' + fesc(p.p) + (p.cup ? ' <small>' + fesc(p.cup) + '</small>' : '') + '</span><small class="cvgf-stock">' + fesc(p.s) + '</small>' +
+        '<p class="cvgf-text">' + fesc(p.t) + '</p><div class="cvga-actions"><a class="cvga-btn cvga-btn-sm" href="' + fesc(p.i[0][1]) + '" data-cvgf-dl>Descargar foto' + (p.i.length > 1 ? ' 1' : '') + '</a><button class="cvga-btn cvga-btn-soft cvga-btn-sm" type="button" data-cvgf-copy>Copiar texto</button></div><small class="cvgf-done" role="status"></small></div></article>';
+    };
+    var byId = {};
+    fdata.items.forEach(function (p) { byId[p.id] = p; p.q = fnorm(p.n + ' ' + p.t.split('\n')[1]); });
+    fcats.addEventListener('toggle', function (e) {
+      var d = e.target; if (!d.matches || !d.matches('details[data-cat]') || !d.open) return;
+      var grid = d.querySelector('[data-cvgf-grid]'); if (grid.childElementCount) return;
+      var cat = Number(d.getAttribute('data-cat'));
+      grid.innerHTML = fdata.items.filter(function (p) { return p.c.indexOf(cat) > -1; }).map(card).join('');
+    }, true);
+    var ftimer;
+    fq.addEventListener('input', function () {
+      clearTimeout(ftimer);
+      ftimer = setTimeout(function () {
+        var words = fnorm(fq.value).split(/\s+/).filter(function (w) { return w.length > 1; });
+        if (!words.length) { fres.hidden = true; fres.innerHTML = ''; fcats.hidden = false; fcount.textContent = fdata.items.length + ' productos en existencia'; return; }
+        var hits = fdata.items.filter(function (p) { return words.every(function (w) { return p.q.indexOf(w.length > 4 ? w.slice(0, -1) : w) > -1; }); });
+        fcats.hidden = true; fres.hidden = false;
+        fres.innerHTML = hits.length ? '<div class="cvgf-grid">' + hits.map(card).join('') + '</div>' : '<p class="cvga-empty">No encontré «' + fesc(fq.value) + '». Prueba con otra palabra o pregúntale a Curru.</p>';
+        fcount.textContent = hits.length + (hits.length === 1 ? ' producto' : ' productos');
+      }, 150);
+    });
+    fotos.addEventListener('click', function (e) {
+      var item = e.target.closest('.cvgf-item'); if (!item) return;
+      var p = byId[item.getAttribute('data-id')]; if (!p) return;
+      var th = e.target.closest('.cvgf-thumb');
+      if (th) {
+        var k = Number(th.getAttribute('data-k'));
+        item.querySelector('.cvgf-photo img').src = p.i[k][0];
+        var dl = item.querySelector('[data-cvgf-dl]'); dl.href = p.i[k][1]; dl.textContent = 'Descargar foto ' + (k + 1);
+        item.querySelectorAll('.cvgf-thumb').forEach(function (b) { b.classList.toggle('is-on', b === th); });
+        return;
+      }
+      var done = item.querySelector('.cvgf-done');
+      if (e.target.closest('[data-cvgf-dl]')) { done.textContent = 'Descargando… mírala en tu galería o en Descargas.'; return; }
+      if (e.target.closest('[data-cvgf-copy]')) {
+        var ok = function () { done.textContent = 'Texto copiado. Pégalo junto a la foto.'; };
+        var fallback = function () {
+          var ta = document.createElement('textarea'); ta.value = p.t; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
+          var copied = false; try { copied = document.execCommand('copy'); } catch (ignore) {}
+          document.body.removeChild(ta); if (copied) ok(); else window.prompt('Copia el texto:', p.t);
+        };
+        if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(p.t).then(ok, fallback); else fallback();
+      }
+    });
+    fotos.addEventListener('click', function (e) { var z = e.target.closest('[data-cvgf-zip]'); if (z) { var n = z.parentNode.querySelector('.cvga-note'); if (n) n.textContent = 'Preparando el ZIP… la primera vez puede tardar un minuto.'; } });
   }
 
   show(current(), false);

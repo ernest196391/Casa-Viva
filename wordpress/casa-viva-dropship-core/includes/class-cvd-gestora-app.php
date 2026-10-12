@@ -75,7 +75,7 @@ final class CVD_Gestora_App {
 			array( 'calculadora', 'Calculadora', 'calc', '' ),
 			array( 'buscar', 'Buscar precios', 'search', '' ),
 			array( 'curru', 'Pregúntale a Curru', 'chat', '' ),
-			array( 'materiales', 'Fotos y textos listos', 'doc', '' ),
+			array( 'fotos', 'Fotos para publicar', 'image', '' ),
 			array( 'herramientas', 'Más herramientas', 'spark', '' ),
 			array( '', 'Mi dinero', '', '' ),
 			array( 'ventas', 'Ventas', 'chart', '' ),
@@ -125,6 +125,7 @@ final class CVD_Gestora_App {
 					<?php echo self::herramientas(); // phpcs:ignore ?>
 					<?php echo self::calculadora(); // phpcs:ignore ?>
 					<?php echo self::buscar( $zone ); // phpcs:ignore ?>
+					<?php echo class_exists( 'CVD_Gestora_Fotos' ) ? CVD_Gestora_Fotos::render( $user, $code ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<div class="cvga-legacy"><?php echo $legacy; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- salida del shortcode, ya escapada allí. ?></div>
 				</div>
 			</main>
@@ -187,7 +188,8 @@ final class CVD_Gestora_App {
 							<?php if ( $ready ) : ?><li><div><b><?php echo esc_html( $ready . ( 1 === $ready ? ' pedido listo' : ' pedidos listos' ) ); ?></b> para mandar al mensajero</div><a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="#ventas" data-cvga-go="ventas">Ver</a></li><?php endif; ?>
 							<?php if ( $quiet ) : ?><li><div><b><?php echo esc_html( $quiet . ( 1 === $quiet ? ' cliente' : ' clientes' ) ); ?></b> sin comprar en 30 días</div><a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="#clientes" data-cvga-go="clientes">Escribir</a></li><?php endif; ?>
 							<?php if ( ! $clients ) : ?><li><div><b>Manda tu tienda</b> a 5 contactos</div><a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="<?php echo esc_url( 'https://wa.me/?text=' . rawurlencode( 'Mira mi tienda Casa Viva: ' . $link ) ); ?>" target="_blank" rel="noopener">Mandar</a></li><?php endif; ?>
-							<?php if ( ! $ready && ! $quiet && $clients ) : ?><li><div>Todo al día. Comparte un producto de la lista.</div></li><?php endif; ?>
+							<li><div><b>Fotos para publicar</b>: todo lo que hay, con tu enlace</div><a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="#fotos" data-cvga-go="fotos">Abrir</a></li>
+								<?php if ( ! $ready && ! $quiet && $clients ) : ?><li><div>Todo al día. Comparte un producto de la lista.</div></li><?php endif; ?>
 						</ul>
 					</section>
 				</div>
@@ -220,7 +222,7 @@ final class CVD_Gestora_App {
 		$tools = array(
 			array( 'calc', 'Calculadora', 'Pon el precio en USD y mira cuánto es en CUP, euros, tarjeta clásica, Zelle o PayPal con la tasa de hoy.', 'ready', 'calculadora' ),
 			array( 'chat', 'Pregúntale a Curru', 'Precios, medidas y si hay en almacén. Responde al momento.', 'ready', 'curru' ),
-			array( 'doc', 'Fotos y textos listos', 'Publicaciones de Casa Viva para copiar y pegar en tu estado.', 'ready', 'materiales' ),
+			array( 'image', 'Fotos para publicar', 'Todo lo que hay en existencia, con tu precio y tu enlace: descarga la foto y copia el texto.', 'ready', 'fotos' ),
 			array( 'search', 'Buscar precios', 'Sube la foto de un producto y mira a cuánto lo venden en Revolico y otras tiendas.', class_exists( 'CVD_Gestora_Busca' ) && CVD_Gestora_Busca::available() ? 'ready' : 'soon', 'buscar' ),
 			array( 'target', 'Cazadora de clientes', 'Encuentra gente que está pidiendo lo que vendes, para escribirle primero.', 'soon', '' ),
 			array( 'camera', 'Fotos de producto', 'Convierte una foto normal en una foto bonita para vender.', 'soon', '' ),
@@ -480,6 +482,7 @@ final class CVD_Gestora_App {
 			'truck'  => '<path d="M2 6h12v10H2z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
 			'calc'   => '<rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M8 6.5h8v3H8z"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/>',
 			'camera' => '<rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/>',
+			'image'  => '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
 		);
 		return '<svg class="cvga-ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' . ( $paths[ $name ] ?? '' ) . '</svg>';
 	}
