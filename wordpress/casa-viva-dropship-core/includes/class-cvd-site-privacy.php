@@ -25,7 +25,7 @@ final class CVD_Site_Privacy {
 		$text = '';
 		if ( function_exists( 'is_product' ) && is_product() ) {
 			$p = wc_get_product( get_queried_object_id() );
-			if ( $p ) { $text = wp_strip_all_tags( $p->get_short_description() ?: $p->get_description() ); if ( '' === trim( $text ) ) { $text = $p->get_name() . ' en Casa Viva, tienda para el hogar en La Habana. Entrega a domicilio o recogida en tienda.'; } }
+			if ( $p ) { $text = trim( (string) $p->get_meta( '_cvd_meta_description' ) ) ?: wp_strip_all_tags( $p->get_short_description() ?: $p->get_description() ); if ( '' === trim( $text ) ) { $text = $p->get_name() . ' en Casa Viva, tienda para el hogar en La Habana. Entrega a domicilio o recogida en tienda.'; } }
 		} elseif ( function_exists( 'is_product_category' ) && is_product_category() ) {
 			$term = get_queried_object();
 			$text = $term && $term->description ? wp_strip_all_tags( $term->description ) : ( $term ? $term->name . ' para tu hogar en Casa Viva, La Habana. Entrega a domicilio o recogida en tienda.' : '' );
