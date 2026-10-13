@@ -15,9 +15,24 @@
     if(actions.navigation_url) links.push('<a class="cvd-oc-contact" href="'+safeHref(actions.navigation_url)+'" target="_blank" rel="noopener noreferrer" data-contact="navigate">Navegar</a>');
     return links.length?'<nav class="cvd-oc-contacts" aria-label="Acciones con el cliente">'+links.join('')+'</nav>':'';
   }
+  // Gestora y mensajero con su WhatsApp (3.13.78, Nana: en tienda se anotan los dos).
+  function waLink(phone) {
+    var d=String(phone||"").replace(/\D/g,""); if(!d) return "";
+    if(d.length===8) d="53"+d;
+    var label=d.length===10&&d.indexOf("53")===0?"+53 "+d.slice(2,6)+" "+d.slice(6):"+"+d;
+    return ' · <a href="https://wa.me/'+d+'" target="_blank" rel="noopener noreferrer">'+esc(label)+'</a>';
+  }
+  function peopleLines(p) {
+    var people=p.people||{}, g=people.gestora, m=people.messenger;
+    var gestora=g?esc(g.name)+waLink(g.phone):"Venta directa (sin gestora)", messenger;
+    if(people.pickup) messenger="Recogida en tienda";
+    else if(m&&m.state==="assigned") messenger=esc(m.name)+waLink(m.phone)+(m.byGestora?" (lo eligió la gestora)":"");
+    else if(m) messenger="Sin mensajero todavía · la gestora pidió a "+esc(m.name)+waLink(m.phone);
+    else messenger="Sin mensajero todavía";
+    return '<p>Gestor/a: <strong>'+gestora+'</strong></p><p>Mensajero: <strong>'+messenger+'</strong></p>';
+  }
   function commercialCards(p) {
     var cards=[];
-    if(p.gestora) cards.push(card('Gestora','<p>'+esc(p.gestora.name||(p.gestora.attributed?'Atribuida':'Venta orgánica'))+'</p>'));
     if(p.commission_summary) cards.push(card('Comisión','<p>Estado: '+esc(p.commission_summary.status)+'</p>'));
     return cards.join('');
   }
@@ -28,8 +43,9 @@
     var timeline=p.timeline.events.map(function(e){return '<li><strong>'+esc(e.to_state||e.event_type)+'</strong><span>'+esc(e.timestamp)+' · '+esc(e.actor_role)+'</span></li>';}).join("");
     root.innerHTML='<header class="cvd-oc-head"><div><small>Pedido</small><h1>#'+esc(p.order.number)+'</h1></div><span class="cvd-oc-stage">'+esc(p.canonical_stage)+'</span></header>'+warning+
       '<div class="cvd-oc-grid">'+card('Cliente','<p><strong>'+esc(p.customer.name)+'</strong><br><a href="tel:'+esc(p.customer.phone)+'">'+esc(p.customer.phone)+'</a></p><p>'+esc(p.delivery.mode)+' · '+esc(p.delivery.address)+'</p>'+contactActions(p))+
+      card('Gestora y mensajero',peopleLines(p))+
       card('Productos',items)+card('Operación','<p>Etapa: <strong>'+esc(p.operation.status)+'</strong></p>')+
-      card('Mensajería','<p>'+esc(p.delivery.status||'No iniciada')+'</p><p>Mensajero: '+esc(p.courier.name||'Sin asignar')+'</p><p>Tarifa: '+esc(p.pricing.shipping_cup)+' CUP</p>')+
+      card('Mensajería','<p>'+esc(p.delivery.status||'No iniciada')+'</p><p>Tarifa: '+esc(p.pricing.shipping_cup)+' CUP</p>')+
       card('Dinero','<p>Estado: <strong>'+esc(p.payment.status)+'</strong></p><p>Método: '+esc(p.payment.method||'Sin registrar')+'</p>')+
       commercialCards(p)+
       (p.incident.active?card('Incidencia','<p>'+esc(p.incident.note||'Incidencia activa')+'</p><small>'+esc(p.incident.at)+'</small>'):'')+

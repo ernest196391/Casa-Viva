@@ -51,9 +51,10 @@ final class CVD_Staff_Privacy {
 		return $data;
 	}
 
+	// 3.13.78 (Nana, 12–13 oct): la tienda SÍ ve quién vendió el pedido (nombre y WhatsApp de la gestora,
+	// en «people») porque lo anota en tienda. Lo que sigue oculto a las dependientas es el dinero de la gestora.
 	private static function filter_sales_order( array $order ): array {
 		unset(
-			$order['gestora'],
 			$order['commission'],
 			$order['commissionStatus'],
 			$order['adminUrl']
@@ -75,7 +76,7 @@ final class CVD_Staff_Privacy {
 	}
 
 	private static function filter_projection( array $projection ): array {
-		unset( $projection['commission_summary'], $projection['gestora'] );
+		unset( $projection['commission_summary'] ); // la gestora (sin su id) y el mensajero se ven: 3.13.78
 		return $projection;
 	}
 }

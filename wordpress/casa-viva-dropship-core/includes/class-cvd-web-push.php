@@ -91,7 +91,9 @@ final class CVD_Web_Push {
 	}
 
 	private static function staff_order_url( WC_Order $order ): string {
-		return add_query_arg( 'order_id', $order->get_id(), home_url( '/centro-pedido/' ) );
+		// 3.13.78: la página /centro-pedido/ nunca se creó (el aviso abría un 404). Se abre el pedido en /ventas/,
+		// que es donde trabaja la tienda (con su gestora y su mensajero).
+		return add_query_arg( 'cvd_order', $order->get_id(), home_url( '/ventas/' ) );
 	}
 
 	private static function messenger_order_url( WC_Order $order ): string {

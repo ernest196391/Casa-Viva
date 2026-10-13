@@ -46,14 +46,17 @@ $clerk_sales = CVD_Staff_Privacy::filter_response( CVD_Sales::orders( $sales_req
 $clerk_sales_data = $clerk_sales->get_data();
 cvt_5a_assert( 1 === count( $clerk_sales_data['orders'] ), 'La dependienta no recibió el pedido operativo esperado.' );
 $clerk_order = $clerk_sales_data['orders'][0];
-foreach ( array( 'gestora', 'commission', 'commissionStatus', 'adminUrl' ) as $forbidden ) {
+foreach ( array( 'commission', 'commissionStatus', 'adminUrl' ) as $forbidden ) {
 	cvt_5a_assert( ! array_key_exists( $forbidden, $clerk_order ), "La dependienta recibió {$forbidden}." );
 }
 cvt_5a_assert( isset( $clerk_order['customer'], $clerk_order['products'], $clerk_order['actions'] ), 'La privacidad eliminó datos necesarios para operar.' );
+// 3.13.78 (Nana): la tienda anota quién vendió cada pedido → ve el nombre de la gestora (no su dinero).
+cvt_5a_assert( 'Gestora privada 5A' === ( $clerk_order['people']['gestora']['name'] ?? '' ), 'La dependienta no ve el nombre de la gestora del pedido.' );
 
 $clerk_projection_raw = new WP_REST_Response( CVD_Order_Center::project( $order, $clerk->ID ) );
 $clerk_projection = CVD_Staff_Privacy::filter_response( $clerk_projection_raw, $server, $order_center_request )->get_data();
-cvt_5a_assert( ! array_key_exists( 'gestora', $clerk_projection ), 'El Centro Único filtró datos de gestora a la dependienta.' );
+cvt_5a_assert( ! isset( $clerk_projection['gestora']['id'] ), 'El Centro Único filtró el id de la gestora a la dependienta.' );
+cvt_5a_assert( 'Gestora privada 5A' === ( $clerk_projection['people']['gestora']['name'] ?? '' ), 'El Centro Único no enseña la gestora a la dependienta.' );
 cvt_5a_assert( ! array_key_exists( 'commission_summary', $clerk_projection ), 'El Centro Único filtró estado de comisión a la dependienta.' );
 cvt_5a_assert( isset( $clerk_projection['customer'], $clerk_projection['items'], $clerk_projection['operation'], $clerk_projection['available_actions'] ), 'El filtro rompió la proyección operativa de dependienta.' );
 

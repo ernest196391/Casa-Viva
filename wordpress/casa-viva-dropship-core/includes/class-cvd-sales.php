@@ -276,7 +276,8 @@ final class CVD_Sales {
 	}
 
 	private static function matches_search( WC_Order $order, string $search ): bool {
-		$haystack = array( $order->get_order_number(), $order->get_formatted_billing_full_name(), $order->get_billing_phone(), $order->get_billing_email() );
+		// 3.13.78: también por el nombre de la gestora («Oliuska» encuentra sus pedidos).
+		$haystack = array( $order->get_order_number(), $order->get_formatted_billing_full_name(), $order->get_billing_phone(), $order->get_billing_email(), (string) $order->get_meta( 'gestora_nombre', true ) );
 		foreach ( $order->get_items( 'line_item' ) as $item ) { $haystack[] = $item->get_name(); }
 		return false !== stripos( implode( ' ', $haystack ), $search );
 	}
@@ -515,7 +516,60 @@ final class CVD_Sales {
 				'reference' => (string) $order->get_meta( '_cvd_collection_reference', true ),
 			) : null,
 			'adminUrl' => admin_url( 'admin.php?page=wc-orders&action=edit&id=' . $order->get_id() ),
+			// 3.13.78 (Nana, 12–13 oct): quién lo vendió y quién lo lleva, con su WhatsApp. Las dependientas lo ven.
+			'people' => self::people( $order ),
 		);
+	}
+
+	/**
+	 * Gestora y mensajero de un pedido, para la tienda (Nana, 12–13 oct: «en tienda debemos hacer esas anotaciones»).
+	 * Solo lectura: nombre y WhatsApp. La comisión sigue oculta a las dependientas (CVD_Staff_Privacy).
+	 * gestora = null → venta directa. messenger = null → sin mensajero todavía (o recogida en tienda: pickup).
+	 * messenger.state: «assigned» (lo lleva) o «preferred» (la gestora lo pidió, aún no lo tiene).
+	 */
+	public static function people( WC_Order $order ): array {
+		$pickup = 'pickup' === sanitize_key( (string) $order->get_meta( '_cvd_fulfillment_type', true ) );
+		$owner_id = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
+		$gestora = null;
+		if ( $owner_id ) {
+			$name = trim( (string) $order->get_meta( 'gestora_nombre', true ) );
+			$gestora = array( 'name' => '' !== $name ? $name : (string) get_the_author_meta( 'display_name', $owner_id ), 'phone' => self::user_phone( $owner_id ) );
+		}
+		$messenger = null;
+		if ( ! $pickup ) {
+			$assigned = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
+			$preferred = ! $assigned && class_exists( 'CVD_Direct_Dispatch' ) ? CVD_Direct_Dispatch::preferred_messenger( $order ) : null;
+			if ( $assigned ) {
+				$messenger = array( 'name' => $assigned->display_name, 'phone' => self::user_phone( $assigned->ID ), 'state' => 'assigned', 'byGestora' => class_exists( 'CVD_Direct_Dispatch' ) && CVD_Direct_Dispatch::is_direct( $order ) );
+			} elseif ( $preferred ) {
+				$messenger = array( 'name' => $preferred->display_name, 'phone' => self::user_phone( $preferred->ID ), 'state' => 'preferred', 'byGestora' => true );
+			}
+		}
+		return array( 'pickup' => $pickup, 'gestora' => $gestora, 'messenger' => $messenger );
+	}
+
+	/** WhatsApp de una persona del equipo (solo dígitos): el de su cuenta o, si falta, el de facturación. */
+	public static function user_phone( int $user_id ): string {
+		return $user_id ? preg_replace( '/\D+/', '', (string) ( get_user_meta( $user_id, '_cvd_whatsapp', true ) ?: get_user_meta( $user_id, 'billing_phone', true ) ) ) : '';
+	}
+
+	/** «+53 5387 0260» para leer en pantalla (8 dígitos cubanos → con +53). */
+	public static function phone_label( string $digits ): string {
+		$d = preg_replace( '/\D+/', '', $digits );
+		if ( 8 === strlen( $d ) ) { $d = '53' . $d; }
+		return 10 === strlen( $d ) && str_starts_with( $d, '53' ) ? '+53 ' . substr( $d, 2, 4 ) . ' ' . substr( $d, 6 ) : ( '' !== $d ? '+' . $d : '' );
+	}
+
+	/** Las dos líneas en texto (para pantallas hechas en PHP, como /mensajeria/). */
+	public static function people_lines( WC_Order $order ): array {
+		$p = self::people( $order );
+		$who = static fn( array $x ): string => $x['name'] . ( '' !== $x['phone'] ? ' · ' . self::phone_label( $x['phone'] ) : '' );
+		$gestora = $p['gestora'] ? $who( $p['gestora'] ) : 'Venta directa (sin gestora)';
+		if ( $p['pickup'] ) { $messenger = 'Recogida en tienda'; }
+		elseif ( ! $p['messenger'] ) { $messenger = 'Sin mensajero todavía'; }
+		elseif ( 'preferred' === $p['messenger']['state'] ) { $messenger = 'Sin mensajero todavía · la gestora pidió a ' . $who( $p['messenger'] ); }
+		else { $messenger = $who( $p['messenger'] ) . ( $p['messenger']['byGestora'] ? ' (lo eligió la gestora)' : '' ); }
+		return array( 'gestora' => $gestora, 'messenger' => $messenger );
 	}
 
 	/** Últimos 8 pasos del pedido (tienda y mensajería) con hora local, para el panel de la dueña. Solo lectura. */

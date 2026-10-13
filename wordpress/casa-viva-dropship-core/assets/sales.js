@@ -68,12 +68,27 @@
       return '<button class="cvd-sale-action' + danger + '" data-order="' + order.id + '" data-status="' + status + '" data-pickup="' + (order.fulfillment === "Recogida en tienda" ? "1" : "0") + '" data-declared-usd="' + escapeText(order.declaredUsd || "") + '" data-declared-cup="' + escapeText(order.declaredCup || "") + '">' + escapeText(actionLabel(order, status)) + "</button>";
     }).join("");
   }
-  // Mensajería con el nombre de quien lo lleva (Nana, 12-oct: en tienda se anota el mensajero y la gestora).
+  // Mensajería: en qué punto va la entrega. Quién lo lleva sale arriba, en «Mensajero» (peopleRows).
   function messengerRow(order) {
-    var text = order.deliveryStatus || "No aplica";
-    if (order.messengerName) text += " · " + order.messengerName + (order.directAssignment ? " (lo eligió la gestora)" : "");
-    else if (order.preferredMessenger) text += " · preferido: " + order.preferredMessenger;
-    return '<p><b>Mensajería</b><span>' + escapeText(text) + '</span></p>';
+    if (order.isPickup) return "";
+    return '<p><b>Mensajería</b><span>' + escapeText(order.deliveryStatus || "No aplica") + '</span></p>';
+  }
+  // Gestora y mensajero de cada pedido, con su WhatsApp (3.13.78, Nana 12–13 oct: «en tienda debemos hacer esas anotaciones»).
+  function waLink(phone) {
+    var d = String(phone || "").replace(/\D/g, "");
+    if (!d) return "";
+    if (d.length === 8) d = "53" + d;
+    var label = d.length === 10 && d.indexOf("53") === 0 ? "+53 " + d.slice(2, 6) + " " + d.slice(6) : "+" + d;
+    return ' · <a target="_blank" rel="noopener" href="https://wa.me/' + d + '">' + escapeText(label) + "</a>";
+  }
+  function peopleRows(order) {
+    var people = order.people || {}, g = people.gestora, m = people.messenger, messenger;
+    var gestora = g ? escapeText(g.name) + waLink(g.phone) : "Venta directa (sin gestora)";
+    if (people.pickup) messenger = "Recogida en tienda";
+    else if (m && m.state === "assigned") messenger = escapeText(m.name) + waLink(m.phone) + (m.byGestora ? " (lo eligió la gestora)" : "");
+    else if (m) messenger = "Sin mensajero todavía · la gestora pidió a " + escapeText(m.name) + waLink(m.phone);
+    else messenger = "Sin mensajero todavía";
+    return '<p class="cvd-sale-people"><b>Gestor/a</b><span><strong>' + gestora + '</strong></span></p><p class="cvd-sale-people"><b>Mensajero</b><span><strong>' + messenger + "</strong></span></p>";
   }
   // Cómo paga el cliente (3.13.67, Lennys): la misma cifra que lee el mensajero en su vale.
   // Zelle/PayPal: el cliente paga todo antes; la tienda verifica la captura antes de coordinar la entrega.
@@ -93,10 +108,7 @@
     return '<p><b>Armado</b><span style="color:#a35a1f;font-weight:700">🔧 ' + escapeText(a.text) + "</span></p>";
   }
   function commercialData(order) {
-    var rows = [];
-    if (Object.prototype.hasOwnProperty.call(order, "gestora")) {
-      rows.push('<p><b>Gestora</b><span>' + escapeText(order.gestora || "Casa Viva · Venta directa") + '</span></p>');
-    }
+    var rows = []; // la gestora ya sale arriba (peopleRows); aquí solo la comisión, que solo ve administración
     if (Object.prototype.hasOwnProperty.call(order, "commission") && Object.prototype.hasOwnProperty.call(order, "commissionStatus")) {
       rows.push('<p><b>Comisión</b><span>' + escapeText(Number(order.commission || 0).toFixed(2) + " · " + order.commissionStatus) + '</span></p>');
     }
@@ -121,7 +133,7 @@
       var wa = order.phone ? '<a class="cvd-sale-wa" target="_blank" rel="noopener" href="https://wa.me/' + escapeText(order.phone.replace(/\D/g, "")) + '">WhatsApp</a>' : "";
       // Pedido de prueba (3.13.54): cartel grande arriba; el servidor no lo deja salir al reparto.
       var test = order.testOrder ? '<p class="cvd-sale-test" role="note" style="margin:0 0 10px;padding:10px 12px;border-radius:12px;background:#b3261e;color:#fff;font-weight:800;font-size:1.15em;letter-spacing:.02em;text-align:center">PRUEBA — no preparar<br><small style="font-weight:600;font-size:.75em">No sale al reparto ni a ningún mensajero</small></p>' : '';
-      return '<article class="cvd-sale-card' + (order.testOrder ? ' is-test' : '') + '">' + test + '<div class="cvd-sale-top"><div><span class="cvd-sale-status is-' + order.status + '">' + escapeText(order.statusLabel) + '</span><h2>Pedido #' + escapeText(order.number) + '</h2><small>' + escapeText(order.date) + '</small></div><div class="cvd-sale-code"><canvas data-order-code="' + escapeText(order.orderCode) + '"></canvas><small>' + escapeText(order.orderCode) + '</small></div><strong>' + escapeText(order.total) + (order.shippingCup && !/CUP/i.test(order.total) ? ' + ' + escapeText(order.shippingCup) + ' CUP' : '') + '</strong></div><div class="cvd-sale-data"><p><b>Cliente</b><span>' + escapeText(order.customer) + " · " + phone + '</span></p><p><b>Entrega</b><span>' + escapeText(order.fulfillment + " · " + order.address) + '</span></p>' + paymentRow(order) + assemblyRow(order) + (order.deliveryWhen ? '<p><b>Día</b><span' + (order.deliveryFuture ? ' style="color:#a8641c;font-weight:700"' : '') + '>📅 ' + escapeText(order.deliveryWhen) + '</span></p>' : '') + '<p><b>Productos</b><span>' + productLinks(order.products) + '</span></p>' + messengerRow(order) + commercialData(order) + '</div><div class="cvd-sale-actions">' + actionButtons(order) + (order.canReturn ? '<button type="button" class="cvd-sale-return is-warning" data-return-order="' + order.id + '">Devolución</button>' : '') + (order.trackingUrl ? '<button type="button" data-copy-tracking="' + escapeText(order.trackingUrl) + '">Copiar seguimiento</button>' : '') + wa + (cvdSales.isAdmin && order.adminUrl ? '<a href="' + escapeText(order.adminUrl) + '" target="_blank" rel="noopener">Ver pedido</a>' : '') + '</div></article>';
+      return '<article class="cvd-sale-card' + (order.testOrder ? ' is-test' : '') + '">' + test + '<div class="cvd-sale-top"><div><span class="cvd-sale-status is-' + order.status + '">' + escapeText(order.statusLabel) + '</span><h2>Pedido #' + escapeText(order.number) + '</h2><small>' + escapeText(order.date) + '</small></div><div class="cvd-sale-code"><canvas data-order-code="' + escapeText(order.orderCode) + '"></canvas><small>' + escapeText(order.orderCode) + '</small></div><strong>' + escapeText(order.total) + (order.shippingCup && !/CUP/i.test(order.total) ? ' + ' + escapeText(order.shippingCup) + ' CUP' : '') + '</strong></div><div class="cvd-sale-data"><p><b>Cliente</b><span>' + escapeText(order.customer) + " · " + phone + '</span></p>' + peopleRows(order) + '<p><b>Entrega</b><span>' + escapeText(order.fulfillment + " · " + order.address) + '</span></p>' + paymentRow(order) + assemblyRow(order) + (order.deliveryWhen ? '<p><b>Día</b><span' + (order.deliveryFuture ? ' style="color:#a8641c;font-weight:700"' : '') + '>📅 ' + escapeText(order.deliveryWhen) + '</span></p>' : '') + '<p><b>Productos</b><span>' + productLinks(order.products) + '</span></p>' + messengerRow(order) + commercialData(order) + '</div><div class="cvd-sale-actions">' + actionButtons(order) + (order.canReturn ? '<button type="button" class="cvd-sale-return is-warning" data-return-order="' + order.id + '">Devolución</button>' : '') + (order.trackingUrl ? '<button type="button" data-copy-tracking="' + escapeText(order.trackingUrl) + '">Copiar seguimiento</button>' : '') + wa + (cvdSales.isAdmin && order.adminUrl ? '<a href="' + escapeText(order.adminUrl) + '" target="_blank" rel="noopener">Ver pedido</a>' : '') + '</div></article>';
     }).join("");
     if (window.CVQRCode) document.querySelectorAll("[data-order-code]").forEach(function (canvas) { window.CVQRCode.toCanvas(canvas, canvas.dataset.orderCode, { width: 84, margin: 1 }); });
   }

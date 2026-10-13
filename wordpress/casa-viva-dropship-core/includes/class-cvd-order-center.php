@@ -81,6 +81,8 @@ final class CVD_Order_Center {
 			'payment' => array( 'status' => $canonical['cash_status'], 'method' => (string) $order->get_meta( '_cvd_collection_method', true ), 'verified_at' => (string) $order->get_meta( '_cvd_collection_received_at', true ) ),
 			'commission_summary' => array( 'status' => $canonical['commission_status'] ),
 			'gestora' => array( 'id' => $owner_id, 'name' => (string) $order->get_meta( 'gestora_nombre', true ), 'attributed' => $owner_id > 0 ),
+			// 3.13.78 (Nana): gestora y mensajero con su WhatsApp, lo mismo que en /ventas/ (ver CVD_Sales::people).
+			'people' => class_exists( 'CVD_Sales' ) ? CVD_Sales::people( $order ) : null,
 			'incident' => array( 'active' => (bool) $canonical['incident']['active'], 'domain' => $incident_domain, 'note' => $incident_prefix ? (string) $order->get_meta( $incident_prefix . 'note', true ) : '', 'actor_id' => $incident_prefix ? absint( $order->get_meta( $incident_prefix . 'opened_by', true ) ) : 0, 'at' => $incident_prefix ? (string) $order->get_meta( $incident_prefix . 'opened_at', true ) : '' ),
 			'canonical_stage' => $canonical['canonical_stage'],
 			'consistency' => array( 'level' => $canonical['consistency'], 'review_required' => 'CONFLICT' === $canonical['consistency'], 'reasons' => $is_admin ? $canonical['reasons'] : array() ),

@@ -13,7 +13,8 @@ $assert = static function ( bool $condition, string $message ): void {
 	if ( ! $condition ) { throw new RuntimeException( $message ); }
 };
 
-$expected_staff_url = add_query_arg( 'order_id', $order->get_id(), home_url( '/centro-pedido/' ) );
+// 3.13.78: el aviso de la tienda abre el pedido en /ventas/ (la página /centro-pedido/ no existe en producción).
+$expected_staff_url = add_query_arg( 'cvd_order', $order->get_id(), home_url( '/ventas/' ) );
 $expected_messenger_url = add_query_arg( 'order_id', $order->get_id(), home_url( '/area-mensajeros/' ) );
 
 global $wpdb;
@@ -25,7 +26,7 @@ $new_order = $wpdb->get_row( $wpdb->prepare(
 	$order->get_id()
 ), ARRAY_A );
 $assert( is_array( $new_order ), 'No se registró la notificación de pedido nuevo.' );
-$assert( $expected_staff_url === $new_order['action_url'], 'Pedido nuevo no enlaza al Centro Único.' );
+$assert( $expected_staff_url === $new_order['action_url'], 'Pedido nuevo no abre el pedido en /ventas/.' );
 $assert( false !== strpos( $new_order['title'], '#' . $order->get_order_number() ), 'Pedido nuevo no identifica el pedido.' );
 
 $messenger = get_user_by( 'id', absint( $fixture['messenger_id'] ) );
@@ -51,7 +52,7 @@ $staff_update = $wpdb->get_row( $wpdb->prepare(
 	$order->get_id()
 ), ARRAY_A );
 $assert( is_array( $staff_update ), 'No se registró actualización para operaciones.' );
-$assert( $expected_staff_url === $staff_update['action_url'], 'Actualización operativa no enlaza al Centro Único.' );
+$assert( $expected_staff_url === $staff_update['action_url'], 'Actualización operativa no abre el pedido en /ventas/.' );
 $assert( false !== stripos( $staff_update['message'], 'cliente' ), 'La actualización no describe el avance logístico.' );
 
 $messenger_update = $wpdb->get_row( $wpdb->prepare(
