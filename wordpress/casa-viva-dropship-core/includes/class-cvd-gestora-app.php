@@ -88,6 +88,15 @@ final class CVD_Gestora_App {
 			array( '', 'Mi equipo', '', '' ),
 			array( 'invitar', 'Invitar gestoras', 'invite', '' ),
 		);
+		// 3.13.77: «Aprende» (tutoriales). Mientras le falte algo, justo debajo de Inicio y con lo que lleva (2/6);
+		// cuando lo vio todo, baja al final de Herramientas.
+		$learn = class_exists( 'CVD_Aprende' ) ? CVD_Aprende::progress( $user->ID, 'gestora' ) : null;
+		if ( $learn ) {
+			$pending = $learn['done'] < $learn['total'];
+			$item = array( 'aprende', 'Aprende', 'learn', '', $pending ? $learn['done'] . '/' . $learn['total'] : '' );
+			$at = $pending ? 1 : (int) array_search( 'herramientas', array_column( $nav, 0 ), true ) + 1;
+			array_splice( $nav, $at, 0, array( $item ) );
+		}
 		// Cuenta doble (gestora y mensajero aprobado): enlace directo a su área de entregas.
 		if ( CVD_Registration::is_dual( $user ) && CVD_Registration::is_approved_messenger( $user ) ) {
 			$nav[] = array( '', 'Mensajería', '', '' );
@@ -109,7 +118,7 @@ final class CVD_Gestora_App {
 					<?php elseif ( '' !== $item[3] ) : // Enlace a otra página (no es una vista de esta app). ?>
 					<a class="cvga-link" href="<?php echo esc_url( $item[3] ); ?>"><?php echo self::icon( $item[2] ); // phpcs:ignore ?><span class="cvga-label"><?php echo esc_html( $item[1] ); ?></span></a>
 					<?php else : ?>
-					<a class="cvga-link" href="#<?php echo esc_attr( $item[0] ); ?>" data-cvga-go="<?php echo esc_attr( $item[0] ); ?>"><?php echo self::icon( $item[2] ); // phpcs:ignore ?><span class="cvga-label"><?php echo esc_html( $item[1] ); ?></span></a>
+					<a class="cvga-link" href="#<?php echo esc_attr( $item[0] ); ?>" data-cvga-go="<?php echo esc_attr( $item[0] ); ?>"><?php echo self::icon( $item[2] ); // phpcs:ignore ?><span class="cvga-label"><?php echo esc_html( $item[1] ); ?></span><?php if ( 'aprende' === $item[0] ) : ?><span class="cvga-nav-badge" data-cva-badge="gestora"<?php echo empty( $item[4] ) ? ' hidden' : ''; ?>><?php echo esc_html( (string) ( $item[4] ?? '' ) ); ?></span><?php endif; ?></a>
 					<?php endif; endforeach; ?>
 				</nav>
 				<div class="cvga-nav cvga-nav-bottom">
@@ -126,7 +135,8 @@ final class CVD_Gestora_App {
 					<a class="cvga-shop-btn" href="<?php echo esc_url( $link ); ?>"><?php echo self::icon( 'shop' ); // phpcs:ignore ?><span>Ver la tienda</span></a>
 				</header>
 				<div class="cvga-wrap">
-					<?php echo self::inicio( $user, $first, $link, $code, $orders, $box ); // phpcs:ignore ?>
+					<?php echo self::inicio( $user, $first, $link, $code, $orders, $box, $learn ); // phpcs:ignore ?>
+					<?php echo $learn ? CVD_Aprende::render( $user, 'gestora' ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo self::tienda( $link ); // phpcs:ignore ?>
 					<?php echo self::herramientas(); // phpcs:ignore ?>
 					<?php echo self::calculadora(); // phpcs:ignore ?>
@@ -148,7 +158,7 @@ final class CVD_Gestora_App {
 		return (string) ob_get_clean();
 	}
 
-	private static function inicio( WP_User $user, string $first, string $link, string $code, array $orders, string $box ): string {
+	private static function inicio( WP_User $user, string $first, string $link, string $code, array $orders, string $box, ?array $learn = null ): string {
 		$money = self::money_summary( $orders );
 		$clients = class_exists( 'CVD_Clients' ) ? CVD_Clients::list( $user->ID, '', 5000 ) : array();
 		$quiet = 0;
@@ -194,6 +204,7 @@ final class CVD_Gestora_App {
 					<section class="cvga-card">
 						<h2>Para hoy</h2>
 						<ul class="cvga-todo">
+							<?php if ( $learn && $learn['done'] < $learn['total'] ) : // 3.13.77: mientras le falte algo de «Aprende». ?><li data-cva-nudge="gestora"><div><b>Aprende</b>: te faltan <span data-cva-left><?php echo esc_html( (string) ( $learn['total'] - $learn['done'] ) ); ?></span> de <?php echo esc_html( (string) $learn['total'] ); ?> vídeos y guías</div><a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="#aprende" data-cvga-go="aprende">Ver</a></li><?php endif; ?>
 							<?php if ( $ready ) : ?><li><div><b><?php echo esc_html( $ready . ( 1 === $ready ? ' pedido listo' : ' pedidos listos' ) ); ?></b> para mandar al mensajero</div><a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="#ventas" data-cvga-go="ventas">Ver</a></li><?php endif; ?>
 							<?php if ( $quiet ) : ?><li><div><b><?php echo esc_html( $quiet . ( 1 === $quiet ? ' cliente' : ' clientes' ) ); ?></b> sin comprar en 30 días</div><a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="#clientes" data-cvga-go="clientes">Escribir</a></li><?php endif; ?>
 							<?php if ( ! $clients ) : ?><li><div><b>Manda tu tienda</b> a 5 contactos</div><a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="<?php echo esc_url( 'https://wa.me/?text=' . rawurlencode( 'Mira mi tienda Casa Viva: ' . $link ) ); ?>" target="_blank" rel="noopener">Mandar</a></li><?php endif; ?>
@@ -492,6 +503,7 @@ final class CVD_Gestora_App {
 			'calc'   => '<rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M8 6.5h8v3H8z"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/>',
 			'camera' => '<rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/>',
 			'image'  => '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
+			'learn'  => '<circle cx="12" cy="12" r="9"/><path d="M10 8.5l5.5 3.5-5.5 3.5z"/>',
 			'shop'   => '<path d="M3.5 9.5 5 4h14l1.5 5.5"/><path d="M3.5 9.5a2.8 2.8 0 0 0 5.6 0 2.9 2.9 0 0 0 5.8 0 2.8 2.8 0 0 0 5.6 0"/><path d="M5 12v8h14v-8"/><path d="M10 20v-4.5h4V20"/>',
 		);
 		return '<svg class="cvga-ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' . ( $paths[ $name ] ?? '' ) . '</svg>';

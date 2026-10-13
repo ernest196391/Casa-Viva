@@ -1,0 +1,82 @@
+/* 3.13.77 · «Aprende» (boceto aprobado por Ernesto, 13-oct). Marca Casa Viva: crema #F6F1E6, marrón #2B2420,
+   petróleo #0D3B45 (gestora) / marrón (mensajero) arriba, ámbar #A35A1F en botones; Cinzel solo en títulos cortos.
+   Los !important solo pisan las reglas genéricas de botones del área del mensajero (.cvd-p03 button…). */
+@font-face{font-family:"Figtree";font-style:normal;font-weight:400;font-display:swap;src:url(fonts/figtree-latin-400.woff2) format("woff2")}
+@font-face{font-family:"Figtree";font-style:normal;font-weight:600;font-display:swap;src:url(fonts/figtree-latin-600.woff2) format("woff2")}
+@font-face{font-family:"Cinzel";font-style:normal;font-weight:600;font-display:swap;src:url(fonts/cinzel-latin-600.woff2) format("woff2")}
+
+.cva{--cva-crema:#F6F1E6;--cva-marron:#2B2420;--cva-petroleo:#0D3B45;--cva-ambar:#A35A1F;--cva-ambar-osc:#7d4416;--cva-card:#fffdf8;--cva-borde:#d9cfbf;--cva-suave:#5a4e46;--cva-num:#ece4d6;--cva-visto:#dbe7e8;
+  width:100%;max-width:680px;margin:0 auto;color:var(--cva-marron);font-family:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15px;font-weight:400;line-height:1.45;-webkit-text-size-adjust:100%}
+.cva *,.cva *::before,.cva *::after{box-sizing:border-box}
+.cva [hidden]{display:none!important}
+.cva.cvga-view{gap:0}
+
+/* Cabecera */
+.cva-hero{background:var(--cva-petroleo);color:var(--cva-crema);padding:20px 20px 22px;display:flex;flex-direction:column;gap:10px;border-radius:16px}
+.cva--mensajero .cva-hero{background:var(--cva-marron)}
+.cva-hero-top{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.cva-area{font-size:13px;font-weight:400;letter-spacing:.08em;white-space:nowrap}
+.cva-hello{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cva .cva-h1{margin:0;padding:0;font:600 30px/1.15 "Cinzel",Georgia,serif;letter-spacing:.12em;color:var(--cva-crema);text-transform:uppercase}
+.cva-intro{margin:0;font-size:15px;line-height:1.4;color:var(--cva-crema)}
+.cva-progress{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.cva-progress-text{display:flex;justify-content:space-between;gap:10px;font-size:14px;font-weight:600}
+.cva-bar{height:8px;border-radius:4px;background:rgba(246,241,230,.25);overflow:hidden}
+.cva-bar i{display:block;height:8px;border-radius:4px;background:var(--cva-crema);transition:width .25s ease}
+
+/* Lista numerada */
+.cva-list{padding:16px 0 8px;display:flex;flex-direction:column;gap:10px}
+.cva-card{padding:12px 12px 12px 14px;border-radius:14px;background:var(--cva-card);border:1px solid var(--cva-borde)}
+.cva-card.is-next{border:2px solid var(--cva-ambar);padding:11px 11px 11px 13px}
+.cva-row{display:flex;align-items:center;gap:12px}
+.cva-num{flex:0 0 auto;width:34px;height:34px;border-radius:17px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:15px;background:var(--cva-num);color:var(--cva-marron)}
+.cva-card.is-done .cva-num{background:var(--cva-petroleo);color:var(--cva-crema)}
+.cva-body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px}
+.cva-titleline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cva-title{font-size:16px;font-weight:600;line-height:1.25}
+.cva-next{font-size:12px;font-weight:600;line-height:1.4;color:var(--cva-crema);background:var(--cva-ambar);padding:2px 8px;border-radius:10px}
+.cva-kind{font-size:13px;color:var(--cva-suave)}
+.cva .cva-seen{align-self:flex-start;margin:4px 0 0;min-height:32px;width:auto!important;padding:4px 12px!important;border-radius:16px!important;border:1px solid var(--cva-ambar)!important;background:transparent!important;color:var(--cva-ambar)!important;font:600 13px/1.2 "Figtree",system-ui,sans-serif!important;letter-spacing:0!important;text-transform:none!important;box-shadow:none!important;cursor:pointer}
+.cva .cva-card.is-done .cva-seen{border-color:transparent!important;background:var(--cva-visto)!important;color:var(--cva-petroleo)!important}
+.cva .cva-play{flex:0 0 auto;width:48px;height:48px;min-height:48px;margin:0;padding:0!important;border-radius:24px!important;border:0!important;background:var(--cva-ambar)!important;color:var(--cva-crema)!important;display:flex;align-items:center;justify-content:center;box-shadow:none!important;cursor:pointer}
+.cva .cva-play:hover{background:var(--cva-ambar-osc)!important}
+.cva-play .cva-ic-close,.cva-play[aria-expanded="true"] .cva-ic-play{display:none}
+.cva-play[aria-expanded="true"] .cva-ic-close{display:block}
+.cva-soon{flex:0 0 auto;font-size:12px;font-weight:600;color:var(--cva-suave);background:var(--cva-num);padding:4px 10px;border-radius:12px}
+.cva-media{margin-top:12px}
+.cva-media video{display:block;width:100%;max-height:72vh;border-radius:12px;background:#000}
+.cva-media audio{display:block;width:100%}
+.cva-imgs{display:flex;flex-direction:column;gap:14px}
+.cva-imgs figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:6px}
+.cva-imgs img{display:block;width:100%;max-width:470px;height:auto;border-radius:12px;border:1px solid var(--cva-borde)}
+.cva-status{margin:0;padding:9px 12px;border-radius:10px;background:#f6e3c8;color:#5e3a0e;font-size:14px}
+
+/* Dudas rápidas / Lo que escribes */
+.cva-faq{padding:8px 0 20px;display:flex;flex-direction:column;gap:10px}
+.cva .cva-h2{margin:6px 0 0;padding:0;font:600 16px/1.3 "Cinzel",Georgia,serif;letter-spacing:.1em;color:var(--cva-marron);text-transform:uppercase}
+.cva-chips{display:flex;flex-wrap:wrap;gap:8px}
+.cva .cva-chip{min-height:44px;width:auto!important;margin:0;padding:8px 14px!important;border-radius:22px!important;border:1px solid var(--cva-borde)!important;background:var(--cva-card)!important;color:var(--cva-marron)!important;font:600 14px/1.2 "Figtree",system-ui,sans-serif!important;letter-spacing:0!important;text-transform:none!important;box-shadow:none!important;cursor:pointer}
+.cva .cva-chip[aria-expanded="true"]{border-color:transparent!important;background:var(--cva-marron)!important;color:var(--cva-crema)!important}
+.cva-answer{background:var(--cva-card);border:1px solid var(--cva-borde);border-radius:12px;padding:12px 14px;font-size:15px;line-height:1.45}
+.cva-answer strong{font-weight:600}
+.cva-help{margin:4px 0 0;font-size:14px;line-height:1.4}
+.cva a{color:var(--cva-ambar)!important;text-decoration:underline;text-underline-offset:2px}
+.cva a:hover{color:var(--cva-ambar-osc)!important}
+.cva .cva-save{font-size:14px;font-weight:600}
+.cva button:focus-visible,.cva a:focus-visible{outline:2px solid var(--cva-ambar)!important;outline-offset:2px}
+
+/* Mensajero: la sección es una hoja crema con la cabecera de borde a borde. */
+.cva--mensajero{background:var(--cva-crema);border-radius:20px;padding:0 16px;overflow:hidden;margin-bottom:12px}
+.cva--mensajero .cva-hero{margin:0 -16px;border-radius:0}
+
+/* Gestora: en el móvil la cabecera va de borde a borde, como en el boceto. */
+@media (max-width:860px){.cva--gestora .cva-hero{margin:-16px -16px 0;border-radius:0}}
+
+/* Menú: «Aprende» con lo que falta (app de gestoras) y 5 pestañas abajo (mensajero). */
+.cvga-nav-badge{margin-left:auto;font-size:11.5px;font-weight:700;line-height:1.5;background:#A35A1F;color:#F6F1E6;border-radius:99px;padding:0 8px}
+.cvga.is-mini .cvga-nav-badge{display:none}
+@media (max-width:640px){
+  .cvd-messenger-center.cvd-p03 .cvd-messenger-nav.cva-nav5{grid-template-columns:repeat(5,minmax(0,1fr))!important}
+  .cvd-messenger-center.cvd-p03 .cvd-messenger-nav.cva-nav5 a{font-size:10.5px!important;padding:10px 2px!important}
+}
+@media (prefers-reduced-motion:reduce){.cva-bar i{transition:none}}

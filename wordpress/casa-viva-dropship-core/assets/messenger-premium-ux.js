@@ -23,6 +23,7 @@
       ruta: ['.cvd-messenger-route', '#entregas'],
       dinero: ['#ganancias', '.cvd-messenger-earnings', '#cierre', '.cvd-messenger-closeout', '#liquidaciones'],
       mas: ['.cvd-messenger-contacts', '.cvd-messenger-preparation', '#asistente', '#perfil'],
+      aprende: ['#aprende'], // 3.13.77: tutoriales del mensajero
     };
     const offersPanel = qs('#ofertas', center);
     const todayPanel = qs('.cvd-messenger-today', center);
@@ -53,6 +54,7 @@
       ['#contactos', 'mas'],
       ['#preparar', 'mas'],
       ['#asistente', 'mas'],
+      ['#aprende', 'aprende'],
     ]);
 
     const activate = (screen, focus = false) => {
@@ -110,11 +112,11 @@
       }, { capture: true });
     });
 
-    let initial = location.hash === '#ruta' ? 'ruta' : location.hash === '#ganancias' || location.hash === '#liquidaciones' ? 'dinero' : location.hash === '#perfil' || location.hash === '#contactos' || location.hash === '#preparar' || location.hash === '#asistente' ? 'mas' : 'hoy';
+    let initial = location.hash === '#aprende' ? 'aprende' : location.hash === '#ruta' ? 'ruta' : location.hash === '#ganancias' || location.hash === '#liquidaciones' ? 'dinero' : location.hash === '#perfil' || location.hash === '#contactos' || location.hash === '#preparar' || location.hash === '#asistente' ? 'mas' : 'hoy';
     if (location.hash === '#asistente' && assistant) assistant.classList.add('is-open');
     try {
       const stored = sessionStorage.getItem('cvdMessengerView');
-      if (['hoy', 'ruta', 'dinero', 'mas'].includes(stored) && !location.hash) initial = stored;
+      if (['hoy', 'ruta', 'dinero', 'mas', 'aprende'].includes(stored) && !location.hash) initial = stored;
     } catch (_) {}
     activate(initial, false);
   }

@@ -56,12 +56,17 @@
 
     const nav = qs('.cvd-messenger-nav', center);
     if (nav) {
-      nav.innerHTML = [
+      const tabs = [
         ['#hoy', 'Hoy'],
         ['#ruta', 'Ruta'],
         ['#ganancias', 'Dinero'],
         ['#perfil', 'Más'],
-      ].map(([href, label]) => `<a href="${href}">${label}</a>`).join('');
+      ];
+      // 3.13.77: «Aprende». Mientras le falte algo, la segunda pestaña; cuando lo vio todo, antes de «Más».
+      const learn = qs('#aprende', center);
+      if (learn) tabs.splice(learn.getAttribute('data-cva-done') === '1' ? 3 : 1, 0, ['#aprende', 'Aprende']);
+      nav.innerHTML = tabs.map(([href, label]) => `<a href="${href}">${label}</a>`).join('');
+      nav.classList.toggle('cva-nav5', !!learn);
     }
 
     const today = qs('.cvd-messenger-today', center);
