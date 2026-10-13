@@ -8,6 +8,17 @@ final class CVD_Registration {
 		add_filter( 'wp_authenticate_user', array( __CLASS__, 'block_pending_login' ), 20 );
 		add_action( 'template_redirect', array( __CLASS__, 'handle_secure_access_link' ), 1 );
 		add_action( 'woocommerce_login_form_end', array( __CLASS__, 'whatsapp_access_hint' ) );
+		add_action( 'woocommerce_login_form_start', array( __CLASS__, 'guest_order_hint' ) );
+	}
+
+	/**
+	 * 3.13.93 (auditoría de cliente 13-oct, punto 18): quien compró sin cuenta llega aquí buscando su pedido.
+	 * En la pestaña «Clientes», arriba del todo: no hace falta entrar, se mira con el número y el teléfono.
+	 */
+	public static function guest_order_hint(): void {
+		$tab = isset( $_GET['acceso'] ) ? sanitize_key( wp_unslash( $_GET['acceso'] ) ) : '';
+		if ( '' !== $tab && 'clientes' !== $tab ) { return; }
+		echo '<div class="cvd-notice cvd-guest-order-hint" style="margin:0 0 14px"><strong>¿Compraste sin cuenta?</strong> No hace falta entrar: mira tu pedido con su número y tu teléfono.<br><a class="cvd-primary" style="display:inline-block;margin-top:8px" href="' . esc_url( home_url( '/seguimiento/' ) ) . '">Ver mi pedido</a></div>';
 	}
 
 	/** En la pantalla de entrada: las gestoras sin contraseña entran pidiendo su enlace por WhatsApp. */
