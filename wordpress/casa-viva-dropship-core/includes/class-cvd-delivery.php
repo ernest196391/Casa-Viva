@@ -16,6 +16,7 @@ final class CVD_Delivery {
 		add_action( 'admin_post_cvd_delivery_pickup', array( __CLASS__, 'confirm_pickup' ) );
 		add_shortcode( 'casa_viva_delivery_control', array( __CLASS__, 'render_control' ) );
 		add_shortcode( 'casa_viva_order_tracking', array( __CLASS__, 'render_tracking' ) );
+		add_action( 'template_redirect', array( __CLASS__, 'tracking_page_request' ), 1 ); // 3.13.89: «Mi pedido» sin cuenta
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'initialize_order' ), 30 );
 		add_action( 'woocommerce_email_after_order_table', array( __CLASS__, 'render_email_tracking' ), 25, 4 );
@@ -765,9 +766,60 @@ final class CVD_Delivery {
 		return $allowed ? $order : null;
 	}
 
+	/** Intentos de «Mi pedido» por conexión cada media hora (número + teléfono): frena a quien pruebe números al azar. */
+	private const LOOKUP_LIMIT = 8;
+
+	/**
+	 * 3.13.89 (auditoría de cliente 13-oct, punto 18: quien compró sin cuenta no veía su pedido).
+	 * /seguimiento/ es personal: nunca en caché. Y recibe el formulario «Mi pedido» (número + teléfono, por POST para que
+	 * el teléfono no quede en la dirección). Si coinciden, lleva al enlace de seguimiento del pedido (el de su clave, el
+	 * mismo del vale). Si no, un aviso genérico que no dice si el número existe.
+	 */
+	public static function tracking_page_request(): void {
+		if ( ! is_page( 'seguimiento' ) ) { return; }
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) { define( 'DONOTCACHEPAGE', true ); }
+		do_action( 'litespeed_control_set_nocache', 'Casa Viva seguimiento: pedido personal' );
+		nocache_headers();
+		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! isset( $_POST['cvd_lookup_order'] ) ) { return; }
+		$back = home_url( '/seguimiento/' );
+		$key = 'cvd_lookup_' . md5( (string) ( $_SERVER['REMOTE_ADDR'] ?? '' ) . wp_salt( 'nonce' ) );
+		$tries = (int) get_transient( $key );
+		if ( $tries >= self::LOOKUP_LIMIT ) { wp_safe_redirect( add_query_arg( 'aviso', 'espera', $back ), 303 ); exit; }
+		set_transient( $key, $tries + 1, 30 * MINUTE_IN_SECONDS );
+		$number = absint( preg_replace( '/\D+/', '', (string) wp_unslash( $_POST['cvd_lookup_order'] ) ) );
+		$phone = substr( preg_replace( '/\D+/', '', (string) wp_unslash( $_POST['cvd_lookup_phone'] ?? '' ) ), -8 );
+		$order = $number ? wc_get_order( $number ) : false;
+		$found = $order instanceof WC_Order && ! $order instanceof WC_Order_Refund && 8 === strlen( $phone )
+			&& ! in_array( $order->get_status(), array( 'checkout-draft', 'trash' ), true )
+			&& (string) $order->get_order_number() === (string) $number;
+		if ( $found ) {
+			$phones = array_filter( array_map( static fn( $p ) => substr( preg_replace( '/\D+/', '', (string) $p ), -8 ), array( $order->get_billing_phone(), $order->get_meta( '_cvd_alternate_phone', true ) ) ), static fn( $p ) => 8 === strlen( $p ) );
+			$found = in_array( $phone, $phones, true );
+		}
+		wp_safe_redirect( $found ? self::tracking_url( $order ) : add_query_arg( 'aviso', 'no', $back ), 303 );
+		exit;
+	}
+
+	/** «Mi pedido» sin enlace: los pedidos hechos en este teléfono (los guarda la página de pedido recibido) y la búsqueda. */
+	private static function render_lookup(): string {
+		$notice = sanitize_key( wp_unslash( $_GET['aviso'] ?? '' ) );
+		$notices = array( 'no' => 'No encontramos un pedido con ese número y ese teléfono. Revisa los dos (el teléfono es el que se puso al comprar).', 'espera' => 'Demasiados intentos seguidos. Espera media hora o escríbenos por WhatsApp.' );
+		$help = class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::contact_url( 'Hola Casa Viva, quiero saber cómo va mi pedido número ' ) : '';
+		$html = '<section class="cvd-tracking cvd-tracking-empty cvd-my-order">';
+		$html .= '<div class="cvd-my-order__saved" data-my-orders hidden><h2>Tus pedidos en este teléfono</h2><ul></ul></div>';
+		$html .= '<form class="cvd-my-order__lookup" method="post" action="' . esc_url( home_url( '/seguimiento/' ) ) . '"><h2>Busca tu pedido</h2><p>No hace falta cuenta. Escribe el número del pedido y el teléfono que pusiste al comprar.</p>';
+		$html .= '<label for="cvd-lookup-order">Número del pedido</label><input id="cvd-lookup-order" name="cvd_lookup_order" inputmode="numeric" pattern="[0-9#\s]*" maxlength="12" autocomplete="off" placeholder="Ej.: 3598" required>';
+		$html .= '<label for="cvd-lookup-phone">Teléfono</label><input id="cvd-lookup-phone" name="cvd_lookup_phone" type="tel" inputmode="tel" maxlength="20" autocomplete="tel" placeholder="Ej.: 5 123 4567" required>';
+		if ( isset( $notices[ $notice ] ) ) { $html .= '<p class="cvd-my-order__error" role="alert">' . esc_html( $notices[ $notice ] ) . '</p>'; }
+		$html .= '<button class="cvd-primary" type="submit">Ver mi pedido</button></form>';
+		$html .= '<details class="cvd-my-order__link"><summary>Tengo el enlace del vale</summary><form data-tracking-link-form><label for="cvd-tracking-link">Pega el enlace</label><input id="cvd-tracking-link" type="url" inputmode="url" placeholder="https://casaviva.company/seguimiento/?pedido=…" required><button class="cvd-secondary" type="submit">Abrir</button><span data-tracking-link-error role="alert"></span></form></details>';
+		if ( $help ) { $html .= '<p class="cvd-my-order__help">¿No lo encuentras? <a href="' . esc_url( $help ) . '" target="_blank" rel="noopener">Escríbenos por WhatsApp</a> con el número del pedido.</p>'; }
+		return $html . '</section>';
+	}
+
 	public static function render_tracking(): string {
 		$order = self::tracking_order();
-		if ( ! $order ) { return '<section class="cvd-tracking cvd-tracking-empty"><h1>Seguir pedido</h1><form data-tracking-link-form><label for="cvd-tracking-link">Pega el enlace recibido</label><input id="cvd-tracking-link" type="url" inputmode="url" placeholder="https://casaviva.company/seguimiento/?pedido=…" required><button class="cvd-primary" type="submit">Consultar</button><span data-tracking-link-error role="alert"></span></form></section>'; }
+		if ( ! $order ) { return self::render_lookup(); }
 		$view = self::tracking_view( $order );
 		$status = $view['status'];
 		$current_rank = $view['rank'];
@@ -776,6 +828,7 @@ final class CVD_Delivery {
 		$courier = self::tracking_courier_text( $view );
 		$html .= '</ol><p class="cvd-tracking-courier" data-tracking-courier' . ( '' === $courier ? ' hidden' : '' ) . '>' . esc_html( $courier ) . '</p>';
 		$html .= '<div class="cvd-courier-location" data-courier-location hidden><strong>Ubicación del mensajero</strong><span data-location-time>Esperando actualización…</span><a class="cvd-secondary" data-location-link target="_blank" rel="noopener">Abrir en el mapa</a></div>';
+		if ( 'pickup' === $status ) { $html .= '<p class="cvd-tracking-pickup">Recogida en tienda: ' . esc_html( (string) get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ) ) . ' · <a href="' . esc_url( home_url( '/como-llegar/' ) ) . '">Cómo llegar</a></p>'; }
 		$map = esc_url( (string) CVD_Shipping_Rates::order_map_url( $order ) );
 		if ( $map && $current_rank >= 4 ) { $html .= '<a class="cvd-primary" href="' . $map . '" target="_blank" rel="noopener">Abrir dirección de entrega</a>'; }
 		if ( in_array( $status, array( 'incident', 'failed', 'returned', 'cancelled' ), true ) ) { $html .= '<p class="cvd-tracking-alert">Casa Viva está revisando esta entrega. Te contactaremos si necesitamos confirmar algún dato.</p>'; }
@@ -792,6 +845,7 @@ final class CVD_Delivery {
 	 * título, pasos (también Preparando y Listo para salir), primer nombre del mensajero y su hora.
 	 */
 	public static function tracking_view( WC_Order $order ): array {
+		if ( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return self::pickup_view( $order ); }
 		$status = self::status( $order );
 		$operation = sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) );
 		$labels = array( 'Pedido confirmado', 'Preparando', 'Listo para salir', 'Mensajero asignado', 'Recogido', 'En camino', 'Entregado' );
@@ -810,6 +864,25 @@ final class CVD_Delivery {
 			if ( $rank < 6 ) { $eta = trim( (string) $order->get_meta( '_cvd_bot_eta', true ) ); }
 		}
 		return array( 'status' => $status, 'title' => $title, 'rank' => $rank, 'steps' => $steps, 'messenger' => $messenger, 'eta' => $eta );
+	}
+
+	/** 3.13.89: recogida en tienda, con sus propios pasos (sin mensajero ni «en camino»). */
+	private static function pickup_view( WC_Order $order ): array {
+		$operation = sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) );
+		$wc_status = $order->get_status();
+		if ( in_array( $wc_status, array( 'cancelled', 'refunded', 'failed' ), true ) ) {
+			$rank = -1;
+		} elseif ( 'completed' === $wc_status || 'delivered' === $operation ) {
+			$rank = 3;
+		} elseif ( in_array( $operation, array( 'ready', 'with_courier' ), true ) ) {
+			$rank = 2;
+		} else {
+			$rank = 'preparing' === $operation ? 1 : 0;
+		}
+		$steps = array();
+		foreach ( array( 'Pedido confirmado', 'Preparando', 'Listo para recoger', 'Recogido' ) as $index => $label ) { $steps[] = array( 'label' => $label, 'done' => $index <= $rank ); }
+		$titles = array( -1 => 'Pedido cancelado', 0 => 'Pedido recibido', 1 => 'Estamos preparando tu pedido', 2 => 'Tu pedido está listo para recoger', 3 => 'Pedido recogido' );
+		return array( 'status' => -1 === $rank ? 'cancelled' : 'pickup', 'title' => $titles[ $rank ], 'rank' => $rank, 'steps' => $steps, 'messenger' => '', 'eta' => '' );
 	}
 
 	public static function tracking_courier_text( array $view ): string {

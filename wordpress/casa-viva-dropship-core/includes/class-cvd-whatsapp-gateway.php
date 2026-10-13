@@ -79,14 +79,19 @@ final class CVD_WhatsApp_Gateway {
 
 		self::delivery_card( $order, $is_pickup );
 
+		// 3.13.89 (auditoría 13-oct, punto 18): sin cuenta también se ve el pedido. El enlace lleva la clave del pedido
+		// (el mismo seguimiento del vale) y este teléfono lo recuerda en «Pedidos» (data-cvd-save-order, ver la plantilla).
+		$tracking_url = ! $order_url && class_exists( 'CVD_Delivery' ) ? CVD_Delivery::tracking_url( $order ) : '';
 		echo '<div class="cvd-thanks__secondary">';
 		if ( $order_url ) {
 			echo '<a class="cvd-thanks__button" href="' . esc_url( $order_url ) . '">Ver seguimiento</a>';
+		} elseif ( $tracking_url ) {
+			echo '<a class="cvd-thanks__button" href="' . esc_url( $tracking_url ) . '" data-cvd-save-order="' . esc_attr( $order->get_order_number() ) . '">Ver mi pedido</a>';
 		}
 		echo '<a class="cvd-thanks__button" href="' . esc_url( wc_get_page_permalink( 'shop' ) ) . '">Seguir comprando</a>';
 		echo '</div>';
-		if ( ! $order_url && ! is_user_logged_in() ) {
-			echo '<p class="cvd-thanks__note">Para ver tus pedidos aquí, inicia sesión o crea tu cuenta antes de tu próxima compra.</p>';
+		if ( $tracking_url ) {
+			echo '<p class="cvd-thanks__note">Tu pedido es el <strong>#' . esc_html( $order->get_order_number() ) . '</strong>. Para ver cómo va no hace falta cuenta: toca «Ver mi pedido», o en «Pedidos» escribe este número y el teléfono del pedido (' . esc_html( wp_parse_url( home_url( '/' ), PHP_URL_HOST ) . '/seguimiento' ) . ').</p>';
 		}
 		echo '</section>';
 	}

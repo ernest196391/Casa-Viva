@@ -31,6 +31,18 @@ defined( 'ABSPATH' ) || exit;
 			<?php endif; ?>
 			<p class="cvd-thanks__back" style="margin-top:10px;text-align:center"><a class="button" href="<?php echo esc_url( home_url( '/tienda/' ) ); ?>">Volver a la tienda</a></p>
 			<script>
+			// 3.13.89: este teléfono recuerda el pedido para «Pedidos» (/seguimiento/), sin cuenta. Solo en este navegador.
+			(function () {
+				var link = document.querySelector('[data-cvd-save-order]');
+				if (!link) return;
+				try {
+					var key = 'cvd_mis_pedidos', list = JSON.parse(window.localStorage.getItem(key) || '[]');
+					var number = link.getAttribute('data-cvd-save-order');
+					list = (Array.isArray(list) ? list : []).filter(function (o) { return o && String(o.n) !== number; });
+					list.unshift({ n: number, u: link.href, t: Date.now() });
+					window.localStorage.setItem(key, JSON.stringify(list.slice(0, 10)));
+				} catch (ignore) {}
+			})();
 			// Al volver de WhatsApp: el pedido ya está hecho; se dice claramente y se ofrece seguir comprando.
 			(function () {
 				var btn = document.querySelector('.cvd-thanks__whatsapp');

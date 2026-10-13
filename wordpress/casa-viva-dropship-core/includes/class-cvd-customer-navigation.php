@@ -57,6 +57,7 @@ final class CVD_Customer_Navigation {
 		if ( function_exists( 'is_cart' ) && is_cart() ) { return 'cart'; }
 		if ( function_exists( 'is_account_page' ) && is_account_page() ) { return function_exists( 'is_wc_endpoint_url' ) && is_wc_endpoint_url( 'orders' ) ? 'orders' : 'account'; }
 		if ( function_exists( 'is_shop' ) && ( is_shop() || is_product_category() || is_product_tag() ) ) { return 'categories'; }
+		if ( is_page( 'seguimiento' ) ) { return 'orders'; }
 		return is_front_page() ? 'home' : '';
 	}
 
@@ -73,7 +74,8 @@ final class CVD_Customer_Navigation {
 		if ( ! self::is_customer_surface() || ! function_exists( 'wc_get_page_permalink' ) ) { return; }
 		$active = self::active_key();
 		$account_url = wc_get_page_permalink( 'myaccount' );
-		$orders_url = is_user_logged_in() ? wc_get_account_endpoint_url( 'orders' ) : $account_url;
+		// 3.13.89 (auditoría 13-oct, punto 18): sin sesión, «Pedidos» lleva a «Mi pedido» (número + teléfono), no a entrar.
+		$orders_url = is_user_logged_in() ? wc_get_account_endpoint_url( 'orders' ) : home_url( '/seguimiento/' );
 		echo '<nav class="cvd-customer-nav" aria-label="Navegación principal">';
 		echo self::item( 'home', 'Inicio', home_url( '/' ), '⌂', $active );
 		echo self::item( 'categories', 'Comprar', wc_get_page_permalink( 'shop' ), '▦', $active );

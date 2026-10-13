@@ -4,6 +4,25 @@
   var linkForm=document.querySelector('[data-tracking-link-form]');
   if(linkForm)linkForm.addEventListener('submit',function(event){event.preventDefault();var input=linkForm.querySelector('input'),error=linkForm.querySelector('[data-tracking-link-error]');try{var url=new URL(input.value.trim());if(url.origin!==location.origin||url.pathname.replace(/\/+$/,'')!=='/seguimiento'||!url.searchParams.get('pedido')||!url.searchParams.get('clave'))throw new Error('invalid');location.assign(url.href);}catch(ignore){error.textContent='Ese enlace no es válido. Copia el enlace completo recibido con el pedido.';}});
 
+  // 3.13.89: «Tus pedidos en este teléfono». Los guarda la página de pedido recibido, solo en este navegador.
+  var savedBox = document.querySelector('[data-my-orders]');
+  if (savedBox) {
+    var saved = [];
+    try { saved = JSON.parse(window.localStorage.getItem('cvd_mis_pedidos') || '[]'); } catch (ignore) { saved = []; }
+    saved = Array.isArray(saved) ? saved.filter(function (o) { return o && o.n && typeof o.u === 'string' && o.u.indexOf(location.origin + '/seguimiento/') === 0; }) : [];
+    if (saved.length) {
+      var savedList = savedBox.querySelector('ul');
+      saved.slice(0, 10).forEach(function (o) {
+        var li = document.createElement('li'), a = document.createElement('a');
+        a.href = o.u; a.className = 'cvd-secondary'; a.textContent = 'Pedido #' + String(o.n).replace(/\D/g, '');
+        li.appendChild(a);
+        if (o.t) { var when = document.createElement('small'); when.textContent = ' ' + new Date(o.t).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }); li.appendChild(when); }
+        savedList.appendChild(li);
+      });
+      savedBox.hidden = false;
+    }
+  }
+
   var watchId = null;
   var activeOrder = 0;
   var lastSentAt = 0;

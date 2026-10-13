@@ -33,3 +33,22 @@ form.variations_form.cvd-pick-hint table.variations{outline:3px solid rgba(163,9
 html body.woocommerce-checkout #billing_address_2_field>label.screen-reader-text{position:static!important;display:block;width:auto!important;height:auto!important;margin:0 0 4px!important;padding:0!important;overflow:visible!important;clip:auto!important;clip-path:none!important;white-space:normal!important}
 
 @media(prefers-reduced-motion:reduce){form.variations_form.cvd-pick-hint table.variations{transition:none}}
+
+/* 3.13.89 (auditoría 13-oct, punto 20): «Regala a tu familia» en la ficha es una línea corta debajo de la descripción. */
+.cvm-fuera-linea{max-width:720px;margin:16px auto;padding:10px 14px;border-radius:14px;background:#F3EBDD;color:#2B2420;font-size:14px;line-height:1.45}
+.cvm-fuera-linea a{font-weight:600;white-space:nowrap}
+
+/* 3.13.89 (punto 18): «Mi pedido» sin cuenta en /seguimiento/: pedidos de este teléfono y búsqueda por número + teléfono. */
+.cvd-my-order{max-width:520px;margin:0 auto}
+.cvd-my-order h2{font-size:20px;margin:0 0 6px}
+.cvd-my-order__lookup,.cvd-my-order__saved{display:grid;gap:8px;margin:0 0 20px}
+.cvd-my-order__lookup p{margin:0 0 4px}
+.cvd-my-order input{width:100%;min-height:46px;font-size:16px;box-sizing:border-box}
+.cvd-my-order__saved ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+.cvd-my-order__saved li{display:flex;align-items:center;gap:6px}
+.cvd-my-order__error{color:#A3361F;font-weight:600;margin:0}
+.cvd-my-order__link{margin:0 0 16px}
+.cvd-my-order__link summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center}
+.cvd-my-order__link form{display:grid;gap:8px}
+.cvd-my-order__help{font-size:14px}
+.cvd-tracking-pickup{margin:10px 0;font-size:15px}

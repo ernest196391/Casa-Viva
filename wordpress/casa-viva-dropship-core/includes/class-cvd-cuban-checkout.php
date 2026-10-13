@@ -349,12 +349,15 @@ final class CVD_Cuban_Checkout {
 			'class' => array( 'form-row-last', 'cvd-delivery-field', 'cvd-change-field' ), 'priority' => 125,
 		);
 		// 3.13.70: armado por el mensajero (solo mensajería: cvd-delivery-field se oculta con «Recogida en tienda»).
-		$fields['billing'][ self::ASSEMBLY_FIELD ] = array(
-			'type' => 'select', 'label' => 'Armado por el mensajero', 'required' => false,
-			'options' => array( '' => 'No' ) + array_map( static fn( array $a ): string => $a['option'], self::ASSEMBLY ), 'default' => '',
-			'description' => '¿Hay que armar el producto? Se le paga aparte al mensajero, como la mensajería: no se suma al total.',
-			'class' => array( 'form-row-wide', 'cvd-delivery-field', 'cvd-assembly-field' ), 'priority' => 126,
-		);
+		// 3.13.89: solo si en el carrito hay algo que se arma (assembly_offered()).
+		if ( self::assembly_offered() ) {
+			$fields['billing'][ self::ASSEMBLY_FIELD ] = array(
+				'type' => 'select', 'label' => 'Armado por el mensajero', 'required' => false,
+				'options' => array( '' => 'No' ) + array_map( static fn( array $a ): string => $a['option'], self::ASSEMBLY ), 'default' => '',
+				'description' => '¿Hay que armar el producto? Se le paga aparte al mensajero, como la mensajería: no se suma al total.',
+				'class' => array( 'form-row-wide', 'cvd-delivery-field', 'cvd-assembly-field' ), 'priority' => 126,
+			);
+		}
 		$fields['billing']['billing_cvd_map_url'] = array(
 			'type'        => 'url',
 			'label'       => 'Ubicación exacta',
@@ -624,6 +627,38 @@ final class CVD_Cuban_Checkout {
 	}
 
 	// ---------- Armado por el mensajero (3.13.70) ----------
+
+	/** 3.13.89: productos que se arman, por su nombre (sin tildes, en minúscula; singular o plural). */
+	private const ASSEMBLY_WORDS = '/\b(?:escritorio|silla|sillon|mesa|mesita|estante|estanteria|librero|repisa|zapatera|perchero|percha doble|closet|armario|gavetero|cama|litera|cuna|corral|mueble|sofa|butaca|banqueta|taburete|tocador|aparador|vitrina|gondola|organizador (?:multifuncional|multiusos|de \d+ niveles|de bano))(?:s|es)?\b/';
+	/** …salvo lo que solo los nombra (forro para sillas, lámpara de mesa) o no se arma (plegable, soporte de TV). */
+	private const ASSEMBLY_NOT = '/\b(?:forro|funda|lampara|mantel|protector|cojin|plegable|refrigerad\w*|cables?|ganchos?|casco|soporte|alfombras?|sabanas?|edredon|colchon|cortinas?)\b/';
+
+	/**
+	 * 3.13.89 (auditoría de cliente 13-oct, punto 19: salía «Armado por el mensajero» hasta con una sombrilla).
+	 * Se ofrece si el carrito trae algo que se arma (muebles, estantes, camas, sillas, zapateras…). El equipo (gestoras,
+	 * tienda) lo ve siempre: conoce sus productos y la regla por nombre puede fallar. Un producto se puede forzar con el
+	 * dato `_cvd_needs_assembly` = yes | no (en el producto o en su producto padre).
+	 */
+	public static function assembly_offered(): bool {
+		$user = wp_get_current_user();
+		if ( $user->exists() && array_intersect( (array) $user->roles, array_merge( self::TEAM_ROLES, array( 'cvd_clerk', 'cvd_operator' ) ) ) ) { return true; }
+		if ( ! function_exists( 'WC' ) || ! WC()->cart ) { return true; }
+		foreach ( WC()->cart->get_cart() as $item ) {
+			$product = $item['data'] ?? null;
+			if ( $product instanceof WC_Product && self::needs_assembly( $product ) ) { return true; }
+		}
+		return false;
+	}
+
+	public static function needs_assembly( WC_Product $product ): bool {
+		foreach ( array_filter( array( $product->get_id(), $product->get_parent_id() ) ) as $id ) {
+			$flag = sanitize_key( (string) get_post_meta( $id, '_cvd_needs_assembly', true ) );
+			if ( 'yes' === $flag ) { return true; }
+			if ( 'no' === $flag ) { return false; }
+		}
+		$name = CVD_Product_Search::normalize( $product->get_name() );
+		return (bool) preg_match( self::ASSEMBLY_WORDS, $name ) && ! preg_match( self::ASSEMBLY_NOT, $name );
+	}
 
 	/**
 	 * Armado del pedido o null (sin armado, recogida en tienda o pedido de antes de 3.13.70).

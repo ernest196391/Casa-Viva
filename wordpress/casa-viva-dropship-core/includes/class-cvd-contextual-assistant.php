@@ -177,7 +177,8 @@ final class CVD_Contextual_Assistant {
 		return array(
 			'routeUrl'    => home_url( '/ruta-cv/' ),
 			'managersUrl' => home_url( '/gestores/' ),
-			'ordersUrl'   => function_exists( 'wc_get_account_endpoint_url' ) ? wc_get_account_endpoint_url( 'orders' ) : home_url( '/mi-cuenta/' ),
+			// 3.13.89: sin sesión, «Mis pedidos» es /seguimiento/ (número + teléfono, sin cuenta).
+			'ordersUrl'   => is_user_logged_in() && function_exists( 'wc_get_account_endpoint_url' ) ? wc_get_account_endpoint_url( 'orders' ) : home_url( '/seguimiento/' ),
 			'ratesUrl'    => home_url( '/tarifas-mensajeria/' ),
 			'shopUrl'     => function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'shop' ) : home_url( '/tienda/' ),
 			'cartUrl'     => function_exists( 'wc_get_cart_url' ) ? wc_get_cart_url() : home_url( '/carrito/' ),

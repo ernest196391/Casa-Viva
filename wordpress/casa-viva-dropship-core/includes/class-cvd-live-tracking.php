@@ -69,7 +69,11 @@ final class CVD_Live_Tracking {
 	public static function tracking( WP_REST_Request $request ) {
 		$order = self::authorized_order( $request );
 		if ( is_wp_error( $order ) ) { return $order; }
-		return rest_ensure_response( self::tracking_payload( $order ) );
+		// 3.13.89: el estado cambia a cada rato; ninguna caché (LiteSpeed guarda la API REST) debe congelarlo.
+		do_action( 'litespeed_control_set_nocache', 'Casa Viva seguimiento en vivo' );
+		$response = rest_ensure_response( self::tracking_payload( $order ) );
+		$response->header( 'Cache-Control', 'no-store' );
+		return $response;
 	}
 
 	public static function customer_response( WP_REST_Request $request ) {
