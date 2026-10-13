@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.13.71
+ * Version: 3.13.72
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.13.71' );
+define( 'CVD_VERSION', '3.13.72' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -40,6 +40,7 @@ require_once CVD_DIR . 'includes/class-cvd-panel-bridge.php';
 require_once CVD_DIR . 'includes/class-cvd-clients.php';
 require_once CVD_DIR . 'includes/class-cvd-site-privacy.php';
 require_once CVD_DIR . 'includes/class-cvd-market-bridge.php';
+require_once CVD_DIR . 'includes/class-cvd-departments.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-app.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-busca.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-fotos.php';
@@ -79,6 +80,7 @@ add_action(
 			CVD_Clients::register();
 			CVD_Site_Privacy::register();
 			CVD_Market_Bridge::register();
+			CVD_Departments::register(); // 3.13.72: Tienda por departamentos (Lennys y Cely, 13-oct).
 			CVD_Gestora_App::register();
 			CVD_Gestora_Busca::register();
 			CVD_Gestora_Fotos::register();

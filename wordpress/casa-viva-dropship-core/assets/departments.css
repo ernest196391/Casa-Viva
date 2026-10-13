@@ -1,0 +1,40 @@
+/* 3.13.72 · Tienda por departamentos. Marca Casa Viva: crema #F6F1E6, marrón #2B2420, petróleo #0D3B45, ámbar #A35A1F; títulos Cinzel, texto Figtree. */
+@font-face{font-family:"Figtree";font-style:normal;font-weight:600;font-display:swap;src:url(fonts/figtree-latin-600.woff2) format("woff2")}
+@font-face{font-family:"Cinzel";font-style:normal;font-weight:600;font-display:swap;src:url(fonts/cinzel-latin-600.woff2) format("woff2")}
+
+.cvd-depts{--cvd-crema:#F6F1E6;--cvd-marron:#2B2420;--cvd-suave:#5E544D;--cvd-petroleo:#0D3B45;--cvd-ambar:#A35A1F;--cvd-borde:#E0D5C1;
+	position:sticky;top:0;z-index:40;background:var(--cvd-crema);border:1px solid var(--cvd-borde);border-radius:16px;margin:0 0 18px;padding:10px;box-sizing:border-box}
+.cvd-depts__rail{display:flex;flex-wrap:wrap;gap:8px}
+.cvd-depts__chip{flex:none;display:inline-flex;align-items:center;min-height:40px;padding:8px 16px;border:1px solid var(--cvd-borde);border-radius:999px;background:#FFFDF8;color:var(--cvd-marron)!important;font:600 14px/1.2 "Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;text-decoration:none!important;white-space:nowrap;transition:background-color .15s,border-color .15s,color .15s}
+.cvd-depts__chip:hover{border-color:var(--cvd-ambar)}
+.cvd-depts__chip:focus-visible{outline:2px solid var(--cvd-ambar);outline-offset:2px}
+.cvd-depts__chip.is-active{background:var(--cvd-petroleo);border-color:var(--cvd-petroleo);color:var(--cvd-crema)!important}
+
+/* Portada: la franja va arriba del todo, a lo ancho, con las fichas dentro del ancho del contenido. */
+.cvd-depts--home{border-width:0 0 1px;border-radius:0;margin:0;padding:10px 0}
+.cvd-depts--home .cvd-depts__rail{width:min(100% - 32px,1200px);margin-inline:auto}
+
+/* Móvil: una sola fila que se desliza de lado, de borde a borde. */
+@media (max-width:700px){
+	.cvd-depts{border-width:0 0 1px;border-radius:0;margin:0 calc(50% - 50vw) 14px;padding:8px 0}
+	.cvd-depts--home{margin:0}
+	.cvd-depts__rail,.cvd-depts--home .cvd-depts__rail{flex-wrap:nowrap;width:auto;margin:0;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scrollbar-width:none;padding:2px 16px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
+	.cvd-depts__rail::-webkit-scrollbar{display:none}
+	.cvd-depts__chip{scroll-snap-align:start;min-height:40px;padding:8px 14px;font-size:14px}
+	.cvd-depts__chip:last-child{margin-right:24px}
+}
+
+/* «Todo» agrupado: título de cada departamento a lo ancho de la rejilla. */
+.woocommerce ul.products li.cvd-dept-head,.woocommerce ul.products li.cvd-dept-sub{grid-column:1/-1;list-style:none;margin:0;width:auto;float:none}
+.woocommerce ul.products li.cvd-dept-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px;padding:22px 2px 8px;border-bottom:2px solid #E0D5C1}
+.woocommerce ul.products li.cvd-dept-head:first-child{padding-top:4px}
+.cvd-dept-head h2{margin:0;color:#2B2420;font:600 19px/1.25 "Cinzel",Georgia,serif;letter-spacing:.08em;text-transform:uppercase}
+.cvd-dept-head a{color:#A35A1F!important;font:600 14px/1.3 "Figtree",system-ui,sans-serif;text-decoration:none!important;white-space:nowrap}
+.cvd-dept-head a:hover{text-decoration:underline!important}
+.woocommerce ul.products li.cvd-dept-sub{padding:10px 14px;border-radius:12px;background:#F6F1E6;color:#5E544D;font:400 14px/1.4 "Figtree",system-ui,sans-serif}
+.cvd-dept-sub span{margin-right:6px;color:#8A4B19;font-weight:600;letter-spacing:.04em;text-transform:uppercase;font-size:12px}
+
+/* Etiqueta de las tarjetas «Bajo pedido». */
+.cvd-market-badge{display:inline-block;align-self:flex-start;margin:6px 0 0;padding:3px 9px;border:1px solid #E8D9BF;border-radius:999px;background:#F6F1E6;color:#8A4B19;font:600 12px/1.3 "Figtree",system-ui,sans-serif}
+
+@media (prefers-reduced-motion:reduce){.cvd-depts__chip{transition:none}}

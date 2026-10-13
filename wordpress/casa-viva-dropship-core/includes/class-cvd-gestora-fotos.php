@@ -47,7 +47,14 @@ final class CVD_Gestora_Fotos {
 		foreach ( $products as $product ) {
 			if ( 'hidden' === $product->get_catalog_visibility() ) { continue; }
 			$terms = array();
-			foreach ( $product->get_category_ids() as $term_id ) {
+			// 3.13.72: los «Bajo pedido» ya tienen también su departamento; aquí siguen saliendo solo en «Bajo pedido»
+			// (Fotos para publicar enseña lo que hay en existencia por departamento).
+			$cat_ids = $product->get_category_ids();
+			if ( class_exists( 'CVD_Market_Bridge' ) && CVD_Market_Bridge::is_market_sku( (string) $product->get_sku() ) ) {
+				$market = get_term_by( 'slug', 'bajo-pedido', 'product_cat' );
+				if ( $market ) { $cat_ids = array( (int) $market->term_id ); }
+			}
+			foreach ( $cat_ids as $term_id ) {
 				$term = get_term( $term_id, 'product_cat' );
 				if ( ! $term || is_wp_error( $term ) || in_array( $term->slug, array( 'pruebas', 'sin-categorizar' ), true ) ) { continue; }
 				$terms[] = (int) $term_id;
