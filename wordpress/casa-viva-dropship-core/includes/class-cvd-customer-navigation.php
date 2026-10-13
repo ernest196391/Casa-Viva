@@ -11,6 +11,20 @@ final class CVD_Customer_Navigation {
 		add_filter( 'woocommerce_add_to_cart_fragments', array( __CLASS__, 'cart_fragments' ) );
 		add_action( 'wp_ajax_cvd_cart_count', array( __CLASS__, 'ajax_cart_count' ) );
 		add_action( 'wp_ajax_nopriv_cvd_cart_count', array( __CLASS__, 'ajax_cart_count' ) );
+		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'no_cache_store_api' ), 1, 3 );
+	}
+
+	/**
+	 * 3.13.90 (encontrado al revisar la auditoría, 13-oct): LiteSpeed guardaba en caché la API del carrito de WooCommerce
+	 * (GET /wp-json/wc/store/v1/cart) y la servía a otros visitantes. El panel del carrito (plugin de marca) enseñaba el
+	 * carrito de otra persona. Las rutas /wc/store son de cada sesión: nunca en caché.
+	 */
+	public static function no_cache_store_api( $result, $server, $request ) {
+		unset( $server );
+		if ( $request instanceof WP_REST_Request && 0 === strpos( (string) $request->get_route(), '/wc/store' ) ) {
+			do_action( 'litespeed_control_set_nocache', 'WooCommerce Store API: carrito de cada sesión' );
+		}
+		return $result;
 	}
 
 	private static function is_customer_surface(): bool {
