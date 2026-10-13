@@ -28,6 +28,9 @@ final class CVD_Departments {
 		add_action( 'woocommerce_archive_description', array( __CLASS__, 'render_bar' ), 2 );
 		add_action( 'wp_footer', array( __CLASS__, 'home_bar' ), 4 );
 		add_filter( 'posts_clauses', array( __CLASS__, 'group_clauses' ), 20, 2 );
+		// woocommerce_content() (el que usa el tema) no lanza woocommerce_shop_loop: el título va en the_post, justo antes
+		// de cada tarjeta. woocommerce_shop_loop queda para las plantillas que sí lo lanzan (sin repetir: ver $seen).
+		add_action( 'the_post', array( __CLASS__, 'on_the_post' ), 20, 2 );
 		add_action( 'woocommerce_shop_loop', array( __CLASS__, 'loop_separator' ), 5 );
 		add_action( 'woocommerce_after_shop_loop_item_title', array( __CLASS__, 'market_badge' ), 6 );
 	}
@@ -135,12 +138,21 @@ final class CVD_Departments {
 		return $product instanceof WC_Product && class_exists( 'CVD_Market_Bridge' ) && CVD_Market_Bridge::is_market_sku( (string) $product->get_sku() );
 	}
 
+	public static function on_the_post( $post, $query = null ): void {
+		if ( ! $post instanceof WP_Post || ! $query instanceof WP_Query || ! $query->is_main_query() || 'product' !== $post->post_type ) { return; }
+		// Solo dentro de la rejilla de productos (no en la cabecera ni en otros bucles).
+		if ( ! did_action( 'woocommerce_before_shop_loop' ) || did_action( 'woocommerce_after_shop_loop' ) ) { return; }
+		self::loop_separator( (int) $post->ID );
+	}
+
 	/** Títulos de departamento en «Todo» y el separador «Bajo pedido» entre lo de la tienda y lo bajo pedido. */
-	public static function loop_separator(): void {
+	public static function loop_separator( int $id = 0 ): void {
+		static $seen = array();
 		global $wp_query;
-		if ( ! self::is_catalog() || ! $wp_query instanceof WP_Query || ! in_the_loop() ) { return; }
-		$id = (int) get_the_ID();
-		if ( ! $id ) { return; }
+		if ( ! self::is_catalog() || ! $wp_query instanceof WP_Query ) { return; }
+		$id = $id ?: (int) get_the_ID();
+		if ( ! $id || isset( $seen[ $id ] ) ) { return; }
+		$seen[ $id ] = true;
 		$grouped = (bool) $wp_query->get( 'cvd_grouped' );
 		$market = self::is_market( $id );
 		if ( $grouped ) {

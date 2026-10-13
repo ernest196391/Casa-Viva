@@ -19,6 +19,8 @@
 	.cvd-depts{border-width:0 0 1px;border-radius:0;margin:0 calc(50% - 50vw) 14px;padding:8px 0}
 	.cvd-depts--home{margin:0}
 	.cvd-depts__rail,.cvd-depts--home .cvd-depts__rail{flex-wrap:nowrap;width:auto;margin:0;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scrollbar-width:none;padding:2px 16px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
+	/* width:0 + min-width:100%: la fila no ensancha la página (el body del tema es una rejilla que mide el contenido). */
+	.cvd-depts__rail,.cvd-depts--home .cvd-depts__rail{width:0;min-width:100%;box-sizing:border-box}
 	.cvd-depts__rail::-webkit-scrollbar{display:none}
 	.cvd-depts__chip{scroll-snap-align:start;min-height:40px;padding:8px 14px;font-size:14px}
 	.cvd-depts__chip:last-child{margin-right:24px}
