@@ -55,3 +55,7 @@ html body.woocommerce-checkout #billing_address_2_field>label.screen-reader-text
 
 /* 3.13.93 (auditoría 13-oct, punto 23): hueco vacío arriba de la entrada en Mi cuenta (título de WooCommerce vacío). */
 .woocommerce-account .woocommerce>h2:empty{display:none;margin:0}
+/* El tema deja 62–66 px arriba de la tarjeta para ese título: si está vacío, la tarjeta empieza normal. */
+.woocommerce-account:not(.logged-in) .woocommerce>h2:empty+form.login{padding-top:24px}
+/* 3.13.94: «Tus pedidos en este teléfono» solo cuando hay alguno guardado (display:grid tapaba el atributo hidden). */
+.cvd-my-order__saved[hidden]{display:none}
