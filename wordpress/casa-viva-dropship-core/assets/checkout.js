@@ -189,7 +189,22 @@
         $('<div>', { class: 'cvd-pickup-note', text: 'Recogida: ' + cvdCheckout.pickupAddress })
       );
     }
+    syncPhoneRequired(delivery);
     syncPayment(delivery);
+  }
+
+  // 3.13.69 (Dany, 13-oct): con «Recogida en tienda» el teléfono de quien recibe es opcional; con mensajería, obligatorio.
+  // La web lo comprueba igual al finalizar (CVD_Cuban_Checkout::validate): aquí solo se enseña el asterisco o «(opcional)».
+  function syncPhoneRequired(delivery) {
+    var $row = $('#billing_phone_field');
+    if (!$row.length) return;
+    var $label = $row.find('label').first();
+    $row.toggleClass('validate-required', delivery);
+    $('#billing_phone').attr('aria-required', delivery ? 'true' : 'false');
+    if (!delivery) $row.removeClass('woocommerce-invalid woocommerce-invalid-required-field');
+    $label.find('.required').toggle(delivery);
+    $label.find('.cvd-phone-optional').remove();
+    if (!delivery && !$label.find('.optional').length) $label.append($('<span>', { class: 'optional cvd-phone-optional', text: '(opcional)' }));
   }
 
   // Forma de pago (3.13.67, Lennys): cuánto es con la tasa de hoy (mismas cuentas que CVD_Cuban_Checkout::payment_amount),
@@ -450,7 +465,7 @@
 	  // Mensajería (3.13.53): el precio de la lista o «por confirmar con la tienda» si el reparto no está en la lista.
 	  var fee = $.trim($('.cvd-shipping-cup td strong').first().text());
 	  var shipping = pickup ? '' : (/\d/.test(fee) ? fee : 'por confirmar con la tienda (tu reparto no está en la lista)');
-	  return line('Productos', rows.join(' · ')) + line('Total productos', total) + line('Mensajería', shipping) + line('Entrega', where) + line('Cuándo', when) + line('Pago', change) + line('Recibe', [fieldText('#billing_first_name'), fieldText('#billing_last_name')].join(' ') + ' · ' + fieldText('#billing_phone'));
+	  return line('Productos', rows.join(' · ')) + line('Total productos', total) + line('Mensajería', shipping) + line('Entrega', where) + line('Cuándo', when) + line('Pago', change) + line(pickup ? 'Recoge' : 'Recibe', [$.trim([fieldText('#billing_first_name'), fieldText('#billing_last_name')].join(' ')), fieldText('#billing_phone') || (pickup ? 'sin teléfono' : '')].filter(Boolean).join(' · '));
 	}
 	function showReview(onConfirm) {
 	  $('#cvd-review').remove();

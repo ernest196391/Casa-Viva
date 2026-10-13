@@ -312,7 +312,9 @@ final class CVD_Bot_Bridge {
 			$order->update_meta_data( '_cvd_whatsapp_verified', $phone );
 			$order->add_order_note( substr( $typed, -8 ) === substr( $phone, -8 )
 				? 'VivaBot: el cliente envió el vale desde su WhatsApp (+' . $phone . ').'
-				: 'VivaBot: el cliente envió el vale desde +' . $phone . ', distinto del teléfono escrito en la web (' . $typed . '). Se usa el de WhatsApp.' );
+				: ( '' === $typed // 3.13.69: en la recogida en tienda el teléfono es opcional
+					? 'VivaBot: el cliente envió el vale desde +' . $phone . ' (en la web no escribió teléfono). Se usa ese.'
+					: 'VivaBot: el cliente envió el vale desde +' . $phone . ', distinto del teléfono escrito en la web (' . $typed . '). Se usa el de WhatsApp.' ) );
 			$order->save();
 		}
 		return self::no_cache( array( 'ok' => true, 'matches' => substr( $typed, -8 ) === substr( $phone, -8 ) ) );

@@ -241,7 +241,9 @@ final class CVD_Cuban_Checkout {
 		$fields['billing']['billing_last_name']['class'] = array( 'form-row-wide' );
 		$fields['billing']['billing_last_name']['priority'] = 30;
 		$fields['billing']['billing_phone']['label'] = 'WhatsApp o teléfono de quien recibe';
-		$fields['billing']['billing_phone']['required'] = true;
+		// 3.13.69 (Dany, 13-oct): con «Recogida en tienda» el teléfono es opcional (el cliente pasa por la tienda);
+		// con mensajería sigue siendo obligatorio. checkout.js cambia el asterisco por «(opcional)» al elegir recogida.
+		$fields['billing']['billing_phone']['required'] = $is_delivery;
 		$fields['billing']['billing_phone']['class'] = array( 'form-row-wide' );
 		$fields['billing']['billing_phone']['autocomplete'] = 'tel';
 		$fields['billing']['billing_phone']['priority'] = 40;
@@ -399,10 +401,14 @@ final class CVD_Cuban_Checkout {
 		if ( ! in_array( $type, array( 'delivery', 'pickup' ), true ) ) {
 			$errors->add( 'cvd_fulfillment', 'Selecciona mensajería o recogida en tienda.' );
 		}
+		$phone = isset( $_POST['billing_phone'] ) ? preg_replace( '/\D+/', '', wp_unslash( $_POST['billing_phone'] ) ) : '';
 		if ( 'delivery' !== $type ) {
+			// Recogida (3.13.69): el teléfono puede ir vacío, pero si lo escriben tiene que estar completo.
+			if ( '' !== $phone && strlen( $phone ) < 8 ) {
+				$errors->add( 'billing_phone', 'Escribe el teléfono completo (8 cifras) o déjalo vacío: en la recogida en tienda es opcional.' );
+			}
 			return;
 		}
-		$phone = isset( $_POST['billing_phone'] ) ? preg_replace( '/\D+/', '', wp_unslash( $_POST['billing_phone'] ) ) : '';
 		if ( strlen( $phone ) < 8 ) {
 			$errors->add( 'billing_phone', 'Escribe un teléfono válido de quien recibe.' );
 		}
