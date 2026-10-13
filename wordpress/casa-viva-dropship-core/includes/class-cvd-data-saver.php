@@ -24,12 +24,16 @@ final class CVD_Data_Saver {
 		add_filter( 'wp_get_attachment_image_attributes', array( __CLASS__, 'card_image_sizes' ), 20, 3 );
 	}
 
-	/** 1. Sin rel=prefetch del código del carrito y del pago de WooCommerce (assets/client/blocks/). */
+	/**
+	 * 1. Sin rel=prefetch del código del carrito de WooCommerce: el bloque del carrito y todo lo que necesita (React y
+	 * los paquetes de WordPress en wp-includes/js/dist), 51 archivos, ~627 KB comprimidos medidos el 13-oct.
+	 * WooCommerce los añade como array con 'as' => script|style; WordPress no añade ninguno así.
+	 */
 	public static function no_cart_prefetch( $urls, $relation_type ) {
 		if ( 'prefetch' !== $relation_type || ! is_array( $urls ) ) { return $urls; }
 		return array_values( array_filter( $urls, static function ( $url ): bool {
-			$href = is_array( $url ) ? (string) ( $url['href'] ?? '' ) : (string) $url;
-			return false === strpos( $href, '/woocommerce/assets/client/blocks/' );
+			if ( ! is_array( $url ) ) { return false === strpos( (string) $url, '/woocommerce/assets/client/blocks/' ); }
+			return ! in_array( (string) ( $url['as'] ?? '' ), array( 'script', 'style' ), true );
 		} ) );
 	}
 
