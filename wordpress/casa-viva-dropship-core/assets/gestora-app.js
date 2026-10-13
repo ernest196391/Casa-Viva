@@ -42,7 +42,14 @@
     if (e.target.closest('[data-cvga-logout]') && !window.confirm('¿Salir de tu cuenta? Para volver a entrar escribe "mi acceso" al WhatsApp de Casa Viva.')) { e.preventDefault(); return; }
     if (e.target.closest('[data-cvga-curru]')) { var launcher = document.querySelector('.cvd-assistant-launcher'); if (launcher) launcher.click(); return; }
     var save = e.target.closest('[data-cvga-save-qr]');
-    if (save) { var canvas = app.querySelector('#cvga-tienda canvas'); if (canvas) { var link = document.createElement('a'); link.download = 'mi-tienda-casa-viva.png'; link.href = canvas.toDataURL('image/png'); link.click(); } }
+    if (save) {
+      // 3.13.76: la imagen que se guarda es grande (~1000 px) y con más blanco alrededor (6 módulos): en el estado de
+      // WhatsApp el fondo es negro y comprime la foto.
+      var canvas = app.querySelector('#cvga-tienda canvas'), text = canvas && canvas.getAttribute('data-qr');
+      var download = function (url) { var link = document.createElement('a'); link.download = 'mi-tienda-casa-viva.png'; link.href = url; document.body.appendChild(link); link.click(); link.remove(); };
+      if (text && window.CVQRCode && window.cvdQrOptions) { window.CVQRCode.toDataURL(text, window.cvdQrOptions(text, 1024, 6), function (err, url) { if (!err && url) download(url); else if (canvas) download(canvas.toDataURL('image/png')); }); }
+      else if (canvas) { download(canvas.toDataURL('image/png')); }
+    }
   });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') app.classList.remove('is-open'); });
   try { if (localStorage.getItem('cvga-mini') === '1') app.classList.add('is-mini'); } catch (ignore) {}

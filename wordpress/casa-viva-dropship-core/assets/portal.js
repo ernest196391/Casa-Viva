@@ -41,7 +41,23 @@
   window.addEventListener('hashchange', markActiveNav); markActiveNav();
 
   if (window.CVQRCode) document.querySelectorAll('[data-pickup-qr]').forEach(function (canvas) { window.CVQRCode.toCanvas(canvas, canvas.getAttribute('data-pickup-qr'), { width: 360, margin: 2, errorCorrectionLevel: 'M' }); });
-  if (window.CVQRCode) document.querySelectorAll('canvas[data-qr]').forEach(function (canvas) { window.CVQRCode.toCanvas(canvas, canvas.getAttribute('data-qr'), { width: 220, margin: 2, errorCorrectionLevel: 'M' }); });
+  // QR de la tienda y de invitar (3.13.76, Niurka: «parece ilegible»). Antes: 220 px, margen de 2 módulos (la norma pide 4)
+  // y la imagen guardada igual de pequeña; en el estado de WhatsApp (fondo negro) los lectores no lo encontraban.
+  // Ahora: margen de 4, negro sobre blanco y un número ENTERO de píxeles de la pantalla por módulo (sin reescalar: nítido
+  // en cualquier móvil). En pantalla, corrección M (módulos más grandes, unos 240 px); la imagen que se guarda, Q.
+  function cvdQrOptions(text, px, margin, level) {
+    level = level || 'Q'; margin = margin || 4;
+    var qr = window.CVQRCode.create(text, { errorCorrectionLevel: level });
+    return { errorCorrectionLevel: level, margin: margin, scale: Math.max(2, Math.floor((px || 512) / (qr.modules.size + margin * 2))), color: { dark: '#000000', light: '#ffffff' } };
+  }
+  window.cvdQrOptions = cvdQrOptions;
+  if (window.CVQRCode) document.querySelectorAll('canvas[data-qr]').forEach(function (canvas) {
+    var text = canvas.getAttribute('data-qr'), dpr = Math.min(3, Math.max(1, window.devicePixelRatio || 1));
+    try {
+      var opts = cvdQrOptions(text, 240 * dpr, 4, 'M');
+      window.CVQRCode.toCanvas(canvas, text, opts, function () { canvas.style.width = (canvas.width / dpr) + 'px'; canvas.style.height = ''; });
+    } catch (ignore) {}
+  });
   function closeExpandedQr() { var expanded = document.querySelector('.cvd-pickup-qr.is-expanded'); if (expanded) expanded.classList.remove('is-expanded'); document.body.classList.remove('cvd-qr-open'); }
   document.addEventListener('click', function (event) { var button = event.target.closest('[data-qr-expand]'); if (button) { var qr = button.closest('.cvd-pickup-qr'); var opening = !qr.classList.contains('is-expanded'); closeExpandedQr(); if (opening) { qr.classList.add('is-expanded'); document.body.classList.add('cvd-qr-open'); } return; } if (event.target.matches('.cvd-pickup-qr.is-expanded')) closeExpandedQr(); });
   document.addEventListener('keydown', function (event) { if (event.key === 'Escape') closeExpandedQr(); });

@@ -73,7 +73,7 @@ body.cvga-body *,body.cvga-body *::before,body.cvga-body *::after{box-sizing:bor
 .cvga-todo li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--ga-line)}
 .cvga-todo li:first-child{border-top:0}
 .cvga-qr-card{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
-.cvga-qr-card canvas{width:160px;height:160px;border-radius:10px;background:#fff}
+.cvga-qr-card canvas{width:200px;height:auto;aspect-ratio:1;max-width:100%;border-radius:8px;background:#fff;image-rendering:pixelated;color-scheme:only light} /* 3.13.76: portal.js le pone el ancho exacto (un número entero de píxeles por módulo); nunca se oscurece */
 .cvga-qr-card div{flex:1;min-width:200px}
 .cvga-tools{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
 .cvga-tool{display:flex;flex-direction:column;gap:6px}
