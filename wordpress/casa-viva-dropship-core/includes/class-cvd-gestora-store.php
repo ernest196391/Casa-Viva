@@ -6,9 +6,14 @@ defined( 'ABSPATH' ) || exit;
 final class CVD_Gestora_Store {
 	private static bool $resolving_price = false;
 	private static array $price_maps = array();
+	private static ?array $contact = null;
+	/** Páginas de atención al cliente con un botón de WhatsApp escrito en la página (3.13.88: van a la gestora en su tienda). */
+	private const CONTACT_PAGES = array( 'atencion-al-cliente', 'formas-de-pago', 'condiciones-de-mensajeria', 'como-llegar', 'tarifas-mensajeria', 'cotizar-mensajeria', 'seguimiento' );
 
 	public static function register(): void {
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ) );
+		// Prioridad 9: antes de los shortcodes (11), así solo cambia el botón escrito en la página, nunca el de «mi acceso».
+		add_filter( 'the_content', array( __CLASS__, 'contact_in_page_content' ), 9 );
 		foreach ( array( 'woocommerce_product_get_price', 'woocommerce_product_get_regular_price', 'woocommerce_product_get_sale_price', 'woocommerce_product_variation_get_price', 'woocommerce_product_variation_get_regular_price', 'woocommerce_product_variation_get_sale_price' ) as $filter ) {
 			add_filter( $filter, array( __CLASS__, 'customer_price' ), 30, 2 );
 		}
@@ -260,6 +265,101 @@ final class CVD_Gestora_Store {
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT product_id,price FROM {$table} WHERE gestora_user_id=%d", $gestora_id ), ARRAY_A );
 		self::$price_maps[ $gestora_id ] = wp_list_pluck( $rows, 'price', 'product_id' );
 		return self::$price_maps[ $gestora_id ];
+	}
+
+	/**
+	 * 3.13.88 (D52, Ernesto 13-oct: «usamos el WhatsApp de la gestora en toda su tienda»). A quién escribe por WhatsApp
+	 * quien mira la web (pie, botón verde, «Pedir por WhatsApp» de la ficha, Ayuda, páginas de atención):
+	 * - en la tienda de una gestora (su enlace ?ref= en esta visita, o el último enlace guardado en este navegador,
+	 *   CVD_Attribution::current_referral_owner()), a ELLA. Es la misma gestora que se queda la venta;
+	 * - un cliente con cuenta que no viene por ningún enlace, a su gestora de siempre (la que se queda sus compras);
+	 * - el equipo (gestoras, mensajeros, tienda) habla con Casa Viva. La gestora que abre SU tienda ve su número,
+	 *   lo mismo que ven sus clientes;
+	 * - si no, Casa Viva (cvd_central_whatsapp).
+	 * Nunca sale el número de otra gestora. Las páginas con gestora no se guardan en caché (CVD_Attribution).
+	 *
+	 * @return array{phone:string, display:string, name:string, gestora_id:int}
+	 */
+	public static function contact(): array {
+		if ( null !== self::$contact ) { return self::$contact; }
+		$central = self::wa_digits( (string) get_option( 'cvd_central_whatsapp', '' ) ) ?: '5354056173';
+		$result = array( 'phone' => $central, 'display' => self::wa_display( $central ), 'name' => '', 'gestora_id' => 0 );
+		$gestora = self::contact_gestora();
+		$phone = $gestora ? self::wa_digits( (string) get_user_meta( $gestora->ID, '_cvd_whatsapp', true ) ) : '';
+		if ( $gestora && $phone ) {
+			$name = (string) strtok( trim( (string) $gestora->display_name ), ' ' );
+			$result = array( 'phone' => $phone, 'display' => self::wa_display( $phone ), 'name' => $name ? ucfirst( $name ) : '', 'gestora_id' => $gestora->ID );
+		}
+		// Se recuerda solo cuando la sesión de WooCommerce ya está cargada (antes de wp_loaded no se ve la gestora guardada).
+		if ( did_action( 'wp_loaded' ) ) { self::$contact = $result; }
+		return $result;
+	}
+
+	/** Enlace de WhatsApp con el texto ya escrito. En la tienda de una gestora, el texto nombra el producto que se mira. */
+	public static function contact_url( string $casa_viva_text = '' ): string {
+		$text = self::contact_text( $casa_viva_text );
+		return 'https://wa.me/' . self::contact()['phone'] . ( '' !== $text ? '?text=' . rawurlencode( $text ) : '' );
+	}
+
+	/** Texto para escribir: el de Casa Viva tal cual; a una gestora, «vi en tu tienda…» y el producto de la ficha. */
+	public static function contact_text( string $casa_viva_text = '' ): string {
+		if ( ! self::contact()['gestora_id'] ) { return $casa_viva_text; }
+		$product = function_exists( 'is_product' ) && is_product() ? wc_get_product( get_queried_object_id() ) : null;
+		if ( $product instanceof WC_Product ) {
+			return 'Hola, vi en tu tienda de Casa Viva: ' . $product->get_name() . ' · ' . get_permalink( $product->get_id() ) . ' · Tengo una pregunta: ';
+		}
+		return 'Hola, vi tu tienda de Casa Viva y tengo una pregunta: ';
+	}
+
+	/**
+	 * WhatsApp para un pedido ya hecho (página de «pedido recibido»): la gestora del pedido, salvo que sea ella misma
+	 * quien lo está mirando (hizo el pedido para su cliente: entonces habla con Casa Viva).
+	 */
+	public static function order_contact_phone( WC_Order $order ): string {
+		$central = self::wa_digits( (string) get_option( 'cvd_central_whatsapp', '' ) ) ?: '5354056173';
+		$owner_id = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
+		if ( ! $owner_id || 'gestora' !== sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) || get_current_user_id() === $owner_id ) { return $central; }
+		return self::wa_digits( (string) get_user_meta( $owner_id, '_cvd_whatsapp', true ) ) ?: $central;
+	}
+
+	/** El botón de WhatsApp escrito dentro de las páginas de atención (Atención al cliente, Formas de pago…). */
+	public static function contact_in_page_content( $content ) {
+		if ( ! is_string( $content ) || false === strpos( $content, 'wa.me/' ) || ! is_page( self::CONTACT_PAGES ) || ! self::contact()['gestora_id'] ) { return $content; }
+		$central = self::wa_digits( (string) get_option( 'cvd_central_whatsapp', '' ) ) ?: '5354056173';
+		$pattern = '#https://wa\.me/' . preg_quote( $central, '#' ) . '(?:\?text=[^"\'\s<>]*)?#';
+		return (string) preg_replace_callback( $pattern, static fn(): string => self::contact_url( '' ), $content );
+	}
+
+	private static function contact_gestora(): ?WP_User {
+		if ( is_admin() && ! wp_doing_ajax() ) { return null; }
+		$owner = CVD_Attribution::current_referral_owner();
+		if ( is_user_logged_in() ) {
+			$context = class_exists( 'CVD_Contextual_Assistant' ) ? CVD_Contextual_Assistant::context() : 'cliente';
+			if ( 'gestora' === $context ) {
+				if ( ! $owner || absint( $owner['owner_user_id'] ?? 0 ) !== get_current_user_id() ) { return null; }
+			} elseif ( 'cliente' === $context ) {
+				$owner = $owner ?: CVD_Attribution::current_customer_owner();
+			} else {
+				return null;
+			}
+		}
+		if ( ! $owner || 'gestora' !== ( $owner['owner_type'] ?? '' ) ) { return null; }
+		$gestora = get_user_by( 'id', absint( $owner['owner_user_id'] ?? 0 ) );
+		if ( ! $gestora || 'approved' !== get_user_meta( $gestora->ID, '_cvd_account_status', true ) || ! in_array( 'cvd_gestora', (array) $gestora->roles, true ) ) { return null; }
+		return $gestora;
+	}
+
+	/** Cifras para wa.me: un número cubano de 8 cifras lleva delante el 53. */
+	private static function wa_digits( string $raw ): string {
+		$digits = preg_replace( '/\D+/', '', $raw );
+		if ( 8 === strlen( $digits ) ) { $digits = '53' . $digits; }
+		return strlen( $digits ) >= 10 && strlen( $digits ) <= 15 ? $digits : '';
+	}
+
+	/** «5405 6173» para un número cubano; otros, con su prefijo. */
+	private static function wa_display( string $digits ): string {
+		if ( 10 === strlen( $digits ) && str_starts_with( $digits, '53' ) ) { return substr( $digits, 2, 4 ) . ' ' . substr( $digits, 6 ); }
+		return '+' . $digits;
 	}
 
 	public static function store_banner(): void {

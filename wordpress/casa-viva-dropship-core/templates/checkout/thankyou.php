@@ -18,10 +18,12 @@ defined( 'ABSPATH' ) || exit;
 		<?php else : ?>
 			<?php CVD_WhatsApp_Gateway::thankyou_button( $order->get_id() ); ?>
 			<?php
-			// "Me equivoqué": avisa a la tienda por WhatsApp con el número del pedido para corregirlo sin rehacerlo.
-			$cvd_fix_phone = preg_replace( '/\D+/', '', (string) get_option( 'cvd_central_whatsapp', '' ) );
+			// "Me equivoqué": avisa por WhatsApp con el número del pedido para corregirlo sin rehacerlo.
+			// 3.13.88 (D52): si el pedido es de una gestora, a ella (con su cliente se habla por ella); si no, a Casa Viva.
+			$cvd_fix_phone = class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::order_contact_phone( $order ) : preg_replace( '/\D+/', '', (string) get_option( 'cvd_central_whatsapp', '' ) );
 			if ( $cvd_fix_phone ) :
-				$cvd_fix_text = 'Hola Casa Viva, me equivoqué en el pedido #' . $order->get_order_number() . ' y quiero corregir: ';
+				$cvd_fix_to_gestora = preg_replace( '/\D+/', '', (string) get_option( 'cvd_central_whatsapp', '' ) ) !== $cvd_fix_phone;
+				$cvd_fix_text = ( $cvd_fix_to_gestora ? 'Hola, ' : 'Hola Casa Viva, ' ) . 'me equivoqué en el pedido #' . $order->get_order_number() . ' y quiero corregir: ';
 				?>
 				<p class="cvd-thanks__fix" style="margin-top:14px;text-align:center">
 					<a href="<?php echo esc_url( 'https://wa.me/' . $cvd_fix_phone . '?text=' . rawurlencode( $cvd_fix_text ) ); ?>" target="_blank" rel="noopener" style="text-decoration:underline">¿Te equivocaste en algo? Corrige tu pedido #<?php echo esc_html( $order->get_order_number() ); ?> sin rehacerlo</a>

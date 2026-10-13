@@ -164,13 +164,12 @@ final class CVD_Contextual_Assistant {
 	}
 
 	private static function whatsapp_url(): string {
-		// Quien entra por el enlace de una gestora habla con ella, no con la central.
-		$phone = '';
-		$owner = in_array( self::context(), array( 'visitante', 'cliente' ), true ) && class_exists( 'CVD_Attribution' ) ? CVD_Attribution::current_customer_owner() : null;
-		if ( $owner && 'gestora' === ( $owner['owner_type'] ?? '' ) && ! empty( $owner['owner_user_id'] ) ) {
-			$phone = (string) get_user_meta( absint( $owner['owner_user_id'] ), '_cvd_whatsapp', true );
+		// Quien está en la tienda de una gestora habla con ella, no con la central. 3.13.88 (D52): la misma regla que el
+		// pie, la ficha y las páginas de atención (CVD_Gestora_Store::contact()); en una ficha, el texto nombra el producto.
+		if ( class_exists( 'CVD_Gestora_Store' ) ) {
+			return CVD_Gestora_Store::contact_url( 'Hola Casa Viva, necesito ayuda.' );
 		}
-		$phone = preg_replace( '/\D+/', '', $phone ?: (string) get_option( 'cvd_central_whatsapp', '' ) );
+		$phone = preg_replace( '/\D+/', '', (string) get_option( 'cvd_central_whatsapp', '' ) );
 		return $phone ? 'https://wa.me/' . $phone . '?text=' . rawurlencode( 'Hola Casa Viva, necesito ayuda.' ) : '';
 	}
 
