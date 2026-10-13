@@ -156,3 +156,6 @@ body.woocommerce-cart .cv-whatsapp,body.woocommerce-checkout .cv-whatsapp{displa
 .woocommerce-cart .wc-block-grid__product-onsale{font-size:11px;top:8px;left:8px;right:auto}
 .woocommerce-cart :is(.wp-block-woocommerce-cart-cross-sells-block,.wp-block-post-content,.entry-content)>h2{margin:28px 0 14px!important;font-size:20px!important;line-height:1.25;text-align:left!important;color:var(--cvd-green)}
 .woocommerce-cart .wc-block-grid__product-link{display:flex;flex-direction:column;gap:6px;color:var(--cvd-ink)!important;text-decoration:none!important}
+/* 3.13.83: el logo del pie salía marrón sobre petróleo (casi invisible) y los textos del pie en gris oscuro. Logo oficial en crema y textos legibles. */
+html body .cv-footer .cv-brand::before{background-image:url(logo-casa-viva-crema.svg)}
+html body .cv-footer p,html body .cv-footer p a{color:rgba(246,241,230,.88)}

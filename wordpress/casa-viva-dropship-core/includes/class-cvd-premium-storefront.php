@@ -115,7 +115,8 @@ final class CVD_Premium_Storefront {
 
 	public static function footer(): void {
 		if ( is_admin() ) { return; }
-		if ( self::is_home() && ! self::$hero_done ) {
+		// 3.13.83: con la portada nueva (CVD_Home_Rails) las ofertas van en su fila «A buen precio»: no se repiten arriba.
+		if ( self::is_home() && ! self::$hero_done && ! ( class_exists( 'CVD_Home_Rails' ) && CVD_Home_Rails::active() ) ) {
 			// Si el tema no usa the_content en la portada, el script la coloca arriba del contenido.
 			echo '<template id="cvd-hero-template">' . self::hero_html() . '</template>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML ya escapado en hero_html().
 		}

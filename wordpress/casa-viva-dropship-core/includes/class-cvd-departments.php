@@ -92,7 +92,8 @@ final class CVD_Departments {
 
 	/** La portada del tema no tiene un hueco con hook arriba: se pinta al final y se sube encima del contenido. */
 	public static function home_bar(): void {
-		if ( ! self::is_home() ) { return; }
+		// 3.13.83: la portada nueva (CVD_Home_Rails) ya pinta las fichas arriba, desde el servidor.
+		if ( ! self::is_home() || ( class_exists( 'CVD_Home_Rails' ) && CVD_Home_Rails::active() ) ) { return; }
 		$bar = self::bar_html( 'home' );
 		if ( '' === $bar ) { return; }
 		echo '<template id="cvd-depts-home">' . $bar . '</template>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado en bar_html().
