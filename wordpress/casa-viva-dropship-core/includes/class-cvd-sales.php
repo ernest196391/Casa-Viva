@@ -237,13 +237,13 @@ final class CVD_Sales {
 		if ( function_exists( 'wc_increase_stock_levels' ) ) { wc_increase_stock_levels( $order ); }
 		// La comisión se anula aquí mismo: el paso a "reembolsado" no la toca en un pedido ya cerrado.
 		if ( 'paid' === sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ) {
-			$order->add_order_note( 'Devolución: la comisión de la gestora ya estaba pagada; descontarla en su próximo pago.' );
+			$order->add_order_note( 'Devolución: la comisión de quien vendió ya estaba pagada; descontarla en su próximo pago.' );
 		} elseif ( class_exists( 'CVD_Commissions' ) ) {
 			CVD_Commissions::cancel_for_order( $order, $actor->ID, current_time( 'mysql', true ), 'return:' . $order->get_id() );
 		}
 		$order->update_meta_data( '_cvd_return', array( 'at' => current_time( 'mysql', true ), 'by' => $actor->ID, 'refund_usd' => $usd, 'refund_cup' => $cup, 'reason' => $reason, 'messenger_earning' => $messenger_note ) );
 		$order->update_meta_data( '_cvd_return_in_progress', 'yes' ); // deja pasar el freno de D30 solo para esta devolución
-		$order->add_order_note( sprintf( 'Devolución registrada por %s: se devolvió al cliente %s USD + %s CUP. Motivo: %s. Stock repuesto; comisión de la gestora anulada; ganancia del mensajero %s.', $actor->display_name, $usd, $cup, $reason, $messenger_note ) );
+		$order->add_order_note( sprintf( 'Devolución registrada por %s: se devolvió al cliente %s USD + %s CUP. Motivo: %s. Stock repuesto; comisión de quien vendió anulada; ganancia del mensajero %s.', $actor->display_name, $usd, $cup, $reason, $messenger_note ) );
 		$order->save();
 		$order->update_status( 'refunded', 'Devolución registrada en el Centro de ventas.' );
 		$order = wc_get_order( $order->get_id() );
@@ -564,11 +564,11 @@ final class CVD_Sales {
 	public static function people_lines( WC_Order $order ): array {
 		$p = self::people( $order );
 		$who = static fn( array $x ): string => $x['name'] . ( '' !== $x['phone'] ? ' · ' . self::phone_label( $x['phone'] ) : '' );
-		$gestora = $p['gestora'] ? $who( $p['gestora'] ) : 'Venta directa (sin gestora)';
+		$gestora = $p['gestora'] ? $who( $p['gestora'] ) : 'Venta directa (sin gestor/a)';
 		if ( $p['pickup'] ) { $messenger = 'Recogida en tienda'; }
 		elseif ( ! $p['messenger'] ) { $messenger = 'Sin mensajero todavía'; }
-		elseif ( 'preferred' === $p['messenger']['state'] ) { $messenger = 'Sin mensajero todavía · la gestora pidió a ' . $who( $p['messenger'] ); }
-		else { $messenger = $who( $p['messenger'] ) . ( $p['messenger']['byGestora'] ? ' (lo eligió la gestora)' : '' ); }
+		elseif ( 'preferred' === $p['messenger']['state'] ) { $messenger = 'Sin mensajero todavía · quien vendió pidió a ' . $who( $p['messenger'] ); }
+		else { $messenger = $who( $p['messenger'] ) . ( $p['messenger']['byGestora'] ? ' (lo eligió quien vendió)' : '' ); }
 		return array( 'gestora' => $gestora, 'messenger' => $messenger );
 	}
 
@@ -590,7 +590,7 @@ final class CVD_Sales {
 			$who = absint( $event['data']['messenger'] ?? 0 );
 			$who = $who && in_array( $to, array( 'assigned', 'accepted' ), true ) ? get_userdata( $who ) : false;
 			if ( $who ) { $label .= ' · ' . $who->display_name; }
-			if ( 'assigned' === $to && ! empty( $event['data']['direct'] ) ) { $label .= ' (directo, lo eligió la gestora)'; }
+			if ( 'assigned' === $to && ! empty( $event['data']['direct'] ) ) { $label .= ' (directo, lo eligió quien vendió)'; }
 			$steps[] = array( 'at' => (string) $event['at'], 'label' => $label );
 		}
 		$eta = trim( (string) $order->get_meta( '_cvd_bot_eta', true ) );

@@ -24,10 +24,10 @@
   }
   function peopleLines(p) {
     var people=p.people||{}, g=people.gestora, m=people.messenger;
-    var gestora=g?esc(g.name)+waLink(g.phone):"Venta directa (sin gestora)", messenger;
+    var gestora=g?esc(g.name)+waLink(g.phone):"Venta directa (sin gestor/a)", messenger;
     if(people.pickup) messenger="Recogida en tienda";
-    else if(m&&m.state==="assigned") messenger=esc(m.name)+waLink(m.phone)+(m.byGestora?" (lo eligió la gestora)":"");
-    else if(m) messenger="Sin mensajero todavía · la gestora pidió a "+esc(m.name)+waLink(m.phone);
+    else if(m&&m.state==="assigned") messenger=esc(m.name)+waLink(m.phone)+(m.byGestora?" (lo eligió quien vendió)":"");
+    else if(m) messenger="Sin mensajero todavía · quien vendió pidió a "+esc(m.name)+waLink(m.phone);
     else messenger="Sin mensajero todavía";
     return '<p>Gestor/a: <strong>'+gestora+'</strong></p><p>Mensajero: <strong>'+messenger+'</strong></p>';
   }
@@ -43,7 +43,7 @@
     var timeline=p.timeline.events.map(function(e){return '<li><strong>'+esc(e.to_state||e.event_type)+'</strong><span>'+esc(e.timestamp)+' · '+esc(e.actor_role)+'</span></li>';}).join("");
     root.innerHTML='<header class="cvd-oc-head"><div><small>Pedido</small><h1>#'+esc(p.order.number)+'</h1></div><span class="cvd-oc-stage">'+esc(p.canonical_stage)+'</span></header>'+warning+
       '<div class="cvd-oc-grid">'+card('Cliente','<p><strong>'+esc(p.customer.name)+'</strong><br><a href="tel:'+esc(p.customer.phone)+'">'+esc(p.customer.phone)+'</a></p><p>'+esc(p.delivery.mode)+' · '+esc(p.delivery.address)+'</p>'+contactActions(p))+
-      card('Gestora y mensajero',peopleLines(p))+
+      card('Gestor/a y mensajero',peopleLines(p))+
       card('Productos',items)+card('Operación','<p>Etapa: <strong>'+esc(p.operation.status)+'</strong></p>')+
       card('Mensajería','<p>'+esc(p.delivery.status||'No iniciada')+'</p><p>Tarifa: '+esc(p.pricing.shipping_cup)+' CUP</p>')+
       card('Dinero','<p>Estado: <strong>'+esc(p.payment.status)+'</strong></p><p>Método: '+esc(p.payment.method||'Sin registrar')+'</p>')+

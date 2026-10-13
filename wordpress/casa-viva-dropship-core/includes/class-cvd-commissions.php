@@ -123,11 +123,11 @@ final class CVD_Commissions {
 		}
 		$status = sanitize_key( $order->get_meta( '_cvd_commission_status', true ) ) ?: 'pending';
 		wp_nonce_field( 'cvd_save_commission_status_' . $order->get_id(), 'cvd_commission_status_nonce' );
-		echo '<div class="order_data_column"><h4>Comisión de gestora</h4>';
-		echo '<p><strong>Gestora:</strong> ' . esc_html( $order->get_meta( 'gestora_nombre', true ) ) . '<br>';
+		echo '<div class="order_data_column"><h4>Comisión de gestor/a</h4>';
+		echo '<p><strong>Gestor/a:</strong> ' . esc_html( $order->get_meta( 'gestora_nombre', true ) ) . '<br>';
 		echo '<strong>Código:</strong> ' . esc_html( $order->get_meta( 'gestora_codigo', true ) ) . '<br>';
 		echo '<strong>Comisión:</strong> ' . wp_kses_post( wc_price( (float) $order->get_meta( '_cvd_commission_amount', true ), array( 'currency' => $order->get_currency() ) ) ) . '</p>';
-		if ( $order->get_meta( '_cvd_commission_risk', true ) ) { echo '<p class="notice notice-warning"><strong>Revisión requerida:</strong> el pedido coincide con datos de la gestora.</p>'; }
+		if ( $order->get_meta( '_cvd_commission_risk', true ) ) { echo '<p class="notice notice-warning"><strong>Revisión requerida:</strong> el pedido coincide con datos de quien vendió.</p>'; }
 		echo '<p><label for="cvd_commission_status"><strong>Estado</strong></label><br><select id="cvd_commission_status" name="cvd_commission_status">';
 		foreach ( self::allowed_admin_statuses( $status ) as $value => $label ) {
 			echo '<option value="' . esc_attr( $value ) . '" ' . selected( $status, $value, false ) . '>' . esc_html( $label ) . '</option>';

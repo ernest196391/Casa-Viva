@@ -225,7 +225,7 @@ final class CVD_Gestora_Fotos {
 
 	/** «Descargar foto»: solo fotos de productos publicados, solo para gestoras aprobadas. */
 	public static function download_jpg(): void {
-		if ( ! self::allowed( wp_get_current_user() ) ) { wp_die( 'Solo para gestoras aprobadas de Casa Viva.', 'Casa Viva', array( 'response' => 403 ) ); }
+		if ( ! self::allowed( wp_get_current_user() ) ) { wp_die( 'Solo para gestores aprobados de Casa Viva.', 'Casa Viva', array( 'response' => 403 ) ); }
 		$id = absint( $_GET['id'] ?? 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- solo lectura de una foto pública.
 		$parent = (int) wp_get_post_parent_id( $id );
 		$in_catalog = false;
@@ -260,7 +260,7 @@ final class CVD_Gestora_Fotos {
 
 	/** «Descargar todas (ZIP)»: se arma una vez por categoría y se reutiliza hasta que cambie algo. */
 	public static function download_zip(): void {
-		if ( ! self::allowed( wp_get_current_user() ) ) { wp_die( 'Solo para gestoras aprobadas de Casa Viva.', 'Casa Viva', array( 'response' => 403 ) ); }
+		if ( ! self::allowed( wp_get_current_user() ) ) { wp_die( 'Solo para gestores aprobados de Casa Viva.', 'Casa Viva', array( 'response' => 403 ) ); }
 		check_admin_referer( 'cvd_fotos_zip' );
 		$cat_id = absint( $_GET['cat'] ?? 0 );
 		$plan = self::zip_plan( $cat_id );

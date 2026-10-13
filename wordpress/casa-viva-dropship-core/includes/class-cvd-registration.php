@@ -16,7 +16,7 @@ final class CVD_Registration {
 		if ( isset( $_GET['cvd_access'] ) && 'invalid' === sanitize_key( wp_unslash( $_GET['cvd_access'] ) ) ) {
 			echo '<div class="cvd-notice cvd-error" role="alert" style="margin-top:14px">Ese enlace para entrar ya se usó o venció. Pide otro: escribe <strong>mi acceso</strong> al WhatsApp 5354056173.</div>';
 		}
-		echo '<div class="cvd-notice" style="margin-top:14px"><strong>¿Gestora o mensajero?</strong> Escribe tu número de WhatsApp arriba, en lugar del correo, con la contraseña que pusiste en <em>Mi perfil</em>.</div>';
+		echo '<div class="cvd-notice" style="margin-top:14px"><strong>¿Gestor/a o mensajero?</strong> Escribe tu número de WhatsApp arriba, en lugar del correo, con la contraseña que pusiste en <em>Mi perfil</em>.</div>';
 		echo '<div class="cvd-notice" style="margin-top:14px"><strong>¿Aún no tienes contraseña o la olvidaste?</strong><br><a class="cvd-primary" style="display:inline-block;margin-top:8px" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener">Entrar con WhatsApp</a><br><small>Te mandamos un enlace para entrar. Dentro, en <em>Mi perfil</em>, pon tu contraseña y ya no tendrás que pedirlo más.</small></div>';
 	}
 
@@ -127,7 +127,7 @@ final class CVD_Registration {
 		}
 
 		$inviter = 'gestora' === $type ? self::inviter_from_request() : null;
-		$title = 'mensajero' === $type ? 'Trabaja como mensajero de Casa Viva' : 'Vende con Casa Viva como gestora';
+		$title = 'mensajero' === $type ? 'Trabaja como mensajero de Casa Viva' : 'Vende con Casa Viva como gestor/a';
 		$intro = 'mensajero' === $type
 			? 'Recibe entregas asignadas, consulta direcciones y actualiza el estado de cada recorrido desde tu área privada.'
 			: 'Obtén tu enlace personal, comparte el catálogo y consulta pedidos, clientes y comisiones desde tu área privada.';
@@ -140,7 +140,7 @@ final class CVD_Registration {
 			<div class="cvd-auth-intro"><h1><?php echo esc_html( $title ); ?></h1><p><?php echo esc_html( $intro ); ?></p><?php if ( 'gestora' === $type ) : ?><ul><li>Es gratis. Casa Viva revisa tu solicitud y te avisa por WhatsApp.</li><li>Ganas el 10 % de cada venta (algunos productos tienen un monto fijo).</li><li>Puedes subir tus precios: la diferencia es tuya.</li><li>Entras con tu WhatsApp, sin contraseña.</li></ul><?php else : ?><ul><li>Registro gratuito sujeto a aprobación.</li><li>Información y actividad protegidas por usuario.</li><li>Soporte operativo de Casa Viva.</li></ul><?php endif; ?></div>
 			<form class="cvd-form" method="post">
 				<h2>Crear solicitud</h2>
-				<?php if ( $adding_second ) : ?><p class="cvd-notice"><?php echo esc_html( 'mensajero' === $type ? 'Ya eres gestora: esta solicitud añade la mensajería a tu misma cuenta. Sigues vendiendo igual que siempre.' : 'Ya eres mensajero: esta solicitud añade la venta como gestora a tu misma cuenta. Sigues haciendo entregas igual que siempre.' ); ?></p><?php endif; ?>
+				<?php if ( $adding_second ) : ?><p class="cvd-notice"><?php echo esc_html( 'mensajero' === $type ? 'Ya eres gestor/a: esta solicitud añade la mensajería a tu misma cuenta. Sigues vendiendo igual que siempre.' : 'Ya eres mensajero: esta solicitud añade la venta como gestor/a a tu misma cuenta. Sigues haciendo entregas igual que siempre.' ); ?></p><?php endif; ?>
 				<?php if ( $inviter ) : ?><p class="cvd-notice">Te invita <strong><?php echo esc_html( $inviter->display_name ); ?></strong>.</p><input name="cvd_invita" type="hidden" value="<?php echo esc_attr( (string) get_user_meta( $inviter->ID, '_cvd_referral_code', true ) ); ?>"><?php endif; ?>
 				<?php if ( ! $inviter && 'gestora' === $type && '' !== (string) ( $_GET['invita'] ?? '' ) ) : ?><p class="cvd-notice">Este enlace de invitación ya no vale. Puedes registrarte igual.</p><?php endif; ?>
 				<?php foreach ( $errors as $error ) : ?><p class="cvd-error"><?php echo esc_html( $error ); ?></p><?php endforeach; ?>
@@ -211,11 +211,11 @@ final class CVD_Registration {
 					return new WP_Error(
 						'phone_other_program',
 						'gestora' === $owner_programs[0]
-							? 'Ya tienes cuenta de gestora con este WhatsApp: entra primero y vuelve a esta página para añadir mensajería.'
-							: 'Ya tienes cuenta de mensajero con este WhatsApp: entra primero y vuelve a esta página para añadir la venta como gestora.'
+							? 'Ya tienes cuenta de gestor/a con este WhatsApp: entra primero y vuelve a esta página para añadir mensajería.'
+							: 'Ya tienes cuenta de mensajero con este WhatsApp: entra primero y vuelve a esta página para añadir la venta como gestor/a.'
 					);
 				}
-				return new WP_Error( 'phone_exists', 'Ya hay una cuenta con este WhatsApp. Entra en Mi cuenta → Gestoras → «Entrar con WhatsApp» y te mandamos tu enlace.' );
+				return new WP_Error( 'phone_exists', 'Ya hay una cuenta con este WhatsApp. Entra en Mi cuenta → Gestores → «Entrar con WhatsApp» y te mandamos tu enlace.' );
 			}
 			// Sin correo ni contraseña: correo interno (no recibe mensajes) y contraseña aleatoria; se entra con el enlace de WhatsApp.
 			if ( '' === $email ) { $email = 'g' . $phone . '@gestoras.casaviva.company'; }
@@ -299,7 +299,7 @@ final class CVD_Registration {
 	}
 
 	private static function send_application_emails( WP_User $user, string $type ): void {
-		$program = 'mensajero' === $type ? 'mensajero' : 'gestora';
+		$program = 'mensajero' === $type ? 'mensajero' : 'gestor/a'; // solo texto de los correos
 		$admin_email = sanitize_email( get_option( 'cvd_notification_email', get_option( 'admin_email' ) ) );
 		$admin_url = admin_url( 'admin.php?page=cvd-gestoras' );
 		$applicant_subject = 'Casa Viva recibió tu solicitud';

@@ -94,7 +94,7 @@ final class CVD_Voucher_Intake {
 		if ( $customer <= 0 && $gestora <= 0 ) { return array(); }
 		if ( $official_fee <= 0 ) { return new WP_Error( 'cvd_voucher_payment_rate', 'La ruta no tiene tarifa canónica. Resuelve la cotización antes de confirmar el cobro.' ); }
 		if ( abs( ( $customer + $gestora ) - $official_fee ) > 0.009 ) { return new WP_Error( 'cvd_voucher_payment_total', 'El reparto de mensajería debe sumar la tarifa oficial de Casa Viva.' ); }
-		if ( $gestora > 0 && ! $owner_id ) { return new WP_Error( 'cvd_voucher_payment_owner', 'Selecciona una gestora aprobada antes de aplicar descuento de comisión.' ); }
+		if ( $gestora > 0 && ! $owner_id ) { return new WP_Error( 'cvd_voucher_payment_owner', 'Selecciona una cuenta de gestor/a aprobada antes de aplicar descuento de comisión.' ); }
 		$rows = array();
 		if ( $customer > 0 ) { $rows[] = array( 'id' => 'delivery-customer-cup', 'concept' => 'delivery', 'amount' => $customer, 'currency' => 'CUP', 'payer' => 'customer', 'method' => 'cash_cup' ); }
 		if ( $gestora > 0 ) { $rows[] = array( 'id' => 'delivery-gestora-cup', 'concept' => 'delivery', 'amount' => $gestora, 'currency' => 'CUP', 'payer' => 'gestora', 'payer_user_id' => $owner_id, 'method' => 'commission_deduction' ); }
@@ -105,7 +105,7 @@ final class CVD_Voucher_Intake {
 		$user = wp_get_current_user(); if ( CVD_Registration::is_approved_gestora( $user ) ) { return $user->ID; }
 		if ( ! $manager_code ) { return 0; }
 		$users = get_users( array( 'number' => 1, 'meta_key' => '_cvd_referral_code', 'meta_value' => strtoupper( preg_replace( '/[^A-Z0-9_-]/i', '', $manager_code ) ), 'fields' => 'all' ) );
-		if ( ! $users || ! CVD_Registration::is_approved_gestora( $users[0] ) ) { return new WP_Error( 'cvd_voucher_manager', 'El código de gestora no corresponde a una cuenta aprobada.', array( 'status' => 400 ) ); }
+		if ( ! $users || ! CVD_Registration::is_approved_gestora( $users[0] ) ) { return new WP_Error( 'cvd_voucher_manager', 'El código de gestor/a no corresponde a una cuenta aprobada.', array( 'status' => 400 ) ); }
 		return $users[0]->ID;
 	}
 
@@ -178,7 +178,7 @@ final class CVD_Voucher_Intake {
 		<main class="cvd-voucher-app" data-cvd-voucher>
 			<header><a class="cvd-voucher-back" href="<?php echo esc_url( home_url( '/ruta-cv/' ) ); ?>">← Volver a Ruta</a><p class="cvd-kicker">Entrada inteligente</p><h1>Subir vale</h1><p>Pega el texto de WhatsApp. NEXO propone y Casa Viva valida antes de guardar.</p></header>
 			<section class="cvd-voucher-card"><label for="cvd-voucher-text"><strong>Pega el vale completo</strong></label><textarea id="cvd-voucher-text" maxlength="12000" rows="12" placeholder="Pedido, productos, cliente, dirección, importes y notas"></textarea><button class="cvd-primary" data-voucher-parse type="button">Interpretar con NEXO</button><p class="cvd-voucher-status" role="status" aria-live="polite"></p></section>
-			<section class="cvd-voucher-card" data-voucher-review hidden><div class="cvd-voucher-heading"><div><p class="cvd-kicker">NEXO entendió esto</p><h2>Revisa y corrige</h2></div><strong data-voucher-confidence></strong></div><div data-voucher-alerts></div><form data-voucher-form></form><button class="cvd-primary" data-voucher-confirm type="button" <?php disabled( ! self::can_confirm() ); ?>><?php echo self::can_confirm() ? 'Confirmar y crear pedido' : 'Operación debe confirmar'; ?></button><p class="cvd-voucher-note"><?php echo self::can_confirm() ? 'Al confirmar se crea un pedido canónico e idempotente en Casa Viva.' : 'Puedes interpretar y revisar. Por seguridad, solo operación, administración o la gestora autorizada crea el pedido.'; ?></p></section>
+			<section class="cvd-voucher-card" data-voucher-review hidden><div class="cvd-voucher-heading"><div><p class="cvd-kicker">NEXO entendió esto</p><h2>Revisa y corrige</h2></div><strong data-voucher-confidence></strong></div><div data-voucher-alerts></div><form data-voucher-form></form><button class="cvd-primary" data-voucher-confirm type="button" <?php disabled( ! self::can_confirm() ); ?>><?php echo self::can_confirm() ? 'Confirmar y crear pedido' : 'Operación debe confirmar'; ?></button><p class="cvd-voucher-note"><?php echo self::can_confirm() ? 'Al confirmar se crea un pedido canónico e idempotente en Casa Viva.' : 'Puedes interpretar y revisar. Por seguridad, solo operación, administración o la cuenta de gestor/a autorizada crea el pedido.'; ?></p></section>
 			<section class="cvd-voucher-card cvd-voucher-success" data-voucher-payload hidden><p class="cvd-kicker">Pedido creado</p><h2>Listo para operación</h2><pre></pre><a class="cvd-primary" href="<?php echo esc_url( home_url( '/ruta-cv/' ) ); ?>">Abrir jornada</a></section>
 		</main>
 		<?php return (string) ob_get_clean();

@@ -57,7 +57,7 @@ final class CVD_Aprende {
 		if ( 'mensajero' === $role ) {
 			return array(
 				'yo'        => array( 'Yo', 'Cuando sale una carrera en el grupo de mensajeros, escribe solo *Yo*. Si hay varias, *Yo #número*. El primero se la lleva y le llega el vale por privado, con fotos.' ),
-				'hora'      => array( 'La hora', 'Responde al vale solo con la hora a la que vas, por ejemplo «2:30-3 pm». El bot se la pasa a la gestora.' ),
+				'hora'      => array( 'La hora', 'Responde al vale solo con la hora a la que vas, por ejemplo «2:30-3 pm». El bot se la pasa a quien vendió.' ),
 				'pasar'     => array( 'Pasar', 'Si la hace otro compañero, escribe «pásasela a Pedri» o «pasar #número a Pedri». Desde ese momento es suya.' ),
 				'suelto'    => array( 'Suelto', 'Si al final no puedes, escribe *suelto* cuanto antes y la carrera pasa a otro mensajero.' ),
 				'entregado' => array( 'Entregado', 'Al entregar, escribe *entregado #número*. Así queda cerrada en el sistema.' ),
@@ -359,7 +359,7 @@ final class CVD_Aprende {
 		?>
 		<section <?php echo $attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- texto fijo. ?> data-cva data-cva-role="<?php echo esc_attr( $role ); ?>" data-cva-done="<?php echo $progress['done'] >= $progress['total'] ? '1' : '0'; ?>" data-endpoint="<?php echo esc_url( rest_url( self::NS . '/aprende' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'wp_rest' ) ); ?>">
 			<header class="cva-hero">
-				<div class="cva-hero-top"><span class="cva-area"><?php echo esc_html( $is_gestora ? 'MI ÁREA DE GESTORA' : 'ÁREA DEL MENSAJERO' ); ?></span><span class="cva-hello"><?php echo esc_html( 'Hola, ' . self::first_name( $user ) ); ?></span></div>
+				<div class="cva-hero-top"><span class="cva-area"><?php echo esc_html( $is_gestora ? 'MI ÁREA DE GESTOR/A' : 'ÁREA DEL MENSAJERO' ); ?></span><span class="cva-hello"><?php echo esc_html( 'Hola, ' . self::first_name( $user ) ); ?></span></div>
 				<h1 class="cva-h1">APRENDE</h1>
 				<p class="cva-intro"><?php echo esc_html( $is_gestora ? 'Todo para empezar a vender, a tu ritmo. Toca ▶ para verlo y marca lo que ya viste.' : 'Cómo coger una carrera, dar la hora y cerrarla bien. Son dos minutos.' ); ?></p>
 				<div class="cva-progress">

@@ -84,7 +84,7 @@ final class CVD_Bot_Bridge {
 	private static function partner( WP_REST_Request $request ) {
 		$user = get_user_by( 'id', absint( $request['id'] ) );
 		if ( ! $user || ! array_intersect( array( 'cvd_gestora', 'cvd_messenger' ), (array) $user->roles ) ) {
-			return new WP_Error( 'cvd_partner', 'No es una gestora ni un mensajero.', array( 'status' => 404 ) );
+			return new WP_Error( 'cvd_partner', 'No es gestor/a ni mensajero.', array( 'status' => 404 ) );
 		}
 		return $user;
 	}
@@ -252,13 +252,13 @@ final class CVD_Bot_Bridge {
 	public static function gestora_finished_notified( WP_REST_Request $request ) {
 		$order = self::order( $request );
 		if ( is_wp_error( $order ) ) { return $order; }
-		if ( 'gestora' !== sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) ) { return new WP_Error( 'cvd_not_gestora', 'Ese pedido no es de una gestora.', array( 'status' => 409 ) ); }
+		if ( 'gestora' !== sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) ) { return new WP_Error( 'cvd_not_gestora', 'Ese pedido no es de un/a gestor/a.', array( 'status' => 409 ) ); }
 		if ( '' !== (string) $order->get_meta( '_cvd_bot_gestora_done_notified_at', true ) ) { return self::no_cache( array( 'ok' => true, 'already' => true ) ); }
 		$via = 'whatsapp' === sanitize_key( (string) $request->get_param( 'via' ) ) ? 'whatsapp' : 'poll';
 		$order->update_meta_data( '_cvd_bot_gestora_done_notified_at', current_time( 'mysql', true ) );
 		$order->update_meta_data( '_cvd_bot_gestora_done_via', $via );
 		if ( ! $request->get_param( 'skipped' ) ) {
-			$order->add_order_note( 'whatsapp' === $via ? 'VivaBot: la gestora ya sabe que el pedido se entregó (aviso del «entregado» por WhatsApp).' : 'VivaBot: avisada la gestora por WhatsApp de que su pedido terminó.' );
+			$order->add_order_note( 'whatsapp' === $via ? 'VivaBot: quien vendió ya sabe que el pedido se entregó (aviso del «entregado» por WhatsApp).' : 'VivaBot: se avisó por WhatsApp a quien vendió de que su pedido terminó.' );
 		}
 		$order->save();
 		return self::no_cache( array( 'ok' => true, 'already' => false ) );

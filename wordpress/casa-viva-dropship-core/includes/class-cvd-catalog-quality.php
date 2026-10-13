@@ -87,7 +87,7 @@ final class CVD_Catalog_Quality {
 			<h1>Vende productos para el hogar con el respaldo de Casa Viva</h1>
 			<p class="cvd-gestores-lead">Obtén tu tienda personal, comparte tus productos y consulta tus ventas y ganancias desde un solo lugar.</p>
 			<div class="cvd-gestores-steps"><article><b>1</b><h2>Crea tu cuenta</h2><p>Envía tus datos. Casa Viva la aprueba y te avisa por WhatsApp.</p></article><article><b>2</b><h2>Comparte tu tienda</h2><p>Manda tu enlace a tus clientes. Si quieres, sube tus precios: la diferencia es tuya.</p></article><article><b>3</b><h2>Cobra tus ganancias</h2><p>Ganas el 10 % de cada venta entregada (algunos productos tienen un monto fijo), más lo que subiste.</p></article></div>
-			<a class="cvd-primary cvd-gestores-cta" href="<?php echo esc_url( $register_url ); ?>">Solicitar cuenta de gestora</a>
+			<a class="cvd-primary cvd-gestores-cta" href="<?php echo esc_url( $register_url ); ?>">Solicitar cuenta de gestor/a</a>
 		</section>
 		<?php
 		return (string) ob_get_clean();

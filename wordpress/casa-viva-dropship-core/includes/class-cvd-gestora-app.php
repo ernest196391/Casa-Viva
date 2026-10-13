@@ -65,7 +65,7 @@ final class CVD_Gestora_App {
 		$link = add_query_arg( 'ref', $code, wc_get_page_permalink( 'shop' ) );
 		$first = strtok( (string) $user->display_name, ' ' ) ?: $user->display_name;
 		$zone = (string) get_user_meta( $user->ID, '_cvd_zone', true );
-		$wa_shop = 'https://wa.me/5354056173?text=' . rawurlencode( 'Hola, soy la gestora ' . $user->display_name . ' (código ' . $code . ').' );
+		$wa_shop = 'https://wa.me/5354056173?text=' . rawurlencode( 'Hola, soy ' . $user->display_name . ', gestor/a de Casa Viva (código ' . $code . ').' );
 		$logout = wp_logout_url( home_url( '/casa-viva-app/' ) );
 
 		$nav = array(
@@ -86,7 +86,7 @@ final class CVD_Gestora_App {
 			array( 'ventas', 'Ventas', 'chart', '' ),
 			array( 'cobrar', 'Cobrar', 'card', '' ),
 			array( '', 'Mi equipo', '', '' ),
-			array( 'invitar', 'Invitar gestoras', 'invite', '' ),
+			array( 'invitar', 'Invitar gestores', 'invite', '' ),
 		);
 		// 3.13.77: «Aprende» (tutoriales). Mientras le falte algo, justo debajo de Inicio y con lo que lleva (2/6);
 		// cuando lo vio todo, baja al final de Herramientas.
@@ -108,7 +108,7 @@ final class CVD_Gestora_App {
 			<aside class="cvga-side" aria-label="Menú">
 				<div class="cvga-me">
 					<span class="cvga-avatar" aria-hidden="true"><?php echo esc_html( mb_strtoupper( mb_substr( (string) $user->display_name, 0, 1 ) ) ); ?></span>
-					<div class="cvga-me-text"><b><?php echo esc_html( $user->display_name ); ?></b><small>Gestora<?php echo $zone ? ' · ' . esc_html( $zone ) : ''; ?></small></div>
+					<div class="cvga-me-text"><b><?php echo esc_html( $user->display_name ); ?></b><small>Gestor/a<?php echo $zone ? ' · ' . esc_html( $zone ) : ''; ?></small></div>
 					<button class="cvga-icon-btn cvga-collapse" type="button" data-cvga-collapse aria-label="Plegar menú" title="Plegar menú"><?php echo self::icon( 'panel' ); // phpcs:ignore ?></button>
 					<button class="cvga-icon-btn cvga-close" type="button" data-cvga-close aria-label="Cerrar menú"><?php echo self::icon( 'x' ); // phpcs:ignore ?></button>
 				</div>

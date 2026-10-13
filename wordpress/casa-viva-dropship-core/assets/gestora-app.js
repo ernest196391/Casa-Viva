@@ -13,7 +13,7 @@
 
   // Enlaces viejos (redirecciones tras guardar) que apuntan a otra palabra.
   var alias = { dashboard: 'inicio', catalogo: 'tienda', clientes: 'clientes', 'mis-clientes': 'clientes', comisiones: 'ventas', mensajeria: 'ventas', pagos: 'cobrar', materiales: 'fotos' };
-  var titles = { inicio: 'Inicio', aprende: 'Aprende', tienda: 'Mi tienda', precios: 'Mis precios', clientes: 'Clientes', herramientas: 'Herramientas', calculadora: 'Calculadora', buscar: 'Buscar precios', fotos: 'Fotos para publicar', ventas: 'Ventas', cobrar: 'Cobrar', invitar: 'Invitar gestoras', perfil: 'Mi perfil' };
+  var titles = { inicio: 'Inicio', aprende: 'Aprende', tienda: 'Mi tienda', precios: 'Mis precios', clientes: 'Clientes', herramientas: 'Herramientas', calculadora: 'Calculadora', buscar: 'Buscar precios', fotos: 'Fotos para publicar', ventas: 'Ventas', cobrar: 'Cobrar', invitar: 'Invitar gestores', perfil: 'Mi perfil' };
   var views = Array.prototype.slice.call(document.querySelectorAll('[data-view]'));
   var titleEl = app.querySelector('[data-cvga-title]');
 

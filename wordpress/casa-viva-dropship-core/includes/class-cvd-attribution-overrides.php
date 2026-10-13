@@ -106,7 +106,7 @@ final class CVD_Attribution_Overrides {
 		}
 		$owner = self::approved_owner( $new_owner_id );
 		if ( ! $owner ) {
-			return new WP_Error( 'cvd_reassignment_owner', 'La nueva propietaria debe ser una gestora o influencer aprobada.' );
+			return new WP_Error( 'cvd_reassignment_owner', 'La cuenta nueva debe ser de gestor/a o influencer, y estar aprobada.' );
 		}
 		$reason = sanitize_text_field( trim( $reason ) );
 		if ( strlen( $reason ) < 4 ) {

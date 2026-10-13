@@ -140,7 +140,7 @@ final class CVD_Clients {
 	public static function render_gestora( WP_User $user, string $store_link ): string {
 		$rows = self::list( $user->ID );
 		$flag = sanitize_key( wp_unslash( $_GET['cliente'] ?? '' ) );
-		$notes = array( 'ok' => 'Cliente guardado.', 'taken' => 'Ese cliente ya lo trajo otra gestora: no se puede pasar a tu lista.', 'error' => 'Escribe un teléfono válido (8 cifras).' );
+		$notes = array( 'ok' => 'Cliente guardado.', 'taken' => 'Ese cliente ya lo trajo otra persona que vende con Casa Viva: no se puede pasar a tu lista.', 'error' => 'Escribe un teléfono válido (8 cifras).' );
 		ob_start(); ?>
 		<section class="cvd-panel" id="mis-clientes"><div><p class="cvd-kicker">Tus clientes</p><h2>Mis clientes (<?php echo esc_html( count( $rows ) ); ?>)</h2><p>Quien compra con tu enlace aparece aquí solo. También puedes añadirlos tú.</p></div>
 			<?php if ( isset( $notes[ $flag ] ) ) : ?><div class="cvd-notice" role="status"><?php echo esc_html( $notes[ $flag ] ); ?></div><?php endif; ?>

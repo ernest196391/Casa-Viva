@@ -54,8 +54,8 @@ final class CVD_Direct_Dispatch {
 		if ( 'note' === $source ) { return 'la nota del cliente'; }
 		$gestora = self::gestora_name( $order );
 		// Elegido en el checkout: «la gestora Ana al hacer el pedido» (o «la tienda…» si lo hizo alguien del equipo).
-		if ( 'checkout' === $source ) { return ( $gestora ? 'la gestora ' . $gestora : 'la tienda' ) . ' al hacer el pedido'; }
-		return $gestora ? 'la gestora ' . $gestora : 'la gestora';
+		if ( 'checkout' === $source ) { return ( $gestora ? 'el/la gestor/a ' . $gestora : 'la tienda' ) . ' al hacer el pedido'; }
+		return $gestora ? 'el/la gestor/a ' . $gestora : 'quien vendió';
 	}
 
 	/** Nombre de la gestora dueña del pedido ('' si no es de gestora). */
@@ -120,7 +120,7 @@ final class CVD_Direct_Dispatch {
 				if ( $previous ) {
 					$order->delete_meta_data( self::PREFERRED_META );
 					$order->delete_meta_data( self::SOURCE_META );
-					$order->add_order_note( 'La gestora ' . $user->display_name . ' quitó el mensajero elegido: el pedido saldrá al grupo de mensajeros.' );
+					$order->add_order_note( $user->display_name . ' (gestor/a) quitó el mensajero elegido: el pedido saldrá al grupo de mensajeros.' );
 					$order->save();
 				}
 				$result = 'grupo';
@@ -130,7 +130,7 @@ final class CVD_Direct_Dispatch {
 					if ( $previous !== $messenger_id ) {
 						$order->update_meta_data( self::PREFERRED_META, $messenger_id );
 						$order->update_meta_data( self::SOURCE_META, 'gestora' );
-						$order->add_order_note( 'La gestora ' . $user->display_name . ' eligió al mensajero ' . $messenger->display_name . '. Al pulsar «Listo para salir» se le asigna directo (no sale al grupo).' );
+						$order->add_order_note( $user->display_name . ' (gestor/a) eligió al mensajero ' . $messenger->display_name . '. Al pulsar «Listo para salir» se le asigna directo (no sale al grupo).' );
 						$order->save();
 					}
 					$result = 'guardado';

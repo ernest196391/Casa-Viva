@@ -145,7 +145,7 @@ class CVD_Gateway_WhatsApp extends WC_Payment_Gateway {
 	public function __construct() {
 		$this->id                 = 'cvd_whatsapp';
 		$this->method_title       = 'Confirmar y coordinar por WhatsApp';
-		$this->method_description = 'Guarda el pedido y abre el WhatsApp de la gestora o de Casa Viva.';
+		$this->method_description = 'Guarda el pedido y abre el WhatsApp de quien vendió o de Casa Viva.';
 		$this->has_fields         = false;
 		$this->supports           = array( 'products' );
 

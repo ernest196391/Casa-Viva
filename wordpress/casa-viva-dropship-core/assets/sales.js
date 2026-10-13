@@ -83,10 +83,10 @@
   }
   function peopleRows(order) {
     var people = order.people || {}, g = people.gestora, m = people.messenger, messenger;
-    var gestora = g ? escapeText(g.name) + waLink(g.phone) : "Venta directa (sin gestora)";
+    var gestora = g ? escapeText(g.name) + waLink(g.phone) : "Venta directa (sin gestor/a)";
     if (people.pickup) messenger = "Recogida en tienda";
-    else if (m && m.state === "assigned") messenger = escapeText(m.name) + waLink(m.phone) + (m.byGestora ? " (lo eligió la gestora)" : "");
-    else if (m) messenger = "Sin mensajero todavía · la gestora pidió a " + escapeText(m.name) + waLink(m.phone);
+    else if (m && m.state === "assigned") messenger = escapeText(m.name) + waLink(m.phone) + (m.byGestora ? " (lo eligió quien vendió)" : "");
+    else if (m) messenger = "Sin mensajero todavía · quien vendió pidió a " + escapeText(m.name) + waLink(m.phone);
     else messenger = "Sin mensajero todavía";
     return '<p class="cvd-sale-people"><b>Gestor/a</b><span><strong>' + gestora + '</strong></span></p><p class="cvd-sale-people"><b>Mensajero</b><span><strong>' + messenger + "</strong></span></p>";
   }
@@ -158,7 +158,7 @@
       var refundUsd = window.prompt("¿Cuántos USD se le devuelven al cliente? (0 si ninguno)", "0"); if (refundUsd === null) return;
       var refundCup = window.prompt("¿Cuántos CUP se le devuelven al cliente? (0 si ninguno)", "0"); if (refundCup === null) return;
       var voidMessenger = window.confirm("¿Anular también la ganancia del mensajero?\n\nAceptar = sí, se anula (por ejemplo, entrega mal hecha)\nCancelar = no, se le paga (hizo su trabajo)");
-      if (!window.confirm("Confirmar devolución del #" + ret.dataset.returnOrder + ":\n• Se devuelve " + refundUsd + " USD + " + refundCup + " CUP\n• El producto vuelve al stock\n• Se anula la comisión de la gestora\n• Ganancia del mensajero: " + (voidMessenger ? "ANULADA" : "se mantiene"))) return;
+      if (!window.confirm("Confirmar devolución del #" + ret.dataset.returnOrder + ":\n• Se devuelve " + refundUsd + " USD + " + refundCup + " CUP\n• El producto vuelve al stock\n• Se anula la comisión de quien vendió\n• Ganancia del mensajero: " + (voidMessenger ? "ANULADA" : "se mantiene"))) return;
       ret.disabled = true; message.textContent = "Registrando devolución…";
       try { await api(cvdSales.url + "/" + ret.dataset.returnOrder + "/return", { method: "POST", body: JSON.stringify({ reason: reason, refundUsd: refundUsd, refundCup: refundCup, voidMessenger: voidMessenger }) }); message.textContent = "Devolución registrada."; await load(); }
       catch (error) { message.textContent = error.message; message.className = "is-error"; ret.disabled = false; }

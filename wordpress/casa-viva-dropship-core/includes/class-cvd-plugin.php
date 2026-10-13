@@ -386,18 +386,18 @@ final class CVD_Plugin {
 		if ( ! $admin_email ) {
 			return;
 		}
-		$lines = array( 'Casa Viva tiene solicitudes de gestoras pendientes:', '' );
+		$lines = array( 'Casa Viva tiene solicitudes de gestores pendientes:', '' );
 		foreach ( $users as $user ) {
 			$lines[] = '- ' . $user->display_name . ' · ' . $user->user_email;
 		}
 		$lines[] = '';
 		$lines[] = 'Revisar y aprobar:';
 		$lines[] = admin_url( 'admin.php?page=cvd-gestoras' );
-		$sent = wp_mail( $admin_email, 'Solicitudes de gestoras pendientes en Casa Viva', implode( "\n", $lines ) );
+		$sent = wp_mail( $admin_email, 'Solicitudes de gestores pendientes en Casa Viva', implode( "\n", $lines ) );
 		foreach ( $users as $user ) {
 			update_user_meta( $user->ID, '_cvd_admin_notification_sent', $sent ? current_time( 'mysql', true ) : 'failed' );
 			if ( ! get_user_meta( $user->ID, '_cvd_application_email_sent', true ) ) {
-				$applicant_message = "Hola {$user->display_name},\n\nTu solicitud de gestora está registrada y pendiente de aprobación por Casa Viva.\n\nPuedes consultar el estado aquí:\n" . home_url( '/area-gestoras/' );
+				$applicant_message = "Hola {$user->display_name},\n\nTu solicitud de gestor/a está registrada y pendiente de aprobación por Casa Viva.\n\nPuedes consultar el estado aquí:\n" . home_url( '/area-gestoras/' );
 				$applicant_sent = wp_mail( $user->user_email, 'Casa Viva recibió tu solicitud', $applicant_message );
 				update_user_meta( $user->ID, '_cvd_application_email_sent', $applicant_sent ? current_time( 'mysql', true ) : 'failed' );
 			}
@@ -433,12 +433,12 @@ final class CVD_Plugin {
 
 	public static function create_pages(): void {
 		$pages = array(
-			'registro-gestora'  => array( 'Registro de gestoras', '[casa_viva_registro role="gestora"]' ),
-			'area-gestoras'     => array( 'Gestoras · Acceso', '[casa_viva_portal role="gestora"]' ),
+			'registro-gestora'  => array( 'Registro de gestores', '[casa_viva_registro role="gestora"]' ),
+			'area-gestoras'     => array( 'Gestores · Acceso', '[casa_viva_portal role="gestora"]' ),
 			'registro-mensajero'=> array( 'Registro de mensajeros', '[casa_viva_registro role="mensajero"]' ),
 			'area-mensajeros'   => array( 'Área de mensajeros', '[casa_viva_portal role="mensajero"]' ),
 			'ruta-cv'           => array( 'Ruta Casa Viva', '[casa_viva_portal role="mensajero"]' ),
-			'gestores'          => array( 'Gestoras', '[casa_viva_gestores]' ),
+			'gestores'          => array( 'Gestores', '[casa_viva_gestores]' ),
 			'casa-viva-app'     => array( 'Casa Viva App', '[casa_viva_app]' ),
 			'centro-operaciones'=> array( 'Centro de operaciones', '[casa_viva_operations]' ),
 			'inventario'        => array( 'Inventario Casa Viva', '[casa_viva_inventory]' ),

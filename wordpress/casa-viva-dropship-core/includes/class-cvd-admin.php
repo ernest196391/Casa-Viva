@@ -18,7 +18,7 @@ final class CVD_Admin {
 		$pending = count( get_users( array( 'role' => 'cvd_gestora', 'meta_key' => '_cvd_account_status', 'meta_value' => 'pending', 'fields' => 'ids' ) ) );
 		$badge = $pending ? ' <span class="awaiting-mod count-' . absint( $pending ) . '"><span class="pending-count">' . absint( $pending ) . '</span></span>' : '';
 		add_menu_page( 'Casa Viva', 'Casa Viva' . $badge, 'manage_woocommerce', 'cvd-gestoras', array( __CLASS__, 'gestoras_page' ), 'dashicons-store', 56 );
-		add_submenu_page( 'cvd-gestoras', 'Solicitudes de gestoras', 'Solicitudes', 'manage_woocommerce', 'cvd-gestoras', array( __CLASS__, 'gestoras_page' ) );
+		add_submenu_page( 'cvd-gestoras', 'Solicitudes de gestores', 'Solicitudes', 'manage_woocommerce', 'cvd-gestoras', array( __CLASS__, 'gestoras_page' ) );
 		add_submenu_page( 'cvd-gestoras', 'Configuración Casa Viva', 'Configuración', 'manage_woocommerce', 'casa-viva-dropship', array( __CLASS__, 'settings_page' ) );
 	}
 
@@ -41,17 +41,17 @@ final class CVD_Admin {
 		?>
 		<div class="wrap">
 			<h1>Casa Viva Dropship</h1>
-			<p>Reglas generales del sistema. Los valores individuales de una gestora o producto tienen prioridad.</p>
+			<p>Reglas generales del sistema. Los valores individuales de un/a gestor/a o de un producto tienen prioridad.</p>
 			<form method="post" action="options.php">
 				<?php settings_fields( 'cvd_settings' ); ?>
 				<table class="form-table">
 					<tr>
 						<th><label for="cvd_notification_email">Correo de solicitudes</label></th>
-						<td><input class="regular-text" id="cvd_notification_email" name="cvd_notification_email" type="email" value="<?php echo esc_attr( get_option( 'cvd_notification_email', get_option( 'admin_email' ) ) ); ?>"><p class="description">Casa Viva recibirá aquí las nuevas solicitudes de gestoras.</p></td>
+						<td><input class="regular-text" id="cvd_notification_email" name="cvd_notification_email" type="email" value="<?php echo esc_attr( get_option( 'cvd_notification_email', get_option( 'admin_email' ) ) ); ?>"><p class="description">Casa Viva recibirá aquí las nuevas solicitudes de gestores.</p></td>
 					</tr>
 					<tr>
 						<th><label for="cvd_default_max_markup_percent">Aumento máximo predeterminado (%)</label></th>
-						<td><input id="cvd_default_max_markup_percent" min="0" name="cvd_default_max_markup_percent" step="0.01" type="number" value="<?php echo esc_attr( get_option( 'cvd_default_max_markup_percent', 30 ) ); ?>"><p class="description">Se aplica cuando el producto o la gestora no tengan un límite específico.</p></td>
+						<td><input id="cvd_default_max_markup_percent" min="0" name="cvd_default_max_markup_percent" step="0.01" type="number" value="<?php echo esc_attr( get_option( 'cvd_default_max_markup_percent', 30 ) ); ?>"><p class="description">Se aplica cuando el producto o el/la gestor/a no tengan un límite específico.</p></td>
 					</tr>
 					<tr>
 						<th><label for="cvd_default_commission_rate">Comisión predeterminada (%)</label></th>
@@ -111,7 +111,7 @@ final class CVD_Admin {
 					$email_notice = self::send_status_email( $user, $status, $access_link ) ? ' Se envió el aviso por correo.' : ' El estado cambió, pero WordPress no pudo enviar el correo.';
 					$phone = preg_replace( '/\D+/', '', (string) get_user_meta( $user_id, '_cvd_whatsapp', true ) );
 					if ( 'approved' === $status && $phone && $access_link ) {
-						$message = "Hola {$user->display_name}, tu cuenta de gestora Casa Viva fue aprobada. Entra directamente a tu panel con este enlace seguro (válido por 7 días): {$access_link}";
+						$message = "Hola {$user->display_name}, tu cuenta de gestor/a de Casa Viva fue aprobada. Entra directamente a tu panel con este enlace seguro (válido por 7 días): {$access_link}";
 						$whatsapp_url = 'https://wa.me/' . $phone . '?text=' . rawurlencode( $message );
 						$whatsapp_notice = ' <a class="button button-primary" href="' . esc_attr( $whatsapp_url ) . '" target="_blank" rel="noopener">Avisar por WhatsApp</a>';
 					}
@@ -120,7 +120,7 @@ final class CVD_Admin {
 			}
 		}
 		$users = get_users( array( 'role' => 'cvd_gestora', 'orderby' => 'registered', 'order' => 'DESC' ) );
-		echo '<div class="wrap"><h1>Solicitudes de gestoras</h1><p>Aquí Casa Viva aprueba, suspende o rechaza las cuentas. Las solicitudes pendientes aparecen primero.</p><table class="widefat striped"><thead><tr><th>Gestora</th><th>WhatsApp</th><th>Zona</th><th>Estado</th><th>Correo</th><th>Acciones</th></tr></thead><tbody>';
+		echo '<div class="wrap"><h1>Solicitudes de gestores</h1><p>Aquí Casa Viva aprueba, suspende o rechaza las cuentas. Las solicitudes pendientes aparecen primero.</p><table class="widefat striped"><thead><tr><th>Gestor/a</th><th>WhatsApp</th><th>Zona</th><th>Estado</th><th>Correo</th><th>Acciones</th></tr></thead><tbody>';
 		foreach ( $users as $user ) {
 			$status = get_user_meta( $user->ID, '_cvd_account_status', true ) ?: 'pending';
 			$email_state = get_user_meta( $user->ID, '_cvd_application_email_sent', true );
@@ -134,9 +134,9 @@ final class CVD_Admin {
 	private static function send_status_email( WP_User $user, string $status, string $access_link = '' ): bool {
 		$labels = array( 'approved' => 'Aprobada', 'suspended' => 'Suspendida', 'rejected' => 'No aprobada' );
 		$label = $labels[ $status ] ?? ucfirst( $status );
-		$subject = 'Estado de tu cuenta de gestora Casa Viva: ' . $label;
+		$subject = 'Estado de tu cuenta de gestor/a de Casa Viva: ' . $label;
 		if ( 'approved' === $status ) {
-			$message = "Hola {$user->display_name},\n\nTu cuenta de gestora fue aprobada.\n\nEntra directamente a tu panel con este enlace seguro:\n{$access_link}\n\nEl enlace es válido durante 7 días y abre exactamente tu cuenta. Después podrás entrar normalmente desde Mi cuenta.\n\nSi olvidaste tu contraseña, puedes recuperarla aquí:\n" . wp_lostpassword_url( home_url( '/area-gestoras/' ) ) . "\n\nCasa Viva";
+			$message = "Hola {$user->display_name},\n\nTu cuenta de gestor/a fue aprobada.\n\nEntra directamente a tu panel con este enlace seguro:\n{$access_link}\n\nEl enlace es válido durante 7 días y abre exactamente tu cuenta. Después podrás entrar normalmente desde Mi cuenta.\n\nSi olvidaste tu contraseña, puedes recuperarla aquí:\n" . wp_lostpassword_url( home_url( '/area-gestoras/' ) ) . "\n\nCasa Viva";
 		} else {
 			$message = "Hola {$user->display_name},\n\nEl estado de tu solicitud es: {$label}.\n\nSi necesitas ayuda, contacta con Casa Viva.";
 		}
@@ -170,12 +170,12 @@ final class CVD_Admin {
 			</tr>
 			<tr>
 				<th><label for="_cvd_account_status">Estado de la cuenta</label></th>
-				<td><select id="_cvd_account_status" name="_cvd_account_status"><option value="pending" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'pending' ); ?>>Pendiente</option><option value="approved" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'approved' ); ?>>Aprobada</option><option value="suspended" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'suspended' ); ?>>Suspendida</option><option value="rejected" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'rejected' ); ?>>Rechazada</option></select><p class="description">Solo las cuentas aprobadas pueden entrar en su portal.<?php echo CVD_Registration::is_dual( $user ) ? ' En esta cuenta doble es el estado como gestora.' : ''; ?></p></td>
+				<td><select id="_cvd_account_status" name="_cvd_account_status"><option value="pending" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'pending' ); ?>>Pendiente</option><option value="approved" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'approved' ); ?>>Aprobada</option><option value="suspended" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'suspended' ); ?>>Suspendida</option><option value="rejected" <?php selected( get_user_meta( $user->ID, '_cvd_account_status', true ), 'rejected' ); ?>>Rechazada</option></select><p class="description">Solo las cuentas aprobadas pueden entrar en su portal.<?php echo CVD_Registration::is_dual( $user ) ? ' En esta cuenta doble es el estado como gestor/a.' : ''; ?></p></td>
 			</tr>
 			<?php if ( CVD_Registration::is_dual( $user ) ) : $messenger_status = CVD_Registration::status_for( $user, 'mensajero' ); // Cuenta doble: estado propio como mensajero. ?>
 			<tr>
 				<th><label for="_cvd_messenger_status">Estado como mensajero</label></th>
-				<td><select id="_cvd_messenger_status" name="_cvd_messenger_status"><?php foreach ( array( 'pending' => 'Pendiente', 'approved' => 'Aprobada', 'suspended' => 'Suspendida', 'rejected' => 'Rechazada' ) as $value => $label ) : ?><option value="<?php echo esc_attr( $value ); ?>" <?php selected( $messenger_status, $value ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select><p class="description">Esta cuenta es gestora y mensajero a la vez: cada programa tiene su estado.</p></td>
+				<td><select id="_cvd_messenger_status" name="_cvd_messenger_status"><?php foreach ( array( 'pending' => 'Pendiente', 'approved' => 'Aprobada', 'suspended' => 'Suspendida', 'rejected' => 'Rechazada' ) as $value => $label ) : ?><option value="<?php echo esc_attr( $value ); ?>" <?php selected( $messenger_status, $value ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select><p class="description">Esta cuenta es de gestor/a y de mensajero a la vez: cada programa tiene su estado.</p></td>
 			</tr>
 			<?php endif; ?>
 			<tr>

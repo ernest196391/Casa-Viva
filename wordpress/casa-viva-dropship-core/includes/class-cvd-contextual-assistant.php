@@ -75,7 +75,7 @@ final class CVD_Contextual_Assistant {
 		$action = admin_url( 'admin-post.php' );
 		?>
 		<h2>Clave de VivaBot</h2>
-		<p>VivaBot (WhatsApp) usa esta clave para preguntarle a Curru como cliente o como gestora, sin el límite de los visitantes.</p>
+		<p>VivaBot (WhatsApp) usa esta clave para preguntarle a Curru como cliente o como gestor/a, sin el límite de los visitantes.</p>
 		<?php if ( $new_key ) : ?>
 			<div class="notice notice-warning inline"><p><strong>Cópiala ahora, no se volverá a mostrar:</strong></p><p><input class="large-text code" type="text" readonly value="<?php echo esc_attr( $new_key ); ?>" onclick="this.select()"></p><p>Pégala en VivaBot como cabecera <code>X-VivaBot-Key</code>. La clave anterior ya no funciona.</p></div>
 		<?php endif; ?>
@@ -336,7 +336,7 @@ final class CVD_Contextual_Assistant {
 			return $reply( 'Al confirmar el pedido verás los importes y las formas de pago aceptadas. Casa Viva nunca convierte monedas sin avisarte. No compartas datos bancarios por chat.', $help_link );
 		}
 		if ( 'gestora' === $context && preg_match( '/\b(gestora|comision|vale|tienda espejo)\b/', $q ) ) {
-			return $reply( 'Desde Gestoras revisas tus pedidos y envías vales. Las asignaciones de mensajería siguen el mecanismo oficial.', array( array( 'label' => 'Abrir Gestoras', 'url' => $urls['managersUrl'] ) ) );
+			return $reply( 'Desde Gestores revisas tus pedidos y envías vales. Las asignaciones de mensajería siguen el mecanismo oficial.', array( array( 'label' => 'Abrir Gestores', 'url' => $urls['managersUrl'] ) ) );
 		}
 		if ( 'mensajero' === $context && preg_match( '/\b(ruta|cliente|llamar|vuelto|cobro)\b/', $q ) ) {
 			return $reply( 'En Ruta tienes contactos, preparación, vuelto, cobro y el asistente de tu jornada.', array( array( 'label' => 'Abrir Ruta', 'url' => $urls['routeUrl'] ) ) );
