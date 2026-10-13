@@ -30,7 +30,7 @@ final class CVD_Home_Rails {
 	private const TOP_LIMIT    = 12;
 	private const DEPT_LIMIT   = 8;
 	private const LOW_PRICE    = 15.0;
-	private const LOW_STOCK    = 2;
+	private const LOW_STOCK    = 1; // 3.13.87: «Últimas unidades» solo con 1 (Ernesto, 13-oct)
 	private const MIN_SOLD     = 4;
 	private const EAGER_IMAGES = 3;
 
