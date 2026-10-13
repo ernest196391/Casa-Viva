@@ -39,7 +39,13 @@
     $(document.body).on('added_to_cart removed_from_cart updated_wc_div wc_fragments_refreshed', syncCount);
   }
 
-  window.addEventListener('pageshow', syncCount);
+  // 3.13.91 (auditoría 13-oct, punto 11): antes cada página preguntaba al servidor cuántos productos había en el
+  // carrito (una llamada a admin-ajax por visita). Ahora solo si WooCommerce dice que hay carrito (su cookie) o si la
+  // página vuelve de la memoria del navegador (atrás/adelante), donde el número puede estar viejo.
+  function hasCart() { return /(?:^|;\s*)woocommerce_items_in_cart=1(?:;|$)/.test(document.cookie); }
+  window.addEventListener('pageshow', function (event) {
+    if ((event && event.persisted) || hasCart()) { syncCount(); }
+  });
 
   document.addEventListener('click', function (event) {
     document.querySelectorAll('details.cv-mobile-nav[open]').forEach(function (menu) {

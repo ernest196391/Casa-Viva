@@ -12,6 +12,20 @@ final class CVD_Customer_Navigation {
 		add_action( 'wp_ajax_cvd_cart_count', array( __CLASS__, 'ajax_cart_count' ) );
 		add_action( 'wp_ajax_nopriv_cvd_cart_count', array( __CLASS__, 'ajax_cart_count' ) );
 		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'no_cache_store_api' ), 1, 3 );
+		add_action( 'template_redirect', array( __CLASS__, 'no_cache_with_cart' ), 0 );
+	}
+
+	/**
+	 * 3.13.91 (auditoría 13-oct, punto 11): LiteSpeed guardaba la página que se pintó para alguien con productos en el
+	 * carrito y se la daba a todos: el contador del carrito salía en 1 a gente con el carrito vacío y cada visita bajaba
+	 * el código del carrito de WooCommerce (~550 KB, 51 enlaces «prefetch»). Una página pintada con carrito no se guarda.
+	 * Quien tiene carrito sigue recibiendo las páginas guardadas (vacías) y el contador se corrige con customer-navigation.js.
+	 */
+	public static function no_cache_with_cart(): void {
+		if ( function_exists( 'WC' ) && WC()->cart && WC()->cart->get_cart_contents_count() > 0 ) {
+			if ( ! defined( 'DONOTCACHEPAGE' ) ) { define( 'DONOTCACHEPAGE', true ); }
+			do_action( 'litespeed_control_set_nocache', 'Casa Viva: página pintada con productos en el carrito' );
+		}
 	}
 
 	/**
