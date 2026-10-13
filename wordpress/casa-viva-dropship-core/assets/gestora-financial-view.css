@@ -44,3 +44,37 @@
   .cvd-history-panel .cvd-table-wrap td:nth-child(9)::before { content: 'Cómo se calcula'; }
   .cvd-history-panel .cvd-table-wrap td:nth-child(10)::before { content: 'Estado'; }
 }
+
+/* 3.13.68 «Tus comisiones» (pedido de Cely): 4 cifras como en BizneCubano. Colores y letras de la marca (casa-viva-marca). */
+.cvd-cbox{--cb-crema:var(--cvm-crema,#F6F1E6);--cb-marron:var(--cvm-marron,#2B2420);--cb-suave:var(--cvm-marron-suave,#5E544D);--cb-petroleo:var(--cvm-petroleo,#0D3B45);--cb-ambar:var(--cvm-ambar,#A35A1F);--cb-borde:var(--cvm-borde,#E0D5C1);background:#FFFDF8;border:1px solid var(--cb-borde);border-radius:14px;padding:18px;color:var(--cb-marron);font-family:var(--cvm-texto,"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif);min-width:0;box-sizing:border-box}
+.cvd-cbox *,.cvd-cbox *::before,.cvd-cbox *::after{box-sizing:border-box}
+.cvd-cbox,.cvd-cbox .cvd-cbox-head h2,.cvd-cbox .cvd-cbox-head p,.cvd-cbox-note{text-align:left!important}
+.cvd-cbox .cvd-cbox-head h2{font-family:var(--cvm-titulos,"Cinzel",Georgia,serif);font-weight:600;font-size:17px;line-height:1.3;letter-spacing:.08em;text-transform:uppercase;color:var(--cb-marron);margin:0}
+.cvd-cbox .cvd-cbox-head p{margin:4px 0 14px;color:var(--cb-suave);font-size:13.5px}
+.cvd-cbox-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.cvd-cbox-card{display:flex;flex-direction:column;gap:2px;min-width:0;padding:14px;border-radius:12px;background:var(--cb-crema);border:1px solid var(--cb-borde)}
+.cvd-cbox-label{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--cb-suave)}
+.cvd-cbox-label::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--cb-ambar)}
+.cvd-cbox-card.is-requested .cvd-cbox-label::before{background:var(--cb-suave)}
+.cvd-cbox-card.is-paid .cvd-cbox-label::before{background:#2F6B3A}
+.cvd-cbox-amount{display:block;font-size:22px;line-height:1.2;font-weight:700;color:var(--cb-petroleo);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;margin-top:4px}
+.cvd-cbox-cup{display:block;font-size:13.5px;font-weight:600;color:var(--cb-ambar);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.cvd-cbox-count{display:block;font-size:12px;color:var(--cb-suave);margin-top:4px}
+/* «Listas para cobrar» es lo que se puede pedir ya: va resaltada en petróleo. */
+.cvd-cbox-card.is-ready{background:var(--cb-petroleo);border-color:var(--cb-petroleo)}
+.cvd-cbox-card.is-ready .cvd-cbox-label,.cvd-cbox-card.is-ready .cvd-cbox-count{color:#D9E4E2}
+.cvd-cbox-card.is-ready .cvd-cbox-label::before{background:var(--cb-crema)}
+.cvd-cbox-card.is-ready .cvd-cbox-amount{color:var(--cb-crema)}
+.cvd-cbox-card.is-ready .cvd-cbox-cup{color:#F2C99A}
+.cvd-cbox-action{align-self:flex-start;margin-top:8px;padding:7px 12px;min-height:36px;display:inline-flex;align-items:center;border-radius:10px;background:var(--cb-ambar);color:#fff!important;font-size:13px;font-weight:600;text-decoration:none!important}
+.cvd-cbox-action:hover{background:var(--cvm-ambar-hover,#8A4B19)}
+.cvd-cbox-action:focus-visible{outline:2px solid var(--cb-crema);outline-offset:2px}
+.cvd-cbox-note{margin:12px 0 0;font-size:12.5px;color:var(--cb-suave)}
+.cvd-cbox-note.is-warn{color:var(--cb-ambar);font-weight:600}
+@media (max-width:760px){
+  .cvd-cbox{padding:14px}
+  .cvd-cbox-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .cvd-cbox-card{padding:12px}
+  .cvd-cbox-amount{font-size:19px}
+}
+@media (max-width:340px){.cvd-cbox-grid{grid-template-columns:minmax(0,1fr)}}

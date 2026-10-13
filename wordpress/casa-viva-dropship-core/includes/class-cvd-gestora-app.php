@@ -58,6 +58,9 @@ final class CVD_Gestora_App {
 		$user = wp_get_current_user();
 		// Primero el portal clásico: procesa los formularios (precios, pagos) antes de calcular las cifras.
 		$legacy = do_shortcode( '[casa_viva_portal role="gestora"]' );
+		// 3.13.68: sus pedidos, una sola vez para las cifras de Inicio y el recuadro «Tus comisiones» (Inicio y Ventas).
+		$orders = wc_get_orders( array( 'limit' => -1, 'type' => 'shop_order', 'meta_key' => '_cvd_owner_user_id', 'meta_value' => $user->ID ) );
+		$box = class_exists( 'CVD_Gestora_Financial_View' ) ? CVD_Gestora_Financial_View::commission_box( $orders, $user->ID ) : '';
 		$code = self::referral_code( $user );
 		$link = add_query_arg( 'ref', $code, wc_get_page_permalink( 'shop' ) );
 		$first = strtok( (string) $user->display_name, ' ' ) ?: $user->display_name;
@@ -120,12 +123,13 @@ final class CVD_Gestora_App {
 					<b data-cvga-title>Inicio</b>
 				</header>
 				<div class="cvga-wrap">
-					<?php echo self::inicio( $user, $first, $link, $code ); // phpcs:ignore ?>
+					<?php echo self::inicio( $user, $first, $link, $code, $orders, $box ); // phpcs:ignore ?>
 					<?php echo self::tienda( $link ); // phpcs:ignore ?>
 					<?php echo self::herramientas(); // phpcs:ignore ?>
 					<?php echo self::calculadora(); // phpcs:ignore ?>
 					<?php echo self::buscar( $zone ); // phpcs:ignore ?>
 					<?php echo class_exists( 'CVD_Gestora_Fotos' ) ? CVD_Gestora_Fotos::render( $user, $code ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
+					<?php if ( $box ) : // 3.13.68: el mismo recuadro arriba de «Tus ventas». ?><div class="cvga-view" data-view="ventas"><?php echo $box; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?></div><?php endif; ?>
 					<div class="cvga-legacy"><?php echo $legacy; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- salida del shortcode, ya escapada allí. ?></div>
 				</div>
 			</main>
@@ -140,8 +144,8 @@ final class CVD_Gestora_App {
 		return (string) ob_get_clean();
 	}
 
-	private static function inicio( WP_User $user, string $first, string $link, string $code ): string {
-		$money = self::money_summary( $user->ID );
+	private static function inicio( WP_User $user, string $first, string $link, string $code, array $orders, string $box ): string {
+		$money = self::money_summary( $orders );
 		$clients = class_exists( 'CVD_Clients' ) ? CVD_Clients::list( $user->ID, '', 5000 ) : array();
 		$quiet = 0;
 		$limit = gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS );
@@ -154,10 +158,11 @@ final class CVD_Gestora_App {
 		<section class="cvga-view" data-view="inicio" id="cvga-inicio">
 			<div class="cvga-head"><h1>Hola, <?php echo esc_html( $first ); ?></h1><p>Esto es lo que llevas este mes.</p></div>
 			<div class="cvga-kpis">
-				<article class="cvga-card cvga-kpi"><small>Ganado</small><strong><?php echo esc_html( $money['month'] ); ?></strong><span>Incluye ventas aún sin entregar</span></article>
-				<article class="cvga-card cvga-kpi"><small>Por cobrar</small><strong><?php echo esc_html( $money['approved'] ); ?></strong><span>De pedidos ya entregados</span></article>
+				<article class="cvga-card cvga-kpi"><small>Ganado este mes</small><strong><?php echo esc_html( $money['month'] ); ?></strong><span>Incluye ventas aún sin entregar</span></article>
+				<?php // 3.13.68: «Por cobrar» pasó al recuadro «Tus comisiones» como «Listas para cobrar». ?>
 				<article class="cvga-card cvga-kpi"><small>Clientes</small><strong><?php echo esc_html( (string) count( $clients ) ); ?></strong><span><a href="#clientes" data-cvga-go="clientes">Ver la lista</a></span></article>
 			</div>
+			<?php echo $box; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro (CVD_Gestora_Financial_View::commission_box). ?>
 			<div class="cvga-grid">
 				<section class="cvga-card">
 					<div class="cvga-row"><h2>Lo que más se vende</h2><span class="cvga-chip"><?php echo esc_html( $top['label'] ); ?></span></div>
@@ -418,21 +423,21 @@ final class CVD_Gestora_App {
 		return $p;
 	}
 
-	private static function money_summary( int $user_id ): array {
+	/** Lo ganado este mes (sus pedidos ya leídos en render()); sin pedidos anulados, comisiones canceladas ni pruebas. */
+	private static function money_summary( array $orders ): array {
 		$month_start = strtotime( gmdate( 'Y-m-01 00:00:00' ) );
-		$month = array(); $approved = array();
-		$orders = wc_get_orders( array( 'limit' => -1, 'type' => 'shop_order', 'meta_key' => '_cvd_owner_user_id', 'meta_value' => $user_id ) );
+		$month = array();
 		foreach ( $orders as $order ) {
-			if ( in_array( $order->get_status(), array( 'cancelled', 'refunded', 'failed', 'trash' ), true ) ) { continue; }
+			if ( ! $order instanceof WC_Order || in_array( $order->get_status(), array( 'cancelled', 'refunded', 'failed', 'trash' ), true ) ) { continue; }
+			if ( class_exists( 'CVD_Delivery' ) && CVD_Delivery::is_test_order( $order ) ) { continue; } // 3.13.68: igual que el recuadro.
 			$status = sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ?: 'pending';
 			if ( 'cancelled' === $status ) { continue; }
 			$cur = strtoupper( (string) ( $order->get_meta( '_cvd_commission_currency', true ) ?: $order->get_currency() ) ) ?: 'USD';
 			$amount = (float) $order->get_meta( '_cvd_commission_amount', true );
 			$created = $order->get_date_created();
 			if ( $created && $created->getTimestamp() >= $month_start ) { $month[ $cur ] = ( $month[ $cur ] ?? 0 ) + $amount; }
-			if ( 'approved' === $status ) { $approved[ $cur ] = ( $approved[ $cur ] ?? 0 ) + $amount; }
 		}
-		return array( 'month' => self::money_list( $month ), 'approved' => self::money_list( $approved ) );
+		return array( 'month' => self::money_list( $month ) );
 	}
 
 	private static function money_list( array $by_currency ): string {

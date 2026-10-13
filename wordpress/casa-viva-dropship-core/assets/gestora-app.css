@@ -47,7 +47,7 @@ body.cvga-body *,body.cvga-body *::before,body.cvga-body *::after{box-sizing:bor
 .cvga-empty{color:var(--ga-muted);margin:8px 0 0}
 .cvga-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .cvga-chip{display:inline-block;font-size:12px;padding:3px 10px;border-radius:99px;background:var(--ga-soft);color:var(--ga-ink);white-space:nowrap}
-.cvga-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.cvga-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px} /* 3.13.68: Ganado este mes y Clientes; lo demás va en «Tus comisiones». */
 .cvga-kpi small{display:block;color:var(--ga-muted);font-size:13px}
 .cvga-kpi strong{display:block;font-size:24px;line-height:1.25;margin:2px 0;font-variant-numeric:tabular-nums}
 .cvga-kpi span{font-size:12.5px;color:var(--ga-muted)}
