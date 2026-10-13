@@ -21,6 +21,7 @@ final class CVD_Gestora_Store {
 		add_action( 'woocommerce_before_single_product', array( __CLASS__, 'store_banner' ), 5 );
 		add_filter( 'woocommerce_add_cart_item_data', array( __CLASS__, 'lock_cart_price' ), 20, 3 );
 		add_action( 'woocommerce_before_calculate_totals', array( __CLASS__, 'apply_locked_cart_prices' ), 20 );
+		add_action( 'woocommerce_cart_loaded_from_session', array( __CLASS__, 'relock_cart' ), 20 );
 		add_action( 'woocommerce_checkout_create_order_line_item', array( __CLASS__, 'snapshot_line' ), 20, 4 );
 		add_action( 'woocommerce_checkout_create_order', array( __CLASS__, 'snapshot_order' ), 15, 2 );
 	}
@@ -50,6 +51,43 @@ final class CVD_Gestora_Store {
 		if ( did_action( 'woocommerce_before_calculate_totals' ) > 2 ) { return; }
 		foreach ( $cart->get_cart() as $cart_item ) {
 			if ( isset( $cart_item['_cvd_locked_price'], $cart_item['data'] ) && $cart_item['data'] instanceof WC_Product ) { $cart_item['data']->set_price( (float) $cart_item['_cvd_locked_price'] ); }
+		}
+	}
+
+	/**
+	 * 3.13.81 (Thaly, 13-oct): lo que ya estaba en el carrito pasa al precio de la gestora cuyo enlace se está usando.
+	 * Thaly tenía los organizadores en el carrito desde antes (a 30, sin gestora); al volver por su enlace la ficha
+	 * decía 35 pero el carrito seguía a 30. Mismo criterio que la atribución: el último enlace manda.
+	 */
+	public static function relock_cart( WC_Cart $cart ): void {
+		$gestora = self::active_gestora();
+		if ( ! $gestora ) { return; }
+		$contents = array(); $changed = false;
+		// Lo que no es dato propio de la línea; lo que queda es lo que add_to_cart usó para su clave.
+		$not_line_data = array_flip( array( 'key', 'product_id', 'variation_id', 'variation', 'quantity', 'data', 'data_hash', 'line_tax_data', 'line_subtotal', 'line_subtotal_tax', 'line_total', 'line_tax' ) );
+		foreach ( $cart->get_cart_contents() as $key => $item ) {
+			$product = $item['data'] ?? null;
+			if ( $product instanceof WC_Product && absint( $item['_cvd_gestora_id'] ?? 0 ) !== $gestora->ID ) {
+				$base = (float) get_post_meta( $product->get_id(), '_price', true );
+				$item['_cvd_gestora_id'] = $gestora->ID;
+				$item['_cvd_base_price'] = $base;
+				$item['_cvd_locked_price'] = (float) self::resolve_price( $product, $gestora->ID, $base );
+				// Nueva clave, la misma que daría añadirlo ahora desde su tienda: así no salen dos líneas del mismo producto.
+				$key = $cart->generate_cart_id( $item['product_id'], $item['variation_id'], $item['variation'], array_diff_key( $item, $not_line_data ) );
+				$item['key'] = $key;
+				$changed = true;
+			}
+			if ( isset( $contents[ $key ] ) ) { $contents[ $key ]['quantity'] += $item['quantity']; } else { $contents[ $key ] = $item; }
+		}
+		if ( ! $changed ) { return; }
+		$cart->set_cart_contents( $contents );
+		// WooCommerce no guarda el carrito tras cargarlo salvo que él mismo lo cambie: se guarda aquí, como
+		// WC_Cart_Session::get_cart_for_session() (sin el objeto producto), y también el carrito de la cuenta.
+		$for_session = array();
+		foreach ( $contents as $key => $item ) { unset( $item['data'] ); $for_session[ $key ] = $item; }
+		if ( WC()->session ) { WC()->session->set( 'cart', $for_session ); }
+		if ( get_current_user_id() && apply_filters( 'woocommerce_persistent_cart_enabled', true ) ) {
+			update_user_meta( get_current_user_id(), '_woocommerce_persistent_cart_' . get_current_blog_id(), array( 'cart' => $for_session ) );
 		}
 	}
 
@@ -91,14 +129,29 @@ final class CVD_Gestora_Store {
 		return $owner && hash_equals( (string) ( $owner['referral_code'] ?? '' ), $code ) ? $owner : null;
 	}
 
-	/** Código ?ref= de la página de esta misma web desde la que se hizo la petición AJAX. */
+	/**
+	 * Código ?ref= de la página de esta misma web desde la que se hizo la petición AJAX.
+	 *
+	 * 3.13.81 (Thaly, 13-oct, pedido #3598): al pulsar «Todo bien, finalizar», el formulario de pago manda
+	 * _wp_http_referer, una ruta relativa sin dominio (/?wc-ajax=update_order_review o /finalizar-compra/?ref=…),
+	 * y wp_get_raw_referer() la prefiere a la cabecera Referer. Se descartaba por no tener dominio: la página de
+	 * pago mostraba 140 (precio de la gestora) y el pedido se creaba a 120 (precio de Casa Viva). Ahora se mira
+	 * esa ruta y, si no trae código, la cabecera Referer.
+	 */
 	private static function referral_from_referer(): string {
-		$referer = (string) wp_get_raw_referer();
-		if ( '' === $referer || wp_parse_url( $referer, PHP_URL_HOST ) !== wp_parse_url( home_url( '/' ), PHP_URL_HOST ) ) { return ''; }
-		$query = array();
-		parse_str( (string) wp_parse_url( $referer, PHP_URL_QUERY ), $query );
-		$value = $query['ref'] ?? ( $query['cv_ref'] ?? '' );
-		return is_string( $value ) ? $value : '';
+		$home_host = wp_parse_url( home_url( '/' ), PHP_URL_HOST );
+		$referers = array( (string) wp_get_raw_referer(), isset( $_SERVER['HTTP_REFERER'] ) ? (string) wp_unslash( $_SERVER['HTTP_REFERER'] ) : '' );
+		foreach ( $referers as $referer ) {
+			if ( '' === $referer ) { continue; }
+			// Solo esta web: dirección completa con nuestro dominio o ruta relativa (/…). «//otra-web» trae dominio y no pasa.
+			$host = wp_parse_url( $referer, PHP_URL_HOST );
+			if ( $host ? $host !== $home_host : 0 !== strpos( $referer, '/' ) ) { continue; }
+			$query = array();
+			parse_str( (string) wp_parse_url( $referer, PHP_URL_QUERY ), $query );
+			$value = $query['ref'] ?? ( $query['cv_ref'] ?? '' );
+			if ( is_string( $value ) && '' !== $value ) { return $value; }
+		}
+		return '';
 	}
 
 	public static function customer_price( $price, WC_Product $product ) {
