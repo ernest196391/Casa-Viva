@@ -224,7 +224,8 @@ final class CVD_Contextual_Assistant {
 		};
 		?>
 		<div class="cvd-curru-nudge" data-cvd-curru-nudge hidden><button type="button" data-cvd-curru-open>¿Te ayudo a encontrar algo? <span aria-hidden="true">👋</span></button></div>
-		<button class="cvd-assistant-launcher<?php echo $avatar ? ' has-photo' : ''; ?>" type="button" aria-label="<?php echo esc_attr( 'Abrir ' . $name . ', asistente de Casa Viva' ); ?>" aria-expanded="false" aria-controls="cvd-contextual-assistant"><?php echo $photo( 'cvd-curru-photo' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></button>
+		<?php // 3.13.84 (Ernesto, 13-oct: «Cúrru está metida en el medio»): un solo botón pequeño «Ayuda», abajo a la derecha; WhatsApp va dentro. ?>
+		<button class="cvd-assistant-launcher cvd-help-chip" type="button" aria-label="<?php echo esc_attr( 'Ayuda: habla con ' . $name . ' o escríbenos por WhatsApp' ); ?>" aria-expanded="false" aria-controls="cvd-contextual-assistant"><span class="cvd-help-chip__face<?php echo $avatar ? ' has-photo' : ''; ?>"><?php echo $photo( 'cvd-curru-photo' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span><span class="cvd-help-chip__label">Ayuda</span></button>
 		<div class="cvd-curru-backdrop" data-cvd-curru-backdrop hidden></div>
 		<aside class="cvd-contextual-assistant" id="cvd-contextual-assistant" data-context="<?php echo esc_attr( self::context() ); ?>" role="dialog" aria-modal="true" aria-labelledby="cvd-curru-name" tabindex="-1" hidden>
 			<header>

@@ -22,6 +22,72 @@
   let busy = false;
   // Últimos turnos para que la IA entienda el hilo; solo texto de esta conversación.
   const history = [];
+  const root = document.documentElement;
+  const touch = window.matchMedia("(pointer: coarse)").matches;
+
+  // 3.13.84: WhatsApp vive dentro de Ayuda (en el móvil ya no hay un segundo botón flotante).
+  // config.whatsapp ya lleva a la gestora cuando se entró por su enlace.
+  if (config.whatsapp && !panel.querySelector(".cvd-curru-wa")) {
+    const wa = document.createElement("a");
+    wa.className = "cvd-curru-wa";
+    wa.href = config.whatsapp;
+    wa.target = "_blank";
+    wa.rel = "noopener";
+    wa.setAttribute("aria-label", "Escribir a una persona por WhatsApp");
+    wa.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.3c0-.1-.2-.2-.4-.3Z"/></svg>WhatsApp';
+    const closeButton = panel.querySelector("[data-cvd-assistant-close]");
+    if (closeButton) closeButton.before(wa);
+  }
+
+  // 3.13.84: en la ficha, Ayuda no sale hasta pasar los botones de compra (no tapa foto, nombre, precio ni botones).
+  // En la ficha ya está «¿Dudas? Pregúntale a Curru» junto a los botones.
+  const buySection = document.querySelector("body.single-product form.cart");
+  if (buySection) {
+    let queued = false;
+    const check = () => {
+      queued = false;
+      root.classList.toggle("cvd-help-wait", buySection.getBoundingClientRect().bottom > 0);
+    };
+    const schedule = () => { if (!queued) { queued = true; window.requestAnimationFrame(check); } };
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    check();
+  }
+
+  // Al bajar leyendo la lista, Ayuda se aparta; al subir un poco, vuelve.
+  // Y nunca se queda encima de un botón, un precio, un nombre de producto o un campo: si al parar
+  // de moverse los taparía, espera escondida (en las listas tapaba «Añadir al carrito» de la columna derecha).
+  const avoid = "a.button,button,.button,.price,.product_title,.woocommerce-loop-product__title,input,select,textarea,label,h1,h2";
+  const skip = ".cvd-help-chip,.cvd-customer-nav,.cvd-contextual-assistant,.cvd-buybar";
+  const covers = () => {
+    const box = launcher.getBoundingClientRect();
+    if (!box.width || !box.height) return false;
+    const points = [[box.left + 3, box.top + 3], [box.right - 3, box.top + 3], [box.left + 3, box.bottom - 3], [box.right - 3, box.bottom - 3], [box.left + box.width / 2, box.top + box.height / 2], [box.left + 3, box.top + box.height / 2]];
+    return points.some(([x, y]) => document.elementsFromPoint(x, y).some((node) => !node.closest(skip) && node.closest(avoid)));
+  };
+  const place = () => root.classList.toggle("cvd-help-covering", covers());
+  let lastY = window.scrollY;
+  let travel = 0;
+  let settle = 0;
+  window.addEventListener("scroll", () => {
+    const y = window.scrollY;
+    const delta = y - lastY;
+    lastY = y;
+    window.clearTimeout(settle);
+    settle = window.setTimeout(place, 160);
+    if (!delta) return;
+    travel = Math.sign(delta) === Math.sign(travel) ? travel + delta : delta;
+    if (travel > 48 && y > 120) root.classList.add("cvd-help-away");
+    else if (travel < -24 || y <= 120) root.classList.remove("cvd-help-away");
+  }, { passive: true });
+  window.addEventListener("resize", () => { window.clearTimeout(settle); settle = window.setTimeout(place, 160); });
+  window.addEventListener("load", place);
+  place();
+
+  // Mientras se escribe en un campo de la página, Ayuda se aparta (el teclado la subía encima del formulario).
+  const isField = (node) => node instanceof Element && node.matches("input:not([type=checkbox]):not([type=radio]):not([type=submit]):not([type=button]),select,textarea") && !panel.contains(node);
+  document.addEventListener("focusin", (event) => { if (isField(event.target)) root.classList.add("cvd-help-typing"); });
+  document.addEventListener("focusout", (event) => { if (isField(event.target)) root.classList.remove("cvd-help-typing"); });
 
   // Si la foto falla, se usa el dibujo incluido; si también falla, queda la inicial.
   document.querySelectorAll(".cvd-curru-photo").forEach((img) => img.addEventListener("error", () => {
@@ -40,7 +106,8 @@
     if (backdrop) backdrop.hidden = false;
     document.documentElement.classList.add("cvd-curru-open");
     launcher.setAttribute("aria-expanded", "true");
-    window.setTimeout(() => input.focus(), 0);
+    // En el móvil no se abre el teclado solo: tapaba los botones de preguntas rápidas.
+    window.setTimeout(() => (touch ? panel : input).focus({ preventScroll: true }), 0);
   }
   function close() {
     stopVoice();

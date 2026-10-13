@@ -44,7 +44,9 @@
 
   // Ofertas: una vez por sesión, al bajar por la página o tras unos segundos, nunca encima de una compra.
   const offers = document.querySelector("[data-cvd-offers]");
-  if (!offers) return;
+  // 3.13.84 (auditoría móvil): en el teléfono y en los resultados de búsqueda la ventana no se abre sola.
+  // Tapaba toda la pantalla y el toque caía en otra oferta (se buscaba «sombrilla» y abría una crema facial).
+  if (!offers || window.matchMedia("(max-width: 820px)").matches || document.body.classList.contains("search-results")) return;
   const KEY = "cvdOffersSeen";
   let seen = false;
   try { seen = sessionStorage.getItem(KEY) === "1"; } catch { /* sin almacenamiento */ }
