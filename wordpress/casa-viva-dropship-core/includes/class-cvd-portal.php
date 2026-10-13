@@ -519,7 +519,13 @@ final class CVD_Portal {
 			$html .= '<div class="cvd-delivery-money"><div><span>Pedido</span><strong>' . wp_kses_post( wc_price( $order->get_total(), array( 'currency' => $order->get_currency() ) ) ) . '</strong></div><div><span>Mensajería total</span><strong>' . esc_html( $shipping_cup ? number_format_i18n( $shipping_cup, 0 ) . ' CUP' : 'Por confirmar con la tienda' ) . '</strong></div>';
 			$collectible = class_exists( 'CVD_Payment_Obligations' ) ? CVD_Payment_Obligations::customer_collectible( $order ) : array();
 			if ( $collectible ) { foreach ( $collectible as $obligation ) { $html .= '<div class="cvd-customer-collectible"><span>Cobrar al cliente</span><strong>' . esc_html( number_format_i18n( (float) $obligation['amount'], 2 ) . ' ' . $obligation['currency'] ) . '</strong><small>' . esc_html( ucfirst( $obligation['concept'] ) . ' · ' . $obligation['method'] ) . '</small></div>'; } }
-			else { $html .= '<div class="cvd-customer-collectible"><span>Cobrar al cliente</span><strong>Por confirmar</strong><small>No se infiere del total.</small></div>'; }
+			else {
+				// 3.13.67: con la forma de pago del checkout, la misma cifra que el vale de WhatsApp (Zelle/PayPal: nada, ya pagó).
+				$payment = class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_payment( $order ) : null;
+				if ( $payment && $payment['prepaid'] ) { $html .= '<div class="cvd-customer-collectible"><span>Cobrar al cliente</span><strong>Nada: ya pagó</strong><small>' . esc_html( $payment['text'] . '. Solo cobras tu mensajería.' ) . '</small></div>'; }
+				elseif ( $payment && null !== $payment['amount'] ) { $html .= '<div class="cvd-customer-collectible"><span>Cobrar al cliente</span><strong>' . esc_html( CVD_Cuban_Checkout::money( (float) $payment['amount'], $payment['currency'] ) ) . '</strong><small>' . esc_html( $payment['text'] . ( 'transfer_cup' === $payment['kind'] ? ' · a tu tarjeta: pide la captura' : '' ) ) . '</small></div>'; }
+				else { $html .= '<div class="cvd-customer-collectible"><span>Cobrar al cliente</span><strong>Por confirmar</strong><small>' . esc_html( $payment ? $payment['text'] : 'No se infiere del total.' ) . '</small></div>'; }
+			}
 			$html .= '</div>';
 			$schedule = self::messenger_schedule_label( $order ); $change = self::messenger_change_label( $order );
 			$html .= '<div class="cvd-route-window"><span>📅 Día de entrega</span><strong>' . esc_html( $schedule ?: 'Sin preferencia registrada' ) . '</strong></div>';

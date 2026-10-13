@@ -379,7 +379,9 @@ final class CVD_Sales {
 			// ¿Cuadra con lo que declaró el mensajero por WhatsApp? Si no, queda escrito en el pedido.
 			$declared_usd = (string) $order->get_meta( '_cvd_declared_usd', true );
 			$declared_cup = (string) $order->get_meta( '_cvd_declared_cup', true );
-			if ( '' !== $declared_usd || '' !== $declared_cup ) {
+			// Zelle/PayPal (3.13.67): el mensajero declara 0 (no cobró productos) y la tienda registra el pago adelantado: no es descuadre.
+			$prepaid = class_exists( 'CVD_Cuban_Checkout' ) && CVD_Cuban_Checkout::is_prepaid( $order );
+			if ( ( '' !== $declared_usd || '' !== $declared_cup ) && ! $prepaid ) {
 				$got_usd = (float) wc_format_decimal( $request->get_param( 'collectedUsd' ) ?: 0, 2 );
 				$got_cup = (float) wc_format_decimal( $request->get_param( 'collectedCup' ) ?: 0, 2 );
 				if ( abs( $got_usd - (float) $declared_usd ) > 0.009 || abs( $got_cup - (float) $declared_cup ) > 0.009 ) {
@@ -487,6 +489,9 @@ final class CVD_Sales {
 			'canReturn' => current_user_can( 'manage_woocommerce' ) && $order->has_status( 'completed' ) && ! $order->get_meta( '_cvd_return', true ),
 			'declaredUsd' => (string) $order->get_meta( '_cvd_declared_usd', true ),
 			'declaredCup' => (string) $order->get_meta( '_cvd_declared_cup', true ),
+			'declaredEur' => (string) $order->get_meta( '_cvd_declared_eur', true ),
+			// 3.13.67 (Lennys): cómo paga el cliente y cuánto en su moneda, la misma cifra que lee el mensajero en su vale.
+			'payment' => 'pickup' === $fulfillment || ! class_exists( 'CVD_Cuban_Checkout' ) ? null : CVD_Cuban_Checkout::order_payment( $order ),
 			'deliveryStatus' => 'pickup' === $fulfillment ? '' : ( class_exists( 'CVD_Delivery' ) ? CVD_Delivery::label( $delivery_status ) : '' ),
 			'trackingUrl' => class_exists( 'CVD_Delivery' ) && 'pickup' !== $fulfillment ? CVD_Delivery::tracking_url( $order ) : '',
 			// Reparto (3.13.48): quién lo lleva, a qué hora, sus pasos y si el mensajero dice que ya entregó el dinero.

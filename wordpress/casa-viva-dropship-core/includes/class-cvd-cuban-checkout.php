@@ -12,6 +12,32 @@ final class CVD_Cuban_Checkout {
 	public const TEAM_ROLES = array( 'cvd_gestora', 'cvd_influencer', 'cvd_messenger', 'administrator', 'shop_manager' );
 	/** Notas para el pedido que se está creando: en woocommerce_checkout_create_order aún no tiene número y add_order_note() no guardaría nada. */
 	private static array $pending_notes = array();
+	/**
+	 * 3.13.67 (Lennys, 12-oct): «¿Cómo paga el cliente?». Cada forma de pago dice en qué moneda se cobra y qué tasa
+	 * del día usa (CVD_Daily_Rates: lo que paga el cliente por cada 1 USD del precio; `rate` vacío = 1:1).
+	 * Transferencia CUP: el cliente transfiere a la tarjeta que le da el MENSAJERO y le enseña la captura; el mensajero
+	 * luego le da el dinero a la tienda. Zelle y PayPal (prepaid): consulta antes con la tienda, el cliente paga TODO antes
+	 * y manda la captura, la tienda lo verifica antes de coordinar la entrega y no hay devolución; el mensajero solo cobra
+	 * su mensajería. La mensajería siempre se paga aparte, en CUP, al mensajero.
+	 */
+	public const PAYMENT_KINDS = array(
+		'cash_usd'     => array( 'label' => 'Efectivo USD', 'option' => 'Efectivo en dólares (USD)', 'currency' => 'USD', 'rate' => '' ),
+		'cash_cup'     => array( 'label' => 'Efectivo CUP', 'option' => 'Efectivo en pesos (CUP)', 'currency' => 'CUP', 'rate' => 'cup' ),
+		'transfer_cup' => array( 'label' => 'Transferencia CUP', 'option' => 'Transferencia en CUP (a la tarjeta que da el mensajero)', 'currency' => 'CUP', 'rate' => 'cup' ),
+		'eur'          => array( 'label' => 'Euros (EUR)', 'option' => 'Euros (EUR) en efectivo', 'currency' => 'EUR', 'rate' => 'eur' ),
+		'clasica'      => array( 'label' => 'Tarjeta Clásica', 'option' => 'Tarjeta Clásica (transferencia en el momento)', 'currency' => 'USD', 'rate' => 'clasica' ),
+		'zelle'        => array( 'label' => 'Zelle', 'option' => 'Zelle (paga todo antes)', 'currency' => 'USD', 'rate' => 'zelle', 'prepaid' => true ),
+		'paypal'       => array( 'label' => 'PayPal', 'option' => 'PayPal (paga todo antes)', 'currency' => 'USD', 'rate' => 'paypal_pct', 'prepaid' => true ),
+	);
+	/** Formas de pago en efectivo: las únicas en las que el cliente puede pedir vuelto. */
+	public const CASH_KINDS = array( 'cash_usd', 'cash_cup', 'eur' );
+	public const PREPAID_NOTICE = 'Consulta antes con la tienda; el cliente paga todo antes y manda la captura.';
+	/**
+	 * Respaldo SOLO si todavía no hay ninguna tasa guardada de ese tipo: lo que publicó la tienda el 12-oct
+	 * (1 EUR = 1 USD, Clásica ×1,15, Zelle ×1,04, PayPal +4 %). El pedido queda marcado «tasa por confirmar».
+	 * La CUP no tiene respaldo: cambia cada día (sin tasa, el vale dice «a la tasa de hoy, pregúntala a la tienda»).
+	 */
+	private const PAYMENT_FALLBACK = array( 'eur' => 1.0, 'clasica' => 1.15, 'zelle' => 1.04, 'paypal_pct' => 4.0 );
 	public static function register(): void {
 		add_filter( 'woocommerce_states', array( __CLASS__, 'register_provinces' ) );
 		add_filter( 'default_checkout_billing_country', array( __CLASS__, 'default_country' ) );
@@ -41,6 +67,10 @@ final class CVD_Cuban_Checkout {
 	public static function checkout_value( $value, string $input ) {
 		if ( in_array( $input, array( 'billing_country', 'shipping_country' ), true ) ) {
 			return 'CU';
+		}
+		// 3.13.67: la forma de pago se elige cada vez (Zelle/PayPal piden consultar antes): nunca se precarga del pedido anterior.
+		if ( 'billing_cvd_payment_kind' === $input ) {
+			return '';
 		}
 		if ( 'billing_state' === $input && ! array_key_exists( strtoupper( (string) $value ), self::provinces() ) ) {
 			return strtoupper( (string) get_option( 'cvd_default_province', 'LH' ) );
@@ -286,15 +316,22 @@ final class CVD_Cuban_Checkout {
 			'options' => array( '' => 'Sin preferencia', 'morning' => 'Por la mañana', 'afternoon' => 'Por la tarde' ),
 			'class' => array( 'form-row-last', 'cvd-delivery-field' ), 'priority' => 122,
 		);
+		// 3.13.67 (Lennys, 12-oct): forma de pago, obligatoria con mensajería. checkout.js enseña cuánto es con la tasa de hoy
+		// y, en Zelle/PayPal, el aviso de consultar antes con la tienda. El vuelto (abajo) solo sale si paga en efectivo.
+		$fields['billing']['billing_cvd_payment_kind'] = array(
+			'type' => 'select', 'label' => '¿Cómo paga el cliente?', 'required' => $is_delivery,
+			'options' => array( '' => 'Elige cómo paga' ) + array_map( static fn( array $kind ): string => $kind['option'], self::PAYMENT_KINDS ),
+			'class' => array( 'form-row-wide', 'cvd-delivery-field', 'cvd-payment-kind' ), 'priority' => 123,
+		);
 		$fields['billing']['billing_cvd_change_amount'] = array(
 			'type' => 'number', 'label' => '¿Con cuánto paga los productos? (para llevarle el vuelto)', 'placeholder' => 'Ej. 20 · vacío si paga exacto', 'required' => false,
-			'class' => array( 'form-row-first', 'cvd-delivery-field' ), 'priority' => 123,
+			'class' => array( 'form-row-first', 'cvd-delivery-field', 'cvd-change-field' ), 'priority' => 124,
 			'custom_attributes' => array( 'min' => '0', 'step' => '0.01', 'inputmode' => 'decimal' ),
 		);
 		$fields['billing']['billing_cvd_change_currency'] = array(
 			'type' => 'select', 'label' => 'Moneda en que paga', 'required' => false,
 			'options' => array( '' => 'Elige la moneda', 'USD' => 'Dólares (USD)', 'CUP' => 'Pesos cubanos (CUP)', 'EUR' => 'Euros (EUR)' ), // sin moneda preseleccionada (prueba: 2 USD salieron como 2 CUP)
-			'class' => array( 'form-row-last', 'cvd-delivery-field' ), 'priority' => 124,
+			'class' => array( 'form-row-last', 'cvd-delivery-field', 'cvd-change-field' ), 'priority' => 125,
 		);
 		$fields['billing']['billing_cvd_map_url'] = array(
 			'type'        => 'url',
@@ -352,6 +389,7 @@ final class CVD_Cuban_Checkout {
 				'pickupAddress'  => get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ),
 				'ajaxUrl'        => admin_url( 'admin-ajax.php' ),
 				'addressNonce'   => wp_create_nonce( 'cvd_address_search' ),
+				'payment'        => self::payment_script_data(),
 			),
 		);
 	}
@@ -373,12 +411,17 @@ final class CVD_Cuban_Checkout {
 		$date = sanitize_text_field( wp_unslash( $_POST['billing_cvd_delivery_date'] ?? '' ) );
 		$date_error = CVD_Delivery_When::error( $date );
 		if ( $date_error ) { $errors->add( 'billing_cvd_delivery_date', $date_error ); }
+		// 3.13.67: forma de pago obligatoria con mensajería (con nuestro mensaje, no el genérico de WooCommerce).
+		$errors->remove( 'billing_cvd_payment_kind_required' );
+		$kind = sanitize_key( wp_unslash( $_POST['billing_cvd_payment_kind'] ?? '' ) );
+		if ( ! isset( self::PAYMENT_KINDS[ $kind ] ) ) { $errors->add( 'billing_cvd_payment_kind', 'Elige cómo paga el cliente: efectivo (USD o CUP), transferencia CUP, euros, Tarjeta Clásica, Zelle o PayPal.' ); }
+		// El vuelto solo cuenta en efectivo, y en la moneda en que paga (la de la forma de pago).
 		$change_amount = (float) wc_format_decimal( wp_unslash( $_POST['billing_cvd_change_amount'] ?? 0 ), 2 );
-		$change_currency = strtoupper( sanitize_key( wp_unslash( $_POST['billing_cvd_change_currency'] ?? '' ) ) );
-		if ( $change_amount > 0 && ! in_array( $change_currency, array( 'USD', 'CUP', 'EUR' ), true ) ) { $errors->add( 'billing_cvd_change_currency', 'Elige en qué moneda paga (dólares, pesos o euros).' ); }
+		$cash_currency = in_array( $kind, self::CASH_KINDS, true ) ? self::PAYMENT_KINDS[ $kind ]['currency'] : '';
 		$products_total = function_exists( 'WC' ) && WC()->cart ? (float) WC()->cart->get_total( 'edit' ) : 0;
-		if ( $change_amount > 0 && 'USD' === $change_currency && $products_total > 0 && $change_amount < $products_total ) {
-			$errors->add( 'billing_cvd_change_amount', sprintf( 'Con %s USD no alcanza: los productos cuestan %s USD. Escribe el billete con el que paga (o déjalo vacío si paga exacto).', wc_format_decimal( $change_amount, 2, true ), wc_format_decimal( $products_total, 2, true ) ) );
+		$due = '' !== $cash_currency ? self::payment_amount( $products_total, self::payment_factors()[ $kind ]['factor'], $cash_currency ) : null;
+		if ( $change_amount > 0 && null !== $due && $change_amount < $due ) {
+			$errors->add( 'billing_cvd_change_amount', sprintf( 'Con %s no alcanza: los productos cuestan %s. Escribe el billete con el que paga (o déjalo vacío si paga exacto).', self::money( $change_amount, $cash_currency ), self::money( $due, $cash_currency ) ) );
 		}
 
 		$required = array(
@@ -422,7 +465,7 @@ final class CVD_Cuban_Checkout {
 			$order->set_billing_address_2( '' );
 			$order->set_billing_city( '' );
 			$order->set_billing_state( '' );
-			foreach ( array( '_cvd_province_name', '_cvd_locality', '_cvd_reference', '_cvd_map_url', '_cvd_map_accuracy', '_cvd_delivery_date', '_cvd_delivery_window', '_cvd_pay_with' ) as $key ) {
+			foreach ( array( '_cvd_province_name', '_cvd_locality', '_cvd_reference', '_cvd_map_url', '_cvd_map_accuracy', '_cvd_delivery_date', '_cvd_delivery_window', '_cvd_pay_with', '_cvd_payment_kind', '_cvd_payment_currency', '_cvd_payment_amount', '_cvd_payment_factor', '_cvd_payment_usd', '_cvd_payment_estimated' ) as $key ) {
 				$order->delete_meta_data( $key );
 			}
 			$order->update_meta_data( '_cvd_change_required', array() );
@@ -441,16 +484,37 @@ final class CVD_Cuban_Checkout {
 		$order->update_meta_data( '_cvd_delivery_date', CVD_Delivery_When::normalize( sanitize_text_field( wp_unslash( $_POST['billing_cvd_delivery_date'] ?? '' ) ) ) );
 		$window = sanitize_key( wp_unslash( $_POST['billing_cvd_delivery_window'] ?? '' ) );
 		$order->update_meta_data( '_cvd_delivery_window', in_array( $window, array( 'morning', 'afternoon' ), true ) ? $window : '' );
-		// El cliente dice con cuánto paga; si es en USD (moneda de los productos) el vuelto se calcula aquí.
+		// 3.13.67: forma de pago y cuánto es en su moneda con la tasa de hoy. Se guarda la cifra y el factor usado:
+		// el vale del mensajero, la tienda y la gestora leen lo mismo (order_payment()).
+		$kind = sanitize_key( wp_unslash( $_POST['billing_cvd_payment_kind'] ?? '' ) );
+		$due = null; $cash_currency = '';
+		if ( isset( self::PAYMENT_KINDS[ $kind ] ) ) {
+			$def = self::PAYMENT_KINDS[ $kind ];
+			$rate = self::payment_factors()[ $kind ];
+			$usd = round( (float) $order->get_total(), 2 );
+			$due = self::payment_amount( $usd, $rate['factor'], $def['currency'] );
+			$order->update_meta_data( '_cvd_payment_kind', $kind );
+			$order->update_meta_data( '_cvd_payment_currency', $def['currency'] );
+			$order->update_meta_data( '_cvd_payment_factor', $rate['factor'] );
+			$order->update_meta_data( '_cvd_payment_usd', $usd );
+			if ( null !== $due ) { $order->update_meta_data( '_cvd_payment_amount', $due ); }
+			if ( $rate['estimated'] ) { $order->update_meta_data( '_cvd_payment_estimated', 'yes' ); }
+			$cash_currency = in_array( $kind, self::CASH_KINDS, true ) ? $def['currency'] : '';
+			self::note( $order, 'Forma de pago: ' . self::payment_text( $kind, $due, $rate['factor'], $usd ) . '.' . ( empty( $def['prepaid'] ) ? '' : ' ' . self::PREPAID_NOTICE . ' La tienda verifica el pago antes de coordinar la entrega; no hay devolución. El mensajero solo cobra su mensajería.' ) );
+		}
+		// El cliente dice con cuánto paga (solo en efectivo, en la moneda de su forma de pago) y el vuelto se calcula aquí.
+		// Sin forma de pago (pedido de antes): como siempre, la moneda que eligió y el vuelto solo si es en USD.
 		$pay_with = (float) wc_format_decimal( wp_unslash( $_POST['billing_cvd_change_amount'] ?? 0 ), 2 );
 		$pay_currency = strtoupper( sanitize_key( wp_unslash( $_POST['billing_cvd_change_currency'] ?? '' ) ) );
-		$pay_currency = in_array( $pay_currency, array( 'USD', 'CUP', 'EUR' ), true ) ? $pay_currency : 'USD';
+		$pay_currency = '' !== $cash_currency ? $cash_currency : ( in_array( $pay_currency, array( 'USD', 'CUP', 'EUR' ), true ) ? $pay_currency : 'USD' );
+		if ( isset( self::PAYMENT_KINDS[ $kind ] ) && '' === $cash_currency ) { $pay_with = 0; } // transferencia, Clásica, Zelle o PayPal: no hay vuelto
 		$change_required = array();
 		if ( $pay_with > 0 ) {
 			$order->update_meta_data( '_cvd_pay_with', array( 'amount' => $pay_with, 'currency' => $pay_currency ) );
-			if ( 'USD' === $pay_currency ) {
-				$change = round( $pay_with - (float) $order->get_total(), 2 );
-				if ( $change > 0 ) { $change_required[] = array( 'amount' => $change, 'currency' => 'USD' ); }
+			$owed = 'USD' === $pay_currency ? (float) $order->get_total() : ( '' !== $cash_currency ? $due : null );
+			if ( null !== $owed ) {
+				$change = round( $pay_with - $owed, 2 );
+				if ( $change > 0 ) { $change_required[] = array( 'amount' => $change, 'currency' => $pay_currency ); }
 			}
 		}
 		$order->update_meta_data( '_cvd_change_required', $change_required );
@@ -472,6 +536,8 @@ final class CVD_Cuban_Checkout {
 		echo '<p><strong>Modalidad:</strong> ' . esc_html( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ? 'Recogida en tienda' : 'Mensajería' ) . '</p>';
 		$shipping_cup = class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_fee( $order ) : absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) );
 		echo '<p><strong>Tarifa guardada:</strong> ' . esc_html( $shipping_cup ? number_format_i18n( $shipping_cup, 0 ) . ' CUP' : 'Por confirmar' ) . '</p>';
+		$payment = self::order_payment( $order );
+		if ( $payment ) { echo '<p><strong>Cómo paga el cliente:</strong> ' . esc_html( $payment['text'] . ( $payment['prepaid'] ? ' — verificar la captura antes de coordinar la entrega (sin devolución)' : '' ) ) . '</p>'; }
 		foreach ( array( '_cvd_locality' => 'Reparto/localidad', '_cvd_reference' => 'Referencia', '_cvd_alternate_phone' => 'Teléfono alternativo', '_cvd_delivery_date' => 'Día de entrega', '_cvd_delivery_window' => 'Horario solicitado', '_cvd_map_url' => 'Ubicación en mapa', '_cvd_buyer_name' => 'Persona que compra/paga' ) as $key => $label ) {
 			$value = $order->get_meta( $key, true );
 			if ( '_cvd_map_url' === $key ) { $value = CVD_Shipping_Rates::safe_map_url( (string) $value ); }
@@ -494,8 +560,107 @@ final class CVD_Cuban_Checkout {
 			echo esc_html( implode( ', ', array_filter( array( $order->get_billing_address_1(), $order->get_billing_address_2(), $order->get_meta( '_cvd_locality', true ), $order->get_billing_city(), $order->get_meta( '_cvd_province_name', true ) ) ) ) );
 		}
 		echo '</p>';
+		$payment = 'pickup' === $type ? null : self::order_payment( $order );
+		if ( $payment ) {
+			echo '<p><strong>Pago:</strong> ' . esc_html( $payment['text'] ) . ( $payment['prepaid'] ? '<br>' . esc_html( self::PREPAID_NOTICE . ' No hay devolución.' ) : '' ) . '<br><small>' . esc_html( 'La mensajería se paga aparte, en CUP, al mensajero.' ) . '</small></p>';
+		}
 		$map_url = CVD_Shipping_Rates::order_map_url( $order );
 		if ( $map_url ) { echo '<p><a class="button" href="' . esc_url( $map_url ) . '" target="_blank" rel="noopener">Abrir ubicación en el mapa</a></p>'; }
 		echo '</section>';
+	}
+
+	// ---------- Formas de pago (3.13.67) ----------
+
+	/**
+	 * Factor de HOY por forma de pago: cuánto paga el cliente por cada 1 USD del precio (CVD_Daily_Rates; PayPal es
+	 * 1 + %/100). estimated = salió del respaldo PAYMENT_FALLBACK porque aún no hay esa tasa. factor 0 = sin tasa (CUP).
+	 */
+	public static function payment_factors(): array {
+		$rates = class_exists( 'CVD_Daily_Rates' ) ? CVD_Daily_Rates::get() : array();
+		$out = array();
+		foreach ( self::PAYMENT_KINDS as $kind => $def ) {
+			$field = $def['rate'];
+			$value = '' === $field ? 1.0 : ( isset( $rates[ $field ] ) && is_numeric( $rates[ $field ] ) ? (float) $rates[ $field ] : null );
+			$estimated = false;
+			if ( null === $value && isset( self::PAYMENT_FALLBACK[ $field ] ) ) { $value = self::PAYMENT_FALLBACK[ $field ]; $estimated = true; }
+			$factor = null === $value ? 0.0 : ( 'paypal_pct' === $field ? 1 + $value / 100 : $value );
+			$out[ $kind ] = array( 'factor' => $factor > 0 ? round( $factor, 4 ) : 0.0, 'estimated' => $estimated );
+		}
+		return $out;
+	}
+
+	/** Importe en la moneda de la forma de pago: CUP entero; USD y EUR con 2 decimales. null si no hay tasa. */
+	public static function payment_amount( float $usd, float $factor, string $currency ): ?float {
+		if ( $usd <= 0 || $factor <= 0 ) { return null; }
+		return 'CUP' === $currency ? (float) round( $usd * $factor ) : round( $usd * $factor, 2 );
+	}
+
+	/** ¿Zelle o PayPal? El cliente ya pagó todo antes: el mensajero no cobra productos (solo su mensajería). */
+	public static function is_prepaid( WC_Order $order ): bool {
+		$kind = sanitize_key( (string) $order->get_meta( '_cvd_payment_kind', true ) );
+		return ! empty( self::PAYMENT_KINDS[ $kind ]['prepaid'] );
+	}
+
+	/**
+	 * Forma de pago del pedido para el vale del bot, la tienda (Pedidos) y la gestora, o null si es un pedido de antes
+	 * de 3.13.67 (entonces todo sigue como siempre). Manda la cifra guardada al comprar; solo si luego cambió el total
+	 * del pedido se recalcula, con el mismo factor del día de la venta.
+	 * → kind, label, currency, amount (null = sin tasa), factor, usd, prepaid, estimated, text.
+	 */
+	public static function order_payment( WC_Order $order ): ?array {
+		$kind = sanitize_key( (string) $order->get_meta( '_cvd_payment_kind', true ) );
+		if ( ! isset( self::PAYMENT_KINDS[ $kind ] ) ) { return null; }
+		$def = self::PAYMENT_KINDS[ $kind ];
+		$usd = round( (float) $order->get_total(), 2 );
+		$factor = (float) $order->get_meta( '_cvd_payment_factor', true );
+		$saved = (string) $order->get_meta( '_cvd_payment_amount', true );
+		$same_total = abs( (float) $order->get_meta( '_cvd_payment_usd', true ) - $usd ) < 0.01;
+		$amount = '' !== $saved && $same_total ? (float) $saved : self::payment_amount( $usd, $factor, $def['currency'] );
+		return array(
+			'kind'      => $kind,
+			'label'     => $def['label'],
+			'currency'  => $def['currency'],
+			'amount'    => $amount,
+			'factor'    => $factor > 0 ? $factor : null,
+			'usd'       => $usd,
+			'prepaid'   => ! empty( $def['prepaid'] ),
+			'estimated' => 'yes' === (string) $order->get_meta( '_cvd_payment_estimated', true ),
+			'text'      => self::payment_text( $kind, $amount, $factor, $usd ),
+		);
+	}
+
+	/** "Efectivo CUP · 28.260 CUP (36 USD × 785)"; Zelle/PayPal terminan en "· por adelantado". */
+	public static function payment_text( string $kind, ?float $amount, float $factor, float $usd ): string {
+		$def = self::PAYMENT_KINDS[ $kind ] ?? null;
+		if ( ! $def ) { return ''; }
+		if ( null === $amount ) {
+			$money = self::money( $usd, 'USD' ) . ' en ' . $def['currency'] . ' a la tasa del día (por confirmar con la tienda)';
+		} else {
+			$money = self::money( $amount, $def['currency'] ) . ( 'cash_usd' === $kind ? '' : ' (' . self::payment_formula( $kind, $factor, $usd ) . ')' );
+		}
+		return $def['label'] . ' · ' . $money . ( empty( $def['prepaid'] ) ? '' : ' · por adelantado' );
+	}
+
+	/** "36 USD × 785", "36 USD × 1,15" o, en PayPal, "36 USD + 4 %". */
+	private static function payment_formula( string $kind, float $factor, float $usd ): string {
+		$rate = static fn( float $v ): string => class_exists( 'CVD_Daily_Rates' ) ? CVD_Daily_Rates::format_rate( $v ) : (string) $v;
+		if ( 'paypal' === $kind ) { return self::money( $usd, 'USD' ) . ' + ' . $rate( round( ( $factor - 1 ) * 100, 2 ) ) . ' %'; }
+		return self::money( $usd, 'USD' ) . ' × ' . $rate( $factor );
+	}
+
+	/** Dinero a la cubana: 28260 CUP → "28.260 CUP"; 41.4 USD → "41,40 USD"; 36 USD → "36 USD". */
+	public static function money( float $amount, string $currency ): string {
+		$decimals = 'CUP' === $currency || abs( $amount - round( $amount ) ) < 0.005 ? 0 : 2;
+		return number_format( $amount, $decimals, ',', '.' ) . ' ' . $currency;
+	}
+
+	/** Lo que necesita checkout.js para enseñar cuánto es con la tasa de hoy (las mismas cuentas que el servidor). */
+	private static function payment_script_data(): array {
+		$factors = self::payment_factors();
+		$kinds = array();
+		foreach ( self::PAYMENT_KINDS as $kind => $def ) {
+			$kinds[ $kind ] = array( 'label' => $def['label'], 'currency' => $def['currency'], 'factor' => $factors[ $kind ]['factor'], 'estimated' => $factors[ $kind ]['estimated'], 'prepaid' => ! empty( $def['prepaid'] ), 'cash' => in_array( $kind, self::CASH_KINDS, true ) );
+		}
+		return array( 'kinds' => $kinds, 'prepaidNotice' => self::PREPAID_NOTICE );
 	}
 }

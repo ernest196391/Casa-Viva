@@ -75,6 +75,14 @@
     else if (order.preferredMessenger) text += " · preferido: " + order.preferredMessenger;
     return '<p><b>Mensajería</b><span>' + escapeText(text) + '</span></p>';
   }
+  // Cómo paga el cliente (3.13.67, Lennys): la misma cifra que lee el mensajero en su vale.
+  // Zelle/PayPal: el cliente paga todo antes; la tienda verifica la captura antes de coordinar la entrega.
+  function paymentRow(order) {
+    var p = order.payment;
+    if (!p || !p.text) return "";
+    var extra = p.prepaid ? " · verifica la captura antes de coordinar la entrega (sin devolución); el mensajero solo cobra su mensajería" : (p.kind === "transfer_cup" ? " · a la tarjeta del mensajero: él trae el dinero" : "");
+    return '<p><b>Pago</b><span' + (p.prepaid ? ' style="color:#a8641c;font-weight:700"' : "") + ">💳 " + escapeText(p.text + extra) + "</span></p>";
+  }
   function commercialData(order) {
     var rows = [];
     if (Object.prototype.hasOwnProperty.call(order, "gestora")) {
@@ -104,7 +112,7 @@
       var wa = order.phone ? '<a class="cvd-sale-wa" target="_blank" rel="noopener" href="https://wa.me/' + escapeText(order.phone.replace(/\D/g, "")) + '">WhatsApp</a>' : "";
       // Pedido de prueba (3.13.54): cartel grande arriba; el servidor no lo deja salir al reparto.
       var test = order.testOrder ? '<p class="cvd-sale-test" role="note" style="margin:0 0 10px;padding:10px 12px;border-radius:12px;background:#b3261e;color:#fff;font-weight:800;font-size:1.15em;letter-spacing:.02em;text-align:center">PRUEBA — no preparar<br><small style="font-weight:600;font-size:.75em">No sale al reparto ni a ningún mensajero</small></p>' : '';
-      return '<article class="cvd-sale-card' + (order.testOrder ? ' is-test' : '') + '">' + test + '<div class="cvd-sale-top"><div><span class="cvd-sale-status is-' + order.status + '">' + escapeText(order.statusLabel) + '</span><h2>Pedido #' + escapeText(order.number) + '</h2><small>' + escapeText(order.date) + '</small></div><div class="cvd-sale-code"><canvas data-order-code="' + escapeText(order.orderCode) + '"></canvas><small>' + escapeText(order.orderCode) + '</small></div><strong>' + escapeText(order.total) + (order.shippingCup && !/CUP/i.test(order.total) ? ' + ' + escapeText(order.shippingCup) + ' CUP' : '') + '</strong></div><div class="cvd-sale-data"><p><b>Cliente</b><span>' + escapeText(order.customer) + " · " + phone + '</span></p><p><b>Entrega</b><span>' + escapeText(order.fulfillment + " · " + order.address) + '</span></p>' + (order.deliveryWhen ? '<p><b>Día</b><span' + (order.deliveryFuture ? ' style="color:#a8641c;font-weight:700"' : '') + '>📅 ' + escapeText(order.deliveryWhen) + '</span></p>' : '') + '<p><b>Productos</b><span>' + productLinks(order.products) + '</span></p>' + messengerRow(order) + commercialData(order) + '</div><div class="cvd-sale-actions">' + actionButtons(order) + (order.canReturn ? '<button type="button" class="cvd-sale-return is-warning" data-return-order="' + order.id + '">Devolución</button>' : '') + (order.trackingUrl ? '<button type="button" data-copy-tracking="' + escapeText(order.trackingUrl) + '">Copiar seguimiento</button>' : '') + wa + (cvdSales.isAdmin && order.adminUrl ? '<a href="' + escapeText(order.adminUrl) + '" target="_blank" rel="noopener">Ver pedido</a>' : '') + '</div></article>';
+      return '<article class="cvd-sale-card' + (order.testOrder ? ' is-test' : '') + '">' + test + '<div class="cvd-sale-top"><div><span class="cvd-sale-status is-' + order.status + '">' + escapeText(order.statusLabel) + '</span><h2>Pedido #' + escapeText(order.number) + '</h2><small>' + escapeText(order.date) + '</small></div><div class="cvd-sale-code"><canvas data-order-code="' + escapeText(order.orderCode) + '"></canvas><small>' + escapeText(order.orderCode) + '</small></div><strong>' + escapeText(order.total) + (order.shippingCup && !/CUP/i.test(order.total) ? ' + ' + escapeText(order.shippingCup) + ' CUP' : '') + '</strong></div><div class="cvd-sale-data"><p><b>Cliente</b><span>' + escapeText(order.customer) + " · " + phone + '</span></p><p><b>Entrega</b><span>' + escapeText(order.fulfillment + " · " + order.address) + '</span></p>' + paymentRow(order) + (order.deliveryWhen ? '<p><b>Día</b><span' + (order.deliveryFuture ? ' style="color:#a8641c;font-weight:700"' : '') + '>📅 ' + escapeText(order.deliveryWhen) + '</span></p>' : '') + '<p><b>Productos</b><span>' + productLinks(order.products) + '</span></p>' + messengerRow(order) + commercialData(order) + '</div><div class="cvd-sale-actions">' + actionButtons(order) + (order.canReturn ? '<button type="button" class="cvd-sale-return is-warning" data-return-order="' + order.id + '">Devolución</button>' : '') + (order.trackingUrl ? '<button type="button" data-copy-tracking="' + escapeText(order.trackingUrl) + '">Copiar seguimiento</button>' : '') + wa + (cvdSales.isAdmin && order.adminUrl ? '<a href="' + escapeText(order.adminUrl) + '" target="_blank" rel="noopener">Ver pedido</a>' : '') + '</div></article>';
     }).join("");
     if (window.CVQRCode) document.querySelectorAll("[data-order-code]").forEach(function (canvas) { window.CVQRCode.toCanvas(canvas, canvas.dataset.orderCode, { width: 84, margin: 1 }); });
   }
@@ -150,12 +158,25 @@
       document.getElementById("cvd-money-usd").value = ((card && card.querySelector(".cvd-sale-top>strong").textContent.match(/[\d.,]+/)) || [""])[0].replace(",", ".");
       // Lo que el mensajero declaró por WhatsApp: se propone tal cual; si la tienda cuenta otra cosa, Core lo anota.
       var declaredUsd = button.dataset.declaredUsd, declaredCup = button.dataset.declaredCup;
+      // 3.13.67: la forma de pago del pedido (Efectivo CUP, Zelle…) y su cifra; los euros van a la observación.
+      var sale = lastData && (lastData.orders || []).filter(function (o) { return String(o.id) === String(button.dataset.order); })[0];
+      var pay = sale && sale.payment, declaredEur = sale ? Number(sale.declaredEur || 0) : 0, moneyNote = document.getElementById("cvd-money-note");
+      if (/^Cobrado en euros:/.test(moneyNote.value)) moneyNote.value = ""; // lo puso otro pedido
+      if (pay && pay.amount && !(Number(declaredUsd) > 0 || Number(declaredCup) > 0)) {
+        document.getElementById("cvd-money-usd").value = pay.currency === "USD" ? pay.amount : "0";
+        document.getElementById("cvd-money-cup").value = pay.currency === "CUP" ? pay.amount : "0";
+        document.getElementById("cvd-money-method").value = { cash_usd: "cash_usd", cash_cup: "cash_cup", transfer_cup: "cash_cup", clasica: "transfer", zelle: "zelle" }[pay.kind] || "other";
+        if (pay.currency === "EUR") moneyNote.value = "Cobrado en euros: " + (declaredEur || pay.amount) + " EUR";
+        declaredUsd = ""; declaredCup = "";
+      }
       if (declaredUsd || declaredCup) {
         document.getElementById("cvd-money-usd").value = declaredUsd || "0";
         document.getElementById("cvd-money-cup").value = declaredCup || "0";
         document.getElementById("cvd-money-method").value = Number(declaredUsd) > 0 && Number(declaredCup) > 0 ? "mixed" : (Number(declaredUsd) > 0 ? "cash_usd" : "cash_cup");
         document.getElementById("cvd-money-title").textContent = "Dinero recibido · el mensajero declaró " + (declaredUsd || 0) + " USD + " + (declaredCup || 0) + " CUP";
+        if (pay) document.getElementById("cvd-money-method").value = { cash_usd: "cash_usd", cash_cup: "cash_cup", transfer_cup: "cash_cup", clasica: "transfer", zelle: "zelle" }[pay.kind] || "other";
       }
+      if (pay && pay.text) document.getElementById("cvd-money-title").textContent += " · Pago: " + pay.text;
       syncMoneyAccount(); moneyDialog.showModal(); return;
     }
     if (status === "cancelled" && !window.confirm("¿Cancelar el pedido? Se repondrá el stock y se cancelará la comisión.")) return;

@@ -41,11 +41,13 @@ final class CVD_Messenger_Cash {
 		} else {
 			$usd = (string) $order->get_meta( '_cvd_collection_amount_usd', true );
 			$cup = (string) $order->get_meta( '_cvd_collection_amount_cup', true );
+			$eur = (string) $order->get_meta( '_cvd_collection_amount_eur', true ); // 3.13.67: cobrado en euros
 			if ( '' === $usd && '' === $cup ) { // solo lo que declaró por WhatsApp
 				$usd = (string) $order->get_meta( '_cvd_declared_usd', true );
 				$cup = (string) $order->get_meta( '_cvd_declared_cup', true );
+				$eur = (string) $order->get_meta( '_cvd_declared_eur', true );
 			}
-			$totals = array( 'USD' => (float) $usd, 'CUP' => (float) $cup );
+			$totals = array( 'USD' => (float) $usd, 'CUP' => (float) $cup, 'EUR' => (float) $eur );
 		}
 		$list = array();
 		foreach ( $totals as $currency => $amount ) {

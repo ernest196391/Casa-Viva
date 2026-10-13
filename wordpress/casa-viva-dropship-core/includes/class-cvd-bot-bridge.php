@@ -537,9 +537,24 @@ final class CVD_Bot_Bridge {
 		if ( in_array( $status, array( 'delivered', 'cash_returned', 'closed' ), true ) ) { return self::no_cache( array( 'result' => 'already' ) ); }
 		$usd    = (float) wc_format_decimal( $request->get_param( 'usd' ) ?? 0, 2 );
 		$cup    = (float) wc_format_decimal( $request->get_param( 'cup' ) ?? 0, 2 );
+		$eur    = (float) wc_format_decimal( $request->get_param( 'eur' ) ?? 0, 2 ); // 3.13.67: pagó en euros
 		$method = sanitize_key( (string) $request->get_param( 'method' ) );
-		if ( ! in_array( $method, array( 'cash_usd', 'cash_cup', 'transfer', 'mixed', 'other' ), true ) ) { $method = $usd > 0 && $cup > 0 ? 'mixed' : ( $usd > 0 ? 'cash_usd' : 'cash_cup' ); }
-		if ( $usd <= 0 && $cup <= 0 ) { return self::no_cache( array( 'result' => 'needs_amount' ) ); }
+		if ( ! in_array( $method, array( 'cash_usd', 'cash_cup', 'transfer', 'mixed', 'other' ), true ) ) {
+			$method = count( array_filter( array( $usd, $cup, $eur ), static fn( float $v ): bool => $v > 0 ) ) > 1 ? 'mixed' : ( $usd > 0 ? 'cash_usd' : ( $cup > 0 ? 'cash_cup' : 'other' ) );
+		}
+		// 3.13.67: Zelle / PayPal ya pagados por adelantado (la tienda lo verificó antes): el mensajero no cobra productos,
+		// así que «entregado» vale con 0 y no se le anota dinero de la tienda (solo su mensajería, que es suya).
+		$payment = class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_payment( $order ) : null;
+		$collection_note = 'Declarado por WhatsApp' . ( $payment ? ' · ' . $payment['label'] : '' );
+		if ( $payment && $payment['prepaid'] ) {
+			if ( $usd > 0 || $cup > 0 || $eur > 0 ) { $order->add_order_note( sprintf( 'El mensajero declaró %s USD + %s CUP + %s EUR, pero el pedido es %s (pagado por adelantado): no se le anota dinero de productos.', $usd, $cup, $eur, $payment['label'] ) ); }
+			$usd = 0.0; $cup = 0.0; $eur = 0.0; $method = 'transfer';
+			$collection_note .= ' (pagado por adelantado; sin dinero de productos)';
+		} elseif ( $usd <= 0 && $cup <= 0 && $eur <= 0 ) {
+			return self::no_cache( array( 'result' => 'needs_amount' ) );
+		}
+		if ( $payment && 'transfer_cup' === $payment['kind'] ) { $collection_note .= ' (el cliente transfirió a la tarjeta del mensajero)'; }
+		if ( $eur > 0 ) { $collection_note .= ' · ' . wc_format_decimal( $eur, 2, true ) . ' EUR'; }
 		// 3.13.55: si ya lo entregó, es que tenía el paquete. Si la dependienta no marcó «Entregado al mensajero»,
 		// se marca solo («automático: confirmó el mensajero») en vez de pedirle que vuelva a escribir. Nunca en pruebas.
 		if ( in_array( $status, array( 'assigned', 'accepted', 'to_store' ), true ) ) {
@@ -558,18 +573,22 @@ final class CVD_Bot_Bridge {
 			'actor_user_id'        => $messenger->ID,
 			'idempotency_key'      => 'bot-delivered:' . $order->get_id(),
 			'source'               => 'cvd_bot_bridge_delivered',
-			'metadata'             => array( 'collection_method' => $method, 'collected_usd' => $usd, 'collected_cup' => $cup, 'channel' => 'whatsapp' ),
+			'metadata'             => array( 'collection_method' => $method, 'collected_usd' => $usd, 'collected_cup' => $cup, 'collected_eur' => $eur, 'channel' => 'whatsapp' ),
 			'coupled_payment_state'=> 'pending_return',
-			'atomic_mutation'      => static function ( WC_Order $locked, $from, $to, WP_User $actor, string $at ) use ( $method, $usd, $cup ): void {
+			'atomic_mutation'      => static function ( WC_Order $locked, $from, $to, WP_User $actor, string $at ) use ( $method, $usd, $cup, $eur, $collection_note ): void {
 				$locked->update_meta_data( '_cvd_delivered_by', $actor->ID );
 				$locked->update_meta_data( '_cvd_delivered_at', $at );
 				$locked->update_meta_data( '_cvd_collection_method', $method );
 				$locked->update_meta_data( '_cvd_collection_amount_usd', wc_format_decimal( $usd, 2 ) );
 				$locked->update_meta_data( '_cvd_collection_amount_cup', wc_format_decimal( $cup, 2 ) );
-				$locked->update_meta_data( '_cvd_collection_note', 'Declarado por WhatsApp' );
+				$locked->update_meta_data( '_cvd_collection_note', $collection_note );
 				// Lo que declaró el mensajero se conserva aparte: la tienda lo ve al cerrar y se avisa si no cuadra.
 				$locked->update_meta_data( '_cvd_declared_usd', wc_format_decimal( $usd, 2 ) );
 				$locked->update_meta_data( '_cvd_declared_cup', wc_format_decimal( $cup, 2 ) );
+				if ( $eur > 0 ) { // 3.13.67: euros en mano del mensajero (salen en «Dinero por entregar»)
+					$locked->update_meta_data( '_cvd_collection_amount_eur', wc_format_decimal( $eur, 2 ) );
+					$locked->update_meta_data( '_cvd_declared_eur', wc_format_decimal( $eur, 2 ) );
+				}
 				$locked->update_meta_data( '_cvd_collection_received_by', $actor->ID );
 				$locked->update_meta_data( '_cvd_collection_received_at', $at );
 			},
@@ -694,8 +713,12 @@ final class CVD_Bot_Bridge {
 		// Desde 3.13.20 el cliente dice con cuánto paga: el vale lo muestra junto al vuelto calculado.
 		$pay = $order->get_meta( '_cvd_pay_with', true );
 		if ( is_array( $pay ) && (float) ( $pay['amount'] ?? 0 ) > 0 ) {
-			$with = wc_format_decimal( (float) $pay['amount'], 2, true ) . ' ' . strtoupper( (string) ( $pay['currency'] ?? '' ) );
-			return $change ? $change . ' (paga con ' . $with . ')' : ( 'USD' === strtoupper( (string) $pay['currency'] ) ? 'no (paga exacto: ' . $with . ')' : 'paga con ' . $with . ' · calcula el vuelto' );
+			$currency = strtoupper( (string) ( $pay['currency'] ?? '' ) );
+			$with = wc_format_decimal( (float) $pay['amount'], 2, true ) . ' ' . $currency;
+			// 3.13.67: en CUP o EUR el vuelto ya se calcula con la cifra de la forma de pago; sin ella, lo calcula el mensajero.
+			$payment = class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_payment( $order ) : null;
+			$known = 'USD' === $currency || ( $payment && $payment['currency'] === $currency && null !== $payment['amount'] );
+			return $change ? $change . ' (paga con ' . $with . ')' : ( $known ? 'no (paga exacto: ' . $with . ')' : 'paga con ' . $with . ' · calcula el vuelto' );
 		}
 		return $change;
 	}
@@ -739,6 +762,9 @@ final class CVD_Bot_Bridge {
 			'zoneUnknown'     => 'unknown' === (string) $order->get_meta( '_cvd_locality_check', true ),
 			'earningCup'  => CVD_Delivery::courier_amount( $order ),
 			'change'      => $change,
+			// 3.13.67: cómo paga el cliente y cuánto en su moneda (null en pedidos de antes: el bot hace como siempre).
+			// { kind, label, currency, amount, factor, usd, prepaid, estimated, text }; la mensajería sigue aparte, en CUP.
+			'payment'     => class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_payment( $order ) : null,
 			'window'      => self::window( $order ),
 		) + self::when( $order ) + array(
 			'note'        => wp_strip_all_tags( (string) $order->get_customer_note() ),

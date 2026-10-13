@@ -189,7 +189,55 @@
         $('<div>', { class: 'cvd-pickup-note', text: 'Recogida: ' + cvdCheckout.pickupAddress })
       );
     }
+    syncPayment(delivery);
   }
+
+  // Forma de pago (3.13.67, Lennys): cuánto es con la tasa de hoy (mismas cuentas que CVD_Cuban_Checkout::payment_amount),
+  // el aviso de Zelle/PayPal y el vuelto solo en efectivo (en la moneda en que paga).
+  function cubanMoney(n, cur) {
+    var cup = cur === 'CUP', d = cup || Math.abs(n - Math.round(n)) < 0.005 ? 0 : 2;
+    var parts = Number(n).toFixed(d).split('.');
+    return parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + (parts[1] ? ',' + parts[1] : '') + ' ' + cur;
+  }
+  function cubanRate(f) { return String(Math.round(f * 10000) / 10000).replace('.', ','); }
+  // Total de productos de la tabla del pedido: "36.00", "36,00" o "1.250,00": el último separador seguido de 1-2 cifras es el decimal.
+  function cartTotal() {
+    var s = ($.trim($('.woocommerce-checkout-review-order-table .order-total .amount').first().text()).match(/[\d.,]+/) || ['0'])[0];
+    var m = /[.,](\d{1,2})$/.exec(s);
+    return m ? parseFloat(s.slice(0, m.index).replace(/[.,]/g, '') + '.' + m[1]) : parseFloat(s.replace(/[.,]/g, '')) || 0;
+  }
+  function paymentQuote() {
+    var kinds = (cvdCheckout.payment || {}).kinds || {}, kind = $('#billing_cvd_payment_kind').val() || '', def = kinds[kind];
+    if (!def) return null;
+    var usd = cartTotal(), f = Number(def.factor) || 0;
+    var amount = usd > 0 && f > 0 ? (def.currency === 'CUP' ? Math.round(usd * f) : Math.round(usd * f * 100) / 100) : null;
+    var formula = kind === 'cash_usd' ? '' : ' (' + cubanMoney(usd, 'USD') + (kind === 'paypal' ? ' + ' + cubanRate((f - 1) * 100) + ' %' : ' × ' + cubanRate(f)) + (def.estimated ? ' · tasa por confirmar' : '') + ')';
+    var text = amount === null ? cubanMoney(usd, 'USD') + ' en ' + def.currency + ' a la tasa de hoy (confírmala con la tienda)' : cubanMoney(amount, def.currency) + formula;
+    return { kind: kind, def: def, amount: amount, text: text };
+  }
+  function syncPayment(delivery) {
+    var $kind = $('#billing_cvd_payment_kind');
+    if (!$kind.length) return;
+    if (delivery === undefined) delivery = ($('input[name="billing_cvd_fulfillment_type"]:checked').val() || 'delivery') === 'delivery';
+    var pay = delivery ? paymentQuote() : null, cash = Boolean(pay && pay.def.cash);
+    $('.cvd-change-field').toggle(cash);
+    if (cash) {
+      $('#billing_cvd_change_currency').val(pay.def.currency);
+      $('#billing_cvd_change_currency_field').hide(); // la moneda es la de la forma de pago
+      $('#billing_cvd_change_amount').attr('placeholder', 'En ' + pay.def.currency + ' · vacío si paga exacto');
+    } else if (pay) {
+      $('#billing_cvd_change_amount').val(''); // transferencia, Clásica, Zelle o PayPal: no hay vuelto
+    }
+    var $hint = $('#cvd-payment-hint');
+    if (!pay) { $hint.remove(); return; }
+    if (!$hint.length) $hint = $('<div>', { id: 'cvd-payment-hint', class: 'cvd-payment-hint', 'aria-live': 'polite' }).css({ margin: '6px 0 0', fontSize: '.92em', lineHeight: 1.4 }).appendTo('#billing_cvd_payment_kind_field');
+    var how = { transfer_cup: 'El cliente transfiere a la tarjeta que le da el mensajero y le enseña la captura.', clasica: 'Se paga en el momento, por transferencia.' }[pay.kind] || '';
+    $hint.empty()
+      .append(pay.def.prepaid ? $('<p>', { text: cvdCheckout.payment.prepaidNotice + ' No hay devolución.' }).css({ margin: '0 0 4px', padding: '8px 10px', borderRadius: '10px', background: '#fff4e5', color: '#8a4b00', fontWeight: 700 }) : null)
+      .append($('<p>', { text: (pay.def.prepaid ? 'Paga antes: ' : 'Son ') + pay.text + '. ' + how }).css({ margin: 0, fontWeight: 600 }))
+      .append($('<small>', { text: pay.def.prepaid ? 'El mensajero solo cobra su mensajería (en CUP).' : 'La mensajería se paga aparte, en CUP, al mensajero.' }));
+  }
+  $(document.body).on('change', '#billing_cvd_payment_kind', function () { syncPayment(); });
 
 	function prepareLocationButton() {
 	  var $field = $('#billing_cvd_map_url');
@@ -394,6 +442,9 @@
 	  var payCurrency = $('#billing_cvd_change_currency').val();
 	  var totalNumber = parseFloat((total.match(/[\d.,]+/) || ['0'])[0].replace(/\.(?=\d{3}\b)/g, '').replace(',', '.'));
 	  var change = payWith > 0 ? (payCurrency === 'USD' ? (payWith - totalNumber > 0 ? 'Paga con ' + payWith + ' USD → vuelto ' + (payWith - totalNumber).toFixed(2) + ' USD' : 'Paga exacto') : 'Paga con ' + payWith + ' ' + (payCurrency || '¿moneda?')) : 'Paga exacto (sin vuelto)';
+	  // 3.13.67: con forma de pago, la cifra en su moneda y, si paga en efectivo, el vuelto en esa misma moneda.
+	  var pay = paymentQuote();
+	  if (pay) change = pay.def.label + ' · ' + pay.text + (pay.def.prepaid ? ' · paga todo antes' : '') + (pay.def.cash && payWith > 0 ? ' · paga con ' + cubanMoney(payWith, pay.def.currency) + (pay.amount !== null && payWith > pay.amount ? ' → vuelto ' + cubanMoney(payWith - pay.amount, pay.def.currency) : '') : '');
 	  if (pickup) change = ''; // Recogida: sin fila de vuelto ni pago en efectivo (mejora #23).
 	  var line = function (label, value) { return value ? '<p style="margin:.35em 0"><b>' + label + ':</b> ' + $('<span>').text(value).html() + '</p>' : ''; };
 	  // Mensajería (3.13.53): el precio de la lista o «por confirmar con la tienda» si el reparto no está en la lista.
