@@ -335,7 +335,8 @@ final class CVD_Cuban_Checkout {
 		$fields['billing']['billing_cvd_payment_kind'] = array(
 			'type' => 'select', 'label' => '¿Cómo paga el cliente?', 'required' => $is_delivery,
 			'options' => array( '' => 'Elige cómo paga' ) + array_map( static fn( array $kind ): string => $kind['option'], self::PAYMENT_KINDS ),
-			'class' => array( 'form-row-wide', 'cvd-delivery-field', 'cvd-payment-kind' ), 'priority' => 123,
+			// 3.13.74 (Dany): también en la recogida en tienda, ahí opcional (sin cvd-delivery-field: no se oculta).
+			'class' => array( 'form-row-wide', 'cvd-payment-kind' ), 'priority' => 123,
 		);
 		$fields['billing']['billing_cvd_change_amount'] = array(
 			'type' => 'number', 'label' => '¿Con cuánto paga los productos? (para llevarle el vuelto)', 'placeholder' => 'Ej. 20 · vacío si paga exacto', 'required' => false,
@@ -426,6 +427,9 @@ final class CVD_Cuban_Checkout {
 			if ( '' !== $phone && strlen( $phone ) < 8 ) {
 				$errors->add( 'billing_phone', 'Escribe el teléfono completo (8 cifras) o déjalo vacío: en la recogida en tienda es opcional.' );
 			}
+			// 3.13.74: «¿Cómo paga el cliente?» es opcional en la recogida; si lo eligen, tiene que ser de la lista.
+			$pickup_kind = sanitize_key( wp_unslash( $_POST['billing_cvd_payment_kind'] ?? '' ) );
+			if ( '' !== $pickup_kind && ! isset( self::PAYMENT_KINDS[ $pickup_kind ] ) ) { $errors->add( 'billing_cvd_payment_kind', 'Elige cómo paga el cliente de la lista, o déjalo vacío.' ); }
 			return;
 		}
 		if ( strlen( $phone ) < 8 ) {
@@ -497,6 +501,7 @@ final class CVD_Cuban_Checkout {
 			}
 			$order->update_meta_data( '_cvd_change_required', array() );
 			$order->add_order_note( 'Cliente seleccionó recogida en tienda.' );
+			self::save_payment( $order, sanitize_key( wp_unslash( $_POST['billing_cvd_payment_kind'] ?? '' ) ), true ); // 3.13.74
 			return;
 		}
 		$order->update_meta_data( '_cvd_province_name', self::provinces()[ $state ] ?? $state );
@@ -521,24 +526,10 @@ final class CVD_Cuban_Checkout {
 		$order->update_meta_data( '_cvd_delivery_date', CVD_Delivery_When::normalize( sanitize_text_field( wp_unslash( $_POST['billing_cvd_delivery_date'] ?? '' ) ) ) );
 		$window = sanitize_key( wp_unslash( $_POST['billing_cvd_delivery_window'] ?? '' ) );
 		$order->update_meta_data( '_cvd_delivery_window', in_array( $window, array( 'morning', 'afternoon' ), true ) ? $window : '' );
-		// 3.13.67: forma de pago y cuánto es en su moneda con la tasa de hoy. Se guarda la cifra y el factor usado:
-		// el vale del mensajero, la tienda y la gestora leen lo mismo (order_payment()).
+		// 3.13.67: forma de pago y cuánto es en su moneda con la tasa de hoy (save_payment()).
 		$kind = sanitize_key( wp_unslash( $_POST['billing_cvd_payment_kind'] ?? '' ) );
-		$due = null; $cash_currency = '';
-		if ( isset( self::PAYMENT_KINDS[ $kind ] ) ) {
-			$def = self::PAYMENT_KINDS[ $kind ];
-			$rate = self::payment_factors()[ $kind ];
-			$usd = round( (float) $order->get_total(), 2 );
-			$due = self::payment_amount( $usd, $rate['factor'], $def['currency'] );
-			$order->update_meta_data( '_cvd_payment_kind', $kind );
-			$order->update_meta_data( '_cvd_payment_currency', $def['currency'] );
-			$order->update_meta_data( '_cvd_payment_factor', $rate['factor'] );
-			$order->update_meta_data( '_cvd_payment_usd', $usd );
-			if ( null !== $due ) { $order->update_meta_data( '_cvd_payment_amount', $due ); }
-			if ( $rate['estimated'] ) { $order->update_meta_data( '_cvd_payment_estimated', 'yes' ); }
-			$cash_currency = in_array( $kind, self::CASH_KINDS, true ) ? $def['currency'] : '';
-			self::note( $order, 'Forma de pago: ' . self::payment_text( $kind, $due, $rate['factor'], $usd ) . '.' . ( empty( $def['prepaid'] ) ? '' : ' ' . self::PREPAID_NOTICE . ' La tienda verifica el pago antes de coordinar la entrega; no hay devolución. El mensajero solo cobra su mensajería.' ) );
-		}
+		$due = self::save_payment( $order, $kind, false );
+		$cash_currency = isset( self::PAYMENT_KINDS[ $kind ] ) && in_array( $kind, self::CASH_KINDS, true ) ? self::PAYMENT_KINDS[ $kind ]['currency'] : '';
 		// El cliente dice con cuánto paga (solo en efectivo, en la moneda de su forma de pago) y el vuelto se calcula aquí.
 		// Sin forma de pago (pedido de antes): como siempre, la moneda que eligió y el vuelto solo si es en USD.
 		$pay_with = (float) wc_format_decimal( wp_unslash( $_POST['billing_cvd_change_amount'] ?? 0 ), 2 );
@@ -555,6 +546,28 @@ final class CVD_Cuban_Checkout {
 			}
 		}
 		$order->update_meta_data( '_cvd_change_required', $change_required );
+	}
+
+	/**
+	 * Guarda la forma de pago y cuánto es en su moneda con la tasa de hoy: _cvd_payment_kind, _currency, _factor, _usd,
+	 * _amount (y _estimated si usó el respaldo). El vale, la tienda y la gestora leen lo mismo (order_payment()).
+	 * 3.13.74: también en la recogida en tienda (Dany). Devuelve el importe (null si no hay forma o no hay tasa).
+	 */
+	private static function save_payment( WC_Order $order, string $kind, bool $pickup ): ?float {
+		if ( ! isset( self::PAYMENT_KINDS[ $kind ] ) ) { return null; }
+		$def = self::PAYMENT_KINDS[ $kind ];
+		$rate = self::payment_factors()[ $kind ];
+		$usd = round( (float) $order->get_total(), 2 );
+		$due = self::payment_amount( $usd, $rate['factor'], $def['currency'] );
+		$order->update_meta_data( '_cvd_payment_kind', $kind );
+		$order->update_meta_data( '_cvd_payment_currency', $def['currency'] );
+		$order->update_meta_data( '_cvd_payment_factor', $rate['factor'] );
+		$order->update_meta_data( '_cvd_payment_usd', $usd );
+		if ( null !== $due ) { $order->update_meta_data( '_cvd_payment_amount', $due ); }
+		if ( $rate['estimated'] ) { $order->update_meta_data( '_cvd_payment_estimated', 'yes' ); }
+		$prepaid = empty( $def['prepaid'] ) ? '' : ' ' . self::PREPAID_NOTICE . ( $pickup ? ' La tienda verifica el pago antes de entregarlo; no hay devolución.' : ' La tienda verifica el pago antes de coordinar la entrega; no hay devolución. El mensajero solo cobra su mensajería.' );
+		self::note( $order, 'Forma de pago' . ( $pickup ? ' (recogida en tienda)' : '' ) . ': ' . self::payment_text( $kind, $due, $rate['factor'], $usd ) . '.' . $prepaid );
+		return $due;
 	}
 
 	private static function note( WC_Order $order, string $text ): void {
@@ -599,9 +612,9 @@ final class CVD_Cuban_Checkout {
 			echo esc_html( implode( ', ', array_filter( array( $order->get_billing_address_1(), $order->get_billing_address_2(), $order->get_meta( '_cvd_locality', true ), $order->get_billing_city(), $order->get_meta( '_cvd_province_name', true ) ) ) ) );
 		}
 		echo '</p>';
-		$payment = 'pickup' === $type ? null : self::order_payment( $order );
+		$payment = self::order_payment( $order ); // 3.13.74: también en la recogida
 		if ( $payment ) {
-			echo '<p><strong>Pago:</strong> ' . esc_html( $payment['text'] ) . ( $payment['prepaid'] ? '<br>' . esc_html( self::PREPAID_NOTICE . ' No hay devolución.' ) : '' ) . '<br><small>' . esc_html( 'La mensajería se paga aparte, en CUP, al mensajero.' ) . '</small></p>';
+			echo '<p><strong>Pago:</strong> ' . esc_html( $payment['text'] ) . ( $payment['prepaid'] ? '<br>' . esc_html( self::PREPAID_NOTICE . ' No hay devolución.' ) : '' ) . ( 'pickup' === $type ? '' : '<br><small>' . esc_html( 'La mensajería se paga aparte, en CUP, al mensajero.' ) . '</small>' ) . '</p>';
 		}
 		$assembly = self::order_assembly( $order );
 		if ( $assembly ) { echo '<p><strong>Armado por el mensajero:</strong> ' . esc_html( $assembly['text'] ) . '</p>'; }

@@ -68,14 +68,16 @@ final class CVD_WhatsApp_Receipt_Template {
 
 		$change = $order && class_exists( 'CVD_Bot_Bridge' ) ? CVD_Bot_Bridge::change_label( $order ) : '';
 		// 3.13.67: cómo paga el cliente y cuánto en su moneda con la tasa del día de la compra.
-		$how = $order && ! $is_pickup && class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_payment( $order ) : null;
+		// 3.13.74 (Dany): también en la recogida en tienda.
+		$how = $order && class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_payment( $order ) : null;
 		self::section(
 			$lines,
 			'PAGO',
 			array(
 				$how ? 'Cómo paga: ' . $how['text'] : '',
 				$how && $how['prepaid'] ? CVD_Cuban_Checkout::PREPAID_NOTICE . ' No hay devolución.' : '',
-				$how && ! $assembly ? 'La mensajería se paga aparte, en CUP, al mensajero.' : '',
+				$how && ! $assembly && ! $is_pickup ? 'La mensajería se paga aparte, en CUP, al mensajero.' : '',
+				$how && $is_pickup && ! $how['prepaid'] ? 'Se paga en la tienda al recogerlo.' : '',
 				$assembly ? 'La mensajería (en CUP) y el armado (' . CVD_Cuban_Checkout::money( (float) $assembly['usd'], 'USD' ) . ') se pagan aparte, al mensajero.' : '',
 				! $how && $data['payment']['label'] ? 'Forma de pago: ' . $data['payment']['label'] : '', // la pasarela de WooCommerce, solo en pedidos de antes
 				$change ? 'Vuelto: ' . $change : '',

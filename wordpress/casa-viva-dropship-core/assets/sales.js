@@ -80,7 +80,10 @@
   function paymentRow(order) {
     var p = order.payment;
     if (!p || !p.text) return "";
-    var extra = p.prepaid ? " · verifica la captura antes de coordinar la entrega (sin devolución); el mensajero solo cobra su mensajería" : (p.kind === "transfer_cup" ? " · a la tarjeta del mensajero: él trae el dinero" : "");
+    // 3.13.74: en la recogida en tienda, lo que se cobra al entregarlo en la tienda.
+    var extra = order.isPickup
+      ? (p.prepaid ? " · verifica la captura antes de entregarlo (sin devolución)" : " · se cobra en la tienda al recogerlo")
+      : (p.prepaid ? " · verifica la captura antes de coordinar la entrega (sin devolución); el mensajero solo cobra su mensajería" : (p.kind === "transfer_cup" ? " · a la tarjeta del mensajero: él trae el dinero" : ""));
     return '<p><b>Pago</b><span' + (p.prepaid ? ' style="color:#a8641c;font-weight:700"' : "") + ">💳 " + escapeText(p.text + extra) + "</span></p>";
   }
   // Armado por el mensajero (3.13.70, Ernesto): se cobra aparte, como la mensajería; no está en el total.
