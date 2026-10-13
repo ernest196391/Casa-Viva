@@ -247,13 +247,47 @@ final class CVD_Delivery {
 		return is_object( $order ) && method_exists( $order, 'get_meta' ) && '' !== trim( (string) $order->get_meta( self::TEST_META, true ) );
 	}
 
-	/** true = es de prueba y se frenó (deja la nota una sola vez por petición). */
+	/**
+	 * 3.13.71 (13-oct): ¿este pedido NO puede salir al reparto? Sin efectos: '' = sí puede.
+	 * - 'test': marcado de prueba o con «PRUEBA» en el nombre, los apellidos, la nota o quien paga. Hasta ahora eso solo
+	 *   se miraba en el checkout; el #3548 (creado a mano por un error de Claude al probar, sin pasar por el checkout)
+	 *   salió al grupo real cuando se pulsó «Listo» en Pedidos de la tienda.
+	 * - 'no_delivery': el pedido no dice «Mensajería» (_cvd_fulfillment_type). El checkout y el vale siempre lo ponen.
+	 * - 'inactive': el pedido no está pendiente, en espera ni procesando (papelera, cancelado, completado…).
+	 */
+	public static function blocks_dispatch( $order ): string {
+		if ( ! $order instanceof WC_Order ) { return 'no_order'; }
+		if ( self::is_test_order( $order ) || self::looks_like_test_order( $order ) ) { return 'test'; }
+		if ( 'delivery' !== (string) $order->get_meta( '_cvd_fulfillment_type', true ) ) { return 'no_delivery'; }
+		if ( ! in_array( $order->get_status(), array( 'pending', 'on-hold', 'processing' ), true ) ) { return 'inactive'; }
+		return '';
+	}
+
+	/** «PRUEBA» en los datos del pedido (las mismas reglas que el checkout). */
+	public static function looks_like_test_order( WC_Order $order ): bool {
+		return self::looks_like_test( (string) $order->get_billing_first_name(), (string) $order->get_billing_last_name(), (string) $order->get_customer_note(), (string) $order->get_meta( '_cvd_buyer_name', true ) );
+	}
+
+	/**
+	 * true = no sale al reparto y se frenó (deja la nota una sola vez por petición). Desde 3.13.71 frena también lo que
+	 * parece de prueba (y lo marca), lo que no es de mensajería y lo que no está activo: ver blocks_dispatch().
+	 */
 	public static function refuse_test_order( WC_Order $order ): bool {
 		static $noted = array();
-		if ( ! self::is_test_order( $order ) ) { return false; }
+		$why = self::blocks_dispatch( $order );
+		if ( '' === $why ) { return false; }
+		if ( 'test' === $why && ! self::is_test_order( $order ) ) {
+			$order->update_meta_data( self::TEST_META, 'auto' );
+			$order->save();
+		}
 		if ( empty( $noted[ $order->get_id() ] ) ) {
 			$noted[ $order->get_id() ] = true;
-			$order->add_order_note( 'Pedido de prueba: no sale al reparto (no se publicó ni se asignó a ningún mensajero).' );
+			$texts = array(
+				'test'        => 'Pedido de prueba: no sale al reparto (no se publicó ni se asignó a ningún mensajero).',
+				'no_delivery' => 'Este pedido no dice «Mensajería» (no se hizo por el checkout ni por el vale): no sale al reparto.',
+				'inactive'    => 'El pedido está «' . wc_get_order_status_name( $order->get_status() ) . '»: no sale al reparto.',
+			);
+			$order->add_order_note( $texts[ $why ] ?? 'Este pedido no sale al reparto.' );
 			$order->save();
 		}
 		return true;
@@ -427,6 +461,7 @@ final class CVD_Delivery {
 
 	public static function expand_offer( int $order_id ): void {
 		$order=wc_get_order($order_id); if(!$order||'offered'!==self::status($order)||absint($order->get_meta('_cvd_messenger_user_id',true))){return;}
+		if(self::refuse_test_order($order)){return;} // 3.13.71: el #3548 se amplió a 19 mensajeros más estando ya en la papelera
 		$eligible=self::eligible_messengers($order); $invited=array_map('absint',(array)$order->get_meta('_cvd_delivery_invited_messengers',true));
 		$new=array_values(array_filter($eligible,static fn(WP_User $user):bool=>!in_array($user->ID,$invited,true)));
 		if(!$new){return;} $order->update_meta_data('_cvd_delivery_invited_messengers',array_values(array_unique(array_merge($invited,wp_list_pluck($new,'ID'))))); self::append_event($order,'offered','offered',array('wave_expanded'=>count($new))); $order->save(); self::notify_offer($order,$new);
@@ -442,7 +477,7 @@ final class CVD_Delivery {
 		$orders = array_values( array_filter( $orders, static function ( WC_Order $order ) use ( $messenger ): bool {
 			$rejected = array_map( 'absint', (array) $order->get_meta( '_cvd_delivery_rejected_by', true ) );
 			$invited = array_map( 'absint', (array) $order->get_meta( '_cvd_delivery_invited_messengers', true ) );
-			return ! self::is_test_order( $order ) && in_array( $messenger->ID, $invited, true ) && ! in_array( $messenger->ID, $rejected, true ) && ! absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
+			return '' === self::blocks_dispatch( $order ) && in_array( $messenger->ID, $invited, true ) && ! in_array( $messenger->ID, $rejected, true ) && ! absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
 		} ) );
 		$messenger_zone = remove_accents( strtolower( (string) get_user_meta( $messenger->ID, '_cvd_zone', true ) ) );
 		usort( $orders, static function ( WC_Order $a, WC_Order $b ) use ( $messenger_zone ): int {
