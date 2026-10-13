@@ -72,6 +72,8 @@ final class CVD_Gestora_App {
 			array( 'inicio', 'Inicio', 'home', '' ),
 			array( '', 'Vender', '', '' ),
 			array( 'tienda', 'Mi tienda', 'bag', '' ),
+			// 3.13.75 (Rafael Codina): volver a la tienda para ver los productos, con su código.
+			array( 'ver-tienda', 'Ver la tienda', 'shop', $link ),
 			array( 'precios', 'Mis precios', 'tag', '' ),
 			array( 'clientes', 'Clientes', 'people', '' ),
 			array( '', 'Herramientas', '', '' ),
@@ -121,6 +123,7 @@ final class CVD_Gestora_App {
 				<header class="cvga-top">
 					<button class="cvga-icon-btn" type="button" data-cvga-open aria-label="Abrir menú"><?php echo self::icon( 'menu' ); // phpcs:ignore ?></button>
 					<b data-cvga-title>Inicio</b>
+					<a class="cvga-shop-btn" href="<?php echo esc_url( $link ); ?>"><?php echo self::icon( 'shop' ); // phpcs:ignore ?><span>Ver la tienda</span></a>
 				</header>
 				<div class="cvga-wrap">
 					<?php echo self::inicio( $user, $first, $link, $code, $orders, $box ); // phpcs:ignore ?>
@@ -136,6 +139,7 @@ final class CVD_Gestora_App {
 			<nav class="cvga-tabbar" aria-label="Accesos rápidos">
 				<a href="#inicio" data-cvga-go="inicio"><?php echo self::icon( 'home' ); // phpcs:ignore ?>Inicio</a>
 				<a href="#tienda" data-cvga-go="tienda"><?php echo self::icon( 'bag' ); // phpcs:ignore ?>Vender</a>
+				<a href="<?php echo esc_url( $link ); ?>" class="cvga-tab-shop"><?php echo self::icon( 'shop' ); // phpcs:ignore ?>Tienda</a>
 				<a href="#clientes" data-cvga-go="clientes"><?php echo self::icon( 'people' ); // phpcs:ignore ?>Clientes</a>
 				<a href="#cobrar" data-cvga-go="cobrar"><?php echo self::icon( 'card' ); // phpcs:ignore ?>Cobrar</a>
 			</nav>
@@ -211,7 +215,7 @@ final class CVD_Gestora_App {
 			<div class="cvga-head"><h1>Mi tienda</h1><p>Comparte tu enlace. Lo que compren con él cuenta para ti.</p></div>
 			<section class="cvga-card">
 				<div class="cvga-link-box"><input id="cvga-link-store" readonly value="<?php echo esc_attr( $link ); ?>" aria-label="Enlace de tu tienda"><button class="cvga-btn cvga-btn-sm" type="button" data-copy-target="cvga-link-store">Copiar</button></div>
-				<div class="cvga-actions"><a class="cvga-btn" href="<?php echo esc_url( 'https://wa.me/?text=' . rawurlencode( 'Mira mi tienda Casa Viva: ' . $link ) ); ?>" target="_blank" rel="noopener">Mandar por WhatsApp</a><a class="cvga-btn cvga-btn-soft" href="<?php echo esc_url( $link ); ?>" target="_blank" rel="noopener">Ver mi tienda</a></div>
+				<div class="cvga-actions"><a class="cvga-btn" href="<?php echo esc_url( 'https://wa.me/?text=' . rawurlencode( 'Mira mi tienda Casa Viva: ' . $link ) ); ?>" target="_blank" rel="noopener">Mandar por WhatsApp</a><a class="cvga-btn cvga-btn-soft" href="<?php echo esc_url( $link ); ?>">Ver mi tienda</a></div>
 				<p class="cvga-note">Para mandar un solo producto: ábrelo en tu tienda y copia el enlace de esa página. Ya lleva tu código.</p>
 			</section>
 			<section class="cvga-card cvga-qr-card">
@@ -488,6 +492,7 @@ final class CVD_Gestora_App {
 			'calc'   => '<rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M8 6.5h8v3H8z"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/>',
 			'camera' => '<rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/>',
 			'image'  => '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
+			'shop'   => '<path d="M3.5 9.5 5 4h14l1.5 5.5"/><path d="M3.5 9.5a2.8 2.8 0 0 0 5.6 0 2.9 2.9 0 0 0 5.8 0 2.8 2.8 0 0 0 5.6 0"/><path d="M5 12v8h14v-8"/><path d="M10 20v-4.5h4V20"/>',
 		);
 		return '<svg class="cvga-ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' . ( $paths[ $name ] ?? '' ) . '</svg>';
 	}
