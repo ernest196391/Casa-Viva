@@ -34,14 +34,16 @@ final class CVD_Attribution {
 	}
 
 	/**
-	 * First-touch referral owner for the current browser.
+	 * Referral owner for the current browser: the link in this request, else the last saved link.
 	 *
-	 * A valid saved referral wins over later links. This keeps storefront pricing and
-	 * order attribution aligned with the permanent ownership model.
+	 * 3.13.79 (Ernesto, 13-oct): el último enlace manda. Antes mandaba el primero que se abrió en el
+	 * navegador (400 días): Thaly abría SU enlace y veía 30 en vez de su precio de 35 porque su teléfono
+	 * guardaba el de otra gestora, y la venta se le habría apuntado a la otra. El cliente que ya compró
+	 * sigue siendo de su gestora: eso lo decide resolve_and_attach() por su teléfono/correo (find_existing_owner).
 	 */
 	public static function current_referral_owner(): ?array {
-		$owner = self::owner_from_saved_referral();
-		return $owner ?: self::owner_from_request();
+		$owner = self::owner_from_request();
+		return $owner ?: self::owner_from_saved_referral();
 	}
 
 	/** Resolve permanent ownership for an authenticated customer before transient referral state. */
@@ -78,10 +80,11 @@ final class CVD_Attribution {
 			return;
 		}
 
-		// First touch is permanent at browser level too: a later referral link cannot
-		// replace a valid saved owner. Administration remains the only reassignment path.
+		// 3.13.79: el último enlace manda (ver current_referral_owner). Si el navegador ya guarda este
+		// mismo enlace no se reescribe; si guarda el de otra gestora, se cambia por este. Los clientes
+		// que ya compraron siguen con su gestora por su identidad, no por esta marca del navegador.
 		$saved_owner = self::owner_from_saved_referral();
-		if ( $saved_owner ) {
+		if ( $saved_owner && hash_equals( (string) ( $saved_owner['referral_code'] ?? '' ), $code ) ) {
 			if ( ! defined( 'DONOTCACHEPAGE' ) ) {
 				define( 'DONOTCACHEPAGE', true );
 			}
