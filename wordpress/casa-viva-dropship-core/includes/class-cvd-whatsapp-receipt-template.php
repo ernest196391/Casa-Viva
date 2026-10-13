@@ -35,6 +35,11 @@ final class CVD_WhatsApp_Receipt_Template {
 			$products . ( 1 === $products ? ' producto' : ' productos' ) . ' · ' . $units . ( 1 === $units ? ' unidad' : ' unidades' ),
 			$is_pickup ? '🏬 Recogida en tienda' : '🚚 A domicilio' . ( isset( $address[1] ) ? ' · ' . str_replace( ', ', ' · ', $address[1] ) : '' ),
 		);
+		// 3.13.70 (Ernesto, 13-oct): armado por el mensajero, bien visible arriba. Se cobra aparte: no está en el total.
+		$assembly = $order && ! $is_pickup && class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_assembly( $order ) : null;
+		if ( $assembly ) {
+			$lines[] = $assembly['notice'];
+		}
 
 		$items = array();
 		foreach ( $data['items'] as $index => $item ) {
@@ -56,6 +61,9 @@ final class CVD_WhatsApp_Receipt_Template {
 			}
 			$amounts[] = ( 'shipping' === $row['key'] && $is_pickup ) ? 'Recogida: Sin costo' : $row['label'] . ': ' . $row['formatted'];
 		}
+		if ( $assembly ) {
+			$amounts[] = 'Armado (aparte, al mensajero): ' . CVD_Cuban_Checkout::money( (float) $assembly['usd'], 'USD' );
+		}
 		self::section( $lines, 'IMPORTES', $amounts );
 
 		$change = $order && class_exists( 'CVD_Bot_Bridge' ) ? CVD_Bot_Bridge::change_label( $order ) : '';
@@ -67,7 +75,8 @@ final class CVD_WhatsApp_Receipt_Template {
 			array(
 				$how ? 'Cómo paga: ' . $how['text'] : '',
 				$how && $how['prepaid'] ? CVD_Cuban_Checkout::PREPAID_NOTICE . ' No hay devolución.' : '',
-				$how ? 'La mensajería se paga aparte, en CUP, al mensajero.' : '',
+				$how && ! $assembly ? 'La mensajería se paga aparte, en CUP, al mensajero.' : '',
+				$assembly ? 'La mensajería (en CUP) y el armado (' . CVD_Cuban_Checkout::money( (float) $assembly['usd'], 'USD' ) . ') se pagan aparte, al mensajero.' : '',
 				! $how && $data['payment']['label'] ? 'Forma de pago: ' . $data['payment']['label'] : '', // la pasarela de WooCommerce, solo en pedidos de antes
 				$change ? 'Vuelto: ' . $change : '',
 			)

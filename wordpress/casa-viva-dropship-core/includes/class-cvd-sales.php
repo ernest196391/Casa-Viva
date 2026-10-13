@@ -492,6 +492,8 @@ final class CVD_Sales {
 			'declaredEur' => (string) $order->get_meta( '_cvd_declared_eur', true ),
 			// 3.13.67 (Lennys): cómo paga el cliente y cuánto en su moneda, la misma cifra que lee el mensajero en su vale.
 			'payment' => 'pickup' === $fulfillment || ! class_exists( 'CVD_Cuban_Checkout' ) ? null : CVD_Cuban_Checkout::order_payment( $order ),
+			// 3.13.70 (Ernesto): armado por el mensajero, aparte del total ({ kind, usd, label, text, notice } o null).
+			'assembly' => class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_assembly( $order ) : null,
 			'deliveryStatus' => 'pickup' === $fulfillment ? '' : ( class_exists( 'CVD_Delivery' ) ? CVD_Delivery::label( $delivery_status ) : '' ),
 			'trackingUrl' => class_exists( 'CVD_Delivery' ) && 'pickup' !== $fulfillment ? CVD_Delivery::tracking_url( $order ) : '',
 			// Reparto (3.13.48): quién lo lleva, a qué hora, sus pasos y si el mensajero dice que ya entregó el dinero.

@@ -340,6 +340,8 @@ final class CVD_Bot_Bridge {
 				'items'      => self::items( $order ),
 				'earningCup' => CVD_Delivery::courier_amount( $order ),
 				'window'     => self::window( $order ),
+				// 3.13.70: el mensajero ve el armado ANTES de coger la carrera (si no quiere armar, no la coge).
+				'assembly'   => self::assembly( $order ),
 			) + self::when( $order ) + array(
 				'offeredAt'  => $offered_at,
 				// Si el pedido se volvió a ofertar (se quitó el mensajero y otra vez "Listo para salir"),
@@ -653,6 +655,16 @@ final class CVD_Bot_Bridge {
 		return $messenger && $messenger->ID === absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ? $messenger : null;
 	}
 
+	/**
+	 * 3.13.70 (Ernesto, 13-oct): armado por el mensajero, o null. { kind: small|large, usd: 5|10, label, notice }.
+	 * notice = «🔧 *OJO: hay que ARMAR el producto* · el mensajero cobra *10 USD* de armado al cliente» (listo para WhatsApp).
+	 * Se cobra aparte, como la mensajería: no está en productsUsd ni en payment.
+	 */
+	private static function assembly( WC_Order $order ): ?array {
+		$a = class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_assembly( $order ) : null;
+		return $a ? array( 'kind' => $a['kind'], 'usd' => $a['usd'], 'label' => $a['label'], 'notice' => $a['notice'] ) : null;
+	}
+
 	private static function items( WC_Order $order ): string {
 		$items = array();
 		foreach ( $order->get_items( 'line_item' ) as $item ) { $items[] = $item->get_quantity() . ' × ' . $item->get_name(); }
@@ -768,6 +780,7 @@ final class CVD_Bot_Bridge {
 			// { kind, label, currency, amount, factor, usd, prepaid, estimated, text }; la mensajería sigue aparte, en CUP.
 			'payment'     => class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_payment( $order ) : null,
 			'window'      => self::window( $order ),
+			'assembly'    => self::assembly( $order ), // 3.13.70
 		) + self::when( $order ) + array(
 			'note'        => wp_strip_all_tags( (string) $order->get_customer_note() ),
 			'pickup'      => 'Casa Viva · Calle Conill A esq. 45 #864, Nuevo Vedado',

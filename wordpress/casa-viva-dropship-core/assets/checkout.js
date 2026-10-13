@@ -465,7 +465,9 @@
 	  // Mensajería (3.13.53): el precio de la lista o «por confirmar con la tienda» si el reparto no está en la lista.
 	  var fee = $.trim($('.cvd-shipping-cup td strong').first().text());
 	  var shipping = pickup ? '' : (/\d/.test(fee) ? fee : 'por confirmar con la tienda (tu reparto no está en la lista)');
-	  return line('Productos', rows.join(' · ')) + line('Total productos', total) + line('Mensajería', shipping) + line('Entrega', where) + line('Cuándo', when) + line('Pago', change) + line(pickup ? 'Recoge' : 'Recibe', [$.trim([fieldText('#billing_first_name'), fieldText('#billing_last_name')].join(' ')), fieldText('#billing_phone') || (pickup ? 'sin teléfono' : '')].filter(Boolean).join(' · '));
+	  // 3.13.70: armado por el mensajero, aparte (no está en el total de productos).
+	  var assembly = pickup || !$('#cvd_assembly').val() ? '' : fieldText('#cvd_assembly') + ' · se le paga aparte al mensajero, como la mensajería (no está en el total)';
+	  return line('Productos', rows.join(' · ')) + line('Total productos', total) + line('Mensajería', shipping) + line('Armado', assembly) + line('Entrega', where) + line('Cuándo', when) + line('Pago', change) + line(pickup ? 'Recoge' : 'Recibe', [$.trim([fieldText('#billing_first_name'), fieldText('#billing_last_name')].join(' ')), fieldText('#billing_phone') || (pickup ? 'sin teléfono' : '')].filter(Boolean).join(' · '));
 	}
 	function showReview(onConfirm) {
 	  $('#cvd-review').remove();

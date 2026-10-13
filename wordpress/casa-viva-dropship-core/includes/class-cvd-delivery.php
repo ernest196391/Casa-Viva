@@ -136,11 +136,14 @@ final class CVD_Delivery {
 				foreach ( $order->get_items( 'line_item' ) as $item ) {
 					$items[] = $item->get_name() . ( $item->get_quantity() > 1 ? ' × ' . $item->get_quantity() : '' );
 				}
+				$asm = class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_assembly( $order ) : null;
 				return array(
 					'id' => $order->get_id(),
 					'zone' => self::destination_zone( $order ),
 					'earningCup' => self::courier_amount( $order ),
-					'items' => implode( ', ', $items ),
+					// 3.13.70: el armado sale en la ventana «Nueva carrera» antes de aceptarla.
+					'items' => implode( ', ', $items ) . ( $asm ? ' · 🔧 hay que ARMARLO: cobras ' . CVD_Cuban_Checkout::money( (float) $asm['usd'], 'USD' ) . ' aparte' : '' ),
+					'assembly' => $asm,
 					'zoneMatch' => self::zone_matches( $user, $order ),
 					'acceptUrl' => self::offer_action_url( $order->get_id(), 'accept' ),
 					'declineUrl' => self::offer_action_url( $order->get_id(), 'decline' ),

@@ -38,6 +38,18 @@ final class CVD_Cuban_Checkout {
 	 * La CUP no tiene respaldo: cambia cada día (sin tasa, el vale dice «a la tasa de hoy, pregúntala a la tienda»).
 	 */
 	private const PAYMENT_FALLBACK = array( 'eur' => 1.0, 'clasica' => 1.15, 'zelle' => 1.04, 'paypal_pct' => 4.0 );
+	/**
+	 * 3.13.70 (Ernesto, 13-oct): «Armado por el mensajero», solo con mensajería. Se cobra APARTE: el cliente se lo paga al
+	 * mensajero, como la mensajería; no entra en el total de WooCommerce. El pedido guarda _cvd_assembly (small|large) y
+	 * _cvd_assembly_usd (5|10): esos nombres los lee VivaBot. El mensajero lo ve antes de coger la carrera; si no quiere
+	 * armar, no la coge y la coge otro.
+	 */
+	public const ASSEMBLY = array(
+		'small' => array( 'usd' => 5, 'label' => 'producto pequeño', 'option' => 'Sí, producto pequeño (5 USD)' ),
+		'large' => array( 'usd' => 10, 'label' => 'producto grande', 'option' => 'Sí, producto grande (10 USD)' ),
+	);
+	/** Sin prefijo billing_: no se copia al perfil del cliente (cada pedido se elige de nuevo). */
+	public const ASSEMBLY_FIELD = 'cvd_assembly';
 	public static function register(): void {
 		add_filter( 'woocommerce_states', array( __CLASS__, 'register_provinces' ) );
 		add_filter( 'default_checkout_billing_country', array( __CLASS__, 'default_country' ) );
@@ -69,7 +81,7 @@ final class CVD_Cuban_Checkout {
 			return 'CU';
 		}
 		// 3.13.67: la forma de pago se elige cada vez (Zelle/PayPal piden consultar antes): nunca se precarga del pedido anterior.
-		if ( 'billing_cvd_payment_kind' === $input ) {
+		if ( 'billing_cvd_payment_kind' === $input || self::ASSEMBLY_FIELD === $input ) { // 3.13.70: el armado, igual
 			return '';
 		}
 		if ( 'billing_state' === $input && ! array_key_exists( strtoupper( (string) $value ), self::provinces() ) ) {
@@ -236,7 +248,7 @@ final class CVD_Cuban_Checkout {
 		$fields['billing']['billing_first_name']['class'] = array( 'form-row-wide' );
 		$fields['billing']['billing_first_name']['priority'] = 20;
 		// Opcional (Dany, 12-oct): muchos clientes solo dan el nombre.
-		$fields['billing']['billing_last_name']['label'] = 'Apellidos de quien recibe (opcional)';
+		$fields['billing']['billing_last_name']['label'] = 'Apellidos de quien recibe'; // WooCommerce ya añade «(opcional)»
 		$fields['billing']['billing_last_name']['required'] = false;
 		$fields['billing']['billing_last_name']['class'] = array( 'form-row-wide' );
 		$fields['billing']['billing_last_name']['priority'] = 30;
@@ -335,6 +347,13 @@ final class CVD_Cuban_Checkout {
 			'options' => array( '' => 'Elige la moneda', 'USD' => 'Dólares (USD)', 'CUP' => 'Pesos cubanos (CUP)', 'EUR' => 'Euros (EUR)' ), // sin moneda preseleccionada (prueba: 2 USD salieron como 2 CUP)
 			'class' => array( 'form-row-last', 'cvd-delivery-field', 'cvd-change-field' ), 'priority' => 125,
 		);
+		// 3.13.70: armado por el mensajero (solo mensajería: cvd-delivery-field se oculta con «Recogida en tienda»).
+		$fields['billing'][ self::ASSEMBLY_FIELD ] = array(
+			'type' => 'select', 'label' => 'Armado por el mensajero', 'required' => false,
+			'options' => array( '' => 'No' ) + array_map( static fn( array $a ): string => $a['option'], self::ASSEMBLY ), 'default' => '',
+			'description' => '¿Hay que armar el producto? Se le paga aparte al mensajero, como la mensajería: no se suma al total.',
+			'class' => array( 'form-row-wide', 'cvd-delivery-field', 'cvd-assembly-field' ), 'priority' => 126,
+		);
 		$fields['billing']['billing_cvd_map_url'] = array(
 			'type'        => 'url',
 			'label'       => 'Ubicación exacta',
@@ -421,6 +440,8 @@ final class CVD_Cuban_Checkout {
 		$errors->remove( 'billing_cvd_payment_kind_required' );
 		$kind = sanitize_key( wp_unslash( $_POST['billing_cvd_payment_kind'] ?? '' ) );
 		if ( ! isset( self::PAYMENT_KINDS[ $kind ] ) ) { $errors->add( 'billing_cvd_payment_kind', 'Elige cómo paga el cliente: efectivo (USD o CUP), transferencia CUP, euros, Tarjeta Clásica, Zelle o PayPal.' ); }
+		$assembly = sanitize_key( wp_unslash( $_POST[ self::ASSEMBLY_FIELD ] ?? '' ) );
+		if ( '' !== $assembly && 'no' !== $assembly && ! isset( self::ASSEMBLY[ $assembly ] ) ) { $errors->add( self::ASSEMBLY_FIELD, 'Elige si hay que armar el producto: No, pequeño (5 USD) o grande (10 USD).' ); }
 		// El vuelto solo cuenta en efectivo, y en la moneda en que paga (la de la forma de pago).
 		$change_amount = (float) wc_format_decimal( wp_unslash( $_POST['billing_cvd_change_amount'] ?? 0 ), 2 );
 		$cash_currency = in_array( $kind, self::CASH_KINDS, true ) ? self::PAYMENT_KINDS[ $kind ]['currency'] : '';
@@ -471,7 +492,7 @@ final class CVD_Cuban_Checkout {
 			$order->set_billing_address_2( '' );
 			$order->set_billing_city( '' );
 			$order->set_billing_state( '' );
-			foreach ( array( '_cvd_province_name', '_cvd_locality', '_cvd_reference', '_cvd_map_url', '_cvd_map_accuracy', '_cvd_delivery_date', '_cvd_delivery_window', '_cvd_pay_with', '_cvd_payment_kind', '_cvd_payment_currency', '_cvd_payment_amount', '_cvd_payment_factor', '_cvd_payment_usd', '_cvd_payment_estimated' ) as $key ) {
+			foreach ( array( '_cvd_province_name', '_cvd_locality', '_cvd_reference', '_cvd_map_url', '_cvd_map_accuracy', '_cvd_delivery_date', '_cvd_delivery_window', '_cvd_pay_with', '_cvd_payment_kind', '_cvd_payment_currency', '_cvd_payment_amount', '_cvd_payment_factor', '_cvd_payment_usd', '_cvd_payment_estimated', '_cvd_assembly', '_cvd_assembly_usd' ) as $key ) {
 				$order->delete_meta_data( $key );
 			}
 			$order->update_meta_data( '_cvd_change_required', array() );
@@ -487,6 +508,16 @@ final class CVD_Cuban_Checkout {
 		$order->update_meta_data( '_cvd_map_url', $map_url );
 		$order->update_meta_data( '_cvd_map_accuracy', $map_url && isset( $_POST['billing_cvd_map_accuracy'] ) ? absint( $_POST['billing_cvd_map_accuracy'] ) : 0 );
 		if ( $map_raw && ! $map_url ) { self::note( $order, 'La ubicación del mapa estaba fuera de Cuba y no se guardó. El mensajero se guía por la dirección escrita.' ); }
+		// 3.13.70: armado por el mensajero (aparte, fuera del total de WooCommerce).
+		$assembly = sanitize_key( wp_unslash( $_POST[ self::ASSEMBLY_FIELD ] ?? '' ) );
+		if ( isset( self::ASSEMBLY[ $assembly ] ) ) {
+			$order->update_meta_data( '_cvd_assembly', $assembly );
+			$order->update_meta_data( '_cvd_assembly_usd', (string) self::ASSEMBLY[ $assembly ]['usd'] );
+			self::note( $order, 'Armado por el mensajero: ' . self::ASSEMBLY[ $assembly ]['label'] . ', ' . self::ASSEMBLY[ $assembly ]['usd'] . ' USD. Lo cobra el mensajero aparte, como la mensajería (no está en el total).' );
+		} else {
+			$order->delete_meta_data( '_cvd_assembly' );
+			$order->delete_meta_data( '_cvd_assembly_usd' );
+		}
 		$order->update_meta_data( '_cvd_delivery_date', CVD_Delivery_When::normalize( sanitize_text_field( wp_unslash( $_POST['billing_cvd_delivery_date'] ?? '' ) ) ) );
 		$window = sanitize_key( wp_unslash( $_POST['billing_cvd_delivery_window'] ?? '' ) );
 		$order->update_meta_data( '_cvd_delivery_window', in_array( $window, array( 'morning', 'afternoon' ), true ) ? $window : '' );
@@ -544,6 +575,8 @@ final class CVD_Cuban_Checkout {
 		echo '<p><strong>Tarifa guardada:</strong> ' . esc_html( $shipping_cup ? number_format_i18n( $shipping_cup, 0 ) . ' CUP' : 'Por confirmar' ) . '</p>';
 		$payment = self::order_payment( $order );
 		if ( $payment ) { echo '<p><strong>Cómo paga el cliente:</strong> ' . esc_html( $payment['text'] . ( $payment['prepaid'] ? ' — verificar la captura antes de coordinar la entrega (sin devolución)' : '' ) ) . '</p>'; }
+		$assembly = self::order_assembly( $order );
+		if ( $assembly ) { echo '<p style="color:#a35a1f"><strong>🔧 Armado por el mensajero:</strong> ' . esc_html( $assembly['text'] ) . '</p>'; }
 		foreach ( array( '_cvd_locality' => 'Reparto/localidad', '_cvd_reference' => 'Referencia', '_cvd_alternate_phone' => 'Teléfono alternativo', '_cvd_delivery_date' => 'Día de entrega', '_cvd_delivery_window' => 'Horario solicitado', '_cvd_map_url' => 'Ubicación en mapa', '_cvd_buyer_name' => 'Persona que compra/paga' ) as $key => $label ) {
 			$value = $order->get_meta( $key, true );
 			if ( '_cvd_map_url' === $key ) { $value = CVD_Shipping_Rates::safe_map_url( (string) $value ); }
@@ -570,9 +603,37 @@ final class CVD_Cuban_Checkout {
 		if ( $payment ) {
 			echo '<p><strong>Pago:</strong> ' . esc_html( $payment['text'] ) . ( $payment['prepaid'] ? '<br>' . esc_html( self::PREPAID_NOTICE . ' No hay devolución.' ) : '' ) . '<br><small>' . esc_html( 'La mensajería se paga aparte, en CUP, al mensajero.' ) . '</small></p>';
 		}
+		$assembly = self::order_assembly( $order );
+		if ( $assembly ) { echo '<p><strong>Armado por el mensajero:</strong> ' . esc_html( $assembly['text'] ) . '</p>'; }
 		$map_url = CVD_Shipping_Rates::order_map_url( $order );
 		if ( $map_url ) { echo '<p><a class="button" href="' . esc_url( $map_url ) . '" target="_blank" rel="noopener">Abrir ubicación en el mapa</a></p>'; }
 		echo '</section>';
+	}
+
+	// ---------- Armado por el mensajero (3.13.70) ----------
+
+	/**
+	 * Armado del pedido o null (sin armado, recogida en tienda o pedido de antes de 3.13.70).
+	 * → kind (small|large), usd (5|10), label, text (para pantallas) y notice (para WhatsApp, con *negritas*).
+	 */
+	public static function order_assembly( WC_Order $order ): ?array {
+		if ( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return null; }
+		$kind = sanitize_key( (string) $order->get_meta( '_cvd_assembly', true ) );
+		if ( ! isset( self::ASSEMBLY[ $kind ] ) ) { return null; }
+		$usd = (float) $order->get_meta( '_cvd_assembly_usd', true );
+		$usd = $usd > 0 ? $usd : (float) self::ASSEMBLY[ $kind ]['usd'];
+		return array(
+			'kind'   => $kind,
+			'usd'    => $usd,
+			'label'  => self::ASSEMBLY[ $kind ]['label'],
+			'text'   => 'Sí, ' . self::ASSEMBLY[ $kind ]['label'] . ' · el mensajero cobra ' . self::money( $usd, 'USD' ) . ' de armado al cliente, aparte (como la mensajería)',
+			'notice' => self::assembly_notice( $usd ),
+		);
+	}
+
+	/** «🔧 *OJO: hay que ARMAR el producto* · el mensajero cobra *10 USD* de armado al cliente» (texto de Ernesto, 13-oct). */
+	public static function assembly_notice( float $usd ): string {
+		return '🔧 *OJO: hay que ARMAR el producto* · el mensajero cobra *' . self::money( $usd, 'USD' ) . '* de armado al cliente';
 	}
 
 	// ---------- Formas de pago (3.13.67) ----------
