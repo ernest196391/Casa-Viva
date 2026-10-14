@@ -29,7 +29,7 @@ test('Ayuda contextual abre soporte para el pedido visible', async ({ page }) =>
 
   const support = page.locator(`[data-cvd-customer-order-support="${activeId}"]`);
   await expect(support).toBeVisible();
-  await expect(support.getByRole('heading', { name: 'Habla con Casa Viva sobre este pedido' })).toBeVisible();
+  await expect(support.getByRole('heading', { name: /^Habla con .+ sobre este pedido$/ })).toBeVisible();
 
   const whatsapp = support.getByRole('link', { name: 'Escribir por WhatsApp' });
   const call = support.getByRole('link', { name: 'Llamar' });

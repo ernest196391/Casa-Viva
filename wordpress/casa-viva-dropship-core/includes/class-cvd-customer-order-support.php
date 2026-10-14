@@ -23,6 +23,14 @@ final class CVD_Customer_Order_Support {
 		return preg_replace( '/\D+/', '', $phone );
 	}
 
+	/** 3.14.6 (D54): el pedido de una gestora se habla con ella, y el título lo dice con su nombre. */
+	private static function support_title( WC_Order $order ): string {
+		$owner_id = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
+		$owner = ( $owner_id && 'gestora' === sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) && get_user_meta( $owner_id, '_cvd_whatsapp', true ) ) ? get_userdata( $owner_id ) : null;
+		$name = $owner ? (string) strtok( trim( (string) $owner->display_name ), ' ' ) : '';
+		return '' !== $name ? 'Habla con ' . ucfirst( $name ) . ' sobre este pedido' : 'Habla con Casa Viva sobre este pedido';
+	}
+
 	private static function customer_stage( WC_Order $order ): string {
 		if ( class_exists( 'CVD_Canonical_Order_Reader' ) ) {
 			$state = CVD_Canonical_Order_Reader::read( $order );
@@ -64,7 +72,7 @@ final class CVD_Customer_Order_Support {
 		<section class="cvd-customer-order-support" data-cvd-customer-order-support="<?php echo esc_attr( (string) $order->get_id() ); ?>">
 			<div class="cvd-customer-order-support__copy">
 				<p>¿Necesitas ayuda?</p>
-				<h3>Habla con Casa Viva sobre este pedido</h3>
+				<h3><?php echo esc_html( self::support_title( $order ) ); ?></h3>
 				<span>El mensaje incluirá automáticamente el número del pedido y su estado visible.</span>
 			</div>
 			<?php if ( $phone ) : ?>

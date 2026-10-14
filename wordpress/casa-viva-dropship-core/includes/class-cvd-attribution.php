@@ -6,6 +6,16 @@ defined( 'ABSPATH' ) || exit;
 final class CVD_Attribution {
 	private const COOKIE_NAME = 'cvd_referral';
 	private const SESSION_KEY = 'cvd_referral';
+	/**
+	 * 3.14.6 (Thaly, 14-oct, D54): segunda marca del navegador, solo para las cachés. Delante de LiteSpeed está la caché de
+	 * Hostinger (hcdn), que guarda las páginas y se las da a todos sin mirar cookies, salvo unas pocas de WordPress y
+	 * WooCommerce: si el nombre lleva «wp_woocommerce_session_», pasa de largo. Sin esta marca, el cliente de una gestora
+	 * que tocaba Inicio, el logo o un departamento recibía la página guardada con los precios y el WhatsApp de Casa Viva.
+	 * No dice qué gestora es (eso lo dice cvd_referral, firmada); solo «este navegador está en la tienda de una gestora».
+	 * LiteSpeed se salta su caché con cualquiera de las dos (ajuste «No cachear cookies», ver ESTADO 14-oct).
+	 */
+	public const BYPASS_COOKIE = 'cvd_wp_woocommerce_session_tienda';
+	private static bool $bypass_checked = false;
 
 	public static function register(): void {
 		self::disable_cache_for_referral_request();
@@ -19,7 +29,7 @@ final class CVD_Attribution {
 
 	/** Prevent full-page caches from serving Casa Viva prices inside a gestora storefront. */
 	private static function disable_cache_for_referral_request(): void {
-		if ( isset( $_GET['ref'] ) || isset( $_GET['cv_ref'] ) || ! empty( $_COOKIE[ self::COOKIE_NAME ] ) ) {
+		if ( isset( $_GET['ref'] ) || isset( $_GET['cv_ref'] ) || ! empty( $_COOKIE[ self::COOKIE_NAME ] ) || ! empty( $_COOKIE[ self::BYPASS_COOKIE ] ) ) {
 			if ( ! defined( 'DONOTCACHEPAGE' ) ) {
 				define( 'DONOTCACHEPAGE', true );
 			}
@@ -59,10 +69,12 @@ final class CVD_Attribution {
 	/** Ensure LiteSpeed never shares one gestora's storefront prices with another visitor. */
 	public static function litespeed_vary_cookies( array $cookies ): array {
 		$cookies[] = self::COOKIE_NAME;
+		$cookies[] = self::BYPASS_COOKIE;
 		return array_values( array_unique( $cookies ) );
 	}
 
 	public static function capture_referral(): void {
+		self::ensure_bypass_cookie();
 		$raw_code = '';
 		if ( isset( $_GET['ref'] ) ) {
 			$raw_code = wp_unslash( $_GET['ref'] );
@@ -113,9 +125,45 @@ final class CVD_Attribution {
 		}
 
 		$_COOKIE[ self::COOKIE_NAME ] = $signed;
+		self::set_bypass_cookie( $days );
 		if ( function_exists( 'WC' ) && WC()->session ) {
 			WC()->session->set( self::SESSION_KEY, $signed );
 		}
+	}
+
+	/**
+	 * 3.14.6: el navegador que ya guardaba el enlace de una gestora (de antes de esta versión) recibe también la marca para
+	 * las cachés la primera vez que llega a PHP (una página con ?ref=, el carrito, la ficha que no estaba guardada…).
+	 */
+	private static function ensure_bypass_cookie(): void {
+		if ( self::$bypass_checked ) { return; }
+		self::$bypass_checked = true;
+		if ( ! empty( $_COOKIE[ self::BYPASS_COOKIE ] ) || empty( $_COOKIE[ self::COOKIE_NAME ] ) ) { return; }
+		if ( ! self::owner_from_saved_referral() ) { return; }
+		self::set_bypass_cookie( min( 400, max( 1, absint( get_option( 'cvd_cookie_days', 400 ) ) ) ) );
+	}
+
+	private static function set_bypass_cookie( int $days ): void {
+		if ( ! headers_sent() ) {
+			setcookie(
+				self::BYPASS_COOKIE,
+				'1',
+				array(
+					'expires'  => time() + ( DAY_IN_SECONDS * $days ),
+					'path'     => COOKIEPATH ?: '/',
+					'domain'   => COOKIE_DOMAIN,
+					'secure'   => is_ssl(),
+					'httponly' => true,
+					'samesite' => 'Lax',
+				)
+			);
+		}
+		$_COOKIE[ self::BYPASS_COOKIE ] = '1';
+	}
+
+	/** Último enlace de gestora guardado en este navegador (cookie firmada o sesión), sin mirar la dirección. */
+	public static function saved_referral_owner(): ?array {
+		return self::owner_from_saved_referral();
 	}
 
 	public static function attach_to_order( WC_Order $order, array $data ): void {

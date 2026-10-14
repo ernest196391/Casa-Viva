@@ -7,6 +7,8 @@ final class CVD_Gestora_Store {
 	private static bool $resolving_price = false;
 	private static array $price_maps = array();
 	private static ?array $contact = null;
+	/** Gestora de la tienda de esta visita ya calculada, por etapa de la petición (null = tienda de Casa Viva). */
+	private static array $active = array();
 	/** Páginas de atención al cliente con un botón de WhatsApp escrito en la página (3.13.88: van a la gestora en su tienda). */
 	private const CONTACT_PAGES = array( 'atencion-al-cliente', 'formas-de-pago', 'condiciones-de-mensajeria', 'como-llegar', 'tarifas-mensajeria', 'cotizar-mensajeria', 'seguimiento' );
 
@@ -24,6 +26,10 @@ final class CVD_Gestora_Store {
 		add_filter( 'post_type_link', array( __CLASS__, 'preserve_referral_on_product_links' ), 20, 2 );
 		add_action( 'woocommerce_before_shop_loop', array( __CLASS__, 'store_banner' ), 5 );
 		add_action( 'woocommerce_before_single_product', array( __CLASS__, 'store_banner' ), 5 );
+		// 3.14.6: la marca de la gestora también en el carrito y en el pago (antes solo en la lista y la ficha).
+		add_action( 'woocommerce_before_cart', array( __CLASS__, 'store_banner' ), 5 );
+		add_action( 'woocommerce_before_checkout_form', array( __CLASS__, 'store_banner' ), 1 );
+		add_filter( 'render_block', array( __CLASS__, 'banner_in_cart_block' ), 10, 2 );
 		add_filter( 'woocommerce_add_cart_item_data', array( __CLASS__, 'lock_cart_price' ), 20, 3 );
 		add_action( 'woocommerce_before_calculate_totals', array( __CLASS__, 'apply_locked_cart_prices' ), 20 );
 		add_action( 'woocommerce_cart_loaded_from_session', array( __CLASS__, 'relock_cart' ), 20 );
@@ -35,11 +41,9 @@ final class CVD_Gestora_Store {
 		if ( 'product' !== $post->post_type ) {
 			return $url;
 		}
-		$owner = self::pricing_owner_from_request();
-		if ( ! $owner || empty( $owner['referral_code'] ) ) {
-			return $url;
-		}
-		return add_query_arg( 'ref', $owner['referral_code'], $url );
+		$gestora = self::active_gestora();
+		$code = $gestora ? (string) get_user_meta( $gestora->ID, '_cvd_referral_code', true ) : '';
+		return '' !== $code ? add_query_arg( 'ref', $code, $url ) : $url;
 	}
 
 	public static function lock_cart_price( array $cart_item_data, int $product_id, int $variation_id ): array {
@@ -111,18 +115,69 @@ final class CVD_Gestora_Store {
 		);
 	}
 
+	/**
+	 * Gestora cuya tienda (precios, marca, fotos, WhatsApp) ve esta visita, o null = tienda de Casa Viva.
+	 *
+	 * 3.14.6 (Thaly, 14-oct, D54: la tienda de la gestora es «pegajosa»). Antes los precios de la gestora solo salían con
+	 * ?ref= en la dirección: su cliente abría el enlace y veía 35, tocaba Inicio, el logo, Menú, un departamento o el
+	 * buscador y le salía 30, el precio de Casa Viva. Ahora manda, por este orden:
+	 *  1. el enlace de esta visita (?ref= de una gestora aprobada), para cualquiera, como siempre;
+	 *  2. si no, el último enlace de gestora guardado en este navegador (cookie firmada, el último manda, D50), en TODA la web,
+	 *     para visitantes y clientes con cuenta. La gestora con su sesión abierta ve así SU tienda (inicio, lista, ficha,
+	 *     buscador, carrito, pago) solo si el enlace guardado es el suyo, y nunca en su panel; mensajeros, tienda y
+	 *     administración ven la de Casa Viva salvo que abran un ?ref=. En la API (REST) solo cuenta para Cúrru y el
+	 *     carrito de WooCommerce: el panel, el bot y las apps del equipo siguen viendo los precios de Casa Viva.
+	 * Las páginas con gestora no se guardan en ninguna caché (CVD_Attribution: DONOTCACHEPAGE, no-cache y la cookie
+	 * BYPASS_COOKIE que la caché de Hostinger respeta), así que un visitante sin enlace nunca ve los precios de una gestora.
+	 */
 	public static function active_gestora(): ?WP_User {
 		if ( is_admin() && ! wp_doing_ajax() ) { return null; }
-		// La cookie atribuye la venta, pero nunca debe alterar la tienda general.
-		// Los precios de la tienda espejo requieren un código explícito en la URL.
+		// Se recuerda por etapa: antes de wp_loaded la sesión y la cookie aún no están leídas, y hasta «wp» no se sabe qué página es.
+		$stage = did_action( 'wp' ) ? 'wp' : ( did_action( 'wp_loaded' ) ? 'loaded' : '' );
+		if ( '' !== $stage && array_key_exists( $stage, self::$active ) ) { return self::$active[ $stage ]; }
 		$owner = self::pricing_owner_from_request();
-		if ( ! $owner || 'gestora' !== ( $owner['owner_type'] ?? '' ) ) { return null; }
-		$user = get_user_by( 'id', absint( $owner['owner_user_id'] ?? 0 ) );
-		if ( ! $user || 'approved' !== get_user_meta( $user->ID, '_cvd_account_status', true ) ) { return null; }
+		if ( ! $owner ) { $owner = self::sticky_owner(); }
+		$user = null;
+		if ( $owner && 'gestora' === ( $owner['owner_type'] ?? '' ) ) {
+			$user = get_user_by( 'id', absint( $owner['owner_user_id'] ?? 0 ) ) ?: null;
+			if ( $user && 'approved' !== get_user_meta( $user->ID, '_cvd_account_status', true ) ) { $user = null; }
+		}
+		if ( '' !== $stage ) { self::$active[ $stage ] = $user; }
 		return $user;
 	}
 
-	/** Gestora usada exclusivamente para presentar precios de tienda espejo. */
+	/** El último enlace guardado en este navegador, si a quien navega le toca ver la tienda de esa gestora (ver active_gestora). */
+	private static function sticky_owner(): ?array {
+		if ( self::is_rest() && ! self::storefront_rest() ) { return null; }
+		$owner = CVD_Attribution::saved_referral_owner();
+		if ( ! $owner || ! is_user_logged_in() ) { return $owner; }
+		$context = class_exists( 'CVD_Contextual_Assistant' ) ? CVD_Contextual_Assistant::context() : 'cliente';
+		if ( 'cliente' === $context ) { return $owner; }
+		if ( 'gestora' === $context && absint( $owner['owner_user_id'] ?? 0 ) === get_current_user_id() && self::storefront_page() ) { return $owner; }
+		return null;
+	}
+
+	/** ¿Llamada a la API? Se mira la dirección, no solo REST_REQUEST: esa constante aún no existe cuando WooCommerce carga el carrito. */
+	private static function is_rest(): bool {
+		return ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || isset( $_GET['rest_route'] ) || false !== strpos( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), '/' . rest_get_url_prefix() . '/' );
+	}
+
+	/** Llamadas a la API que forman parte de la tienda: Cúrru y el carrito/pago de WooCommerce (Store API). */
+	private static function storefront_rest(): bool {
+		$route = isset( $_GET['rest_route'] ) ? (string) wp_unslash( $_GET['rest_route'] ) : (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
+		return false !== strpos( $route, '/casa-viva/v1/curru/' ) || false !== strpos( $route, '/wc/store/' );
+	}
+
+	/** Páginas de la tienda (no el panel de la gestora): inicio, lista, ficha, buscador, carrito, pago, páginas de atención. */
+	private static function storefront_page(): bool {
+		if ( wp_doing_ajax() ) { return isset( $_GET['wc-ajax'] ); }
+		if ( self::is_rest() ) { return true; }
+		if ( ! did_action( 'wp' ) ) { return false; }
+		if ( function_exists( 'is_woocommerce' ) && ( is_woocommerce() || is_cart() || is_checkout() ) ) { return true; }
+		return is_front_page() || is_search() || is_page( self::CONTACT_PAGES );
+	}
+
+	/** Gestora del enlace ?ref= de esta visita (o, en AJAX, de la página que lo pidió). */
 	private static function pricing_owner_from_request(): ?array {
 		$raw = isset( $_GET['ref'] ) ? wp_unslash( $_GET['ref'] ) : ( isset( $_GET['cv_ref'] ) ? wp_unslash( $_GET['cv_ref'] ) : '' );
 		// "Añadir al carrito" desde la lista va por AJAX (/?wc-ajax=add_to_cart) sin ?ref=: se lee de la página que lo pidió.
@@ -360,6 +415,14 @@ final class CVD_Gestora_Store {
 	private static function wa_display( string $digits ): string {
 		if ( 10 === strlen( $digits ) && str_starts_with( $digits, '53' ) ) { return substr( $digits, 2, 4 ) . ' ' . substr( $digits, 6 ); }
 		return '+' . $digits;
+	}
+
+	/** El carrito de la web es un bloque de WooCommerce (no pasa por woocommerce_before_cart): la marca va delante del bloque. */
+	public static function banner_in_cart_block( $content, $block ) {
+		if ( ! is_string( $content ) || ! in_array( $block['blockName'] ?? '', array( 'woocommerce/cart', 'woocommerce/checkout' ), true ) ) { return $content; }
+		ob_start();
+		self::store_banner();
+		return (string) ob_get_clean() . $content;
 	}
 
 	public static function store_banner(): void {
