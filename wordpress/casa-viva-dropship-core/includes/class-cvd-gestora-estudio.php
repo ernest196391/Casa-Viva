@@ -534,6 +534,7 @@ final class CVD_Gestora_Estudio {
 		if ( is_wp_error( $editor ) ) { return (string) file_get_contents( $path ); } // phpcs:ignore
 		$editor->resize( $max, $max, false );
 		$editor->set_quality( 85 );
+		require_once ABSPATH . 'wp-admin/includes/file.php'; // wp_tempnam() no está cargada en las peticiones REST (3.14.13)
 		$tmp = wp_tempnam( 'cvd-estudio' ) . '.jpg';
 		$saved = $editor->save( $tmp, 'image/jpeg' );
 		if ( is_wp_error( $saved ) || empty( $saved['path'] ) ) { return (string) file_get_contents( $path ); } // phpcs:ignore
@@ -545,6 +546,8 @@ final class CVD_Gestora_Estudio {
 	/** Guarda la foto de Google en su galería como JPEG (máx. 1600 px). */
 	private static function save_to_gallery( int $user_id, string $bytes, int $product_id, string $text, string $color, string $src = 'clave' ) {
 		list( $dir ) = self::dir( $user_id );
+		// 3.14.13: wp_tempnam() vive en wp-admin; sin esto «Subir mi foto de Gemini» daba 500 desde el área (Dany y Dayra, 14-oct).
+		require_once ABSPATH . 'wp-admin/includes/file.php';
 		$tmp = wp_tempnam( 'cvd-estudio-raw' );
 		file_put_contents( $tmp, $bytes ); // phpcs:ignore
 		$id = strtolower( wp_generate_password( 10, false ) );
