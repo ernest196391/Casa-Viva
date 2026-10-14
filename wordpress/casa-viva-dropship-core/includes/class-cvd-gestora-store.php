@@ -16,6 +16,9 @@ final class CVD_Gestora_Store {
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		// Prioridad 9: antes de los shortcodes (11), así solo cambia el botón escrito en la página, nunca el de «mi acceso».
 		add_filter( 'the_content', array( __CLASS__, 'contact_in_page_content' ), 9 );
+		// 3.14.10 (D67): con gestora, «Cómo llegar a la tienda» es «Cómo recoger tu pedido» (página, pestaña y vista previa).
+		add_filter( 'the_title', array( __CLASS__, 'pickup_page_title' ), 10, 2 );
+		add_filter( 'single_post_title', array( __CLASS__, 'pickup_page_title' ), 10, 2 );
 		foreach ( array( 'woocommerce_product_get_price', 'woocommerce_product_get_regular_price', 'woocommerce_product_get_sale_price', 'woocommerce_product_variation_get_price', 'woocommerce_product_variation_get_regular_price', 'woocommerce_product_variation_get_sale_price' ) as $filter ) {
 			add_filter( $filter, array( __CLASS__, 'customer_price' ), 30, 2 );
 		}
@@ -417,6 +420,14 @@ final class CVD_Gestora_Store {
 		$user = get_userdata( $owner_id );
 		$name = $user ? (string) strtok( trim( (string) $user->display_name ), ' ' ) : '';
 		return '' !== $name ? ucfirst( $name ) : ( $user ? 'Tu gestora' : '' );
+	}
+
+	/** Título de la página «Cómo llegar a la tienda» para el cliente de una gestora. */
+	public static function pickup_page_title( $title, $post = null ) {
+		if ( ! is_string( $title ) || 'Cómo llegar a la tienda' !== $title || is_admin() ) { return $title; }
+		$post = get_post( $post );
+		if ( ! $post || 'como-llegar' !== $post->post_name || ! self::hides_casa_viva() ) { return $title; }
+		return 'Cómo recoger tu pedido';
 	}
 
 	/** Nombre de la gestora de esta visita para los textos de recogida ('' si se ve la tienda de Casa Viva). */

@@ -33,6 +33,7 @@ const checks = [
   ['3.14.9 recogida sin dirección', /te dice dónde y cuándo recogerlo/.test(fn(store, 'pickup_place'))],
   ['3.14.9 páginas y fichas sin dirección ni número', /cv-info-address/.test(fn(store, 'without_casa_viva')) && /5405/.test(fn(store, 'without_casa_viva')) && /como-llegar/.test(fn(store, 'without_casa_viva'))],
   ['3.14.9 pago, gracias, seguimiento, vale, Cúrru y Mi cuenta', ['class-cvd-cuban-checkout.php', 'class-cvd-whatsapp-gateway.php', 'class-cvd-delivery.php', 'class-cvd-whatsapp-receipt-template.php', 'class-cvd-contextual-assistant.php', 'class-cvd-registration.php', 'class-cvd-premium-storefront.php'].every((f) => /CVD_Gestora_Store::(pickup_place|pickup_label|order_gestora_name|hides_casa_viva)/.test(read(f)))],
+  ['3.14.10 «Cómo recoger tu pedido» con gestora', /'Cómo recoger tu pedido'/.test(fn(store, 'pickup_page_title')) && /self::hides_casa_viva\(\)/.test(fn(store, 'pickup_page_title'))],
   ['API detectada por la dirección, no solo REST_REQUEST', /rest_get_url_prefix\(\)/.test(fn(store, 'is_rest'))],
   ['memo por etapa (wp_loaded / wp)', /did_action\( 'wp' \)/.test(active) && /did_action\( 'wp_loaded' \)/.test(active)],
   ['enlaces de producto con ?ref= de la tienda activa', /self::active_gestora\(\)/.test(fn(store, 'preserve_referral_on_product_links'))],
