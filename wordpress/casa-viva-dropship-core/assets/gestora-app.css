@@ -203,3 +203,43 @@ body.cvga-body .cvd-customer-nav{display:none!important}
 .cvgf-body .cvga-actions{margin-top:auto;padding-top:10px}
 .cvgf-done{color:var(--ga-good);font-size:12.5px;min-height:1em}
 @media (max-width:520px){.cvgf-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.cvgf-body{padding:8px 9px 10px}.cvgf-text{display:none}.cvgf-body .cvga-actions{flex-direction:column;align-items:stretch}.cvgf-body .cvga-btn{white-space:normal}}
+
+/* 3.14.0 · Programa de gestoras: «Mi equipo» y «Mi piedra» (D53–D58). */
+.cvga-prog-shadow{margin:0;padding:10px 14px;border-radius:12px;background:#fbf3e2;border:1px solid #ecd9b0;color:#5c420f;font-size:14px}
+.cvga-kpis-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.cvga-team{list-style:none;margin:8px 0 0;padding:0}
+.cvga-team li{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--ga-line)}
+.cvga-team li:first-child{border-top:0}
+.cvga-avatar-sm{width:36px;height:36px;border-radius:50%;background:var(--ga-soft);color:var(--ga-brand);display:grid;place-items:center;font-weight:700}
+.cvga-team-text{min-width:0}
+.cvga-team-text b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cvga-team-text small{display:block;color:var(--ga-muted);font-size:12.5px}
+.cvga-team-end{display:flex;flex-direction:column;align-items:flex-end;gap:4px;font-variant-numeric:tabular-nums}
+.cvga-gem{display:inline-block;font-size:12px;font-weight:600;padding:2px 10px;border-radius:99px;white-space:nowrap;background:var(--gem-bg,#efebe4);color:var(--gem-ink,#5f5a52)}
+[data-gem="bronce"]{--gem-bg:#f4e3d3;--gem-ink:#7a4a22;--gem:#b06b34}
+[data-gem="plata"]{--gem-bg:#eceff1;--gem-ink:#4b555c;--gem:#8c99a3}
+[data-gem="oro"]{--gem-bg:#fbf0d2;--gem-ink:#7a5a0c;--gem:#c39443}
+[data-gem="platino"]{--gem-bg:#e9eef0;--gem-ink:#3e4f57;--gem:#6f8792}
+[data-gem="zafiro"]{--gem-bg:#dfe8f8;--gem-ink:#1d3f7a;--gem:#2f5fb3}
+[data-gem="rubi"]{--gem-bg:#f8dfe3;--gem-ink:#7c1426;--gem:#b3253f}
+[data-gem="esmeralda"]{--gem-bg:#dcf1e6;--gem-ink:#0f5a37;--gem:#1f8a57}
+[data-gem="diamante"]{--gem-bg:#e2f3f8;--gem-ink:#165a6c;--gem:#3aa0bd}
+[data-gem="doble-diamante"]{--gem-bg:#e5ecfb;--gem-ink:#26357a;--gem:#5161c9}
+[data-gem="corona"]{--gem-bg:#f6e8c8;--gem-ink:#5b3d00;--gem:#a87a12}
+[data-gem="none"]{--gem:#b9b2a7}
+.cvga-stone-card{display:flex;align-items:center;gap:16px}
+.cvga-stone-big{flex:none;width:76px;height:76px;border-radius:20px;display:grid;place-items:center;background:var(--gem-bg,#f2efe9);color:var(--gem,#b9b2a7)}
+.cvga-stone-card small{color:var(--ga-muted);font-size:13px}
+.cvga-stone-name{font-size:24px!important;margin:0!important}
+.cvga-bar-lg{display:block;height:10px;border-radius:99px;background:var(--ga-soft);overflow:hidden;margin:10px 0 6px}
+.cvga-bar-lg i{display:block;height:100%;background:var(--ga-gold);border-radius:99px}
+.cvga-bonus{margin:6px 0 0;font-size:15px}
+.cvga-bonus b{font-size:26px;font-variant-numeric:tabular-nums;margin-right:6px}
+.cvga-table-wrap{overflow-x:auto}
+.cvga-stones{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+.cvga-stones th,.cvga-stones td{text-align:left;padding:7px 8px;border-top:1px solid var(--ga-line)}
+.cvga-stones th{color:var(--ga-muted);font-weight:500;font-size:12.5px;border-top:0}
+.cvga-stones tr.is-me td{background:#fbf3e2}
+.cvga-stones td:last-child{white-space:nowrap}
+.cvga .cvd-pts{display:inline-block;padding:1px 8px;border-radius:99px;background:#fbf3e2;color:#7a5512;border:1px solid #ecd9b0;font-size:12.5px;font-weight:600}
+@media (max-width:640px){.cvga-kpis-3{grid-template-columns:1fr 1fr}.cvga-kpis-3 .cvga-kpi:first-child{grid-column:1/-1}}

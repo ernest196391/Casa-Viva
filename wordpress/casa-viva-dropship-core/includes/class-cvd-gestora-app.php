@@ -88,6 +88,12 @@ final class CVD_Gestora_App {
 			array( '', 'Mi equipo', '', '' ),
 			array( 'invitar', 'Invitar gestores', 'invite', '' ),
 		);
+		// 3.14.0: Programa de gestoras (D53–D58): «Mi equipo» y «Mi piedra», en sombra solo para quien lo prueba.
+		$programa = class_exists( 'CVD_Programa' ) && CVD_Programa::visible_for( $user );
+		if ( $programa ) {
+			$at = (int) array_search( 'invitar', array_column( $nav, 0 ), true );
+			array_splice( $nav, $at, 1, array( array( 'equipo', 'Mi equipo', 'people', '' ), array( 'piedra', 'Mi piedra', 'gem', '' ), array( 'invitar', 'Invitar gestores', 'invite', '' ) ) );
+		}
 		// 3.13.77: «Aprende» (tutoriales). Mientras le falte algo, justo debajo de Inicio y con lo que lleva (2/6);
 		// cuando lo vio todo, baja al final de Herramientas.
 		$learn = class_exists( 'CVD_Aprende' ) ? CVD_Aprende::progress( $user->ID, 'gestora' ) : null;
@@ -141,6 +147,7 @@ final class CVD_Gestora_App {
 					<?php echo self::herramientas(); // phpcs:ignore ?>
 					<?php echo self::calculadora(); // phpcs:ignore ?>
 					<?php echo self::buscar( $zone ); // phpcs:ignore ?>
+					<?php if ( $programa ) { echo CVD_Programa::render_equipo( $user ) . CVD_Programa::render_piedra( $user ); } // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo class_exists( 'CVD_Gestora_Fotos' ) ? CVD_Gestora_Fotos::render( $user, $code ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php if ( $box ) : // 3.13.68: el mismo recuadro arriba de «Tus ventas». ?><div class="cvga-view" data-view="ventas"><?php echo $box; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?></div><?php endif; ?>
 					<div class="cvga-legacy"><?php echo $legacy; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- salida del shortcode, ya escapada allí. ?></div>
@@ -516,6 +523,7 @@ final class CVD_Gestora_App {
 			'calc'   => '<rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M8 6.5h8v3H8z"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/>',
 			'camera' => '<rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/>',
 			'image'  => '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
+			'gem'    => '<path d="M7 4h10l4 5-9 11L3 9z"/><path d="M3 9h18M10 4 8 9l4 11 4-11-2-5"/>',
 			'learn'  => '<circle cx="12" cy="12" r="9"/><path d="M10 8.5l5.5 3.5-5.5 3.5z"/>',
 			'shop'   => '<path d="M3.5 9.5 5 4h14l1.5 5.5"/><path d="M3.5 9.5a2.8 2.8 0 0 0 5.6 0 2.9 2.9 0 0 0 5.8 0 2.8 2.8 0 0 0 5.6 0"/><path d="M5 12v8h14v-8"/><path d="M10 20v-4.5h4V20"/>',
 		);
