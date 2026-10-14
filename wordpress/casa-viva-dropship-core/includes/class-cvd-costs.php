@@ -7,8 +7,11 @@ defined( 'ABSPATH' ) || exit;
  *
  * Meta en producto y variación (la variación sin costo propio hereda el del padre):
  *   _cvd_cost_usd         costo de compra por unidad en USD (compra + flete). NO cambiar el nombre: lo usa el programa de gestoras.
- *   _cvd_cost_source      bizne | proveedor | manual | formula
+ *   _cvd_cost_source      bizne | proveedor | manual | formula | por_confirmar
+ *                         formula = provisional (precio ÷ 1,5, regla de Lennys); por_confirmar = costo dudoso cargado
+ *                         hasta que lo confirme Lennys. Los dos son provisionales: cualquier costo real los sustituye.
  *   _cvd_cost_updated_at  fecha ISO (UTC) del último cambio del costo
+ *   _cvd_no_reponer       1 = liquidación, no se vuelve a comprar (3.14.2); _cvd_admin_note = nota solo para administración
  * Calculado al guardar (no se edita a mano):
  *   _cvd_floor_usd        precio mínimo
  *   _cvd_floor_status     ok | bajo | sin_costo
@@ -30,9 +33,13 @@ final class CVD_Costs {
 	public const FLOOR = '_cvd_floor_usd';
 	public const STATUS = '_cvd_floor_status';
 	public const UNDER = '_cvd_under_floor';
-	public const SOURCES = array( 'bizne' => 'BizneCubano / caja', 'proveedor' => 'Proveedor (bajo pedido)', 'manual' => 'Manual', 'formula' => 'Fórmula' );
+	public const SOURCES = array( 'bizne' => 'BizneCubano / caja', 'proveedor' => 'Proveedor (bajo pedido)', 'manual' => 'Manual', 'formula' => 'Fórmula (provisional)', 'por_confirmar' => 'Por confirmar (dudoso)' );
+	/** Costos provisionales: un costo real (bizne, proveedor, manual) siempre los pisa, también con only_empty. */
+	public const PROVISIONAL = array( 'formula', 'por_confirmar' );
+	public const NO_REPONER = '_cvd_no_reponer';
+	public const ADMIN_NOTE = '_cvd_admin_note';
 	private const NS = 'casa-viva/v1';
-	private const PRIVATE_KEYS = array( self::COST, self::SOURCE, self::UPDATED, self::FLOOR, self::STATUS, self::UNDER );
+	private const PRIVATE_KEYS = array( self::COST, self::SOURCE, self::UPDATED, self::FLOOR, self::STATUS, self::UNDER, self::NO_REPONER, self::ADMIN_NOTE );
 
 	private static bool $busy = false;
 
@@ -214,6 +221,11 @@ final class CVD_Costs {
 		echo '</select></p>';
 		$when = $updated ? ' · costo cambiado el ' . esc_html( wp_date( 'j M Y H:i', strtotime( $updated ) ) ) : '';
 		echo '<p class="form-field form-row description" style="margin-top:0">' . esc_html( self::status_text( $e ) ) . $when . '</p>';
+		$note = (string) $product->get_meta( self::ADMIN_NOTE, true );
+		if ( '1' === (string) $product->get_meta( self::NO_REPONER, true ) || '' !== $note ) {
+			$label = '1' === (string) $product->get_meta( self::NO_REPONER, true ) ? '🏷️ Liquidación: NO reponer. ' : '';
+			echo '<p class="form-field form-row description" style="margin-top:0;color:#b45309"><strong>' . esc_html( $label . $note ) . '</strong></p>';
+		}
 	}
 
 	public static function product_fields(): void {
@@ -287,7 +299,7 @@ final class CVD_Costs {
 			if ( ! $product || null === $cost || $cost < 0 ) { $out['missing'][] = $item['id'] ?? $item['item_id'] ?? $item['sku'] ?? null; continue; }
 			$source = sanitize_key( (string) ( $item['source'] ?? 'manual' ) );
 			$current = (string) $product->get_meta( self::SOURCE, true );
-			if ( $only_empty && '' !== (string) $product->get_meta( self::COST, true ) && $current !== $source ) { $out['skipped']++; continue; }
+			if ( $only_empty && '' !== (string) $product->get_meta( self::COST, true ) && $current !== $source && ! in_array( $current, self::PROVISIONAL, true ) ) { $out['skipped']++; continue; }
 			if ( self::set_cost( $product, $cost, $source ) ) { $product->save(); $out['changed']++; } else { $out['same']++; }
 		}
 		return new WP_REST_Response( array( 'ok' => true ) + $out, 200 );
@@ -298,6 +310,7 @@ final class CVD_Costs {
 		$counts = array( 'ok' => 0, 'bajo' => 0, 'sin_costo' => 0 );
 		$by_kind = array( 'tienda' => $counts, 'bajo_pedido' => $counts );
 		$under = array();
+		$by_source = array();
 		$ids = get_posts( array( 'post_type' => array( 'product', 'product_variation' ), 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids', 'no_found_rows' => true ) );
 		foreach ( $ids as $id ) {
 			$product = wc_get_product( $id );
@@ -307,12 +320,17 @@ final class CVD_Costs {
 			$kind = self::is_bajo_pedido( $product ) ? 'bajo_pedido' : 'tienda';
 			$counts[ $e['status'] ]++;
 			$by_kind[ $kind ][ $e['status'] ]++;
+			$src = (string) $product->get_meta( self::SOURCE, true );
+			if ( '' === $src && '' === (string) $product->get_meta( self::COST, true ) && $product->get_parent_id() ) { $src = (string) get_post_meta( $product->get_parent_id(), self::SOURCE, true ); }
+			if ( null !== $e['cost'] ) { $by_source[ $src ?: 'manual' ] = ( $by_source[ $src ?: 'manual' ] ?? 0 ) + 1; }
 			if ( 'bajo' === $e['status'] && count( $under ) < $list ) {
 				$under[] = array( 'id' => $id, 'name' => wp_strip_all_tags( $product->get_name() ), 'price' => $e['price'], 'floor' => $e['floor'], 'cost' => $e['cost'] );
 			}
 		}
 		$line = sprintf( '%d productos bajo el mínimo · %d sin costo', $counts['bajo'], $counts['sin_costo'] );
-		return array( 'total' => array_sum( $counts ), 'counts' => $counts, 'by_kind' => $by_kind, 'line' => $line, 'under' => $under );
+		$provisional = ( $by_source['formula'] ?? 0 ) + ( $by_source['por_confirmar'] ?? 0 );
+		if ( $provisional ) { $line .= sprintf( ' · %d con costo provisional', $provisional ); }
+		return array( 'total' => array_sum( $counts ), 'counts' => $counts, 'by_kind' => $by_kind, 'by_source' => $by_source, 'line' => $line, 'under' => $under );
 	}
 
 	public static function rest_summary( WP_REST_Request $request ): WP_REST_Response {
