@@ -289,15 +289,21 @@ final class CVD_Gestora_Estudio {
 		require_once ABSPATH . 'wp-admin/includes/image.php';
 		wp_update_attachment_metadata( $att, wp_generate_attachment_metadata( $att, $target ) );
 		self::unset_store_photo( $user_id, $product->get_id(), '' ); // la anterior de ese producto, si había
-		$map = (array) get_user_meta( $user_id, self::META_STORE, true );
+		$map = self::store_map_of( $user_id );
 		$map[ $product->get_id() ] = array( 'att' => (int) $att, 'photo' => $id );
 		update_user_meta( $user_id, self::META_STORE, $map );
 		do_action( 'litespeed_purge_post', $product->get_id() );
 		return rest_ensure_response( array( 'ok' => true, 'in_store' => true, 'message' => 'Listo: en tu tienda este producto sale con tu foto. La tienda general no cambia.', 'link' => self::store_link( $product->get_id(), $user_id ) ) );
 	}
 
+	/** Producto => ['att' => adjunto, 'photo' => id de su galería]. */
+	private static function store_map_of( int $user_id ): array {
+		$map = get_user_meta( $user_id, self::META_STORE, true );
+		return is_array( $map ) ? array_filter( $map, 'is_array' ) : array();
+	}
+
 	private static function unset_store_photo( int $user_id, int $product_id, string $only_if_photo ): void {
-		$map = (array) get_user_meta( $user_id, self::META_STORE, true );
+		$map = self::store_map_of( $user_id );
 		if ( ! $product_id || empty( $map[ $product_id ] ) ) { return; }
 		if ( '' !== $only_if_photo && ( $map[ $product_id ]['photo'] ?? '' ) !== $only_if_photo ) { return; }
 		$att = (int) ( $map[ $product_id ]['att'] ?? 0 );
@@ -315,7 +321,7 @@ final class CVD_Gestora_Estudio {
 			self::$store_map = array();
 			$gestora = class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::active_gestora() : null;
 			if ( $gestora ) {
-				foreach ( (array) get_user_meta( $gestora->ID, self::META_STORE, true ) as $pid => $row ) {
+				foreach ( self::store_map_of( $gestora->ID ) as $pid => $row ) {
 					if ( ! empty( $row['att'] ) ) { self::$store_map[ (int) $pid ] = (int) $row['att']; }
 				}
 			}
@@ -493,7 +499,7 @@ final class CVD_Gestora_Estudio {
 
 	private static function item_for_js( array $item, int $user_id ): array {
 		list( , $url ) = self::dir( $user_id );
-		$map = (array) get_user_meta( $user_id, self::META_STORE, true );
+		$map = self::store_map_of( $user_id );
 		$pid = (int) $item['product'];
 		$product = $pid ? wc_get_product( $pid ) : null;
 		return array(
