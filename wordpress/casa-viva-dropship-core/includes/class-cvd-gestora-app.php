@@ -239,7 +239,16 @@ final class CVD_Gestora_App {
 	}
 
 	private static function herramientas(): string {
+		// 3.13.99: precios de mensajería (decisión de Ernesto, 14-oct). PDF con nombre fijo en uploads/casa-viva/,
+		// generado con las tarifas vivas (docs/nexo-business/bienvenida-2026-10-14/generar-pdf.mjs en ernesto-rondon-nexo).
+		$uploads  = wp_get_upload_dir();
+		$pdf_path = trailingslashit( $uploads['basedir'] ) . 'casa-viva/precios-mensajeria.pdf';
+		$pdf_url  = is_readable( $pdf_path ) ? add_query_arg( 'v', (string) filemtime( $pdf_path ), trailingslashit( $uploads['baseurl'] ) . 'casa-viva/precios-mensajeria.pdf' ) : '';
+		$pdf_ts   = $pdf_url ? (int) filemtime( $pdf_path ) : 0;
+		$meses    = array( 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic' ); // sin depender del idioma cargado
+		$pdf_date = $pdf_ts ? wp_date( 'j', $pdf_ts ) . ' ' . $meses[ (int) wp_date( 'n', $pdf_ts ) - 1 ] . ' ' . wp_date( 'Y', $pdf_ts ) : '';
 		$tools = array(
+			array( 'truck', 'Precios de mensajería', 'Cuánto cuesta llevar el pedido a cada reparto, en CUP. La mensajería es del mensajero.', 'ready', 'precios-mensajeria' ),
 			array( 'calc', 'Calculadora', 'Pon el precio en USD y mira cuánto es en CUP, euros, tarjeta clásica, Zelle o PayPal con la tasa de hoy.', 'ready', 'calculadora' ),
 			array( 'chat', 'Pregúntale a Curru', 'Precios, medidas y si hay en almacén. Responde al momento.', 'ready', 'curru' ),
 			array( 'image', 'Fotos para publicar', 'Todo lo que hay en existencia, con tu precio y tu enlace: descarga la foto y copia el texto.', 'ready', 'fotos' ),
@@ -259,6 +268,9 @@ final class CVD_Gestora_App {
 					<p><?php echo esc_html( $t[2] ); ?></p>
 					<div class="cvga-actions">
 						<?php if ( 'soon' === $t[3] ) : ?><span class="cvga-chip">Pronto</span>
+						<?php elseif ( 'precios-mensajeria' === $t[4] ) : // no «mensajeria»: en gestora-app.js ese alias va a Ventas ?>
+							<a class="cvga-btn cvga-btn-sm" href="<?php echo esc_url( home_url( '/cotizar-mensajeria/' ) ); ?>">Calcular</a>
+							<?php if ( $pdf_url ) : ?><a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="<?php echo esc_url( $pdf_url ); ?>" target="_blank" rel="noopener">Ver PDF</a><span class="cvga-note"><?php echo esc_html( 'Actualizado: ' . $pdf_date ); ?></span><?php endif; ?>
 						<?php elseif ( 'curru' === $t[4] ) : ?><button class="cvga-btn cvga-btn-sm" type="button" data-cvga-curru>Abrir</button>
 						<?php else : ?><a class="cvga-btn cvga-btn-sm" href="#<?php echo esc_attr( $t[4] ); ?>" data-cvga-go="<?php echo esc_attr( $t[4] ); ?>">Abrir</a><?php endif; ?>
 					</div>
@@ -308,6 +320,7 @@ final class CVD_Gestora_App {
 					<label class="cvga-field" for="cvga-calc-usd"><span>Precio en USD</span><input id="cvga-calc-usd" name="usd" type="text" inputmode="decimal" placeholder="Ej.: 25" enterkeyhint="done"></label>
 					<label class="cvga-field" for="cvga-calc-ship"><span>Mensajería en CUP <small>(opcional)</small></span><input id="cvga-calc-ship" name="ship" type="text" inputmode="numeric" placeholder="Ej.: 500" enterkeyhint="done"></label>
 				</div>
+				<p class="cvga-note"><a href="<?php echo esc_url( home_url( '/cotizar-mensajeria/' ) ); ?>">¿Cuánto es la mensajería? Ver precios</a></p>
 				<p class="cvga-calc-rate"><?php echo $rates['updatedTs'] ? esc_html( 'Tasa del día · actualizada ' . self::rate_when( (int) $rates['updatedTs'] ) ) : 'Aún no hay tasa del día.'; ?></p>
 				<?php if ( $rates['updatedTs'] && $rates['stale'] ) : ?><p class="cvga-warn">Ojo: esta tasa tiene más de <?php echo esc_html( (string) CVD_Daily_Rates::STALE_HOURS ); ?> horas. Confírmala en el grupo General antes de cobrar.</p><?php endif; ?>
 			</form>
