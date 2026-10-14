@@ -325,6 +325,26 @@ final class CVD_Delivery {
 		return !empty($result['success']);
 	}
 
+	/** 3.14.15: meta que deja publicar en el grupo un pedido con producto de proveedor (la pone VivaBot con PUBLICA/RECOGÍ o /mensajeria/). */
+	public const SUPPLIER_DISPATCH_OK = '_cvd_supplier_dispatch_ok';
+
+	/**
+	 * 3.14.15 (#3693, 14-oct): un pedido con producto de proveedor (bajo pedido, SKU MK-) NO sale al grupo de
+	 * mensajeros al pulsar «Listo»: la entrega la lleva el proveedor o la coordina Ernesto (a la lámpara la llevaba
+	 * Pedri y Nana pulsó «Listo» a las 15:00; salió al grupo y la cogió Félix). Sale solo si alguien lo autoriza
+	 * (meta SUPPLIER_DISPATCH_OK: «PUBLICA #N» o «RECOGÍ #N» en VivaBot, o «Ofertar» en /mensajeria/). true = retenido.
+	 */
+	public static function supplier_hold( WC_Order $order ): bool {
+		if ( ! class_exists( 'CVD_Market_Bridge' ) || ! CVD_Market_Bridge::order_has_market_items( $order ) ) { return false; }
+		if ( '' !== (string) $order->get_meta( self::SUPPLIER_DISPATCH_OK, true ) ) { return false; }
+		if ( ! $order->get_meta( '_cvd_supplier_hold_noted', true ) ) {
+			$order->update_meta_data( '_cvd_supplier_hold_noted', current_time( 'mysql', true ) );
+			$order->add_order_note( 'Pedido con producto de proveedor: «Listo» no lo publica en el grupo de mensajeros (la entrega la lleva el proveedor o la coordina Ernesto). Si hace falta un mensajero del grupo: «PUBLICA #' . $order->get_order_number() . '» en VivaBot u «Ofertar» en Mensajería.' );
+			$order->save();
+		}
+		return true;
+	}
+
 	/**
 	 * «Listo para salir» de un pedido a domicilio (3.13.48). Si la gestora (o la nota del cliente)
 	 * eligió mensajero y sigue aprobado, se le asigna directo y NO sale al grupo. Si ya no está
@@ -333,6 +353,7 @@ final class CVD_Delivery {
 	public static function dispatch_ready( WC_Order $order ): bool {
 		if ( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return false; }
 		if ( self::refuse_test_order( $order ) ) { return false; }
+		if ( self::supplier_hold( $order ) ) { return false; }
 		$preferred_id = class_exists( 'CVD_Direct_Dispatch' ) ? absint( $order->get_meta( CVD_Direct_Dispatch::PREFERRED_META, true ) ) : 0;
 		if ( ! $preferred_id || 'unassigned' !== self::status( $order ) || absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { return self::publish_offer( $order ); }
 		$messenger = CVD_Direct_Dispatch::preferred_messenger( $order );
@@ -589,6 +610,12 @@ final class CVD_Delivery {
 		$current = self::status( $order ); $user = wp_get_current_user();
 		if ( ! self::allowed_for_user( $order, $user, $current, $next ) ) { wp_die( 'No tienes permiso para realizar este cambio.' ); }
 		if ( 'offered' === $next ) {
+			// 3.14.15: «Ofertar» a mano en /mensajeria/ es una decisión explícita: también publica los de proveedor.
+			if ( class_exists( 'CVD_Market_Bridge' ) && CVD_Market_Bridge::order_has_market_items( $order ) && '' === (string) $order->get_meta( self::SUPPLIER_DISPATCH_OK, true ) ) {
+				$order->update_meta_data( self::SUPPLIER_DISPATCH_OK, current_time( 'mysql', true ) );
+				$order->add_order_note( 'Pedido con producto de proveedor publicado a mano en el grupo de mensajeros por ' . $user->display_name . '.' );
+				$order->save();
+			}
 			self::dispatch_ready( $order ); // sin mensajero elegido por la gestora = publish_offer() de siempre
 			wp_safe_redirect( home_url( '/mensajeria/?actualizado=1' ) ); exit;
 		}
