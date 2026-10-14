@@ -1,4 +1,4 @@
-/* «Mi estudio de fotos» y «Mi contabilidad» (3.14.1). Usa los colores de .cvga (gestora-app.css). */
+/* «Mi estudio de fotos» y «Mi contabilidad» (3.14.1; modo Gemini gratis 3.14.3). Usa los colores de .cvga (gestora-app.css). */
 .cvga-chip.is-good{background:#dcefe3;color:#1f5c38}
 .cves .cves-msg{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:var(--ga-soft);font-size:14px}
 .cves .cves-msg.is-bad{background:#f8e1dc;color:#7a2416}
@@ -47,6 +47,29 @@
 .cves-del{border:0;background:transparent;color:#9a3a2a;font:inherit;font-size:13.5px;text-decoration:underline;cursor:pointer;padding:6px}
 .cves-done{color:var(--ga-muted);font-size:13px}
 .cves-done:empty{display:none}
+/* 3.14.3 modo Gemini gratis */
+.cves .cves-ic{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.cves-free h2{margin:0 0 10px}
+.cves-free-steps{list-style:none;margin:0 0 6px;padding:0;display:flex;flex-direction:column;gap:12px}
+.cves-free-steps li{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--ga-line);border-radius:12px;background:var(--ga-bg)}
+.cves-free-steps li.is-off{opacity:.55}
+.cves-free-steps li>div{flex:1;min-width:0}
+.cves-free-steps p{margin:2px 0 8px;font-size:15px;line-height:1.35}
+.cves-step-ic{position:relative;display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;background:var(--ga-brand);color:#fff;flex:none}
+.cves-step-ic b{position:absolute;top:-4px;right:-4px;width:20px;height:20px;border-radius:50%;background:var(--ga-gold);color:#fff;font-size:12px;line-height:20px;text-align:center}
+.cves-base{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cves-base img{width:48px;height:48px;border-radius:8px;object-fit:cover;background:var(--ga-soft)}
+.cves-base [hidden]{display:none}
+.cves-free .cves-done{display:block;margin-top:6px;color:var(--ga-good);font-weight:600}
+.cves-free .cves-prompt textarea{background:var(--ga-surface)}
+.cves-up-title{margin:18px 0 10px!important;padding-top:14px;border-top:1px solid var(--ga-line)}
+.cves-up{width:100%;min-height:48px;font-size:16px}
+.cves-up-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.cves-link{display:block;margin:12px 0 0;border:0;background:transparent;color:var(--ga-brand);font:inherit;font-weight:600;text-decoration:underline;cursor:pointer;padding:6px 0}
+.cves-key>summary{cursor:pointer;font-size:14.5px;color:var(--ga-muted);list-style-position:inside}
+.cves-key>summary b{color:var(--ga-ink)}
+.cves-key[open]>summary{margin-bottom:12px}
+.cves-key .cves-key-off>.cvga-note:first-child{margin-top:0}
 @media (max-width:520px){.cves-gallery{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.cves-item-body .cvga-actions{flex-direction:column;align-items:stretch}.cves-item-body .cvga-btn{white-space:normal}.cves-item.is-big{max-width:none}}
 
 /* Mi contabilidad */

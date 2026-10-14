@@ -83,8 +83,8 @@ final class CVD_Estudio_Errors {
 			return 'Google dice que tu clave no tiene permiso para Gemini. Crea una clave nueva en aistudio.google.com/apikey y conéctala otra vez.';
 		}
 		if ( 429 === $http || 'RESOURCE_EXHAUSTED' === $status ) {
-			if ( false !== strpos( $m, 'limit: 0' ) || false !== strpos( $m, 'free_tier' ) || false !== strpos( $m, 'billing' ) ) {
-				return 'Tu clave de Google no tiene saldo para crear fotos. Google cobra unos 3 centavos de USD por foto y pide activar la facturación (una tarjeta) en tu cuenta de AI Studio. Sin eso, Google no crea fotos.';
+			if ( self::is_billing( $http, $status, $message ) ) {
+				return 'Tu clave de Google no tiene saldo para crear fotos aquí (Google pide activar la facturación con una tarjeta). Hazla gratis en la app de Gemini: abajo tienes los 3 pasos.';
 			}
 			return 'Llegaste al límite de tu clave de Google por ahora. Espera un minuto y prueba otra vez; si sigue, prueba mañana.';
 		}
@@ -92,6 +92,13 @@ final class CVD_Estudio_Errors {
 		if ( $http >= 500 ) { return 'Google está ocupado ahora mismo. Prueba otra vez en un par de minutos.'; }
 		if ( 'INVALID_ARGUMENT' === $status && false !== strpos( $m, 'image' ) ) { return 'Google no pudo leer la foto que subiste. Prueba con otra foto (JPG o PNG).'; }
 		return 'clave' === $context ? 'No pude comprobar tu clave con Google. Revisa que la copiaste completa y prueba otra vez.' : 'Google no pudo crear la foto esta vez. Prueba otra vez.';
+	}
+
+	/** 3.14.3: ¿el error es «sin facturación / sin capa gratis»? Entonces se le ofrece el modo Gemini gratis (la app). */
+	public static function is_billing( int $http, string $status, string $message ): bool {
+		if ( 429 !== $http && 'RESOURCE_EXHAUSTED' !== $status ) { return false; }
+		$m = strtolower( $message );
+		return false !== strpos( $m, 'limit: 0' ) || false !== strpos( $m, 'free_tier' ) || false !== strpos( $m, 'billing' );
 	}
 
 	/** Google contestó pero sin foto (por sus reglas de seguridad u otro motivo). */
@@ -161,6 +168,13 @@ final class CVD_Estudio_Limits {
 	public const MAX_UPLOAD_BYTES = 8388608;    // foto del móvil: 8 MB
 	public const MAX_TEXT = 400;                // lo que escribe
 	public const MAX_PROMPT = 2500;             // instrucción editada a mano
+	public const MAX_GEMINI_UPLOAD_BYTES = 15728640; // 3.14.3: foto hecha en la app de Gemini (el móvil la achica antes; esto es el tope)
+	public const MIN_UPLOAD_SIDE = 300;         // más pequeña no sirve para la tienda
+
+	/** '' si la foto subida tiene un tamaño útil; si no, el motivo en español. */
+	public static function upload_size_check( int $w, int $h ): string {
+		return min( $w, $h ) < self::MIN_UPLOAD_SIDE ? 'Esa foto es muy pequeña. Guarda la foto de Gemini en tamaño completo y súbela otra vez.' : '';
+	}
 
 	/** '' si cabe; si no, el motivo en español. */
 	public static function gallery_check( int $count, int $total_bytes, int $new_bytes = 0 ): string {
@@ -404,6 +418,94 @@ final class CVD_Estudio_Prompt {
 		$custom = trim( mb_substr( $custom, 0, CVD_Estudio_Limits::MAX_PROMPT ) );
 		$custom = trim( (string) preg_replace( '/\n?Hard rules:.*$/s', '', $custom ) );
 		return $custom . "\n" . self::hard_rules( $has_ref, $color_en, $color_from_ref );
+	}
+
+	/* ---------------------------------------------------------------- modo Gemini gratis (3.14.3) */
+
+	/** Habitaciones y lugares => escena en español, para la instrucción que se pega en la app de Gemini. */
+	private const ROOMS_ES = array(
+		'bano' => 'un baño limpio y bonito, con azulejos claros y pocos adornos de buen gusto',
+		'sala' => 'una sala luminosa y moderna, con decoración sencilla',
+		'cuarto' => 'un cuarto acogedor y luminoso, con textiles suaves', 'habitacion' => 'un cuarto acogedor y luminoso, con textiles suaves', 'dormitorio' => 'un cuarto acogedor y luminoso, con textiles suaves',
+		'cocina' => 'la meseta de una cocina limpia y moderna',
+		'comedor' => 'la mesa de un comedor luminoso',
+		'patio' => 'una terraza soleada con plantas verdes', 'terraza' => 'una terraza soleada con plantas verdes', 'balcon' => 'un balcón soleado con plantas verdes',
+		'oficina' => 'un escritorio ordenado en casa', 'escritorio' => 'un escritorio ordenado en casa',
+		'ninos' => 'un cuarto de niños alegre y ordenado', 'bebe' => 'un cuarto de bebé suave y tranquilo',
+		'playa' => 'una playa luminosa con arena suave', 'jardin' => 'un jardín verde con luz suave de día',
+		'closet' => 'un closet ordenado con ropa doblada', 'armario' => 'un closet ordenado con ropa doblada',
+	);
+
+	public static function room_in_text_es( string $text ): string {
+		foreach ( explode( ' ', self::normalize( $text ) ) as $w ) {
+			if ( isset( self::ROOMS_ES[ $w ] ) ) { return self::ROOMS_ES[ $w ]; }
+		}
+		return '';
+	}
+
+	/** Las reglas fijas, en español (van siempre al final de la instrucción para la app). */
+	public static function hard_rules_es( bool $has_ref, string $color, bool $color_from_ref ): string {
+		$rules = array( 'Foto realista, como hecha con cámara; nada de dibujo ni 3D.' );
+		if ( $has_ref ) {
+			$rules[] = 'Mantén el producto exactamente igual que en la foto adjunta: misma forma, proporciones, tamaño real, materiales, textura, detalles y número de piezas. No lo rediseñes, no le quites ni le añadas nada.';
+			$rules[] = '' !== $color && ! $color_from_ref
+				? 'Cambia solo el color del producto a ' . mb_strtolower( $color ) . '; todo lo demás del producto, idéntico.'
+				: 'Mantén el color real del producto, el de la foto adjunta.';
+		}
+		$rules[] = 'Sin textos, letras, números, logos, marcas, marcas de agua, precios, pegatinas, bordes ni marcos en ninguna parte de la imagen.';
+		return 'Reglas obligatorias: ' . implode( ' ', $rules );
+	}
+
+	/**
+	 * Instrucción en español para pegar en la app de Gemini (gemini.google.com), donde la gestora adjunta la foto
+	 * del producto. Mismas reglas que build(): producto fiel, color real o uno que existe, sin textos.
+	 * Va en español porque la app contesta en el idioma de la instrucción y ella tiene que entender la respuesta.
+	 *
+	 * @param array $in Igual que build() (text_en no se usa).
+	 * @return array{prompt:string, aspect:string}
+	 */
+	public static function build_app( array $in ): array {
+		$name = trim( (string) ( $in['name'] ?? '' ) );
+		$desc = rtrim( trim( (string) ( $in['desc'] ?? '' ) ), '. ' );
+		$text = trim( (string) ( $in['text'] ?? '' ) );
+		$preset = isset( self::PRESETS[ $in['preset'] ?? '' ] ) ? (string) $in['preset'] : '';
+		$vertical = ! empty( $in['vertical'] ) || 'estado' === $preset;
+		$color = trim( (string) ( $in['color'] ?? '' ) );
+		$color_from_ref = ! empty( $in['color_from_ref'] );
+		$has_ref = ! empty( $in['has_product_ref'] );
+		$has_photo = ! empty( $in['has_user_photo'] );
+
+		$lines = array();
+		$lines[] = 'Crea una imagen: una foto profesional de producto para una tienda online de artículos del hogar en La Habana, Cuba' . ( '' !== $name ? ', del producto «' . $name . '»' . ( '' !== $desc ? ' (' . $desc . ')' : '' ) : '' ) . '.';
+		if ( $has_ref && $has_photo ) {
+			$lines[] = 'Te adjunto dos fotos del mismo producto: la del catálogo de la tienda y una foto del móvil. Úsalas juntas para que el producto salga fiel.';
+		} elseif ( $has_ref || $has_photo ) {
+			$lines[] = 'La foto adjunta es el producto real. Haz que salga igual y mejora solo la foto (escena, luz y encuadre).';
+		} else {
+			$lines[] = 'Adjunta primero la foto del producto.';
+		}
+		$room = self::room_in_text_es( $text );
+		if ( 'blanco' === $preset ) {
+			$scene = 'fondo blanco puro de estudio (#FFFFFF), sin nada más alrededor, con una sombra suave y natural debajo del producto.';
+		} elseif ( 'persona' === $preset ) {
+			$scene = 'una persona real usando el producto con naturalidad en casa' . ( '' !== $room ? ', en ' . $room : '' ) . '. El producto es el protagonista: se ve entero, nítido y a su tamaño real junto a la persona. Aspecto cotidiano y natural.';
+		} elseif ( 'ambiente' === $preset || '' !== $room ) {
+			$scene = 'pon el producto en ' . ( '' !== $room ? $room : 'una casa luminosa, ordenada y moderna, en el lugar donde se usa ese producto' ) . ', como en una revista de decoración, sin cosas de más, con el producto como protagonista.';
+		} else {
+			$scene = 'un lugar sencillo, limpio y con buena luz que vaya con el producto, con fondo neutro y tranquilo.';
+		}
+		$lines[] = 'Escena: ' . $scene;
+		if ( '' !== $color ) {
+			$lines[] = $color_from_ref ? 'Color del producto: ' . mb_strtolower( $color ) . ', exactamente como en la foto adjunta.' : 'Color del producto: ' . mb_strtolower( $color ) . '.';
+		}
+		if ( '' !== $text ) {
+			$lines[] = 'Lo que pide la vendedora (síguelo si no rompe las reglas): «' . $text . '»';
+		}
+		$lines[] = 'Luz: luz natural suave de día, sombras realistas y colores reales.';
+		$lines[] = 'Cámara: a la altura de los ojos y en el ángulo que mejor enseñe el producto, nítido, ocupando el 60-70 % de la foto. ' . ( $vertical ? 'Formato vertical 9:16, para el estado de WhatsApp, con espacio tranquilo arriba y abajo.' : 'Formato cuadrado 1:1.' );
+		$lines[] = self::hard_rules_es( $has_ref || $has_photo, $color, $color_from_ref );
+		$lines[] = 'Devuelve solo la imagen.';
+		return array( 'prompt' => implode( "\n", $lines ), 'aspect' => self::aspect( $preset, $vertical ) );
 	}
 
 	/** Instrucción para el modelo de texto que pasa a inglés lo que pidió (solo la escena, sin inventar del producto). */

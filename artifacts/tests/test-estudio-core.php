@@ -126,6 +126,52 @@ has( 'sin conexión', CVD_Estudio_Errors::human( 0, '', '' ), 'conexión' );
 has( 'seguridad', CVD_Estudio_Errors::no_image( 'IMAGE_SAFETY' ), 'por sus reglas' );
 has( 'sin imagen', CVD_Estudio_Errors::no_image( 'STOP' ), 'no devolvió ninguna foto' );
 
+/* ---------- modo Gemini gratis (3.14.3) ---------- */
+check( 'facturación: limit 0', CVD_Estudio_Errors::is_billing( 429, 'RESOURCE_EXHAUSTED', 'Quota exceeded ... free_tier ... limit: 0' ), true );
+check( 'facturación: check your plan and billing', CVD_Estudio_Errors::is_billing( 429, 'RESOURCE_EXHAUSTED', 'You exceeded your current quota, please check your plan and billing details.' ), true );
+check( 'cuota normal no es facturación', CVD_Estudio_Errors::is_billing( 429, 'RESOURCE_EXHAUSTED', 'Resource has been exhausted (e.g. check quota).' ), false );
+check( 'otro error no es facturación', CVD_Estudio_Errors::is_billing( 400, 'INVALID_ARGUMENT', 'billing' ), false );
+has( 'sin saldo: manda a Gemini gratis', CVD_Estudio_Errors::human( 429, 'RESOURCE_EXHAUSTED', 'check your plan and billing' ), 'gratis en la app de Gemini' );
+
+$a = CVD_Estudio_Prompt::build_app( array( 'name' => 'Organizador de baño', 'desc' => 'Tres niveles', 'text' => 'el organizador en un baño bonito', 'preset' => 'ambiente', 'has_product_ref' => true ) );
+has( 'app: en español', $a['prompt'], 'Crea una imagen' );
+has( 'app: nombre del producto', $a['prompt'], '«Organizador de baño»' );
+has( 'app: descripción', $a['prompt'], '(Tres niveles)' );
+has( 'app: foto adjunta', $a['prompt'], 'La foto adjunta es el producto real' );
+has( 'app: escena baño en español', $a['prompt'], 'un baño limpio y bonito' );
+has( 'app: producto fiel', $a['prompt'], 'Mantén el producto exactamente igual' );
+has( 'app: color real', $a['prompt'], 'Mantén el color real del producto' );
+has( 'app: sin textos ni marcas de agua', $a['prompt'], 'Sin textos, letras, números, logos, marcas, marcas de agua' );
+has( 'app: texto de ella', $a['prompt'], '«el organizador en un baño bonito»' );
+has( 'app: cuadrada', $a['prompt'], 'Formato cuadrado 1:1' );
+has( 'app: solo la imagen', $a['prompt'], 'Devuelve solo la imagen.' );
+has( 'app: nada en inglés', $a['prompt'], 'Keep the product', false );
+has( 'app: nunca dice IA', mb_strtolower( $a['prompt'] ), 'inteligencia artificial', false );
+check( 'app: aspecto 1:1', $a['aspect'], '1:1' );
+$a = CVD_Estudio_Prompt::build_app( array( 'name' => 'Toalla', 'preset' => 'estado', 'has_product_ref' => true ) );
+has( 'app: estado vertical', $a['prompt'], 'Formato vertical 9:16' );
+$a = CVD_Estudio_Prompt::build_app( array( 'name' => 'Toalla', 'preset' => 'blanco', 'has_product_ref' => true ) );
+has( 'app: fondo blanco', $a['prompt'], 'fondo blanco puro' );
+$a = CVD_Estudio_Prompt::build_app( array( 'name' => 'Toalla', 'preset' => 'persona', 'text' => 'en la playa', 'has_product_ref' => true ) );
+has( 'app: persona en la playa', $a['prompt'], 'una persona real usando el producto con naturalidad en casa, en una playa' );
+$a = CVD_Estudio_Prompt::build_app( array( 'name' => 'Sábanas', 'preset' => 'color', 'color' => 'Azul claro', 'color_from_ref' => false, 'has_product_ref' => true ) );
+has( 'app: recolor a un color que existe', $a['prompt'], 'Cambia solo el color del producto a azul claro' );
+has( 'app: color del producto', $a['prompt'], 'Color del producto: azul claro.' );
+$a = CVD_Estudio_Prompt::build_app( array( 'name' => 'Sábanas', 'preset' => 'color', 'color' => 'Azul', 'color_from_ref' => true, 'has_product_ref' => true ) );
+has( 'app: color con foto de la variación', $a['prompt'], 'exactamente como en la foto adjunta' );
+has( 'app: con foto no recolorea', $a['prompt'], 'Cambia solo el color', false );
+$a = CVD_Estudio_Prompt::build_app( array( 'name' => 'Sábanas', 'has_product_ref' => true, 'has_user_photo' => true ) );
+has( 'app: dos fotos', $a['prompt'], 'Te adjunto dos fotos' );
+$a = CVD_Estudio_Prompt::build_app( array( 'name' => '', 'text' => 'en una mesa', 'has_user_photo' => true ) );
+has( 'app: solo foto del móvil', $a['prompt'], 'La foto adjunta es el producto real' );
+has( 'app: sin nombre no pone comillas', $a['prompt'], '«»', false );
+check( 'app: reglas una vez', substr_count( CVD_Estudio_Prompt::build_app( array( 'name' => 'X', 'has_product_ref' => true ) )['prompt'], 'Reglas obligatorias:' ), 1 );
+has( 'app: sin punto doble tras la descripción', CVD_Estudio_Prompt::build_app( array( 'name' => 'X', 'desc' => 'Protege de golpes.', 'has_product_ref' => true ) )['prompt'], '(Protege de golpes).' );
+check( 'app: sala en español', CVD_Estudio_Prompt::room_in_text_es( 'en mi Sala' ), 'una sala luminosa y moderna, con decoración sencilla' );
+check( 'subida: tamaño útil', CVD_Estudio_Limits::upload_size_check( 1024, 1024 ), '' );
+has( 'subida: muy pequeña', CVD_Estudio_Limits::upload_size_check( 1024, 200 ), 'muy pequeña' );
+check( 'subida: tope 15 MB', CVD_Estudio_Limits::MAX_GEMINI_UPLOAD_BYTES, 15 * 1024 * 1024 );
+
 /* ---------- contabilidad ---------- */
 $lines = array(
 	array( 'product_id' => 10, 'name' => 'A', 'month' => '2026-10', 'state' => 'earned', 'qty' => 2, 'commission' => 2.6, 'markup' => 4.0 ),

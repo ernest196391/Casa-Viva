@@ -89,6 +89,9 @@ final class CVD_Gestora_Estudio {
 		register_rest_route( self::NS, '/gestora/estudio/crear', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'rest_create' ), 'permission_callback' => $perm ) );
 		register_rest_route( self::NS, '/gestora/estudio/borrar', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'rest_delete' ), 'permission_callback' => $perm ) );
 		register_rest_route( self::NS, '/gestora/estudio/tienda', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'rest_store' ), 'permission_callback' => $perm ) );
+		// 3.14.3 modo Gemini gratis: la foto base para adjuntar en la app y subir la foto que hizo allí.
+		register_rest_route( self::NS, '/gestora/estudio/base', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'rest_base' ), 'permission_callback' => $perm ) );
+		register_rest_route( self::NS, '/gestora/estudio/subir', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'rest_upload' ), 'permission_callback' => $perm ) );
 	}
 
 	/** Conectar: comprueba la clave con una llamada mínima (leer el modelo de fotos) y la guarda cifrada. */
@@ -144,7 +147,8 @@ final class CVD_Gestora_Estudio {
 
 	/** Enseña la instrucción que se mandará (para la parte plegada «Ver la instrucción»). */
 	public static function rest_prompt( WP_REST_Request $request ) {
-		$plan = self::plan( $request, true );
+		$app = 'app' === (string) $request->get_param( 'mode' );
+		$plan = self::plan( $request, ! $app, $app );
 		if ( is_wp_error( $plan ) ) { return $plan; }
 		return rest_ensure_response( array( 'prompt' => $plan['prompt'], 'aspect' => $plan['aspect'], 'color' => $plan['color'] ) );
 	}
@@ -154,7 +158,7 @@ final class CVD_Gestora_Estudio {
 	 *
 	 * @return array|WP_Error
 	 */
-	private static function plan( WP_REST_Request $request, bool $rewrite ) {
+	private static function plan( WP_REST_Request $request, bool $rewrite, bool $app = false ) {
 		$user_id = get_current_user_id();
 		$product = self::product( absint( $request->get_param( 'product_id' ) ) );
 		$text = mb_substr( sanitize_textarea_field( (string) $request->get_param( 'text' ) ), 0, CVD_Estudio_Limits::MAX_TEXT );
@@ -176,13 +180,21 @@ final class CVD_Gestora_Estudio {
 		$color_from_ref = false;
 		if ( '' !== $color && ! empty( $colors[ $color ]['img'] ) ) { $ref_id = (int) $colors[ $color ]['img']; $color_from_ref = true; }
 
+		$desc = $product && class_exists( 'CVD_Gestora_Fotos' ) ? CVD_Gestora_Fotos::selling_line( $product ) : '';
+		if ( $app ) { // modo Gemini gratis: instrucción en español para pegar en la app; nada sale hacia Google desde aquí
+			$built = CVD_Estudio_Prompt::build_app( array(
+				'name' => $product ? $product->get_name() : '', 'desc' => $desc, 'text' => $text, 'preset' => $preset, 'vertical' => $vertical,
+				'color' => $color, 'color_from_ref' => $color_from_ref, 'has_product_ref' => $ref_id > 0, 'has_user_photo' => $has_photo,
+			) );
+			return array( 'product' => $product, 'text' => $text, 'color' => $color, 'ref_id' => $ref_id, 'prompt' => $built['prompt'], 'aspect' => $built['aspect'] );
+		}
+
 		$text_en = '';
 		$custom = trim( (string) $request->get_param( 'prompt' ) );
 		if ( '' === $custom && $rewrite && '' !== $text ) {
 			$key = self::key_for( $user_id );
 			if ( $key ) { $text_en = self::rewrite( $key, $text ); }
 		}
-		$desc = $product && class_exists( 'CVD_Gestora_Fotos' ) ? CVD_Gestora_Fotos::selling_line( $product ) : '';
 		$built = CVD_Estudio_Prompt::build( array(
 			'name' => $product ? $product->get_name() : '', 'desc' => $desc, 'text' => $text, 'text_en' => $text_en,
 			'preset' => $preset, 'vertical' => $vertical, 'color' => $color, 'color_from_ref' => $color_from_ref,
@@ -242,6 +254,64 @@ final class CVD_Gestora_Estudio {
 
 		$item = self::save_to_gallery( $user_id, $result['bytes'], $plan['product'] ? $plan['product']->get_id() : 0, $plan['text'], $plan['color'] );
 		if ( is_wp_error( $item ) ) { return $item; }
+		return rest_ensure_response( array( 'photo' => self::item_for_js( $item, $user_id ), 'left' => max( 0, CVD_Estudio_Limits::MAX_PER_DAY - (int) get_transient( $day_key ) ) ) );
+	}
+
+	/**
+	 * Modo Gemini gratis, paso «Guardar foto del producto»: la foto que hay que adjuntar en la app (la del color
+	 * elegido si esa variación tiene foto propia), como descarga JPG. Se abre con ?_wpnonce= (enlace normal).
+	 */
+	public static function rest_base( WP_REST_Request $request ) {
+		$plan = self::plan( $request, false, true );
+		if ( is_wp_error( $plan ) ) { return $plan; }
+		$path = $plan['ref_id'] && class_exists( 'CVD_Gestora_Fotos' ) ? CVD_Gestora_Fotos::jpg_path( (int) $plan['ref_id'] ) : '';
+		if ( ! $path || ! file_exists( $path ) ) { return new WP_Error( 'cvd_estudio_base', 'Este producto no tiene foto para guardar.', array( 'status' => 404 ) ); }
+		$name = 'casa-viva-' . ( $plan['product'] ? sanitize_title( $plan['product']->get_name() ) : 'producto' ) . ( '' !== $plan['color'] ? '-' . sanitize_title( $plan['color'] ) : '' ) . '.jpg';
+		nocache_headers();
+		header( 'Content-Type: image/jpeg' );
+		header( 'Content-Disposition: ' . ( '1' === (string) $request->get_param( 'ver' ) ? 'inline' : 'attachment' ) . '; filename="' . sanitize_file_name( $name ) . '"' );
+		header( 'Content-Length: ' . filesize( $path ) );
+		readfile( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_readfile
+		exit;
+	}
+
+	/**
+	 * Modo Gemini gratis, «Subir mi foto de Gemini»: la foto que hizo en la app entra en su galería (mismos límites)
+	 * y desde ahí Descargar / Compartir / Poner en mi tienda. El producto y el color son los que tenía elegidos.
+	 */
+	public static function rest_upload( WP_REST_Request $request ) {
+		$user_id = get_current_user_id();
+		$file = $request->get_file_params()['photo'] ?? null;
+		if ( ! is_array( $file ) || empty( $file['tmp_name'] ) ) { return new WP_Error( 'cvd_estudio_photo', 'Elige la foto que hiciste en Gemini.', array( 'status' => 400 ) ); }
+		if ( UPLOAD_ERR_OK !== (int) ( $file['error'] ?? 1 ) || ! is_uploaded_file( (string) $file['tmp_name'] ) ) { return new WP_Error( 'cvd_estudio_photo', 'La foto debe ser JPG, PNG o WebP de hasta 15 MB.', array( 'status' => 400 ) ); }
+		return self::ingest( $user_id, (string) $file['tmp_name'], absint( $request->get_param( 'product_id' ) ), sanitize_text_field( (string) $request->get_param( 'color' ) ), (string) $request->get_param( 'text' ) );
+	}
+
+	/** Mete en la galería de $user_id una foto ya subida (ruta temporal). Separado para poder probarlo sin HTTP. */
+	private static function ingest( int $user_id, string $tmp, int $product_id, string $chosen, string $text ) {
+		$bad = new WP_Error( 'cvd_estudio_photo', 'La foto debe ser JPG, PNG o WebP de hasta 15 MB.', array( 'status' => 400 ) );
+		if ( ! is_file( $tmp ) || (int) filesize( $tmp ) > CVD_Estudio_Limits::MAX_GEMINI_UPLOAD_BYTES ) { return $bad; }
+		$info = @getimagesize( $tmp ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( ! $info || ! in_array( $info['mime'], array( 'image/jpeg', 'image/png', 'image/webp' ), true ) ) { return $bad; }
+		$small = CVD_Estudio_Limits::upload_size_check( (int) $info[0], (int) $info[1] );
+		if ( $small ) { return new WP_Error( 'cvd_estudio_photo', $small, array( 'status' => 400 ) ); }
+		$gallery = self::gallery( $user_id );
+		$full = CVD_Estudio_Limits::gallery_check( count( $gallery ), (int) array_sum( array_column( $gallery, 'bytes' ) ) );
+		if ( $full ) { return new WP_Error( 'cvd_estudio_full', $full, array( 'status' => 400 ) ); }
+		$day_key = 'cvd_estudio_dia_' . $user_id . '_' . wp_date( 'Ymd' );
+		$day = CVD_Estudio_Limits::day_check( (int) get_transient( $day_key ) );
+		if ( $day ) { return new WP_Error( 'cvd_estudio_day', $day, array( 'status' => 429 ) ); }
+
+		$product = self::product( $product_id );
+		$color = '';
+		if ( $product && '' !== $chosen ) {
+			$match = CVD_Estudio_Prompt::match_color( $chosen, array_keys( self::product_colors( $product ) ) );
+			$color = $match ? $match[0] : '';
+		}
+		$text = mb_substr( sanitize_textarea_field( $text ), 0, 160 );
+		$item = self::save_to_gallery( $user_id, (string) file_get_contents( $tmp ), $product ? $product->get_id() : 0, $text, $color, 'gemini' ); // phpcs:ignore
+		if ( is_wp_error( $item ) ) { return $item; }
+		set_transient( $day_key, (int) get_transient( $day_key ) + 1, DAY_IN_SECONDS );
 		return rest_ensure_response( array( 'photo' => self::item_for_js( $item, $user_id ), 'left' => max( 0, CVD_Estudio_Limits::MAX_PER_DAY - (int) get_transient( $day_key ) ) ) );
 	}
 
@@ -389,7 +459,8 @@ final class CVD_Gestora_Estudio {
 			if ( $last && 404 === $last[0] ) { continue; } // modelo inexistente: el de reserva
 			break;
 		}
-		return new WP_Error( 'cvd_estudio_google', CVD_Estudio_Errors::human( (int) $last[0], (string) $last[1]['status'], (string) $last[1]['message'] ), array( 'status' => 429 === $last[0] ? 429 : 502 ) );
+		$free = CVD_Estudio_Errors::is_billing( (int) $last[0], (string) $last[1]['status'], (string) $last[1]['message'] );
+		return new WP_Error( 'cvd_estudio_google', CVD_Estudio_Errors::human( (int) $last[0], (string) $last[1]['status'], (string) $last[1]['message'] ), array( 'status' => 429 === $last[0] ? 429 : 502, 'free' => $free ) );
 	}
 
 	/** Bytes de la primera imagen de la respuesta (inlineData o inline_data). */
@@ -472,7 +543,7 @@ final class CVD_Gestora_Estudio {
 	}
 
 	/** Guarda la foto de Google en su galería como JPEG (máx. 1600 px). */
-	private static function save_to_gallery( int $user_id, string $bytes, int $product_id, string $text, string $color ) {
+	private static function save_to_gallery( int $user_id, string $bytes, int $product_id, string $text, string $color, string $src = 'clave' ) {
 		list( $dir ) = self::dir( $user_id );
 		$tmp = wp_tempnam( 'cvd-estudio-raw' );
 		file_put_contents( $tmp, $bytes ); // phpcs:ignore
@@ -488,9 +559,9 @@ final class CVD_Gestora_Estudio {
 			$ok = ! is_wp_error( $saved );
 		}
 		wp_delete_file( $tmp );
-		if ( ! $ok || ! file_exists( $target ) ) { return new WP_Error( 'cvd_estudio_save', 'Google creó la foto pero no pude guardarla. Prueba otra vez.', array( 'status' => 500 ) ); }
+		if ( ! $ok || ! file_exists( $target ) ) { return new WP_Error( 'cvd_estudio_save', 'gemini' === $src ? 'No pude guardar esa foto. Prueba otra vez o con otra foto (JPG o PNG).' : 'Google creó la foto pero no pude guardarla. Prueba otra vez.', array( 'status' => 500 ) ); }
 		$size = @getimagesize( $target ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-		$item = array( 'id' => $id, 'file' => $file, 'w' => (int) ( $size[0] ?? 0 ), 'h' => (int) ( $size[1] ?? 0 ), 'bytes' => (int) filesize( $target ), 'product' => $product_id, 'text' => mb_substr( $text, 0, 160 ), 'color' => $color, 'at' => time() );
+		$item = array( 'id' => $id, 'file' => $file, 'w' => (int) ( $size[0] ?? 0 ), 'h' => (int) ( $size[1] ?? 0 ), 'bytes' => (int) filesize( $target ), 'product' => $product_id, 'text' => mb_substr( $text, 0, 160 ), 'color' => $color, 'at' => time(), 'src' => $src );
 		$gallery = self::gallery( $user_id );
 		array_unshift( $gallery, $item );
 		update_user_meta( $user_id, self::META_GALLERY, $gallery );
@@ -507,6 +578,7 @@ final class CVD_Gestora_Estudio {
 			'product' => $product ? $product->get_name() : '', 'pid' => $product ? $pid : 0, 'text' => (string) $item['text'], 'color' => (string) ( $item['color'] ?? '' ),
 			'date' => self::date_label( (int) $item['at'] ), 'inStore' => $pid && ( $map[ $pid ]['photo'] ?? '' ) === $item['id'],
 			'storeLink' => $product ? self::store_link( $pid, $user_id ) : '',
+			'src' => (string) ( $item['src'] ?? 'clave' ),
 			'name' => 'casa-viva-' . ( $product ? sanitize_title( $product->get_name() ) : 'foto' ) . '-' . $item['id'] . '.jpg',
 		);
 	}
@@ -590,40 +662,21 @@ final class CVD_Gestora_Estudio {
 			'base' => esc_url_raw( rest_url( self::NS . '/gestora/estudio/' ) ), 'nonce' => wp_create_nonce( 'wp_rest' ),
 			'hasKey' => $has_key, 'gallery' => $gallery, 'left' => $left, 'maxPhotos' => CVD_Estudio_Limits::MAX_PHOTOS,
 		);
+		$ic = static fn( string $d ): string => '<svg class="cves-ic" viewBox="0 0 24 24" aria-hidden="true">' . $d . '</svg>';
 		ob_start();
 		?>
 		<section class="cvga-view cves" data-view="estudio" id="cvga-estudio" data-cves>
-			<div class="cvga-head"><h1>Mi estudio de fotos</h1><p>Elige un producto, di cómo quieres la foto y Google la crea con tu clave. Quedan en tu galería para descargar, compartir o poner en tu tienda.</p></div>
+			<div class="cvga-head"><h1>Mi estudio de fotos</h1><p>Haz fotos bonitas de tus productos <b>gratis</b> con la app de Gemini y guárdalas aquí para descargarlas, compartirlas o ponerlas en tu tienda.</p></div>
 
-			<section class="cvga-card cves-key<?php echo $has_key ? ' is-on' : ''; ?>" data-cves-key>
-				<div class="cves-key-on"<?php echo $has_key ? '' : ' hidden'; ?>>
-					<div class="cvga-row"><h2>Tu clave de Google</h2><span class="cvga-chip is-good" data-cves-since><?php echo esc_html( $since ? 'Conectada · ' . self::date_label( $since ) : 'Conectada' ); ?></span></div>
-					<p class="cvga-note">Cada foto la paga Google con tu clave (unos 3 centavos de USD por foto). Tu clave está guardada cifrada y no se enseña a nadie.</p>
-					<div class="cvga-actions"><button class="cvga-btn cvga-btn-soft cvga-btn-sm" type="button" data-cves-key-remove>Quitar mi clave</button></div>
-				</div>
-				<form class="cves-key-off" data-cves-key-form autocomplete="off"<?php echo $has_key ? ' hidden' : ''; ?>>
-					<h2>Conectar mi clave de Google</h2>
-					<ol class="cves-steps">
-						<li>Abre <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> con tu cuenta de Gmail (desde Cuba, con VPN).</li>
-						<li>Toca <b>Create API key</b> y copia la clave (un texto largo de letras y números).</li>
-						<li>Pégala aquí y toca <b>Comprobar y guardar</b>.</li>
-					</ol>
-					<label class="cvga-field" for="cves-key-input"><span>Tu clave de Google</span><input id="cves-key-input" name="key" type="password" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Pega aquí tu clave" required></label>
-					<div class="cvga-actions"><button class="cvga-btn" type="submit">Comprobar y guardar</button></div>
-					<p class="cvga-note">La guardamos cifrada en Casa Viva, nunca se enseña y la puedes quitar cuando quieras. Google cobra unos 3 centavos de USD por foto a tu cuenta.</p>
-				</form>
-				<p class="cves-msg" data-cves-key-msg role="status" hidden></p>
-			</section>
-
-			<form class="cvga-card cves-make" data-cves-form autocomplete="off"<?php echo $has_key ? '' : ' hidden'; ?>>
-				<h2>1. ¿De qué producto?</h2>
+			<form class="cvga-card cves-make" data-cves-form autocomplete="off">
+				<h2>¿De qué producto?</h2>
 				<div class="cves-pick" data-cves-pick hidden><img alt="" width="56" height="56"><div><b data-cves-pick-name></b><small class="cvga-note" data-cves-pick-colors></small></div><button type="button" class="cvga-btn cvga-btn-soft cvga-btn-sm" data-cves-pick-clear>Cambiar</button></div>
 				<label class="cvgf-search cves-search" for="cves-q" data-cves-search><svg class="cvga-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><input id="cves-q" type="search" placeholder="Busca en tu tienda: organizador, cortina…" enterkeyhint="search" data-cves-q aria-label="Buscar producto"></label>
 				<div class="cves-hits" data-cves-hits></div>
-				<label class="cves-upload" for="cves-photo"><span>o sube una foto del móvil <small>(opcional)</small></span><input id="cves-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp"></label>
+				<label class="cves-upload" for="cves-photo"><span>o usa una foto de tu móvil <small>(opcional)</small></span><input id="cves-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp"></label>
 				<img class="cves-preview" alt="" data-cves-preview hidden>
 
-				<h2>2. ¿Cómo la quieres?</h2>
+				<h2>¿Cómo la quieres?</h2>
 				<div class="cves-ideas" role="group" aria-label="Ideas">
 					<?php foreach ( CVD_Estudio_Prompt::PRESETS as $slug => $label ) : ?>
 					<button type="button" class="cves-idea" data-cves-idea="<?php echo esc_attr( $slug ); ?>" aria-pressed="false"><?php echo esc_html( $label ); ?></button>
@@ -631,22 +684,79 @@ final class CVD_Gestora_Estudio {
 				</div>
 				<div class="cves-colors" data-cves-colors hidden></div>
 				<label class="cvga-field" for="cves-text"><span>Dilo con tus palabras <small>(opcional)</small></span><textarea id="cves-text" name="text" rows="2" maxlength="<?php echo esc_attr( (string) CVD_Estudio_Limits::MAX_TEXT ); ?>" placeholder="Ej.: el organizador en un baño bonito, con luz de mañana"></textarea></label>
-				<details class="cves-prompt" data-cves-prompt>
-					<summary>Ver la instrucción para Google <small>(si quieres tocarla)</small></summary>
-					<textarea rows="8" data-cves-prompt-text aria-label="Instrucción para Google"></textarea>
-					<small class="cvga-note">Las reglas del final (producto fiel, sin textos ni marcas) se ponen siempre, aunque las borres.</small>
-				</details>
-				<div class="cvga-actions"><button class="cvga-btn" type="submit" data-cves-go>Crear foto</button><small class="cvga-note" data-cves-left><?php echo esc_html( 'Te quedan ' . $left . ' fotos hoy.' ); ?></small></div>
-				<p class="cves-msg" data-cves-msg role="status" hidden></p>
-				<div class="cves-result" data-cves-result></div>
+
+				<div class="cves-auto" data-cves-auto<?php echo $has_key ? '' : ' hidden'; ?>>
+					<details class="cves-prompt" data-cves-prompt>
+						<summary>Ver la instrucción para Google <small>(si quieres tocarla)</small></summary>
+						<textarea rows="8" data-cves-prompt-text aria-label="Instrucción para Google"></textarea>
+						<small class="cvga-note">Las reglas del final (producto fiel, sin textos ni marcas) se ponen siempre, aunque las borres.</small>
+					</details>
+					<div class="cvga-actions"><button class="cvga-btn" type="submit" data-cves-go>Crear foto con mi clave</button><small class="cvga-note" data-cves-left><?php echo esc_html( 'Te quedan ' . $left . ' fotos hoy.' ); ?></small></div>
+					<p class="cves-msg" data-cves-msg role="status" hidden></p>
+					<div class="cves-result" data-cves-result></div>
+					<button type="button" class="cves-link" data-cves-free-show>o hazla gratis en la app de Gemini</button>
+				</div>
 			</form>
 
-			<section class="cves-gallery-wrap"<?php echo $gallery || $has_key ? '' : ' hidden'; ?> data-cves-gallery-wrap>
+			<section class="cvga-card cves-free" data-cves-free<?php echo $has_key ? ' hidden' : ''; ?>>
+				<h2>Hazla gratis en Gemini, en 3 pasos</h2>
+				<ol class="cves-free-steps">
+					<li>
+						<span class="cves-step-ic"><?php echo $ic( '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>' ); // phpcs:ignore ?><b>1</b></span>
+						<div><p>Copia la instrucción que te preparo.</p><button type="button" class="cvga-btn cvga-btn-sm" data-cves-copy>Copiar instrucción</button><small class="cves-done" data-cves-copy-msg role="status"></small></div>
+					</li>
+					<li data-cves-base-step>
+						<span class="cves-step-ic"><?php echo $ic( '<path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/>' ); // phpcs:ignore ?><b>2</b></span>
+						<div><p data-cves-base-text>Guarda la foto del producto en tu móvil.</p><div class="cves-base"><img alt="" width="48" height="48" data-cves-base-img hidden><a class="cvga-btn cvga-btn-sm" href="#" download data-cves-base>Guardar foto del producto</a><button type="button" class="cvga-btn cvga-btn-soft cvga-btn-sm" data-cves-base-share hidden>Mandarla a Gemini</button></div></div>
+					</li>
+					<li>
+						<span class="cves-step-ic"><?php echo $ic( '<path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>' ); // phpcs:ignore ?><b>3</b></span>
+						<div><p>Abre Gemini, toca <b>+</b> y adjunta la foto, pega la instrucción y envía.</p><a class="cvga-btn cvga-btn-sm" href="https://gemini.google.com/app" target="_blank" rel="noopener" data-cves-open>Abrir Gemini</a></div>
+					</li>
+				</ol>
+				<p class="cves-msg" data-cves-free-msg role="status" hidden></p>
+				<details class="cves-prompt">
+					<summary>Ver la instrucción</summary>
+					<textarea rows="8" readonly data-cves-free-text aria-label="Instrucción para Gemini"></textarea>
+					<small class="cvga-note">Para cambiarla, cambia arriba el producto, la idea o tus palabras.</small>
+				</details>
+				<p class="cvga-note">Gemini es gratis con tu cuenta de Gmail. Si la foto no sale bien, pídele en el mismo chat: «otra vez, igual pero…». Revisa que el producto salga igual al real antes de usarla.</p>
+				<p class="cvga-note">¿Sale una estrellita en la esquina de la foto? En Gemini, abre <b>Ajustes</b> y apaga <b>Media watermark</b> (marca de agua), si te sale esa opción; vale para las fotos nuevas.</p>
+
+				<h2 class="cves-up-title">¿Ya la tienes? Súbela aquí</h2>
+				<label class="cvga-btn cves-up" for="cves-up-input"><?php echo $ic( '<path d="M12 20V9"/><path d="M7 13l5-5 5 5"/><path d="M5 4h14"/>' ); // phpcs:ignore ?>Subir mi foto de Gemini</label>
+				<input id="cves-up-input" class="cves-up-input" type="file" accept="image/*" data-cves-up>
+				<p class="cves-msg" data-cves-up-msg role="status" hidden></p>
+				<div class="cves-result" data-cves-up-result></div>
+			</section>
+
+			<section class="cves-gallery-wrap" data-cves-gallery-wrap>
 				<div class="cvga-row"><h2>Mi galería</h2><span class="cvga-chip" data-cves-count><?php echo esc_html( count( $gallery ) . ' de ' . CVD_Estudio_Limits::MAX_PHOTOS ); ?></span></div>
 				<p class="cvga-note">«Poner en mi tienda» cambia la foto de ese producto solo para quien entra con tu enlace. La tienda de Casa Viva no cambia.</p>
 				<div class="cves-gallery" data-cves-gallery></div>
-				<p class="cvga-empty" data-cves-empty<?php echo $gallery ? ' hidden' : ''; ?>>Aún no has creado fotos.</p>
+				<p class="cvga-empty" data-cves-empty<?php echo $gallery ? ' hidden' : ''; ?>>Aún no tienes fotos. Las que subas o crees salen aquí.</p>
 			</section>
+
+			<details class="cvga-card cves-key<?php echo $has_key ? ' is-on' : ''; ?>" data-cves-key<?php echo $has_key ? ' open' : ''; ?>>
+				<summary><b>Opción avanzada:</b> que la foto se haga sola aquí</summary>
+				<div class="cves-key-on"<?php echo $has_key ? '' : ' hidden'; ?>>
+					<div class="cvga-row"><h2>Tu clave de Google</h2><span class="cvga-chip is-good" data-cves-since><?php echo esc_html( $since ? 'Conectada · ' . self::date_label( $since ) : 'Conectada' ); ?></span></div>
+					<p class="cvga-note">Cada foto la paga Google con tu clave (unos 3 centavos de USD por foto). Tu clave está guardada cifrada y no se enseña a nadie.</p>
+					<div class="cvga-actions"><button class="cvga-btn cvga-btn-soft cvga-btn-sm" type="button" data-cves-key-remove>Quitar mi clave</button></div>
+				</div>
+				<form class="cves-key-off" data-cves-key-form autocomplete="off"<?php echo $has_key ? ' hidden' : ''; ?>>
+					<p class="cvga-note">Solo si tienes la <b>facturación activada</b> en Google (con una tarjeta): conecta tu clave y la foto se hace sola aquí, sin ir a Gemini. Google cobra unos 3 centavos de USD por foto a tu cuenta. Sin facturación, usa los 3 pasos gratis de arriba.</p>
+					<ol class="cves-steps">
+						<li>Abre <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> con tu cuenta de Gmail.</li>
+						<li>Toca <b>Create API key</b> y copia la clave (un texto largo de letras y números).</li>
+						<li>Pégala aquí y toca <b>Comprobar y guardar</b>.</li>
+					</ol>
+					<label class="cvga-field" for="cves-key-input"><span>Tu clave de Google</span><input id="cves-key-input" name="key" type="password" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Pega aquí tu clave" required></label>
+					<div class="cvga-actions"><button class="cvga-btn cvga-btn-soft" type="submit">Comprobar y guardar</button></div>
+					<p class="cvga-note">La guardamos cifrada en Casa Viva, nunca se enseña y la puedes quitar cuando quieras.</p>
+				</form>
+				<p class="cves-msg" data-cves-key-msg role="status" hidden></p>
+			</details>
 			<script type="application/json" data-cves-config><?php echo wp_json_encode( $config, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP ); ?></script>
 		</section>
 		<?php
