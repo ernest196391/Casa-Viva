@@ -205,10 +205,10 @@ final class CVD_Order_Avisos {
 		if ( ! $already ) {
 			$order->update_meta_data( self::META, $list );
 			if ( $pending ) { $order->update_meta_data( self::PENDING_META, '1' ); } else { $order->delete_meta_data( self::PENDING_META ); }
-			$what = 'c' === substr( $id, 0, 1 ) ? 'la cancelación' : 'el cambio';
+			$what = 'c' === substr( $id, 0, 1 ) ? 'de la cancelación' : 'del cambio';
 			$order->add_order_note( 'sent' === $result
-				? 'VivaBot avisó por WhatsApp de ' . $what . ( $to ? ' a: ' . implode( ', ', $to ) : '' ) . '.'
-				: 'VivaBot no avisó de ' . $what . ( $to ? ' (' . implode( ', ', $to ) . ')' : '' ) . '.' );
+				? 'VivaBot avisó por WhatsApp ' . $what . ( $to ? ' a: ' . implode( ', ', $to ) : '' ) . '.'
+				: 'VivaBot no avisó ' . $what . ( $to ? ' (' . implode( ', ', $to ) . ')' : '' ) . '.' );
 			$order->save();
 		}
 		$response = rest_ensure_response( array( 'ok' => true, 'already' => $already ) );
