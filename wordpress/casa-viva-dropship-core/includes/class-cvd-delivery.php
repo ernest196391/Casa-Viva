@@ -325,11 +325,11 @@ final class CVD_Delivery {
 		return !empty($result['success']);
 	}
 
-	/** 3.14.15: meta que deja publicar en el grupo un pedido con producto de proveedor (la pone VivaBot con PUBLICA/RECOGÍ o /mensajeria/). */
+	/** 3.14.17: meta que deja publicar en el grupo un pedido con producto de proveedor (la pone VivaBot con PUBLICA/RECOGÍ o /mensajeria/). */
 	public const SUPPLIER_DISPATCH_OK = '_cvd_supplier_dispatch_ok';
 
 	/**
-	 * 3.14.15 (#3693, 14-oct): un pedido con producto de proveedor (bajo pedido, SKU MK-) NO sale al grupo de
+	 * 3.14.17 (#3693, 14-oct): un pedido con producto de proveedor (bajo pedido, SKU MK-) NO sale al grupo de
 	 * mensajeros al pulsar «Listo»: la entrega la lleva el proveedor o la coordina Ernesto (a la lámpara la llevaba
 	 * Pedri y Nana pulsó «Listo» a las 15:00; salió al grupo y la cogió Félix). Sale solo si alguien lo autoriza
 	 * (meta SUPPLIER_DISPATCH_OK: «PUBLICA #N» o «RECOGÍ #N» en VivaBot, o «Ofertar» en /mensajeria/). true = retenido.
@@ -610,7 +610,7 @@ final class CVD_Delivery {
 		$current = self::status( $order ); $user = wp_get_current_user();
 		if ( ! self::allowed_for_user( $order, $user, $current, $next ) ) { wp_die( 'No tienes permiso para realizar este cambio.' ); }
 		if ( 'offered' === $next ) {
-			// 3.14.15: «Ofertar» a mano en /mensajeria/ es una decisión explícita: también publica los de proveedor.
+			// 3.14.17: «Ofertar» a mano en /mensajeria/ es una decisión explícita: también publica los de proveedor.
 			if ( class_exists( 'CVD_Market_Bridge' ) && CVD_Market_Bridge::order_has_market_items( $order ) && '' === (string) $order->get_meta( self::SUPPLIER_DISPATCH_OK, true ) ) {
 				$order->update_meta_data( self::SUPPLIER_DISPATCH_OK, current_time( 'mysql', true ) );
 				$order->add_order_note( 'Pedido con producto de proveedor publicado a mano en el grupo de mensajeros por ' . $user->display_name . '.' );

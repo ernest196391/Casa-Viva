@@ -22,7 +22,7 @@ final class CVD_Bot_Bridge {
 		$auth = array( __CLASS__, 'authorized' );
 		register_rest_route( self::NS, '/bot/dispatch', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'dispatch' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/announced', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'announced' ), 'permission_callback' => $auth ) );
-		// 3.14.15: pedido de proveedor que Ernesto deja salir al grupo («PUBLICA #N», «RECOGÍ #N»).
+		// 3.14.17: pedido de proveedor que Ernesto deja salir al grupo («PUBLICA #N», «RECOGÍ #N»).
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/publish', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'publish_supplier' ), 'permission_callback' => $auth ) );
 		// Asignación directa (la gestora eligió mensajero): el vale va por privado, nunca al grupo.
 		register_rest_route( self::NS, '/bot/dispatch/direct', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'direct' ), 'permission_callback' => $auth ) );
@@ -391,7 +391,7 @@ final class CVD_Bot_Bridge {
 	}
 
 	/**
-	 * 3.14.15 (#3693): «PUBLICA #N» / «RECOGÍ #N» de Ernesto en VivaBot. Un pedido con producto de proveedor queda
+	 * 3.14.17 (#3693): «PUBLICA #N» / «RECOGÍ #N» de Ernesto en VivaBot. Un pedido con producto de proveedor queda
 	 * autorizado a salir al grupo de mensajeros; si ya está «Listo» y sin mensajero, sale ahora (como el «Listo» de
 	 * siempre, en nombre del administrador del sistema). → result: published | flagged (sale al pulsar «Listo») | not_published.
 	 */
