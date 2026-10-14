@@ -19,7 +19,8 @@
 .cves-pick .cvga-note{display:block;margin:2px 0 0}
 .cves-upload{display:flex;flex-direction:column;gap:6px;margin-top:12px;font-size:14px;font-weight:600}
 .cves-upload small{font-weight:400;color:var(--ga-muted)}
-.cves-upload input{font:inherit;font-weight:400}
+.cves-upload input{font:inherit;font-weight:400;font-size:14px;color:var(--ga-muted);max-width:100%}
+.cves-upload input::file-selector-button{border:0;border-radius:10px;background:var(--ga-soft);color:var(--ga-ink);padding:9px 14px;font:inherit;font-weight:600;margin-right:10px;cursor:pointer}
 .cves-preview{max-width:160px;border-radius:10px;margin-top:8px}
 .cves-ideas{display:flex;flex-wrap:wrap;gap:8px}
 .cves-idea,.cves-color{border:1px solid var(--ga-line);background:var(--ga-surface);color:var(--ga-ink);border-radius:99px;padding:8px 14px;font:inherit;font-size:14px;cursor:pointer;min-height:40px;display:inline-flex;align-items:center;gap:6px}

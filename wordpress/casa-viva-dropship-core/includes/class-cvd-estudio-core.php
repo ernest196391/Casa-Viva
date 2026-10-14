@@ -77,7 +77,7 @@ final class CVD_Estudio_Errors {
 			return 'Google no deja usar Gemini desde el país de esta conexión. Tu clave está bien guardada; avisa a Casa Viva por WhatsApp para revisarlo.';
 		}
 		if ( false !== strpos( $m, 'api key not valid' ) || false !== strpos( $m, 'api_key_invalid' ) || false !== strpos( $m, 'api key expired' ) || 401 === $http ) {
-			return 'clave' === $context ? 'Esa clave no es válida. Cópiala otra vez completa desde aistudio.google.com/apikey (empieza por «AIza» o «AQ.») y pégala.' : 'Tu clave de Google dejó de funcionar. Vuelve a conectarla en «Conectar mi clave de Google».';
+			return 'clave' === $context ? 'Esa clave no es válida. Cópiala otra vez completa desde aistudio.google.com/apikey (es un texto largo, sin espacios) y pégala.' : 'Tu clave de Google dejó de funcionar. Vuelve a conectarla en «Conectar mi clave de Google».';
 		}
 		if ( 403 === $http || 'PERMISSION_DENIED' === $status ) {
 			return 'Google dice que tu clave no tiene permiso para Gemini. Crea una clave nueva en aistudio.google.com/apikey y conéctala otra vez.';

@@ -96,7 +96,7 @@ final class CVD_Gestora_Estudio {
 		$key = trim( (string) $request->get_param( 'key' ) );
 		$key = (string) preg_replace( '/\s+/', '', $key );
 		if ( ! CVD_Estudio_Vault::looks_like_key( $key ) ) {
-			return new WP_Error( 'cvd_estudio_key', 'Eso no parece una clave de Google. Cópiala completa desde aistudio.google.com/apikey (empieza por «AIza» o «AQ.»).', array( 'status' => 400 ) );
+			return new WP_Error( 'cvd_estudio_key', 'Eso no parece una clave de Google. Cópiala completa desde aistudio.google.com/apikey (es un texto largo, sin espacios).', array( 'status' => 400 ) );
 		}
 		$check = self::check_key( $key );
 		if ( true !== $check ) { return new WP_Error( 'cvd_estudio_key', $check, array( 'status' => 400 ) ); }
@@ -599,10 +599,10 @@ final class CVD_Gestora_Estudio {
 					<h2>Conectar mi clave de Google</h2>
 					<ol class="cves-steps">
 						<li>Abre <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> con tu cuenta de Gmail (desde Cuba, con VPN).</li>
-						<li>Toca <b>Create API key</b> y copia la clave (empieza por «AIza» o «AQ.»).</li>
+						<li>Toca <b>Create API key</b> y copia la clave (un texto largo de letras y números).</li>
 						<li>Pégala aquí y toca <b>Comprobar y guardar</b>.</li>
 					</ol>
-					<label class="cvga-field" for="cves-key-input"><span>Tu clave de Google</span><input id="cves-key-input" name="key" type="password" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIza… o AQ.…" required></label>
+					<label class="cvga-field" for="cves-key-input"><span>Tu clave de Google</span><input id="cves-key-input" name="key" type="password" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Pega aquí tu clave" required></label>
 					<div class="cvga-actions"><button class="cvga-btn" type="submit">Comprobar y guardar</button></div>
 					<p class="cvga-note">La guardamos cifrada en Casa Viva, nunca se enseña y la puedes quitar cuando quieras. Google cobra unos 3 centavos de USD por foto a tu cuenta.</p>
 				</form>
