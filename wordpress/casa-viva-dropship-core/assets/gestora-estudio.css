@@ -66,6 +66,13 @@
 .cves-up{width:100%;min-height:48px;font-size:16px}
 .cves-up-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
 .cves-link{display:block;margin:12px 0 0;border:0;background:transparent;color:var(--ga-brand);font:inherit;font-weight:600;text-decoration:underline;cursor:pointer;padding:6px 0}
+/* 3.14.16: avisos (VPN, descargar la foto) y «Elegir producto» en una foto de la galería */
+.cves .cves-warn{margin:8px 0;padding:8px 10px;border-radius:10px;background:#fff4dc;color:#6b4a00;font-size:14px}
+.cves-up-tips{margin:0 0 12px;padding:10px 12px 10px 28px;border-radius:10px;background:#fff4dc;color:#6b4a00;font-size:14px;line-height:1.45}
+.cves-up-tips li+li{margin-top:4px}
+.cves-item-pick{margin-top:8px;padding-top:8px;border-top:1px solid var(--ga-line)}
+.cves-item-pick .cves-search{margin:0}
+.cves-item-pick .cves-link,.cves-item-body .cves-change{margin:4px 0 0;font-size:13.5px}
 .cves-key>summary{cursor:pointer;font-size:14.5px;color:var(--ga-muted);list-style-position:inside}
 .cves-key>summary b{color:var(--ga-ink)}
 .cves-key[open]>summary{margin-bottom:12px}

@@ -92,6 +92,7 @@ final class CVD_Gestora_Estudio {
 		// 3.14.3 modo Gemini gratis: la foto base para adjuntar en la app y subir la foto que hizo allí.
 		register_rest_route( self::NS, '/gestora/estudio/base', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'rest_base' ), 'permission_callback' => $perm ) );
 		register_rest_route( self::NS, '/gestora/estudio/subir', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'rest_upload' ), 'permission_callback' => $perm ) );
+		register_rest_route( self::NS, '/gestora/estudio/foto-producto', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'rest_photo_product' ), 'permission_callback' => $perm ) );
 	}
 
 	/** Conectar: comprueba la clave con una llamada mínima (leer el modelo de fotos) y la guarda cifrada. */
@@ -313,6 +314,33 @@ final class CVD_Gestora_Estudio {
 		if ( is_wp_error( $item ) ) { return $item; }
 		set_transient( $day_key, (int) get_transient( $day_key ) + 1, DAY_IN_SECONDS );
 		return rest_ensure_response( array( 'photo' => self::item_for_js( $item, $user_id ), 'left' => max( 0, CVD_Estudio_Limits::MAX_PER_DAY - (int) get_transient( $day_key ) ) ) );
+	}
+
+	/**
+	 * 3.14.16: elegir (o cambiar) el producto de una foto que ya está en la galería, sin volver a subirla
+	 * (Dany, 14-oct: su foto quedó «sin producto» y no podía ponerla en su tienda).
+	 */
+	public static function rest_photo_product( WP_REST_Request $request ) {
+		$user_id = get_current_user_id();
+		$id = sanitize_key( (string) $request->get_param( 'id' ) );
+		$product = self::product( absint( $request->get_param( 'product_id' ) ) );
+		if ( ! $product ) { return new WP_Error( 'cvd_estudio_product', 'Ese producto no está disponible. Elige otro.', array( 'status' => 400 ) ); }
+		$gallery = self::gallery( $user_id );
+		$found = null;
+		foreach ( $gallery as $i => $g ) { if ( $g['id'] === $id ) { $found = $i; break; } }
+		if ( null === $found ) { return new WP_Error( 'cvd_estudio_missing', 'Esa foto ya no está.', array( 'status' => 404 ) ); }
+		$old = (int) $gallery[ $found ]['product'];
+		if ( $old && $old !== $product->get_id() ) { self::unset_store_photo( $user_id, $old, $id ); } // estaba en su tienda con otro producto
+		$color = '';
+		$chosen = sanitize_text_field( (string) $request->get_param( 'color' ) );
+		if ( '' !== $chosen ) {
+			$match = CVD_Estudio_Prompt::match_color( $chosen, array_keys( self::product_colors( $product ) ) );
+			$color = $match ? $match[0] : '';
+		}
+		$gallery[ $found ]['product'] = $product->get_id();
+		$gallery[ $found ]['color'] = $color;
+		update_user_meta( $user_id, self::META_GALLERY, $gallery );
+		return rest_ensure_response( array( 'photo' => self::item_for_js( $gallery[ $found ], $user_id ), 'message' => 'Listo: esta foto ya es de «' . $product->get_name() . '». Ahora puedes ponerla en tu tienda.' ) );
 	}
 
 	public static function rest_delete( WP_REST_Request $request ) {
@@ -664,6 +692,7 @@ final class CVD_Gestora_Estudio {
 		$config = array(
 			'base' => esc_url_raw( rest_url( self::NS . '/gestora/estudio/' ) ), 'nonce' => wp_create_nonce( 'wp_rest' ),
 			'hasKey' => $has_key, 'gallery' => $gallery, 'left' => $left, 'maxPhotos' => CVD_Estudio_Limits::MAX_PHOTOS,
+			'user' => (int) $user->ID, // 3.14.16: para recordar en este móvil el producto elegido de cada gestora
 		);
 		$ic = static fn( string $d ): string => '<svg class="cves-ic" viewBox="0 0 24 24" aria-hidden="true">' . $d . '</svg>';
 		ob_start();
@@ -714,7 +743,7 @@ final class CVD_Gestora_Estudio {
 					</li>
 					<li>
 						<span class="cves-step-ic"><?php echo $ic( '<path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>' ); // phpcs:ignore ?><b>3</b></span>
-						<div><p>Abre Gemini, toca <b>+</b> y adjunta la foto, pega la instrucción y envía.</p><a class="cvga-btn cvga-btn-sm" href="https://gemini.google.com/app" target="_blank" rel="noopener" data-cves-open>Abrir Gemini</a></div>
+						<div><p>Abre Gemini, toca <b>+</b> y adjunta la foto, pega la instrucción y envía.</p><p class="cves-warn"><b>Gemini en Cuba necesita VPN.</b> Enciéndela solo para Gemini.</p><a class="cvga-btn cvga-btn-sm" href="https://gemini.google.com/app" target="_blank" rel="noopener" data-cves-open>Abrir Gemini</a></div>
 					</li>
 				</ol>
 				<p class="cves-msg" data-cves-free-msg role="status" hidden></p>
@@ -727,6 +756,11 @@ final class CVD_Gestora_Estudio {
 				<p class="cvga-note">¿Sale una estrellita en la esquina de la foto? En Gemini, abre <b>Ajustes</b> y apaga <b>Media watermark</b> (marca de agua), si te sale esa opción; vale para las fotos nuevas.</p>
 
 				<h2 class="cves-up-title">¿Ya la tienes? Súbela aquí</h2>
+				<ul class="cves-up-tips">
+					<li>En Gemini, mantén el dedo sobre la foto y toca <b>Descargar</b>: <b>descarga la FOTO</b> (no compartas el chat ni el enlace).</li>
+					<li><b>Gemini en Cuba necesita VPN; apágala para subir aquí.</b></li>
+					<li>Tu producto queda elegido aunque cierres esta página: la foto se guarda con él.</li>
+				</ul>
 				<label class="cvga-btn cves-up" for="cves-up-input"><?php echo $ic( '<path d="M12 20V9"/><path d="M7 13l5-5 5 5"/><path d="M5 4h14"/>' ); // phpcs:ignore ?>Subir mi foto de Gemini</label>
 				<input id="cves-up-input" class="cves-up-input" type="file" accept="image/*" data-cves-up>
 				<p class="cves-msg" data-cves-up-msg role="status" hidden></p>

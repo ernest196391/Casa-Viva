@@ -55,34 +55,64 @@
   var state = { pid: 0, colors: [], color: '', preset: '', vertical: false, promptEdited: false, img: '' };
   var q = $('[data-cves-q]'), hits = $('[data-cves-hits]'), pick = $('[data-cves-pick]'), search = $('[data-cves-search]'), colorsBox = $('[data-cves-colors]');
   var timer;
+  // Busca en los productos de su tienda (lo usan el buscador de arriba y «Elegir producto» de cada foto).
+  function findItems(text) {
+    var words = norm(text).split(/\s+/).filter(function (w) { return w.length > 1; });
+    if (!words.length) return null;
+    return items.filter(function (p) { return words.every(function (w) { return p.q.indexOf(w.length > 4 ? w.slice(0, -1) : w) > -1; }); }).slice(0, 8);
+  }
+  function hitsHtml(found, text, attr) {
+    if (!found) return '';
+    return found.length ? found.map(function (p) { return '<button type="button" class="cves-hit" ' + attr + '="' + p.id + '"><img src="' + esc(p.i[0] && p.i[0][0]) + '" alt="" width="40" height="40" loading="lazy"><span>' + esc(p.n) + '<small>' + esc(p.p) + '</small></span></button>'; }).join('') : '<p class="cvga-empty">No encontré «' + esc(text) + '» en tu tienda.</p>';
+  }
   q.addEventListener('input', function () {
     clearTimeout(timer);
-    timer = setTimeout(function () {
-      var words = norm(q.value).split(/\s+/).filter(function (w) { return w.length > 1; });
-      if (!words.length) { hits.innerHTML = ''; return; }
-      var found = items.filter(function (p) { return words.every(function (w) { return p.q.indexOf(w.length > 4 ? w.slice(0, -1) : w) > -1; }); }).slice(0, 8);
-      hits.innerHTML = found.length ? found.map(function (p) { return '<button type="button" class="cves-hit" data-pid="' + p.id + '"><img src="' + esc(p.i[0] && p.i[0][0]) + '" alt="" width="40" height="40" loading="lazy"><span>' + esc(p.n) + '<small>' + esc(p.p) + '</small></span></button>'; }).join('') : '<p class="cvga-empty">No encontré «' + esc(q.value) + '» en tu tienda.</p>';
-    }, 150);
+    timer = setTimeout(function () { hits.innerHTML = hitsHtml(findItems(q.value), q.value, 'data-pid'); }, 150);
   });
   hits.addEventListener('click', function (e) {
     var b = e.target.closest('[data-pid]'); if (!b) return;
     choose(Number(b.getAttribute('data-pid')));
   });
-  function choose(pid) {
+  function choose(pid, wantColor) {
     var p = items.filter(function (x) { return x.id === pid; })[0]; if (!p) return;
     state.pid = pid; state.color = ''; state.colors = []; state.img = p.i[0] ? p.i[0][0] : '';
     pick.hidden = false; search.hidden = true; hits.innerHTML = ''; q.value = '';
     pick.querySelector('img').src = state.img;
     $('[data-cves-pick-name]').textContent = p.n;
     var colorsNote = $('[data-cves-pick-colors]'); colorsNote.textContent = 'Mirando sus colores…';
+    remember();
     dirty();
     api('producto?id=' + pid, null, 'GET').then(function (d) {
+      if (state.pid !== pid) return;
       state.colors = d.colors || [];
       colorsNote.textContent = state.colors.length ? 'Colores: ' + state.colors.map(function (c) { return c.label; }).join(', ') : 'Un solo color (el de la foto)';
+      if (wantColor && state.colors.some(function (c) { return c.label === wantColor; })) { state.color = wantColor; remember(); dirty(); }
       renderColors();
     }).catch(function () { colorsNote.textContent = ''; });
   }
-  $('[data-cves-pick-clear]').addEventListener('click', function () { state.pid = 0; state.colors = []; state.color = ''; state.img = ''; pick.hidden = true; search.hidden = false; renderColors(); dirty(); q.focus(); });
+  $('[data-cves-pick-clear]').addEventListener('click', function () { state.pid = 0; state.colors = []; state.color = ''; state.img = ''; pick.hidden = true; search.hidden = false; renderColors(); remember(); dirty(); q.focus(); });
+
+  /* ---------- 3.14.16: recordar lo elegido en este móvil (al ir a Gemini el móvil suele cerrar la página) ---------- */
+  var memoKey = 'cvesEleccion:' + (cfg.user || 0), MEMO_DAYS = 7;
+  function remember() {
+    try {
+      if (!state.pid && !state.preset && !text.value) { window.localStorage.removeItem(memoKey); return; }
+      window.localStorage.setItem(memoKey, JSON.stringify({ pid: state.pid, color: state.color, preset: state.preset, vertical: state.vertical, text: text.value, t: Date.now() }));
+    } catch (ignore) {}
+  }
+  function recall() {
+    var m = null;
+    try { m = JSON.parse(window.localStorage.getItem(memoKey) || 'null'); } catch (ignore) { m = null; }
+    if (!m || !m.t || Date.now() - m.t > MEMO_DAYS * 864e5) return;
+    if (typeof m.text === 'string' && m.text && !text.value) text.value = m.text.slice(0, 400);
+    if (m.vertical) { state.vertical = true; var v = root.querySelector('[data-cves-idea="estado"]'); if (v) v.setAttribute('aria-pressed', 'true'); }
+    if (m.preset && root.querySelector('[data-cves-idea="' + String(m.preset).replace(/[^a-z0-9_-]/gi, '') + '"]')) {
+      state.preset = m.preset;
+      root.querySelectorAll('[data-cves-idea]').forEach(function (o) { if (o.getAttribute('data-cves-idea') !== 'estado') o.setAttribute('aria-pressed', String(o.getAttribute('data-cves-idea') === state.preset)); });
+    }
+    if (m.pid && items.some(function (x) { return x.id === Number(m.pid); })) choose(Number(m.pid), m.preset === 'color' ? m.color : '');
+    else renderColors();
+  }
 
   var photo = makeForm.elements.photo, preview = $('[data-cves-preview]');
   function hasPhoto() { return !!(photo.files && photo.files[0]); }
@@ -92,11 +122,11 @@
   root.querySelectorAll('[data-cves-idea]').forEach(function (b) {
     b.addEventListener('click', function () {
       var idea = b.getAttribute('data-cves-idea');
-      if (idea === 'estado') { state.vertical = !state.vertical; b.setAttribute('aria-pressed', String(state.vertical)); dirty(); return; }
+      if (idea === 'estado') { state.vertical = !state.vertical; b.setAttribute('aria-pressed', String(state.vertical)); remember(); dirty(); return; }
       state.preset = state.preset === idea ? '' : idea;
       root.querySelectorAll('[data-cves-idea]').forEach(function (o) { if (o.getAttribute('data-cves-idea') !== 'estado') o.setAttribute('aria-pressed', String(o.getAttribute('data-cves-idea') === state.preset)); });
       if (state.preset !== 'color') state.color = '';
-      renderColors(); dirty();
+      renderColors(); remember(); dirty();
     });
   });
   function renderColors() {
@@ -106,7 +136,7 @@
     if (!state.colors.length) { colorsBox.innerHTML = '<p class="cvga-note">Este producto solo lo tenemos en el color de su foto.</p>'; return; }
     colorsBox.innerHTML = '<span class="cvga-note">Colores que tenemos:</span>' + state.colors.map(function (c) { return '<button type="button" class="cves-color" data-color="' + esc(c.label) + '" aria-pressed="' + (state.color === c.label) + '">' + (c.img ? '<img src="' + esc(c.img) + '" alt="" width="22" height="22">' : '') + esc(c.label) + '</button>'; }).join('');
   }
-  colorsBox.addEventListener('click', function (e) { var b = e.target.closest('[data-color]'); if (!b) return; state.color = b.getAttribute('data-color'); renderColors(); dirty(); });
+  colorsBox.addEventListener('click', function (e) { var b = e.target.closest('[data-color]'); if (!b) return; state.color = b.getAttribute('data-color'); renderColors(); remember(); dirty(); });
 
   /* ---------- instrucción ---------- */
   var promptBox = $('[data-cves-prompt]'), promptText = $('[data-cves-prompt-text]'), text = makeForm.elements.text;
@@ -132,7 +162,7 @@
   promptBox.addEventListener('toggle', function () { if (promptBox.open && !promptText.value) loadPrompt(); });
   promptText.addEventListener('input', function () { state.promptEdited = true; });
   text.addEventListener('change', dirty);
-  text.addEventListener('input', function () { clearTimeout(text._t); text._t = setTimeout(freeDirty, 600); });
+  text.addEventListener('input', function () { clearTimeout(text._t); text._t = setTimeout(function () { remember(); freeDirty(); }, 600); });
 
   /* ---------- modo Gemini gratis ---------- */
   var freeText = $('[data-cves-free-text]'), freeMsg = $('[data-cves-free-msg]'), copyBtn = $('[data-cves-copy]'), copyMsg = $('[data-cves-copy-msg]');
@@ -249,10 +279,11 @@
       var fd = fields(new FormData()); fd.append('photo', small, small.name || 'gemini.jpg');
       return api('subir', fd);
     }).then(function (d) {
-      say(upMsg, state.pid ? 'Lista. Está en tu galería: ya puedes descargarla, compartirla o ponerla en tu tienda.' : 'Lista. Está en tu galería. Para ponerla en tu tienda, elige primero el producto arriba y súbela otra vez.');
+      say(upMsg, d.photo.pid ? 'Lista. Está en tu galería: ya puedes descargarla, compartirla o ponerla en tu tienda.' : 'Lista. Está en tu galería. Para ponerla en tu tienda, elige aquí abajo de qué producto es (no hace falta subirla otra vez).');
       if (typeof d.left === 'number') left.textContent = 'Te quedan ' + d.left + ' fotos hoy.';
-      cfg.gallery.unshift(d.photo); renderGallery();
+      if (!d.photo.pid) pickerFor = d.photo.id;
       upResult.innerHTML = card(d.photo, true);
+      cfg.gallery.unshift(d.photo); renderGallery();
     }).catch(function (err) { say(upMsg, err.message, true); })
       .then(function () { up.value = ''; });
   });
@@ -281,14 +312,24 @@
 
   /* ---------- galería ---------- */
   var gallery = $('[data-cves-gallery]'), empty = $('[data-cves-empty]'), count = $('[data-cves-count]');
+  var pickerFor = ''; // 3.14.16: foto de la galería a la que se le está eligiendo producto
+  function pickerHtml(p) {
+    if (pickerFor !== p.id) return '';
+    return '<div class="cves-item-pick"><label class="cvgf-search cves-search"><svg class="cvga-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><input type="search" placeholder="¿De qué producto es?" enterkeyhint="search" data-pick-q aria-label="Buscar el producto de esta foto"></label>' +
+      '<div class="cves-hits" data-pick-hits>' + (state.pid ? hitsHtml(items.filter(function (x) { return x.id === state.pid; }), '', 'data-pick-pid') : '') + '</div><button type="button" class="cves-link" data-act="pick-close">Cerrar</button></div>';
+  }
   function card(p, big) {
     return '<article class="cves-item' + (big ? ' is-big' : '') + '" data-id="' + esc(p.id) + '"><a class="cves-img" href="' + esc(p.url) + '" target="_blank" rel="noopener"><img src="' + esc(p.url) + '" alt="' + esc(p.product || 'Foto') + '" loading="lazy" width="' + (p.w || 400) + '" height="' + (p.h || 400) + '"></a>' +
       '<div class="cves-item-body"><b>' + esc(p.product || 'Foto sin producto') + (p.color ? ' · ' + esc(p.color) : '') + '</b><small class="cvga-note">' + esc(p.date) + (p.text ? ' · «' + esc(p.text) + '»' : '') + '</small>' +
       (p.inStore ? '<span class="cvga-chip is-good">En tu tienda</span>' : '') +
       '<div class="cvga-actions"><a class="cvga-btn cvga-btn-sm" href="' + esc(p.url) + '" download="' + esc(p.name) + '">Descargar</a><button type="button" class="cvga-btn cvga-btn-soft cvga-btn-sm" data-act="share">Compartir</button>' +
-      (p.pid ? (p.inStore ? '<button type="button" class="cvga-btn cvga-btn-soft cvga-btn-sm" data-act="unstore">Quitar de mi tienda</button>' + (p.storeLink ? '<a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="' + esc(p.storeLink) + '" target="_blank" rel="noopener">Verla</a>' : '') : '<button type="button" class="cvga-btn cvga-btn-soft cvga-btn-sm" data-act="store">Poner en mi tienda</button>') : '') +
-      '<button type="button" class="cves-del" data-act="del" aria-label="Borrar foto">Borrar</button></div><small class="cves-done" role="status"></small></div></article>';
+      (p.pid ? (p.inStore ? '<button type="button" class="cvga-btn cvga-btn-soft cvga-btn-sm" data-act="unstore">Quitar de mi tienda</button>' + (p.storeLink ? '<a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="' + esc(p.storeLink) + '" target="_blank" rel="noopener">Verla</a>' : '') : '<button type="button" class="cvga-btn cvga-btn-soft cvga-btn-sm" data-act="store">Poner en mi tienda</button>') : '<button type="button" class="cvga-btn cvga-btn-sm" data-act="pick">Elegir producto</button>') +
+      '<button type="button" class="cves-del" data-act="del" aria-label="Borrar foto">Borrar</button></div>' +
+      (p.pid && pickerFor !== p.id ? '<button type="button" class="cves-link cves-change" data-act="pick">Cambiar producto</button>' : '') +
+      (big || !bigShown(p.id) ? pickerHtml(p) : '') +
+      '<small class="cves-done" role="status"></small></div></article>';
   }
+  function bigShown(id) { return [result, upResult].some(function (box) { return box && box.firstChild && box.firstChild.getAttribute && box.firstChild.getAttribute('data-id') === id; }); }
   function renderGallery() {
     gallery.innerHTML = cfg.gallery.map(function (p) { return card(p, false); }).join('');
     empty.hidden = cfg.gallery.length > 0;
@@ -298,10 +339,42 @@
   function refreshBig() {
     [result, upResult].forEach(function (box) { if (box.firstChild) { var x = find(box.firstChild.getAttribute('data-id')); box.innerHTML = x ? card(x, true) : ''; } });
   }
+  // 3.14.16: «Elegir producto» en una foto de la galería, sin volver a subirla.
+  root.addEventListener('input', function (e) {
+    var input = e.target.closest && e.target.closest('[data-pick-q]'); if (!input) return;
+    var box = input.closest('.cves-item-pick').querySelector('[data-pick-hits]');
+    clearTimeout(input._t);
+    input._t = setTimeout(function () { box.innerHTML = hitsHtml(findItems(input.value), input.value, 'data-pick-pid'); }, 150);
+  });
+  function setPhotoProduct(p, pid, el) {
+    var done = el.querySelector('.cves-done');
+    done.textContent = 'Guardando…';
+    var fdp = new FormData(); fdp.append('id', p.id); fdp.append('product_id', String(pid));
+    if (state.pid === pid && state.color) fdp.append('color', state.color);
+    api('foto-producto', fdp).then(function (d) {
+      pickerFor = '';
+      cfg.gallery = cfg.gallery.map(function (x) { return x.id === p.id ? d.photo : x; });
+      renderGallery(); refreshBig();
+      root.querySelectorAll('.cves-item[data-id="' + p.id + '"] .cves-done').forEach(function (again) { again.textContent = d.message; });
+    }).catch(function (err) { done.textContent = err.message; });
+  }
   root.addEventListener('click', function (e) {
+    var hit = e.target.closest('[data-pick-pid]');
+    if (hit) {
+      var hel = hit.closest('.cves-item'), hp = hel && find(hel.getAttribute('data-id'));
+      if (hp) setPhotoProduct(hp, Number(hit.getAttribute('data-pick-pid')), hel);
+      return;
+    }
     var b = e.target.closest('[data-act]'); if (!b) return;
     var el = b.closest('.cves-item'), p = el && find(el.getAttribute('data-id')); if (!p) return;
     var done = el.querySelector('.cves-done'), act = b.getAttribute('data-act');
+    if (act === 'pick' || act === 'pick-close') {
+      pickerFor = act === 'pick' ? p.id : '';
+      renderGallery(); refreshBig();
+      var qq = pickerFor && root.querySelector('.cves-item[data-id="' + p.id + '"] [data-pick-q]');
+      if (qq) qq.focus();
+      return;
+    }
     if (act === 'share') {
       var shareText = (p.product ? p.product + (p.storeLink ? ' — pídelo aquí: ' + p.storeLink : '') : '');
       if (navigator.canShare && window.File) {
@@ -331,5 +404,6 @@
     }
   });
   renderGallery();
-  if (!free.hidden) freeDirty();
+  recall(); // 3.14.16: vuelve a poner el producto, la idea y el color que eligió (si cerró la página para ir a Gemini)
+  if (!free.hidden && !state.pid) freeDirty();
 })();
