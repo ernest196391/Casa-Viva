@@ -61,6 +61,10 @@ class WC_Order {
 	public function get_status() { return $this->status; }
 	public function get_meta( $k, $s = true ) { return $this->m[ $k ] ?? ''; }
 	public function get_date_completed() { return null; }
+	public function get_billing_first_name() { return $this->m['_bf'] ?? 'Cliente'; }
+	public function get_billing_last_name() { return $this->m['_bl'] ?? 'Real'; }
+	public function get_shipping_first_name() { return ''; }
+	public function get_shipping_last_name() { return ''; }
 }
 class WC_Product {
 	public $id; public $name; public $parent = 0; public $children = array(); public $m = array();
@@ -94,8 +98,9 @@ $GLOBALS['users'] = array(
 	2 => new WP_User( 2, 'Ana Ejemplo', '2026-10-01 15:00:00' ),
 	3 => new WP_User( 3, 'Rosa Ejemplo', '2026-10-05 15:00:00' ),
 	4 => new WP_User( 4, 'Gestora Prueba', '2026-10-05 15:00:00' ),
+	5 => new WP_User( 5, 'Lola Ejemplo', '2026-10-05 15:00:00' ),
 );
-foreach ( array( 1, 2, 3, 4 ) as $u ) { $GLOBALS['umeta'][ $u ]['_cvd_account_status'] = 'approved'; }
+foreach ( array( 1, 2, 3, 4, 5 ) as $u ) { $GLOBALS['umeta'][ $u ]['_cvd_account_status'] = 'approved'; }
 $GLOBALS['umeta'][2]['_cvd_invited_by'] = 1; $GLOBALS['umeta'][3]['_cvd_invited_by'] = 2; $GLOBALS['umeta'][4]['_cvd_test_account'] = '1';
 
 // Productos: 100 alfombra (costo 20), 200 lámpara variable con variación 201 (costo 32 en la variación), 300 sin costo.
@@ -116,7 +121,8 @@ order( 3002, 3, array( array( 200, 201, 2, 90, 9 ) ) );                     // R
 order( 3003, 2, array( array( 100, 0, 5, 150, 15 ) ) );                     // Ana: 150 − 100 − 15 = 35 pts
 order( 3004, 2, array( array( 300, 0, 1, 25, 2.5 ) ) );                     // Ana: sin costo → 0 pts (cuenta como venta)
 order( 3005, 1, array( array( 100, 0, 2, 60, 6 ) ) );                       // Marta: 60 − 40 − 6 = 14 pts
-order( 3006, 3, array( array( 100, 0, 3, 90, 9 ) ), array( '_cvd_commission_risk' => 'self_order' ) ); // autocompra
+order( 3006, 3, array( array( 100, 0, 3, 90, 9 ) ), array( '_cvd_commission_risk' => 'self_order', '_bf' => 'Rosa', '_bl' => 'Ejemplo Pérez' ) ); // autocompra: se llama como ella
+order( 3011, 5, array( array( 100, 0, 1, 30, 3 ) ), array( '_cvd_commission_risk' => 'self_order', '_bf' => 'Yunier', '_bl' => 'Cliente' ) ); // su teléfono, otro nombre: cuenta y se revisa
 order( 3007, 4, array( array( 100, 0, 3, 90, 9 ) ) );                       // cuenta de prueba
 order( 3008, 3, array( array( 100, 0, 3, 90, 9 ) ), array( '_cvd_commission_status' => 'pending', '_cvd_commission_history' => array() ), 'processing' ); // sin cobrar
 order( 3009, 3, array( array( 100, 0, 3, 90, 9 ) ), array(), 'cancelled' );  // anulado
@@ -134,6 +140,7 @@ ok( abs( $P[1]['red1'] - 3.5 ) < 0.01, 'Marta: 2 % de los 175 de Ana = 3,50' );
 ok( 0.0 === (float) $P[1]['red2'] && abs( $P[1]['red_lost'] - 3.9 ) < 0.01, 'Marta no es Plata: pierde el 1 % de Rosa (3,90)' );
 $types = array_column( $r['alerts'], 'type' );
 ok( in_array( 'autocompra', $types, true ) && in_array( 'sin_costo', $types, true ), 'alertas de autocompra y de producto sin costo' );
+ok( in_array( 'revisar', $types, true ) && abs( $P[5]['own_points'] - 7 ) < 0.01, 'Lola: pedido con su teléfono pero otro cliente → cuenta (7 puntos) con alerta «revisar»' );
 ok( $r['totals']['pay_usd'] <= $r['totals']['pool_usd'] + 0.01, 'lo que se paga cabe en el fondo' );
 
 // Puntos de producto en la tienda (comisión 10 %).

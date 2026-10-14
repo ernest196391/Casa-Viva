@@ -118,6 +118,32 @@ final class CVD_Programa_Calc {
 		return $t >= $start && $t < $end;
 	}
 
+	/**
+	 * ¿Autocompra? Core marca «self_order» cuando el pedido lleva el teléfono o el correo de la gestora, pero en
+	 * Casa Viva muchas gestoras ponen su propio teléfono en el pedido de su cliente (datos reales de octubre: 19 de
+	 * 24 pedidos cobrados con esa marca, todos con el nombre del cliente). Por eso:
+	 *  - 'si'       = quien compra o recibe se llama como la gestora (y, si su nombre es de una sola palabra, además
+	 *                 coincide el teléfono o el correo) → no cuenta;
+	 *  - 'revisar'  = solo coincide el teléfono o el correo → cuenta, con alerta para revisarlo;
+	 *  - ''         = nada.
+	 */
+	public static function self_purchase( string $seller_name, array $buyer_names, bool $contact_match ): string {
+		$tok = static function ( string $s ): array {
+			$s = strtolower( strtr( $s, array( 'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n', 'Á' => 'a', 'É' => 'e', 'Í' => 'i', 'Ó' => 'o', 'Ú' => 'u', 'Ñ' => 'n' ) ) );
+			return array_values( array_filter( preg_split( '/[^a-z0-9]+/', $s ) ?: array(), static fn( $t ) => strlen( $t ) > 1 ) );
+		};
+		$g = $tok( $seller_name );
+		if ( $g ) {
+			foreach ( $buyer_names as $name ) {
+				$b = $tok( (string) $name );
+				if ( ! $b || $b[0] !== $g[0] ) { continue; }
+				$more = count( $g ) > 1 && array_intersect( array_slice( $g, 1 ), array_slice( $b, 1 ) );
+				if ( $more || ( 1 === count( $g ) && $contact_match ) ) { return 'si'; }
+			}
+		}
+		return $contact_match ? 'revisar' : '';
+	}
+
 	/** Fecha de «entregada y cobrada»: última aprobación del historial de la comisión, si no la verificación del dinero, si no la de completado. */
 	public static function approved_at( $history, string $cash_verified_at = '', string $completed_at = '' ): string {
 		$at = '';
@@ -132,7 +158,8 @@ final class CVD_Programa_Calc {
 	/**
 	 * @param string $period   'AAAA-MM'.
 	 * @param array  $members  id => ['name', 'inviter' => id|0, 'joined' => 'Y-m-d H:i:s', 'approved' => bool, 'title' => slug].
-	 * @param array  $sales    lista de ['order_id', 'owner', 'at' (hora de Cuba), 'status' (approved|paid|…), 'self_order', 'test',
+	 * @param array  $sales    lista de ['order_id', 'owner', 'at' (hora de Cuba), 'status' (approved|paid|…), 'self_order' (no cuenta),
+	 *                         'self_check' (cuenta con alerta), 'test',
 	 *                         'lines' => [['product_id', 'name', 'qty', 'base', 'cost_unit' (null si no hay), 'commission']]].
 	 * @param array  $reversals devoluciones de pedidos ya cerrados: ['order_id', 'owner', 'points', 'base', 'red' => [['user', 'level', 'amount']]].
 	 */
@@ -164,8 +191,11 @@ final class CVD_Programa_Calc {
 			if ( ! in_array( (string) ( $s['status'] ?? '' ), array( 'approved', 'paid' ), true ) ) { continue; }
 			if ( ! empty( $s['test'] ) ) { continue; }
 			if ( ! empty( $s['self_order'] ) ) {
-				$alerts[] = array( 'type' => 'autocompra', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ' con el teléfono o el correo de quien vende: no da puntos ni red.' );
+				$alerts[] = array( 'type' => 'autocompra', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': lo compra o lo recibe la misma gestora; no da puntos ni red.' );
 				continue;
+			}
+			if ( ! empty( $s['self_check'] ) ) {
+				$alerts[] = array( 'type' => 'revisar', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': lleva el teléfono o el correo de la gestora con otro nombre de cliente. Cuenta; revisar si fuera para ella.' );
 			}
 			$base = 0.0; $points = 0.0; $cost = 0.0; $commission = 0.0; $missing = array(); $losing = array();
 			foreach ( (array) ( $s['lines'] ?? array() ) as $l ) {

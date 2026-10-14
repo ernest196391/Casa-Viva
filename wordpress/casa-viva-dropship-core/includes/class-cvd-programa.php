@@ -208,7 +208,7 @@ final class CVD_Programa {
 				$pid = absint( $b['product_id'] ?? 0 ); $vid = absint( $b['variation_id'] ?? 0 );
 				$lines[] = array(
 					'product_id' => $vid ?: $pid,
-					'name' => (string) get_the_title( $vid ?: $pid ),
+					'name' => html_entity_decode( (string) get_the_title( $vid ?: $pid ), ENT_QUOTES, 'UTF-8' ),
 					'qty' => max( 1, (int) ( $b['quantity'] ?? 1 ) ),
 					'base' => (float) ( $b['base_amount'] ?? 0 ),
 					'cost_unit' => self::unit_cost( $pid, $vid ),
@@ -216,9 +216,15 @@ final class CVD_Programa {
 				);
 			}
 			$test = ( class_exists( 'CVD_Delivery' ) && ( CVD_Delivery::is_test_order( $order ) || 'test' === CVD_Delivery::blocks_dispatch( $order ) ) ) || ! empty( $members[ $owner ]['test'] );
+			// Autocompra: el nombre de quien compra o recibe es el de la gestora (la marca self_order de Core sola no basta).
+			$self = CVD_Programa_Calc::self_purchase(
+				(string) $members[ $owner ]['name'],
+				array( trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ), trim( $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name() ), (string) $order->get_meta( 'cliente_vinculado', true ) ),
+				'self_order' === (string) $order->get_meta( '_cvd_commission_risk', true )
+			);
 			$out[] = array(
 				'order_id' => $order->get_id(), 'owner' => $owner, 'at' => self::local( $at ), 'status' => $status,
-				'self_order' => 'self_order' === (string) $order->get_meta( '_cvd_commission_risk', true ),
+				'self_order' => 'si' === $self, 'self_check' => 'revisar' === $self,
 				'test' => $test, 'lines' => $lines,
 			);
 		}
@@ -607,6 +613,11 @@ final class CVD_Programa {
 			);
 		}
 		usort( $people, static fn( $a, $b ) => $b['teamPoints'] <=> $a['teamPoints'] );
+		// Alertas: lo grave primero; «revisar» (su teléfono con otro cliente) es muy común y va al final.
+		$order = array( 'autocompra' => 0, 'concentracion' => 1, 'red_negativa' => 2, 'devolucion' => 3, 'pierde' => 4, 'sin_costo' => 5, 'revisar' => 6 );
+		$alerts = (array) ( $data['alerts'] ?? array() );
+		usort( $alerts, static fn( $a, $b ) => ( $order[ $a['type'] ] ?? 9 ) <=> ( $order[ $b['type'] ] ?? 9 ) );
+		$alert_counts = array_count_values( array_column( $alerts, 'type' ) );
 		global $wpdb;
 		$runs = (array) $wpdb->get_results( 'SELECT id, period, kind, mode, status, computed_at, rate_cup, totals, payload_sha256 FROM ' . self::t( 'runs' ) . ' ORDER BY id DESC LIMIT 15', ARRAY_A );
 		foreach ( $runs as &$r ) { $r['totals'] = json_decode( (string) $r['totals'], true ); }
@@ -617,7 +628,8 @@ final class CVD_Programa {
 			'run' => $run ? array( 'id' => (int) $run['id'], 'period' => $run['period'], 'kind' => $run['kind'], 'status' => $run['status'], 'computedAt' => $run['computed_at'], 'rateCup' => (float) $run['rate_cup'], 'sha256' => $run['payload_sha256'] ) : null,
 			'totals' => $data['totals'] ?? null,
 			'people' => array_slice( $people, 0, $people_limit ),
-			'alerts' => array_slice( (array) ( $data['alerts'] ?? array() ), 0, 100 ),
+			'alerts' => array_slice( $alerts, 0, 100 ),
+			'alertCounts' => $alert_counts,
 			'runs' => $runs,
 		);
 	}
@@ -651,7 +663,8 @@ final class CVD_Programa {
 		}
 		echo '</tbody></table>';
 		if ( $rep['alerts'] ) {
-			echo '<h2>Alertas (' . count( $rep['alerts'] ) . ')</h2><ul style="list-style:disc;margin-left:20px">';
+			$labels = array( 'autocompra' => 'Autocompra (no cuenta)', 'concentracion' => 'Un miembro con más del 60 %', 'red_negativa' => 'Red en negativo', 'devolucion' => 'Devolución de un mes cerrado', 'pierde' => 'Se vende perdiendo', 'sin_costo' => 'Producto sin costo', 'revisar' => 'Su teléfono con otro cliente (cuenta)' );
+			echo '<h2>Alertas (' . esc_html( (string) array_sum( $rep['alertCounts'] ) ) . ')</h2><p>' . esc_html( implode( ' · ', array_map( static fn( $k, $v ) => ( $labels[ $k ] ?? $k ) . ': ' . $v, array_keys( $rep['alertCounts'] ), $rep['alertCounts'] ) ) ) . '</p><ul style="list-style:disc;margin-left:20px">';
 			foreach ( $rep['alerts'] as $a ) { echo '<li><strong>' . esc_html( $a['type'] ) . '</strong> · ' . esc_html( $a['text'] ) . '</li>'; }
 			echo '</ul>';
 		}

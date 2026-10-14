@@ -34,6 +34,16 @@ ok( 7 === $C::unit_points( 30, 20, 3 ), 'unit_points 30/20/3 = 7' );
 ok( null === $C::unit_points( 30, null, 3 ), 'unit_points sin costo = null (no se enseña)' );
 ok( 0 === $C::unit_points( 30, 29, 3 ), 'unit_points que pierde = 0' );
 
+// ---------- 1b. Autocompra ----------
+ok( 'si' === $C::self_purchase( 'Ana María Pérez', array( 'Ana Pérez' ), false ), 'se llama como ella: autocompra' );
+ok( 'si' === $C::self_purchase( 'Ána Pérez', array( 'ana perez gomez' ), true ), 'sin tildes ni mayúsculas: autocompra' );
+ok( 'revisar' === $C::self_purchase( 'Ana Pérez', array( 'Yunier Romero' ), true ), 'su teléfono con otro cliente: cuenta y se revisa' );
+ok( '' === $C::self_purchase( 'Ana Pérez', array( 'Ana Gómez' ), false ), 'otra Ana sin su teléfono: venta normal' );
+ok( 'revisar' === $C::self_purchase( 'Neisy', array( 'Neisy Fernández' ), false ) || '' === $C::self_purchase( 'Neisy', array( 'Neisy Fernández' ), false ), 'nombre de una palabra sin su teléfono: no se excluye' );
+ok( 'si' === $C::self_purchase( 'Neisy', array( 'Neisy Fernández' ), true ), 'nombre de una palabra + su teléfono: autocompra' );
+$r = $C::compute( P, array( 1 => member( 'Ana' ) ), array( sale( 5, 1, 200, 120, 10, array( 'self_check' => true ) ) ) );
+ok( abs( $r['people'][1]['own_points'] - 70 ) < 0.01 && has_alert( $r, 'revisar', 1 ), 'self_check: cuenta y deja alerta' );
+
 // ---------- 2. Fecha de «entregada y cobrada» ----------
 ok( '2026-11-03 10:00:00' === $C::approved_at( array( array( 'to' => 'pending', 'at' => '2026-10-30 09:00:00' ), array( 'to' => 'approved', 'at' => '2026-11-03 10:00:00' ) ) ), 'approved_at toma la aprobación del historial' );
 ok( '2026-11-04 08:00:00' === $C::approved_at( array(), '2026-11-04 08:00:00', '2026-11-05 08:00:00' ), 'approved_at sin historial: dinero verificado' );
