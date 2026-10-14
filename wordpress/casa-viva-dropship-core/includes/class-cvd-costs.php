@@ -56,8 +56,25 @@ final class CVD_Costs {
 
 	// ---------- reglas ----------
 
+	/**
+	 * Modo del aviso (3.14.5, Ernesto 14-oct): «perdida» (por defecto) = solo avisa si precio − costo − comisión < 0,50 USD
+	 * (opción cvd_cost_loss_min_usd), sin gastos fijos ni ganancia mínima hasta que Lennys los confirme.
+	 * Volver a la regla completa de D59: wp option update cvd_cost_floor_mode completo
+	 */
+	public static function full_mode(): bool {
+		return 'completo' === get_option( 'cvd_cost_floor_mode', 'perdida' );
+	}
+
+	/** Regla de comisión de Lennys: menos de 10 USD → 10 % o 1 USD (máx. 2); desde 10 USD → ~10 % (redondeado arriba, mínimo 1). */
+	public static function commission_cap( float $price ): float {
+		return $price < 10 ? 2.0 : max( 1.0, ceil( $price * 0.10 - 1e-9 ) );
+	}
+
 	/** Reglas del mínimo según el tipo de producto. Opciones por si Ernesto cambia un número (sin tocar código). */
 	public static function rules( bool $bajo_pedido ): array {
+		if ( ! self::full_mode() ) {
+			return array( 'fixed' => 0.0, 'pct' => 0.0, 'min' => (float) get_option( 'cvd_cost_loss_min_usd', 0.5 ) );
+		}
 		if ( $bajo_pedido ) {
 			return array( 'fixed' => 0.0, 'pct' => (float) get_option( 'cvd_cost_pedido_min_profit_pct', 2.5 ), 'min' => (float) get_option( 'cvd_cost_pedido_min_profit_usd', 1 ) );
 		}
@@ -203,6 +220,10 @@ final class CVD_Costs {
 
 	private static function status_text( array $e ): string {
 		if ( 'sin_costo' === $e['status'] ) { return 'Sin costo: no se puede calcular el mínimo.'; }
+		if ( ! self::full_mode() ) {
+			$txt = 'Para no perder (costo + comisión + 0,50): ' . wc_format_localized_price( $e['floor'] ) . ' USD';
+			return 'bajo' === $e['status'] ? '⚠️ ' . $txt . ' — con el precio de hoy SE PIERDE.' : '✅ ' . $txt . ' — no se pierde.';
+		}
 		$txt = 'Precio mínimo: ' . wc_format_localized_price( $e['floor'] ) . ' USD';
 		return 'bajo' === $e['status'] ? '⚠️ ' . $txt . ' — el precio de hoy está POR DEBAJO.' : '✅ ' . $txt . ' — el precio está bien.';
 	}
@@ -311,6 +332,7 @@ final class CVD_Costs {
 		$by_kind = array( 'tienda' => $counts, 'bajo_pedido' => $counts );
 		$under = array();
 		$by_source = array();
+		$bajo_real = 0; $bajo_prov = 0; $com_bad = 0; $com_list = array();
 		$ids = get_posts( array( 'post_type' => array( 'product', 'product_variation' ), 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids', 'no_found_rows' => true ) );
 		foreach ( $ids as $id ) {
 			$product = wc_get_product( $id );
@@ -323,14 +345,32 @@ final class CVD_Costs {
 			$src = (string) $product->get_meta( self::SOURCE, true );
 			if ( '' === $src && '' === (string) $product->get_meta( self::COST, true ) && $product->get_parent_id() ) { $src = (string) get_post_meta( $product->get_parent_id(), self::SOURCE, true ); }
 			if ( null !== $e['cost'] ) { $by_source[ $src ?: 'manual' ] = ( $by_source[ $src ?: 'manual' ] ?? 0 ) + 1; }
+			$is_prov = in_array( $src, self::PROVISIONAL, true );
+			if ( 'bajo' === $e['status'] ) { $is_prov ? $bajo_prov++ : $bajo_real++; }
 			if ( 'bajo' === $e['status'] && count( $under ) < $list ) {
-				$under[] = array( 'id' => $id, 'name' => wp_strip_all_tags( $product->get_name() ), 'price' => $e['price'], 'floor' => $e['floor'], 'cost' => $e['cost'] );
+				$under[] = array( 'id' => $id, 'name' => wp_strip_all_tags( $product->get_name() ), 'price' => $e['price'], 'floor' => $e['floor'], 'cost' => $e['cost'], 'provisional' => $is_prov );
+			}
+			// 3.14.5: comisión de la tienda fuera de la regla de Lennys (la copia nocturna nube → web no avisaba).
+			if ( 'tienda' === $kind && $e['price'] > 0 ) {
+				$c = self::commission( $product );
+				$usd = 'fixed' === $c['type'] ? $c['value'] : $e['price'] * $c['value'] / 100;
+				if ( $usd > self::commission_cap( $e['price'] ) + 0.001 ) {
+					$com_bad++;
+					if ( count( $com_list ) < $list ) { $com_list[] = array( 'id' => $id, 'name' => wp_strip_all_tags( $product->get_name() ), 'price' => $e['price'], 'commission' => round( $usd, 2 ), 'cap' => self::commission_cap( $e['price'] ) ); }
+				}
 			}
 		}
-		$line = sprintf( '%d productos bajo el mínimo · %d sin costo', $counts['bajo'], $counts['sin_costo'] );
 		$provisional = ( $by_source['formula'] ?? 0 ) + ( $by_source['por_confirmar'] ?? 0 );
-		if ( $provisional ) { $line .= sprintf( ' · %d con costo provisional', $provisional ); }
-		return array( 'total' => array_sum( $counts ), 'counts' => $counts, 'by_kind' => $by_kind, 'by_source' => $by_source, 'line' => $line, 'under' => $under );
+		if ( self::full_mode() ) {
+			$line = sprintf( '%d productos bajo el mínimo · %d sin costo', $counts['bajo'], $counts['sin_costo'] );
+			if ( $provisional ) { $line .= sprintf( ' · %d con costo provisional', $provisional ); }
+		} else {
+			$line = sprintf( '%d pierden dinero (precio − costo − comisión < %s USD)', $bajo_real, number_format( (float) get_option( 'cvd_cost_loss_min_usd', 0.5 ), 2, ',', '.' ) );
+			if ( $bajo_prov ) { $line .= sprintf( ' · %d más con costo provisional', $bajo_prov ); }
+			$line .= sprintf( ' · %d sin costo', $counts['sin_costo'] );
+		}
+		if ( $com_bad ) { $line .= sprintf( ' · ⚠️ %d comisiones fuera de la regla de Lennys', $com_bad ); }
+		return array( 'total' => array_sum( $counts ), 'mode' => self::full_mode() ? 'completo' : 'perdida', 'counts' => $counts, 'bajo_real' => $bajo_real, 'bajo_provisional' => $bajo_prov, 'commission_out_of_rule' => $com_bad, 'commission_list' => $com_list, 'by_kind' => $by_kind, 'by_source' => $by_source, 'line' => $line, 'under' => $under );
 	}
 
 	public static function rest_summary( WP_REST_Request $request ): WP_REST_Response {
