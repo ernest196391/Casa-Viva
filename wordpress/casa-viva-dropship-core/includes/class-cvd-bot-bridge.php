@@ -36,6 +36,8 @@ final class CVD_Bot_Bridge {
 		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)/whatsapp', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'verified_whatsapp' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/gestora', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'gestora_link' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/gestora/orders', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'gestora_orders' ), 'permission_callback' => $auth ) );
+		// 3.14.11 (D67): ¿este teléfono es cliente de una gestora? El bot le pasa con ella en vez de atenderle como tienda.
+		register_rest_route( self::NS, '/bot/client-owner', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'client_owner' ), 'permission_callback' => $auth ) );
 		// Aviso a la gestora cuando su pedido termina por CUALQUIER camino (3.13.53): recogida cerrada en /ventas/ o el panel,
 		// o «Entregado» marcado desde el área del mensajero. El «entregado» por WhatsApp avisa al momento y marca lo mismo.
 		register_rest_route( self::NS, '/bot/gestora/finished', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'gestora_finished' ), 'permission_callback' => $auth ) );
@@ -173,6 +175,26 @@ final class CVD_Bot_Bridge {
 	}
 
 	/** Lo que una gestora pregunta por WhatsApp: sus últimos pedidos, en qué punto van y su comisión. */
+	/**
+	 * 3.14.11 (D67, Ernesto 14-oct): gestora dueña de un cliente por su teléfono (Clientes de Casa Viva: la primera
+	 * gestora que lo trajo, por un pedido de su enlace o apuntado en «Mis clientes»; nunca pasa a otra). Solo gestoras
+	 * aprobadas y con WhatsApp. Solo lectura.
+	 */
+	public static function client_owner( WP_REST_Request $request ) {
+		global $wpdb;
+		$phone = class_exists( 'CVD_Clients' ) ? CVD_Clients::phone( (string) $request->get_param( 'phone' ) ) : '';
+		if ( ! $phone ) { return self::no_cache( array( 'found' => false ) ); }
+		CVD_Clients::install();
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT owner_user_id, name FROM ' . CVD_Clients::table() . ' WHERE phone=%s', $phone ) );
+		$user = $row && (int) $row->owner_user_id ? get_userdata( (int) $row->owner_user_id ) : null;
+		if ( ! $user || ! CVD_Registration::is_approved_gestora( $user ) ) { return self::no_cache( array( 'found' => false ) ); }
+		$wa = preg_replace( '/\D+/', '', (string) get_user_meta( $user->ID, '_cvd_whatsapp', true ) );
+		if ( 8 === strlen( $wa ) ) { $wa = '53' . $wa; }
+		if ( strlen( $wa ) < 10 ) { return self::no_cache( array( 'found' => false ) ); }
+		$first = (string) strtok( trim( (string) $user->display_name ), ' ' );
+		return self::no_cache( array( 'found' => true, 'client' => (string) $row->name, 'gestora' => array( 'id' => $user->ID, 'name' => '' !== $first ? ucfirst( $first ) : 'tu gestora', 'phone' => $wa ) ) );
+	}
+
 	public static function gestora_orders( WP_REST_Request $request ) {
 		$gestora = self::user_by_phone( (string) $request->get_param( 'phone' ), 'cvd_gestora', false ); // también pendientes: el bot les dice que esperen la aprobación (si no, les pedía registrarse otra vez)
 		if ( ! $gestora ) { return self::no_cache( array( 'found' => false ) ); }
