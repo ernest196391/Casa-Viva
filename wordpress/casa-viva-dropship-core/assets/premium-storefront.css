@@ -159,3 +159,6 @@ body.woocommerce-cart .cv-whatsapp,body.woocommerce-checkout .cv-whatsapp{displa
 /* 3.13.83: el logo del pie salía marrón sobre petróleo (casi invisible) y los textos del pie en gris oscuro. Logo oficial en crema y textos legibles. */
 html body .cv-footer .cv-brand::before{background-image:url(logo-casa-viva-crema.svg)}
 html body .cv-footer p,html body .cv-footer p a{color:rgba(246,241,230,.88)}
+/* 3.14.3 (Ernesto 14-oct): en escritorio el logo centrado (marca.css) quedaba debajo del menú, puesto encima en absoluto («VTIenVdA»). Logo a la izquierda y menú en su sitio, sin montarse. En móvil (≤900 px) sigue el logo centrado con «Menú» a la derecha. */
+@media(min-width:901px){html body .cv-header .cv-header__inner{justify-content:space-between!important;gap:24px}html body .cv-header .cv-header__inner>.cv-brand{margin:0!important;flex:0 0 auto}html body .cv-header .cv-header__inner>.cv-nav{position:static!important;transform:none!important;top:auto!important;right:auto!important;flex:1 1 auto;min-width:0;flex-wrap:wrap;justify-content:flex-end;row-gap:8px}}
+@media(max-width:900px){html body .cv-header .cv-header__inner>.cv-brand{max-width:calc(100% - 150px)}html body .cv-header .cv-brand::before{max-width:100%}}

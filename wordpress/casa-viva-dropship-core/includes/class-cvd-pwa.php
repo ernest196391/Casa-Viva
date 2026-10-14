@@ -40,8 +40,17 @@ final class CVD_PWA {
 		register_rest_route( 'casa-viva/v1', '/manifest', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'manifest' ), 'permission_callback' => '__return_true' ) );
 	}
 
+	/**
+	 * Icono de la app con el logo nuevo (3.14.3, Ernesto 14-oct): isotipo crema sobre marrón, sacado del SVG oficial.
+	 * Nombres nuevos (cv-*) + ?v= para que el móvil que ya instaló la app vuelva a pedir el icono.
+	 */
+	const ICON_VERSION = '20261014';
+
+	public static function icon_url( string $file ): string {
+		return CVD_URL . 'assets/pwa/' . $file . '?v=' . self::ICON_VERSION;
+	}
+
 	public static function manifest(): WP_REST_Response {
-		$icons = CVD_URL . 'assets/pwa/';
 		$data = array(
 			'id'               => '/casa-viva-app/',
 			'name'             => 'Casa Viva',
@@ -51,16 +60,16 @@ final class CVD_PWA {
 			'start_url'        => '/casa-viva-app/?source=pwa',
 			'scope'            => '/',
 			'display'          => 'standalone',
-			'background_color' => '#F5E7DC',
-			'theme_color'      => '#432D2D',
+			'background_color' => '#F6F1E6',
+			'theme_color'      => '#2B2420',
 			'icons'            => array(
-				array( 'src' => $icons . 'icon-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any' ),
-				array( 'src' => $icons . 'icon-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any' ),
-				array( 'src' => $icons . 'icon-maskable-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable' ),
+				array( 'src' => self::icon_url( 'cv-icon-192.png' ), 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any' ),
+				array( 'src' => self::icon_url( 'cv-icon-512.png' ), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any' ),
+				array( 'src' => self::icon_url( 'cv-icon-maskable-512.png' ), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable' ),
 			),
 			'shortcuts' => array(
-				array( 'name' => 'Tienda', 'url' => '/tienda/', 'icons' => array( array( 'src' => $icons . 'icon-192.png', 'sizes' => '192x192' ) ) ),
-				array( 'name' => 'Mi cuenta', 'url' => '/mi-cuenta/', 'icons' => array( array( 'src' => $icons . 'icon-192.png', 'sizes' => '192x192' ) ) ),
+				array( 'name' => 'Tienda', 'url' => '/tienda/', 'icons' => array( array( 'src' => self::icon_url( 'cv-icon-192.png' ), 'sizes' => '192x192' ) ) ),
+				array( 'name' => 'Mi cuenta', 'url' => '/mi-cuenta/', 'icons' => array( array( 'src' => self::icon_url( 'cv-icon-192.png' ), 'sizes' => '192x192' ) ) ),
 			),
 		);
 		$response = new WP_REST_Response( $data );
@@ -71,8 +80,8 @@ final class CVD_PWA {
 
 	public static function head(): void {
 		echo '<link rel="manifest" href="' . esc_url( rest_url( 'casa-viva/v1/manifest' ) ) . '">';
-		echo '<meta name="theme-color" content="#432D2D">';
-		echo '<link rel="apple-touch-icon" href="' . esc_url( CVD_URL . 'assets/pwa/icon-192.png' ) . '">';
+		echo '<meta name="theme-color" content="#2B2420">';
+		echo '<link rel="apple-touch-icon" sizes="180x180" href="' . esc_url( self::icon_url( 'cv-apple-touch-180.png' ) ) . '">';
 		echo '<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Casa Viva">';
 	}
 
@@ -104,8 +113,8 @@ final class CVD_PWA {
 		header( 'Service-Worker-Allowed: /' );
 		header( 'Cache-Control: no-cache, no-store, must-revalidate' );
 		$offline = wp_json_encode( home_url( '/casa-viva-app/?offline=1' ) );
-		$icon = wp_json_encode( CVD_URL . 'assets/pwa/icon-192.png' );
-		$badge = wp_json_encode( CVD_URL . 'assets/pwa/notification-badge-96.png' );
+		$icon = wp_json_encode( self::icon_url( 'cv-icon-192.png' ) );
+		$badge = wp_json_encode( self::icon_url( 'cv-badge-96.png' ) );
 		echo "const CACHE='casa-viva-" . esc_js( CVD_VERSION ) . "';const OFFLINE={$offline};const ICON={$icon};const BADGE={$badge};\n";
 		echo "self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll([OFFLINE,ICON,BADGE])));self.skipWaiting()});\n";
 		echo "self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('casa-viva-')&&k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim()});\n";
@@ -157,7 +166,7 @@ final class CVD_PWA {
 		// Enlace de «mi acceso» vencido o ya usado (dependientas, 3.13.49): cómo pedir otro.
 		$invalid = isset( $_GET['cvd_access'] ) && 'invalid' === sanitize_key( wp_unslash( $_GET['cvd_access'] ) ) ? '<p class="cvd-app-recovery" role="alert">Ese enlace para entrar ya se usó o venció. Escribe <strong>mi acceso</strong> al WhatsApp de Casa Viva (5354056173) y te mandamos otro.</p>' : '';
 		$hint = '<p class="cvd-app-recovery">¿Trabajas en la tienda? Escribe tu número de WhatsApp en lugar del usuario, con tu contraseña.</p>';
-		return '<section class="cvd-app-entry"><img src="' . esc_url( CVD_URL . 'assets/pwa/icon-192.png' ) . '" alt="Casa Viva" width="112" height="112"><div class="cvd-app-login">' . $invalid . $login . $hint . '<p class="cvd-app-recovery"><a href="' . esc_url( $lost ) . '">¿Olvidaste tu contraseña?</a></p></div></section>';
+		return '<section class="cvd-app-entry"><img src="' . esc_url( self::icon_url( 'cv-icono-app.svg' ) ) . '" alt="Casa Viva" width="112" height="112"><div class="cvd-app-login">' . $invalid . $login . $hint . '<p class="cvd-app-recovery"><a href="' . esc_url( $lost ) . '">¿Olvidaste tu contraseña?</a></p></div></section>';
 	}
 
 	public static function render_operations(): string {
