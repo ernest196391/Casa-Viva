@@ -88,7 +88,7 @@ final class CVD_Gestora_App {
 			array( '', 'Mi equipo', '', '' ),
 			array( 'invitar', 'Invitar gestores', 'invite', '' ),
 		);
-		// 3.14.0: Programa de gestoras (D53–D58): «Mi equipo» y «Mi piedra», en sombra solo para quien lo prueba.
+		// 3.14.1: Programa de gestoras (D53–D58): «Mi equipo» y «Mi piedra», en sombra solo para quien lo prueba.
 		$programa = class_exists( 'CVD_Programa' ) && CVD_Programa::visible_for( $user );
 		if ( $programa ) {
 			$at = (int) array_search( 'invitar', array_column( $nav, 0 ), true );
