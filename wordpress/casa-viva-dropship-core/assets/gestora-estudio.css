@@ -1,0 +1,64 @@
+/* «Mi estudio de fotos» y «Mi contabilidad» (3.14.1). Usa los colores de .cvga (gestora-app.css). */
+.cvga-chip.is-good{background:#dcefe3;color:#1f5c38}
+.cves .cves-msg{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:var(--ga-soft);font-size:14px}
+.cves .cves-msg.is-bad{background:#f8e1dc;color:#7a2416}
+.cves-steps{margin:6px 0 12px;padding-left:20px;font-size:14.5px}
+.cves-steps li{margin:4px 0}
+.cves .cvga-field input[type=password],.cves textarea{border:1px solid var(--ga-line);background:var(--ga-bg);border-radius:10px;padding:10px 12px;font:inherit;font-weight:400;font-size:16px;width:100%;color:var(--ga-ink)}
+.cves textarea{resize:vertical;min-height:64px}
+.cves-make h2{margin:14px 0 8px}
+.cves-make h2:first-child{margin-top:0}
+.cves-hits{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.cves-hit{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid var(--ga-line);background:var(--ga-surface);border-radius:10px;padding:6px 10px;font:inherit;color:var(--ga-ink);cursor:pointer}
+.cves-hit img{width:40px;height:40px;border-radius:8px;object-fit:cover;background:var(--ga-soft)}
+.cves-hit span{display:flex;flex-direction:column;min-width:0}
+.cves-hit small{color:var(--ga-muted)}
+.cves-pick{display:flex;align-items:center;gap:12px;padding:8px;border:1px solid var(--ga-line);border-radius:12px;background:var(--ga-bg)}
+.cves-pick img{width:56px;height:56px;border-radius:10px;object-fit:cover;background:var(--ga-soft)}
+.cves-pick div{flex:1;min-width:0}
+.cves-pick .cvga-note{display:block;margin:2px 0 0}
+.cves-upload{display:flex;flex-direction:column;gap:6px;margin-top:12px;font-size:14px;font-weight:600}
+.cves-upload small{font-weight:400;color:var(--ga-muted)}
+.cves-upload input{font:inherit;font-weight:400}
+.cves-preview{max-width:160px;border-radius:10px;margin-top:8px}
+.cves-ideas{display:flex;flex-wrap:wrap;gap:8px}
+.cves-idea,.cves-color{border:1px solid var(--ga-line);background:var(--ga-surface);color:var(--ga-ink);border-radius:99px;padding:8px 14px;font:inherit;font-size:14px;cursor:pointer;min-height:40px;display:inline-flex;align-items:center;gap:6px}
+.cves-idea[aria-pressed=true],.cves-color[aria-pressed=true]{background:var(--ga-brand);border-color:var(--ga-brand);color:#fff}
+.cves-color img{width:22px;height:22px;border-radius:50%;object-fit:cover}
+.cves-colors{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.cves-colors .cvga-note{margin:0;width:100%}
+.cves-make .cvga-field{margin-top:12px}
+.cves-prompt{margin-top:12px;border:1px dashed var(--ga-line);border-radius:10px;padding:8px 12px}
+.cves-prompt summary{cursor:pointer;font-weight:600;font-size:14px}
+.cves-prompt summary small{font-weight:400;color:var(--ga-muted)}
+.cves-prompt textarea{margin-top:8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+.cves-result:empty{display:none}
+.cves-result{margin-top:14px}
+.cves-gallery-wrap{display:flex;flex-direction:column;gap:6px}
+.cves-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.cves-item{background:var(--ga-surface);border:1px solid var(--ga-line);border-radius:var(--ga-r);overflow:hidden;display:flex;flex-direction:column}
+.cves-item.is-big{max-width:520px}
+.cves-img{display:block;background:var(--ga-soft)}
+.cves-img img{display:block;width:100%;height:auto}
+.cves-item-body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:4px}
+.cves-item-body .cvga-note{margin:0}
+.cves-item-body .cvga-chip{align-self:flex-start}
+.cves-del{border:0;background:transparent;color:#9a3a2a;font:inherit;font-size:13.5px;text-decoration:underline;cursor:pointer;padding:6px}
+.cves-done{color:var(--ga-muted);font-size:13px}
+.cves-done:empty{display:none}
+@media (max-width:520px){.cves-gallery{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.cves-item-body .cvga-actions{flex-direction:column;align-items:stretch}.cves-item-body .cvga-btn{white-space:normal}.cves-item.is-big{max-width:none}}
+
+/* Mi contabilidad */
+.cvcx-bar select{border:1px solid var(--ga-line);background:var(--ga-bg);border-radius:10px;padding:10px 12px;font:inherit;font-size:16px;font-weight:400;max-width:260px}
+.cvcx-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.cvcx-list{list-style:none;margin:0;padding:0}
+.cvcx-item{padding:12px 0;border-top:1px solid var(--ga-line)}
+.cvcx-item:first-child{border-top:0}
+.cvcx-name{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.cvcx-name img{width:44px;height:44px;border-radius:9px;object-fit:cover;background:var(--ga-soft)}
+.cvcx-nums{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px 12px;margin:0}
+.cvcx-nums div{display:flex;flex-direction:column}
+.cvcx-nums dt{font-size:12px;color:var(--ga-muted)}
+.cvcx-nums dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums}
+.cvcx-nums dd.is-good{color:var(--ga-good)}
+@media (max-width:420px){.cvcx-nums{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
