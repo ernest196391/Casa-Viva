@@ -43,7 +43,8 @@ final class CVD_WhatsApp_Receipt_Template {
 
 		$items = array();
 		foreach ( $data['items'] as $index => $item ) {
-			$items[] = ( $index + 1 ) . '. *' . $item['name'] . '* ×' . $item['quantity'] . ' — ' . $item['price'];
+			// 3.14.7 (Nana): con varias unidades, el precio de cada una y el subtotal («15.00 USD c/u = 30.00 USD»).
+			$items[] = ( $index + 1 ) . '. *' . $item['name'] . '* ×' . $item['quantity'] . ' — ' . ( $item['quantity'] > 1 && '' !== ( $item['unit_price'] ?? '' ) ? $item['unit_price'] . ' c/u = ' : '' ) . $item['price'];
 			if ( $item['variations'] ) {
 				$items[] = '   _' . implode( ' · ', $item['variations'] ) . '_';
 			}
@@ -239,6 +240,7 @@ final class CVD_WhatsApp_Receipt_Template {
 				'quantity'   => max( 1, (int) $item->get_quantity() ),
 				'variations' => self::visible_variations( $product ),
 				'price'      => self::money( $order, $item->get_total() ),
+				'unit_price' => self::money( $order, (float) $item->get_total() / max( 1, (int) $item->get_quantity() ) ),
 				'action_url' => $product && class_exists( 'CVD_Receipt_Links' ) ? CVD_Receipt_Links::url( $order, 'product', (int) $item_id ) : '',
 			);
 		}

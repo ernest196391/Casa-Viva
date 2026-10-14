@@ -338,6 +338,7 @@ final class CVD_Bot_Bridge {
 				'id'         => $order->get_id(),
 				'zone'       => CVD_Delivery::destination_zone( $order ),
 				'items'      => self::items( $order ),
+				'itemLines'  => CVD_Order_Lines::texts( $order ), // 3.14.7 (Nana): «1× Bata — 30 USD» · «2× … — 15 USD c/u = 30 USD»
 				'earningCup' => CVD_Delivery::courier_amount( $order ),
 				'window'     => self::window( $order ),
 				// 3.13.70: el mensajero ve el armado ANTES de coger la carrera (si no quiere armar, no la coge).
@@ -768,6 +769,7 @@ final class CVD_Bot_Bridge {
 			'reference'   => (string) $order->get_meta( '_cvd_reference', true ),
 			'mapUrl'      => (string) CVD_Shipping_Rates::order_map_url( $order ),
 			'items'       => self::items( $order ),
+			'itemLines'   => CVD_Order_Lines::texts( $order ), // 3.14.7 (Nana, 14-oct): precio de cada producto en el vale
 			'productsUsd' => wc_format_decimal( $order->get_total(), 2 ),
 			'shippingCup' => $shipping,
 			// 3.13.53: nunca «+ 0 CUP». Sin tarifa (reparto fuera de la lista) el vale dice «por confirmar con la tienda».

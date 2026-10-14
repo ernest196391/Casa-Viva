@@ -452,7 +452,9 @@ final class CVD_Sales {
 		$products = array();
 		foreach ( $order->get_items( 'line_item' ) as $item ) {
 			$product = $item->get_product();
-			$products[] = array( 'name' => $item->get_name(), 'quantity' => (int) $item->get_quantity(), 'url' => $product ? get_permalink( $product->get_parent_id() ?: $product->get_id() ) : '' );
+			// 3.14.7 (Nana): precio de cada producto en la tarjeta («2× … — 15 USD c/u = 30 USD»).
+			$line = $item instanceof WC_Order_Item_Product ? CVD_Order_Lines::line( $order, $item ) : null;
+			$products[] = array( 'name' => $item->get_name(), 'quantity' => (int) $item->get_quantity(), 'url' => $product ? get_permalink( $product->get_parent_id() ?: $product->get_id() ) : '', 'unit' => $line ? $line['unit'] : null, 'lineTotal' => $line ? $line['total'] : null, 'text' => $line ? $line['text'] : '' );
 		}
 		$fulfillment = sanitize_key( (string) $order->get_meta( '_cvd_fulfillment_type', true ) );
 		$operation_status = self::operation_status( $order );

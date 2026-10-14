@@ -40,8 +40,7 @@ final class CVD_Order_Avisos {
 
 	/** Lo que se compara al cambiar: dirección, día y franja, teléfono, productos, total y forma de pago. */
 	public static function snapshot( WC_Order $order ): array {
-		$items = array();
-		foreach ( $order->get_items( 'line_item' ) as $item ) { $items[] = $item->get_quantity() . ' × ' . $item->get_name(); }
+		$items = CVD_Order_Lines::texts( $order ); // 3.14.7 (Nana): «Productos ahora» con el precio de cada uno
 		$when = class_exists( 'CVD_Delivery_When' ) ? CVD_Delivery_When::for_order( $order ) : array( 'label' => '' );
 		$payment = class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_payment( $order ) : null;
 		return array(

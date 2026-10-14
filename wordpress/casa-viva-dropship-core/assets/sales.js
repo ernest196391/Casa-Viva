@@ -56,7 +56,8 @@
     if (!response.ok) throw new Error(data.message || "No se pudo completar la operación.");
     return data;
   }
-  function productLinks(products) { return products.map(function (p) { var text = escapeText(p.quantity + " × " + p.name); return p.url ? '<a target="_blank" rel="noopener" href="' + escapeText(p.url) + '">' + text + "</a>" : text; }).join(" · "); }
+  // 3.14.7 (Nana): cada producto con su precio, uno por renglón («2× Toalla — 15 USD c/u = 30 USD»).
+  function productLinks(products) { return products.map(function (p) { var text = escapeText(p.text || (p.quantity + " × " + p.name)); return p.url ? '<a target="_blank" rel="noopener" href="' + escapeText(p.url) + '">' + text + "</a>" : text; }).join("<br>"); }
   function actionLabel(order, status) {
     if (status === "ready" && order.fulfillment === "Recogida en tienda") return "Listo para recoger";
     if (status === "delivered" && order.fulfillment === "Recogida en tienda") return "Entregar al cliente";
