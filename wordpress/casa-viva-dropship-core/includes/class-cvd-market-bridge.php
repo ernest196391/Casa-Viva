@@ -201,6 +201,9 @@ final class CVD_Market_Bridge {
 		$product->update_meta_data( '_cvd_market_version', $version );
 		$product->update_meta_data( '_cvd_commission_type', 'fixed' );
 		$product->update_meta_data( '_cvd_commission_value', wc_format_decimal( $commission, 2 ) );
+		// 3.14.0: costo = precio del proveedor (supplier_price), si VivaBot lo manda. Para el precio mínimo y el programa de gestoras.
+		$cost = $request->get_param( 'cost' );
+		if ( is_numeric( $cost ) && (float) $cost > 0 && class_exists( 'CVD_Costs' ) ) { CVD_Costs::set_cost( $product, (float) $cost, 'proveedor' ); }
 		$product->delete_meta_data( '_cvd_sync_hidden_from' );
 		$product_id = $product->save();
 
