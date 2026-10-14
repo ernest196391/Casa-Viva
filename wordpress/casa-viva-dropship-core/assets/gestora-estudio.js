@@ -17,7 +17,8 @@
     if (body) opts.body = body;
     return fetch(cfg.base + path, opts).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (d) {
-        if (!r.ok) { var e = new Error((d && d.message) || 'Algo falló. Prueba otra vez.'); e.data = (d && d.data) || {}; throw e; }
+        // 3.14.12: con el código, para saber qué pasó sin entrar al servidor (prueba de Dany y Dayra, 14-oct).
+        if (!r.ok) { var e = new Error((d && d.message) || ('Algo falló (código ' + r.status + '). Prueba otra vez o mándale una captura a Ernesto.')); e.data = (d && d.data) || {}; throw e; }
         return d;
       });
     }, function () { throw new Error('Sin conexión. Revisa tus datos o el wifi y prueba otra vez.'); });
