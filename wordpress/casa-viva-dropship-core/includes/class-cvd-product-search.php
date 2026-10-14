@@ -144,7 +144,9 @@ final class CVD_Product_Search {
 		$query = mb_substr( sanitize_text_field( (string) $request->get_param( 'q' ) ), 0, 120 );
 		$limit = max( 1, min( self::MAX_RESULTS, absint( $request->get_param( 'limit' ) ?: 6 ) ) );
 		$response = rest_ensure_response( array( 'query' => $query, 'products' => self::cards( self::search( $query, $limit ) ) ) );
-		$response->header( 'Cache-Control', 'public, max-age=120' );
+		// Con la tienda de una gestora los precios son suyos: ni el móvil ni la caché de Hostinger deben guardarlos.
+		$gestora = class_exists( 'CVD_Gestora_Store' ) && CVD_Gestora_Store::active_gestora();
+		$response->header( 'Cache-Control', $gestora ? 'private, no-store' : 'public, max-age=120' );
 		return $response;
 	}
 

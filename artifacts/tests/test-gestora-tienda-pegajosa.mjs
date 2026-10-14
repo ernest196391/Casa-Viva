@@ -5,6 +5,7 @@ const dir = 'wordpress/casa-viva-dropship-core/';
 const store = fs.readFileSync(dir + 'includes/class-cvd-gestora-store.php', 'utf8');
 const attribution = fs.readFileSync(dir + 'includes/class-cvd-attribution.php', 'utf8');
 const support = fs.readFileSync(dir + 'includes/class-cvd-customer-order-support.php', 'utf8');
+const search = fs.readFileSync(dir + 'includes/class-cvd-product-search.php', 'utf8');
 const fn = (src, name) => {
   const start = src.indexOf('function ' + name + '(');
   if (start < 0) return '';
@@ -24,7 +25,9 @@ const checks = [
   ['cliente con cuenta: su tienda de gestora', /'cliente' === \$context/.test(sticky)],
   ['la gestora solo ve SU tienda guardada y solo en páginas de tienda', /'gestora' === \$context && absint\( \$owner\['owner_user_id'\] \?\? 0 \) === get_current_user_id\(\) && self::storefront_page\(\)/.test(sticky)],
   ['equipo (mensajero, tienda, admin) sin tienda pegajosa', /return null;\s*}\s*$/.test(sticky.trim() + '\n}') || /return null;/.test(sticky)],
-  ['API: solo Cúrru y el carrito', /self::is_rest\(\) && ! self::storefront_rest\(\)/.test(sticky) && /\/casa-viva\/v1\/curru\//.test(store) && /\/wc\/store\//.test(store)],
+  ['API: solo Cúrru y el carrito', /self::is_rest\(\) && ! self::storefront_rest\(\)/.test(sticky) && /'\/casa-viva\/v1\/curru\/'/.test(store) && /\/wc\/store\//.test(store)],
+  ['sugerencias del buscador con precio de la gestora (Niurka)', /'\/casa-viva\/v1\/products\/search'/.test(fn(store, 'storefront_rest'))],
+  ['sugerencias con gestora sin caché', /CVD_Gestora_Store::active_gestora\(\)/.test(search) && /'private, no-store'/.test(search)],
   ['API detectada por la dirección, no solo REST_REQUEST', /rest_get_url_prefix\(\)/.test(fn(store, 'is_rest'))],
   ['memo por etapa (wp_loaded / wp)', /did_action\( 'wp' \)/.test(active) && /did_action\( 'wp_loaded' \)/.test(active)],
   ['enlaces de producto con ?ref= de la tienda activa', /self::active_gestora\(\)/.test(fn(store, 'preserve_referral_on_product_links'))],

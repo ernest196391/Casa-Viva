@@ -162,10 +162,16 @@ final class CVD_Gestora_Store {
 		return ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || isset( $_GET['rest_route'] ) || false !== strpos( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), '/' . rest_get_url_prefix() . '/' );
 	}
 
-	/** Llamadas a la API que forman parte de la tienda: Cúrru y el carrito/pago de WooCommerce (Store API). */
+	/**
+	 * Llamadas a la API que forman parte de la tienda: Cúrru, las sugerencias del buscador (3.14.8, Niurka: la lista
+	 * que sale al escribir daba el precio de Casa Viva y la ficha el suyo) y el carrito/pago de WooCommerce (Store API).
+	 */
 	private static function storefront_rest(): bool {
 		$route = isset( $_GET['rest_route'] ) ? (string) wp_unslash( $_GET['rest_route'] ) : (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
-		return false !== strpos( $route, '/casa-viva/v1/curru/' ) || false !== strpos( $route, '/wc/store/' );
+		foreach ( array( '/casa-viva/v1/curru/', '/casa-viva/v1/products/search', '/wc/store/' ) as $prefix ) {
+			if ( false !== strpos( $route, $prefix ) ) { return true; }
+		}
+		return false;
 	}
 
 	/** Páginas de la tienda (no el panel de la gestora): inicio, lista, ficha, buscador, carrito, pago, páginas de atención. */
