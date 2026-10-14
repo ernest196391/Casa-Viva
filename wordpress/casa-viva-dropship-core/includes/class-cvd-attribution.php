@@ -145,6 +145,10 @@ final class CVD_Attribution {
 		// when the client later arrives organically, through another link, or when a
 		// gestora places the order on the client's behalf.
 		$owner = self::find_existing_owner( $identities );
+		// 3.13.98 (D53, fallo B): cliente apuntado a mano en «Mis clientes» → protegido 30 días para esa gestora.
+		if ( ! $owner && class_exists( 'CVD_Clients' ) ) {
+			$owner = CVD_Clients::protected_owner( $phone );
+		}
 		if ( ! $owner && $preferred_owner_id ) {
 			$user = get_userdata( $preferred_owner_id );
 			$code = self::sanitize_code( (string) get_user_meta( $preferred_owner_id, '_cvd_referral_code', true ) );
@@ -224,6 +228,19 @@ final class CVD_Attribution {
 		);
 	}
 
+	/**
+	 * 3.13.98 (D53, fallo A; Ernesto 14-oct): ¿este pedido hace al cliente «de» su gestora? Solo si se entregó:
+	 * completado, operación «entregado», reparto entregado / dinero devuelto / cerrado, o caja verificada.
+	 * Los pedidos en curso siguen siendo de quien los hizo (su atribución no cambia); solo no «atan» al cliente.
+	 */
+	public static function owns_customer( WC_Order $order ): bool {
+		if ( $order->has_status( array( 'cancelled', 'refunded', 'failed', 'pending', 'draft', 'checkout-draft', 'trash' ) ) ) { return false; }
+		if ( $order->has_status( 'completed' ) ) { return true; }
+		if ( 'delivered' === sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) ) ) { return true; }
+		if ( in_array( sanitize_key( (string) $order->get_meta( '_cvd_delivery_status', true ) ), array( 'delivered', 'cash_returned', 'closed' ), true ) ) { return true; }
+		return 'verified' === sanitize_key( (string) $order->get_meta( '_cvd_cash_status', true ) );
+	}
+
 	private static function find_existing_owner( array $identities ): ?array {
 		foreach ( $identities as $identity ) {
 			$page = 1;
@@ -235,8 +252,9 @@ final class CVD_Attribution {
 						'paginate'   => true,
 						'orderby'    => 'date',
 						'order'      => 'ASC',
-						// Un pedido cancelado o fallido no vincula permanentemente al cliente.
-						'status'     => array( 'pending', 'processing', 'on-hold', 'completed' ),
+						// 3.13.98 (D53, fallo A): solo une al cliente un pedido ENTREGADO (ver owns_customer). Un pedido
+						// sin pagar, en curso o cancelado ya no deja al cliente unido a esa gestora para siempre.
+						'status'     => array( 'processing', 'on-hold', 'completed' ),
 						// WooCommerce 8.2 no filtra de forma fiable el meta_query compuesto
 						// en todos los motores de almacenamiento. La identidad exacta se
 						// consulta como meta_key/meta_value y el owner se valida abajo.
@@ -252,6 +270,7 @@ final class CVD_Attribution {
 					// filtro, nunca aceptar una identidad distinta a la solicitada.
 					$stored_hash = (string) $order->get_meta( '_cvd_identity_' . $identity['type'], true );
 					if ( ! $stored_hash || ! hash_equals( $identity['hash'], $stored_hash ) ) { continue; }
+					if ( ! self::owns_customer( $order ) ) { continue; }
 					$owner_user_id = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
 					$owner_type = sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) );
 					if ( ! $owner_user_id || 'organic' === $owner_type ) { continue; }

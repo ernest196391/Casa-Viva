@@ -271,8 +271,8 @@
       var box = editDialog.querySelector("[data-found]");
       if (q.value.trim().length < 2) { box.innerHTML = ""; return; }
       try {
-        var r = await api(cvdSales.url + "/products?q=" + encodeURIComponent(q.value.trim()), { method: "GET" });
-        box.innerHTML = (r.products || []).length ? r.products.map(function (p) { return '<button type="button" class="cvd-edit-found" data-pick="' + p.wooId + '" data-name="' + escapeText(p.name) + '">' + escapeText(p.name) + " · " + escapeText(p.price) + " USD" + (p.stock === null ? "" : " · quedan " + p.stock) + "</button>"; }).join("") : '<p class="cvd-edit-hint">No encontré ese producto.</p>';
+        var r = await api(cvdSales.url + "/products?q=" + encodeURIComponent(q.value.trim()) + "&order=" + encodeURIComponent(editState.id), { method: "GET" });
+        box.innerHTML = (r.products || []).length ? r.products.map(function (p) { return '<button type="button" class="cvd-edit-found" data-pick="' + p.wooId + '" data-name="' + escapeText(p.name) + '">' + escapeText(p.name) + " · " + escapeText(p.price) + " USD" + (p.gestoraPrice ? " (precio de la gestora)" : "") + (p.stock === null ? "" : " · quedan " + p.stock) + "</button>"; }).join("") : '<p class="cvd-edit-hint">No encontré ese producto.</p>';
       } catch (error) { box.innerHTML = '<p class="cvd-edit-hint">' + escapeText(error.message) + "</p>"; }
     }, 300);
   });

@@ -100,7 +100,7 @@ final class CVD_Order_Edit {
 	}
 
 	/** El mensajero que ya tenía el pedido (para avisarle), o null. */
-	private static function messenger_to_warn( WC_Order $order ): ?array {
+	public static function messenger_to_warn( WC_Order $order ): ?array {
 		if ( self::is_pickup( $order ) || ! in_array( self::delivery_stage( $order ), array( 'assigned', 'accepted', 'to_store', 'picked_up', 'handed_over' ), true ) ) { return null; }
 		$user = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
 		if ( ! $user ) { return null; }
@@ -123,12 +123,18 @@ final class CVD_Order_Edit {
 		if ( '' !== $block ) { return new WP_Error( 'cvd_cancel_blocked', $block, array( 'status' => 409 ) ); }
 		$messenger = self::messenger_to_warn( $order );
 		$stage = self::delivery_stage( $order );
+		$before = class_exists( 'CVD_Order_Avisos' ) ? CVD_Order_Avisos::snapshot( $order ) : array(); // 3.13.98: aviso por WhatsApp
 		if ( ! class_exists( 'CVD_Order_Transition_Service' ) ) { return new WP_Error( 'cvd_cancel_service', 'No se pudo cancelar ahora.', array( 'status' => 500 ) ); }
 		// system: el permiso ya se comprobó arriba (la dependienta no tiene manage_woocommerce).
-		$result = CVD_Order_Transition_Service::cancel( $order_id, 'cancelled', array(
-			'actor_user_id' => $user_id, 'system' => true, 'source' => 'cvd_order_edit_' . sanitize_key( $source ),
-			'idempotency_key' => 'manual-cancel:' . $order_id . ':' . wp_generate_uuid4(),
-		) );
+		if ( class_exists( 'CVD_Order_Avisos' ) ) { CVD_Order_Avisos::begin_manual(); }
+		try {
+			$result = CVD_Order_Transition_Service::cancel( $order_id, 'cancelled', array(
+				'actor_user_id' => $user_id, 'system' => true, 'source' => 'cvd_order_edit_' . sanitize_key( $source ),
+				'idempotency_key' => 'manual-cancel:' . $order_id . ':' . wp_generate_uuid4(),
+			) );
+		} finally {
+			if ( class_exists( 'CVD_Order_Avisos' ) ) { CVD_Order_Avisos::end_manual(); }
+		}
 		$fresh = wc_get_order( $order_id );
 		if ( empty( $result['success'] ) || ! $fresh || ! $fresh->has_status( 'cancelled' ) ) {
 			$code = (string) ( $result['error_code'] ?? '' );
@@ -142,8 +148,10 @@ final class CVD_Order_Edit {
 		$fresh->update_meta_data( '_cvd_cancel_source', sanitize_key( $source ) );
 		$fresh->add_order_note( sprintf( 'Pedido CANCELADO por %s. Motivo: %s. Las existencias vuelven a la tienda%s.%s', self::who( $user_id ), $reason, absint( $fresh->get_meta( '_cvd_owner_user_id', true ) ) ? ' y la comisión de quien vendió queda anulada' : '', $messenger ? ' Lo tenía el mensajero ' . $messenger['name'] . ' (' . CVD_Delivery::label( $stage ) . '): hay que avisarle.' : '' ) );
 		$fresh->save();
+		// 3.13.98: VivaBot avisa solo al mensajero, a la gestora y (venta directa) al cliente (CVD_Order_Avisos).
+		if ( class_exists( 'CVD_Order_Avisos' ) ) { CVD_Order_Avisos::record_cancel( $fresh, $before, $reason, $user_id, sanitize_key( $source ), $messenger, $stage ); }
 		$message = 'Pedido #' . $fresh->get_order_number() . ' cancelado. Las existencias vuelven a la tienda.';
-		if ( $messenger ) { $message .= ' Avísale a ' . $messenger['name'] . ' que ya no lo lleve.'; }
+		if ( $messenger ) { $message .= ' El bot le avisa por WhatsApp a ' . $messenger['name'] . ' que ya no lo lleve.'; }
 		return array( 'ok' => true, 'message' => $message, 'messenger' => $messenger );
 	}
 
@@ -193,6 +201,7 @@ final class CVD_Order_Edit {
 		if ( ! $order instanceof WC_Order || 'shop_order' !== $order->get_type() ) { return new WP_Error( 'cvd_edit_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
 		$block = self::edit_block( $order, $user_id );
 		if ( '' !== $block ) { return new WP_Error( 'cvd_edit_blocked', $block, array( 'status' => 409 ) ); }
+		$before = class_exists( 'CVD_Order_Avisos' ) ? CVD_Order_Avisos::snapshot( $order ) : array(); // 3.13.98: aviso por WhatsApp
 
 		// 1. Validar todo antes de tocar nada.
 		$text = static fn( $key ): ?string => array_key_exists( $key, $data ) && null !== $data[ $key ] ? trim( preg_replace( '/\s+/', ' ', sanitize_text_field( (string) $data[ $key ] ) ) ) : null;
@@ -264,13 +273,26 @@ final class CVD_Order_Edit {
 				}
 				$unit = (float) $item->get_subtotal() / max( 1, (int) $item->get_quantity() );
 				$changes[] = $item->get_name() . ': ' . $item->get_quantity() . ' → ' . $qty;
-				$item->set_quantity( $qty ); $item->set_subtotal( $unit * $qty ); $item->set_total( $unit * $qty ); $item->save();
+				$item->set_quantity( $qty ); $item->set_subtotal( $unit * $qty ); $item->set_total( $unit * $qty );
+				$item->delete_meta_data( '_cvd_commission_snapshot' ); // 3.13.98: la comisión de esa línea se recalcula con la cantidad nueva
+				$item->save();
 				wc_maybe_adjust_line_item_product_stock( $item );
 			}
 			foreach ( $adds as $add ) {
 				list( $product, $qty ) = $add;
-				$item_id = $order->add_product( $product, $qty );
+				// 3.13.98 (Ernesto, 14-oct): en un pedido de gestora entra con el precio de ESA gestora (su precio propio
+				// o su aumento general, como en su enlace), no con el de Casa Viva; y su ganancia cuenta en la comisión.
+				$price = self::unit_price_for( $order, $product );
+				$item_id = $price['gestora'] ? $order->add_product( $product, $qty, array( 'subtotal' => $price['unit'] * $qty, 'total' => $price['unit'] * $qty ) ) : $order->add_product( $product, $qty );
 				$item = $item_id ? $order->get_item( $item_id, false ) : null;
+				if ( $item && $price['gestora'] ) {
+					$item->add_meta_data( '_cvd_base_unit_price', wc_format_decimal( $price['base'], 4 ), true );
+					$item->add_meta_data( '_cvd_sale_unit_price', wc_format_decimal( $price['unit'], 4 ), true );
+					$item->add_meta_data( '_cvd_margin_unit', wc_format_decimal( max( 0, $price['unit'] - $price['base'] ), 4 ), true );
+					$item->add_meta_data( '_cvd_pricing_gestora_user_id', $price['gestora'], true );
+					$item->save();
+					if ( ! absint( $order->get_meta( '_cvd_pricing_gestora_user_id', true ) ) ) { $order->update_meta_data( '_cvd_pricing_gestora_user_id', $price['gestora'] ); }
+				}
 				if ( $item ) { wc_maybe_adjust_line_item_product_stock( $item ); }
 				$items_changed = true;
 				$changes[] = 'Añadido: ' . $qty . '× ' . $product->get_name();
@@ -283,9 +305,11 @@ final class CVD_Order_Edit {
 		$order->add_order_note( 'Pedido CAMBIADO por ' . self::who( $user_id ) . ': ' . implode( '; ', $changes ) . '.' . ( $messenger ? ' Ya lo tenía asignado ' . $messenger['name'] . ': hay que avisarle.' : '' ) );
 		$order->save();
 		if ( $items_changed && class_exists( 'CVD_Commissions' ) ) { CVD_Commissions::mark_pending( $order->get_id() ); }
-		$total = (float) wc_get_order( $order->get_id() )->get_total();
+		$saved = wc_get_order( $order->get_id() );
+		$total = (float) $saved->get_total();
+		if ( class_exists( 'CVD_Order_Avisos' ) ) { CVD_Order_Avisos::record_edit( $saved, $before, $user_id, sanitize_key( $source ), $messenger ); }
 		$message = 'Pedido #' . $order->get_order_number() . ' cambiado' . ( $items_changed ? '. Nuevo total: ' . wc_format_decimal( $total, 2 ) . ' ' . $order->get_currency() : '' ) . '.';
-		if ( $messenger ) { $message .= ' Avísale del cambio a ' . $messenger['name'] . '.'; }
+		if ( $messenger ) { $message .= ' El bot le avisa del cambio por WhatsApp a ' . $messenger['name'] . '.'; }
 		return array( 'ok' => true, 'changes' => $changes, 'stock' => $stock, 'total' => $total, 'message' => $message, 'messenger' => $messenger );
 	}
 
@@ -295,6 +319,27 @@ final class CVD_Order_Edit {
 		$result = self::edit( absint( $request['id'] ), $data, get_current_user_id(), 'ventas' );
 		if ( is_wp_error( $result ) ) { return $result; }
 		return rest_ensure_response( $result );
+	}
+
+	// ---------- Precio de la gestora ----------
+
+	/** Gestora cuyos precios lleva el pedido: la de su enlace (_cvd_pricing_gestora_user_id) o, si no, la dueña gestora. */
+	public static function pricing_gestora( WC_Order $order ): int {
+		$id = absint( $order->get_meta( '_cvd_pricing_gestora_user_id', true ) );
+		if ( $id ) { return $id; }
+		return 'gestora' === sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) ? absint( $order->get_meta( '_cvd_owner_user_id', true ) ) : 0;
+	}
+
+	/**
+	 * Precio por unidad de un producto que se añade al pedido: el de la gestora (CVD_Gestora_Store::resolve_price, lo
+	 * mismo que ve su cliente en su enlace) en pedidos de gestora; el de Casa Viva en los demás.
+	 * → [ 'base' => precio Casa Viva, 'unit' => precio que se cobra, 'gestora' => id o 0 ].
+	 */
+	public static function unit_price_for( WC_Order $order, WC_Product $product ): array {
+		$base = (float) get_post_meta( $product->get_id(), '_price', true );
+		$gestora = self::pricing_gestora( $order );
+		if ( ! $gestora || $base <= 0 || ! class_exists( 'CVD_Gestora_Store' ) ) { return array( 'base' => $base, 'unit' => $base, 'gestora' => 0 ); }
+		return array( 'base' => $base, 'unit' => (float) CVD_Gestora_Store::resolve_price( $product, $gestora, $base ), 'gestora' => $gestora );
 	}
 
 	// ---------- Caja (NEXO) ----------
@@ -349,6 +394,9 @@ final class CVD_Order_Edit {
 	public static function products_request( WP_REST_Request $request ) {
 		$q = trim( sanitize_text_field( (string) $request->get_param( 'q' ) ) );
 		if ( mb_strlen( $q ) < 2 ) { return rest_ensure_response( array( 'products' => array() ) ); }
+		// 3.13.98: con ?order=, el precio que tendrá en ESE pedido (el de la gestora si es suyo).
+		$for = absint( $request->get_param( 'order' ) ) ? wc_get_order( absint( $request->get_param( 'order' ) ) ) : null;
+		$for = $for instanceof WC_Order && 'shop_order' === $for->get_type() ? $for : null;
 		$ids = array();
 		if ( ctype_digit( $q ) ) { $ids[] = absint( $q ); }
 		$sku = wc_get_product_id_by_sku( $q );
@@ -362,7 +410,8 @@ final class CVD_Order_Edit {
 			$items = $product->is_type( 'variable' ) ? array_filter( array_map( 'wc_get_product', $product->get_children() ) ) : array( $product );
 			foreach ( $items as $p ) {
 				if ( ! $p->is_purchasable() || 'publish' !== $p->get_status() ) { continue; }
-				$out[] = array( 'wooId' => $p->get_id(), 'name' => $p->get_name(), 'price' => (float) $p->get_price(), 'stock' => $p->managing_stock() ? (int) $p->get_stock_quantity() : null, 'inStock' => $p->is_in_stock() );
+				$price = $for ? self::unit_price_for( $for, $p ) : null;
+				$out[] = array( 'wooId' => $p->get_id(), 'name' => $p->get_name(), 'price' => $price ? round( $price['unit'], 2 ) : (float) $p->get_price(), 'gestoraPrice' => $price && $price['gestora'] ? true : false, 'stock' => $p->managing_stock() ? (int) $p->get_stock_quantity() : null, 'inStock' => $p->is_in_stock() );
 				if ( count( $out ) >= 10 ) { break 2; }
 			}
 		}

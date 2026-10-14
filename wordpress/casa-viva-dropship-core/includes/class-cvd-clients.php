@@ -11,7 +11,9 @@ defined( 'ABSPATH' ) || exit;
  * opt_out = pidió que no le escriban: no se muestra el botón de WhatsApp.
  */
 final class CVD_Clients {
-	private const DB_VERSION = '1';
+	private const DB_VERSION = '2';
+	/** 3.13.98 (D53, fallo B): días que un cliente apuntado a mano queda protegido para su gestora. */
+	public const PROTECT_DAYS = 30;
 
 	public static function register(): void {
 		add_action( 'init', array( __CLASS__, 'install' ) );
@@ -40,6 +42,7 @@ final class CVD_Clients {
 			last_order_at datetime NULL,
 			note varchar(255) NOT NULL DEFAULT '',
 			opt_out tinyint(1) NOT NULL DEFAULT 0,
+			claimed_at datetime NULL,
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
 			PRIMARY KEY  (id),
@@ -71,18 +74,41 @@ final class CVD_Clients {
 		if ( ! $phone ) { return array( 'error' => 'Escribe un teléfono válido (8 cifras).' ); }
 		$now = current_time( 'mysql', true );
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table() . ' WHERE phone=%s', $phone ) );
+		// 3.13.98: cuándo la gestora lo apuntó a mano (empieza su protección de PROTECT_DAYS días).
+		$claimed = $owner && 'gestora' === sanitize_key( $source ) ? $now : null;
 		if ( ! $row ) {
-			$wpdb->insert( self::table(), array( 'phone' => $phone, 'name' => sanitize_text_field( $name ), 'owner_user_id' => $owner, 'source' => sanitize_key( $source ), 'note' => sanitize_text_field( $note ), 'created_at' => $now, 'updated_at' => $now ) );
+			$wpdb->insert( self::table(), array( 'phone' => $phone, 'name' => sanitize_text_field( $name ), 'owner_user_id' => $owner, 'source' => sanitize_key( $source ), 'note' => sanitize_text_field( $note ), 'claimed_at' => $claimed, 'created_at' => $now, 'updated_at' => $now ) );
 			return array( 'ok' => true, 'id' => (int) $wpdb->insert_id, 'owner' => $owner, 'created' => true );
 		}
 		$update = array( 'updated_at' => $now );
 		if ( '' === $row->name && '' !== trim( $name ) ) { $update['name'] = sanitize_text_field( $name ); }
-		if ( ! (int) $row->owner_user_id && $owner ) { $update['owner_user_id'] = $owner; }
+		if ( ! (int) $row->owner_user_id && $owner ) { $update['owner_user_id'] = $owner; if ( $claimed ) { $update['claimed_at'] = $claimed; } }
 		// La nota solo la cambia la dueña del cliente (o el panel sin gestora): otra gestora no pisa la nota ajena.
 		if ( '' !== trim( $note ) && ( ! $owner || ! (int) $row->owner_user_id || (int) $row->owner_user_id === $owner ) ) { $update['note'] = sanitize_text_field( $note ); }
 		$wpdb->update( self::table(), $update, array( 'id' => $row->id ) );
 		$final = (int) ( $update['owner_user_id'] ?? $row->owner_user_id );
 		return array( 'ok' => true, 'id' => (int) $row->id, 'owner' => $final, 'taken' => $owner && $final && $final !== $owner );
+	}
+
+	/**
+	 * 3.13.98 (D53, fallo B; Ernesto 14-oct): la gestora que apuntó a mano a este cliente en «Mis clientes» hace
+	 * menos de PROTECT_DAYS días se queda la venta si compra por la web o el bot. Pasado el plazo, deja de estar
+	 * protegido (lo que mande entonces es su primera compra entregada: CVD_Attribution::owns_customer).
+	 * → mismo formato que CVD_Attribution (owner_user_id, owner_type, referral_code, source) o null.
+	 */
+	public static function protected_owner( string $phone_raw ): ?array {
+		global $wpdb;
+		$phone = self::phone( $phone_raw );
+		if ( ! $phone ) { return null; }
+		self::install();
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT owner_user_id, source, claimed_at, created_at FROM ' . self::table() . ' WHERE phone=%s', $phone ) );
+		if ( ! $row || ! (int) $row->owner_user_id ) { return null; }
+		$since = $row->claimed_at ?: ( 'gestora' === $row->source ? $row->created_at : null );
+		if ( ! $since || strtotime( $since . ' UTC' ) < time() - self::PROTECT_DAYS * DAY_IN_SECONDS ) { return null; }
+		$user = get_userdata( (int) $row->owner_user_id );
+		if ( ! $user || ! class_exists( 'CVD_Registration' ) || ! CVD_Registration::is_approved_gestora( $user ) ) { return null; }
+		$code = (string) get_user_meta( $user->ID, '_cvd_referral_code', true );
+		return array( 'owner_user_id' => $user->ID, 'owner_type' => 'gestora', 'referral_code' => $code, 'source' => 'protected_client' );
 	}
 
 	public static function from_order_id( $order_id ): void {
