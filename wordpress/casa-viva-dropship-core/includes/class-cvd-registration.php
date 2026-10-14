@@ -27,6 +27,9 @@ final class CVD_Registration {
 		if ( isset( $_GET['cvd_access'] ) && 'invalid' === sanitize_key( wp_unslash( $_GET['cvd_access'] ) ) ) {
 			echo '<div class="cvd-notice cvd-error" role="alert" style="margin-top:14px">Ese enlace para entrar ya se usó o venció. Pide otro: escribe <strong>mi acceso</strong> al WhatsApp 5354056173.</div>';
 		}
+		// 3.14.9 (D67): el cliente de una gestora compra sin cuenta y mira su pedido en «Ver mi pedido» (arriba): no se le
+		// manda al WhatsApp de Casa Viva ni se le habla del equipo. El equipo entra igual con su número y contraseña.
+		if ( class_exists( 'CVD_Gestora_Store' ) && CVD_Gestora_Store::hides_casa_viva() ) { return; }
 		echo '<div class="cvd-notice" style="margin-top:14px"><strong>¿Gestor/a o mensajero?</strong> Escribe tu número de WhatsApp arriba, en lugar del correo, con la contraseña que pusiste en <em>Mi perfil</em>.</div>';
 		echo '<div class="cvd-notice" style="margin-top:14px"><strong>¿Aún no tienes contraseña o la olvidaste?</strong><br><a class="cvd-primary" style="display:inline-block;margin-top:8px" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener">Entrar con WhatsApp</a><br><small>Te mandamos un enlace para entrar. Dentro, en <em>Mi perfil</em>, pon tu contraseña y ya no tendrás que pedirlo más.</small></div>';
 	}

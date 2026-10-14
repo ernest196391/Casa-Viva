@@ -315,7 +315,7 @@ final class CVD_Shipping_Rates {
 		parse_str( $post_data, $data );
 		$type = sanitize_key( $data['billing_cvd_fulfillment_type'] ?? 'delivery' );
 		$quote = 'pickup' === $type
-			? array( 'fee' => 0, 'status' => 'pickup', 'label' => 'Recogida en tienda' )
+			? array( 'fee' => 0, 'status' => 'pickup', 'label' => class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::pickup_label() : 'Recogida en tienda' )
 			: self::quote( sanitize_text_field( $data['billing_city'] ?? '' ), sanitize_text_field( $data['billing_cvd_locality'] ?? '' ) );
 		if ( WC()->session ) { WC()->session->set( 'cvd_shipping_quote', $quote ); }
 	}

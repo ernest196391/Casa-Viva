@@ -322,6 +322,10 @@ final class CVD_Contextual_Assistant {
 
 		// Recogida en tienda: dirección del pie de la web y horario confirmado por Ernesto (2026-10-05).
 		if ( preg_match( '/\b(recog\w*|recojo|recojer|direccion|donde estan|ubicad\w*|horario|abren|cierran)\b/', $q ) && ! preg_match( '/\b(mensajeria|envio|domicilio|tarifa|zona|municipio)\b/', $q ) ) {
+			// 3.14.9 (D67): al cliente de una gestora, ni la dirección ni el horario de la tienda: se lo dice ella.
+			if ( class_exists( 'CVD_Gestora_Store' ) && CVD_Gestora_Store::hides_casa_viva() ) {
+				return $reply( 'Para recoger tu pedido, ' . CVD_Gestora_Store::pickup_place() . '. Al pagar elige «Recogida».', $help_link );
+			}
 			return $reply( 'Puedes recoger tu pedido en ' . self::PICKUP_ADDRESS . ', de 10:00 a 17:00 (almuerzo de 1:00 a 1:30). Al pagar elige «Recogida» y ven cuando en Mis pedidos aparezca como listo.', array_merge( array( array( 'label' => 'Mis pedidos', 'url' => $urls['ordersUrl'] ) ), $help_link ) );
 		}
 		if ( preg_match( '/\b(pedido|orden|estado|seguimiento|donde esta|llega|rastrear)\b/', $q ) ) {

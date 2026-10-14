@@ -828,7 +828,13 @@ final class CVD_Delivery {
 		$courier = self::tracking_courier_text( $view );
 		$html .= '</ol><p class="cvd-tracking-courier" data-tracking-courier' . ( '' === $courier ? ' hidden' : '' ) . '>' . esc_html( $courier ) . '</p>';
 		$html .= '<div class="cvd-courier-location" data-courier-location hidden><strong>Ubicación del mensajero</strong><span data-location-time>Esperando actualización…</span><a class="cvd-secondary" data-location-link target="_blank" rel="noopener">Abrir en el mapa</a></div>';
-		if ( 'pickup' === $status ) { $html .= '<p class="cvd-tracking-pickup">Recogida en tienda: ' . esc_html( (string) get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ) ) . ' · <a href="' . esc_url( home_url( '/como-llegar/' ) ) . '">Cómo llegar</a></p>'; }
+		if ( 'pickup' === $status ) {
+			// 3.14.9 (D67): pedido de una gestora visto por su cliente: sin la dirección de la tienda ni «Cómo llegar».
+			$gestora_name = class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::order_gestora_name( $order ) : '';
+			$html .= '' !== $gestora_name
+				? '<p class="cvd-tracking-pickup">Recogida: ' . esc_html( CVD_Gestora_Store::pickup_place( $order ) ) . '.</p>'
+				: '<p class="cvd-tracking-pickup">Recogida en tienda: ' . esc_html( (string) get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ) ) . ' · <a href="' . esc_url( home_url( '/como-llegar/' ) ) . '">Cómo llegar</a></p>';
+		}
 		$map = esc_url( (string) CVD_Shipping_Rates::order_map_url( $order ) );
 		if ( $map && $current_rank >= 4 ) { $html .= '<a class="cvd-primary" href="' . $map . '" target="_blank" rel="noopener">Abrir dirección de entrega</a>'; }
 		if ( in_array( $status, array( 'incident', 'failed', 'returned', 'cancelled' ), true ) ) { $html .= '<p class="cvd-tracking-alert">Casa Viva está revisando esta entrega. Te contactaremos si necesitamos confirmar algún dato.</p>'; }

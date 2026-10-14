@@ -383,12 +383,72 @@ final class CVD_Gestora_Store {
 		return self::wa_digits( (string) get_user_meta( $owner_id, '_cvd_whatsapp', true ) ) ?: $central;
 	}
 
-	/** El botón de WhatsApp escrito dentro de las páginas de atención (Atención al cliente, Formas de pago…). */
+	/**
+	 * El botón de WhatsApp escrito dentro de las páginas de atención (Atención al cliente, Formas de pago…) y, para el
+	 * cliente de una gestora (3.14.9), también en fichas y demás páginas, junto con la dirección de la tienda (ver
+	 * hides_casa_viva()).
+	 */
 	public static function contact_in_page_content( $content ) {
-		if ( ! is_string( $content ) || false === strpos( $content, 'wa.me/' ) || ! is_page( self::CONTACT_PAGES ) || ! self::contact()['gestora_id'] ) { return $content; }
-		$central = self::wa_digits( (string) get_option( 'cvd_central_whatsapp', '' ) ) ?: '5354056173';
-		$pattern = '#https://wa\.me/' . preg_quote( $central, '#' ) . '(?:\?text=[^"\'\s<>]*)?#';
-		return (string) preg_replace_callback( $pattern, static fn(): string => self::contact_url( '' ), $content );
+		if ( ! is_string( $content ) || '' === $content || ! self::contact()['gestora_id'] ) { return $content; }
+		$hide = self::hides_casa_viva();
+		if ( false !== strpos( $content, 'wa.me/' ) && ( $hide || is_page( self::CONTACT_PAGES ) ) ) {
+			$central = self::wa_digits( (string) get_option( 'cvd_central_whatsapp', '' ) ) ?: '5354056173';
+			$pattern = '#https://wa\.me/' . preg_quote( $central, '#' ) . '(?:\?text=[^"\'\s<>]*)?#';
+			$content = (string) preg_replace_callback( $pattern, static fn(): string => self::contact_url( '' ), $content );
+		}
+		return $hide ? self::without_casa_viva( $content ) : $content;
+	}
+
+	/**
+	 * 3.14.9 (Ernesto 14-oct, D67; lo pidió Thaly: que su cliente no se salte a la gestora yendo o escribiendo a la tienda).
+	 * ¿Esta visita es de un cliente en la tienda de una gestora? Entonces nada de Casa Viva que le lleve fuera de ella:
+	 * ni la dirección de la tienda, ni horario o mapa, ni el WhatsApp de Casa Viva, ni «Vende con nosotros».
+	 * La web sin enlace sigue igual, y la gestora mirando su propia tienda (su sesión) también.
+	 */
+	public static function hides_casa_viva(): bool {
+		$id = (int) self::contact()['gestora_id'];
+		return $id > 0 && $id !== get_current_user_id();
+	}
+
+	/** Nombre corto de la gestora de este pedido si quien lo mira no es ella (su cliente, el bot); '' = pedido de Casa Viva. */
+	public static function order_gestora_name( WC_Order $order ): string {
+		$owner_id = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
+		if ( ! $owner_id || 'gestora' !== sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) || get_current_user_id() === $owner_id ) { return ''; }
+		$user = get_userdata( $owner_id );
+		$name = $user ? (string) strtok( trim( (string) $user->display_name ), ' ' ) : '';
+		return '' !== $name ? ucfirst( $name ) : ( $user ? 'Tu gestora' : '' );
+	}
+
+	/** Nombre de la gestora de esta visita para los textos de recogida ('' si se ve la tienda de Casa Viva). */
+	private static function hidden_store_name(): string {
+		return self::hides_casa_viva() ? ( self::contact()['name'] ?: 'Tu gestora' ) : '';
+	}
+
+	/** Dónde se recoge: la dirección de Casa Viva o, en la tienda de una gestora (o su pedido), «Thalia te dice dónde y cuándo recogerlo». */
+	public static function pickup_place( ?WC_Order $order = null ): string {
+		$name = $order ? self::order_gestora_name( $order ) : self::hidden_store_name();
+		return '' !== $name ? $name . ' te dice dónde y cuándo recogerlo' : (string) get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' );
+	}
+
+	/** «Recogida en tienda» o, con gestora, solo «Recogida» (la tienda de Casa Viva no se nombra). */
+	public static function pickup_label( ?WC_Order $order = null ): string {
+		return '' !== ( $order ? self::order_gestora_name( $order ) : self::hidden_store_name() ) ? 'Recogida' : 'Recogida en tienda';
+	}
+
+	/** Quita del texto de una página o ficha la dirección, el horario y el número de Casa Viva (cliente de una gestora). */
+	private static function without_casa_viva( string $html ): string {
+		$contact = self::contact();
+		$name = esc_html( $contact['name'] ?: 'Tu gestora' );
+		if ( is_page( 'como-llegar' ) ) {
+			return '<p><strong>Para recoger tu pedido</strong>, ' . $name . ' te dice dónde y cuándo.</p><p><a class="button cv-info-cta" href="' . esc_url( self::contact_url( '' ) ) . '" target="_blank" rel="noopener">Escribir a ' . $name . ' por WhatsApp</a></p>';
+		}
+		$html = (string) preg_replace( '#<p class="cv-info-address">.*?</p>#s', '', $html );
+		$html = str_replace( 'recogida en nuestra tienda de Nuevo Vedado', 'recogida (' . $name . ' te dice dónde y cuándo)', $html );
+		$html = str_replace( 'Escríbenos por WhatsApp al', 'Escríbele a ' . $name . ' por WhatsApp al', $html );
+		$html = str_replace( '<h2>Recogida en tienda</h2>', '<h2>Recogida</h2>', $html );
+		$html = str_replace( 'También puedes recoger después de recibir la confirmación. No acudas antes de que Casa Viva confirme que el pedido está preparado.', 'También puedes recogerlo: ' . $name . ' te dice dónde y cuándo, cuando esté listo.', $html );
+		$html = (string) preg_replace( '/(?:\+?53\s?)?\b5405[\s-]?6173\b/', esc_html( $contact['display'] ), $html );
+		return (string) preg_replace( '#<a [^>]*href="[^"]*/como-llegar/?"[^>]*>.*?</a>#s', '', $html );
 	}
 
 	private static function contact_gestora(): ?WP_User {

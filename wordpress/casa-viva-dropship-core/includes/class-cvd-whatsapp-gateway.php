@@ -102,13 +102,14 @@ final class CVD_WhatsApp_Gateway {
 
 	private static function delivery_card( WC_Order $order, bool $is_pickup ): void {
 		$who = array_filter( array( $order->get_formatted_billing_full_name(), $order->get_billing_phone() ) );
-		echo '<div class="cvd-thanks__card"><h2 class="cvd-thanks__heading">' . ( $is_pickup ? 'Recogida en tienda' : 'Entrega a domicilio' ) . '</h2>';
+		$gestora_name = class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::order_gestora_name( $order ) : ''; // 3.14.9 (D67)
+		echo '<div class="cvd-thanks__card"><h2 class="cvd-thanks__heading">' . ( $is_pickup ? ( '' !== $gestora_name ? 'Recogida' : 'Recogida en tienda' ) : 'Entrega a domicilio' ) . '</h2>';
 		if ( $who ) {
 			echo '<p class="cvd-thanks__who">' . esc_html( implode( ' · ', $who ) ) . '</p>';
 		}
 		if ( $is_pickup ) {
-			echo '<p>' . esc_html( get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ) ) . '</p>';
-			echo '<p class="cvd-thanks__muted">Te avisamos por WhatsApp cuándo estará listo.</p>';
+			echo '<p>' . esc_html( '' !== $gestora_name ? CVD_Gestora_Store::pickup_place( $order ) . '.' : get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ) ) . '</p>';
+			echo '<p class="cvd-thanks__muted">' . esc_html( '' !== $gestora_name ? $gestora_name . ' te avisa por WhatsApp cuándo estará listo.' : 'Te avisamos por WhatsApp cuándo estará listo.' ) . '</p>';
 		} else {
 			$address = array_filter( array( $order->get_billing_address_1(), $order->get_billing_address_2(), $order->get_meta( '_cvd_locality', true ), $order->get_billing_city(), $order->get_meta( '_cvd_province_name', true ) ) );
 			echo '<p>' . esc_html( implode( ', ', array_map( static fn( $part ) => trim( (string) $part, " ,\t" ), $address ) ) ) . '</p>';

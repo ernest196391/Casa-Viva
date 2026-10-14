@@ -131,7 +131,8 @@ final class CVD_Premium_Storefront {
 		?>
 		<ul class="cvd-trust" aria-label="Cómo compras en Casa Viva">
 			<li><span aria-hidden="true">✓</span> Confirmas tu pedido por WhatsApp o pagas por transferencia</li>
-			<li><span aria-hidden="true">✓</span> Entrega en tu municipio o recogida en Nuevo Vedado · <a href="<?php echo esc_url( $rates ); ?>">Ver tarifas</a></li>
+			<?php $gestora_store = class_exists( 'CVD_Gestora_Store' ) && CVD_Gestora_Store::hides_casa_viva(); // 3.14.9 (D67) ?>
+			<li><span aria-hidden="true">✓</span> Entrega en tu municipio o <?php echo $gestora_store ? 'recogida (' . esc_html( CVD_Gestora_Store::contact()['name'] ?: 'tu gestora' ) . ' te dice dónde)' : 'recogida en Nuevo Vedado'; ?> · <a href="<?php echo esc_url( $rates ); ?>">Ver tarifas</a></li>
 			<li><span aria-hidden="true">✓</span> ¿Dudas? <button type="button" class="cvd-trust__ask" data-cvd-curru-open>Pregúntale a <?php echo esc_html( CVD_Contextual_Assistant::name() ); ?></button></li>
 		</ul>
 		<?php

@@ -111,7 +111,7 @@ final class CVD_Customer_Orders {
 	}
 
 	private static function fulfillment_label( WC_Order $order ): string {
-		return 'pickup' === (string) $order->get_meta( '_cvd_fulfillment_type', true ) ? 'Recogida en tienda' : 'Entrega a domicilio';
+		return 'pickup' === (string) $order->get_meta( '_cvd_fulfillment_type', true ) ? ( class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::pickup_label( $order ) : 'Recogida en tienda' ) : 'Entrega a domicilio';
 	}
 
 	private static function card( WC_Order $order, bool $active ): string {

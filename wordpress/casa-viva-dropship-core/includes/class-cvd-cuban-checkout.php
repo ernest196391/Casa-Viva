@@ -234,7 +234,7 @@ final class CVD_Cuban_Checkout {
 			'label'    => '¿Cómo quieres recibir tu compra?',
 			'options'  => array(
 				'delivery' => 'Mensajería',
-				'pickup'   => 'Recogida en tienda',
+				'pickup'   => class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::pickup_label() : 'Recogida en tienda', // 3.14.9: con gestora, «Recogida»
 			),
 			'default'  => 'delivery',
 			'required' => true,
@@ -416,7 +416,9 @@ final class CVD_Cuban_Checkout {
 				'municipalities' => self::municipalities(),
 				'localities'     => self::localities(),
 				'defaultState'   => strtoupper( (string) get_option( 'cvd_default_province', 'LH' ) ),
-				'pickupAddress'  => get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ),
+				// 3.14.9 (D67): en la tienda de una gestora, ni la dirección ni «en la tienda»: «Thalia te dice dónde y cuándo».
+				'pickupAddress'  => class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::pickup_place() : get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ),
+				'pickupAtStore'  => ! ( class_exists( 'CVD_Gestora_Store' ) && CVD_Gestora_Store::hides_casa_viva() ),
 				'ajaxUrl'        => admin_url( 'admin-ajax.php' ),
 				'addressNonce'   => wp_create_nonce( 'cvd_address_search' ),
 				'payment'        => self::payment_script_data(),
@@ -617,7 +619,7 @@ final class CVD_Cuban_Checkout {
 		$type = $order->get_meta( '_cvd_fulfillment_type', true );
 		echo '<section class="woocommerce-customer-details cvd-customer-delivery"><h2>Entrega</h2><p>';
 		if ( 'pickup' === $type ) {
-			echo esc_html( 'Recogida en tienda: ' . get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ) );
+			echo esc_html( class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::pickup_label( $order ) . ': ' . CVD_Gestora_Store::pickup_place( $order ) : 'Recogida en tienda: ' . get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ) );
 		} else {
 			echo esc_html( implode( ', ', array_filter( array( $order->get_billing_address_1(), $order->get_billing_address_2(), $order->get_meta( '_cvd_locality', true ), $order->get_billing_city(), $order->get_meta( '_cvd_province_name', true ) ) ) ) );
 		}

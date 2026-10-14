@@ -271,7 +271,7 @@
     if (!pay) { $hint.remove(); return; }
     if (!$hint.length) $hint = $('<div>', { id: 'cvd-payment-hint', class: 'cvd-payment-hint', 'aria-live': 'polite' }).css({ margin: '6px 0 0', fontSize: '.92em', lineHeight: 1.4 }).appendTo('#billing_cvd_payment_kind_field');
     var how = (delivery ? { transfer_cup: 'El cliente transfiere a la tarjeta que le da el mensajero y le enseña la captura.', clasica: 'Se paga en el momento, por transferencia.' } : { clasica: 'Se paga en el momento, por transferencia.' })[pay.kind] || '';
-    var foot = delivery ? (pay.def.prepaid ? 'El mensajero solo cobra su mensajería (en CUP).' : 'La mensajería se paga aparte, en CUP, al mensajero.') : (pay.def.prepaid ? '' : 'Se paga en la tienda al recogerlo.');
+    var foot = delivery ? (pay.def.prepaid ? 'El mensajero solo cobra su mensajería (en CUP).' : 'La mensajería se paga aparte, en CUP, al mensajero.') : (pay.def.prepaid ? '' : (cvdCheckout.pickupAtStore === false ? 'Se paga al recogerlo.' : 'Se paga en la tienda al recogerlo.'));
     $hint.empty()
       .append(pay.def.prepaid ? $('<p>', { text: cvdCheckout.payment.prepaidNotice + ' No hay devolución.' }).css({ margin: '0 0 4px', padding: '8px 10px', borderRadius: '10px', background: '#fff4e5', color: '#8a4b00', fontWeight: 700 }) : null)
       .append($('<p>', { text: (pay.def.prepaid ? 'Paga antes: ' : 'Son ') + pay.text + '. ' + how }).css({ margin: 0, fontWeight: 600 }))
@@ -476,7 +476,7 @@
 	  $('.woocommerce-checkout-review-order-table .cart_item').each(function () { rows.push($.trim($(this).find('.product-name').text().replace(/\s+/g, ' '))); });
 	  var total = $.trim($('.woocommerce-checkout-review-order-table .order-total .amount').first().text());
 	  var pickup = ($('select[name="billing_cvd_fulfillment_type"]').val() || $('input[name="billing_cvd_fulfillment_type"]:checked').val() || $('input[name="billing_cvd_fulfillment_type"]').val()) === 'pickup';
-	  var where = pickup ? 'Recogida en tienda' : [fieldText('#billing_address_1'), fieldText('#billing_cvd_locality'), fieldText('#billing_city')].filter(Boolean).join(', ');
+	  var where = pickup ? (cvdCheckout.pickupAtStore === false ? 'Recogida' : 'Recogida en tienda') : [fieldText('#billing_address_1'), fieldText('#billing_cvd_locality'), fieldText('#billing_city')].filter(Boolean).join(', ');
 	  var when = pickup ? '' : [dayText($('#billing_cvd_delivery_date').val()), $('#billing_cvd_delivery_window').val() ? fieldText('#billing_cvd_delivery_window') : ''].filter(Boolean).join(' · ');
 	  var payWith = parseFloat($('#billing_cvd_change_amount').val() || '0');
 	  var payCurrency = $('#billing_cvd_change_currency').val();
@@ -486,7 +486,7 @@
 	  var pay = paymentQuote();
 	  if (pay) change = pay.def.label + ' · ' + pay.text + (pay.def.prepaid ? ' · paga todo antes' : '') + (pay.def.cash && payWith > 0 ? ' · paga con ' + cubanMoney(payWith, pay.def.currency) + (pay.amount !== null && payWith > pay.amount ? ' → vuelto ' + cubanMoney(payWith - pay.amount, pay.def.currency) : '') : '');
 	  // Recogida: sin vuelto (mejora #23); desde 3.13.74 sí dice cómo paga y cuánto, si lo eligieron.
-	  if (pickup) change = pay ? pay.def.label + ' · ' + pay.text + (pay.def.prepaid ? ' · paga todo antes' : ' · en la tienda al recogerlo') : '';
+	  if (pickup) change = pay ? pay.def.label + ' · ' + pay.text + (pay.def.prepaid ? ' · paga todo antes' : (cvdCheckout.pickupAtStore === false ? ' · al recogerlo' : ' · en la tienda al recogerlo')) : '';
 	  var line = function (label, value) { return value ? '<p style="margin:.35em 0"><b>' + label + ':</b> ' + $('<span>').text(value).html() + '</p>' : ''; };
 	  // Mensajería (3.13.53): el precio de la lista o «por confirmar con la tienda» si el reparto no está en la lista.
 	  var fee = $.trim($('.cvd-shipping-cup td strong').first().text());

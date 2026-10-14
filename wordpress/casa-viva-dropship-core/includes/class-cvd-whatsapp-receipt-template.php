@@ -33,7 +33,7 @@ final class CVD_WhatsApp_Receipt_Template {
 			'',
 			'*TOTAL · ' . implode( ' + ', $data['totals']['total_lines'] ) . '*',
 			$products . ( 1 === $products ? ' producto' : ' productos' ) . ' · ' . $units . ( 1 === $units ? ' unidad' : ' unidades' ),
-			$is_pickup ? '🏬 Recogida en tienda' : '🚚 A domicilio' . ( isset( $address[1] ) ? ' · ' . str_replace( ', ', ' · ', $address[1] ) : '' ),
+			$is_pickup ? '🏬 ' . ( $order && class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::pickup_label( $order ) : 'Recogida en tienda' ) : '🚚 A domicilio' . ( isset( $address[1] ) ? ' · ' . str_replace( ', ', ' · ', $address[1] ) : '' ),
 		);
 		// 3.13.70 (Ernesto, 13-oct): armado por el mensajero, bien visible arriba. Se cobra aparte: no está en el total.
 		$assembly = $order && ! $is_pickup && class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_assembly( $order ) : null;
@@ -204,7 +204,8 @@ final class CVD_WhatsApp_Receipt_Template {
 		$address_lines = array();
 
 		if ( $is_pickup ) {
-			$address_lines[] = self::clean( get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ) );
+			// 3.14.9 (D67): pedido de una gestora: sin la dirección de la tienda («Thalia te dice dónde y cuándo recogerlo»).
+			$address_lines[] = self::clean( class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::pickup_place( $order ) : get_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' ) );
 		} else {
 			$street = self::join_unique( array( $order->get_billing_address_1(), $order->get_billing_address_2() ) );
 			$location = self::join_unique(
@@ -220,7 +221,7 @@ final class CVD_WhatsApp_Receipt_Template {
 		$map_url = $is_pickup ? '' : esc_url_raw( (string) CVD_Shipping_Rates::order_map_url( $order ) );
 		return array(
 			'type'          => $fulfillment,
-			'label'         => $is_pickup ? 'Recogida en tienda' : 'Entrega a domicilio',
+			'label'         => $is_pickup ? ( class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::pickup_label( $order ) : 'Recogida en tienda' ) : 'Entrega a domicilio',
 			'address_lines' => $address_lines,
 			'reference'     => $is_pickup ? '' : self::clean( $order->get_meta( '_cvd_reference', true ) ),
 			'map_url'       => $map_url,
