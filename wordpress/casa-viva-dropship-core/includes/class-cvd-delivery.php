@@ -143,7 +143,7 @@ final class CVD_Delivery {
 					'zone' => self::destination_zone( $order ),
 					'earningCup' => self::courier_amount( $order ),
 					// 3.13.70: el armado sale en la ventana «Nueva carrera» antes de aceptarla.
-					'items' => implode( ', ', $items ) . ( $asm ? ' · 🔧 hay que ARMARLO: cobras ' . CVD_Cuban_Checkout::money( (float) $asm['usd'], 'USD' ) . ' aparte' : '' ),
+					'items' => implode( ', ', $items ) . ( $asm ? ' · 🔧 hay que ARMARLO: cobras ' . CVD_Cuban_Checkout::money( (float) $asm['usd'], 'USD' ) . ' aparte' . ( ! empty( $asm['drill'] ) ? ' · lleva TALADRO (soporte de TV)' : '' ) : '' ), // 3.13.96: taladro
 					'assembly' => $asm,
 					'zoneMatch' => self::zone_matches( $user, $order ),
 					'acceptUrl' => self::offer_action_url( $order->get_id(), 'accept' ),

@@ -43,8 +43,11 @@ final class CVD_Cuban_Checkout {
 	 * mensajero, como la mensajería; no entra en el total de WooCommerce. El pedido guarda _cvd_assembly (small|large) y
 	 * _cvd_assembly_usd (5|10): esos nombres los lee VivaBot. El mensajero lo ve antes de coger la carrera; si no quiere
 	 * armar, no la coge y la coge otro.
+	 * 3.13.96 (Lennys, 13-oct 22:01): «simple» (3 USD) para los árboles de Navidad («de 2 a 4 USD por armarlo»). Van de la
+	 * más barata a la más cara: en ese orden salen en la lista. VivaBot conoce small|large; con otra clave usa el `notice`.
 	 */
 	public const ASSEMBLY = array(
+		'simple' => array( 'usd' => 3, 'label' => 'armado sencillo', 'option' => 'Sí, armado sencillo (3 USD)' ),
 		'small' => array( 'usd' => 5, 'label' => 'producto pequeño', 'option' => 'Sí, producto pequeño (5 USD)' ),
 		'large' => array( 'usd' => 10, 'label' => 'producto grande', 'option' => 'Sí, producto grande (10 USD)' ),
 	);
@@ -350,11 +353,13 @@ final class CVD_Cuban_Checkout {
 		);
 		// 3.13.70: armado por el mensajero (solo mensajería: cvd-delivery-field se oculta con «Recogida en tienda»).
 		// 3.13.89: solo si en el carrito hay algo que se arma (assembly_offered()).
-		if ( self::assembly_offered() ) {
+		// 3.13.96: con las opciones que tocan a lo que hay en el carrito (puerta corredera: solo 10 USD; árbol: 3 USD…).
+		$assembly_options = self::assembly_options();
+		if ( $assembly_options ) {
 			$fields['billing'][ self::ASSEMBLY_FIELD ] = array(
 				'type' => 'select', 'label' => 'Armado por el mensajero', 'required' => false,
-				'options' => array( '' => 'No' ) + array_map( static fn( array $a ): string => $a['option'], self::ASSEMBLY ), 'default' => '',
-				'description' => '¿Hay que armar el producto? Se le paga aparte al mensajero, como la mensajería: no se suma al total.',
+				'options' => array( '' => 'No' ) + $assembly_options, 'default' => '',
+				'description' => '¿Hay que armar el producto? Se le paga aparte al mensajero, como la mensajería: no se suma al total.' . ( self::cart_needs_drill() ? ' Soporte de TV: el mensajero lleva taladro para abrir los huecos en la pared.' : '' ),
 				'class' => array( 'form-row-wide', 'cvd-delivery-field', 'cvd-assembly-field' ), 'priority' => 126,
 			);
 		}
@@ -448,7 +453,8 @@ final class CVD_Cuban_Checkout {
 		$kind = sanitize_key( wp_unslash( $_POST['billing_cvd_payment_kind'] ?? '' ) );
 		if ( ! isset( self::PAYMENT_KINDS[ $kind ] ) ) { $errors->add( 'billing_cvd_payment_kind', 'Elige cómo paga el cliente: efectivo (USD o CUP), transferencia CUP, euros, Tarjeta Clásica, Zelle o PayPal.' ); }
 		$assembly = sanitize_key( wp_unslash( $_POST[ self::ASSEMBLY_FIELD ] ?? '' ) );
-		if ( '' !== $assembly && 'no' !== $assembly && ! isset( self::ASSEMBLY[ $assembly ] ) ) { $errors->add( self::ASSEMBLY_FIELD, 'Elige si hay que armar el producto: No, pequeño (5 USD) o grande (10 USD).' ); }
+		// 3.13.96: solo una de las opciones que se ofrecieron para este carrito (la puerta corredera no se arma a 5 USD).
+		if ( '' !== $assembly && 'no' !== $assembly && ! in_array( $assembly, self::assembly_kinds_offered(), true ) ) { $errors->add( self::ASSEMBLY_FIELD, 'Elige de la lista si hay que armar el producto (o «No»).' ); }
 		// El vuelto solo cuenta en efectivo, y en la moneda en que paga (la de la forma de pago).
 		$change_amount = (float) wc_format_decimal( wp_unslash( $_POST['billing_cvd_change_amount'] ?? 0 ), 2 );
 		$cash_currency = in_array( $kind, self::CASH_KINDS, true ) ? self::PAYMENT_KINDS[ $kind ]['currency'] : '';
@@ -521,7 +527,8 @@ final class CVD_Cuban_Checkout {
 		if ( isset( self::ASSEMBLY[ $assembly ] ) ) {
 			$order->update_meta_data( '_cvd_assembly', $assembly );
 			$order->update_meta_data( '_cvd_assembly_usd', (string) self::ASSEMBLY[ $assembly ]['usd'] );
-			self::note( $order, 'Armado por el mensajero: ' . self::ASSEMBLY[ $assembly ]['label'] . ', ' . self::ASSEMBLY[ $assembly ]['usd'] . ' USD. Lo cobra el mensajero aparte, como la mensajería (no está en el total).' );
+			self::note( $order, 'Armado por el mensajero: ' . self::ASSEMBLY[ $assembly ]['label'] . ', ' . self::ASSEMBLY[ $assembly ]['usd'] . ' USD. Lo cobra el mensajero aparte, como la mensajería (no está en el total).'
+				. ( self::order_needs_drill( $order ) || self::cart_needs_drill() ? ' ' . self::DRILL_NOTE : '' ) ); // 3.13.96
 		} else {
 			$order->delete_meta_data( '_cvd_assembly' );
 			$order->delete_meta_data( '_cvd_assembly_usd' );
@@ -634,35 +641,132 @@ final class CVD_Cuban_Checkout {
 	private const ASSEMBLY_NOT = '/\b(?:forro|funda|lampara|mantel|protector|cojin|plegable|refrigerad\w*|cables?|ganchos?|casco|soporte|alfombras?|sabanas?|edredon|colchon|cortinas?)\b/';
 
 	/**
+	 * 3.13.96 (Lennys, 13-oct 22:01): productos con su propio armado, por el nombre (sin tildes, en minúscula).
+	 * kinds = qué opciones de ASSEMBLY se le ofrecen; option = cómo se lee la opción si en el carrito solo hay de ese tipo;
+	 * drill = el mensajero tiene que llevar taladro. Mandan sobre ASSEMBLY_NOT (el soporte de TV ya no queda fuera).
+	 */
+	private const ASSEMBLY_SPECIAL = array(
+		// «Ofrece armado en soporte de TV (el mensajero que vaya tiene que llevar taladro para abrir los huecos)».
+		'tv_mount'     => array( 're' => '/^soporte\b.*\b(?:tv|televisor|televisores|television)\b/', 'kinds' => array( 'small' ), 'option' => 'Sí, instalar el soporte en la pared', 'drill' => true ),
+		// «Las puertas correderas también… es un poco más complicada, así que está en las ofertas más altas».
+		'sliding_door' => array( 're' => '/^puertas?\b.*\b(?:correderas?|corredizas?)\b/', 'kinds' => array( 'large' ), 'option' => 'Sí, instalar la puerta', 'drill' => false ),
+		// «Los arbolitos de Navidad son muy sencillos de armar… de 2 a 4 USD por armarlo» → 3 USD («simple»).
+		'xmas_tree'    => array( 're' => '/^arbol(?:ito)?(?:es|s)?\b.*\bnavid(?:ad|eno|enos)\b/', 'kinds' => array( 'simple' ), 'option' => 'Sí, armar el árbol', 'drill' => false ),
+	);
+	/** Va en la nota del pedido cuando hay que instalar un soporte de TV. */
+	public const DRILL_NOTE = 'Soporte de TV: el mensajero tiene que llevar TALADRO para abrir los huecos en la pared.';
+
+	/**
 	 * 3.13.89 (auditoría de cliente 13-oct, punto 19: salía «Armado por el mensajero» hasta con una sombrilla).
 	 * Se ofrece si el carrito trae algo que se arma (muebles, estantes, camas, sillas, zapateras…). El equipo (gestoras,
 	 * tienda) lo ve siempre: conoce sus productos y la regla por nombre puede fallar. Un producto se puede forzar con el
 	 * dato `_cvd_needs_assembly` = yes | no (en el producto o en su producto padre).
+	 * 3.13.96: y su precio con `_cvd_assembly_kind` = simple | small | large (o varias, separadas por comas).
 	 */
 	public static function assembly_offered(): bool {
+		return (bool) self::assembly_kinds_offered();
+	}
+
+	/** 3.13.96: claves de ASSEMBLY que se ofrecen con este carrito, de la más barata a la más cara. El equipo ve todas. */
+	public static function assembly_kinds_offered(): array {
+		$all = array_keys( self::ASSEMBLY );
 		$user = wp_get_current_user();
-		if ( $user->exists() && array_intersect( (array) $user->roles, array_merge( self::TEAM_ROLES, array( 'cvd_clerk', 'cvd_operator' ) ) ) ) { return true; }
-		if ( ! function_exists( 'WC' ) || ! WC()->cart ) { return true; }
+		if ( $user->exists() && array_intersect( (array) $user->roles, array_merge( self::TEAM_ROLES, array( 'cvd_clerk', 'cvd_operator' ) ) ) ) { return $all; }
+		if ( ! function_exists( 'WC' ) || ! WC()->cart ) { return $all; }
+		$kinds = array();
 		foreach ( WC()->cart->get_cart() as $item ) {
 			$product = $item['data'] ?? null;
-			if ( $product instanceof WC_Product && self::needs_assembly( $product ) ) { return true; }
+			if ( $product instanceof WC_Product ) { $kinds = array_merge( $kinds, self::assembly_kinds( $product ) ); }
+		}
+		return array_values( array_intersect( $all, $kinds ) );
+	}
+
+	/**
+	 * 3.13.96: la lista del pago (clave => texto). Si una opción sale solo por un tipo especial (solo el soporte de TV,
+	 * solo la puerta, solo el árbol), dice qué es: «Sí, instalar la puerta (10 USD)».
+	 */
+	public static function assembly_options(): array {
+		$sources = array();
+		if ( function_exists( 'WC' ) && WC()->cart ) {
+			foreach ( WC()->cart->get_cart() as $item ) {
+				$product = $item['data'] ?? null;
+				if ( ! $product instanceof WC_Product ) { continue; }
+				$special = self::assembly_special( $product->get_name() );
+				foreach ( self::assembly_kinds( $product ) as $kind ) { $sources[ $kind ][ '' !== $special ? $special : 'generic' ] = true; }
+			}
+		}
+		$options = array();
+		foreach ( self::assembly_kinds_offered() as $kind ) {
+			$from = array_keys( $sources[ $kind ] ?? array() );
+			$options[ $kind ] = 1 === count( $from ) && isset( self::ASSEMBLY_SPECIAL[ $from[0] ] )
+				? self::ASSEMBLY_SPECIAL[ $from[0] ]['option'] . ' (' . self::money( (float) self::ASSEMBLY[ $kind ]['usd'], 'USD' ) . ')'
+				: self::ASSEMBLY[ $kind ]['option'];
+		}
+		return $options;
+	}
+
+	public static function needs_assembly( WC_Product $product ): bool {
+		return (bool) self::assembly_kinds( $product );
+	}
+
+	/** 3.13.96: opciones de armado de un producto ([] = no se arma). */
+	public static function assembly_kinds( WC_Product $product ): array {
+		$flag = sanitize_key( self::product_flag( $product, '_cvd_needs_assembly' ) );
+		if ( 'no' === $flag ) { return array(); }
+		$forced = array_values( array_intersect( array_keys( self::ASSEMBLY ), array_map( 'trim', explode( ',', self::product_flag( $product, '_cvd_assembly_kind' ) ) ) ) );
+		if ( $forced ) { return $forced; }
+		$special = self::assembly_special( $product->get_name() );
+		if ( '' !== $special ) { return self::ASSEMBLY_SPECIAL[ $special ]['kinds']; }
+		if ( 'yes' === $flag ) { return array( 'small', 'large' ); }
+		$name = CVD_Product_Search::normalize( $product->get_name() );
+		return preg_match( self::ASSEMBLY_WORDS, $name ) && ! preg_match( self::ASSEMBLY_NOT, $name ) ? array( 'small', 'large' ) : array();
+	}
+
+	/** El dato del producto o, si está vacío, el de su producto padre (en minúscula). */
+	private static function product_flag( WC_Product $product, string $key ): string {
+		foreach ( array_filter( array( $product->get_id(), $product->get_parent_id() ) ) as $id ) {
+			$value = strtolower( trim( (string) get_post_meta( $id, $key, true ) ) );
+			if ( '' !== $value ) { return $value; }
+		}
+		return '';
+	}
+
+	/** 3.13.96: clave de ASSEMBLY_SPECIAL que encaja con el nombre, o ''. */
+	public static function assembly_special( string $name ): string {
+		$name = CVD_Product_Search::normalize( $name );
+		foreach ( self::ASSEMBLY_SPECIAL as $key => $rule ) {
+			if ( preg_match( $rule['re'], $name ) ) { return $key; }
+		}
+		return '';
+	}
+
+	private static function needs_drill( string $name ): bool {
+		$special = self::assembly_special( $name );
+		return '' !== $special && ! empty( self::ASSEMBLY_SPECIAL[ $special ]['drill'] );
+	}
+
+	/** 3.13.96: ¿hay en el carrito un soporte de TV que se ofrece instalar? */
+	public static function cart_needs_drill(): bool {
+		if ( ! function_exists( 'WC' ) || ! WC()->cart ) { return false; }
+		foreach ( WC()->cart->get_cart() as $item ) {
+			$product = $item['data'] ?? null;
+			if ( $product instanceof WC_Product && self::needs_drill( $product->get_name() ) && self::assembly_kinds( $product ) ) { return true; }
 		}
 		return false;
 	}
 
-	public static function needs_assembly( WC_Product $product ): bool {
-		foreach ( array_filter( array( $product->get_id(), $product->get_parent_id() ) ) as $id ) {
-			$flag = sanitize_key( (string) get_post_meta( $id, '_cvd_needs_assembly', true ) );
-			if ( 'yes' === $flag ) { return true; }
-			if ( 'no' === $flag ) { return false; }
+	/** 3.13.96: ¿el pedido trae un soporte de TV? (por el nombre de la línea, así vale también para pedidos ya hechos). */
+	public static function order_needs_drill( WC_Order $order ): bool {
+		foreach ( $order->get_items( 'line_item' ) as $item ) {
+			if ( self::needs_drill( $item->get_name() ) ) { return true; }
 		}
-		$name = CVD_Product_Search::normalize( $product->get_name() );
-		return (bool) preg_match( self::ASSEMBLY_WORDS, $name ) && ! preg_match( self::ASSEMBLY_NOT, $name );
+		return false;
 	}
 
 	/**
 	 * Armado del pedido o null (sin armado, recogida en tienda o pedido de antes de 3.13.70).
-	 * → kind (small|large), usd (5|10), label, text (para pantallas) y notice (para WhatsApp, con *negritas*).
+	 * → kind (simple|small|large), usd (3|5|10), label, drill, text (para pantallas) y notice (para WhatsApp, con *negritas*).
+	 * 3.13.96: con un soporte de TV, label, text y notice dicen que el mensajero lleve taladro (VivaBot enseña label).
 	 */
 	public static function order_assembly( WC_Order $order ): ?array {
 		if ( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return null; }
@@ -670,18 +774,25 @@ final class CVD_Cuban_Checkout {
 		if ( ! isset( self::ASSEMBLY[ $kind ] ) ) { return null; }
 		$usd = (float) $order->get_meta( '_cvd_assembly_usd', true );
 		$usd = $usd > 0 ? $usd : (float) self::ASSEMBLY[ $kind ]['usd'];
+		$label = self::ASSEMBLY[ $kind ]['label'];
+		$drill = self::order_needs_drill( $order );
 		return array(
 			'kind'   => $kind,
 			'usd'    => $usd,
-			'label'  => self::ASSEMBLY[ $kind ]['label'],
-			'text'   => 'Sí, ' . self::ASSEMBLY[ $kind ]['label'] . ' · el mensajero cobra ' . self::money( $usd, 'USD' ) . ' de armado al cliente, aparte (como la mensajería)',
-			'notice' => self::assembly_notice( $usd ),
+			'label'  => $label . ( $drill ? ' · lleva TALADRO para abrir los huecos del soporte de TV' : '' ),
+			'drill'  => $drill,
+			'text'   => 'Sí, ' . $label . ' · el mensajero cobra ' . self::money( $usd, 'USD' ) . ' de armado al cliente, aparte (como la mensajería)' . ( $drill ? ' · el mensajero lleva taladro para abrir los huecos del soporte de TV' : '' ),
+			'notice' => self::assembly_notice( $usd, 'simple' === $kind ? $label : '', $drill ),
 		);
 	}
 
-	/** «🔧 *OJO: hay que ARMAR el producto* · el mensajero cobra *10 USD* de armado al cliente» (texto de Ernesto, 13-oct). */
-	public static function assembly_notice( float $usd ): string {
-		return '🔧 *OJO: hay que ARMAR el producto* · el mensajero cobra *' . self::money( $usd, 'USD' ) . '* de armado al cliente';
+	/**
+	 * «🔧 *OJO: hay que ARMAR el producto* · el mensajero cobra *10 USD* de armado al cliente» (texto de Ernesto, 13-oct).
+	 * 3.13.96: con el tipo si no es pequeño/grande («(armado sencillo)») y el taladro del soporte de TV.
+	 */
+	public static function assembly_notice( float $usd, string $label = '', bool $drill = false ): string {
+		return '🔧 *OJO: hay que ARMAR el producto*' . ( '' !== $label ? ' (' . $label . ')' : '' ) . ' · el mensajero cobra *' . self::money( $usd, 'USD' ) . '* de armado al cliente'
+			. ( $drill ? ' · 🪛 *lleva TALADRO* para abrir los huecos del soporte de TV' : '' );
 	}
 
 	// ---------- Formas de pago (3.13.67) ----------
