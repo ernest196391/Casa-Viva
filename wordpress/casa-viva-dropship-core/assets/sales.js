@@ -63,10 +63,17 @@
     return labels[status] || status;
   }
   function actionButtons(order) {
-    return order.actions.filter(function (status) { return cvdSales.isAdmin || status !== "cancelled"; }).map(function (status) {
+    // 3.13.97: «Cancelar» va aparte (con motivo), ver extraButtons.
+    return order.actions.filter(function (status) { return status !== "cancelled"; }).map(function (status) {
       var danger = status === "cancelled" || status === "incident" ? " is-warning" : status === "delivered" ? " is-success" : "";
       return '<button class="cvd-sale-action' + danger + '" data-order="' + order.id + '" data-status="' + status + '" data-pickup="' + (order.fulfillment === "Recogida en tienda" ? "1" : "0") + '" data-declared-usd="' + escapeText(order.declaredUsd || "") + '" data-declared-cup="' + escapeText(order.declaredCup || "") + '">' + escapeText(actionLabel(order, status)) + "</button>";
     }).join("");
+  }
+  // 3.13.97 (Ernesto, 14-oct): «Cambiar pedido» (antes de que el mensajero lo recoja) y «Cancelar pedido» (con motivo).
+  // Core decide quién y cuándo (canEdit / canCancel); aquí solo se pintan.
+  function extraButtons(order) {
+    return (order.canEdit ? '<button type="button" class="cvd-sale-extra" data-edit-order="' + order.id + '">Cambiar pedido</button>' : "")
+      + (order.canCancel ? '<button type="button" class="cvd-sale-extra is-warning" data-cancel-order="' + order.id + '" data-number="' + escapeText(order.number) + '">Cancelar pedido</button>' : "");
   }
   // Mensajería: en qué punto va la entrega. Quién lo lleva sale arriba, en «Mensajero» (peopleRows).
   function messengerRow(order) {
@@ -133,7 +140,7 @@
       var wa = order.phone ? '<a class="cvd-sale-wa" target="_blank" rel="noopener" href="https://wa.me/' + escapeText(order.phone.replace(/\D/g, "")) + '">WhatsApp</a>' : "";
       // Pedido de prueba (3.13.54): cartel grande arriba; el servidor no lo deja salir al reparto.
       var test = order.testOrder ? '<p class="cvd-sale-test" role="note" style="margin:0 0 10px;padding:10px 12px;border-radius:12px;background:#b3261e;color:#fff;font-weight:800;font-size:1.15em;letter-spacing:.02em;text-align:center">PRUEBA — no preparar<br><small style="font-weight:600;font-size:.75em">No sale al reparto ni a ningún mensajero</small></p>' : '';
-      return '<article class="cvd-sale-card' + (order.testOrder ? ' is-test' : '') + '">' + test + '<div class="cvd-sale-top"><div><span class="cvd-sale-status is-' + order.status + '">' + escapeText(order.statusLabel) + '</span><h2>Pedido #' + escapeText(order.number) + '</h2><small>' + escapeText(order.date) + '</small></div><div class="cvd-sale-code"><canvas data-order-code="' + escapeText(order.orderCode) + '"></canvas><small>' + escapeText(order.orderCode) + '</small></div><strong>' + escapeText(order.total) + (order.shippingCup && !/CUP/i.test(order.total) ? ' + ' + escapeText(order.shippingCup) + ' CUP' : '') + '</strong></div><div class="cvd-sale-data"><p><b>Cliente</b><span>' + escapeText(order.customer) + " · " + phone + '</span></p>' + peopleRows(order) + '<p><b>Entrega</b><span>' + escapeText(order.fulfillment + " · " + order.address) + '</span></p>' + paymentRow(order) + assemblyRow(order) + (order.deliveryWhen ? '<p><b>Día</b><span' + (order.deliveryFuture ? ' style="color:#a8641c;font-weight:700"' : '') + '>📅 ' + escapeText(order.deliveryWhen) + '</span></p>' : '') + '<p><b>Productos</b><span>' + productLinks(order.products) + '</span></p>' + messengerRow(order) + commercialData(order) + '</div><div class="cvd-sale-actions">' + actionButtons(order) + (order.canReturn ? '<button type="button" class="cvd-sale-return is-warning" data-return-order="' + order.id + '">Devolución</button>' : '') + (order.trackingUrl ? '<button type="button" data-copy-tracking="' + escapeText(order.trackingUrl) + '">Copiar seguimiento</button>' : '') + wa + (cvdSales.isAdmin && order.adminUrl ? '<a href="' + escapeText(order.adminUrl) + '" target="_blank" rel="noopener">Ver pedido</a>' : '') + '</div></article>';
+      return '<article class="cvd-sale-card' + (order.testOrder ? ' is-test' : '') + '">' + test + '<div class="cvd-sale-top"><div><span class="cvd-sale-status is-' + order.status + '">' + escapeText(order.statusLabel) + '</span><h2>Pedido #' + escapeText(order.number) + '</h2><small>' + escapeText(order.date) + '</small></div><div class="cvd-sale-code"><canvas data-order-code="' + escapeText(order.orderCode) + '"></canvas><small>' + escapeText(order.orderCode) + '</small></div><strong>' + escapeText(order.total) + (order.shippingCup && !/CUP/i.test(order.total) ? ' + ' + escapeText(order.shippingCup) + ' CUP' : '') + '</strong></div><div class="cvd-sale-data"><p><b>Cliente</b><span>' + escapeText(order.customer) + " · " + phone + '</span></p>' + peopleRows(order) + '<p><b>Entrega</b><span>' + escapeText(order.fulfillment + " · " + order.address) + '</span></p>' + paymentRow(order) + assemblyRow(order) + (order.deliveryWhen ? '<p><b>Día</b><span' + (order.deliveryFuture ? ' style="color:#a8641c;font-weight:700"' : '') + '>📅 ' + escapeText(order.deliveryWhen) + '</span></p>' : '') + '<p><b>Productos</b><span>' + productLinks(order.products) + '</span></p>' + messengerRow(order) + commercialData(order) + (order.cancelReason && order.status === "cancelled" ? '<p><b>Motivo</b><span>' + escapeText(order.cancelReason) + '</span></p>' : '') + '</div><div class="cvd-sale-actions">' + actionButtons(order) + extraButtons(order) + (order.canReturn ? '<button type="button" class="cvd-sale-return is-warning" data-return-order="' + order.id + '">Devolución</button>' : '') + (order.trackingUrl ? '<button type="button" data-copy-tracking="' + escapeText(order.trackingUrl) + '">Copiar seguimiento</button>' : '') + wa + (cvdSales.isAdmin && order.adminUrl ? '<a href="' + escapeText(order.adminUrl) + '" target="_blank" rel="noopener">Ver pedido</a>' : '') + '</div></article>';
     }).join("");
     if (window.CVQRCode) document.querySelectorAll("[data-order-code]").forEach(function (canvas) { window.CVQRCode.toCanvas(canvas, canvas.dataset.orderCode, { width: 84, margin: 1 }); });
   }
@@ -164,6 +171,19 @@
       catch (error) { message.textContent = error.message; message.className = "is-error"; ret.disabled = false; }
       return;
     }
+    var cancelBtn = event.target.closest("[data-cancel-order]");
+    if (cancelBtn) {
+      var why = window.prompt("Cancelar el pedido #" + cancelBtn.dataset.number + "\n\n¿Por qué se cancela? (obligatorio, una frase corta)");
+      if (why === null) return;
+      if (why.trim().length < 3) { message.className = "is-error"; message.textContent = "Para cancelar hay que escribir el motivo."; return; }
+      if (!window.confirm("¿Seguro que cancelas el pedido #" + cancelBtn.dataset.number + "?\n\n• Las existencias vuelven a la tienda\n• La comisión de quien vendió queda anulada\n• No se puede deshacer\n\nMotivo: " + why.trim())) return;
+      cancelBtn.disabled = true; message.className = ""; message.textContent = "Cancelando…";
+      try { var done = await api(cvdSales.url + "/" + cancelBtn.dataset.cancelOrder + "/cancel", { method: "POST", body: JSON.stringify({ reason: why.trim() }) }); await load(); message.className = done.messenger ? "is-error" : ""; message.textContent = done.message || "Pedido cancelado."; }
+      catch (error) { message.textContent = error.message; message.className = "is-error"; cancelBtn.disabled = false; }
+      return;
+    }
+    var editBtn = event.target.closest("[data-edit-order]");
+    if (editBtn) { openEdit(editBtn.dataset.editOrder); return; }
     var button = event.target.closest(".cvd-sale-action"); if (!button) return;
     var status = button.dataset.status;
     if (status === "delivered") {
@@ -205,6 +225,81 @@
     try { var saved = await api(cvdSales.url + "/" + button.dataset.order + "/status", { method: "POST", body: JSON.stringify({ status: status }) }); await load(); if (saved && saved.notice) { message.textContent = saved.notice; message.className = "is-error"; } }
     catch (error) { message.textContent = error.message; message.className = "is-error"; button.disabled = false; }
   });
+  // ---------- Cambiar pedido (3.13.97) ----------
+  // Nombre, teléfono, dirección, día y franja, nota y productos (cantidad, quitar, añadir). Core valida y deja nota.
+  var editDialog = document.createElement("dialog");
+  editDialog.id = "cvd-edit-dialog";
+  list.parentNode.appendChild(editDialog);
+  var editState = null;
+  function editField(label, name, value, extra) { return '<label>' + escapeText(label) + '<input name="' + name + '" value="' + escapeText(value || "") + '"' + (extra || "") + "></label>"; }
+  function paintAdded() {
+    var box = editDialog.querySelector("[data-added]");
+    box.innerHTML = editState.add.map(function (a, i) { return '<p class="cvd-edit-line"><span>+ ' + escapeText(a.name) + '</span><input type="number" min="1" max="999" inputmode="numeric" data-add-qty="' + i + '" value="' + a.qty + '" aria-label="Cantidad"><button type="button" data-add-rm="' + i + '" aria-label="Quitar">✕</button></p>'; }).join("");
+  }
+  async function openEdit(id) {
+    message.className = ""; message.textContent = "Abriendo el pedido…";
+    var d;
+    try { d = await api(cvdSales.url + "/" + id + "/edit", { method: "GET" }); }
+    catch (error) { message.className = "is-error"; message.textContent = error.message; return; }
+    message.textContent = "";
+    if (!d.editable) { message.className = "is-error"; message.textContent = d.why || "Este pedido ya no se puede cambiar."; return; }
+    editState = { id: d.id, add: [] };
+    var windows = [["", "A cualquier hora"], ["morning", "Por la mañana"], ["afternoon", "Por la tarde"]];
+    editDialog.innerHTML = '<form method="dialog" id="cvd-edit-form"><h2>Cambiar pedido #' + escapeText(d.number) + '</h2>'
+      + (d.messenger ? '<p class="cvd-edit-warn">Ya lo tiene asignado <b>' + escapeText(d.messenger.name) + '</b>. Si cambias algo, avísale.</p>' : '')
+      + '<div class="cvd-edit-two">' + editField("Nombre", "firstName", d.firstName, ' required maxlength="60"') + editField("Apellidos", "lastName", d.lastName, ' maxlength="60"') + '</div>'
+      + editField("Teléfono", "phone", d.phone, ' inputmode="tel" required maxlength="30"')
+      + (d.pickup ? '<p class="cvd-edit-hint">Recogida en tienda.</p>'
+        : editField("Dirección", "address", d.address, ' maxlength="200"') + (d.locality ? '<p class="cvd-edit-hint">Reparto: ' + escapeText(d.locality) + '. Si cambia de municipio o de reparto, cancélalo y que se haga de nuevo (cambia la mensajería).</p>' : '')
+          + '<div class="cvd-edit-two"><label>Día de entrega<input type="date" name="deliveryDate" value="' + escapeText(d.date) + '" min="' + escapeText(d.minDate) + '" max="' + escapeText(d.maxDate) + '"></label><label>Franja<select name="deliveryWindow">' + windows.map(function (w) { return '<option value="' + w[0] + '"' + (w[0] === (d.window || "") ? " selected" : "") + ">" + w[1] + "</option>"; }).join("") + '</select></label></div><p class="cvd-edit-hint">Día vacío = lo antes posible. Ahora: ' + escapeText(d.whenLabel) + '</p>')
+      + '<label>Nota del pedido<textarea name="note" rows="2" maxlength="500">' + escapeText(d.note) + '</textarea></label>'
+      + '<h3>Productos</h3>' + d.lines.map(function (l) { return '<p class="cvd-edit-line"><span>' + escapeText(l.name) + '</span><input type="number" min="0" max="999" inputmode="numeric" data-line="' + l.itemId + '" value="' + l.qty + '" aria-label="Cantidad"></p>'; }).join("")
+      + '<p class="cvd-edit-hint">Pon 0 para quitar un producto. Las existencias se ajustan solas.</p>'
+      + '<label>Añadir otro producto<input type="search" data-product-q placeholder="Nombre o código" autocomplete="off"></label><div data-found></div><div data-added></div>'
+      + '<p data-edit-msg role="status" class="is-error"></p>'
+      + '<div class="cvd-edit-buttons"><button value="cancel" formnovalidate>Volver</button><button id="cvd-edit-submit" value="default">Guardar cambios</button></div></form>';
+    editDialog.showModal();
+  }
+  var searchTimer = null;
+  editDialog.addEventListener("input", function (event) {
+    var q = event.target.closest("[data-product-q]");
+    var addQty = event.target.closest("[data-add-qty]");
+    if (addQty) { editState.add[Number(addQty.dataset.addQty)].qty = Math.max(1, parseInt(addQty.value, 10) || 1); return; }
+    if (!q) return;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(async function () {
+      var box = editDialog.querySelector("[data-found]");
+      if (q.value.trim().length < 2) { box.innerHTML = ""; return; }
+      try {
+        var r = await api(cvdSales.url + "/products?q=" + encodeURIComponent(q.value.trim()), { method: "GET" });
+        box.innerHTML = (r.products || []).length ? r.products.map(function (p) { return '<button type="button" class="cvd-edit-found" data-pick="' + p.wooId + '" data-name="' + escapeText(p.name) + '">' + escapeText(p.name) + " · " + escapeText(p.price) + " USD" + (p.stock === null ? "" : " · quedan " + p.stock) + "</button>"; }).join("") : '<p class="cvd-edit-hint">No encontré ese producto.</p>';
+      } catch (error) { box.innerHTML = '<p class="cvd-edit-hint">' + escapeText(error.message) + "</p>"; }
+    }, 300);
+  });
+  editDialog.addEventListener("click", function (event) {
+    var pick = event.target.closest("[data-pick]");
+    if (pick) { editState.add.push({ wooId: Number(pick.dataset.pick), name: pick.dataset.name, qty: 1 }); editDialog.querySelector("[data-found]").innerHTML = ""; editDialog.querySelector("[data-product-q]").value = ""; paintAdded(); return; }
+    var rm = event.target.closest("[data-add-rm]");
+    if (rm) { editState.add.splice(Number(rm.dataset.addRm), 1); paintAdded(); }
+  });
+  editDialog.addEventListener("submit", async function (event) {
+    if (event.submitter && event.submitter.value === "cancel") return;
+    event.preventDefault();
+    var f = event.target, msg = editDialog.querySelector("[data-edit-msg]"), submit = document.getElementById("cvd-edit-submit");
+    var lines = Array.prototype.map.call(f.querySelectorAll("[data-line]"), function (i) { return { itemId: Number(i.dataset.line), qty: Math.max(0, parseInt(i.value, 10) || 0) }; });
+    if (lines.every(function (l) { return l.qty === 0; }) && !editState.add.length) { msg.textContent = "El pedido no puede quedar sin productos. Si ya no lo quieren, cancélalo."; return; }
+    var body = { firstName: f.elements.firstName.value, lastName: f.elements.lastName.value, phone: f.elements.phone.value, note: f.elements.note.value, lines: lines, add: editState.add.map(function (a) { return { wooId: a.wooId, qty: a.qty }; }) };
+    if (f.elements.address) body.address = f.elements.address.value;
+    if (f.elements.deliveryDate) { body.deliveryDate = f.elements.deliveryDate.value; body.deliveryWindow = f.elements.deliveryWindow.value; }
+    submit.disabled = true; msg.textContent = "";
+    try {
+      var r = await api(cvdSales.url + "/" + editState.id + "/edit", { method: "POST", body: JSON.stringify(body) });
+      editDialog.close(); await load();
+      message.className = r.messenger ? "is-error" : ""; message.textContent = r.message || "Pedido cambiado.";
+    } catch (error) { msg.textContent = error.message; }
+    finally { submit.disabled = false; }
+  });
+
   document.getElementById("cvd-money-form").addEventListener("submit", async function (event) {
     if (event.submitter && event.submitter.value === "cancel") return;
     event.preventDefault(); var submit = document.getElementById("cvd-money-submit"); submit.disabled = true;

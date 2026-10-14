@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.13.96
+ * Version: 3.13.97
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.13.96' );
+define( 'CVD_VERSION', '3.13.97' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -56,6 +56,7 @@ require_once CVD_DIR . 'includes/class-cvd-direct-dispatch.php';
 require_once CVD_DIR . 'includes/class-cvd-messenger-cash.php';
 require_once CVD_DIR . 'includes/class-cvd-fichas.php';
 require_once CVD_DIR . 'includes/class-cvd-aprende.php';
+require_once CVD_DIR . 'includes/class-cvd-order-edit.php';
 
 register_activation_hook( __FILE__, array( 'CVD_Plugin', 'activate' ) );
 
@@ -99,6 +100,7 @@ add_action(
 			CVD_Messenger_Cash::register();
 			CVD_Fichas::register();
 			CVD_Aprende::register(); // 3.13.77: «Aprende» (tutoriales) en el área de la gestora y del mensajero.
+			CVD_Order_Edit::register(); // 3.13.97: cancelar con motivo y cambiar pedidos desde /ventas/ y el panel (Ernesto, 14-oct).
 			CVD_Daily_Rates::register(); // 3.13.64: cada pedido nuevo guarda la tasa CUP del día de la venta (regla de Ernesto, 12-oct).
 		}
 	}

@@ -15,6 +15,13 @@ final class CVD_Panel_Bridge {
 	private const NS = 'casa-viva/v1';
 	private const KEY_OPTION = 'cvd_panel_key_hash';
 	private const ACTOR_OPTION = 'cvd_panel_actor_user_id';
+	/** 3.13.97: la petición en curso viene del panel (y quién lo pulsó), para las notas del pedido. */
+	private static bool $via = false;
+	private static string $by = '';
+
+	public static function via_panel(): bool { return self::$via; }
+	public static function current_by(): string { return self::$by; }
+	private static function enter( array $params ): void { self::$via = true; self::$by = mb_substr( sanitize_text_field( (string) ( $params['by'] ?? '' ) ), 0, 80 ); }
 
 	public static function register(): void {
 		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
@@ -32,6 +39,7 @@ final class CVD_Panel_Bridge {
 		// Puente de existencias NEXO ↔ web (D37 fase 2: un solo stock). Solo movimientos, nunca totales a ciegas.
 		register_rest_route( self::NS, '/panel/stock/adjust', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'stock_adjust' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/stock/web-sales', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'web_sales' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/stock/edits-done', array( 'methods' => 'POST', 'callback' => static fn( WP_REST_Request $r ) => self::no_cache( CVD_Order_Edit::mark_caja_edits( (array) $r->get_param( 'items' ) ) ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/stock/levels', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'stock_levels' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/price', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'set_price' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/sales/(?P<id>\d+)/edit', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'edit_order' ), 'permission_callback' => $auth ) );
@@ -132,76 +140,32 @@ final class CVD_Panel_Bridge {
 		return self::no_cache( array( 'from' => $from->format( 'Y-m-d' ), 'to' => $to->format( 'Y-m-d' ), 'items' => $rows ) );
 	}
 
-	private const EDITABLE = array( 'pending', 'processing', 'on-hold' );
-
-	/** Líneas y datos de entrega de un pedido, para editarlo desde el panel. */
+	/** Líneas y datos del pedido para «Cambiar pedido» del panel (3.13.97: los mismos que /ventas/, CVD_Order_Edit). */
 	public static function order_detail( WP_REST_Request $request ) {
 		$order = wc_get_order( absint( $request['id'] ) );
 		if ( ! $order || 'shop_order' !== $order->get_type() ) { return new WP_Error( 'cvd_panel_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
-		$lines = array();
-		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
-			$lines[] = array( 'itemId' => $item_id, 'name' => $item->get_name(), 'qty' => (int) $item->get_quantity(), 'total' => (float) $item->get_total() );
-		}
-		return self::no_cache( array( 'id' => $order->get_id(), 'number' => $order->get_order_number(), 'editable' => in_array( $order->get_status(), self::EDITABLE, true ),
-			'lines' => $lines, 'phone' => $order->get_billing_phone(), 'address' => $order->get_shipping_address_1() ?: $order->get_billing_address_1(), 'note' => $order->get_customer_note() ) );
+		return self::no_cache( CVD_Order_Edit::detail( $order, absint( get_option( self::ACTOR_OPTION, 0 ) ) ) );
 	}
 
 	/**
-	 * Editar un pedido abierto: cantidades (0 = quitar), añadir productos, teléfono, dirección y nota.
-	 * Ajusta el stock como en el administrador de WooCommerce y recalcula totales y comisión.
+	 * Cambiar un pedido desde el panel: nombre, teléfono, dirección, día y franja, nota, cantidades (0 = quitar) y añadir.
+	 * La lógica es la de /ventas/ (CVD_Order_Edit::edit); firma la usuaria del panel y la nota dice quién lo pulsó.
+	 * «stock» = diferencias de líneas ya descontadas: la función nexo-panel-web las aplica en la caja.
 	 */
 	public static function edit_order( WP_REST_Request $request ) {
-		$order = wc_get_order( absint( $request['id'] ) );
-		if ( ! $order || ! in_array( $order->get_status(), self::EDITABLE, true ) ) {
-			return new WP_Error( 'cvd_panel_order', 'Solo se pueden cambiar pedidos que aún no se han entregado ni cancelado.', array( 'status' => 409 ) );
+		$actor = absint( get_option( self::ACTOR_OPTION, 0 ) );
+		if ( ! $actor || ! user_can( $actor, 'manage_woocommerce' ) ) {
+			return new WP_Error( 'cvd_panel_actor', 'Falta configurar quién firma las acciones del panel.', array( 'status' => 500 ) );
 		}
-		require_once WC_ABSPATH . 'includes/admin/wc-admin-functions.php';
 		$p = (array) $request->get_json_params();
-		// Antes de tocar nada: el pedido no puede quedar vacío.
-		$final = array();
-		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) { $final[ $item_id ] = (int) $item->get_quantity(); }
-		foreach ( (array) ( $p['lines'] ?? array() ) as $l ) { if ( isset( $final[ absint( $l['itemId'] ?? 0 ) ] ) ) { $final[ absint( $l['itemId'] ) ] = max( 0, (int) ( $l['qty'] ?? 0 ) ); } }
-		if ( ! array_filter( $final ) && ! array_filter( (array) ( $p['add'] ?? array() ), static fn( $a ) => absint( $a['wooId'] ?? 0 ) > 0 ) ) {
-			return new WP_Error( 'cvd_panel_order', 'El pedido no puede quedar sin productos: cancélalo en su lugar.', array( 'status' => 422 ) );
-		}
-		$changes = array(); $stock = array();
-		foreach ( (array) ( $p['lines'] ?? array() ) as $l ) {
-			$item = $order->get_item( absint( $l['itemId'] ?? 0 ) );
-			$qty = max( 0, (int) ( $l['qty'] ?? -1 ) );
-			if ( ! $item instanceof WC_Order_Item_Product || (int) $item->get_quantity() === $qty ) { continue; }
-			$reduced = (int) $item->get_meta( '_reduced_stock', true );
-			$woo = $item->get_variation_id() ?: $item->get_product_id();
-			// La caja también debe sumar/restar la diferencia (el puente solo cuenta cada línea una vez).
-			if ( $reduced > 0 ) { $stock[] = array( 'itemId' => $item->get_id(), 'wooId' => $woo, 'delta' => (int) $item->get_quantity() - $qty ); }
-			if ( 0 === $qty ) {
-				wc_maybe_adjust_line_item_product_stock( $item, 0 );
-				$changes[] = 'Quitado: ' . $item->get_name();
-				$order->remove_item( $item->get_id() );
-				continue;
-			}
-			$unit = (float) $item->get_subtotal() / max( 1, (int) $item->get_quantity() );
-			$changes[] = $item->get_name() . ': ' . $item->get_quantity() . ' → ' . $qty;
-			$item->set_quantity( $qty ); $item->set_subtotal( $unit * $qty ); $item->set_total( $unit * $qty ); $item->save();
-			wc_maybe_adjust_line_item_product_stock( $item );
-		}
-		foreach ( (array) ( $p['add'] ?? array() ) as $a ) {
-			$product = wc_get_product( absint( $a['wooId'] ?? 0 ) );
-			$qty = max( 1, (int) ( $a['qty'] ?? 1 ) );
-			if ( ! $product ) { continue; }
-			$item_id = $order->add_product( $product, $qty );
-			$item = $order->get_item( $item_id );
-			if ( $item ) { wc_maybe_adjust_line_item_product_stock( $item ); }
-			$changes[] = 'Añadido: ' . $qty . '× ' . $product->get_name();
-		}
-		if ( isset( $p['phone'] ) && '' !== trim( (string) $p['phone'] ) && $p['phone'] !== $order->get_billing_phone() ) { $order->set_billing_phone( sanitize_text_field( (string) $p['phone'] ) ); $changes[] = 'Teléfono'; }
-		if ( isset( $p['address'] ) && '' !== trim( (string) $p['address'] ) ) { $order->set_shipping_address_1( sanitize_text_field( (string) $p['address'] ) ); $order->set_billing_address_1( sanitize_text_field( (string) $p['address'] ) ); $changes[] = 'Dirección'; }
-		if ( isset( $p['note'] ) ) { $order->set_customer_note( sanitize_textarea_field( (string) $p['note'] ) ); }
-		if ( ! $order->get_items( 'line_item' ) ) { return new WP_Error( 'cvd_panel_order', 'El pedido no puede quedar sin productos: cancélalo en su lugar.', array( 'status' => 422 ) ); }
-		$order->calculate_totals( false );
-		if ( $changes ) { $order->add_order_note( 'Cambiado desde el panel: ' . implode( '; ', $changes ) ); }
-		$order->save();
-		if ( class_exists( 'CVD_Commissions' ) ) { CVD_Commissions::mark_pending( $order->get_id() ); }
-		return self::no_cache( array( 'ok' => true, 'changes' => $changes, 'stock' => $stock, 'total' => (float) wc_get_order( $order->get_id() )->get_total() ) );
+		self::enter( $p );
+		wp_set_current_user( $actor );
+		$data = array_intersect_key( $p, array_flip( array( 'firstName', 'lastName', 'phone', 'address', 'deliveryDate', 'deliveryWindow', 'note', 'lines', 'add' ) ) );
+		// El panel viejo mandaba phone/address vacíos cuando no cambiaban: vacío = no se toca.
+		foreach ( array( 'phone', 'address' ) as $k ) { if ( isset( $data[ $k ] ) && '' === trim( (string) $data[ $k ] ) ) { unset( $data[ $k ] ); } }
+		$result = CVD_Order_Edit::edit( absint( $request['id'] ), $data, $actor, 'panel' );
+		if ( is_wp_error( $result ) ) { return $result; }
+		return self::no_cache( $result );
 	}
 
 	/** Precios en masa desde el panel: [{wooId, regular, sale|null}]. sale = precio de oferta (null la quita). */
@@ -365,7 +329,9 @@ final class CVD_Panel_Bridge {
 			foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
 				$lines[] = array( 'itemId' => $item_id, 'wooId' => $item->get_variation_id() ?: $item->get_product_id(), 'qty' => (int) $item->get_quantity(), 'reduced' => (int) $item->get_meta( '_reduced_stock', true ) );
 			}
-			$rows[] = array( 'id' => $order->get_id(), 'number' => $order->get_order_number(), 'status' => $order->get_status(), 'modified' => $order->get_date_modified() ? $order->get_date_modified()->date( 'c' ) : null, 'lines' => $lines );
+			// 3.13.97: cambios de productos hechos en /ventas/ que la caja aún no aplicó (ver CVD_Order_Edit).
+			$edits = class_exists( 'CVD_Order_Edit' ) ? CVD_Order_Edit::pending_caja_edits( $order ) : array();
+			$rows[] = array( 'id' => $order->get_id(), 'number' => $order->get_order_number(), 'status' => $order->get_status(), 'modified' => $order->get_date_modified() ? $order->get_date_modified()->date( 'c' ) : null, 'lines' => $lines, 'edits' => $edits );
 		}
 		return self::no_cache( array( 'orders' => $rows, 'now' => gmdate( 'c' ) ) );
 	}
@@ -811,6 +777,7 @@ final class CVD_Panel_Bridge {
 		$params = (array) $request->get_json_params();
 		$allowed = array( 'status', 'collectionMethod', 'collectionAccount', 'collectionReference', 'collectionCardLabel', 'collectionCardLast4', 'collectionSaveCard', 'collectedUsd', 'collectedCup', 'collectionNote', 'moneyConfirmed', 'handoverConfirmed', 'idempotencyKey', 'reason', 'refundUsd', 'refundCup', 'voidMessenger' );
 		$params = array_intersect_key( $params, array_flip( $allowed ) );
+		self::enter( (array) $request->get_json_params() ); // 3.13.97: la nota de cancelación dice quién lo pulsó en el panel
 		return self::as_owner( 'POST', '/sales/' . absint( $request['id'] ) . '/' . ( 'return' === $request['what'] ? 'return' : 'status' ), $params );
 	}
 

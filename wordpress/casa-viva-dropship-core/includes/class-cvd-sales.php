@@ -294,6 +294,13 @@ final class CVD_Sales {
 			}
 			return rest_ensure_response( array( 'message' => 'Pedido entregado al mensajero.', 'order' => self::payload( wc_get_order( $order->get_id() ) ) ) );
 		}
+		// 3.13.97 (Ernesto, 14-oct): cancelar con motivo, también las dependientas (reglas en CVD_Order_Edit::cancel_block).
+		if ( 'cancelled' === $next && class_exists( 'CVD_Order_Edit' ) ) {
+			$via_panel = class_exists( 'CVD_Panel_Bridge' ) && CVD_Panel_Bridge::via_panel();
+			$result = CVD_Order_Edit::cancel( $order->get_id(), (string) $request->get_param( 'reason' ), get_current_user_id(), $via_panel ? 'panel' : 'ventas' );
+			if ( is_wp_error( $result ) ) { return $result; }
+			return rest_ensure_response( array( 'message' => $result['message'], 'messenger' => $result['messenger'], 'order' => self::payload( wc_get_order( $order->get_id() ) ) ) );
+		}
 		$current = self::operation_status( $order );
 		$fulfillment = sanitize_key( (string) $order->get_meta( '_cvd_fulfillment_type', true ) );
 		if ( 'pickup' === $fulfillment && 'ready' === $current && 'delivered' === $next && class_exists( 'CVD_Order_Transition_Service' ) ) {
@@ -353,10 +360,7 @@ final class CVD_Sales {
 		if ( ! in_array( $next, $allowed, true ) ) {
 			return new WP_Error( 'cvd_invalid_transition', 'Ese cambio de estado no está permitido.', array( 'status' => 409 ) );
 		}
-		if ( 'cancelled' === $next && ! current_user_can( 'manage_woocommerce' ) ) {
-			return new WP_Error( 'cvd_admin_confirmation_required', 'La cancelación debe confirmarla administración.', array( 'status' => 403 ) );
-		}
-		if('cancelled'===$next){$order->update_status('cancelled','Cancelado por administración desde el Centro de ventas.');$fresh=wc_get_order($order->get_id());$coherent=$fresh&&'cancelled'===sanitize_key((string)$fresh->get_meta(self::STATUS_META,true));if(!$coherent){return new WP_Error('cvd_cancellation_failed','No se pudo cancelar el pedido de forma coherente.',array('status'=>409));}return rest_ensure_response(array('message'=>'Pedido actualizado.','order'=>self::payload($fresh)));}
+		if ( 'cancelled' === $next ) { return new WP_Error( 'cvd_cancellation_failed', 'No se pudo cancelar el pedido.', array( 'status' => 409 ) ); } // se cancela arriba (CVD_Order_Edit)
 		if ( 'delivered' === $next ) {
 			// Zelle / USDT llegan como su propio método y se guardan como 'transfer' + cuenta (ver normalize_collection).
 			$collection = self::collection_from_request( $request );
@@ -464,6 +468,11 @@ final class CVD_Sales {
 			if ( in_array( $delivery_status, array( 'accepted', 'to_store' ), true ) || ( 'assigned' === $delivery_status && $direct ) ) { array_unshift( $actions, 'picked_up' ); }
 			if ( 'delivered' === $delivery_status ) { array_unshift( $actions, 'delivered' ); }
 		}
+		// 3.13.97: «Cancelar» y «Cambiar pedido» según CVD_Order_Edit (quién y en qué etapa).
+		$user_id = get_current_user_id();
+		$cancel_why = class_exists( 'CVD_Order_Edit' ) ? CVD_Order_Edit::cancel_block( $order, $user_id ) : 'No disponible.';
+		$edit_why = class_exists( 'CVD_Order_Edit' ) ? CVD_Order_Edit::edit_block( $order, $user_id ) : 'No disponible.';
+		if ( '' !== $cancel_why ) { $actions = array_values( array_diff( $actions, array( 'cancelled' ) ) ); }
 		$phone = preg_replace( '/[^0-9+]/', '', $order->get_billing_phone() );
 		$messenger = 'pickup' === $fulfillment ? false : get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
 		$preferred = 'pickup' !== $fulfillment && ! $messenger && class_exists( 'CVD_Direct_Dispatch' ) ? CVD_Direct_Dispatch::preferred_messenger( $order ) : null;
@@ -518,6 +527,9 @@ final class CVD_Sales {
 			'adminUrl' => admin_url( 'admin.php?page=wc-orders&action=edit&id=' . $order->get_id() ),
 			// 3.13.78 (Nana, 12–13 oct): quién lo vendió y quién lo lleva, con su WhatsApp. Las dependientas lo ven.
 			'people' => self::people( $order ),
+			'canCancel' => '' === $cancel_why,
+			'canEdit' => '' === $edit_why,
+			'cancelReason' => (string) $order->get_meta( '_cvd_cancel_reason', true ),
 		);
 	}
 
