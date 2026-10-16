@@ -29,6 +29,9 @@ final class CVD_Programa {
 	public const OPTION = 'cvd_programa_gestoras';
 	public const VIEW_OPTION = 'cvd_programa_ver';
 	public const FIXED_OPTION = 'cvd_programa_gastos_fijos';
+	/** D79: alertas marcadas «Revisada» (clave => ['at' => UTC, 'by' => usuario]) y el mes cuyo cierre automático espera. */
+	public const REVIEWED_OPTION = 'cvd_programa_revisadas';
+	public const WAIT_OPTION = 'cvd_programa_cierre_espera';
 	private const SCHEMA_VERSION = '2'; // 3.14.29: people.payout_id (pago por «Pedir mi pago»)
 	private const SCHEMA_OPTION = 'cvd_programa_schema';
 	private const CRON = 'cvd_programa_diario';
@@ -153,10 +156,39 @@ final class CVD_Programa {
 		global $wpdb;
 		$done = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::t( 'runs' ) . " WHERE run_date=%s AND kind='diario'", $today ) );
 		if ( ! $done ) { self::run( wp_date( 'Y-m' ), 'diario', 0 ); }
-		if ( (int) wp_date( 'j' ) <= 5 ) {
-			$prev = wp_date( 'Y-m', strtotime( wp_date( 'Y-m-01' ) . ' -1 month' ) );
-			if ( ! self::monthly_run( $prev ) ) { self::run( $prev, 'mensual', 0 ); }
+		$prev = wp_date( 'Y-m', strtotime( wp_date( 'Y-m-01' ) . ' -1 month' ) );
+		// D79: si el cierre está esperando por alertas sin revisar, se sigue intentando cada noche aunque pase el día 5.
+		if ( ( (int) wp_date( 'j' ) <= 5 || (string) get_option( self::WAIT_OPTION, '' ) === $prev ) && ! self::monthly_run( $prev ) ) {
+			self::close_when_reviewed( $prev );
 		}
+	}
+
+	/**
+	 * D79 (auditoría 16-oct §4): el cierre automático del mes ESPERA mientras haya alertas «ganancia_alta» o
+	 * «cuenta_compartida» sin marcar «Revisada» (panel → Equipo → Programa, o wp-admin). «Cerrar ahora» no espera.
+	 * Devuelve el id del cierre, o 0 si espera (y lo apunta en cvd_programa_cierre_espera).
+	 */
+	public static function close_when_reviewed( string $period ): int {
+		$pending = CVD_Programa_Calc::pending_review( (array) ( self::compute( $period )['alerts'] ?? array() ), self::reviewed() );
+		if ( $pending ) { update_option( self::WAIT_OPTION, $period, false ); return 0; }
+		$id = self::run( $period, 'mensual', 0 );
+		if ( $id || self::monthly_run( $period ) ) { delete_option( self::WAIT_OPTION ); }
+		return $id;
+	}
+
+	/** D79: alertas marcadas «Revisada». */
+	public static function reviewed(): array {
+		$r = get_option( self::REVIEWED_OPTION, array() );
+		return is_array( $r ) ? $r : array();
+	}
+
+	/** D79: Lennys (o Ernesto) marca una alerta «Revisada». Solo las que hacen esperar al cierre. */
+	public static function mark_reviewed( string $key, int $by ): bool {
+		if ( ! preg_match( '/^(ganancia_alta|cuenta_compartida):[0-9a-z_:,]{1,120}$/', $key ) ) { return false; }
+		$all = self::reviewed();
+		$all[ $key ] = array( 'at' => current_time( 'mysql', true ), 'by' => $by );
+		if ( count( $all ) > 1000 ) { $all = array_slice( $all, -1000, null, true ); }
+		return (bool) update_option( self::REVIEWED_OPTION, $all, false ) || isset( self::reviewed()[ $key ] );
 	}
 
 	/* ================= Leer WooCommerce ================= */
@@ -217,7 +249,61 @@ final class CVD_Programa {
 				'test' => $test,
 			);
 		}
-		return $out;
+		return self::with_identities( $out );
+	}
+
+	/**
+	 * D79: teléfono (8 últimas cifras), tarjeta o cuenta de cobro y direcciones de entrega de las gestoras que tienen
+	 * madrina o invitadas (solo ellas: hoy son pocas). Sirve para la alerta «cuenta_compartida»; no se guarda en el libro.
+	 */
+	private static function with_identities( array $members ): array {
+		$involved = array();
+		foreach ( $members as $id => $m ) {
+			$inv = (int) ( $m['inviter'] ?? 0 );
+			if ( ! $inv || $inv === (int) $id || ! isset( $members[ $inv ] ) ) { continue; }
+			$involved[ (int) $id ] = true; $involved[ $inv ] = true;
+			$inv2 = (int) ( $members[ $inv ]['inviter'] ?? 0 );
+			if ( $inv2 && isset( $members[ $inv2 ] ) ) { $involved[ $inv2 ] = true; }
+		}
+		foreach ( array_keys( $involved ) as $id ) { $members[ $id ]['ids'] = self::identities( $id ); }
+		return $members;
+	}
+
+	/** D79: datos de una gestora para compararlos con los de su madrina. Claves normalizadas => texto corto para la alerta. */
+	private static function identities( int $user_id ): array {
+		$ids = array( 'telefono' => array(), 'tarjeta' => array(), 'direccion' => array() );
+		$dec = static fn( string $v ): string => ( '' !== $v && class_exists( 'CVD_Payouts' ) ) ? CVD_Payouts::decrypt( $v ) : '';
+		$add_phone = static function ( string $raw ) use ( &$ids ): void {
+			$k = CVD_Programa_Calc::phone_key( $raw );
+			if ( '' !== $k ) { $ids['telefono'][ $k ] = '…' . substr( $k, -4 ); }
+		};
+		$add_account = static function ( string $raw ) use ( &$ids ): void {
+			$k = CVD_Programa_Calc::account_key( $raw );
+			if ( '' !== $k ) { $ids['tarjeta'][ $k ] = false !== strpos( $k, '@' ) ? $k : '…' . substr( $k, -4 ); }
+		};
+		$add_phone( (string) get_user_meta( $user_id, '_cvd_whatsapp', true ) );
+		$add_phone( (string) get_user_meta( $user_id, 'billing_phone', true ) );
+		$add_phone( $dec( (string) get_user_meta( $user_id, '_cvd_payout_phone', true ) ) );
+		$add_account( $dec( (string) get_user_meta( $user_id, '_cvd_payout_account', true ) ) );
+		// Pagos de comisiones, los nuevos («Pedir mi pago») y los de antes: la tarjeta o cuenta y el teléfono con que cobró.
+		global $wpdb;
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT account_value, phone_value FROM {$wpdb->prefix}cvd_payouts WHERE owner_user_id=%d ORDER BY id DESC LIMIT 100", $user_id ), ARRAY_A );
+		foreach ( $rows as $r ) {
+			$add_account( $dec( (string) ( $r['account_value'] ?? '' ) ) );
+			$add_phone( $dec( (string) ( $r['phone_value'] ?? '' ) ) );
+		}
+		// Direcciones de entrega de sus pedidos del último año (sin las de recoger en la tienda).
+		$store = CVD_Programa_Calc::address_key( (string) get_option( 'woocommerce_store_address', '' ), (string) get_option( 'woocommerce_store_city', '' ) );
+		$orders = function_exists( 'wc_get_orders' ) ? wc_get_orders( array( 'type' => 'shop_order', 'limit' => 300, 'meta_key' => '_cvd_owner_user_id', 'meta_value' => $user_id, 'date_created' => '>' . ( time() - 365 * DAY_IN_SECONDS ) ) ) : array(); // phpcs:ignore WordPress.DB.SlowDBQuery
+		foreach ( (array) $orders as $o ) {
+			if ( ! $o instanceof WC_Order || absint( $o->get_meta( '_cvd_owner_user_id', true ) ) !== $user_id ) { continue; }
+			$addr = trim( (string) $o->get_shipping_address_1() ) ? array( $o->get_shipping_address_1(), $o->get_shipping_city() ) : array( $o->get_billing_address_1(), $o->get_billing_city() );
+			$k = CVD_Programa_Calc::address_key( (string) $addr[0], (string) $addr[1] );
+			if ( '' === $k || $k === $store ) { continue; }
+			$label = trim( (string) $addr[0] );
+			$ids['direccion'][ $k ] = ( function_exists( 'mb_substr' ) ? mb_substr( $label, 0, 40 ) : substr( $label, 0, 40 ) ) . ( '' !== trim( (string) $addr[1] ) ? ', ' . trim( (string) $addr[1] ) : '' );
+		}
+		return $ids;
 	}
 
 	/** Pedidos de gestoras que pueden caer en el mes (los que se tocaron desde que empezó). */
@@ -711,6 +797,8 @@ final class CVD_Programa {
 		} elseif ( 'cerrar' === $do ) {
 			$period = sanitize_text_field( (string) ( $_POST['period'] ?? '' ) );
 			$msg = $period < wp_date( 'Y-m' ) && self::run( $period, 'mensual', get_current_user_id() ) ? 'cerrado' : 'error';
+		} elseif ( 'revisada' === $do ) {
+			$msg = self::mark_reviewed( sanitize_text_field( wp_unslash( (string) ( $_POST['key'] ?? '' ) ) ), get_current_user_id() ) ? 'revisada' : 'error';
 		} elseif ( 'pagado' === $do ) {
 			$msg = self::mark_paid( absint( $_POST['row'] ?? 0 ), sanitize_text_field( wp_unslash( (string) ( $_POST['ref'] ?? '' ) ) ) ) ? 'pagado' : 'error';
 		}
@@ -803,10 +891,21 @@ final class CVD_Programa {
 		}
 		usort( $people, static fn( $a, $b ) => $b['teamPoints'] <=> $a['teamPoints'] );
 		// Alertas: lo grave primero; «revisar» (su teléfono con otro cliente) es muy común y va al final.
-		$order = array( 'autocompra' => 0, 'autocompra_red' => 0, 'concentracion' => 1, 'red_negativa' => 2, 'devolucion' => 3, 'pierde' => 4, 'ganancia_alta' => 4, 'sin_costo' => 5, 'revisar' => 6, 'provisional' => 7 );
+		// D79: «cuenta_compartida» es grave (arriba); las «revisar» van agrupadas en un resumen.
+		$order = array( 'cuenta_compartida' => 0, 'autocompra' => 0, 'autocompra_red' => 0, 'concentracion' => 1, 'red_negativa' => 2, 'devolucion' => 3, 'pierde' => 4, 'ganancia_alta' => 4, 'sin_costo' => 5, 'revisar' => 6, 'revisar_resumen' => 6, 'provisional' => 7 );
 		$alerts = (array) ( $data['alerts'] ?? array() );
 		usort( $alerts, static fn( $a, $b ) => ( $order[ $a['type'] ] ?? 9 ) <=> ( $order[ $b['type'] ] ?? 9 ) );
-		$alert_counts = array_count_values( array_column( $alerts, 'type' ) );
+		$reviewed = self::reviewed();
+		$alert_counts = array();
+		foreach ( $alerts as &$a ) {
+			$alert_counts[ $a['type'] ] = ( $alert_counts[ $a['type'] ] ?? 0 ) + max( 1, (int) ( $a['count'] ?? 1 ) );
+			$a['key'] = CVD_Programa_Calc::alert_key( $a );
+			$a['canReview'] = in_array( $a['type'], CVD_Programa_Calc::REVIEW_TYPES, true );
+			$a['reviewed'] = $a['canReview'] && isset( $reviewed[ $a['key'] ] );
+			if ( $a['reviewed'] ) { $a['reviewedAt'] = (string) ( $reviewed[ $a['key'] ]['at'] ?? '' ); }
+		}
+		unset( $a );
+		$pending = count( array_filter( $alerts, static fn( $a ) => $a['canReview'] && ! $a['reviewed'] ) );
 		global $wpdb;
 		$runs = (array) $wpdb->get_results( 'SELECT id, period, kind, mode, status, computed_at, rate_cup, totals, payload_sha256 FROM ' . self::t( 'runs' ) . ' ORDER BY id DESC LIMIT 15', ARRAY_A );
 		foreach ( $runs as &$r ) { $r['totals'] = json_decode( (string) $r['totals'], true ); }
@@ -820,6 +919,8 @@ final class CVD_Programa {
 			'people' => array_slice( $people, 0, $people_limit ),
 			'alerts' => array_slice( $alerts, 0, 100 ),
 			'alertCounts' => $alert_counts,
+			'pendingReview' => $pending, // D79: alertas que hacen esperar al cierre automático
+			'closeWaiting' => (string) get_option( self::WAIT_OPTION, '' ), // D79: mes cuyo cierre espera ('' = ninguno)
 			'runs' => $runs,
 		);
 	}
@@ -829,7 +930,7 @@ final class CVD_Programa {
 		self::maybe_upgrade();
 		$rep = self::report();
 		$mode = $rep['mode'];
-		$msgs = array( 'guardado' => 'Guardado.', 'calculado' => 'Calculado y apuntado en el libro.', 'cerrado' => 'Mes cerrado y apuntado en el libro.', 'pagado' => 'Pago anotado con su recibo.', 'error' => 'No se pudo (revisa que el mes no esté ya cerrado o que falte la referencia).' );
+		$msgs = array( 'guardado' => 'Guardado.', 'calculado' => 'Calculado y apuntado en el libro.', 'cerrado' => 'Mes cerrado y apuntado en el libro.', 'pagado' => 'Pago anotado con su recibo.', 'revisada' => 'Alerta marcada «Revisada».', 'error' => 'No se pudo (revisa que el mes no esté ya cerrado o que falte la referencia).' );
 		$msg = sanitize_key( (string) ( $_GET['msg'] ?? '' ) );
 		$names = array();
 		foreach ( $rep['people'] as $p ) { $names[ $p['id'] ] = $p['name']; }
@@ -853,9 +954,15 @@ final class CVD_Programa {
 		}
 		echo '</tbody></table>';
 		if ( $rep['alerts'] ) {
-			$labels = array( 'autocompra' => 'Autocompra (no cuenta)', 'autocompra_red' => 'La madrina compra por su invitada (sin red)', 'ganancia_alta' => 'Ganancia muy alta: revisar costo','concentracion' => 'Un miembro con más del 60 %', 'red_negativa' => 'Red en negativo', 'devolucion' => 'Devolución de un mes cerrado', 'pierde' => 'Se vende perdiendo', 'sin_costo' => 'Producto sin costo', 'revisar' => 'Su teléfono con otro cliente (cuenta)', 'provisional' => 'Costo provisional (cuenta)' );
+			$labels = array( 'cuenta_compartida' => 'Comparte teléfono, tarjeta o dirección con su madrina', 'revisar_resumen' => 'Su teléfono con otro cliente (normal)', 'autocompra' => 'Autocompra (no cuenta)', 'autocompra_red' => 'La madrina compra por su invitada (sin red)', 'ganancia_alta' => 'Ganancia muy alta: revisar costo','concentracion' => 'Un miembro con más del 60 %', 'red_negativa' => 'Red en negativo', 'devolucion' => 'Devolución de un mes cerrado', 'pierde' => 'Se vende perdiendo', 'sin_costo' => 'Producto sin costo', 'revisar' => 'Su teléfono, 3 veces o más con la misma clienta', 'provisional' => 'Costo provisional (cuenta)' );
 			echo '<h2>Alertas (' . esc_html( (string) array_sum( $rep['alertCounts'] ) ) . ')</h2><p>' . esc_html( implode( ' · ', array_map( static fn( $k, $v ) => ( $labels[ $k ] ?? $k ) . ': ' . $v, array_keys( $rep['alertCounts'] ), $rep['alertCounts'] ) ) ) . '</p><ul style="list-style:disc;margin-left:20px">';
-			foreach ( $rep['alerts'] as $a ) { echo '<li><strong>' . esc_html( $a['type'] ) . '</strong> · ' . esc_html( $a['text'] ) . '</li>'; }
+			if ( $rep['pendingReview'] ) { echo '<p><strong>' . esc_html( $rep['pendingReview'] . ( 1 === $rep['pendingReview'] ? ' alerta' : ' alertas' ) . ' sin revisar: el cierre automático del mes espera hasta que las marques «Revisada».' ) . '</strong>' . ( $rep['closeWaiting'] ? esc_html( ' Ahora espera el cierre de ' . $rep['closeWaiting'] . '.' ) : '' ) . '</p>'; }
+			foreach ( $rep['alerts'] as $a ) {
+				echo '<li><strong>' . esc_html( $a['type'] ) . '</strong> · ' . esc_html( $a['text'] );
+				if ( $a['reviewed'] ) { echo ' <em>· Revisada ' . esc_html( self::local( (string) ( $a['reviewedAt'] ?? '' ) ) ) . '</em>'; }
+				elseif ( $a['canReview'] ) { echo ' ' . $form( 'revisada', '<input type="hidden" name="key" value="' . esc_attr( $a['key'] ) . '"><button class="button button-small">Revisada</button>' ); } // phpcs:ignore
+				echo '</li>';
+			}
 			echo '</ul>';
 		}
 		echo '<h2>Gestoras</h2><table class="widefat striped"><thead><tr><th>Gestora</th><th>Invitada por</th><th>Piedra mes / título</th><th>Puntos propios</th><th>Puntos equipo</th><th>Invitadas</th><th>Red</th><th>Fondo equipo</th><th>Red a pagar</th><th>Bono</th></tr></thead><tbody>';
@@ -900,6 +1007,11 @@ final class CVD_Programa {
 		$auth = array( 'CVD_Panel_Bridge', 'authorized' );
 		register_rest_route( 'casa-viva/v1', '/panel/programa', array( 'methods' => 'GET', 'callback' => static function () {
 			$r = new WP_REST_Response( self::report() ); $r->header( 'Cache-Control', 'no-store, private' ); return $r;
+		}, 'permission_callback' => $auth ) );
+		// D79: Lennys marca una alerta «ganancia_alta» o «cuenta_compartida» como revisada (el cierre automático deja de esperar por ella).
+		register_rest_route( 'casa-viva/v1', '/panel/programa/revisar', array( 'methods' => 'POST', 'callback' => static function ( WP_REST_Request $req ) {
+			$ok = self::mark_reviewed( sanitize_text_field( (string) $req->get_param( 'key' ) ), absint( get_option( 'cvd_panel_actor_user_id', 0 ) ) );
+			return $ok ? new WP_REST_Response( self::report() ) : new WP_Error( 'cvd_programa', 'No se pudo marcar como revisada.', array( 'status' => 400 ) );
 		}, 'permission_callback' => $auth ) );
 		register_rest_route( 'casa-viva/v1', '/panel/programa/calcular', array( 'methods' => 'POST', 'callback' => static function () {
 			$id = self::run( wp_date( 'Y-m' ), 'manual', absint( get_option( 'cvd_panel_actor_user_id', 0 ) ) );

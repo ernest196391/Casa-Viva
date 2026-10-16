@@ -16,6 +16,7 @@ $GLOBALS['meta'] = array(); $GLOBALS['umeta'] = array(); $GLOBALS['orders'] = ar
 
 function get_option( $k, $d = false ) { return $GLOBALS['opts'][ $k ] ?? $d; }
 function update_option( $k, $v ) { $GLOBALS['opts'][ $k ] = $v; return true; }
+function delete_option( $k ) { unset( $GLOBALS['opts'][ $k ] ); return true; }
 function sanitize_key( $v ) { return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $v ) ); }
 function sanitize_text_field( $v ) { return trim( (string) $v ); }
 function absint( $v ) { return abs( (int) $v ); }
@@ -65,6 +66,10 @@ class WC_Order {
 	public function get_billing_last_name() { return $this->m['_bl'] ?? 'Real'; }
 	public function get_shipping_first_name() { return ''; }
 	public function get_shipping_last_name() { return ''; }
+	public function get_shipping_address_1() { return $this->m['_sa1'] ?? ''; }
+	public function get_shipping_city() { return $this->m['_sc'] ?? ''; }
+	public function get_billing_address_1() { return $this->m['_ba1'] ?? ''; }
+	public function get_billing_city() { return $this->m['_bc'] ?? ''; }
 	public function get_items() { return $this->m['_items'] ?? array(); }
 	public function get_qty_refunded_for_item( $id ) { return $this->m['_refunded'][ $id ] ?? 0; }
 }
@@ -145,7 +150,8 @@ ok( abs( $P[1]['red1'] - 1.75 ) < 0.01, 'Marta: 1 % de los 175 de Ana = 1,75' );
 ok( 0.0 === (float) $P[1]['red2'] && abs( $P[1]['red_lost'] - 1.95 ) < 0.01, 'Marta no es Plata: pierde el 0,5 % de Rosa (1,95)' );
 $types = array_column( $r['alerts'], 'type' );
 ok( in_array( 'autocompra', $types, true ) && in_array( 'sin_costo', $types, true ), 'alertas de autocompra y de producto sin costo' );
-ok( in_array( 'revisar', $types, true ) && abs( $P[5]['own_points'] - 7 ) < 0.01, 'Lola: pedido con su teléfono pero otro cliente → cuenta (7 puntos) con alerta «revisar»' );
+ok( in_array( 'revisar_resumen', $types, true ) && abs( $P[5]['own_points'] - 7 ) < 0.01, 'Lola: pedido con su teléfono pero otro cliente → cuenta (7 puntos) y va al resumen «revisar» (D79)' );
+ok( ! in_array( 'cuenta_compartida', $types, true ), 'sin datos compartidos: ninguna «cuenta_compartida»' );
 ok( $r['totals']['pay_usd'] <= $r['totals']['pool_usd'] + 0.01, 'lo que se paga cabe en el fondo' );
 
 // Puntos de producto en la tienda (comisión 10 %).
@@ -230,6 +236,62 @@ $r = CVD_Programa::compute( '2026-11' );
 ok( abs( $r['people'][6]['own_points'] - 21 ) < 0.01, 'reembolso parcial: 3 de 4 alfombras → 90 − 60 − 9 = 21 puntos: ' . $r['people'][6]['own_points'] );
 ok( abs( $r['people'][6]['own_sales_usd'] - 90 ) < 0.01, 'reembolso parcial: cuenta 90 USD vendidos, no 120' );
 unset( $GLOBALS['orders'][3030], $GLOBALS['users'][6] );
+
+// ---------- D79 (3.14.32): cuentas que comparten datos con su madrina (lectura de WordPress), «Revisada» y cierre que espera ----------
+if ( ! class_exists( 'CVD_Payouts' ) ) {
+	final class CVD_Payouts { // lo justo: «descifra» lo que empieza por enc:
+		public static function decrypt( string $v ): string { return 0 === strpos( $v, 'enc:' ) ? substr( $v, 4 ) : ''; }
+	}
+}
+class FakeWpdbD79 extends FakeWpdb {
+	public $payouts = array(); private $last = '';
+	public function prepare( $q, ...$a ) { $this->last = $q . '|' . implode( ',', $a ); return $this->last; }
+	public function get_results( $q, $o = null ) {
+		if ( false !== strpos( $q, 'cvd_payouts WHERE owner_user_id' ) ) { $owner = (int) substr( $q, strrpos( $q, '|' ) + 1 ); return $this->payouts[ $owner ] ?? array(); }
+		return parent::get_results( $q, $o );
+	}
+}
+$GLOBALS['wpdb'] = new FakeWpdbD79();
+// Ana (2) pone de WhatsApp el mismo número que Marta (1) tiene en su perfil.
+$GLOBALS['umeta'][2]['_cvd_whatsapp'] = '+53 5555 1234';
+$GLOBALS['umeta'][1]['billing_phone'] = '55551234';
+// Rosa (3) guardó para cobrar la misma tarjeta con la que Marta cobró un pago de antes.
+$GLOBALS['umeta'][3]['_cvd_payout_account'] = 'enc:9200111122223333';
+$GLOBALS['wpdb']->payouts[1] = array( array( 'account_value' => 'enc:9200 1111 2222 3333', 'phone_value' => '' ) );
+// Rosa y Marta mandan pedidos a la misma casa (escrita distinto). Ana y Marta, a la tienda (no cuenta).
+$GLOBALS['opts']['woocommerce_store_address'] = 'Calle Obispo 101'; $GLOBALS['opts']['woocommerce_store_city'] = 'Habana Vieja';
+$GLOBALS['orders'] = array();
+order( 3001, 3, array( array( 100, 0, 10, 300, 30 ) ), array( '_ba1' => 'Calle 23 #456 e/ A y B', '_bc' => 'Plaza' ) );
+order( 3005, 1, array( array( 100, 0, 2, 60, 6 ) ), array( '_ba1' => 'Calle 23 No. 456 entre A y B', '_bc' => 'Plaza' ) );
+order( 3003, 2, array( array( 100, 0, 5, 150, 15 ) ), array( '_ba1' => 'calle obispo #101', '_bc' => 'Habana Vieja' ) );
+order( 3012, 1, array( array( 100, 0, 1, 30, 3 ) ), array( '_ba1' => 'Obispo 101', '_bc' => 'Habana Vieja' ), 'cancelled' );
+$r = CVD_Programa::compute( '2026-11' );
+$cc = array();
+foreach ( $r['alerts'] as $a ) { if ( 'cuenta_compartida' === $a['type'] ) { $cc[ $a['user'] . '-' . $a['member'] ] = $a; } }
+ok( 2 === count( $cc ), 'cuenta_compartida con datos de WordPress: 2 alertas: ' . implode( ' / ', array_keys( $cc ) ) );
+ok( isset( $cc['2-1'] ) && array( 'telefono' ) === $cc['2-1']['kinds'], 'Ana y Marta: el mismo teléfono (WhatsApp de una, perfil de la otra), sin la dirección de la tienda' );
+ok( isset( $cc['3-1'] ) && array( 'direccion', 'tarjeta' ) === $cc['3-1']['kinds'] && 2 === $cc['3-1']['level'], 'Rosa y Marta (2.º nivel): la tarjeta de un pago viejo y la misma casa' );
+ok( isset( $cc['3-1'] ) && false !== strpos( $cc['3-1']['text'], '…3333' ) && false === strpos( wp_json_encode( $r ), '9200111122223333' ), 'la tarjeta entera no se guarda en el cálculo (solo …3333)' );
+ok( ! isset( $r['people'][1]['ids'] ) && false === strpos( wp_json_encode( $r ), '55551234' ), 'los datos de las gestoras no van al libro' );
+ok( abs( $r['people'][3]['own_points'] - 70 ) < 0.01 && abs( $r['people'][2]['red1'] - 3 ) < 0.01, 'no bloquea: Rosa cuenta sus 70 puntos y Ana su red' );
+
+// Panel: clave, «Revisada» y cuántas faltan.
+$GLOBALS['wpdb']->latest = array( 'id' => 8, 'period' => '2026-11', 'kind' => 'diario', 'status' => 'vista', 'computed_at' => gmdate( 'Y-m-d H:i:s' ), 'rate_cup' => 800, 'payload_sha256' => str_repeat( 'b', 64 ), 'payload' => json_encode( $r ) );
+$rep = CVD_Programa::report();
+ok( 2 === $rep['pendingReview'] && 'cuenta_compartida' === $rep['alerts'][0]['type'], 'panel: 2 alertas sin revisar y «cuenta_compartida» va arriba' );
+ok( $rep['alerts'][0]['canReview'] && ! $rep['alerts'][0]['reviewed'] && '' !== $rep['alerts'][0]['key'], 'panel: cada alerta trae su clave y si se puede marcar «Revisada»' );
+ok( CVD_Programa::mark_reviewed( 'cuenta_compartida:2:1:telefono', 9 ), 'marcar «Revisada» la de Ana y Marta' );
+ok( ! CVD_Programa::mark_reviewed( 'revisar:1:1', 9 ) && ! CVD_Programa::mark_reviewed( 'cuenta_compartida:<b>', 9 ), 'solo se marcan «ganancia_alta» y «cuenta_compartida», con una clave limpia' );
+$rep = CVD_Programa::report();
+$rev = array_values( array_filter( $rep['alerts'], static fn( $a ) => 'cuenta_compartida:2:1:telefono' === $a['key'] ) );
+ok( 1 === $rep['pendingReview'] && $rev && $rev[0]['reviewed'], 'después: queda 1 sin revisar y la de Ana sale «Revisada»' );
+// El cierre automático espera mientras quede una sin revisar; «Cerrar ahora» (run) no pasa por aquí.
+ok( 0 === CVD_Programa::close_when_reviewed( '2026-11' ) && '2026-11' === get_option( 'cvd_programa_cierre_espera' ), 'cierre automático: espera (queda la de Rosa y Marta) y lo apunta' );
+ok( '2026-11' === CVD_Programa::report()['closeWaiting'], 'panel: «el cierre de 2026-11 espera»' );
+CVD_Programa::mark_reviewed( 'cuenta_compartida:3:1:direccion,tarjeta', 9 );
+CVD_Programa::close_when_reviewed( '2026-11' ); // con todo revisado intenta cerrar (aquí la base de datos es falsa: el cierre ya «existe»)
+ok( '' === (string) get_option( 'cvd_programa_cierre_espera', '' ), 'todo revisado: el cierre ya no espera' );
+$GLOBALS['wpdb'] = new FakeWpdb();
 
 echo $fails ? "\n$fails de $count comprobaciones fallaron\n" : "OK: $count comprobaciones\n";
 exit( $fails ? 1 : 0 );

@@ -44,7 +44,7 @@ ok( '' === $C::self_purchase( 'Ana Pérez', array( 'Ana Gómez' ), false ), 'otr
 ok( 'revisar' === $C::self_purchase( 'Neisy', array( 'Neisy Fernández' ), false ) || '' === $C::self_purchase( 'Neisy', array( 'Neisy Fernández' ), false ), 'nombre de una palabra sin su teléfono: no se excluye' );
 ok( 'si' === $C::self_purchase( 'Neisy', array( 'Neisy Fernández' ), true ), 'nombre de una palabra + su teléfono: autocompra' );
 $r = $C::compute( P, array( 1 => member( 'Ana' ) ), array( sale( 5, 1, 200, 120, 10, array( 'self_check' => true ) ) ) );
-ok( abs( $r['people'][1]['own_points'] - 70 ) < 0.01 && has_alert( $r, 'revisar', 1 ), 'self_check: cuenta y deja alerta' );
+ok( abs( $r['people'][1]['own_points'] - 70 ) < 0.01 && has_alert( $r, 'revisar_resumen' ) && ! has_alert( $r, 'revisar' ), 'self_check: cuenta y va al resumen (D79: suelta solo si se repite 3 veces)' );
 
 // ---------- 2. Fecha de «entregada y cobrada» ----------
 ok( '2026-11-03 10:00:00' === $C::approved_at( array( array( 'to' => 'pending', 'at' => '2026-10-30 09:00:00' ), array( 'to' => 'approved', 'at' => '2026-11-03 10:00:00' ) ) ), 'approved_at toma la aprobación del historial' );
@@ -285,6 +285,72 @@ ok( $r4['totals']['pay_usd'] <= 23.11, 'arrastre: se paga como mucho el fondo qu
 $r = $C::compute( P, $m, array( sale( 508, 1, 300, 200, 30 ) ) );
 near( $r['totals']['carry_out_usd'], 0, 'sin devoluciones no hay deuda' );
 near( $r['totals']['pool_usd'], 10.5, 'sin deuda el fondo es el de siempre (15 % de 70)' );
+
+// ---------- D79 (3.14.32): cuentas que comparten datos con su madrina, «revisar» agrupadas, cierre que espera ----------
+ok( '53870260' === $C::phone_key( '+53 5387 0260' ) && '53870260' === $C::phone_key( '5387-0260' ), 'teléfono: 8 últimas cifras, con o sin +53' );
+ok( '' === $C::phone_key( '1234' ) && '' === $C::phone_key( '00000000' ), 'teléfono corto o de ceros: no se compara' );
+ok( '9200123412341234' === $C::account_key( '9200 1234 1234 1234' ) && 'ana@x.com' === $C::account_key( ' Ana@X.com ' ) && '' === $C::account_key( '1234' ), 'tarjeta: los números (12 o más) o un correo' );
+ok( $C::address_key( 'Calle 23 #456 e/ A y B', 'Plaza' ) === $C::address_key( 'calle 23 No. 456 entre a y b', 'plaza' ), 'dirección: igual sin «calle», «#», «No.», «entre», mayúsculas' );
+ok( '' === $C::address_key( 'Vedado', 'Plaza' ), 'dirección sin número: demasiado vaga, no se compara' );
+ok( $C::address_key( 'Calle 23 #456', 'Plaza' ) !== $C::address_key( 'Calle 23 #456', 'Boyeros' ), 'dirección: el municipio cuenta' );
+$ids = static fn( array $tel = array(), array $card = array(), array $dir = array() ): array => array( 'telefono' => $tel, 'tarjeta' => $card, 'direccion' => $dir );
+// Marta (1) invitó a Ana (2); Ana invitó a Rosa (3). Lola (4) sin madrina.
+$m = array(
+	1 => member( 'Marta' ) + array( 'ids' => $ids( array( '53870260' => '…0260' ), array( '9200123412341234' => '…1234' ), array( '23 456|plaza' => 'Calle 23 #456, Plaza' ) ) ),
+	2 => member( 'Ana', 1 ) + array( 'ids' => $ids( array( '53870260' => '…0260' ) ) ),
+	3 => member( 'Rosa', 2 ) + array( 'ids' => $ids( array(), array( '9200123412341234' => '…1234' ), array( '23 456|plaza' => 'Calle 23 #456, Plaza' ) ) ),
+	4 => member( 'Lola' ) + array( 'ids' => $ids( array( '53870260' => '…0260' ) ) ),
+);
+$r = $C::compute( P, $m, array() );
+$cc = array_values( array_filter( $r['alerts'], static fn( $a ) => 'cuenta_compartida' === $a['type'] ) );
+ok( 2 === count( $cc ), 'cuenta_compartida: 2 alertas (Ana con Marta; Rosa con Marta de 2.º nivel): ' . count( $cc ) );
+ok( 2 === $cc[0]['user'] && 1 === $cc[0]['member'] && 1 === $cc[0]['level'] && array( 'telefono' ) === $cc[0]['kinds'], 'Ana y Marta comparten el teléfono (1.er nivel)' );
+ok( 3 === $cc[1]['user'] && 1 === $cc[1]['member'] && 2 === $cc[1]['level'] && array( 'direccion', 'tarjeta' ) === $cc[1]['kinds'], 'Rosa y Marta (2.º nivel) comparten tarjeta y dirección' );
+ok( false !== strpos( $cc[1]['text'], 'madrina de 2.º nivel' ) && false !== strpos( $cc[1]['text'], '…1234' ) && false === strpos( $cc[1]['text'], '9200123412341234' ), 'el texto dice «madrina de 2.º nivel» y solo las 4 últimas cifras de la tarjeta' );
+ok( 'cuenta_compartida:3:1:direccion,tarjeta' === $C::alert_key( $cc[1] ), 'clave estable para marcarla «Revisada»' );
+ok( ! has_alert( $r, 'cuenta_compartida', 4 ), 'Lola tiene el mismo teléfono pero no es invitada de nadie: sin alerta (solo con su madrina)' );
+$m[2]['test'] = true;
+ok( ! has_alert( $C::compute( P, $m, array() ), 'cuenta_compartida', 2 ), 'cuenta de prueba: sin alerta' );
+unset( $m[2]['test'] );
+// No bloquea nada: con la misma tarjeta, Ana sigue cobrando su venta y Marta su red.
+$m[2]['ids']['tarjeta'] = array( '9200123412341234' => '…1234' );
+$r = $C::compute( P, $m, array( sale( 700, 2, 300, 200, 30 ), sale( 701, 1, 60, 40, 6 ) ) );
+ok( has_alert( $r, 'cuenta_compartida', 2 ) && abs( $r['people'][2]['own_points'] - 70 ) < 0.01 && abs( $r['people'][1]['red1'] - 3 ) < 0.01, 'cuenta_compartida no bloquea: Ana 70 puntos y Marta su red de 3 USD' );
+// Sin datos (ids vacíos) no sale nada.
+ok( ! has_alert( $C::compute( P, array( 1 => member( 'Marta' ), 2 => member( 'Ana', 1 ) ), array() ), 'cuenta_compartida' ), 'sin datos no hay alerta' );
+
+// «revisar» agrupadas: 5 pedidos con su teléfono, 3 con la misma clienta → 1 suelta (con los 3 pedidos) + resumen de 2.
+$m = array( 1 => member( 'Ana' ), 2 => member( 'Bea' ) );
+$chk = static fn( int $o, int $owner, string $client ): array => sale( $o, $owner, 60, 40, 6, array( 'self_check' => true, 'buyer_names' => array( $client, '', '' ) ) );
+$r = $C::compute( P, $m, array( $chk( 801, 1, 'Yuni Pérez' ), $chk( 802, 1, 'yuni  PÉREZ' ), $chk( 803, 1, 'Yuni Perez' ), $chk( 804, 1, 'Lía Gómez' ), $chk( 805, 2, 'Yuni Pérez' ) ) );
+$rv = array_values( array_filter( $r['alerts'], static fn( $a ) => 'revisar' === $a['type'] ) );
+$rs = array_values( array_filter( $r['alerts'], static fn( $a ) => 'revisar_resumen' === $a['type'] ) );
+ok( 1 === count( $rv ) && 1 === $rv[0]['user'] && array( 801, 802, 803 ) === $rv[0]['orders'] && 3 === $rv[0]['count'], 'revisar: suelta solo la de Ana con Yuni (3 pedidos, sin tildes ni mayúsculas)' );
+ok( 1 === count( $rs ) && 2 === $rs[0]['count'] && 2 === $rs[0]['gestoras'] && false !== strpos( $rs[0]['text'], '2 pedidos con el teléfono de la gestora (normal)' ), 'revisar_resumen: «2 pedidos con el teléfono de la gestora (normal)»' );
+near( $r['people'][1]['own_points'], 56, 'las «revisar» cuentan igual: Ana 4 × 14 = 56 puntos' );
+$r = $C::compute( P, $m, array( $chk( 806, 1, 'Yuni' ), $chk( 807, 1, 'Yuni' ) ) );
+ok( ! has_alert( $r, 'revisar' ) && has_alert( $r, 'revisar_resumen' ), '2 veces la misma clienta: solo en el resumen' );
+$r = $C::compute( P, $m, array( sale( 808, 1, 60, 40, 6 ) ) );
+ok( ! has_alert( $r, 'revisar' ) && ! has_alert( $r, 'revisar_resumen' ), 'sin pedidos con su teléfono: ni suelta ni resumen' );
+$many = array(); for ( $i = 0; $i < 58; $i++ ) { $many[] = $chk( 900 + $i, 1 + $i % 2, 'Clienta ' . $i ); }
+$r = $C::compute( P, $m, $many );
+ok( 1 === count( $r['alerts'] ) && 58 === $r['alerts'][0]['count'], '58 «revisar» de octubre → 1 sola línea de resumen' );
+
+// Cierre que espera: «ganancia_alta» y «cuenta_compartida» sin revisar; las demás no.
+$al = array(
+	array( 'type' => 'ganancia_alta', 'order' => 9, 'user' => 1, 'key' => 'ganancia_alta:9' ),
+	array( 'type' => 'cuenta_compartida', 'user' => 3, 'member' => 1, 'key' => 'cuenta_compartida:3:1:tarjeta' ),
+	array( 'type' => 'provisional', 'order' => 10, 'user' => 1 ),
+	array( 'type' => 'revisar_resumen', 'count' => 58 ),
+);
+ok( 2 === count( $C::pending_review( $al, array() ) ), 'cierre: espera por 2 alertas (ganancia alta y cuenta compartida)' );
+ok( 1 === count( $C::pending_review( $al, array( 'ganancia_alta:9' => array( 'at' => 'x' ) ) ) ), 'una revisada: queda 1' );
+ok( array() === $C::pending_review( $al, array( 'ganancia_alta:9' => 1, 'cuenta_compartida:3:1:tarjeta' => 1 ) ), 'las dos revisadas: ya no espera' );
+ok( array() === $C::pending_review( array( $al[2], $al[3] ), array() ), '«provisional» y «revisar» no hacen esperar al cierre' );
+$r = $C::compute( P, array( 1 => member( 'Ana' ) ), array( sale( 950, 1, 32, 3.2, 3 ) ) );
+ok( 'ganancia_alta:950' === $C::alert_key( $r['alerts'][0] ) && 1 === count( $C::pending_review( $r['alerts'], array() ) ), 'ganancia_alta del pedido #950: clave «ganancia_alta:950» y hace esperar' );
+// Los números del programa no cambian (D79 no toca red, piedras ni fondo).
+ok( 0.01 === $C::DEFAULTS['red1_pct'] && 0.005 === $C::DEFAULTS['red2_pct'] && 0.15 === $C::DEFAULTS['fund_pct'] && 65 === $C::STONES[0][2] && 5000 === $C::STONES[0][3], 'D79 no cambia red, fondo ni piedras' );
 
 echo $fails ? "\n$fails de $count comprobaciones fallaron\n" : "OK: $count comprobaciones\n";
 exit( $fails ? 1 : 0 );

@@ -48,7 +48,11 @@ final class CVD_Programa_Calc {
 		'min_own_sales'   => 1, // ventas propias entregadas en el mes para cobrar red y bono
 		'high_margin'     => 0.55, // auditoría 16-oct: línea con ganancia > 55 % del precio = «revisar costo» (¿costo mal puesto?)
 		'high_margin_min' => 10.0, // solo líneas de 10 USD o más (lo barato puede ganar mucho de verdad)
+		'revisar_repeat'  => 3,    // D79: «revisar» sale suelta solo si la misma gestora repite su teléfono con la misma clienta 3 veces o más
 	);
+
+	/** D79: alertas que hacen esperar al cierre automático del mes mientras Lennys no las marque «Revisada». */
+	public const REVIEW_TYPES = array( 'ganancia_alta', 'cuenta_compartida' );
 
 	/* ---------------- Piezas pequeñas ---------------- */
 
@@ -151,6 +155,132 @@ final class CVD_Programa_Calc {
 		return $contact_match ? 'revisar' : '';
 	}
 
+	/** Nombre en minúsculas, sin tildes ni signos («Ána  Pérez» → «ana perez»), para comparar clientas. */
+	public static function name_key( string $s ): string {
+		$s = strtolower( strtr( $s, array( 'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n', 'Á' => 'a', 'É' => 'e', 'Í' => 'i', 'Ó' => 'o', 'Ú' => 'u', 'Ü' => 'u', 'Ñ' => 'n' ) ) );
+		return trim( (string) preg_replace( '/[^a-z0-9]+/', ' ', $s ) );
+	}
+
+	/** D79: las 8 últimas cifras de un teléfono ('' si no hay 8 cifras o son todas iguales). */
+	public static function phone_key( string $phone ): string {
+		$d = (string) preg_replace( '/\D+/', '', $phone );
+		if ( strlen( $d ) < 8 ) { return ''; }
+		$d = substr( $d, -8 );
+		return preg_match( '/^(\d)\1{7}$/', $d ) ? '' : $d;
+	}
+
+	/** D79: tarjeta o cuenta de cobro: los números (12 o más) o un correo. '' si no sirve para comparar. */
+	public static function account_key( string $account ): string {
+		$d = (string) preg_replace( '/\D+/', '', $account );
+		if ( strlen( $d ) >= 12 && ! preg_match( '/^(\d)\1+$/', $d ) ) { return $d; }
+		$e = strtolower( trim( $account ) );
+		return preg_match( '/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/', $e ) ? $e : '';
+	}
+
+	/**
+	 * D79: dirección de entrega para comparar: calle y número + municipio, sin tildes, signos ni palabras de relleno
+	 * («Calle 23 #456 e/ A y B», «Plaza» → «23 456 a b|plaza»). Tiene que llevar un número (si no, es demasiado vaga
+	 * para decir que es la misma casa). '' si no sirve.
+	 */
+	public static function address_key( string $address, string $city = '' ): string {
+		$stop = array( 'calle', 'c', 'e', 'entre', 'y', 'no', 'num', 'numero', 'n', 'apto', 'apt', 'esq', 'esquina', 'el', 'la', 'de', 'del', 'los', 'las', 'edificio', 'edif', 'casa', 'avenida', 'ave', 'av' );
+		$tokens = array_values( array_diff( array_filter( explode( ' ', self::name_key( $address ) ), 'strlen' ), $stop ) );
+		$a = implode( ' ', $tokens );
+		if ( strlen( str_replace( ' ', '', $a ) ) < 4 || ! preg_match( '/\d/', $a ) ) { return ''; }
+		return $a . '|' . self::name_key( $city );
+	}
+
+	/**
+	 * D79 (auditoría 16-oct §4, D53): una invitada (o la invitada de su invitada) que comparte con su madrina el teléfono,
+	 * la tarjeta o cuenta de cobro, o la dirección de entrega de sus pedidos. Puede ser la misma persona con dos cuentas
+	 * para cobrarse la red. NO bloquea nada: solo avisa (Lennys decide).
+	 * @param array $members id => [..., 'inviter', 'test', 'ids' => ['telefono' => [clave => texto], 'tarjeta' => [...], 'direccion' => [...]]].
+	 */
+	public static function shared_accounts( array $members ): array {
+		$labels = array( 'telefono' => 'el teléfono', 'tarjeta' => 'la tarjeta o cuenta de cobro', 'direccion' => 'la dirección de entrega' );
+		$inviter_of = static function ( int $id ) use ( $members ): int {
+			$inv = (int) ( $members[ $id ]['inviter'] ?? 0 );
+			return ( $inv && $inv !== $id && isset( $members[ $inv ] ) ) ? $inv : 0;
+		};
+		$alerts = array();
+		foreach ( $members as $id => $m ) {
+			$id = (int) $id;
+			if ( ! empty( $m['test'] ) ) { continue; }
+			$b1 = $inviter_of( $id );
+			$b2 = $b1 ? $inviter_of( $b1 ) : 0;
+			foreach ( array( 1 => $b1, 2 => ( $b2 && $b2 !== $id ) ? $b2 : 0 ) as $level => $madrina ) {
+				if ( ! $madrina || ! empty( $members[ $madrina ]['test'] ) ) { continue; }
+				$found = array();
+				foreach ( $labels as $kind => $label ) {
+					$mine = (array) ( $m['ids'][ $kind ] ?? array() );
+					$hers = (array) ( $members[ $madrina ]['ids'][ $kind ] ?? array() );
+					$same = array_intersect_key( $mine, $hers );
+					unset( $same[''] );
+					if ( $same ) { $found[ $kind ] = $label . ' (' . implode( '; ', array_slice( array_map( 'strval', $same ), 0, 2 ) ) . ')'; }
+				}
+				if ( ! $found ) { continue; }
+				$kinds = array_keys( $found );
+				sort( $kinds );
+				$alerts[] = array(
+					'type' => 'cuenta_compartida', 'user' => $id, 'member' => $madrina, 'level' => $level, 'kinds' => $kinds,
+					'key' => 'cuenta_compartida:' . $id . ':' . $madrina . ':' . implode( ',', $kinds ),
+					'text' => (string) ( $m['name'] ?? '#' . $id ) . ' y su madrina' . ( 2 === $level ? ' de 2.º nivel' : '' ) . ' ' . (string) ( $members[ $madrina ]['name'] ?? '#' . $madrina )
+						. ' comparten ' . implode( ', ', $found ) . '. Puede ser la misma persona con dos cuentas: revisar. No se bloquea nada.',
+				);
+			}
+		}
+		return $alerts;
+	}
+
+	/**
+	 * D79: las alertas «revisar» (la gestora puso su teléfono en el pedido de otra clienta) son lo normal: unas 58 al mes.
+	 * Salen sueltas solo cuando la misma gestora lo repite con la misma clienta $repeat veces o más; el resto va en un resumen.
+	 * @param array $checks lista de ['owner', 'order', 'name' (de la gestora), 'client' (nombre de la clienta)].
+	 */
+	public static function group_revisar( array $checks, int $repeat = 3 ): array {
+		$groups = array();
+		foreach ( $checks as $c ) {
+			$k = (int) $c['owner'] . '|' . self::name_key( (string) ( $c['client'] ?? '' ) );
+			$groups[ $k ][] = $c;
+		}
+		$alerts = array(); $rest = 0; $owners = array();
+		foreach ( $groups as $g ) {
+			if ( count( $g ) >= max( 1, $repeat ) ) {
+				$orders = array_map( static fn( $c ) => (int) $c['order'], $g );
+				$client = trim( (string) ( $g[0]['client'] ?? '' ) );
+				$alerts[] = array(
+					'type' => 'revisar', 'user' => (int) $g[0]['owner'], 'order' => $orders[0], 'orders' => $orders, 'count' => count( $g ),
+					'text' => (string) ( $g[0]['name'] ?? '' ) . ': ' . count( $g ) . ' pedidos con su teléfono y la misma clienta' . ( '' !== $client ? ' «' . $client . '»' : ' (sin nombre)' )
+						. ' (#' . implode( ', #', array_slice( $orders, 0, 8 ) ) . ( count( $orders ) > 8 ? '…' : '' ) . '). Cuentan; revisar si son para ella.',
+				);
+			} else {
+				$rest += count( $g );
+				$owners[ (int) $g[0]['owner'] ] = true;
+			}
+		}
+		if ( $rest ) {
+			$alerts[] = array(
+				'type' => 'revisar_resumen', 'user' => 0, 'order' => 0, 'count' => $rest, 'gestoras' => count( $owners ),
+				'text' => $rest . ( 1 === $rest ? ' pedido' : ' pedidos' ) . ' con el teléfono de la gestora (normal): cada una con otra clienta, menos de ' . max( 1, $repeat ) . ' veces la misma (' . count( $owners ) . ( 1 === count( $owners ) ? ' gestora' : ' gestoras' ) . '). Cuentan.',
+			);
+		}
+		return $alerts;
+	}
+
+	/** D79: clave estable de una alerta (para marcarla «Revisada»). */
+	public static function alert_key( array $a ): string {
+		if ( ! empty( $a['key'] ) ) { return (string) $a['key']; }
+		return (string) ( $a['type'] ?? '' ) . ':' . (int) ( $a['order'] ?? 0 ) . ':' . (int) ( $a['user'] ?? 0 );
+	}
+
+	/**
+	 * D79: alertas que hacen esperar al cierre automático y que nadie marcó «Revisada».
+	 * @param array $reviewed clave => [...] (opción cvd_programa_revisadas).
+	 */
+	public static function pending_review( array $alerts, array $reviewed ): array {
+		return array_values( array_filter( $alerts, static fn( $a ) => in_array( $a['type'] ?? '', self::REVIEW_TYPES, true ) && ! isset( $reviewed[ self::alert_key( $a ) ] ) ) );
+	}
+
 	/** Fecha de «entregada y cobrada»: última aprobación del historial de la comisión, si no la verificación del dinero, si no la de completado. */
 	public static function approved_at( $history, string $cash_verified_at = '', string $completed_at = '' ): string {
 		$at = '';
@@ -195,6 +325,7 @@ final class CVD_Programa_Calc {
 		// Auditoría 16-oct: ganancia NETA del mes (las líneas que pierden restan). Los puntos de cada gestora no bajan de 0
 		// por línea (para no desanimar), pero el fondo del mes se calcula sobre lo que de verdad ganó Casa Viva.
 		$total_net = 0.0;
+		$self_checks = array();
 		foreach ( $sales as $s ) {
 			$order = (int) ( $s['order_id'] ?? 0 ); $owner = (int) ( $s['owner'] ?? 0 ); $at = (string) ( $s['at'] ?? '' );
 			if ( ! isset( $people[ $owner ] ) || substr( $at, 0, 7 ) !== $period ) { continue; }
@@ -205,7 +336,9 @@ final class CVD_Programa_Calc {
 				continue;
 			}
 			if ( ! empty( $s['self_check'] ) ) {
-				$alerts[] = array( 'type' => 'revisar', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': lleva el teléfono o el correo de la gestora con otro nombre de cliente. Cuenta; revisar si fuera para ella.' );
+				// D79: se agrupan al final (group_revisar): sueltas solo si se repite la misma clienta 3 veces o más.
+				$client = ''; foreach ( (array) ( $s['buyer_names'] ?? array() ) as $bn ) { if ( '' !== trim( (string) $bn ) ) { $client = trim( (string) $bn ); break; } }
+				$self_checks[] = array( 'owner' => $owner, 'order' => $order, 'name' => $people[ $owner ]['name'], 'client' => $client );
 			}
 			$base = 0.0; $points = 0.0; $cost = 0.0; $commission = 0.0; $missing = array(); $losing = array(); $provisional = array(); $high = array();
 			foreach ( (array) ( $s['lines'] ?? array() ) as $l ) {
@@ -221,7 +354,7 @@ final class CVD_Programa_Calc {
 				if ( null !== $unit && $unit > 0 ) { $total_net += $lb - $unit * $qty - $lc - $lo; }
 				$base += $lb; $points += $lp; $commission += $lc; $cost += ( null === $unit ? 0 : $unit * $qty ) + $lo;
 			}
-			if ( $high ) { $alerts[] = array( 'type' => 'ganancia_alta', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': gana más del ' . round( 100 * (float) $p['high_margin'] ) . ' % del precio (' . implode( ', ', array_slice( $high, 0, 3 ) ) . '). Revisar que el costo esté bien puesto.' ); }
+			if ( $high ) { $alerts[] = array( 'type' => 'ganancia_alta', 'user' => $owner, 'order' => $order, 'key' => 'ganancia_alta:' . $order, 'text' => 'Pedido #' . $order . ': gana más del ' . round( 100 * (float) $p['high_margin'] ) . ' % del precio (' . implode( ', ', array_slice( $high, 0, 3 ) ) . '). Revisar que el costo esté bien puesto.' ); }
 			if ( $missing ) { $alerts[] = array( 'type' => 'sin_costo', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': sin costo cargado (' . implode( ', ', array_slice( $missing, 0, 3 ) ) . '), esas líneas dan 0 puntos.' ); }
 			if ( $losing ) { $alerts[] = array( 'type' => 'pierde', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': se vende perdiendo (' . implode( ', ', array_slice( $losing, 0, 3 ) ) . '), 0 puntos.' ); }
 			if ( $provisional ) { $alerts[] = array( 'type' => 'provisional', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': costo provisional (' . implode( ', ', array_slice( $provisional, 0, 3 ) ) . '); los puntos cambian cuando se cargue el costo real.' ); }
@@ -254,6 +387,9 @@ final class CVD_Programa_Calc {
 				}
 			}
 		}
+
+		foreach ( self::group_revisar( $self_checks, (int) $p['revisar_repeat'] ) as $a ) { $alerts[] = $a; } // D79
+		foreach ( self::shared_accounts( $members ) as $a ) { $alerts[] = $a; } // D79: cuentas que comparten datos con su madrina
 
 		// 2) Devoluciones de meses ya cerrados: restan puntos, ventas y red.
 		$red_reversal = array();
