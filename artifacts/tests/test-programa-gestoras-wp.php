@@ -169,5 +169,28 @@ ok( false !== strpos( $pi, 'Bronce' ) && false !== strpos( $pi, '5.000 CUP' ), '
 ok( false !== strpos( $pi, 'Para llegar a Plata' ), 'Mi piedra: cuánto falta para Plata' );
 file_put_contents( sys_get_temp_dir() . '/programa-ejemplo.html', '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="gestora-app.css"><body class="cvga-body"><div class="cvga"><main class="cvga-main"><div class="cvga-wrap">' . $eq . $pi . '</div></main></div>' );
 
+// ---------- 3.14.29: encima de 3.14.25 (gastos fijos D74, extra en tienda 15-oct, costo provisional D62) ----------
+if ( ! class_exists( 'CVD_Costs' ) ) {
+	final class CVD_Costs { // lo justo de Core 3.14.25 para estas pruebas
+		public const PROVISIONAL = array( 'formula', 'por_confirmar' );
+		public static function is_bajo_pedido( $p ) { return false; }
+		public static function rules( $bajo, $p = null, $full = null ) { $v = $p ? $p->get_meta( '_cvd_fixed_usd' ) : ''; return array( 'fixed' => '' !== $v ? (float) $v : 1.58, 'pct' => 10, 'min' => 1 ); }
+	}
+}
+$GLOBALS['products'][100]->m['_cvd_fixed_usd'] = '1.6';
+$GLOBALS['orders'] = array();
+order( 3020, 5, array( array( 100, 0, 1, 30, 3 ) ) );
+$GLOBALS['orders'][3020]->m['_cvd_commission_breakdown'][0]['extra'] = array( 'gestora' => 3, 'staff' => 0.9, 'staff_pct' => 3 );
+$r = CVD_Programa::compute( '2026-11' );
+ok( abs( $r['people'][5]['own_points'] - 6.1 ) < 0.01, 'extra en tienda: se resta el premio de la dependienta (30 − 20 − 3 − 0,90 = 6,10): ' . $r['people'][5]['own_points'] );
+ok( 7 === CVD_Programa::product_points( $GLOBALS['products'][100], 2 )['points'], 'gastos fijos apagados (por defecto, D55): la alfombra sigue en ⭐ 7' );
+$GLOBALS['opts']['cvd_programa_gastos_fijos'] = 'si';
+$GLOBALS['meta'][100]['_cvd_cost_source'] = 'formula';
+$r = CVD_Programa::compute( '2026-11' );
+ok( abs( $r['people'][5]['own_points'] - 4.5 ) < 0.01, 'con gastos fijos: 30 − 20 − 3 − 0,90 − 1,60 = 4,50: ' . $r['people'][5]['own_points'] );
+ok( 5 === CVD_Programa::product_points( $GLOBALS['products'][100], 2 )['points'], 'con gastos fijos: alfombra ⭐ 5 (30 − 20 − 3 − 1,60)' );
+ok( in_array( 'provisional', array_column( $r['alerts'], 'type' ), true ), 'costo de fórmula: cuenta con la alerta «provisional»' );
+unset( $GLOBALS['opts']['cvd_programa_gastos_fijos'] );
+
 echo $fails ? "\n$fails de $count comprobaciones fallaron\n" : "OK: $count comprobaciones\n";
 exit( $fails ? 1 : 0 );

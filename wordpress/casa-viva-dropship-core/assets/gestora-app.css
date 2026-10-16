@@ -204,7 +204,7 @@ body.cvga-body .cvd-customer-nav{display:none!important}
 .cvgf-done{color:var(--ga-good);font-size:12.5px;min-height:1em}
 @media (max-width:520px){.cvgf-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.cvgf-body{padding:8px 9px 10px}.cvgf-text{display:none}.cvgf-body .cvga-actions{flex-direction:column;align-items:stretch}.cvgf-body .cvga-btn{white-space:normal}}
 
-/* 3.14.27 · Programa de gestoras: «Mi equipo» y «Mi piedra» (D53–D58). */
+/* 3.14.29 · Programa de gestoras: «Mi equipo» y «Mi piedra» (D53–D58). */
 .cvga-prog-shadow{margin:0;padding:10px 14px;border-radius:12px;background:#fbf3e2;border:1px solid #ecd9b0;color:#5c420f;font-size:14px}
 .cvga-kpis-3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .cvga-team{list-style:none;margin:8px 0 0;padding:0}

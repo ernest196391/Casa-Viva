@@ -13,6 +13,10 @@ defined( 'ABSPATH' ) || exit;
  *  - no: no calcula ni enseña nada.
  * Quién lo ve en sombra: opción `cvd_programa_ver` = 'todas' o lista de ID de usuario («12,57»); las cuentas
  * de prueba siempre.
+ * 3.14.29 (encima de 3.14.25): `cvd_programa_gastos_fijos` = no | si (por defecto no = D55: precio − costo − comisión).
+ * Con «si» los puntos restan también los gastos fijos de cada producto (`_cvd_fixed_usd`, D74; si no tiene, la opción
+ * general de CVD_Costs). Siempre se resta el premio de la dependienta de un «extra en tienda» (regla del 15-oct; hoy 0).
+ * Un costo provisional (fórmula o por confirmar, D62) cuenta, con la alerta «provisional».
  *
  * Libro (append-only):
  *  - {prefix}cvd_programa_runs: cada cálculo (diario, manual o mensual), con el JSON completo y su SHA-256.
@@ -22,6 +26,7 @@ defined( 'ABSPATH' ) || exit;
 final class CVD_Programa {
 	public const OPTION = 'cvd_programa_gestoras';
 	public const VIEW_OPTION = 'cvd_programa_ver';
+	public const FIXED_OPTION = 'cvd_programa_gastos_fijos';
 	private const SCHEMA_VERSION = '1';
 	private const SCHEMA_OPTION = 'cvd_programa_schema';
 	private const CRON = 'cvd_programa_diario';
@@ -169,6 +174,29 @@ final class CVD_Programa {
 		return null === $cost ? null : (float) $cost;
 	}
 
+	/** 3.14.29: ¿los puntos restan los gastos fijos de cada producto? (decisión de Ernesto; por defecto no, como D55). */
+	public static function subtract_fixed(): bool {
+		return 'si' === sanitize_key( (string) get_option( self::FIXED_OPTION, 'no' ) );
+	}
+
+	/** 3.14.29: gastos fijos de una unidad (los del producto, D74, o los generales de CVD_Costs). 0 si no se restan. */
+	public static function unit_fixed( int $product_id, int $variation_id = 0 ): float {
+		if ( ! self::subtract_fixed() || ! class_exists( 'CVD_Costs' ) ) { return 0.0; }
+		$product = wc_get_product( $variation_id ?: $product_id );
+		if ( ! $product ) { return 0.0; }
+		$rules = CVD_Costs::rules( CVD_Costs::is_bajo_pedido( $product ), $product, true ); // bajo pedido: sin gastos fijos (D59)
+		return max( 0.0, (float) $rules['fixed'] );
+	}
+
+	/** 3.14.29: el costo de este producto es provisional (fórmula o por confirmar, D62). */
+	public static function cost_provisional( int $product_id, int $variation_id = 0 ): bool {
+		if ( ! class_exists( 'CVD_Costs' ) ) { return false; }
+		foreach ( array_filter( array( $variation_id, $product_id ) ) as $id ) {
+			if ( '' !== (string) get_post_meta( $id, '_cvd_cost_usd', true ) ) { return in_array( (string) get_post_meta( $id, '_cvd_cost_source', true ), CVD_Costs::PROVISIONAL, true ); }
+		}
+		return false;
+	}
+
 	private static function local( string $utc ): string {
 		return '' === $utc ? '' : wp_date( 'Y-m-d H:i:s', strtotime( $utc . ' UTC' ) );
 	}
@@ -206,13 +234,18 @@ final class CVD_Programa {
 			$breakdown = $order->get_meta( '_cvd_commission_breakdown', true );
 			foreach ( is_array( $breakdown ) ? $breakdown : array() as $b ) {
 				$pid = absint( $b['product_id'] ?? 0 ); $vid = absint( $b['variation_id'] ?? 0 );
+				$qty = max( 1, (int) ( $b['quantity'] ?? 1 ) );
+				// 3.14.29: premio de la dependienta de un «extra en tienda» (foto de la comisión, 3.14.19) + gastos fijos si se restan.
+				$staff = is_array( $b['extra'] ?? null ) ? max( 0.0, (float) ( $b['extra']['staff'] ?? 0 ) ) : 0.0;
 				$lines[] = array(
 					'product_id' => $vid ?: $pid,
 					'name' => html_entity_decode( (string) get_the_title( $vid ?: $pid ), ENT_QUOTES, 'UTF-8' ),
-					'qty' => max( 1, (int) ( $b['quantity'] ?? 1 ) ),
+					'qty' => $qty,
 					'base' => (float) ( $b['base_amount'] ?? 0 ),
 					'cost_unit' => self::unit_cost( $pid, $vid ),
 					'commission' => (float) ( $b['base_commission'] ?? 0 ),
+					'other' => round( $staff + self::unit_fixed( $pid, $vid ) * $qty, 4 ),
+					'cost_provisional' => self::cost_provisional( $pid, $vid ),
 				);
 			}
 			$test = ( class_exists( 'CVD_Delivery' ) && ( CVD_Delivery::is_test_order( $order ) || 'test' === CVD_Delivery::blocks_dispatch( $order ) ) ) || ! empty( $members[ $owner ]['test'] );
@@ -371,7 +404,8 @@ final class CVD_Programa {
 		foreach ( $items as $p ) {
 			$price = (float) get_post_meta( $p->get_id(), '_price', true ); // precio Casa Viva, sin el de la gestora
 			if ( $price <= 0 ) { continue; }
-			$pts = CVD_Programa_Calc::unit_points( $price, self::unit_cost( $p->is_type( 'variation' ) ? $p->get_parent_id() : $p->get_id(), $p->is_type( 'variation' ) ? $p->get_id() : 0 ), self::unit_commission( $p, $user_id, $price ) );
+			$pid = $p->is_type( 'variation' ) ? $p->get_parent_id() : $p->get_id(); $vid = $p->is_type( 'variation' ) ? $p->get_id() : 0;
+			$pts = CVD_Programa_Calc::unit_points( $price, self::unit_cost( $pid, $vid ), self::unit_commission( $p, $user_id, $price ), self::unit_fixed( $pid, $vid ) );
 			if ( null === $pts ) { continue; }
 			$all[] = $pts; $best = max( (int) $best, $pts );
 		}
@@ -614,7 +648,7 @@ final class CVD_Programa {
 		}
 		usort( $people, static fn( $a, $b ) => $b['teamPoints'] <=> $a['teamPoints'] );
 		// Alertas: lo grave primero; «revisar» (su teléfono con otro cliente) es muy común y va al final.
-		$order = array( 'autocompra' => 0, 'concentracion' => 1, 'red_negativa' => 2, 'devolucion' => 3, 'pierde' => 4, 'sin_costo' => 5, 'revisar' => 6 );
+		$order = array( 'autocompra' => 0, 'concentracion' => 1, 'red_negativa' => 2, 'devolucion' => 3, 'pierde' => 4, 'sin_costo' => 5, 'revisar' => 6, 'provisional' => 7 );
 		$alerts = (array) ( $data['alerts'] ?? array() );
 		usort( $alerts, static fn( $a, $b ) => ( $order[ $a['type'] ] ?? 9 ) <=> ( $order[ $b['type'] ] ?? 9 ) );
 		$alert_counts = array_count_values( array_column( $alerts, 'type' ) );
@@ -625,6 +659,7 @@ final class CVD_Programa {
 		return array(
 			'mode' => self::mode(),
 			'viewers' => (string) get_option( self::VIEW_OPTION, '' ),
+			'fixedCosts' => self::subtract_fixed(),
 			'run' => $run ? array( 'id' => (int) $run['id'], 'period' => $run['period'], 'kind' => $run['kind'], 'status' => $run['status'], 'computedAt' => $run['computed_at'], 'rateCup' => (float) $run['rate_cup'], 'sha256' => $run['payload_sha256'] ) : null,
 			'totals' => $data['totals'] ?? null,
 			'people' => array_slice( $people, 0, $people_limit ),
@@ -663,7 +698,7 @@ final class CVD_Programa {
 		}
 		echo '</tbody></table>';
 		if ( $rep['alerts'] ) {
-			$labels = array( 'autocompra' => 'Autocompra (no cuenta)', 'concentracion' => 'Un miembro con más del 60 %', 'red_negativa' => 'Red en negativo', 'devolucion' => 'Devolución de un mes cerrado', 'pierde' => 'Se vende perdiendo', 'sin_costo' => 'Producto sin costo', 'revisar' => 'Su teléfono con otro cliente (cuenta)' );
+			$labels = array( 'autocompra' => 'Autocompra (no cuenta)', 'concentracion' => 'Un miembro con más del 60 %', 'red_negativa' => 'Red en negativo', 'devolucion' => 'Devolución de un mes cerrado', 'pierde' => 'Se vende perdiendo', 'sin_costo' => 'Producto sin costo', 'revisar' => 'Su teléfono con otro cliente (cuenta)', 'provisional' => 'Costo provisional (cuenta)' );
 			echo '<h2>Alertas (' . esc_html( (string) array_sum( $rep['alertCounts'] ) ) . ')</h2><p>' . esc_html( implode( ' · ', array_map( static fn( $k, $v ) => ( $labels[ $k ] ?? $k ) . ': ' . $v, array_keys( $rep['alertCounts'] ), $rep['alertCounts'] ) ) ) . '</p><ul style="list-style:disc;margin-left:20px">';
 			foreach ( $rep['alerts'] as $a ) { echo '<li><strong>' . esc_html( $a['type'] ) . '</strong> · ' . esc_html( $a['text'] ) . '</li>'; }
 			echo '</ul>';

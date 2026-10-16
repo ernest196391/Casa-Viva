@@ -49,16 +49,20 @@ final class CVD_Programa_Calc {
 
 	/* ---------------- Piezas pequeñas ---------------- */
 
-	/** Puntos de una línea: precio Casa Viva − costo × unidades − comisión. Sin costo o pierde = 0. */
-	public static function line_points( float $base, ?float $unit_cost, int $qty, float $commission ): float {
+	/**
+	 * Puntos de una línea: precio Casa Viva − costo × unidades − comisión − otros gastos de la línea. Sin costo o pierde = 0.
+	 * 3.14.29: $other = gastos fijos de la línea (si cvd_programa_gastos_fijos = si; D74) + premio de la dependienta por un
+	 * «extra en tienda» (regla del 15-oct; hoy 0, en espera). Con $other = 0 es la cuenta de D55.
+	 */
+	public static function line_points( float $base, ?float $unit_cost, int $qty, float $commission, float $other = 0.0 ): float {
 		if ( null === $unit_cost || $unit_cost <= 0 ) { return 0.0; }
-		return max( 0.0, round( $base - $unit_cost * max( 1, $qty ) - $commission, 4 ) );
+		return max( 0.0, round( $base - $unit_cost * max( 1, $qty ) - $commission - max( 0.0, $other ), 4 ) );
 	}
 
 	/** Puntos de una unidad para enseñarlos en la tienda de la gestora («⭐ N puntos»); null = sin costo. */
-	public static function unit_points( float $price, ?float $unit_cost, float $commission ): ?int {
+	public static function unit_points( float $price, ?float $unit_cost, float $commission, float $other = 0.0 ): ?int {
 		if ( null === $unit_cost || $unit_cost <= 0 ) { return null; }
-		return (int) floor( max( 0.0, $price - $unit_cost - $commission ) );
+		return (int) floor( max( 0.0, $price - $unit_cost - $commission - max( 0.0, $other ) ) );
 	}
 
 	public static function stone_index( string $slug ): int {
@@ -160,7 +164,7 @@ final class CVD_Programa_Calc {
 	 * @param array  $members  id => ['name', 'inviter' => id|0, 'joined' => 'Y-m-d H:i:s', 'approved' => bool, 'title' => slug].
 	 * @param array  $sales    lista de ['order_id', 'owner', 'at' (hora de Cuba), 'status' (approved|paid|…), 'self_order' (no cuenta),
 	 *                         'self_check' (cuenta con alerta), 'test',
-	 *                         'lines' => [['product_id', 'name', 'qty', 'base', 'cost_unit' (null si no hay), 'commission']]].
+	 *                         'lines' => [['product_id', 'name', 'qty', 'base', 'cost_unit' (null si no hay), 'commission', 'other' (USD de la línea: gastos fijos si se restan + premio de dependienta; 3.14.29), 'cost_provisional' (bool)]]].
 	 * @param array  $reversals devoluciones de pedidos ya cerrados: ['order_id', 'owner', 'points', 'base', 'red' => [['user', 'level', 'amount']]].
 	 */
 	public static function compute( string $period, array $members, array $sales, array $reversals = array(), array $params = array() ): array {
@@ -197,17 +201,21 @@ final class CVD_Programa_Calc {
 			if ( ! empty( $s['self_check'] ) ) {
 				$alerts[] = array( 'type' => 'revisar', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': lleva el teléfono o el correo de la gestora con otro nombre de cliente. Cuenta; revisar si fuera para ella.' );
 			}
-			$base = 0.0; $points = 0.0; $cost = 0.0; $commission = 0.0; $missing = array(); $losing = array();
+			$base = 0.0; $points = 0.0; $cost = 0.0; $commission = 0.0; $missing = array(); $losing = array(); $provisional = array();
 			foreach ( (array) ( $s['lines'] ?? array() ) as $l ) {
 				$lb = (float) ( $l['base'] ?? 0 ); $qty = max( 1, (int) ( $l['qty'] ?? 1 ) ); $lc = (float) ( $l['commission'] ?? 0 );
+				$lo = max( 0.0, (float) ( $l['other'] ?? 0 ) ); // 3.14.29: gastos fijos (si se restan) + premio de dependienta
 				$unit = isset( $l['cost_unit'] ) && null !== $l['cost_unit'] ? (float) $l['cost_unit'] : null;
-				$lp = self::line_points( $lb, $unit, $qty, $lc );
-				if ( null === $unit || $unit <= 0 ) { $missing[] = (string) ( $l['name'] ?? ( '#' . ( $l['product_id'] ?? '' ) ) ); }
-				elseif ( $lb - $unit * $qty - $lc < 0 ) { $losing[] = (string) ( $l['name'] ?? ( '#' . ( $l['product_id'] ?? '' ) ) ); }
-				$base += $lb; $points += $lp; $commission += $lc; $cost += null === $unit ? 0 : $unit * $qty;
+				$lp = self::line_points( $lb, $unit, $qty, $lc, $lo );
+				$label = (string) ( $l['name'] ?? ( '#' . ( $l['product_id'] ?? '' ) ) );
+				if ( null === $unit || $unit <= 0 ) { $missing[] = $label; }
+				elseif ( $lb - $unit * $qty - $lc - $lo < 0 ) { $losing[] = $label; }
+				elseif ( ! empty( $l['cost_provisional'] ) ) { $provisional[] = $label; }
+				$base += $lb; $points += $lp; $commission += $lc; $cost += ( null === $unit ? 0 : $unit * $qty ) + $lo;
 			}
 			if ( $missing ) { $alerts[] = array( 'type' => 'sin_costo', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': sin costo cargado (' . implode( ', ', array_slice( $missing, 0, 3 ) ) . '), esas líneas dan 0 puntos.' ); }
 			if ( $losing ) { $alerts[] = array( 'type' => 'pierde', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': se vende perdiendo (' . implode( ', ', array_slice( $losing, 0, 3 ) ) . '), 0 puntos.' ); }
+			if ( $provisional ) { $alerts[] = array( 'type' => 'provisional', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': costo provisional (' . implode( ', ', array_slice( $provisional, 0, 3 ) ) . '); los puntos cambian cuando se cargue el costo real.' ); }
 			$people[ $owner ]['own_points'] += $points;
 			$people[ $owner ]['own_sales_usd'] += $base;
 			$people[ $owner ]['own_orders']++;

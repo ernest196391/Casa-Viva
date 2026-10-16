@@ -116,7 +116,7 @@ add_action(
 			CVD_Order_Avisos::register(); // 3.13.98: el bot avisa por WhatsApp al cancelar o cambiar un pedido (Ernesto, 14-oct).
 			CVD_Costs::register(); // 3.14.0: costo de cada producto y precio mínimo (Ernesto, 14-oct).
 			CVD_Supplier_Split::register(); // 3.14.14: reparto de la venta de proveedor apuntado en el pedido y sellado al cerrar (Ernesto, 14-oct, D69).
-			CVD_Programa::register(); // 3.14.27: Programa de gestoras en modo sombra: red 2 % + 1 %, piedras por ganancia, fondo 15 % (D53–D58).
+			CVD_Programa::register(); // 3.14.29: Programa de gestoras en modo sombra: red 2 % + 1 %, piedras por ganancia, fondo 15 % (D53–D58).
 			CVD_Daily_Rates::register(); // 3.13.64: cada pedido nuevo guarda la tasa CUP del día de la venta (regla de Ernesto, 12-oct).
 		}
 	}

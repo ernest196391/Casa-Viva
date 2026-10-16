@@ -95,7 +95,7 @@ final class CVD_Gestora_App {
 			array_splice( $nav, (int) array_search( 'fotos', array_column( $nav, 0 ), true ) + 1, 0, array( array( 'estudio', 'Mi estudio de fotos', 'camera', '' ) ) );
 			array_splice( $nav, (int) array_search( 'cobrar', array_column( $nav, 0 ), true ) + 1, 0, array( array( 'contabilidad', 'Mi contabilidad', 'doc', '' ) ) );
 		}
-		// 3.14.27: Programa de gestoras (D53–D58): «Mi equipo» y «Mi piedra», en sombra solo para quien lo prueba.
+		// 3.14.29: Programa de gestoras (D53–D58): «Mi equipo» y «Mi piedra», en sombra solo para quien lo prueba.
 		$programa = class_exists( 'CVD_Programa' ) && CVD_Programa::visible_for( $user );
 		if ( $programa ) {
 			$at = (int) array_search( 'invitar', array_column( $nav, 0 ), true );

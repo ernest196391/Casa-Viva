@@ -188,5 +188,18 @@ for ( $round = 0; $round < 200; $round++ ) {
 }
 ok( true, 'invariante del fondo en 200 rondas al azar' );
 
+// ---------- 3.14.29: gastos fijos, premio de dependienta y costo provisional ----------
+near( $C::line_points( 30, 20, 1, 3, 1.6 ), 5.4, 'con gastos fijos 1,60: 30 − 20 − 3 − 1,60 = 5,40 puntos' );
+near( $C::line_points( 30, 20, 1, 3, 0 ), 7, 'sin «otros» sigue siendo la cuenta de D55 (7 puntos)' );
+near( $C::line_points( 30, 20, 1, 3, -5 ), 7, '«otros» negativo no suma puntos' );
+ok( 5 === $C::unit_points( 30, 20, 3, 1.6 ), 'unit_points con gastos fijos 1,60 = 5' );
+$x = sale( 70, 1, 30, 20, 3 ); $x['lines'][0]['other'] = 1.6; $x['lines'][0]['cost_provisional'] = true;
+$r = $C::compute( P, array( 1 => member( 'Ana' ) ), array( $x ) );
+near( $r['people'][1]['own_points'], 5.4, 'compute resta «otros» de la línea (gastos fijos + premio de dependienta)' );
+ok( has_alert( $r, 'provisional', 1 ), 'alerta «costo provisional» (cuenta igual)' );
+$x = sale( 71, 1, 30, 25, 3 ); $x['lines'][0]['other'] = 2.5;
+$r = $C::compute( P, array( 1 => member( 'Ana' ) ), array( $x ) );
+ok( has_alert( $r, 'pierde', 1 ) && ! has_alert( $r, 'provisional', 1 ), 'con «otros» puede pasar a «pierde» (30 − 25 − 3 − 2,5 < 0)' );
+
 echo $fails ? "\n$fails de $count comprobaciones fallaron\n" : "OK: $count comprobaciones\n";
 exit( $fails ? 1 : 0 );
