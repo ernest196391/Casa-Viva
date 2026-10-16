@@ -283,7 +283,7 @@ final class CVD_Nexo_Busca {
 			'*' . $p['product'] . '*' . ( (int) $p['quantity'] > 1 ? ' × ' . (int) $p['quantity'] : '' ),
 			'Ella quiere cobrar: *' . self::money( (float) $p['price_usd'] ) . '*' . ( (int) $p['quantity'] > 1 ? ' cada uno' : '' ),
 			'',
-			'Proveedor (anuncio): ' . ( ( $o['price'] ?? '' ) ?: 'precio no visible' ) . ( null !== $p['supplier_usd'] ? ' (≈ ' . self::money( (float) $p['supplier_usd'] ) . ')' : '' ),
+			'Proveedor (anuncio): ' . ( ( $o['price'] ?? '' ) ?: 'precio no visible' ) . ( null !== $p['supplier_usd'] && false === stripos( (string) ( $o['price'] ?? '' ), 'USD' ) ? ' (≈ ' . self::money( (float) $p['supplier_usd'] ) . ')' : '' ),
 		);
 		if ( ! empty( $o['source'] ) || ! empty( $o['location'] ) ) { $lines[] = trim( implode( ' · ', array_filter( array( $o['source'] ?? '', $o['location'] ?? '' ) ) ) ); }
 		if ( ! empty( $o['phone'] ) ) { $lines[] = 'Tel. del anuncio: ' . $o['phone']; }
@@ -416,7 +416,7 @@ final class CVD_Nexo_Busca {
 		if ( '' !== (string) $p['photo'] ) { $h .= '<img class="photo" src="' . esc_url( self::photo_url( (string) $p['photo'] ) ) . '" alt="">'; }
 		$h .= '<div class="total"><small>' . esc_html( ( $user ? $user->display_name : 'La gestora' ) . ' quiere cobrar' ) . '</small><strong>' . esc_html( self::money( (float) $p['price_usd'] ) ) . '</strong><span>' . esc_html( (int) $p['quantity'] > 1 ? 'cada uno · ' . (int) $p['quantity'] . ' unidades' : '1 unidad' ) . '</span></div>';
 		$h .= '<div class="copy">';
-		$h .= '<div class="row"><span><small>Proveedor (anuncio)</small><b>' . esc_html( ( $o['price'] ?? '' ) ?: 'precio no visible' ) . '</b>' . ( null !== $p['supplier_usd'] ? '<small>≈ ' . esc_html( self::money( (float) $p['supplier_usd'] ) ) . '</small>' : '' ) . '</span></div>';
+		$h .= '<div class="row"><span><small>Proveedor (anuncio)</small><b>' . esc_html( ( $o['price'] ?? '' ) ?: 'precio no visible' ) . '</b>' . ( null !== $p['supplier_usd'] && false === stripos( (string) ( $o['price'] ?? '' ), 'USD' ) ? '<small>≈ ' . esc_html( self::money( (float) $p['supplier_usd'] ) ) . '</small>' : '' ) . '</span></div>';
 		if ( ! empty( $o['title'] ) ) { $h .= '<div class="row"><span><small>Anuncio</small>' . esc_html( $o['title'] ) . '<small>' . esc_html( implode( ' · ', array_filter( array( $o['source'] ?? '', $o['location'] ?? '' ) ) ) ) . '</small></span></div>'; }
 		$wa_text = 'Hola, vi su anuncio de ' . $p['product'] . ( ! empty( $o['price'] ) ? ' a ' . $o['price'] : '' ) . '. ¿Lo tiene disponible?';
 		$phone = preg_replace( '/\D/', '', (string) ( $o['phone'] ?? '' ) );

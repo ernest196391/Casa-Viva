@@ -59,3 +59,8 @@
 .cvnb-st-confirmada{background:#e7f4ec;color:#1f5a37}
 .cvnb-st-no_hay{background:#f3e3e0;color:#9a392f}
 @media (max-width:380px){.cvnb-total,.cvnb-grid{grid-template-columns:minmax(0,1fr)}}
+/* El tema pone los h2 en Cinzel y mayúsculas: aquí, letra normal (Cinzel solo en el título corto de arriba). */
+#cvga-buscar h2{font-family:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;text-transform:none;letter-spacing:0;font-weight:600;font-size:19px;line-height:1.25}
+#cvga-buscar .cvnb-sum h2{font-size:21px}
+.cvnb-grid{align-items:end}
+#cvga-buscar h2,#cvga-buscar .cvnb-hero p{text-align:left}#cvga-buscar .cvnb-hero h1{text-align:left}

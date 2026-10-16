@@ -169,7 +169,7 @@
       '<div class="cvga-actions"><button type="button" class="cvga-btn" data-act="share">Compartir</button><button type="button" class="cvga-btn cvga-btn-soft" data-act="copy">Copiar</button><a class="cvga-btn cvga-btn-soft" data-save hidden download>Guardar foto</a></div>' +
       '<small class="cvga-note" data-msg-done role="status"></small></section>' +
 
-      '<section class="cvga-card cvnb-step cvnb-cv"><h2><span class="cvnb-n">5</span>O véndelo por Casa Viva <small>(bajo pedido)</small></h2>' +
+      '<section class="cvga-card cvnb-step cvnb-cv"><h2><span class="cvnb-n">5</span><span>O véndelo por Casa Viva <small>(bajo pedido)</small></span></h2>' +
       '<p class="cvga-note">Casa Viva lo comprueba con el proveedor y te avisa por WhatsApp. <b>No le confirmes nada a tu cliente hasta que te avisemos.</b> La comisión te la dice Casa Viva al confirmar el precio.</p>' +
       (cvOk ? '<form data-cv-form><label class="cvga-field"><span>Cliente <small>(nombre o teléfono, opcional)</small></span><input name="client" type="text" maxlength="120" placeholder="Ej.: Marta 5xxxxxxx"></label>' +
         '<label class="cvga-field"><span>Nota <small>(opcional)</small></span><input name="note" type="text" maxlength="300" placeholder="Ej.: la quiere en azul, entrega en Playa"></label>' +
@@ -194,7 +194,7 @@
     }
     var wa = use.querySelector('[data-wa]');
     if (wa) {
-      var t = 'Hola, vi su anuncio de ' + productName() + (o.price ? ' a ' + o.price : '') + '. ¿Lo tiene disponible? ¿Hace entrega en ' + (form.elements.zone.value || cfg.zone || 'La Habana') + '?';
+      var pn = productName(), t = 'Hola, vi su anuncio de ' + (/^[A-ZÁÉÍÓÚÑ][a-záéíóúñü]/.test(pn) ? pn.charAt(0).toLowerCase() + pn.slice(1) : pn) + (o.price ? ' a ' + o.price : '') + '. ¿Lo tiene disponible? ¿Hace entrega en ' + (form.elements.zone.value || cfg.zone || 'La Habana') + '?';
       wa.href = 'https://wa.me/' + waPhone(o.phone) + '?text=' + encodeURIComponent(t);
       var wt = use.querySelector('[data-wa-text]'); if (wt) wt.textContent = '«' + t + '»';
     }
