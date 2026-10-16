@@ -224,9 +224,11 @@ final class CVD_Gestora_Financial_View {
 			if ( ! is_array( $line ) ) { continue; }
 			$type = sanitize_key( (string) ( $line['type'] ?? '' ) );
 			$value = (float) ( $line['value'] ?? 0 );
-			$label = 'fixed' === $type
+			$label = 'extra_tienda' === $type
+				? '33 % de la ganancia de lo que tu clienta añadió en la tienda (regla 33/33/33)'
+				: ( 'fixed' === $type
 				? wc_format_localized_decimal( $value ) . ' ' . $order->get_currency() . ' por unidad'
-				: wc_format_localized_decimal( $value ) . ' % de la venta';
+				: wc_format_localized_decimal( $value ) . ' % de la venta' );
 			$rules[ $label ] = true;
 		}
 		return $rules ? implode( '; ', array_keys( $rules ) ) : 'Regla guardada en la venta';

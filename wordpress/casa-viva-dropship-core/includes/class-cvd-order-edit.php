@@ -39,6 +39,7 @@ final class CVD_Order_Edit {
 			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'edit_request' ), 'permission_callback' => $can ),
 		) );
 		register_rest_route( 'casa-viva/v1', '/sales/products', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'products_request' ), 'permission_callback' => $can ) );
+		register_rest_route( 'casa-viva/v1', '/sales/extras', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'extras_request' ), 'permission_callback' => $can ) );
 	}
 
 	/** administrator, shop_manager (manage_woocommerce), cvd_operator y cvd_clerk (cvd_manage_sales). */
@@ -168,7 +169,7 @@ final class CVD_Order_Edit {
 		$lines = array();
 		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
 			$qty = max( 1, (int) $item->get_quantity() );
-			$lines[] = array( 'itemId' => $item_id, 'name' => $item->get_name(), 'qty' => (int) $item->get_quantity(), 'unit' => round( (float) $item->get_subtotal() / $qty, 2 ), 'total' => (float) $item->get_total() );
+			$lines[] = array( 'itemId' => $item_id, 'name' => $item->get_name(), 'qty' => (int) $item->get_quantity(), 'unit' => round( (float) $item->get_subtotal() / $qty, 2 ), 'total' => (float) $item->get_total(), 'extra' => self::is_extra_item( $item ) );
 		}
 		$why = self::edit_block( $order, $user_id );
 		$when = class_exists( 'CVD_Delivery_When' ) ? CVD_Delivery_When::for_order( $order ) : array( 'date' => '', 'label' => '' );
@@ -182,7 +183,19 @@ final class CVD_Order_Edit {
 			'minDate' => class_exists( 'CVD_Delivery_When' ) ? CVD_Delivery_When::min_date() : '', 'maxDate' => class_exists( 'CVD_Delivery_When' ) ? CVD_Delivery_When::max_date() : '',
 			'lines' => $lines, 'total' => (float) $order->get_total(), 'currency' => $order->get_currency(),
 			'messenger' => self::messenger_to_warn( $order ),
+			// 3.14.18 (33/33/33): solo en pedidos de gestora se puede añadir un «extra en tienda».
+			'gestoraOrder' => self::is_gestora_order( $order ), 'gestoraName' => (string) $order->get_meta( 'gestora_nombre', true ),
 		);
+	}
+
+	/** 3.14.18: pedido vendido por una gestora (su enlace o su área), no venta directa. */
+	public static function is_gestora_order( WC_Order $order ): bool {
+		return absint( $order->get_meta( '_cvd_owner_user_id', true ) ) > 0 && 'gestora' === sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) );
+	}
+
+	private static function is_extra_item( $item ): bool {
+		$mark = $item instanceof WC_Order_Item_Product && class_exists( 'CVD_Commissions' ) ? $item->get_meta( CVD_Commissions::EXTRA_META, true ) : null;
+		return is_array( $mark ) && ! empty( $mark );
 	}
 
 	public static function detail_request( WP_REST_Request $request ) {
@@ -233,7 +246,11 @@ final class CVD_Order_Edit {
 		foreach ( (array) ( $data['add'] ?? array() ) as $a ) {
 			$product = wc_get_product( absint( is_array( $a ) ? ( $a['wooId'] ?? 0 ) : 0 ) );
 			if ( ! $product || $product->is_type( 'variable' ) || 'publish' !== $product->get_status() || 'publish' !== get_post_status( $product->get_parent_id() ?: $product->get_id() ) ) { return new WP_Error( 'cvd_edit_add', 'Uno de los productos para añadir no está a la venta (o falta elegir el color o diseño).', array( 'status' => 422 ) ); }
-			$adds[] = array( $product, max( 1, min( 999, (int) ( $a['qty'] ?? 1 ) ) ) );
+			$adds[] = array( $product, max( 1, min( 999, (int) ( $a['qty'] ?? 1 ) ) ), ! empty( $a['extra'] ) );
+		}
+		// 3.14.18 (33/33/33): el «extra en tienda» solo existe en pedidos de una gestora.
+		if ( array_filter( array_column( $adds, 2 ) ) && ( ! self::is_gestora_order( $order ) || ! class_exists( 'CVD_Commissions' ) ) ) {
+			return new WP_Error( 'cvd_edit_extra', '«Extra en tienda» solo va en pedidos de una gestora. En una venta directa, añádelo normal.', array( 'status' => 422 ) );
 		}
 		$final = array();
 		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) { $final[ $item_id ] = $lines[ $item_id ] ?? (int) $item->get_quantity(); }
@@ -253,7 +270,7 @@ final class CVD_Order_Edit {
 		}
 		if ( null !== $note && $note !== $order->get_customer_note() ) { $changes[] = 'Nota del pedido cambiada'; $order->set_customer_note( $note ); }
 
-		$items_changed = false;
+		$items_changed = false; $has_extra = false;
 		if ( $lines || $adds ) {
 			require_once WC_ABSPATH . 'includes/admin/wc-admin-functions.php'; // wc_maybe_adjust_line_item_product_stock
 			foreach ( $lines as $item_id => $qty ) {
@@ -279,10 +296,11 @@ final class CVD_Order_Edit {
 				wc_maybe_adjust_line_item_product_stock( $item );
 			}
 			foreach ( $adds as $add ) {
-				list( $product, $qty ) = $add;
+				list( $product, $qty, $is_extra ) = $add;
 				// 3.13.98 (Ernesto, 14-oct): en un pedido de gestora entra con el precio de ESA gestora (su precio propio
 				// o su aumento general, como en su enlace), no con el de Casa Viva; y su ganancia cuenta en la comisión.
-				$price = self::unit_price_for( $order, $product );
+				// 3.14.18: un «extra en tienda» lo eligió la clienta en la tienda → precio de la tienda (el que está a la vista).
+				$price = $is_extra ? array( 'base' => 0, 'unit' => 0, 'gestora' => 0 ) : self::unit_price_for( $order, $product );
 				$item_id = $price['gestora'] ? $order->add_product( $product, $qty, array( 'subtotal' => $price['unit'] * $qty, 'total' => $price['unit'] * $qty ) ) : $order->add_product( $product, $qty );
 				$item = $item_id ? $order->get_item( $item_id, false ) : null;
 				if ( $item && $price['gestora'] ) {
@@ -293,9 +311,15 @@ final class CVD_Order_Edit {
 					$item->save();
 					if ( ! absint( $order->get_meta( '_cvd_pricing_gestora_user_id', true ) ) ) { $order->update_meta_data( '_cvd_pricing_gestora_user_id', $price['gestora'] ); }
 				}
+				if ( $item && $is_extra ) {
+					$staff = self::staff_for_extra( $user_id );
+					$item->add_meta_data( CVD_Commissions::EXTRA_META, array( 'staff' => $staff ? $staff->ID : 0, 'staffName' => $staff ? $staff->display_name : '', 'by' => $user_id, 'at' => current_time( 'mysql', true ) ), true );
+					$item->save();
+					$has_extra = true;
+				}
 				if ( $item ) { wc_maybe_adjust_line_item_product_stock( $item ); }
 				$items_changed = true;
-				$changes[] = 'Añadido: ' . $qty . '× ' . $product->get_name();
+				$changes[] = ( $is_extra ? 'Añadido como EXTRA EN TIENDA (33/33/33): ' : 'Añadido: ' ) . $qty . '× ' . $product->get_name();
 			}
 		}
 		if ( ! $changes ) { return array( 'ok' => true, 'changes' => array(), 'stock' => array(), 'total' => (float) $order->get_total(), 'message' => 'No había nada que cambiar.' ); }
@@ -306,9 +330,14 @@ final class CVD_Order_Edit {
 		$order->save();
 		if ( $items_changed && class_exists( 'CVD_Commissions' ) ) { CVD_Commissions::mark_pending( $order->get_id() ); }
 		$saved = wc_get_order( $order->get_id() );
+		// 3.14.18: nota con el reparto 33/33/33 de lo añadido como extra (después de calcular la comisión).
+		$extra_note = $has_extra && class_exists( 'CVD_Commissions' ) ? CVD_Commissions::extra_note( $saved ) : '';
+		if ( '' !== $extra_note ) { $saved->add_order_note( $extra_note ); $saved->update_meta_data( '_cvd_has_extra_tienda', 1 ); $saved->save(); }
 		$total = (float) $saved->get_total();
 		if ( class_exists( 'CVD_Order_Avisos' ) ) { CVD_Order_Avisos::record_edit( $saved, $before, $user_id, sanitize_key( $source ), $messenger ); }
 		$message = 'Pedido #' . $order->get_order_number() . ' cambiado' . ( $items_changed ? '. Nuevo total: ' . wc_format_decimal( $total, 2 ) . ' ' . $order->get_currency() : '' ) . '.';
+		// La nota completa (ganancia y partes) queda en el pedido; a la dependienta solo se le dice lo suyo (CVD_Staff_Privacy).
+		if ( '' !== $extra_note ) { $message .= ' ' . ( user_can( $user_id, 'manage_woocommerce' ) ? $extra_note : self::extra_staff_message( $saved ) ); }
 		if ( $messenger ) { $message .= ' El bot le avisa del cambio por WhatsApp a ' . $messenger['name'] . '.'; }
 		return array( 'ok' => true, 'changes' => $changes, 'stock' => $stock, 'total' => $total, 'message' => $message, 'messenger' => $messenger );
 	}
@@ -319,6 +348,56 @@ final class CVD_Order_Edit {
 		$result = self::edit( absint( $request['id'] ), $data, get_current_user_id(), 'ventas' );
 		if ( is_wp_error( $result ) ) { return $result; }
 		return rest_ensure_response( $result );
+	}
+
+	/** 3.14.18: «Extra en tienda apuntado a nombre de Katia: te tocan 2,67 USD (33 % de la ganancia).» */
+	private static function extra_staff_message( WC_Order $order ): string {
+		$staff = 0.0; $missing = false;
+		foreach ( $order->get_items( 'line_item' ) as $item ) {
+			$snap = $item->get_meta( '_cvd_commission_snapshot', true );
+			$x = is_array( $snap ) && is_array( $snap['extra'] ?? null ) ? $snap['extra'] : null;
+			if ( ! $x ) { continue; }
+			if ( null === $x['profit'] ) { $missing = true; } else { $staff += (float) $x['staff']; }
+		}
+		$who = (string) $order->get_meta( 'gestora_nombre', true );
+		return 'Extra en tienda apuntado a nombre de ' . ( '' !== $who ? $who : 'la gestora' ) . ( $staff > 0 ? ': te tocan ' . number_format( $staff, 2, ',', '.' ) . ' USD (33 % de la ganancia), se pagan un día fijo a la semana.' : '.' ) . ( $missing ? ' Un producto no tiene costo apuntado: avisa a Lennys para que lo ponga.' : '' );
+	}
+
+	/** 3.14.18: la dependienta que atiende (quien pulsa, si es dependienta u operador); administración no cobra el 33 %. */
+	private static function staff_for_extra( int $user_id ): ?WP_User {
+		$user = get_userdata( $user_id );
+		if ( ! $user || ( class_exists( 'CVD_Panel_Bridge' ) && CVD_Panel_Bridge::via_panel() ) ) { return null; }
+		return array_intersect( array( 'cvd_clerk', 'cvd_operator' ), (array) $user->roles ) ? $user : null;
+	}
+
+	/**
+	 * 3.14.18: extras en tienda de los últimos $days días, una fila por producto. $staff_id > 0 = solo los de esa
+	 * dependienta. Sin pedidos cancelados. closed = pedido completado (ya se puede pagar).
+	 */
+	public static function extras( int $staff_id = 0, int $days = 35 ): array {
+		$orders = wc_get_orders( array( 'limit' => 300, 'meta_query' => array( array( 'key' => '_cvd_has_extra_tienda', 'value' => '1' ) ), 'date_created' => '>' . ( time() - $days * DAY_IN_SECONDS ), 'status' => array( 'pending', 'processing', 'on-hold', 'completed' ) ) );
+		$rows = array();
+		foreach ( $orders as $order ) {
+			foreach ( $order->get_items( 'line_item' ) as $item ) {
+				$snap = $item->get_meta( '_cvd_commission_snapshot', true );
+				$x = is_array( $snap ) && is_array( $snap['extra'] ?? null ) ? $snap['extra'] : null;
+				if ( ! $x || ( $staff_id && absint( $x['staff_user_id'] ) !== $staff_id ) ) { continue; }
+				$rows[] = array(
+					'order' => $order->get_id(), 'number' => $order->get_order_number(), 'date' => $order->get_date_created() ? $order->get_date_created()->date_i18n( 'd/m' ) : '',
+					'name' => $item->get_name(), 'qty' => (int) $item->get_quantity(), 'profit' => null === $x['profit'] ? null : (float) $x['profit'],
+					'staff' => (float) $x['staff'], 'staffName' => (string) $x['staff_name'], 'gestora' => null === $x['gestora'] ? null : (float) $x['gestora'],
+					'gestoraName' => (string) $order->get_meta( 'gestora_nombre', true ), 'store' => null === $x['store'] ? null : (float) $x['store'],
+					'closed' => $order->has_status( 'completed' ),
+				);
+			}
+		}
+		return $rows;
+	}
+
+	public static function extras_request( WP_REST_Request $request ) {
+		$admin = current_user_can( 'manage_woocommerce' );
+		$rows = self::extras( $admin ? 0 : get_current_user_id(), 35 );
+		return rest_ensure_response( array( 'admin' => $admin, 'rows' => $rows, 'staffTotal' => round( array_sum( array_column( $rows, 'staff' ) ), 2 ) ) );
 	}
 
 	// ---------- Precio de la gestora ----------

@@ -454,7 +454,9 @@ final class CVD_Sales {
 			$product = $item->get_product();
 			// 3.14.7 (Nana): precio de cada producto en la tarjeta («2× … — 15 USD c/u = 30 USD»).
 			$line = $item instanceof WC_Order_Item_Product ? CVD_Order_Lines::line( $order, $item ) : null;
-			$products[] = array( 'name' => $item->get_name(), 'quantity' => (int) $item->get_quantity(), 'url' => $product ? get_permalink( $product->get_parent_id() ?: $product->get_id() ) : '', 'unit' => $line ? $line['unit'] : null, 'lineTotal' => $line ? $line['total'] : null, 'text' => $line ? $line['text'] : '' );
+			// 3.14.18 (33/33/33): lo que la clienta añadió en la tienda sale marcado.
+			$is_extra = class_exists( 'CVD_Commissions' ) && is_array( $item->get_meta( CVD_Commissions::EXTRA_META, true ) ) && $item->get_meta( CVD_Commissions::EXTRA_META, true );
+			$products[] = array( 'name' => $item->get_name(), 'quantity' => (int) $item->get_quantity(), 'url' => $product ? get_permalink( $product->get_parent_id() ?: $product->get_id() ) : '', 'unit' => $line ? $line['unit'] : null, 'lineTotal' => $line ? $line['total'] : null, 'text' => ( $line ? $line['text'] : '' ) . ( $is_extra && $line ? ' · extra en tienda (33/33/33)' : '' ), 'extra' => (bool) $is_extra );
 		}
 		$fulfillment = sanitize_key( (string) $order->get_meta( '_cvd_fulfillment_type', true ) );
 		$operation_status = self::operation_status( $order );
@@ -504,6 +506,8 @@ final class CVD_Sales {
 			'declaredEur' => (string) $order->get_meta( '_cvd_declared_eur', true ),
 			// 3.13.67 (Lennys): cómo paga el cliente y cuánto en su moneda, la misma cifra que lee el mensajero en su vale.
 			'payment' => class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_payment( $order ) : null, // 3.13.74: también en la recogida
+			// 3.14.18 (Zaymi, 15-oct): el vuelto que pidió el cliente, el mismo que lee el mensajero en su vale; también en la recogida.
+			'change' => class_exists( 'CVD_Bot_Bridge' ) && method_exists( 'CVD_Bot_Bridge', 'change_label' ) ? CVD_Bot_Bridge::change_label( $order ) : '',
 			'isPickup' => 'pickup' === $fulfillment,
 			// 3.13.70 (Ernesto): armado por el mensajero, aparte del total ({ kind, usd, label, text, notice } o null).
 			'assembly' => class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_assembly( $order ) : null,

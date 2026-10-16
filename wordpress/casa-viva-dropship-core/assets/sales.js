@@ -109,6 +109,11 @@
       : (p.prepaid ? " · verifica la captura antes de coordinar la entrega (sin devolución); el mensajero solo cobra su mensajería" : (p.kind === "transfer_cup" ? " · a la tarjeta del mensajero: él trae el dinero" : ""));
     return '<p><b>Pago</b><span' + (p.prepaid ? ' style="color:#a8641c;font-weight:700"' : "") + ">💳 " + escapeText(p.text + extra) + "</span></p>";
   }
+  // Vuelto (3.14.18, Zaymi): con cuánto paga el cliente y cuánto hay que devolverle; en la recogida y en el domicilio.
+  function changeRow(order) {
+    if (!order.change) return "";
+    return '<p><b>Vuelto</b><span style="color:#a8641c;font-weight:700">💵 ' + escapeText(order.change) + "</span></p>";
+  }
   // Armado por el mensajero (3.13.70, Ernesto): se cobra aparte, como la mensajería; no está en el total.
   function assemblyRow(order) {
     var a = order.assembly;
@@ -141,11 +146,25 @@
       var wa = order.phone ? '<a class="cvd-sale-wa" target="_blank" rel="noopener" href="https://wa.me/' + escapeText(order.phone.replace(/\D/g, "")) + '">WhatsApp</a>' : "";
       // Pedido de prueba (3.13.54): cartel grande arriba; el servidor no lo deja salir al reparto.
       var test = order.testOrder ? '<p class="cvd-sale-test" role="note" style="margin:0 0 10px;padding:10px 12px;border-radius:12px;background:#b3261e;color:#fff;font-weight:800;font-size:1.15em;letter-spacing:.02em;text-align:center">PRUEBA — no preparar<br><small style="font-weight:600;font-size:.75em">No sale al reparto ni a ningún mensajero</small></p>' : '';
-      return '<article class="cvd-sale-card' + (order.testOrder ? ' is-test' : '') + '">' + test + '<div class="cvd-sale-top"><div><span class="cvd-sale-status is-' + order.status + '">' + escapeText(order.statusLabel) + '</span><h2>Pedido #' + escapeText(order.number) + '</h2><small>' + escapeText(order.date) + '</small></div><div class="cvd-sale-code"><canvas data-order-code="' + escapeText(order.orderCode) + '"></canvas><small>' + escapeText(order.orderCode) + '</small></div><strong>' + escapeText(order.total) + (order.shippingCup && !/CUP/i.test(order.total) ? ' + ' + escapeText(order.shippingCup) + ' CUP' : '') + '</strong></div><div class="cvd-sale-data"><p><b>Cliente</b><span>' + escapeText(order.customer) + " · " + phone + '</span></p>' + peopleRows(order) + '<p><b>Entrega</b><span>' + escapeText(order.fulfillment + " · " + order.address) + '</span></p>' + paymentRow(order) + assemblyRow(order) + (order.deliveryWhen ? '<p><b>Día</b><span' + (order.deliveryFuture ? ' style="color:#a8641c;font-weight:700"' : '') + '>📅 ' + escapeText(order.deliveryWhen) + '</span></p>' : '') + '<p><b>Productos</b><span>' + productLinks(order.products) + '</span></p>' + messengerRow(order) + commercialData(order) + (order.cancelReason && order.status === "cancelled" ? '<p><b>Motivo</b><span>' + escapeText(order.cancelReason) + '</span></p>' : '') + '</div><div class="cvd-sale-actions">' + actionButtons(order) + extraButtons(order) + (order.canReturn ? '<button type="button" class="cvd-sale-return is-warning" data-return-order="' + order.id + '">Devolución</button>' : '') + (order.trackingUrl ? '<button type="button" data-copy-tracking="' + escapeText(order.trackingUrl) + '">Copiar seguimiento</button>' : '') + wa + (cvdSales.isAdmin && order.adminUrl ? '<a href="' + escapeText(order.adminUrl) + '" target="_blank" rel="noopener">Ver pedido</a>' : '') + '</div></article>';
+      return '<article class="cvd-sale-card' + (order.testOrder ? ' is-test' : '') + '">' + test + '<div class="cvd-sale-top"><div><span class="cvd-sale-status is-' + order.status + '">' + escapeText(order.statusLabel) + '</span><h2>Pedido #' + escapeText(order.number) + '</h2><small>' + escapeText(order.date) + '</small></div><div class="cvd-sale-code"><canvas data-order-code="' + escapeText(order.orderCode) + '"></canvas><small>' + escapeText(order.orderCode) + '</small></div><strong>' + escapeText(order.total) + (order.shippingCup && !/CUP/i.test(order.total) ? ' + ' + escapeText(order.shippingCup) + ' CUP' : '') + '</strong></div><div class="cvd-sale-data"><p><b>Cliente</b><span>' + escapeText(order.customer) + " · " + phone + '</span></p>' + peopleRows(order) + '<p><b>Entrega</b><span>' + escapeText(order.fulfillment + " · " + order.address) + '</span></p>' + paymentRow(order) + changeRow(order) + assemblyRow(order) + (order.deliveryWhen ? '<p><b>Día</b><span' + (order.deliveryFuture ? ' style="color:#a8641c;font-weight:700"' : '') + '>📅 ' + escapeText(order.deliveryWhen) + '</span></p>' : '') + '<p><b>Productos</b><span>' + productLinks(order.products) + '</span></p>' + messengerRow(order) + commercialData(order) + (order.cancelReason && order.status === "cancelled" ? '<p><b>Motivo</b><span>' + escapeText(order.cancelReason) + '</span></p>' : '') + '</div><div class="cvd-sale-actions">' + actionButtons(order) + extraButtons(order) + (order.canReturn ? '<button type="button" class="cvd-sale-return is-warning" data-return-order="' + order.id + '">Devolución</button>' : '') + (order.trackingUrl ? '<button type="button" data-copy-tracking="' + escapeText(order.trackingUrl) + '">Copiar seguimiento</button>' : '') + wa + (cvdSales.isAdmin && order.adminUrl ? '<a href="' + escapeText(order.adminUrl) + '" target="_blank" rel="noopener">Ver pedido</a>' : '') + '</div></article>';
     }).join("");
     if (window.CVQRCode) document.querySelectorAll("[data-order-code]").forEach(function (canvas) { window.CVQRCode.toCanvas(canvas, canvas.dataset.orderCode, { width: 84, margin: 1 }); });
   }
+  // 3.14.18 (33/33/33): lo que lleva cada dependienta por extras en tienda (últimos 35 días). Administración ve a todas.
+  async function loadExtras() {
+    var box = document.getElementById("cvd-sales-extras");
+    if (!box) { box = document.createElement("div"); box.id = "cvd-sales-extras"; box.style.cssText = "margin:.5em 0 1em;padding:.75em 1em;border-radius:12px;background:#fbf3e6;border:1px solid #ecd9b8;font-size:.95em"; if (list && list.parentNode) list.parentNode.insertBefore(box, list); }
+    var r;
+    try { r = await api(cvdSales.url + "/extras", { method: "GET" }); } catch (e) { box.hidden = true; return; }
+    var rows = r.rows || [];
+    if (!rows.length) { box.hidden = true; return; }
+    var usd = function (v) { return v === null || v === undefined ? "—" : Number(v).toFixed(2).replace(".", ","); };
+    var head = r.admin ? "<b>Extras en tienda (33/33/33)</b> · últimos 35 días" : "<b>Tus extras en tienda</b> · llevas <b>" + usd(r.staffTotal) + " USD</b> (33 % de la ganancia) · se pagan un día fijo a la semana";
+    box.hidden = false;
+    box.innerHTML = '<details><summary>' + head + "</summary>" + rows.map(function (x) { return '<p style="margin:.4em 0">#' + escapeText(x.number) + " · " + escapeText(x.date) + " · " + escapeText(x.qty + "× " + x.name) + " · gestora " + escapeText(x.gestoraName || "—") + (x.profit === null ? ' · <b style="color:#a35a1f">sin costo apuntado: avisa a Lennys</b>' : (r.admin ? " · ganancia " + usd(x.profit) + " → gestora " + usd(x.gestora) + " · " + escapeText(x.staffName || "sin dependienta") + " " + usd(x.staff) + " · tienda " + usd(x.store) : " · tu parte <b>" + usd(x.staff) + " USD</b>")) + (x.closed ? "" : " · <i>pedido aún abierto</i>") + "</p>"; }).join("") + "</details>";
+  }
   async function load() {
+    loadExtras();
     var mine = ++loadSeq; // si llegan dos respuestas, solo pinta la última pedida (no vuelve un filtro viejo)
     message.textContent = "Actualizando…";
     var params = new URLSearchParams();
@@ -235,7 +254,9 @@
   function editField(label, name, value, extra) { return '<label>' + escapeText(label) + '<input name="' + name + '" value="' + escapeText(value || "") + '"' + (extra || "") + "></label>"; }
   function paintAdded() {
     var box = editDialog.querySelector("[data-added]");
-    box.innerHTML = editState.add.map(function (a, i) { return '<p class="cvd-edit-line"><span>+ ' + escapeText(a.name) + '</span><input type="number" min="1" max="999" inputmode="numeric" data-add-qty="' + i + '" value="' + a.qty + '" aria-label="Cantidad"><button type="button" data-add-rm="' + i + '" aria-label="Quitar">✕</button></p>'; }).join("");
+    box.innerHTML = editState.add.map(function (a, i) { return '<p class="cvd-edit-line"><span>+ ' + escapeText(a.name) + '</span><input type="number" min="1" max="999" inputmode="numeric" data-add-qty="' + i + '" value="' + a.qty + '" aria-label="Cantidad"><button type="button" data-add-rm="' + i + '" aria-label="Quitar">✕</button></p>'
+      // 3.14.18 (33/33/33): en pedidos de gestora, marcar si la clienta lo eligió aquí en la tienda.
+      + (editState.gestora ? '<label class="cvd-edit-extra" style="display:flex;gap:.5em;align-items:flex-start;margin:-.25em 0 .75em;font-size:.92em"><input type="checkbox" data-add-extra="' + i + '"' + (a.extra ? " checked" : "") + '><span><b>Extra en tienda</b> — la clienta lo eligió aquí. La ganancia se reparte: 33 % ' + escapeText(editState.gestoraName || "la gestora") + ', 33 % tú y 33 % la tienda. Va al precio de la tienda.</span></label>' : ""); }).join("");
   }
   async function openEdit(id) {
     message.className = ""; message.textContent = "Abriendo el pedido…";
@@ -244,7 +265,7 @@
     catch (error) { message.className = "is-error"; message.textContent = error.message; return; }
     message.textContent = "";
     if (!d.editable) { message.className = "is-error"; message.textContent = d.why || "Este pedido ya no se puede cambiar."; return; }
-    editState = { id: d.id, add: [] };
+    editState = { id: d.id, add: [], gestora: !!d.gestoraOrder, gestoraName: d.gestoraName || "" };
     var windows = [["", "A cualquier hora"], ["morning", "Por la mañana"], ["afternoon", "Por la tarde"]];
     editDialog.innerHTML = '<form method="dialog" id="cvd-edit-form"><h2>Cambiar pedido #' + escapeText(d.number) + '</h2>'
       + (d.messenger ? '<p class="cvd-edit-warn">Ya lo tiene asignado <b>' + escapeText(d.messenger.name) + '</b>. Si cambias algo, avísale.</p>' : '')
@@ -254,7 +275,7 @@
         : editField("Dirección", "address", d.address, ' maxlength="200"') + (d.locality ? '<p class="cvd-edit-hint">Reparto: ' + escapeText(d.locality) + '. Si cambia de municipio o de reparto, cancélalo y que se haga de nuevo (cambia la mensajería).</p>' : '')
           + '<div class="cvd-edit-two"><label>Día de entrega<input type="date" name="deliveryDate" value="' + escapeText(d.date) + '" min="' + escapeText(d.minDate) + '" max="' + escapeText(d.maxDate) + '"></label><label>Franja<select name="deliveryWindow">' + windows.map(function (w) { return '<option value="' + w[0] + '"' + (w[0] === (d.window || "") ? " selected" : "") + ">" + w[1] + "</option>"; }).join("") + '</select></label></div><p class="cvd-edit-hint">Día vacío = lo antes posible. Ahora: ' + escapeText(d.whenLabel) + '</p>')
       + '<label>Nota del pedido<textarea name="note" rows="2" maxlength="500">' + escapeText(d.note) + '</textarea></label>'
-      + '<h3>Productos</h3>' + d.lines.map(function (l) { return '<p class="cvd-edit-line"><span>' + escapeText(l.name) + '</span><input type="number" min="0" max="999" inputmode="numeric" data-line="' + l.itemId + '" value="' + l.qty + '" aria-label="Cantidad"></p>'; }).join("")
+      + '<h3>Productos</h3>' + d.lines.map(function (l) { return '<p class="cvd-edit-line"><span>' + escapeText(l.name) + (l.extra ? " · <small>extra en tienda</small>" : "") + '</span><input type="number" min="0" max="999" inputmode="numeric" data-line="' + l.itemId + '" value="' + l.qty + '" aria-label="Cantidad"></p>'; }).join("")
       + '<p class="cvd-edit-hint">Pon 0 para quitar un producto. Las existencias se ajustan solas.</p>'
       + '<label>Añadir otro producto<input type="search" data-product-q placeholder="Nombre o código" autocomplete="off"></label><div data-found></div><div data-added></div>'
       + '<p data-edit-msg role="status" class="is-error"></p>'
@@ -266,6 +287,8 @@
     var q = event.target.closest("[data-product-q]");
     var addQty = event.target.closest("[data-add-qty]");
     if (addQty) { editState.add[Number(addQty.dataset.addQty)].qty = Math.max(1, parseInt(addQty.value, 10) || 1); return; }
+    var addExtra = event.target.closest("[data-add-extra]");
+    if (addExtra) { editState.add[Number(addExtra.dataset.addExtra)].extra = addExtra.checked; return; }
     if (!q) return;
     clearTimeout(searchTimer);
     searchTimer = setTimeout(async function () {
@@ -289,7 +312,7 @@
     var f = event.target, msg = editDialog.querySelector("[data-edit-msg]"), submit = document.getElementById("cvd-edit-submit");
     var lines = Array.prototype.map.call(f.querySelectorAll("[data-line]"), function (i) { return { itemId: Number(i.dataset.line), qty: Math.max(0, parseInt(i.value, 10) || 0) }; });
     if (lines.every(function (l) { return l.qty === 0; }) && !editState.add.length) { msg.textContent = "El pedido no puede quedar sin productos. Si ya no lo quieren, cancélalo."; return; }
-    var body = { firstName: f.elements.firstName.value, lastName: f.elements.lastName.value, phone: f.elements.phone.value, note: f.elements.note.value, lines: lines, add: editState.add.map(function (a) { return { wooId: a.wooId, qty: a.qty }; }) };
+    var body = { firstName: f.elements.firstName.value, lastName: f.elements.lastName.value, phone: f.elements.phone.value, note: f.elements.note.value, lines: lines, add: editState.add.map(function (a) { return { wooId: a.wooId, qty: a.qty, extra: !!a.extra }; }) };
     if (f.elements.address) body.address = f.elements.address.value;
     if (f.elements.deliveryDate) { body.deliveryDate = f.elements.deliveryDate.value; body.deliveryWindow = f.elements.deliveryWindow.value; }
     submit.disabled = true; msg.textContent = "";

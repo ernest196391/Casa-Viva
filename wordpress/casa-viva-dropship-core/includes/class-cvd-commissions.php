@@ -5,6 +5,14 @@ defined( 'ABSPATH' ) || exit;
 /** Comisiones almacenadas y consultadas desde cada pedido WooCommerce. */
 final class CVD_Commissions {
 	private const VALID_STATUSES = array( 'pending', 'approved', 'paid', 'cancelled' );
+	/**
+	 * 3.14.18 (Ernesto, 15-oct, regla 33/33/33): línea que la clienta de una gestora añadió en la tienda al recoger
+	 * su vale. La GANANCIA de esa línea (precio − costo de compra × unidades) se reparte 33,34 % gestora,
+	 * 33,33 % dependienta que la atendió y 33,33 % tienda. La marca la pone CVD_Order_Edit al añadir con «extra».
+	 */
+	public const EXTRA_META = '_cvd_extra_tienda';
+	public const EXTRA_GESTORA_PCT = 33.34;
+	public const EXTRA_STAFF_PCT = 33.33;
 
 	public static function register(): void {
 		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'mark_pending_from_order' ), 40 );
@@ -267,6 +275,51 @@ final class CVD_Commissions {
 		return array( 'type' => $type, 'value' => (float) $value, 'source' => $source );
 	}
 
+	/** Costo de compra en USD de un producto (o de su producto padre); null si no está apuntado. */
+	public static function unit_cost( ?WC_Product $product ): ?float {
+		$candidates = array( $product );
+		if ( $product && $product->is_type( 'variation' ) && $product->get_parent_id() ) { $candidates[] = wc_get_product( $product->get_parent_id() ); }
+		foreach ( $candidates as $p ) {
+			if ( ! $p ) { continue; }
+			$value = $p->get_meta( '_cvd_cost_usd', true );
+			if ( '' !== (string) $value && is_numeric( $value ) && (float) $value > 0 ) { return (float) $value; }
+		}
+		return null;
+	}
+
+	/**
+	 * 3.14.18: reparto 33/33/33 de una línea «extra en tienda», o null si la línea no lo es.
+	 * → [ cost, profit, gestora, staff, store, staff_user_id, staff_name ] en USD; sin costo: profit/gestora/store = null.
+	 */
+	public static function extra_split( WC_Order_Item_Product $item, ?WC_Product $product, float $line, int $quantity ): ?array {
+		$mark = $item->get_meta( self::EXTRA_META, true );
+		if ( ! is_array( $mark ) || ! $mark ) { return null; }
+		$staff_id = absint( $mark['staff'] ?? 0 );
+		$base = array( 'staff_user_id' => $staff_id, 'staff_name' => (string) ( $mark['staffName'] ?? '' ), 'at' => (string) ( $mark['at'] ?? '' ) );
+		$cost = self::unit_cost( $product );
+		if ( null === $cost ) { return $base + array( 'cost' => null, 'profit' => null, 'gestora' => null, 'staff' => 0.0, 'store' => null ); }
+		$profit = max( 0.0, $line - $cost * max( 1, $quantity ) );
+		$gestora = round( $profit * self::EXTRA_GESTORA_PCT / 100, 4 );
+		$staff = $staff_id ? round( $profit * self::EXTRA_STAFF_PCT / 100, 4 ) : 0.0;
+		return $base + array( 'cost' => $cost, 'profit' => round( $profit, 4 ), 'gestora' => $gestora, 'staff' => $staff, 'store' => round( $profit - $gestora - $staff, 4 ) );
+	}
+
+	/** «Extra en tienda: Organizador ×1 — ganancia 8,00 USD → gestora 2,67 · Zaymi 2,67 · tienda 2,66.» ('' si no hay). */
+	public static function extra_note( WC_Order $order ): string {
+		$out = array();
+		foreach ( $order->get_items( 'line_item' ) as $item ) {
+			$snap = $item->get_meta( '_cvd_commission_snapshot', true );
+			$x = is_array( $snap ) && is_array( $snap['extra'] ?? null ) ? $snap['extra'] : null;
+			if ( ! $x ) { continue; }
+			$money = static fn( $v ) => number_format( (float) $v, 2, ',', '.' );
+			$who = '' !== $x['staff_name'] ? $x['staff_name'] : 'sin dependienta';
+			$out[] = null === $x['profit']
+				? $item->get_name() . ' ×' . $item->get_quantity() . ' — SIN COSTO apuntado: va con la comisión normal de la gestora. Pon el costo en el producto para repartir 33/33/33.'
+				: $item->get_name() . ' ×' . $item->get_quantity() . ' — ganancia ' . $money( $x['profit'] ) . ' USD → gestora ' . $money( $x['gestora'] ) . ' · ' . $who . ' ' . $money( $x['staff'] ) . ' · tienda ' . $money( $x['store'] ) . ' USD';
+		}
+		return $out ? 'Extra en tienda (33/33/33): ' . implode( '; ', $out ) . '.' : '';
+	}
+
 	public static function calculate( WC_Order $order, int $owner_user_id ): array {
 		$default_rate = (float) get_option( 'cvd_default_commission_rate', 13 );
 		$user_rate = get_user_meta( $owner_user_id, '_cvd_commission_rate', true );
@@ -287,6 +340,27 @@ final class CVD_Commissions {
 			$line_margin = ( $base_unit > 0 && $pricing_gestora_id === $owner_user_id ) ? max( 0, $line - ( $base_unit * $quantity ) ) : 0;
 
 			$snapshot = $item->get_meta( '_cvd_commission_snapshot', true );
+			$extra = self::extra_split( $item, $product, $line, $quantity );
+			if ( ( ! is_array( $snapshot ) || ! isset( $snapshot['base_commission'], $snapshot['base_amount'], $snapshot['sale_amount'] ) ) && $extra && null !== $extra['profit'] ) {
+				// 3.14.18: extra en tienda con costo conocido → 33,34 % de la ganancia, sin aumento de precio.
+				$snapshot = array(
+					'product_id'       => $item->get_product_id(),
+					'variation_id'     => $item->get_variation_id(),
+					'owner_user_id'    => $owner_user_id,
+					'type'             => 'extra_tienda',
+					'value'            => wc_format_decimal( self::EXTRA_GESTORA_PCT, 4 ),
+					'policy_source'    => 'extra_tienda',
+					'quantity'         => $quantity,
+					'base_amount'      => wc_format_decimal( $line, 4 ),
+					'sale_amount'      => wc_format_decimal( $line, 4 ),
+					'base_commission'  => wc_format_decimal( $extra['gestora'], 4 ),
+					'markup'           => wc_format_decimal( 0, 4 ),
+					'extra'            => $extra,
+					'captured_at'      => current_time( 'mysql', true ),
+				);
+				$item->update_meta_data( '_cvd_commission_snapshot', $snapshot );
+				$item->save_meta_data();
+			}
 			if ( ! is_array( $snapshot ) || ! isset( $snapshot['base_commission'], $snapshot['base_amount'], $snapshot['sale_amount'] ) ) {
 				$policy = self::commission_policy( $product, $gestora_rate );
 				$line_commission = 'fixed' === $policy['type'] ? $policy['value'] * $quantity : $line_base * ( $policy['value'] / 100 );
@@ -304,6 +378,8 @@ final class CVD_Commissions {
 					'markup'           => wc_format_decimal( $line_margin, 4 ),
 					'captured_at'      => current_time( 'mysql', true ),
 				);
+				// Extra en tienda SIN costo apuntado: comisión normal (como antes) y se avisa para poner el costo.
+				if ( $extra ) { $snapshot['policy_source'] = 'extra_sin_costo'; $snapshot['extra'] = $extra; }
 				$item->update_meta_data( '_cvd_commission_snapshot', $snapshot );
 				$item->save_meta_data();
 			}
