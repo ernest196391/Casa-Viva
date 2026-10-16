@@ -1,0 +1,61 @@
+/* NEXO Busca (3.14.28). Marca Casa Viva: petróleo #0D3B45 arriba, crema #F6F1E6, ámbar #A35A1F en botones y precios,
+   Cinzel solo en el título corto. Primero el móvil. */
+@font-face{font-family:"Cinzel";font-style:normal;font-weight:600;font-display:swap;src:url(fonts/cinzel-latin-600.woff2) format("woff2")}
+#cvga-buscar{--nb-petroleo:#0D3B45;--nb-crema:#F6F1E6;--nb-ambar:#A35A1F;--nb-marron:#2B2420;display:flex;flex-direction:column;gap:14px}
+.cvnb-hero{background:var(--nb-petroleo);color:var(--nb-crema);border-radius:var(--ga-r,14px);padding:20px 18px 18px}
+.cvnb-logo{display:block;height:24px;width:auto;margin-bottom:12px;opacity:.95}
+.cvnb-hero h1{margin:0;font:600 26px/1.15 "Cinzel",Georgia,serif;letter-spacing:.08em;text-transform:uppercase;color:var(--nb-crema)}
+.cvnb-hero p{margin:8px 0 0;font-size:16px;line-height:1.4;color:#e6ece9;text-wrap:pretty}
+#cvga-buscar .cvga-btn{background:var(--nb-ambar)}
+#cvga-buscar .cvga-btn-soft{background:var(--ga-soft,#e4ece8);color:var(--nb-marron)!important}
+#cvga-buscar .cvga-btn[disabled]{opacity:.6}
+.cvnb-drop{display:flex;align-items:center;gap:12px;padding:14px;border:2px dashed #cdbfae;border-radius:12px;background:var(--ga-bg,#f6f1e6);cursor:pointer;position:relative;min-height:76px}
+.cvnb-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.cvnb-drop-text b{display:block;font-size:16px}
+.cvnb-drop-text small{display:block;color:var(--ga-muted,#6f6a62);font-weight:400;font-size:13px}
+.cvnb-drop .cvga-busca-preview{width:64px;height:64px;max-width:none;border-radius:10px;object-fit:cover;flex:none}
+#cvga-buscar .cvga-field input[type=text],#cvga-buscar .cvga-field input[type=number]{border:1px solid var(--ga-line,#e8e1d8);background:#fff;border-radius:10px;padding:10px 12px;font:inherit;font-weight:400;min-height:44px;width:100%}
+.cvnb-go{width:100%}
+@media (min-width:600px){.cvnb-go{width:auto}}
+.cvnb-kick{display:block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ga-muted,#6f6a62);margin-bottom:2px}
+.cvnb-sum h2{margin:0 0 4px}
+.cvnb-price{color:var(--nb-ambar);font-size:18px}
+.cvnb-offer.is-on{outline:2px solid var(--nb-ambar);outline-offset:-1px}
+.cvnb-q summary{font-weight:600;cursor:pointer}
+.cvnb-use{display:flex;flex-direction:column;gap:12px}
+.cvnb-chosen{border-left:4px solid var(--nb-ambar)}
+.cvnb-chosen p{margin:4px 0 2px}
+.cvnb-link{border:0;background:none;color:var(--nb-petroleo);text-decoration:underline;font:inherit;cursor:pointer;padding:6px}
+.cvnb-step h2{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:18px}
+.cvnb-step h2 small{font-weight:400;color:var(--ga-muted,#6f6a62);font-size:14px}
+.cvnb-n{flex:none;width:28px;height:28px;border-radius:50%;background:var(--nb-petroleo);color:var(--nb-crema);display:grid;place-items:center;font-size:14px}
+.cvnb-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:10px}
+.cvnb-seg{display:flex;gap:4px;padding:4px;background:var(--ga-bg,#f6f1e6);border:1px solid var(--ga-line,#e8e1d8);border-radius:12px;margin:0 0 10px}
+.cvnb-seg button{flex:1;border:0;background:transparent;border-radius:9px;padding:9px 6px;font:inherit;font-weight:600;font-size:14px;color:var(--nb-marron);cursor:pointer;min-height:40px}
+.cvnb-seg button[aria-pressed=true]{background:var(--nb-petroleo);color:var(--nb-crema)}
+.cvnb-total{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.cvnb-big{background:var(--nb-petroleo);color:var(--nb-crema);border-radius:12px;padding:12px}
+.cvnb-big span{display:block;font-size:13px;opacity:.85}
+.cvnb-big b{display:block;font-size:26px;line-height:1.15;font-variant-numeric:tabular-nums}
+.cvnb-big small{display:block;font-size:13px;opacity:.9}
+.cvnb-big.is-gain{background:#e7f1ea;color:#1f4d33}
+.cvnb-wide{grid-column:1/-1;margin:0}
+.cvnb-split{margin:2px 4px;font-size:15px;color:var(--nb-marron)}
+.cvnb-msg{width:100%;border:1px solid var(--ga-line,#e8e1d8);border-radius:10px;padding:10px 12px;font:inherit;font-size:15px;background:#fff;margin-bottom:10px;resize:vertical}
+.cvnb-pretty{display:block;width:100%;max-width:320px;border-radius:12px;margin-top:10px;border:1px solid var(--ga-line,#e8e1d8)}
+.cvnb-cv{border:2px solid var(--nb-petroleo)}
+.cvnb-cv form{display:flex;flex-direction:column;gap:10px}
+.cvnb-cv-sum{margin:0;font-size:14px}
+.cvnb-back{position:sticky;top:56px;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between;background:#fff7e6;border:1px solid #f0d9a8;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:14px}
+.cvnb-back .cvga-btn{background:#A35A1F}
+.cvnb-mine h2{margin:0 0 4px}
+.cvnb-list{list-style:none;margin:10px 0 0;padding:0}
+.cvnb-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--ga-line,#e8e1d8)}
+.cvnb-item img,.cvnb-noimg{width:52px;height:52px;border-radius:9px;object-fit:cover;flex:none;background:var(--ga-bg,#f6f1e6)}
+.cvnb-item div{flex:1;min-width:0}
+.cvnb-item b{display:block}
+.cvnb-item small{display:block}
+.cvnb-st-pendiente{background:#f6e3c8;color:#7a4a12}
+.cvnb-st-confirmada{background:#e7f4ec;color:#1f5a37}
+.cvnb-st-no_hay{background:#f3e3e0;color:#9a392f}
+@media (max-width:380px){.cvnb-total,.cvnb-grid{grid-template-columns:minmax(0,1fr)}}

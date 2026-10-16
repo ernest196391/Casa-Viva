@@ -77,8 +77,9 @@ final class CVD_Gestora_App {
 			array( 'precios', 'Mis precios', 'tag', '' ),
 			array( 'clientes', 'Clientes', 'people', '' ),
 			array( '', 'Herramientas', '', '' ),
+			// 3.14.28 (Ernesto, 16-oct): «NEXO Busca» (antes «Buscar precios»), la primera de Herramientas.
+			array( 'buscar', 'NEXO Busca', 'search', '' ),
 			array( 'calculadora', 'Calculadora', 'calc', '' ),
-			array( 'buscar', 'Buscar precios', 'search', '' ),
 			array( 'curru', 'Pregúntale a Curru', 'chat', '' ),
 			array( 'fotos', 'Fotos para publicar', 'image', '' ),
 			array( 'herramientas', 'Más herramientas', 'spark', '' ),
@@ -256,11 +257,11 @@ final class CVD_Gestora_App {
 		$meses    = array( 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic' ); // sin depender del idioma cargado
 		$pdf_date = $pdf_ts ? wp_date( 'j', $pdf_ts ) . ' ' . $meses[ (int) wp_date( 'n', $pdf_ts ) - 1 ] . ' ' . wp_date( 'Y', $pdf_ts ) : '';
 		$tools = array(
+			array( 'search', 'NEXO Busca', '¿Tu cliente pide algo que no tenemos? Súbele una foto y te buscamos quién lo vende. Lo vendes tú o por Casa Viva.', class_exists( 'CVD_Gestora_Busca' ) && CVD_Gestora_Busca::available() ? 'ready' : 'soon', 'buscar' ),
 			array( 'truck', 'Precios de mensajería', 'Cuánto cuesta llevar el pedido a cada reparto, en CUP. La mensajería es del mensajero.', 'ready', 'precios-mensajeria' ),
 			array( 'calc', 'Calculadora', 'Pon el precio en USD y mira cuánto es en CUP, euros, tarjeta clásica, Zelle o PayPal con la tasa de hoy.', 'ready', 'calculadora' ),
 			array( 'chat', 'Pregúntale a Curru', 'Precios, medidas y si hay en almacén. Responde al momento.', 'ready', 'curru' ),
 			array( 'image', 'Fotos para publicar', 'Todo lo que hay en existencia, con tu precio y tu enlace: descarga la foto y copia el texto.', 'ready', 'fotos' ),
-			array( 'search', 'Buscar precios', 'Sube la foto de un producto y mira a cuánto lo venden en Revolico y otras tiendas.', class_exists( 'CVD_Gestora_Busca' ) && CVD_Gestora_Busca::available() ? 'ready' : 'soon', 'buscar' ),
 			array( 'target', 'Cazadora de clientes', 'Encuentra gente que está pidiendo lo que vendes, para escribirle primero.', 'soon', '' ),
 			array( 'camera', $estudio ? 'Mi estudio de fotos' : 'Fotos de producto', 'Convierte una foto normal en una foto bonita para vender: fondo blanco, en una sala bonita, para tu estado…', $estudio ? 'ready' : 'soon', 'estudio' ),
 		);
@@ -375,20 +376,44 @@ final class CVD_Gestora_App {
 	}
 
 	private static function buscar( string $zone ): string {
-		$remaining = class_exists( 'CVD_Gestora_Busca' ) ? CVD_Gestora_Busca::remaining( get_current_user_id() ) : 0;
+		// 3.14.28 «NEXO Busca»: encabezado con la marca, foto o texto, y lo de después (assets/gestora-busca.js).
+		$user = wp_get_current_user();
+		$remaining = class_exists( 'CVD_Gestora_Busca' ) ? CVD_Gestora_Busca::remaining( $user->ID ) : 0;
+		$config = array(
+			'base'     => esc_url_raw( rest_url( 'casa-viva/v1/gestora/busca' ) ),
+			'nonce'    => wp_create_nonce( 'wp_rest' ),
+			'rates'    => class_exists( 'CVD_Daily_Rates' ) ? CVD_Daily_Rates::public_data() : array( 'cup' => null ),
+			'zone'     => $zone && ! is_email( $zone ) ? $zone : 'La Habana',
+			'estudio'  => class_exists( 'CVD_Gestora_Estudio' ) && CVD_Gestora_Estudio::enabled_for( $user ),
+			'pedidos'  => class_exists( 'CVD_Nexo_Busca' ) ? CVD_Nexo_Busca::list_for( $user->ID ) : array(),
+		);
 		ob_start();
 		?>
 		<section class="cvga-view" data-view="buscar" id="cvga-buscar">
-			<div class="cvga-head"><h1>Buscar precios</h1><p>Sube la foto de un producto y te digo a cuánto lo venden en Revolico, Facebook y otras tiendas.</p></div>
-			<form class="cvga-card cvga-busca-form" data-cvga-busca data-endpoint="<?php echo esc_url( rest_url( 'casa-viva/v1/gestora/busca' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'wp_rest' ) ); ?>">
-				<label class="cvga-field" for="cvga-busca-img"><span>Foto del producto</span><input id="cvga-busca-img" name="image" type="file" accept="image/jpeg,image/png,image/webp" required></label>
-				<img class="cvga-busca-preview" alt="" hidden>
-				<label class="cvga-field" for="cvga-busca-ctx"><span>¿Qué buscas? <small>(opcional)</small></span><input id="cvga-busca-ctx" name="context" type="text" maxlength="300" placeholder="Ej.: ventilador recargable, color blanco"></label>
-				<label class="cvga-field" for="cvga-busca-zone"><span>Zona</span><input id="cvga-busca-zone" name="zone" type="text" maxlength="100" value="<?php echo esc_attr( $zone && ! is_email( $zone ) ? $zone : 'La Habana' ); ?>"></label>
-				<div class="cvga-actions"><button class="cvga-btn" type="submit">Buscar</button><small class="cvga-note" data-busca-left>Te quedan <?php echo esc_html( (string) $remaining ); ?> búsquedas hoy.</small></div>
+			<header class="cvnb-hero">
+				<img class="cvnb-logo" src="<?php echo esc_url( CVD_URL . 'assets/logo-casa-viva-crema.svg' ); ?>" alt="Casa Viva" width="150" height="31">
+				<h1>NEXO Busca</h1>
+				<p>¿Tu cliente pide algo que no tenemos? Súbele una foto y te buscamos quién lo vende.</p>
+			</header>
+			<form class="cvga-card cvga-busca-form" data-cvga-busca autocomplete="off">
+				<script type="application/json" data-busca-config><?php echo wp_json_encode( $config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON con HEX_TAG. ?></script>
+				<label class="cvnb-drop" for="cvga-busca-img">
+					<img class="cvga-busca-preview" alt="" hidden>
+					<span class="cvnb-drop-text"><b>📷 Subir foto o captura</b><small>La que te mandó el cliente, o una de Facebook o Revolico</small></span>
+					<input id="cvga-busca-img" name="image" type="file" accept="image/jpeg,image/png,image/webp">
+				</label>
+				<label class="cvga-field" for="cvga-busca-ctx"><span>O escribe qué buscas <small>(si subiste foto, es opcional)</small></span><input id="cvga-busca-ctx" name="context" type="text" maxlength="300" placeholder="Ej.: cortina de baño con recubrimiento de teflón"></label>
+				<label class="cvga-field" for="cvga-busca-zone"><span>Zona del cliente</span><input id="cvga-busca-zone" name="zone" type="text" maxlength="100" value="<?php echo esc_attr( $config['zone'] ); ?>"></label>
+				<div class="cvga-actions"><button class="cvga-btn cvnb-go" type="submit">Buscar quién lo vende</button><small class="cvga-note" data-busca-left>Te quedan <?php echo esc_html( (string) $remaining ); ?> búsquedas hoy.</small></div>
 				<p class="cvga-busca-status" data-busca-status role="status" hidden></p>
 			</form>
 			<div class="cvga-busca-results" data-busca-results></div>
+			<div class="cvnb-use" data-busca-use hidden></div>
+			<section class="cvga-card cvnb-mine" data-busca-mine<?php echo $config['pedidos'] ? '' : ' hidden'; ?>>
+				<h2>Mis solicitudes a Casa Viva</h2>
+				<p class="cvga-note">Lo que pediste vender por Casa Viva. Te avisamos por WhatsApp cuando lo comprobemos con el proveedor.</p>
+				<ul class="cvnb-list" data-busca-mine-list></ul>
+			</section>
 		</section>
 		<?php
 		return (string) ob_get_clean();

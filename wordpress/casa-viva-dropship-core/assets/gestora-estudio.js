@@ -284,6 +284,7 @@
       if (!d.photo.pid) pickerFor = d.photo.id;
       upResult.innerHTML = card(d.photo, true);
       cfg.gallery.unshift(d.photo); renderGallery();
+      try { document.dispatchEvent(new CustomEvent('cvd:estudio-foto', { detail: d.photo })); } catch (ignore) {} // 3.14.28: NEXO Busca la recoge
     }).catch(function (err) { say(upMsg, err.message, true); })
       .then(function () { up.value = ''; });
   });
@@ -304,6 +305,7 @@
       if (typeof d.left === 'number') left.textContent = 'Te quedan ' + d.left + ' fotos hoy.';
       cfg.gallery.unshift(d.photo); renderGallery();
       result.innerHTML = card(d.photo, true);
+      try { document.dispatchEvent(new CustomEvent('cvd:estudio-foto', { detail: d.photo })); } catch (ignore) {} // 3.14.28: NEXO Busca la recoge
     }).catch(function (err) {
       say(msg, err.message, true);
       if (err.data && err.data.free) showFree(true); // sin facturación: los 3 pasos gratis, con lo ya elegido
