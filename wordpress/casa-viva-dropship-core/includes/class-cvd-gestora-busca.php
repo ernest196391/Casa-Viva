@@ -175,7 +175,7 @@ final class CVD_Gestora_Busca {
 				'title'    => sanitize_text_field( (string) ( $r['title'] ?? '' ) ),
 				'match'    => in_array( $r['match'] ?? '', array( 'exact', 'close', 'alternative', 'unconfirmed' ), true ) ? $r['match'] : 'unconfirmed',
 				'price'    => sanitize_text_field( (string) ( $r['priceLabel'] ?? '' ) ),
-				'amount'   => is_numeric( $r['priceValue'] ?? null ) && (float) $r['priceValue'] > 0 ? round( (float) $r['priceValue'], 2 ) : null,
+				'amount'   => self::amount( $r ),
 				'currency' => in_array( $r['currency'] ?? '', array( 'USD', 'CUP', 'MLC', 'EUR' ), true ) ? $r['currency'] : '',
 				'location' => sanitize_text_field( (string) ( $r['location'] ?? '' ) ),
 				'phone'    => preg_replace( '/[^0-9+]/', '', (string) ( $r['phone'] ?? '' ) ),
@@ -192,10 +192,28 @@ final class CVD_Gestora_Busca {
 		);
 	}
 
+	/**
+	 * El precio en número. La IA a veces pone 1 (entiende «una unidad»): si la etiqueta trae otro número, manda la
+	 * etiqueta («12 USD» → 12; «9.000 CUP» → 9000).
+	 */
+	private static function amount( array $r ): ?float {
+		$label = (string) ( $r['priceLabel'] ?? '' );
+		$from_label = null;
+		if ( preg_match( '/\d[\d.,]*/', $label, $m ) ) {
+			$d = $m[0];
+			if ( preg_match( '/^\d{1,3}([.,]\d{3})+$/', $d ) ) { $d = preg_replace( '/[.,]/', '', $d ); }
+			else { $d = str_replace( ',', '.', $d ); }
+			$from_label = is_numeric( $d ) && (float) $d > 0 ? (float) $d : null;
+		}
+		$value = is_numeric( $r['priceValue'] ?? null ) && (float) $r['priceValue'] > 0 ? (float) $r['priceValue'] : null;
+		if ( null !== $from_label && ( null === $value || abs( $value - $from_label ) > 0.01 ) ) { $value = $from_label; }
+		return null === $value ? null : round( $value, 2 );
+	}
+
 	private static function instructions(): string {
 		return 'Eres "NEXO Busca", asistente de un/a gestor/a de ventas en Cuba. Le ahorras tiempo para decidir qué ofrecer y a qué precio. Analiza la foto (si es una captura de WhatsApp o Facebook, ignora la interfaz y céntrate en el producto). No inventes marca, modelo, especificaciones, teléfonos, precios, enlaces ni disponibilidad: si algo no se puede confirmar, dilo.'
 			. "\n\n" . 'Busca con web_search ofertas públicas actuales en Cuba, en este orden: 1) Revolico; 2) Facebook público indexado (Marketplace, páginas y grupos públicos); 3) tiendas cubanas con web; 4) Cubísima u otros clasificados cubanos; 5) web abierta. Prioriza enlaces directos al anuncio, resultados recientes, la zona indicada y vendedores distintos. No repitas el mismo anuncio.'
-			. "\n\n" . 'Devuelve: una hipótesis breve del producto; summary = UNA frase con el rango de precios y la mejor coincidencia; hasta 8 opciones (priceLabel tal como aparece, con moneda: USD, CUP, MLC; priceValue = el número de UNA unidad, o null si no hay precio claro; currency = USD, CUP, MLC, EUR o vacío); note solo si cambia la decisión (garantía, entrega, dato dudoso); 3 a 5 preguntas que el/la gestor/a debe hacer al vendedor. Clasifica match como exact, close, alternative o unconfirmed. Español sencillo. Cumple estrictamente el esquema JSON.';
+			. "\n\n" . 'Devuelve: una hipótesis breve del producto; summary = UNA frase con el rango de precios y la mejor coincidencia; hasta 8 opciones (priceLabel tal como aparece, con moneda: USD, CUP, MLC; priceValue = el precio escrito como número, sin moneda (ej.: 12 si dice «12 USD»; 9000 si dice «9.000 CUP»), o null si no hay precio claro; currency = USD, CUP, MLC, EUR o vacío); note solo si cambia la decisión (garantía, entrega, dato dudoso); 3 a 5 preguntas que el/la gestor/a debe hacer al vendedor. Clasifica match como exact, close, alternative o unconfirmed. Español sencillo. Cumple estrictamente el esquema JSON.';
 	}
 
 	private static function schema(): array {
