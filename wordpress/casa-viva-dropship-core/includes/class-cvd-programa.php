@@ -257,13 +257,15 @@ final class CVD_Programa {
 			self::spread_supplier_fund( $order, $lines );
 			$test = ( class_exists( 'CVD_Delivery' ) && ( CVD_Delivery::is_test_order( $order ) || 'test' === CVD_Delivery::blocks_dispatch( $order ) ) ) || ! empty( $members[ $owner ]['test'] );
 			// Autocompra: el nombre de quien compra o recibe es el de la gestora (la marca self_order de Core sola no basta).
+			$buyers = array( trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ), trim( $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name() ), (string) $order->get_meta( 'cliente_vinculado', true ) );
 			$self = CVD_Programa_Calc::self_purchase(
 				(string) $members[ $owner ]['name'],
-				array( trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ), trim( $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name() ), (string) $order->get_meta( 'cliente_vinculado', true ) ),
+				$buyers,
 				'self_order' === (string) $order->get_meta( '_cvd_commission_risk', true )
 			);
 			$out[] = array(
 				'order_id' => $order->get_id(), 'owner' => $owner, 'at' => self::local( $at ), 'status' => $status,
+				'buyer_names' => $buyers, // auditoría 16-oct: la madrina que compra a través de su invitada no cobra red de ese pedido
 				'self_order' => 'si' === $self, 'self_check' => 'revisar' === $self,
 				'test' => $test, 'lines' => $lines,
 			);
@@ -733,7 +735,7 @@ final class CVD_Programa {
 		}
 		usort( $people, static fn( $a, $b ) => $b['teamPoints'] <=> $a['teamPoints'] );
 		// Alertas: lo grave primero; «revisar» (su teléfono con otro cliente) es muy común y va al final.
-		$order = array( 'autocompra' => 0, 'concentracion' => 1, 'red_negativa' => 2, 'devolucion' => 3, 'pierde' => 4, 'sin_costo' => 5, 'revisar' => 6, 'provisional' => 7 );
+		$order = array( 'autocompra' => 0, 'autocompra_red' => 0, 'concentracion' => 1, 'red_negativa' => 2, 'devolucion' => 3, 'pierde' => 4, 'ganancia_alta' => 4, 'sin_costo' => 5, 'revisar' => 6, 'provisional' => 7 );
 		$alerts = (array) ( $data['alerts'] ?? array() );
 		usort( $alerts, static fn( $a, $b ) => ( $order[ $a['type'] ] ?? 9 ) <=> ( $order[ $b['type'] ] ?? 9 ) );
 		$alert_counts = array_count_values( array_column( $alerts, 'type' ) );
@@ -783,7 +785,7 @@ final class CVD_Programa {
 		}
 		echo '</tbody></table>';
 		if ( $rep['alerts'] ) {
-			$labels = array( 'autocompra' => 'Autocompra (no cuenta)', 'concentracion' => 'Un miembro con más del 60 %', 'red_negativa' => 'Red en negativo', 'devolucion' => 'Devolución de un mes cerrado', 'pierde' => 'Se vende perdiendo', 'sin_costo' => 'Producto sin costo', 'revisar' => 'Su teléfono con otro cliente (cuenta)', 'provisional' => 'Costo provisional (cuenta)' );
+			$labels = array( 'autocompra' => 'Autocompra (no cuenta)', 'autocompra_red' => 'La madrina compra por su invitada (sin red)', 'ganancia_alta' => 'Ganancia muy alta: revisar costo','concentracion' => 'Un miembro con más del 60 %', 'red_negativa' => 'Red en negativo', 'devolucion' => 'Devolución de un mes cerrado', 'pierde' => 'Se vende perdiendo', 'sin_costo' => 'Producto sin costo', 'revisar' => 'Su teléfono con otro cliente (cuenta)', 'provisional' => 'Costo provisional (cuenta)' );
 			echo '<h2>Alertas (' . esc_html( (string) array_sum( $rep['alertCounts'] ) ) . ')</h2><p>' . esc_html( implode( ' · ', array_map( static fn( $k, $v ) => ( $labels[ $k ] ?? $k ) . ': ' . $v, array_keys( $rep['alertCounts'] ), $rep['alertCounts'] ) ) ) . '</p><ul style="list-style:disc;margin-left:20px">';
 			foreach ( $rep['alerts'] as $a ) { echo '<li><strong>' . esc_html( $a['type'] ) . '</strong> · ' . esc_html( $a['text'] ) . '</li>'; }
 			echo '</ul>';

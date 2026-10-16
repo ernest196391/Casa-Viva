@@ -216,5 +216,46 @@ ok( $q['ok'] && abs( $q['pay'] - 15350 ) < 0.01, 'Pedir mi pago en CUP: comisió
 $q = CVD_Payout_Math::quote( array( $l ), array(), 'cash_usd', 800 );
 ok( $q['ok'] && abs( $q['pay'] - 14.25 ) < 0.01, 'en efectivo USD: 14,25 USD' );
 
+// ---------- Auditoría 16-oct: fondo sobre la ganancia neta, madrina que compra por su invitada, costo sospechoso ----------
+// Ana vende 2 líneas: una gana 70 y otra (liquidación) pierde 60. Puntos de Ana = 70 (no baja de 0 por línea),
+// pero Casa Viva solo ganó 10: el fondo del mes es 15 % de 10 = 1,50, no 10,50.
+$x = sale( 80, 1, 200, 120, 10 ); $x['lines'][] = array( 'product_id' => 981, 'name' => 'Liquidación', 'qty' => 1, 'base' => 40, 'cost_unit' => 96, 'commission' => 4 );
+$r = $C::compute( P, array( 1 => member( 'Ana' ) ), array( $x ) );
+near( $r['people'][1]['own_points'], 70, 'neto: Ana sigue con 70 puntos (la línea que pierde da 0, no resta)' );
+near( $r['totals']['net_profit_usd'], 10, 'neto: Casa Viva ganó 10 USD en el mes (70 − 60)' );
+near( $r['totals']['pool_usd'], 1.5, 'neto: fondo = 15 % de 10 = 1,50 USD (antes 10,50)' );
+ok( $r['totals']['pay_usd'] <= 1.51, 'neto: no se paga más que el 15 % de lo que de verdad ganó la tienda' );
+ok( has_alert( $r, 'pierde', 1 ), 'neto: sale la alerta «pierde»' );
+// Sin líneas que pierden no cambia nada.
+$r = $C::compute( P, array( 1 => member( 'Ana' ) ), array( sale( 81, 1, 200, 120, 10 ) ) );
+near( $r['totals']['pool_usd'], 10.5, 'sin pérdidas: el fondo sigue siendo 15 % de los puntos (10,50)' );
+// Madrina que compra a través de su invitada: la invitada vende normal, la madrina no cobra red de ese pedido.
+$m = array( 1 => member( 'Marta López' ), 2 => member( 'Ana Pérez', 1 ) );
+$r = $C::compute( P, $m, array( sale( 82, 2, 300, 180, 30, array( 'buyer_names' => array( 'Marta López García', '' ) ) ), sale( 83, 1, 50, 30, 5 ) ) );
+near( $r['people'][1]['red1'], 0, 'madrina compradora: 0 de red de ese pedido' );
+near( $r['people'][2]['own_points'], 90, 'madrina compradora: la invitada sí suma sus 90 puntos' );
+ok( has_alert( $r, 'autocompra_red', 1 ), 'madrina compradora: alerta «autocompra_red»' );
+$r = $C::compute( P, $m, array( sale( 84, 2, 300, 180, 30, array( 'buyer_names' => array( 'Yunier Romero' ) ) ), sale( 85, 1, 50, 30, 5 ) ) );
+near( $r['people'][1]['red1'], 6, 'cliente normal: la madrina cobra su 2 % (6 USD)' );
+// Costo sospechoso: gana más del 55 % del precio en una línea de 10 USD o más.
+$r = $C::compute( P, array( 1 => member( 'Ana' ) ), array( sale( 86, 1, 32, 3.2, 3 ) ) );
+ok( has_alert( $r, 'ganancia_alta', 1 ), 'costo 3,20 en un producto de 32: alerta «ganancia_alta»' );
+$r = $C::compute( P, array( 1 => member( 'Ana' ) ), array( sale( 87, 1, 8, 1, 1 ) ) );
+ok( ! has_alert( $r, 'ganancia_alta', 1 ), 'producto barato (8 USD) con mucho margen: sin alerta' );
+// El invariante del fondo con líneas que pierden, 200 rondas al azar.
+mt_srand( 1016 );
+for ( $round = 0; $round < 200; $round++ ) {
+	$n = mt_rand( 2, 12 ); $m = array();
+	for ( $i = 1; $i <= $n; $i++ ) { $m[ $i ] = member( 'G' . $i, $i > 1 && mt_rand( 0, 2 ) ? mt_rand( 1, $i - 1 ) : 0 ); }
+	$sales = array(); $net = 0.0;
+	for ( $o = 1; $o <= mt_rand( 1, 40 ); $o++ ) {
+		$base = mt_rand( 10, 400 ); $cost = $base * mt_rand( 40, 120 ) / 100; $com = $base * 0.1;
+		$sales[] = sale( 1000 + $o, mt_rand( 1, $n ), $base, $cost, $com ); $net += $base - $cost - $com;
+	}
+	$r = $C::compute( P, $m, $sales, array(), array( 'rate_cup' => mt_rand( 300, 900 ) ) );
+	if ( $r['totals']['pay_usd'] > 0.15 * max( 0, $net ) + 0.05 ) { ok( false, "ronda $round: se pagaría más que el 15 % de la ganancia neta" ); break; }
+}
+ok( true, 'invariante del fondo sobre la ganancia neta en 200 rondas con líneas que pierden' );
+
 echo $fails ? "\n$fails de $count comprobaciones fallaron\n" : "OK: $count comprobaciones\n";
 exit( $fails ? 1 : 0 );

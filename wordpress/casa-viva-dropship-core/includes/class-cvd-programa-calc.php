@@ -45,6 +45,8 @@ final class CVD_Programa_Calc {
 		'red2_min_stone'  => 'plata',
 		'rate_cup'        => 785.0,
 		'min_own_sales'   => 1, // ventas propias entregadas en el mes para cobrar red y bono
+		'high_margin'     => 0.55, // auditoría 16-oct: línea con ganancia > 55 % del precio = «revisar costo» (¿costo mal puesto?)
+		'high_margin_min' => 10.0, // solo líneas de 10 USD o más (lo barato puede ganar mucho de verdad)
 	);
 
 	/* ---------------- Piezas pequeñas ---------------- */
@@ -189,6 +191,9 @@ final class CVD_Programa_Calc {
 		// 1) Ventas del mes que cuentan.
 		$red_raw = array(); // beneficiaria => [nivel => importe]
 		$total_points = 0.0; $total_sales = 0.0;
+		// Auditoría 16-oct: ganancia NETA del mes (las líneas que pierden restan). Los puntos de cada gestora no bajan de 0
+		// por línea (para no desanimar), pero el fondo del mes se calcula sobre lo que de verdad ganó Casa Viva.
+		$total_net = 0.0;
 		foreach ( $sales as $s ) {
 			$order = (int) ( $s['order_id'] ?? 0 ); $owner = (int) ( $s['owner'] ?? 0 ); $at = (string) ( $s['at'] ?? '' );
 			if ( ! isset( $people[ $owner ] ) || substr( $at, 0, 7 ) !== $period ) { continue; }
@@ -201,7 +206,7 @@ final class CVD_Programa_Calc {
 			if ( ! empty( $s['self_check'] ) ) {
 				$alerts[] = array( 'type' => 'revisar', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': lleva el teléfono o el correo de la gestora con otro nombre de cliente. Cuenta; revisar si fuera para ella.' );
 			}
-			$base = 0.0; $points = 0.0; $cost = 0.0; $commission = 0.0; $missing = array(); $losing = array(); $provisional = array();
+			$base = 0.0; $points = 0.0; $cost = 0.0; $commission = 0.0; $missing = array(); $losing = array(); $provisional = array(); $high = array();
 			foreach ( (array) ( $s['lines'] ?? array() ) as $l ) {
 				$lb = (float) ( $l['base'] ?? 0 ); $qty = max( 1, (int) ( $l['qty'] ?? 1 ) ); $lc = (float) ( $l['commission'] ?? 0 );
 				$lo = max( 0.0, (float) ( $l['other'] ?? 0 ) ); // 3.14.29: gastos fijos (si se restan) + premio de dependienta
@@ -211,8 +216,11 @@ final class CVD_Programa_Calc {
 				if ( null === $unit || $unit <= 0 ) { $missing[] = $label; }
 				elseif ( $lb - $unit * $qty - $lc - $lo < 0 ) { $losing[] = $label; }
 				elseif ( ! empty( $l['cost_provisional'] ) ) { $provisional[] = $label; }
+				if ( $lb >= (float) $p['high_margin_min'] && $lp > (float) $p['high_margin'] * $lb ) { $high[] = $label; }
+				if ( null !== $unit && $unit > 0 ) { $total_net += $lb - $unit * $qty - $lc - $lo; }
 				$base += $lb; $points += $lp; $commission += $lc; $cost += ( null === $unit ? 0 : $unit * $qty ) + $lo;
 			}
+			if ( $high ) { $alerts[] = array( 'type' => 'ganancia_alta', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': gana más del ' . round( 100 * (float) $p['high_margin'] ) . ' % del precio (' . implode( ', ', array_slice( $high, 0, 3 ) ) . '). Revisar que el costo esté bien puesto.' ); }
 			if ( $missing ) { $alerts[] = array( 'type' => 'sin_costo', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': sin costo cargado (' . implode( ', ', array_slice( $missing, 0, 3 ) ) . '), esas líneas dan 0 puntos.' ); }
 			if ( $losing ) { $alerts[] = array( 'type' => 'pierde', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': se vende perdiendo (' . implode( ', ', array_slice( $losing, 0, 3 ) ) . '), 0 puntos.' ); }
 			if ( $provisional ) { $alerts[] = array( 'type' => 'provisional', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': costo provisional (' . implode( ', ', array_slice( $provisional, 0, 3 ) ) . '); los puntos cambian cuando se cargue el costo real.' ); }
@@ -226,13 +234,21 @@ final class CVD_Programa_Calc {
 			$joined = $people[ $owner ]['joined'];
 			if ( self::within_months( $joined, $at, (int) $p['red_months'] ) ) {
 				$b1 = $inviter_of( $owner );
+				// Auditoría 16-oct: si quien compra o recibe se llama como la madrina (o la de 2.º nivel), esa madrina no
+				// cobra red de ese pedido: sería cobrarse a sí misma por comprar a través de su invitada.
+				$buyers = array_values( array_filter( array_map( 'strval', (array) ( $s['buyer_names'] ?? array() ) ) ) );
+				$is_buyer = static function ( int $uid ) use ( $buyers, $people ): bool {
+					return $buyers && 'si' === self::self_purchase( (string) ( $people[ $uid ]['name'] ?? '' ), $buyers, false );
+				};
 				if ( $b1 ) {
 					$amt = round( $base * (float) $p['red1_pct'], 4 );
-					$red_raw[ $b1 ][1][] = array( 'order' => $order, 'source' => $owner, 'base' => $base, 'amount' => $amt );
+					if ( $is_buyer( $b1 ) ) { $alerts[] = array( 'type' => 'autocompra_red', 'user' => $b1, 'order' => $order, 'text' => 'Pedido #' . $order . ': lo compra o lo recibe la madrina; no cobra red de él.' ); }
+					else { $red_raw[ $b1 ][1][] = array( 'order' => $order, 'source' => $owner, 'base' => $base, 'amount' => $amt ); }
 					$b2 = $inviter_of( $b1 );
 					if ( $b2 && $b2 !== $owner ) {
 						$amt2 = round( $base * (float) $p['red2_pct'], 4 );
-						$red_raw[ $b2 ][2][] = array( 'order' => $order, 'source' => $owner, 'base' => $base, 'amount' => $amt2 );
+						if ( $is_buyer( $b2 ) ) { $alerts[] = array( 'type' => 'autocompra_red', 'user' => $b2, 'order' => $order, 'text' => 'Pedido #' . $order . ': lo compra o lo recibe la madrina de 2.º nivel; no cobra red de él.' ); }
+						else { $red_raw[ $b2 ][2][] = array( 'order' => $order, 'source' => $owner, 'base' => $base, 'amount' => $amt2 ); }
 					}
 				}
 			}
@@ -247,7 +263,7 @@ final class CVD_Programa_Calc {
 				$people[ $owner ]['own_points'] -= $pts;
 				$people[ $owner ]['own_sales_usd'] -= $base;
 			}
-			$total_points -= $pts; $total_sales -= $base;
+			$total_points -= $pts; $total_sales -= $base; $total_net -= $pts;
 			$lines[] = array( 'kind' => 'devolucion', 'user' => $owner, 'order' => $order, 'source' => $owner, 'base' => round( -$base, 4 ), 'cost' => 0, 'commission' => 0, 'points' => round( -$pts, 4 ), 'pct' => 0, 'amount' => 0 );
 			foreach ( (array) ( $r['red'] ?? array() ) as $rr ) {
 				$u = (int) ( $rr['user'] ?? 0 ); $amt = (float) ( $rr['amount'] ?? 0 );
@@ -325,7 +341,8 @@ final class CVD_Programa_Calc {
 			$bonus_capped += $me['bonus_team_capped'];
 		}
 		unset( $me );
-		$pool = round( (float) $p['fund_pct'] * max( 0.0, $total_points ), 4 );
+		// Auditoría 16-oct: el fondo sale de la ganancia NETA (si una línea pierde, resta), nunca de más que los puntos.
+		$pool = round( (float) $p['fund_pct'] * max( 0.0, min( $total_points, $total_net ) ), 4 );
 		$f_red = $red_capped > $pool && $red_capped > 0 ? $pool / $red_capped : 1.0;
 		$left = max( 0.0, $pool - $red_capped * $f_red );
 		$f_bonus = $bonus_capped > 0 ? min( 1.0, $left / $bonus_capped ) : 1.0;
@@ -350,6 +367,7 @@ final class CVD_Programa_Calc {
 			'totals' => array(
 				'sales_usd' => round( $total_sales, 2 ),
 				'profit_usd' => round( $total_points, 2 ),
+				'net_profit_usd' => round( $total_net, 2 ),
 				'pool_usd' => round( $pool, 2 ),
 				'red_usd' => round( $tot_red, 2 ),
 				'bonus_usd' => round( $tot_bonus_usd, 2 ),
