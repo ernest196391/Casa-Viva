@@ -599,7 +599,7 @@ final class CVD_Panel_Bridge {
 	}
 
 	/**
-	 * 3.14.24 (Lennys 16-oct): varias fotos al crear o editar un producto → galería de la web (debajo de la foto principal).
+	 * 3.14.25 (Lennys 16-oct): varias fotos al crear o editar un producto → galería de la web (debajo de la foto principal).
 	 * Se AÑADEN a las que ya tiene (nunca se quitan). Cada URL se baja una sola vez (_cvd_nexo_gallery_urls), así un
 	 * reintento no la duplica. Máximo 8 por llamada. Devuelve cuántas fotos tiene la galería.
 	 */
@@ -695,7 +695,7 @@ final class CVD_Panel_Bridge {
 			}
 			self::log_product( 'producto con diseños creado', $parent_id, $name, $by );
 		}
-		// 3.14.24: más fotos comerciales del producto (galería); la foto real de cada color va en su diseño.
+		// 3.14.25: más fotos comerciales del producto (galería); la foto real de cada color va en su diseño.
 		if ( $parent instanceof WC_Product_Variable ) { self::add_gallery( $parent->get_id(), (array) ( $p['galleryUrls'] ?? array() ), $name ); }
 		if ( ! $parent instanceof WC_Product_Variable ) { return new WP_Error( 'cvd_panel_product', 'No se pudo crear el producto en la web.', array( 'status' => 500 ) ); }
 		$rows = array();

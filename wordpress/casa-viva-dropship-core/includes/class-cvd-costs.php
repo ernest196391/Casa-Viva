@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Precio mínimo (docs/00-FUENTE-DE-VERDAD/DECISIONES.md D59):
  *   tienda       = costo + gastos fijos + comisión + máx(10 % del precio, 1 USD)
- *                  gastos fijos = los de ESE producto que manda el panel (_cvd_fixed_usd, 3.14.24: proporcionales a su
+ *                  gastos fijos = los de ESE producto que manda el panel (_cvd_fixed_usd, 3.14.25: proporcionales a su
  *                  costo, pedido de Lennys 16-oct) o, si no hay, la opción cvd_cost_fixed_unit_usd (1,58 USD/u.).
  *   bajo pedido  = costo del proveedor + comisión + máx(2,5 % del precio, 1 USD)   (SKU MK-, sin almacén)
  * La misma cuenta está en scripts/precios/costos-y-minimo.mjs (ernesto-rondon-nexo).
@@ -35,7 +35,7 @@ final class CVD_Costs {
 	public const FLOOR = '_cvd_floor_usd';
 	public const STATUS = '_cvd_floor_status';
 	public const UNDER = '_cvd_under_floor';
-	/** 3.14.24: gastos fijos por unidad de este producto (USD), calculados por el panel (gastos del mes × su costo ÷ compras del mes). */
+	/** 3.14.25: gastos fijos por unidad de este producto (USD), calculados por el panel (gastos del mes × su costo ÷ compras del mes). */
 	public const FIXED = '_cvd_fixed_usd';
 	public const SOURCES = array( 'bizne' => 'BizneCubano / caja', 'proveedor' => 'Proveedor (bajo pedido)', 'manual' => 'Manual', 'formula' => 'Fórmula (provisional)', 'por_confirmar' => 'Por confirmar (dudoso)' );
 	/** Costos provisionales: un costo real (bizne, proveedor, manual) siempre los pisa, también con only_empty. */
@@ -86,7 +86,7 @@ final class CVD_Costs {
 		return array( 'fixed' => $own ?? (float) get_option( 'cvd_cost_fixed_unit_usd', 1.58 ), 'pct' => (float) get_option( 'cvd_cost_min_profit_pct', 10 ), 'min' => (float) get_option( 'cvd_cost_min_profit_usd', 1 ) );
 	}
 
-	/** 3.14.24: gastos fijos de este producto que mandó el panel (o los del padre). null = usar la opción general. */
+	/** 3.14.25: gastos fijos de este producto que mandó el panel (o los del padre). null = usar la opción general. */
 	public static function fixed_of( WC_Product $product ): ?float {
 		foreach ( array( $product, $product->get_parent_id() ? wc_get_product( $product->get_parent_id() ) : null ) as $p ) {
 			$v = $p ? (string) $p->get_meta( self::FIXED, true ) : '';
@@ -335,7 +335,7 @@ final class CVD_Costs {
 			$source = sanitize_key( (string) ( $item['source'] ?? 'manual' ) );
 			$current = (string) $product->get_meta( self::SOURCE, true );
 			if ( $only_empty && '' !== (string) $product->get_meta( self::COST, true ) && $current !== $source && ! in_array( $current, self::PROVISIONAL, true ) ) { $out['skipped']++; continue; }
-			// 3.14.24 (Lennys 16-oct: «deja el dato tal y como lo dejo»): un costo puesto a mano (panel o wp-admin) no lo pisa
+			// 3.14.25 (Lennys 16-oct: «deja el dato tal y como lo dejo»): un costo puesto a mano (panel o wp-admin) no lo pisa
 			// ninguna carga automática (p. ej. la copia del precio del proveedor de las 8:50). Solo otro costo «manual».
 			if ( 'manual' === $current && 'manual' !== $source && '' !== (string) $product->get_meta( self::COST, true ) ) { $out['skipped']++; continue; }
 			if ( self::set_cost( $product, $cost, $source ) ) { $product->save(); $out['changed']++; } else { $out['same']++; }
@@ -404,7 +404,7 @@ final class CVD_Costs {
 			return new WP_Error( 'cvd_panel_cost', 'Producto o costo no válido.', array( 'status' => 422 ) );
 		}
 		$changed = self::set_cost( $product, (float) $cost, sanitize_key( (string) ( $request->get_param( 'source' ) ?: 'manual' ) ) );
-		// 3.14.24: gastos fijos de ESTE producto según su costo (los calcula el panel; Lennys 16-oct).
+		// 3.14.25: gastos fijos de ESTE producto según su costo (los calcula el panel; Lennys 16-oct).
 		$fixed = $request->get_param( 'fixedUsd' );
 		if ( is_numeric( $fixed ) && (float) $fixed >= 0 && (float) $fixed < 1000 ) {
 			$new = wc_format_decimal( (float) $fixed, 2 );
