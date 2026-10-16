@@ -6,6 +6,9 @@ defined( 'ABSPATH' ) || exit;
 final class CVD_Sales {
 	private const STATUS_META = '_cvd_operation_status';
 	private const STATUSES = array( 'new', 'confirmed', 'preparing', 'ready', 'with_courier', 'delivered', 'incident', 'cancelled' );
+	private const LIST_STATUSES = array( 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed' );
+	private const OPEN_STATUSES = array( 'pending', 'processing', 'on-hold' ); // por entregar o por cobrar: salen siempre
+	private const SEARCH_LIMIT = 40;
 
 	public static function register(): void {
 		add_shortcode( 'casa_viva_sales', array( __CLASS__, 'render' ) );
@@ -255,18 +258,38 @@ final class CVD_Sales {
 	public static function orders( WP_REST_Request $request ) {
 		$status = sanitize_key( (string) $request->get_param( 'status' ) );
 		$search = sanitize_text_field( (string) $request->get_param( 'search' ) );
+		// 3.14.24 (Nana no encontró el #2963, 16-oct): la lista trae los 50 más recientes MÁS todos los
+		// abiertos (por entregar o por cobrar) aunque sean viejos; al buscar, también busca en el servidor
+		// en TODOS los pedidos (número, nombre, teléfono, correo, producto, gestora).
 		$args = array(
 			'limit' => 50,
 			'type' => 'shop_order',
 			'orderby' => 'date',
 			'order' => 'DESC',
-			'status' => array( 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed' ),
+			'status' => self::LIST_STATUSES,
 		);
-		$orders = wc_get_orders( $args );
+		$by_id = array();
+		foreach ( wc_get_orders( $args ) as $order ) { $by_id[ $order->get_id() ] = $order; }
+		foreach ( wc_get_orders( array_merge( $args, array( 'limit' => 200, 'status' => self::OPEN_STATUSES ) ) ) as $order ) { $by_id[ $order->get_id() ] = $order; }
+		$found = array();
+		if ( '' !== $search ) {
+			foreach ( $by_id as $id => $order ) { if ( ! self::matches_search( $order, $search ) ) { unset( $by_id[ $id ] ); } }
+			$found = self::search_all( $search );
+			foreach ( $found as $id ) {
+				if ( isset( $by_id[ $id ] ) ) { continue; }
+				$order = wc_get_order( $id );
+				if ( $order instanceof WC_Order && ! $order instanceof WC_Order_Refund && 'shop_order' === $order->get_type() && in_array( $order->get_status(), self::LIST_STATUSES, true ) ) { $by_id[ $id ] = $order; }
+			}
+		}
+		$orders = array_values( $by_id );
+		usort( $orders, static function ( WC_Order $a, WC_Order $b ): int {
+			$ta = $a->get_date_created() ? $a->get_date_created()->getTimestamp() : 0;
+			$tb = $b->get_date_created() ? $b->get_date_created()->getTimestamp() : 0;
+			return $tb <=> $ta ?: $b->get_id() <=> $a->get_id();
+		} );
 		$items = array();
 		$summary = array_fill_keys( self::STATUSES, 0 );
 		foreach ( $orders as $order ) {
-			if ( $search && ! self::matches_search( $order, $search ) ) { continue; }
 			$operation_status = self::operation_status( $order );
 			$summary[ $operation_status ]++;
 			if ( $status && in_array( $status, self::STATUSES, true ) && $status !== $operation_status ) { continue; }
@@ -280,6 +303,38 @@ final class CVD_Sales {
 		$haystack = array( $order->get_order_number(), $order->get_formatted_billing_full_name(), $order->get_billing_phone(), $order->get_billing_email(), (string) $order->get_meta( 'gestora_nombre', true ) );
 		foreach ( $order->get_items( 'line_item' ) as $item ) { $haystack[] = $item->get_name(); }
 		return false !== stripos( implode( ' ', $haystack ), $search );
+	}
+
+	/**
+	 * 3.14.24: IDs de pedidos que casan con la búsqueda en TODA la tienda (no solo los 50 últimos).
+	 * Solo lectura; como mucho SEARCH_LIMIT por vía para que la pantalla (refresca cada 8 s) siga rápida.
+	 */
+	private static function search_all( string $search ): array {
+		$search = trim( $search );
+		if ( '' === $search ) { return array(); }
+		$ids = array();
+		$base = array( 'limit' => self::SEARCH_LIMIT, 'type' => 'shop_order', 'orderby' => 'date', 'order' => 'DESC', 'status' => self::LIST_STATUSES, 'return' => 'ids' );
+		// «2963», «#2963» o «CV-PEDIDO-2963» (lo que sale en el vale): el pedido directo.
+		if ( preg_match( '/^(?:#|cv-pedido-)?\s*(\d{1,9})$/i', $search, $m ) ) { $ids[] = (int) $m[1]; }
+		// Búsqueda de WooCommerce: número, nombre, correo, teléfono tal como se guardó y productos.
+		$hpos = class_exists( 'Automattic\WooCommerce\Utilities\OrderUtil' ) && Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
+		try {
+			$ids = array_merge( $ids, $hpos ? (array) wc_get_orders( array_merge( $base, array( 's' => $search ) ) ) : array_slice( array_reverse( (array) wc_order_search( $search ) ), 0, self::SEARCH_LIMIT ) );
+		} catch ( Throwable $e ) { unset( $e ); }
+		// La gestora del pedido («Rafael» encuentra los pedidos de su gestora).
+		if ( strlen( $search ) >= 3 ) {
+			$ids = array_merge( $ids, (array) wc_get_orders( array_merge( $base, array( 'meta_query' => array( array( 'key' => 'gestora_nombre', 'value' => $search, 'compare' => 'LIKE' ) ) ) ) ) );
+		}
+		// Teléfono escrito sin espacios («53388455» encuentra «+53 5 3388455»): últimos 8 dígitos.
+		$digits = preg_replace( '/\D+/', '', $search );
+		if ( strlen( $digits ) >= 6 && strlen( $digits ) >= strlen( preg_replace( '/[\s+()\-]+/', '', $search ) ) && $hpos ) {
+			global $wpdb;
+			$table = $wpdb->prefix . 'wc_order_addresses';
+			$like = '%' . $wpdb->esc_like( substr( $digits, -8 ) ) . '%';
+			$rows = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT order_id FROM {$table} WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone,' ',''),'+',''),'-',''),'(',''),')',''),'.','') LIKE %s ORDER BY order_id DESC LIMIT %d", $like, self::SEARCH_LIMIT ) );
+			$ids = array_merge( $ids, array_map( 'intval', (array) $rows ) );
+		}
+		return array_slice( array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) ), 0, self::SEARCH_LIMIT * 2 );
 	}
 
 	public static function change_status( WP_REST_Request $request ) {
