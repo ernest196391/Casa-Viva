@@ -6,13 +6,13 @@ defined( 'ABSPATH' ) || exit;
  * Programa de gestoras (D53–D58, 14-oct): cálculo PURO, sin WordPress ni base de datos.
  *
  * Recibe gestoras, ventas y devoluciones ya leídas (CVD_Programa las lee de WooCommerce) y devuelve
- * lo que gana cada una en el mes: puntos, piedra, red (2 % + 1 %), bono, fondo y alertas. Todo lo que
+ * lo que gana cada una en el mes: puntos, piedra, red (1 % + 0,5 %, D77), bono, fondo y alertas. Todo lo que
  * decide dinero está aquí para poder probarlo con casos (artifacts/tests/test-programa-gestoras.php).
  *
  * Reglas (Ernesto, D58 y encargo del 14-oct):
  * - Punto = 1 USD de ganancia limpia de una venta entregada y cobrada: precio Casa Viva − costo − comisión
  *   de la gestora. Línea sin costo o que pierde = 0 puntos.
- * - Red: 2 % (1.er nivel) y 1 % (2.º nivel) del precio Casa Viva de lo que venden las invitadas, 12 meses
+ * - Red: 1 % (1.er nivel) y 0,5 % (2.º nivel; D77, antes 2 % y 1 %) del precio Casa Viva de lo que venden las invitadas, 12 meses
  *   desde que entró la invitada. Para cobrarla: 1 venta propia entregada en el mes; para el 2.º nivel,
  *   además, ser Plata ese mes.
  * - Piedras con umbral de puntos del equipo al mes (propio + 2 niveles). Bono solo el mes que se mantiene
@@ -37,8 +37,9 @@ final class CVD_Programa_Calc {
 	);
 
 	public const DEFAULTS = array(
-		'red1_pct'        => 0.02,
-		'red2_pct'        => 0.01,
+		'red1_pct'        => 0.01,  // D77 (Ernesto 16-oct 15:40): 1 % + 0,5 % (antes 2 % + 1 %, que se comía todo el fondo)
+		'red2_pct'        => 0.005,
+		'carry_usd'       => 0.0,   // D77: deuda del fondo que viene de meses anteriores (devoluciones que no se pudieron restar)
 		'red_months'      => 12,
 		'fund_pct'        => 0.15,
 		'member_cap'      => 0.60,
@@ -314,7 +315,7 @@ final class CVD_Programa_Calc {
 					if ( $ok ) { $me[ $kind ] += $r['amount']; }
 					else {
 						$me['red_lost'] += $r['amount'];
-						$me['red_lost_reason'] = ! $active ? 'Sin venta propia entregada este mes' : 'El 1 % del 2.º nivel es desde Plata';
+						$me['red_lost_reason'] = ! $active ? 'Sin venta propia entregada este mes' : 'El ' . self::pct( (float) $p['red2_pct'] ) . ' del 2.º nivel es desde Plata';
 						$kind .= '_perdida';
 					}
 					$lines[] = array( 'kind' => $kind, 'user' => $id, 'order' => $r['order'], 'source' => $r['source'], 'base' => round( $r['base'], 4 ), 'cost' => 0, 'commission' => 0, 'points' => 0, 'pct' => 1 === $lvl ? (float) $p['red1_pct'] : (float) $p['red2_pct'], 'amount' => round( $r['amount'], 4 ) );
@@ -342,7 +343,11 @@ final class CVD_Programa_Calc {
 		}
 		unset( $me );
 		// Auditoría 16-oct: el fondo sale de la ganancia NETA (si una línea pierde, resta), nunca de más que los puntos.
-		$pool = round( (float) $p['fund_pct'] * max( 0.0, min( $total_points, $total_net ) ), 4 );
+		// D77: arrastre. Si las devoluciones dejan el mes en negativo, ese 15 % que faltó restar pasa como deuda al
+		// fondo de los meses siguientes hasta cubrirse (así lo pagado de una venta devuelta siempre se recupera).
+		$fund_raw = (float) $p['fund_pct'] * min( $total_points, $total_net ) - max( 0.0, (float) $p['carry_usd'] );
+		$pool = round( max( 0.0, $fund_raw ), 4 );
+		$carry_out = round( max( 0.0, -$fund_raw ), 4 );
 		$f_red = $red_capped > $pool && $red_capped > 0 ? $pool / $red_capped : 1.0;
 		$left = max( 0.0, $pool - $red_capped * $f_red );
 		$f_bonus = $bonus_capped > 0 ? min( 1.0, $left / $bonus_capped ) : 1.0;
@@ -369,6 +374,8 @@ final class CVD_Programa_Calc {
 				'profit_usd' => round( $total_points, 2 ),
 				'net_profit_usd' => round( $total_net, 2 ),
 				'pool_usd' => round( $pool, 2 ),
+				'carry_in_usd' => round( max( 0.0, (float) $p['carry_usd'] ), 2 ),
+				'carry_out_usd' => round( $carry_out, 2 ),
 				'red_usd' => round( $tot_red, 2 ),
 				'bonus_usd' => round( $tot_bonus_usd, 2 ),
 				'bonus_cup' => $tot_bonus_cup,
@@ -421,8 +428,8 @@ final class CVD_Programa_Calc {
 			'Gestora: ' . $person['name'] . ' (#' . $person['id'] . ')',
 			'Piedra del mes: ' . ( $stone ? $stone['name'] : 'sin piedra' ) . ' · Título: ' . ( self::stone( (string) $person['title'] )['name'] ?? '—' ),
 			'Puntos propios: ' . self::n( $person['own_points'] ) . ' · Puntos del equipo: ' . self::n( $person['team_points'] ),
-			'Red 1.er nivel (2 %): ' . self::n( $person['red1'] ) . ' USD',
-			'Red 2.º nivel (1 %): ' . self::n( $person['red2'] ) . ' USD',
+			'Red 1.er nivel (' . self::pct( self::DEFAULTS['red1_pct'] ) . '): ' . self::n( $person['red1'] ) . ' USD',
+			'Red 2.º nivel (' . self::pct( self::DEFAULTS['red2_pct'] ) . '): ' . self::n( $person['red2'] ) . ' USD',
 		);
 		if ( ! empty( $person['red_reversal'] ) ) { $out[] = 'Devoluciones: −' . self::n( $person['red_reversal'] ) . ' USD'; }
 		$out[] = 'Red a pagar: ' . self::n( $person['red_pay'] ) . ' USD';
@@ -432,4 +439,10 @@ final class CVD_Programa_Calc {
 	}
 
 	private static function n( $v ): string { return number_format( (float) $v, 2, ',', '.' ); }
+
+	/** «1 %», «0,5 %»: el % de la red para los textos (sale de DEFAULTS, así no se queda un número viejo en pantalla). */
+	public static function pct( float $fraction ): string {
+		$v = round( 100 * $fraction, 2 );
+		return str_replace( '.', ',', (string) ( floor( $v ) == $v ? (int) $v : $v ) ) . ' %'; // phpcs:ignore Universal.Operators.StrictComparisons
+	}
 }

@@ -23,6 +23,8 @@ function sale( int $order, int $owner, float $base, ?float $cost, float $com, ar
 		'lines' => array( array( 'product_id' => 900 + $order, 'name' => 'Producto ' . $order, 'qty' => 1, 'base' => $base, 'cost_unit' => $cost, 'commission' => $com ) ) );
 }
 $C = 'CVD_Programa_Calc';
+// D77 (16-oct): la red pasó a 1 % + 0,5 %. Las secciones 4 y 5 prueban la mecánica «la red se come el fondo» con la red vieja (2 % + 1 %).
+const OLD_RED = array( 'red1_pct' => 0.02, 'red2_pct' => 0.01, 'rate_cup' => 785.0 );
 
 // ---------- 1. Puntos por línea ----------
 near( $C::line_points( 30, 20, 1, 3 ), 7, 'alfombra 30 − costo 20 − comisión 3 = 7 puntos' );
@@ -64,7 +66,7 @@ ok( 'plata' === $a['next']['slug'] && abs( $a['next']['missing'] - 60 ) < 0.01, 
 // ---------- 4. Fondo que NO alcanza (la red se come el fondo del equipo) ----------
 // Ana invitó a Rosa. Rosa vende 600 con poca ganancia (30 puntos). Ana vende 1 con 40 puntos.
 $m = array( 1 => member( 'Ana' ), 2 => member( 'Rosa', 1 ) );
-$r = $C::compute( P, $m, array( sale( 10, 2, 600, 510, 60 ), sale( 11, 1, 100, 50, 10 ) ) );
+$r = $C::compute( P, $m, array( sale( 10, 2, 600, 510, 60 ), sale( 11, 1, 100, 50, 10 ) ), array(), OLD_RED );
 $a = $r['people'][1];
 near( $a['team_points'], 70, 'Ana: equipo 70 (40 suyos + 30 de Rosa)' );
 ok( 'bronce' === $a['stone'], 'Ana: Bronce (Rosa aporta 30, por debajo del 60 % de 65 = 39)' );
@@ -79,7 +81,7 @@ ok( $r['totals']['pay_usd'] <= $r['totals']['pool_usd'] + 0.01, 'tope global res
 // Marta → Ana → Rosa. Todas venden con buena ganancia; Marta y Ana tienen bono y red.
 $m = array( 1 => member( 'Marta' ), 2 => member( 'Ana', 1 ), 3 => member( 'Rosa', 2 ) );
 $sales = array( sale( 20, 1, 300, 200, 30 ), sale( 21, 2, 300, 200, 30 ), sale( 22, 3, 300, 200, 30 ), sale( 23, 3, 300, 200, 30 ) );
-$r = $C::compute( P, $m, $sales ); // 70 puntos cada venta → total 280; fondo 42
+$r = $C::compute( P, $m, $sales, array(), OLD_RED ); // 70 puntos cada venta → total 280; fondo 42
 near( $r['totals']['profit_usd'], 280, 'ganancia del mes 280 (cada venta una vez)' );
 near( $r['totals']['pool_usd'], 42, 'fondo del mes 42' );
 ok( $r['totals']['pay_usd'] <= 42.01, 'el total pagado no pasa de 42 aunque los equipos se solapen' );
@@ -132,13 +134,13 @@ ok( has_alert( $r, 'pierde', 1 ), 'alerta «se vende perdiendo»' );
 // ---------- 10. Red: condiciones ----------
 $m = array( 1 => member( 'Marta' ), 2 => member( 'Ana', 1 ), 3 => member( 'Rosa', 2 ) );
 $r = $C::compute( P, $m, array( sale( 60, 3, 600, 500, 60 ), sale( 61, 2, 100, 50, 10 ) ) );
-near( $r['people'][2]['red1'], 12, 'Ana vendió este mes: cobra el 2 % de Rosa' );
+near( $r['people'][2]['red1'], 6, 'Ana vendió este mes: cobra el 1 % de Rosa (600 → 6)' );
 near( $r['people'][1]['red1'] + $r['people'][1]['red2'], 0, 'Marta no vendió este mes: no cobra red' );
-near( $r['people'][1]['red_lost'], 8, 'Marta pierde 2 % de Ana (2) + 1 % de Rosa (6) = 8' );
+near( $r['people'][1]['red_lost'], 4, 'Marta pierde 1 % de Ana (1) + 0,5 % de Rosa (3) = 4' );
 $r = $C::compute( P, $m, array( sale( 60, 3, 600, 500, 60 ), sale( 61, 2, 100, 50, 10 ), sale( 62, 1, 50, 30, 5 ) ) );
 ok( '' === $r['people'][1]['stone'] || 'bronce' === $r['people'][1]['stone'], 'Marta con poco equipo: no es Plata' );
-near( $r['people'][1]['red2'], 0, 'Marta sin Plata: no cobra el 1 % del 2.º nivel' );
-near( $r['people'][1]['red1'], 2, 'Marta sí cobra el 2 % de Ana (100 → 2)' );
+near( $r['people'][1]['red2'], 0, 'Marta sin Plata: no cobra el 0,5 % del 2.º nivel' );
+near( $r['people'][1]['red1'], 1, 'Marta sí cobra el 1 % de Ana (100 → 1)' );
 
 // ---------- 11. Ventana de 12 meses ----------
 $m = array( 1 => member( 'Ana' ), 2 => member( 'Rosa', 1, '2025-10-01 09:00:00' ) );
@@ -150,10 +152,10 @@ ok( ! $C::within_months( '2026-01-31 10:00:00', '2027-02-01 10:00:00', 12 ), 'fu
 
 // ---------- 12. Devolución de un mes ya cerrado ----------
 $m = array( 1 => member( 'Ana' ), 2 => member( 'Rosa', 1 ) );
-$rev = array( array( 'order_id' => 80, 'owner' => 2, 'points' => 40, 'base' => 300, 'red' => array( array( 'user' => 1, 'level' => 1, 'amount' => 6 ) ) ) );
+$rev = array( array( 'order_id' => 80, 'owner' => 2, 'points' => 40, 'base' => 300, 'red' => array( array( 'user' => 1, 'level' => 1, 'amount' => 3 ) ) ) );
 $r = $C::compute( P, $m, array( sale( 81, 2, 300, 200, 30 ), sale( 82, 1, 100, 50, 10 ) ), $rev );
 near( $r['people'][2]['own_points'], 30, 'Rosa: 70 este mes − 40 devueltos = 30' );
-near( $r['people'][1]['red_gross'], 0, 'Ana: red 6 este mes − 6 de la devolución = 0' );
+near( $r['people'][1]['red_gross'], 0, 'Ana: red 3 este mes (1 % de 300) − 3 de la devolución = 0' );
 ok( has_alert( $r, 'devolucion', 2 ), 'alerta de devolución' );
 $r = $C::compute( P, $m, array( sale( 82, 1, 100, 50, 10 ) ), $rev );
 ok( has_alert( $r, 'red_negativa', 1 ), 'si la devolución deja la red en negativo, alerta y no se paga' );
@@ -236,7 +238,7 @@ near( $r['people'][1]['red1'], 0, 'madrina compradora: 0 de red de ese pedido' )
 near( $r['people'][2]['own_points'], 90, 'madrina compradora: la invitada sí suma sus 90 puntos' );
 ok( has_alert( $r, 'autocompra_red', 1 ), 'madrina compradora: alerta «autocompra_red»' );
 $r = $C::compute( P, $m, array( sale( 84, 2, 300, 180, 30, array( 'buyer_names' => array( 'Yunier Romero' ) ) ), sale( 85, 1, 50, 30, 5 ) ) );
-near( $r['people'][1]['red1'], 6, 'cliente normal: la madrina cobra su 2 % (6 USD)' );
+near( $r['people'][1]['red1'], 3, 'cliente normal: la madrina cobra su 1 % (3 USD)' );
 // Costo sospechoso: gana más del 55 % del precio en una línea de 10 USD o más.
 $r = $C::compute( P, array( 1 => member( 'Ana' ) ), array( sale( 86, 1, 32, 3.2, 3 ) ) );
 ok( has_alert( $r, 'ganancia_alta', 1 ), 'costo 3,20 en un producto de 32: alerta «ganancia_alta»' );
@@ -256,6 +258,33 @@ for ( $round = 0; $round < 200; $round++ ) {
 	if ( $r['totals']['pay_usd'] > 0.15 * max( 0, $net ) + 0.05 ) { ok( false, "ronda $round: se pagaría más que el 15 % de la ganancia neta" ); break; }
 }
 ok( true, 'invariante del fondo sobre la ganancia neta en 200 rondas con líneas que pierden' );
+
+// ---------- D77 (3.14.30): red 1 % + 0,5 %, arrastre de devoluciones ----------
+ok( 0.01 === $C::DEFAULTS['red1_pct'] && 0.005 === $C::DEFAULTS['red2_pct'], 'D77: la red por defecto es 1 % + 0,5 %' );
+ok( '1 %' === $C::pct( 0.01 ) && '0,5 %' === $C::pct( 0.005 ) && '2 %' === $C::pct( 0.02 ), 'textos del %: «1 %», «0,5 %», «2 %»' );
+$r = $C::compute( P, array( 1 => member( 'Ana' ) ), array( sale( 1, 1, 200, 120, 10 ) ) );
+ok( false !== strpos( $C::receipt( $r['people'][1], P, 'si' ), 'Red 1.er nivel (1 %)' ), 'el recibo dice 1 %' );
+// Mes 2: se devuelve todo lo de un mes ya pagado (280 puntos) y casi no se vende (14 puntos): el mes queda en negativo.
+$m = array( 1 => member( 'Ana' ) );
+$rev = array( array( 'order_id' => 500, 'owner' => 1, 'points' => 280, 'base' => 1200, 'red' => array() ) );
+$r = $C::compute( P, $m, array( sale( 501, 1, 60, 40, 6 ) ), $rev );
+near( $r['totals']['pool_usd'], 0, 'arrastre: el mes de la devolución no paga nada (fondo 0)' );
+near( $r['totals']['carry_out_usd'], 39.9, 'arrastre: queda una deuda de 15 % × (280 − 14) = 39,90 USD' );
+// Mes 3: vende normal (210 puntos → fondo 31,50): se descuenta la deuda entera y aún sobra deuda.
+$r3 = $C::compute( P, $m, array( sale( 502, 1, 300, 200, 30 ), sale( 503, 1, 300, 200, 30 ), sale( 504, 1, 300, 200, 30 ) ), array(), array( 'carry_usd' => 39.9 ) );
+near( $r3['totals']['carry_in_usd'], 39.9, 'arrastre: entra la deuda de 39,90' );
+near( $r3['totals']['pool_usd'], 0, 'arrastre: 31,50 − 39,90 → fondo 0 este mes' );
+near( $r3['totals']['carry_out_usd'], 8.4, 'arrastre: queda 8,40 de deuda para el mes siguiente' );
+ok( 0 === $r3['people'][1]['bonus_pay_cup'], 'arrastre: este mes no hay bono (todo va a cubrir lo devuelto)' );
+// Mes 4: con 210 puntos otra vez: fondo 31,50 − 8,40 = 23,10.
+$r4 = $C::compute( P, $m, array( sale( 505, 1, 300, 200, 30 ), sale( 506, 1, 300, 200, 30 ), sale( 507, 1, 300, 200, 30 ) ), array(), array( 'carry_usd' => 8.4 ) );
+near( $r4['totals']['pool_usd'], 23.1, 'arrastre: fondo 31,50 − 8,40 = 23,10' );
+near( $r4['totals']['carry_out_usd'], 0, 'arrastre: deuda cubierta' );
+ok( $r4['totals']['pay_usd'] <= 23.11, 'arrastre: se paga como mucho el fondo que queda' );
+// Sin deuda no cambia nada.
+$r = $C::compute( P, $m, array( sale( 508, 1, 300, 200, 30 ) ) );
+near( $r['totals']['carry_out_usd'], 0, 'sin devoluciones no hay deuda' );
+near( $r['totals']['pool_usd'], 10.5, 'sin deuda el fondo es el de siempre (15 % de 70)' );
 
 echo $fails ? "\n$fails de $count comprobaciones fallaron\n" : "OK: $count comprobaciones\n";
 exit( $fails ? 1 : 0 );

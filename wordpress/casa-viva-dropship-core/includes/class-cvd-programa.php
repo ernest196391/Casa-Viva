@@ -236,11 +236,18 @@ final class CVD_Programa {
 			$at = CVD_Programa_Calc::approved_at( $order->get_meta( '_cvd_commission_history', true ), (string) $order->get_meta( '_cvd_cash_verified_at', true ), $completed ? gmdate( 'Y-m-d H:i:s', $completed->getTimestamp() ) : '' );
 			$lines = array();
 			$breakdown = $order->get_meta( '_cvd_commission_breakdown', true );
+			$refunded = self::refunded_qty( $order ); // 3.14.30 (D77): reembolsos de una parte del pedido
 			foreach ( is_array( $breakdown ) ? $breakdown : array() as $b ) {
 				$pid = absint( $b['product_id'] ?? 0 ); $vid = absint( $b['variation_id'] ?? 0 );
 				$qty = max( 1, (int) ( $b['quantity'] ?? 1 ) );
+				$keep = 1.0; $k = $pid . ':' . $vid; $r = min( $qty, (int) ( $refunded[ $k ] ?? 0 ) );
+				if ( $r > 0 ) {
+					$refunded[ $k ] -= $r; $keep = ( $qty - $r ) / $qty; $qty -= $r;
+					if ( $qty <= 0 ) { continue; } // línea devuelta entera: no cuenta
+					$b['base_amount'] = (float) ( $b['base_amount'] ?? 0 ) * $keep; $b['base_commission'] = (float) ( $b['base_commission'] ?? 0 ) * $keep;
+				}
 				// 3.14.29: premio de la dependienta de un «extra en tienda» (foto de la comisión, 3.14.19) + gastos fijos si se restan.
-				$staff = is_array( $b['extra'] ?? null ) ? max( 0.0, (float) ( $b['extra']['staff'] ?? 0 ) ) : 0.0;
+				$staff = $keep * ( is_array( $b['extra'] ?? null ) ? max( 0.0, (float) ( $b['extra']['staff'] ?? 0 ) ) : 0.0 );
 				$prod = class_exists( 'CVD_Costs' ) ? wc_get_product( $vid ?: $pid ) : null;
 				$lines[] = array(
 					'bajo_pedido' => $prod && CVD_Costs::is_bajo_pedido( $prod ),
@@ -312,12 +319,14 @@ final class CVD_Programa {
 			if ( isset( $done[ $order_id ] ) ) { continue; }
 			$order = wc_get_order( $order_id );
 			$gone = ! $order || in_array( $order->get_status(), array( 'cancelled', 'refunded', 'failed', 'trash' ), true ) || 'cancelled' === sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) );
-			if ( ! $gone ) { continue; }
+			// 3.14.30 (D77): reembolso de una parte del pedido después del cierre → se resta esa parte (una vez por pedido).
+			$share = $gone ? 1.0 : self::refund_share( $order );
+			if ( $share <= 0 ) { continue; }
 			$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT l.* FROM ' . self::t( 'lines' ) . ' l JOIN ' . self::t( 'runs' ) . " r ON r.id=l.run_id WHERE r.kind='mensual' AND r.status IN ('cerrado','pagado') AND l.order_id=%d AND l.kind IN ('venta','red1','red2')", $order_id ), ARRAY_A );
 			$rev = array( 'order_id' => $order_id, 'owner' => 0, 'points' => 0, 'base' => 0, 'red' => array() );
 			foreach ( (array) $rows as $l ) {
-				if ( 'venta' === $l['kind'] ) { $rev['owner'] = absint( $l['user_id'] ); $rev['points'] += (float) $l['points']; $rev['base'] += (float) $l['base_usd']; }
-				else { $rev['red'][] = array( 'user' => absint( $l['user_id'] ), 'level' => 'red1' === $l['kind'] ? 1 : 2, 'amount' => (float) $l['amount_usd'] ); }
+				if ( 'venta' === $l['kind'] ) { $rev['owner'] = absint( $l['user_id'] ); $rev['points'] += $share * (float) $l['points']; $rev['base'] += $share * (float) $l['base_usd']; }
+				else { $rev['red'][] = array( 'user' => absint( $l['user_id'] ), 'level' => 'red1' === $l['kind'] ? 1 : 2, 'amount' => $share * (float) $l['amount_usd'] ); }
 			}
 			if ( $rev['owner'] ) { $out[] = $rev; }
 		}
@@ -346,7 +355,51 @@ final class CVD_Programa {
 		foreach ( $members as $id => &$m ) { $m['title'] = $titles[ $id ] ?? ''; }
 		unset( $m );
 		$closed = self::closed_orders();
-		return CVD_Programa_Calc::compute( $period, $members, self::sales( $period, $members, $closed ), self::reversals( $closed ), array( 'rate_cup' => self::rate() ) );
+		return CVD_Programa_Calc::compute( $period, $members, self::sales( $period, $members, $closed ), self::reversals( $closed ), array( 'rate_cup' => self::rate(), 'carry_usd' => self::carry_in( $period ) ) );
+	}
+
+	/**
+	 * 3.14.30 (D77): deuda del fondo que deja el último cierre pagable antes de este mes (devoluciones después de pagar
+	 * que el mes no pudo restar). Cada cierre ya lleva dentro la deuda de los anteriores, así que basta con el último.
+	 * Los cierres en sombra no cuentan: allí no se pagó nada.
+	 */
+	private static function carry_in( string $period ): float {
+		global $wpdb;
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT totals FROM ' . self::t( 'runs' ) . " WHERE kind='mensual' AND status IN ('cerrado','pagado') AND period<%s ORDER BY period DESC, id DESC LIMIT 1", $period ), ARRAY_A );
+		$t = is_array( $row ) ? json_decode( (string) ( $row['totals'] ?? '' ), true ) : null;
+		return is_array( $t ) ? max( 0.0, (float) ( $t['carry_out_usd'] ?? 0 ) ) : 0.0;
+	}
+
+	/**
+	 * 3.14.30 (D77): unidades reembolsadas de cada artículo («producto:variación» => unidades). Un reembolso de WooCommerce
+	 * de solo una parte del pedido (1 de 3 cosas) deja el pedido «completado»: sin esto, lo devuelto seguiría dando puntos y red.
+	 */
+	private static function refunded_qty( $order ): array {
+		if ( ! method_exists( $order, 'get_items' ) || ! method_exists( $order, 'get_qty_refunded_for_item' ) ) { return array(); }
+		$out = array();
+		foreach ( (array) $order->get_items() as $item_id => $item ) {
+			$q = abs( (int) $order->get_qty_refunded_for_item( $item_id ) );
+			if ( $q <= 0 || ! is_object( $item ) || ! method_exists( $item, 'get_product_id' ) ) { continue; }
+			$k = absint( $item->get_product_id() ) . ':' . absint( method_exists( $item, 'get_variation_id' ) ? $item->get_variation_id() : 0 );
+			$out[ $k ] = ( $out[ $k ] ?? 0 ) + $q;
+		}
+		return $out;
+	}
+
+	/** 3.14.30: parte del precio Casa Viva del pedido que se reembolsó (0 = nada, 1 = todo), según las unidades devueltas. */
+	private static function refund_share( $order ): float {
+		$refunded = self::refunded_qty( $order );
+		if ( ! $refunded ) { return 0.0; }
+		$base = 0.0; $back = 0.0;
+		foreach ( (array) $order->get_meta( '_cvd_commission_breakdown', true ) as $b ) {
+			if ( ! is_array( $b ) ) { continue; }
+			$qty = max( 1, (int) ( $b['quantity'] ?? 1 ) ); $lb = (float) ( $b['base_amount'] ?? 0 );
+			$k = absint( $b['product_id'] ?? 0 ) . ':' . absint( $b['variation_id'] ?? 0 );
+			$r = min( $qty, (int) ( $refunded[ $k ] ?? 0 ) );
+			if ( $r > 0 ) { $refunded[ $k ] -= $r; $back += $lb * $r / $qty; }
+			$base += $lb;
+		}
+		return $base > 0 ? min( 1.0, $back / $base ) : 0.0;
 	}
 
 	/** Calcula y lo apunta en el libro. kind = diario | manual | mensual. Devuelve el id del cálculo. */
@@ -354,11 +407,24 @@ final class CVD_Programa {
 		if ( ! preg_match( '/^\d{4}-\d{2}$/', $period ) ) { return 0; }
 		self::maybe_upgrade();
 		$mode = self::mode();
-		if ( 'mensual' === $kind && self::monthly_run( $period ) ) { return 0; } // un solo cierre por mes, nunca se reescribe
+		global $wpdb;
+		// 3.14.30 (D77): un solo cierre a la vez (la tarea de la noche y «Cerrar ahora» no pueden crear dos).
+		$lock = 'mensual' === $kind ? 'cvd_programa_cierre_' . str_replace( '-', '', $period ) : '';
+		if ( $lock && 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 20)', $lock ) ) ) { return 0; }
+		try {
+			if ( 'mensual' === $kind && self::monthly_run( $period ) ) { return 0; } // un solo cierre por mes, nunca se reescribe
+			return self::run_locked( $period, $kind, $by, $mode );
+		} finally {
+			if ( $lock ) { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); }
+		}
+	}
+
+	/** Calcula y guarda en una transacción: si falla cualquier fila, no se guarda nada (3.14.30, D77). */
+	private static function run_locked( string $period, string $kind, int $by, string $mode ): int {
+		global $wpdb;
 		$result = self::compute( $period );
 		$status = 'mensual' === $kind ? ( 'si' === $mode ? 'cerrado' : 'sombra' ) : 'vista';
 		$payload = wp_json_encode( $result );
-		global $wpdb;
 		$wpdb->query( 'START TRANSACTION' );
 		$ok = $wpdb->insert( self::t( 'runs' ), array(
 			'period' => $period, 'kind' => $kind, 'mode' => $mode, 'status' => $status, 'run_date' => wp_date( 'Y-m-d' ),
@@ -367,22 +433,24 @@ final class CVD_Programa {
 		) );
 		$run_id = $ok ? (int) $wpdb->insert_id : 0;
 		if ( ! $run_id ) { $wpdb->query( 'ROLLBACK' ); return 0; }
+		$all_ok = true;
 		foreach ( $result['people'] as $p ) {
 			if ( ! $p['own_points'] && ! $p['team_points'] && ! $p['red_gross'] && ! $p['red_lost'] && '' === $p['title'] ) { continue; } // sin movimiento
-			$wpdb->insert( self::t( 'people' ), array(
+			$all_ok = false !== $wpdb->insert( self::t( 'people' ), array(
 				'run_id' => $run_id, 'period' => $period, 'user_id' => $p['id'], 'stone' => $p['stone'], 'title' => $p['title'],
 				'own_points' => $p['own_points'], 'team_points' => $p['team_points'], 'red_usd' => $p['red_gross'], 'fund_usd' => $p['fund_usd'],
 				'bonus_cup' => $p['bonus_cup'], 'pay_red_usd' => $p['red_pay'], 'pay_bonus_cup' => $p['bonus_pay_cup'], 'coverage' => $p['coverage'],
-			) );
+			) ) && $all_ok;
 		}
 		if ( 'mensual' === $kind ) {
 			foreach ( $result['lines'] as $l ) {
-				$wpdb->insert( self::t( 'lines' ), array(
+				$all_ok = false !== $wpdb->insert( self::t( 'lines' ), array(
 					'run_id' => $run_id, 'period' => $period, 'user_id' => $l['user'], 'kind' => $l['kind'], 'order_id' => $l['order'], 'source_user_id' => $l['source'],
 					'base_usd' => $l['base'], 'cost_usd' => $l['cost'], 'commission_usd' => $l['commission'], 'points' => $l['points'], 'pct' => $l['pct'], 'amount_usd' => $l['amount'],
-				) );
+				) ) && $all_ok;
 			}
 		}
+		if ( ! $all_ok ) { $wpdb->query( 'ROLLBACK' ); return 0; } // 3.14.30: un cierre a medias no se guarda
 		$wpdb->query( 'COMMIT' );
 		return $run_id;
 	}
@@ -504,7 +572,7 @@ final class CVD_Programa {
 		$invite = CVD_Registration::invite_url( $user );
 		$l1 = $me['level1'] ?? array();
 		$l2 = $me['level2'] ?? array();
-		// Lo que deja cada invitada este mes (2 % de sus ventas y 1 % de las de sus invitadas).
+		// Lo que deja cada invitada este mes (1 % de sus ventas y 0,5 % de las de sus invitadas; D77).
 		$from = array();
 		foreach ( (array) ( $data['lines'] ?? array() ) as $l ) {
 			if ( (int) $l['user'] !== $user->ID || ! in_array( $l['kind'], array( 'red1', 'red2' ), true ) ) { continue; }
@@ -520,8 +588,8 @@ final class CVD_Programa {
 			<?php echo self::shadow_note(); // phpcs:ignore ?>
 			<div class="cvga-kpis cvga-kpis-3">
 				<article class="cvga-card cvga-kpi"><small>Te dejan este mes</small><strong><?php echo esc_html( self::usd( $me['red_pay'] ?? 0 ) ); ?></strong><span><?php echo $rate && ! empty( $me['red_pay'] ) ? esc_html( '≈ ' . self::cup( round( $me['red_pay'] * $rate ) ) ) : 'Ventas entregadas y cobradas'; ?></span></article>
-				<article class="cvga-card cvga-kpi"><small>Invitadas</small><strong><?php echo esc_html( (string) count( $l1 ) ); ?></strong><span>Te dan el 2 %</span></article>
-				<article class="cvga-card cvga-kpi"><small>Sus invitadas</small><strong><?php echo esc_html( (string) count( $l2 ) ); ?></strong><span>Te dan el 1 % (desde Plata)</span></article>
+				<article class="cvga-card cvga-kpi"><small>Invitadas</small><strong><?php echo esc_html( (string) count( $l1 ) ); ?></strong><span>Te dan el <?php echo esc_html( CVD_Programa_Calc::pct( CVD_Programa_Calc::DEFAULTS['red1_pct'] ) ); ?></span></article>
+				<article class="cvga-card cvga-kpi"><small>Sus invitadas</small><strong><?php echo esc_html( (string) count( $l2 ) ); ?></strong><span>Te dan el <?php echo esc_html( CVD_Programa_Calc::pct( CVD_Programa_Calc::DEFAULTS['red2_pct'] ) ); ?> (desde Plata)</span></article>
 			</div>
 			<?php if ( $me && ! empty( $me['red_lost'] ) ) : ?>
 			<p class="cvga-warn"><?php echo esc_html( $me['red_lost_reason'] . ': este mes se quedan sin cobrar ' . self::usd( $me['red_lost'] ) . '.' ); ?><?php if ( 'Sin venta propia entregada este mes' === $me['red_lost_reason'] ) : ?> Entrega al menos 1 venta tuya este mes y lo cobras.<?php endif; ?></p>
@@ -538,18 +606,18 @@ final class CVD_Programa {
 					<?php foreach ( $l1 as $id ) : $p = $people[ $id ] ?? $people[ (string) $id ] ?? array(); $joined = (string) ( $p['joined'] ?? '' ); $left = $joined ? max( 0, 12 - (int) floor( ( time() - strtotime( $joined ) ) / ( 30.44 * DAY_IN_SECONDS ) ) ) : 12; ?>
 					<li>
 						<span class="cvga-avatar-sm" aria-hidden="true"><?php echo esc_html( mb_strtoupper( mb_substr( (string) ( $p['name'] ?? '?' ), 0, 1 ) ) ); ?></span>
-						<div class="cvga-team-text"><b><?php echo esc_html( (string) ( $p['name'] ?? '' ) ); ?></b><small><?php echo esc_html( ( $joined ? 'Desde ' . wp_date( 'j/n/Y', strtotime( $joined ) ) . ' · ' : '' ) . ( $left ? 'te da el 2 % ' . $left . ( 1 === $left ? ' mes más' : ' meses más' ) : 'ya pasaron los 12 meses' ) ); ?></small></div>
+						<div class="cvga-team-text"><b><?php echo esc_html( (string) ( $p['name'] ?? '' ) ); ?></b><small><?php echo esc_html( ( $joined ? 'Desde ' . wp_date( 'j/n/Y', strtotime( $joined ) ) . ' · ' : '' ) . ( $left ? 'te da el ' . CVD_Programa_Calc::pct( CVD_Programa_Calc::DEFAULTS['red1_pct'] ) . ' ' . $left . ( 1 === $left ? ' mes más' : ' meses más' ) : 'ya pasaron los 12 meses' ) ); ?></small></div>
 						<div class="cvga-team-end"><?php echo self::stone_chip( (string) ( $p['title'] ?? '' ), 'Empezando' ); // phpcs:ignore ?><b><?php echo esc_html( self::usd( $from[ $id ] ?? 0 ) ); ?></b></div>
 					</li>
 					<?php endforeach; ?>
 				</ul>
-				<?php if ( $l2 ) : ?><p class="cvga-note">Y <?php echo esc_html( count( $l2 ) . ( 1 === count( $l2 ) ? ' gestora invitada' : ' gestoras invitadas' ) ); ?> por ellas (2.º nivel), que te dan el 1 % si eres Plata ese mes. Va incluido en lo de cada una.</p><?php endif; ?>
+				<?php if ( $l2 ) : ?><p class="cvga-note">Y <?php echo esc_html( count( $l2 ) . ( 1 === count( $l2 ) ? ' gestora invitada' : ' gestoras invitadas' ) ); ?> por ellas (2.º nivel), que te dan el <?php echo esc_html( CVD_Programa_Calc::pct( CVD_Programa_Calc::DEFAULTS['red2_pct'] ) ); ?> si eres Plata ese mes. Va incluido en lo de cada una.</p><?php endif; ?>
 				<?php endif; ?>
 				<p class="cvga-note">Solo cuentan ventas entregadas y cobradas, sobre el precio de Casa Viva (sin lo que suben ellas ni la mensajería). Lo pone Casa Viva: tus invitadas cobran su comisión completa.</p>
 			</section>
 			<section class="cvga-card">
 				<h2>Invita a otra gestora</h2>
-				<p class="cvga-note">Ganas el 2 % de lo que venda durante 12 meses. Por invitar no se cobra nada: solo cuando ella vende y entrega.</p>
+				<p class="cvga-note">Ganas el <?php echo esc_html( CVD_Programa_Calc::pct( CVD_Programa_Calc::DEFAULTS['red1_pct'] ) ); ?> de lo que venda durante 12 meses. Por invitar no se cobra nada: solo cuando ella vende y entrega.</p>
 				<?php if ( $invite ) : ?>
 				<div class="cvga-link-box"><input id="cvga-link-invite" readonly value="<?php echo esc_attr( $invite ); ?>" aria-label="Tu enlace para invitar"><button class="cvga-btn cvga-btn-sm" type="button" data-copy-target="cvga-link-invite">Copiar</button></div>
 				<div class="cvga-actions"><a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="<?php echo esc_url( 'https://wa.me/?text=' . rawurlencode( 'Únete como gestora de Casa Viva: vendes sin poner dinero y ganas comisión por cada venta. Regístrate aquí: ' . $invite ) ); ?>" target="_blank" rel="noopener">Mandar por WhatsApp</a></div>
@@ -767,7 +835,7 @@ final class CVD_Programa {
 		foreach ( $rep['people'] as $p ) { $names[ $p['id'] ] = $p['name']; }
 		echo '<div class="wrap"><h1>Programa de gestoras</h1>';
 		if ( isset( $msgs[ $msg ] ) ) { echo '<div class="notice notice-' . ( 'error' === $msg ? 'error' : 'success' ) . '"><p>' . esc_html( $msgs[ $msg ] ) . '</p></div>'; }
-		echo '<p>Red 2 % + 1 %, piedras por ganancia y fondo del 15 % (decisiones D53–D58). <strong>Modo: ' . esc_html( array( 'sombra' => 'SOMBRA (calcula y enseña, no paga)', 'si' => 'SÍ (se paga con recibo)', 'no' => 'APAGADO' )[ $mode ] ) . '</strong></p>';
+		echo '<p>Red ' . CVD_Programa_Calc::pct( CVD_Programa_Calc::DEFAULTS['red1_pct'] ) . ' + ' . CVD_Programa_Calc::pct( CVD_Programa_Calc::DEFAULTS['red2_pct'] ) . ', piedras por ganancia y fondo del 15 % sobre la ganancia neta (D53–D60, D77). <strong>Modo: ' . esc_html( array( 'sombra' => 'SOMBRA (calcula y enseña, no paga)', 'si' => 'SÍ (se paga con recibo)', 'no' => 'APAGADO' )[ $mode ] ) . '</strong></p>';
 		$form = static function ( string $do, string $inner, string $confirm = '' ): string {
 			return '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline-block;margin:0 8px 8px 0"' . ( $confirm ? ' onsubmit="return confirm(\'' . esc_js( $confirm ) . '\')"' : '' ) . '><input type="hidden" name="action" value="cvd_programa"><input type="hidden" name="do" value="' . esc_attr( $do ) . '">' . wp_nonce_field( 'cvd_programa', '_wpnonce', true, false ) . $inner . '</form>';
 		};

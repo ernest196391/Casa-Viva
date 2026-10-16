@@ -65,7 +65,10 @@ class WC_Order {
 	public function get_billing_last_name() { return $this->m['_bl'] ?? 'Real'; }
 	public function get_shipping_first_name() { return ''; }
 	public function get_shipping_last_name() { return ''; }
+	public function get_items() { return $this->m['_items'] ?? array(); }
+	public function get_qty_refunded_for_item( $id ) { return $this->m['_refunded'][ $id ] ?? 0; }
 }
+class WC_Item_Stub { public $p; public $v; public function __construct( $p, $v = 0 ) { $this->p = $p; $this->v = $v; } public function get_product_id() { return $this->p; } public function get_variation_id() { return $this->v; } }
 class WC_Product {
 	public $id; public $name; public $parent = 0; public $children = array(); public $m = array();
 	public function __construct( $id, $name, $parent = 0 ) { $this->id = $id; $this->name = $name; $this->parent = $parent; }
@@ -135,11 +138,11 @@ $P = $r['people'];
 ok( abs( $P[3]['own_points'] - 87 ) < 0.01, 'Rosa: 70 + 17 = 87 puntos (sin autocompra, pendiente, anulado ni el de octubre): ' . $P[3]['own_points'] );
 ok( abs( $P[3]['own_sales_usd'] - 390 ) < 0.01, 'Rosa: 390 USD vendidos y cobrados en noviembre' );
 ok( abs( $P[2]['own_points'] - 35 ) < 0.01, 'Ana: 35 puntos (la cortina sin costo da 0)' );
-ok( abs( $P[2]['red1'] - 7.8 ) < 0.01, 'Ana: 2 % de 390 = 7,80' );
+ok( abs( $P[2]['red1'] - 3.9 ) < 0.01, 'Ana: 1 % de 390 = 3,90 (D77)' );
 ok( 0.0 === (float) $P[4]['own_points'] && ! $P[4]['approved'], 'cuenta de prueba fuera del programa' );
 ok( 'bronce' === $P[1]['stone'], 'Marta: Bronce con 14 + 35 + 39 (tope del 60 % de Rosa) = 88 ≥ 65' );
-ok( abs( $P[1]['red1'] - 3.5 ) < 0.01, 'Marta: 2 % de los 175 de Ana = 3,50' );
-ok( 0.0 === (float) $P[1]['red2'] && abs( $P[1]['red_lost'] - 3.9 ) < 0.01, 'Marta no es Plata: pierde el 1 % de Rosa (3,90)' );
+ok( abs( $P[1]['red1'] - 1.75 ) < 0.01, 'Marta: 1 % de los 175 de Ana = 1,75' );
+ok( 0.0 === (float) $P[1]['red2'] && abs( $P[1]['red_lost'] - 1.95 ) < 0.01, 'Marta no es Plata: pierde el 0,5 % de Rosa (1,95)' );
 $types = array_column( $r['alerts'], 'type' );
 ok( in_array( 'autocompra', $types, true ) && in_array( 'sin_costo', $types, true ), 'alertas de autocompra y de producto sin costo' );
 ok( in_array( 'revisar', $types, true ) && abs( $P[5]['own_points'] - 7 ) < 0.01, 'Lola: pedido con su teléfono pero otro cliente → cuenta (7 puntos) con alerta «revisar»' );
@@ -164,7 +167,7 @@ $GLOBALS['opts']['cvd_programa_gestoras'] = 'sombra';
 $GLOBALS['wpdb']->latest = array( 'id' => 7, 'period' => '2026-11', 'kind' => 'diario', 'status' => 'vista', 'computed_at' => gmdate( 'Y-m-d H:i:s' ), 'rate_cup' => 785, 'payload_sha256' => str_repeat( 'a', 64 ), 'payload' => json_encode( $r ) );
 $eq = CVD_Programa::render_equipo( $GLOBALS['users'][2] );
 ok( false !== strpos( $eq, 'En prueba:' ), 'Mi equipo: aviso de modo sombra' );
-ok( false !== strpos( $eq, 'Rosa Ejemplo' ) && false !== strpos( $eq, '7,80 USD' ), 'Mi equipo: Rosa y lo que le deja (7,80 USD)' );
+ok( false !== strpos( $eq, 'Rosa Ejemplo' ) && false !== strpos( $eq, '3,90 USD' ) && false !== strpos( $eq, 'Te dan el 1 %' ), 'Mi equipo: Rosa, lo que le deja (3,90 USD) y «Te dan el 1 %»' );
 ok( false !== strpos( $eq, 'invita=CV2' ), 'Mi equipo: su enlace para invitar' );
 $pi = CVD_Programa::render_piedra( $GLOBALS['users'][1] );
 ok( false !== strpos( $pi, 'Bronce' ) && false !== strpos( $pi, '5.000 CUP' ), 'Mi piedra: Bronce y su bono' );
@@ -219,6 +222,14 @@ $GLOBALS['opts']['cvd_programa_gestoras'] = 'no';
 ok( array() === CVD_Programa::payout_lines( 5 ), 'con el interruptor en «no» no sale nada en «Pedir mi pago»' );
 $GLOBALS['opts']['cvd_programa_gestoras'] = 'sombra';
 $GLOBALS['wpdb']->results = null; $GLOBALS['wpdb']->query_result = 1;
+
+// ---------- 3.14.30 (D77): reembolso de una parte del pedido ----------
+$GLOBALS['users'][6] = new WP_User( 6, 'Nora Ejemplo', '2026-10-05 15:00:00' ); $GLOBALS['umeta'][6]['_cvd_account_status'] = 'approved';
+order( 3030, 6, array( array( 100, 0, 4, 120, 12 ) ), array( '_items' => array( 91 => new WC_Item_Stub( 100 ) ), '_refunded' => array( 91 => -1 ) ) ); // 4 alfombras, 1 reembolsada
+$r = CVD_Programa::compute( '2026-11' );
+ok( abs( $r['people'][6]['own_points'] - 21 ) < 0.01, 'reembolso parcial: 3 de 4 alfombras → 90 − 60 − 9 = 21 puntos: ' . $r['people'][6]['own_points'] );
+ok( abs( $r['people'][6]['own_sales_usd'] - 90 ) < 0.01, 'reembolso parcial: cuenta 90 USD vendidos, no 120' );
+unset( $GLOBALS['orders'][3030], $GLOBALS['users'][6] );
 
 echo $fails ? "\n$fails de $count comprobaciones fallaron\n" : "OK: $count comprobaciones\n";
 exit( $fails ? 1 : 0 );
