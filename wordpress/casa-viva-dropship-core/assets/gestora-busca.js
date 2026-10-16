@@ -280,14 +280,24 @@
       sf.elements.photo.files = dt.files;
       sf.elements.photo.dispatchEvent(new Event('change', { bubbles: true }));
     } catch (ignore) {}
-    if (sf.elements.text && !sf.elements.text.value) { sf.elements.text.value = productName(); sf.elements.text.dispatchEvent(new Event('change', { bubbles: true })); }
+    // 3.14.31: el estudio recuerda el último producto, color y texto (3.14.16); al venir de NEXO Busca la foto es de OTRO
+    // producto (del proveedor): se quitan para que la instrucción de Gemini no hable de un producto de Casa Viva distinto.
+    var pickBox = sf.querySelector('[data-cves-pick]'), clr = sf.querySelector('[data-cves-pick-clear]');
+    if (pickBox && !pickBox.hidden && clr) { clr.click(); var qi = sf.querySelector('[data-cves-q]'); if (qi) qi.blur(); }
+    var colorIdea = sf.querySelector('[data-cves-idea="color"][aria-pressed="true"]'); if (colorIdea) colorIdea.click();
+    var nm = productName();
+    if (sf.elements.text) { sf.elements.text.value = nm === 'el producto' ? '' : nm; sf.elements.text.dispatchEvent(new Event('input', { bubbles: true })); sf.elements.text.dispatchEvent(new Event('change', { bubbles: true })); }
+    var freeBox = studio.querySelector('[data-cves-free]'), freeMode = !!(freeBox && !freeBox.hidden);
     if (!back) {
       back = document.createElement('div'); back.className = 'cvnb-back';
-      back.innerHTML = '<span data-back-text>Vienes de NEXO Busca: tu foto ya está puesta. Elige una idea y crea la foto.</span><button type="button" class="cvga-btn cvga-btn-sm">← Volver a NEXO Busca</button>';
+      back.innerHTML = '<span data-back-text></span><button type="button" class="cvga-btn cvga-btn-sm">← Volver a NEXO Busca</button>';
       back.querySelector('button').addEventListener('click', goBack);
       var stView = studio.closest('[data-view]') || studio;
       stView.insertBefore(back, stView.firstChild);
     }
+    back.querySelector('[data-back-text]').textContent = freeMode
+      ? 'Vienes de NEXO Busca: tu foto ya está puesta. Elige una idea, sigue los 3 pasos de Gemini y sube aquí la foto que te haga.'
+      : 'Vienes de NEXO Busca: tu foto ya está puesta. Elige una idea y crea la foto.';
     back.hidden = false;
     window.location.hash = 'estudio';
   }

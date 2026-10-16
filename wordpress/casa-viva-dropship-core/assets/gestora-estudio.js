@@ -315,6 +315,7 @@
   /* ---------- galería ---------- */
   var gallery = $('[data-cves-gallery]'), empty = $('[data-cves-empty]'), count = $('[data-cves-count]');
   var pickerFor = ''; // 3.14.16: foto de la galería a la que se le está eligiendo producto
+  var shareFiles = {}; // 3.14.31: id de foto => File ya bajado para «Compartir»
   function pickerHtml(p) {
     if (pickerFor !== p.id) return '';
     return '<div class="cves-item-pick"><label class="cvgf-search cves-search"><svg class="cvga-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><input type="search" placeholder="¿De qué producto es?" enterkeyhint="search" data-pick-q aria-label="Buscar el producto de esta foto"></label>' +
@@ -380,11 +381,19 @@
     if (act === 'share') {
       var shareText = (p.product ? p.product + (p.storeLink ? ' — pídelo aquí: ' + p.storeLink : '') : '');
       if (navigator.canShare && window.File) {
-        fetch(p.url).then(function (r) { return r.blob(); }).then(function (blob) {
-          var file = new File([blob], p.name, { type: 'image/jpeg' });
+        // 3.14.31: la foto queda guardada en el móvil tras el primer toque. En iPhone, si bajarla tarda, el menú Compartir
+        // ya no abre (pide un toque reciente): se avisa «toca otra vez» y el segundo toque comparte al momento.
+        var cached = shareFiles[p.id];
+        (cached ? Promise.resolve(cached) : fetch(p.url).then(function (r) { if (!r.ok) throw new Error('no'); return r.blob(); }).then(function (blob) {
+          return (shareFiles[p.id] = new File([blob], p.name, { type: 'image/jpeg' }));
+        })).then(function (file) {
           if (navigator.canShare({ files: [file] })) return navigator.share({ files: [file], text: shareText });
           throw new Error('no');
-        }).catch(function (err) { if (err && err.name === 'AbortError') return; window.open('https://wa.me/?text=' + encodeURIComponent((shareText ? shareText + ' ' : '') + p.url), '_blank'); });
+        }).catch(function (err) {
+          if (err && err.name === 'AbortError') return;
+          if (err && err.name === 'NotAllowedError' && !cached && shareFiles[p.id]) { done.textContent = 'Foto lista: toca «Compartir» otra vez.'; return; }
+          window.open('https://wa.me/?text=' + encodeURIComponent((shareText ? shareText + ' ' : '') + p.url), '_blank');
+        });
       } else { window.open('https://wa.me/?text=' + encodeURIComponent((shareText ? shareText + ' ' : '') + p.url), '_blank'); }
       return;
     }
