@@ -374,6 +374,7 @@ final class CVD_Shipping_Rates {
 	}
 
 	public static function order_fee( WC_Order $order ): int {
+		if ( absint( $order->get_meta( '_cvd_joined_with', true ) ) ) { return 0; } // 3.14.26: va junto con otro vale de la misma clienta (mismo viaje)
 		$fee = absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) );
 		if ( $fee || 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return $fee; }
 		$quote = self::quote( $order->get_billing_city(), (string) $order->get_meta( '_cvd_locality', true ) );

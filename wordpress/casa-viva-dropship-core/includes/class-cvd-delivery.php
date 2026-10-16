@@ -67,6 +67,56 @@ final class CVD_Delivery {
 		return ( $minutes >= 1320 ? $next->modify( '+1 day' ) : $next )->getTimestamp();
 	}
 
+	/**
+	 * 3.14.26 (Ernesto, 16-oct, idea de Oliuska): la clienta ya tiene un vale con mensajero y pide otra cosa; la gestora
+	 * hace otro vale. Antes salía al grupo y lo podía coger otro mensajero. Ahora, si hay otro pedido ABIERTO de la misma
+	 * clienta (mismo teléfono, misma gestora, mismo día de entrega) que un mensajero tiene y aún no recogió, el nuevo se le
+	 * asigna directo a ese mensajero y su mensajería queda en 0 (mismo viaje: la clienta paga una sola). Queda nota en los
+	 * dos pedidos y en la nota del vale («Va junto con el #N»). Apagar: opción cvd_join_same_customer = no.
+	 */
+	public static function join_same_customer( WC_Order $order ): bool {
+		if ( 'no' === get_option( 'cvd_join_same_customer', 'yes' ) || 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return false; }
+		if ( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) || ( class_exists( 'CVD_Direct_Dispatch' ) && absint( $order->get_meta( CVD_Direct_Dispatch::PREFERRED_META, true ) ) ) ) { return false; } // la gestora ya eligió mensajero
+		$phone = substr( preg_replace( '/\D+/', '', (string) $order->get_billing_phone() ), -8 );
+		$owner = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
+		if ( 8 !== strlen( $phone ) || ! $owner ) { return false; }
+		$day = (string) $order->get_meta( '_cvd_delivery_date', true );
+		$sibling = null;
+		foreach ( wc_get_orders( array( 'limit' => 40, 'status' => array( 'on-hold', 'processing' ), 'exclude' => array( $order->get_id() ), 'date_created' => '>' . ( time() - 4 * DAY_IN_SECONDS ), 'orderby' => 'date', 'order' => 'DESC' ) ) as $other ) {
+			if ( ! $other instanceof WC_Order || $other instanceof WC_Order_Refund || 'pickup' === $other->get_meta( '_cvd_fulfillment_type', true ) ) { continue; }
+			if ( $owner !== absint( $other->get_meta( '_cvd_owner_user_id', true ) ) ) { continue; }
+			if ( substr( preg_replace( '/\D+/', '', (string) $other->get_billing_phone() ), -8 ) !== $phone ) { continue; }
+			if ( $day !== (string) $other->get_meta( '_cvd_delivery_date', true ) ) { continue; }
+			if ( ! in_array( self::status( $other ), array( 'assigned', 'accepted', 'to_store' ), true ) || ! absint( $other->get_meta( '_cvd_messenger_user_id', true ) ) ) { continue; }
+			$sibling = $other;
+			break;
+		}
+		if ( ! $sibling ) { return false; }
+		$messenger = get_userdata( absint( $sibling->get_meta( '_cvd_messenger_user_id', true ) ) );
+		if ( ! $messenger instanceof WP_User ) { return false; }
+		$fee = (string) $order->get_meta( '_cvd_shipping_fee_cup', true );
+		$note = (string) $order->get_customer_note();
+		$order->update_meta_data( '_cvd_joined_with', $sibling->get_id() );
+		$order->update_meta_data( '_cvd_shipping_fee_cup', 0 );
+		$order->update_meta_data( '_cvd_shipping_courier_amount_cup', '0.00' );
+		$order->update_meta_data( '_cvd_shipping_platform_amount_cup', '0.00' );
+		$order->set_customer_note( '🔗 Va JUNTO con el #' . $sibling->get_order_number() . ' (misma clienta, mismo viaje): mensajería 0.' . ( '' !== trim( $note ) ? ' ' . $note : '' ) );
+		$order->save();
+		if ( ! self::assign_direct( $order, $messenger ) ) {
+			$order->delete_meta_data( '_cvd_joined_with' );
+			$order->update_meta_data( '_cvd_shipping_fee_cup', $fee );
+			$order->set_customer_note( $note );
+			$order->save();
+			self::initialize_order( $order );
+			return false;
+		}
+		$fresh = wc_get_order( $order->get_id() );
+		if ( $fresh ) { $fresh->add_order_note( 'Unido con el #' . $sibling->get_order_number() . ' (misma clienta): asignado a ' . $messenger->display_name . ' sin pasar por el grupo. Mensajería 0 (antes ' . ( '' !== $fee ? $fee : '0' ) . ' CUP).' ); $fresh->save(); }
+		$sibling->add_order_note( 'La gestora hizo otro vale para la misma clienta (#' . $order->get_order_number() . '): va junto con este, con ' . $messenger->display_name . '.' );
+		$sibling->save();
+		return true;
+	}
+
 	public static function dispatch_new_order( $order_id ): void {
 		$order = wc_get_order( absint( $order_id ) );
 		if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund || 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return; }
@@ -85,6 +135,8 @@ final class CVD_Delivery {
 			if ( $actor ) { wp_set_current_user( $actor ); }
 		}
 		try {
+			// 3.14.26: vale nuevo de la MISMA clienta con otro suyo ya en manos de un mensajero → va con ese mensajero, no al grupo.
+			if ( self::join_same_customer( $order ) ) { return; }
 			$sent = self::dispatch_ready( $order );
 		} finally {
 			wp_set_current_user( $previous );
