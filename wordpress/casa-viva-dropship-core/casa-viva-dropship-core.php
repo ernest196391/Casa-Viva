@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.28
+ * Version: 3.14.29
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.28' );
+define( 'CVD_VERSION', '3.14.29' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -65,6 +65,8 @@ require_once CVD_DIR . 'includes/class-cvd-order-edit.php';
 require_once CVD_DIR . 'includes/class-cvd-order-avisos.php';
 require_once CVD_DIR . 'includes/class-cvd-costs.php';
 require_once CVD_DIR . 'includes/class-cvd-supplier-split.php';
+require_once CVD_DIR . 'includes/class-cvd-programa-calc.php';
+require_once CVD_DIR . 'includes/class-cvd-programa.php';
 
 register_activation_hook( __FILE__, array( 'CVD_Plugin', 'activate' ) );
 
@@ -114,6 +116,7 @@ add_action(
 			CVD_Order_Avisos::register(); // 3.13.98: el bot avisa por WhatsApp al cancelar o cambiar un pedido (Ernesto, 14-oct).
 			CVD_Costs::register(); // 3.14.0: costo de cada producto y precio mínimo (Ernesto, 14-oct).
 			CVD_Supplier_Split::register(); // 3.14.14: reparto de la venta de proveedor apuntado en el pedido y sellado al cerrar (Ernesto, 14-oct, D69).
+			CVD_Programa::register(); // 3.14.27: Programa de gestoras en modo sombra: red 2 % + 1 %, piedras por ganancia, fondo 15 % (D53–D58).
 			CVD_Daily_Rates::register(); // 3.13.64: cada pedido nuevo guarda la tasa CUP del día de la venta (regla de Ernesto, 12-oct).
 		}
 	}
