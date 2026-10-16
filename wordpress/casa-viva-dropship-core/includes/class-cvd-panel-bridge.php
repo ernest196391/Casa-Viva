@@ -411,7 +411,8 @@ final class CVD_Panel_Bridge {
 				update_post_meta( $id, '_cvd_nexo_image_url', $image );
 			}
 		}
-		return self::no_cache( array( 'ok' => true, 'wooId' => $id, 'created' => ! $woo_id, 'url' => get_permalink( $product->is_type( 'variation' ) ? $product->get_parent_id() : $id ) ) );
+		$gallery = self::add_gallery( $id, (array) ( $p['galleryUrls'] ?? array() ), $name );
+		return self::no_cache( array( 'ok' => true, 'wooId' => $id, 'gallery' => $gallery, 'created' => ! $woo_id, 'url' => get_permalink( $product->is_type( 'variation' ) ? $product->get_parent_id() : $id ) ) );
 	}
 
 	// ---------- 3.13.52: diseños y colores (variaciones) ----------
@@ -597,6 +598,35 @@ final class CVD_Panel_Bridge {
 		return is_wp_error( $att ) ? 0 : (int) $att;
 	}
 
+	/**
+	 * 3.14.24 (Lennys 16-oct): varias fotos al crear o editar un producto → galería de la web (debajo de la foto principal).
+	 * Se AÑADEN a las que ya tiene (nunca se quitan). Cada URL se baja una sola vez (_cvd_nexo_gallery_urls), así un
+	 * reintento no la duplica. Máximo 8 por llamada. Devuelve cuántas fotos tiene la galería.
+	 */
+	private static function add_gallery( int $id, array $urls, string $title ): int {
+		$product = wc_get_product( $id );
+		if ( ! $product || $product->is_type( 'variation' ) ) { return 0; }
+		$done = (array) json_decode( (string) get_post_meta( $id, '_cvd_nexo_gallery_urls', true ), true );
+		$ids = array_map( 'intval', $product->get_gallery_image_ids() );
+		$added = false;
+		foreach ( array_slice( $urls, 0, 8 ) as $url ) {
+			$url = esc_url_raw( (string) $url );
+			if ( '' === $url || in_array( $url, $done, true ) ) { continue; }
+			$att = self::sideload( $url, $id, $title );
+			if ( ! $att ) { continue; }
+			$ids[] = $att;
+			$done[] = $url;
+			$added = true;
+		}
+		if ( $added ) {
+			$product = wc_get_product( $id );
+			$product->set_gallery_image_ids( array_values( array_unique( $ids ) ) );
+			$product->save();
+			update_post_meta( $id, '_cvd_nexo_gallery_urls', wp_json_encode( array_values( $done ) ) );
+		}
+		return count( $ids );
+	}
+
 	private static function by( array $p ): string {
 		return substr( sanitize_text_field( (string) ( $p['by'] ?? 'panel' ) ), 0, 120 ) ?: 'panel';
 	}
@@ -665,6 +695,8 @@ final class CVD_Panel_Bridge {
 			}
 			self::log_product( 'producto con diseños creado', $parent_id, $name, $by );
 		}
+		// 3.14.24: más fotos comerciales del producto (galería); la foto real de cada color va en su diseño.
+		if ( $parent instanceof WC_Product_Variable ) { self::add_gallery( $parent->get_id(), (array) ( $p['galleryUrls'] ?? array() ), $name ); }
 		if ( ! $parent instanceof WC_Product_Variable ) { return new WP_Error( 'cvd_panel_product', 'No se pudo crear el producto en la web.', array( 'status' => 500 ) ); }
 		$rows = array();
 		foreach ( $designs as $d ) {
