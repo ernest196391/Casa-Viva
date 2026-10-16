@@ -11,7 +11,7 @@ define( 'DAY_IN_SECONDS', 86400 );
 define( 'ARRAY_A', 'ARRAY_A' );
 date_default_timezone_set( 'UTC' );
 
-$GLOBALS['opts'] = array( 'cvd_programa_gestoras' => 'sombra', 'cvd_programa_ver' => '2', 'cvd_default_commission_rate' => 10, 'cvd_programa_schema' => '1' );
+$GLOBALS['opts'] = array( 'cvd_programa_gestoras' => 'sombra', 'cvd_programa_ver' => '2', 'cvd_default_commission_rate' => 10, 'cvd_programa_schema' => '2' );
 $GLOBALS['meta'] = array(); $GLOBALS['umeta'] = array(); $GLOBALS['orders'] = array(); $GLOBALS['products'] = array();
 
 function get_option( $k, $d = false ) { return $GLOBALS['opts'][ $k ] ?? $d; }
@@ -81,7 +81,9 @@ class FakeWpdb {
 	public function get_row( $q, $o = null ) { return $this->latest; }
 	public function get_col( $q ) { return array(); }
 	public function get_var( $q ) { return 0; }
-	public function get_results( $q, $o = null ) { return array(); }
+	public $results = null; public $query_result = 1; public $queries = array();
+	public function get_results( $q, $o = null ) { return $this->results ?? array(); }
+	public function query( $q ) { $this->queries[] = $q; return $this->query_result; }
 }
 $GLOBALS['wpdb'] = new FakeWpdb();
 
@@ -173,7 +175,7 @@ file_put_contents( sys_get_temp_dir() . '/programa-ejemplo.html', '<!doctype htm
 if ( ! class_exists( 'CVD_Costs' ) ) {
 	final class CVD_Costs { // lo justo de Core 3.14.25 para estas pruebas
 		public const PROVISIONAL = array( 'formula', 'por_confirmar' );
-		public static function is_bajo_pedido( $p ) { return false; }
+		public static function is_bajo_pedido( $p ) { return '1' === (string) $p->get_meta( '_bajo' ); }
 		public static function rules( $bajo, $p = null, $full = null ) { $v = $p ? $p->get_meta( '_cvd_fixed_usd' ) : ''; return array( 'fixed' => '' !== $v ? (float) $v : 1.58, 'pct' => 10, 'min' => 1 ); }
 	}
 }
@@ -191,6 +193,32 @@ ok( abs( $r['people'][5]['own_points'] - 4.5 ) < 0.01, 'con gastos fijos: 30 −
 ok( 5 === CVD_Programa::product_points( $GLOBALS['products'][100], 2 )['points'], 'con gastos fijos: alfombra ⭐ 5 (30 − 20 − 3 − 1,60)' );
 ok( in_array( 'provisional', array_column( $r['alerts'], 'type' ), true ), 'costo de fórmula: cuenta con la alerta «provisional»' );
 unset( $GLOBALS['opts']['cvd_programa_gastos_fijos'] );
+
+// ---------- 3.14.29 (D75): venta de proveedor resta el fondo de la operación ----------
+if ( ! class_exists( 'CVD_Supplier_Split' ) ) {
+	final class CVD_Supplier_Split { // lo justo de Core 3.14.14
+		public static function saved( $o ) { return array( 'snapshot' => array( 'rate' => 800, 'fundCup' => 2400 ) ); }
+		public static function compute( $o ) { return array(); }
+	}
+}
+$GLOBALS['products'][400] = new WC_Product( 400, 'Lámpara MK-1155' ); $GLOBALS['products'][400]->m['_bajo'] = '1'; $GLOBALS['meta'][400] = array( '_cvd_cost_usd' => '32', '_cvd_cost_source' => 'proveedor' );
+$GLOBALS['orders'] = array();
+order( 3021, 5, array( array( 400, 0, 1, 45, 5 ), array( 100, 0, 1, 30, 3 ) ) );
+$r = CVD_Programa::compute( '2026-11' );
+ok( abs( $r['people'][5]['own_points'] - ( 5 + 7 ) ) < 0.01, 'proveedor: 45 − 32 − 5 − 3 USD de fondo (2.400 CUP / 800) = 5, más la alfombra 7 = 12: ' . $r['people'][5]['own_points'] );
+
+// ---------- 3.14.29 (D75): red y bono por «Pedir mi pago» ----------
+$GLOBALS['wpdb']->results = array( array( 'id' => 9, 'period' => '2026-11', 'stone' => 'plata', 'pay_red_usd' => '8.00', 'pay_bonus_cup' => '6933', 'rate_cup' => '800', 'computed_at' => '2026-12-01 08:00:00' ) );
+$pl = CVD_Programa::payout_lines( 5 );
+ok( 1 === count( $pl ) && CVD_Programa::is_payout_line( $pl[0]['id'] ) && abs( $pl[0]['cup'] - 13333 ) < 0.01, 'cierre en «sí»: un renglón de 8 USD + 6.933 CUP = 13.333 CUP en «Pedir mi pago»' );
+ok( ! CVD_Programa::is_payout_line( 3021 ), 'un pedido normal no es renglón del programa' );
+$GLOBALS['wpdb']->query_result = 0; $threw = false;
+try { CVD_Programa::reserve_for_payout( array( $pl[0]['id'] ), 77, 5 ); } catch ( RuntimeException $e ) { $threw = true; }
+ok( $threw, 'si la red ya se pidió en otra solicitud, no se reserva dos veces (lanza y CVD_Payouts deshace)' );
+$GLOBALS['opts']['cvd_programa_gestoras'] = 'no';
+ok( array() === CVD_Programa::payout_lines( 5 ), 'con el interruptor en «no» no sale nada en «Pedir mi pago»' );
+$GLOBALS['opts']['cvd_programa_gestoras'] = 'sombra';
+$GLOBALS['wpdb']->results = null; $GLOBALS['wpdb']->query_result = 1;
 
 echo $fails ? "\n$fails de $count comprobaciones fallaron\n" : "OK: $count comprobaciones\n";
 exit( $fails ? 1 : 0 );

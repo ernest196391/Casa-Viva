@@ -201,5 +201,20 @@ $x = sale( 71, 1, 30, 25, 3 ); $x['lines'][0]['other'] = 2.5;
 $r = $C::compute( P, array( 1 => member( 'Ana' ) ), array( $x ) );
 ok( has_alert( $r, 'pierde', 1 ) && ! has_alert( $r, 'provisional', 1 ), 'con «otros» puede pasar a «pierde» (30 − 25 − 3 − 2,5 < 0)' );
 
+// ---------- 3.14.29 (D75): red y bono por «Pedir mi pago» ----------
+$l = $C::payout_line( 7, '2026-11', 8, 5000, 800, 'bronce', 1700000000 );
+ok( $C::PAYOUT_BASE + 7 === $l['id'] && 7 === $l['programa'], 'renglón del programa: id = base + fila del libro (no choca con pedidos)' );
+near( $l['usd'], 14.25, 'red 8 USD + bono 5.000 CUP / 800 = 14,25 USD' );
+near( $l['cup'], 11400, 'en CUP: 8 × 800 + 5.000 exactos = 11.400', 0.001 );
+ok( 2 === count( $l['items'] ) && false !== strpos( $l['items'][1]['name'], 'Bronce' ) && 'noviembre 2026' === $l['date'], 'detalle: red y bono Bronce de noviembre 2026' );
+$l2 = $C::payout_line( 8, '2026-11', 0, 3467, 800, 'bronce', 1700000000 );
+ok( 1 === count( $l2['items'] ) && abs( $l2['cup'] - 3467 ) < 0.001, 'solo bono a medias (3.467 CUP): un renglón, CUP exactos' );
+define( 'CVD_PAYOUT_MATH_STANDALONE', true );
+require_once __DIR__ . '/../../wordpress/casa-viva-dropship-core/includes/class-cvd-payout-math.php';
+$q = CVD_Payout_Math::quote( array( array( 'usd' => 5, 'cup' => 3950, 'rate' => 790 ), $l ), array(), 'cash_cup', 800 );
+ok( $q['ok'] && abs( $q['pay'] - 15350 ) < 0.01, 'Pedir mi pago en CUP: comisión 3.950 + programa 11.400 = 15.350 CUP' );
+$q = CVD_Payout_Math::quote( array( $l ), array(), 'cash_usd', 800 );
+ok( $q['ok'] && abs( $q['pay'] - 14.25 ) < 0.01, 'en efectivo USD: 14,25 USD' );
+
 echo $fails ? "\n$fails de $count comprobaciones fallaron\n" : "OK: $count comprobaciones\n";
 exit( $fails ? 1 : 0 );

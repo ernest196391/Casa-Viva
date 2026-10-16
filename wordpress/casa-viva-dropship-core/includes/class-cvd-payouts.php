@@ -107,6 +107,8 @@ final class CVD_Payouts {
 				$lines[] = self::order_line( $order );
 			}
 		}
+		// 3.14.29 (D75): red y bono del programa de gestoras (cierres en «sí»), como un renglón más.
+		if ( class_exists( 'CVD_Programa' ) ) { foreach ( CVD_Programa::payout_lines( $owner_id ) as $line ) { $lines[] = $line; } }
 		usort( $lines, static fn( array $a, array $b ): int => array( $a['ts'], $a['id'] ) <=> array( $b['ts'], $b['id'] ) );
 		return $lines;
 	}
@@ -504,7 +506,9 @@ final class CVD_Payouts {
 				$reserved = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}cvd_owner_financial_ledger SET status='reserved',payout_id=%d WHERE id IN ({$ids}) AND status='open'", $payout_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- ids enteros.
 				if ( count( $debts ) !== (int) $reserved ) { throw new RuntimeException( 'No se pudo reservar la deuda. Intenta otra vez.' ); }
 			}
+			$programa = array();
 			foreach ( $lines as $line ) {
+				if ( class_exists( 'CVD_Programa' ) && CVD_Programa::is_payout_line( (int) $line['id'] ) ) { $programa[] = (int) $line['id']; continue; } // 3.14.29
 				$order = wc_get_order( $line['id'] );
 				if ( ! $order ) { throw new RuntimeException( 'Un pedido no se encontró.' ); }
 				$item_inserted = $wpdb->insert( $wpdb->prefix . 'cvd_payout_items', array(
@@ -519,7 +523,8 @@ final class CVD_Payouts {
 				$fresh = wc_get_order( $line['id'] );
 				if ( ! $fresh || $payout_id !== absint( $fresh->get_meta( '_cvd_payout_id', true ) ) ) { throw new RuntimeException( 'No se pudo vincular una comisión a la solicitud.' ); }
 			}
-			if ( ! self::event( $payout_id, 'requested', '', 'requested', array( 'method' => $method, 'orders' => count( $lines ), 'usd' => $quote['usd'], 'pay' => $quote['pay'], 'currency' => $quote['currency'], 'deduction' => $quote['deduction'], 'debts' => array_column( $debts, 'id' ) ) ) ) { throw new RuntimeException( 'No se pudo registrar el historial.' ); }
+			if ( $programa ) { CVD_Programa::reserve_for_payout( $programa, $payout_id, $owner_id ); }
+			if ( ! self::event( $payout_id, 'requested', '', 'requested', array( 'method' => $method, 'orders' => count( $lines ), 'programa' => count( $programa ), 'usd' => $quote['usd'], 'pay' => $quote['pay'], 'currency' => $quote['currency'], 'deduction' => $quote['deduction'], 'debts' => array_column( $debts, 'id' ) ) ) ) { throw new RuntimeException( 'No se pudo registrar el historial.' ); }
 			if ( false === $wpdb->query( 'COMMIT' ) ) { throw new RuntimeException( 'No se pudo confirmar la solicitud.' ); }
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
@@ -681,7 +686,8 @@ final class CVD_Payouts {
 			if ( 'paid' === $next && ! $reference ) { throw new InvalidArgumentException( 'Escribe la referencia de la transferencia.' ); }
 
 			$order_ids = array_map( 'absint', $wpdb->get_col( $wpdb->prepare( "SELECT order_id FROM {$items_table} WHERE payout_id=%d ORDER BY id ASC", $payout_id ) ) );
-			if ( ! $order_ids ) { throw new RuntimeException( 'La liquidación no contiene comisiones verificables.' ); }
+			$programa = class_exists( 'CVD_Programa' ) ? CVD_Programa::payout_rows( $payout_id ) : array(); // 3.14.29: red y bono
+			if ( ! $order_ids && ! $programa ) { throw new RuntimeException( 'La liquidación no contiene comisiones verificables.' ); }
 
 			$data = array( 'status' => $next, 'updated_at' => current_time( 'mysql', true ) );
 			if ( 'approved' === $next ) { $data['approved_at'] = current_time( 'mysql', true ); $data['approved_by'] = get_current_user_id(); }
@@ -714,6 +720,8 @@ final class CVD_Payouts {
 				if ( 'paid' === $next && 'paid' !== $fresh->get_meta( '_cvd_commission_status', true ) ) { throw new RuntimeException( 'La comisión no quedó marcada como pagada.' ); }
 			}
 
+			if ( $programa && 'rejected' === $next ) { CVD_Programa::release_payout( $payout_id ); }
+			if ( $programa && 'paid' === $next ) { CVD_Programa::settle_payout( $payout_id, $reference, get_current_user_id() ); }
 			if ( ! self::event( $payout_id, $action, $payout['status'], $next, array( 'reference' => $reference, 'proof' => $proof ) ) ) {
 				throw new RuntimeException( 'No se pudo registrar el historial de la liquidación.' );
 			}

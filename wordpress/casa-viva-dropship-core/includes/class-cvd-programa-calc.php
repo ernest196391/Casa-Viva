@@ -366,6 +366,35 @@ final class CVD_Programa_Calc {
 	}
 
 	/** Recibo en texto para pegar o imprimir cuando se pague. */
+	/** Id de un renglón del programa en «Pedir mi pago»: base + id de la fila del libro (nunca choca con un pedido). */
+	public const PAYOUT_BASE = 1000000000;
+
+	public const MONTHS = array( 1 => 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre' );
+
+	/**
+	 * 3.14.29 (Ernesto, 16-oct, D75): la red y el bono de un cierre de mes como un renglón más de «Pedir mi pago»,
+	 * con la misma forma que un pedido (CVD_Payouts::order_line). La red va en USD con la tasa del cierre; el bono es
+	 * fijo en CUP (no cambia con la tasa): en CUP se paga exacto y en USD se convierte con la tasa del cierre.
+	 */
+	public static function payout_line( int $row_id, string $period, float $red_usd, int $bonus_cup, float $rate, string $stone_slug, int $ts ): array {
+		$red_usd = round( max( 0.0, $red_usd ), 2 );
+		$bonus_cup = max( 0, $bonus_cup );
+		$bonus_usd = $rate > 0 ? round( $bonus_cup / $rate, 2 ) : 0.0;
+		$month = ( self::MONTHS[ (int) substr( $period, 5, 2 ) ] ?? $period ) . ' ' . substr( $period, 0, 4 );
+		$items = array();
+		if ( $red_usd > 0 ) { $items[] = array( 'name' => 'Red de tu equipo (' . $month . ')', 'qty' => 1, 'usd' => $red_usd ); }
+		if ( $bonus_cup > 0 ) {
+			$stone = self::stone( $stone_slug );
+			$items[] = array( 'name' => 'Bono ' . ( $stone ? $stone['name'] : 'de piedra' ) . ' (' . $month . ', ' . number_format( $bonus_cup, 0, ',', '.' ) . ' CUP)', 'qty' => 1, 'usd' => $bonus_usd );
+		}
+		return array(
+			'id' => self::PAYOUT_BASE + $row_id, 'programa' => $row_id, 'number' => 'Programa', 'ts' => $ts, 'date' => $month,
+			'items' => $items, 'usd' => round( $red_usd + $bonus_usd, 2 ), 'rate' => $rate,
+			'cup' => $rate > 0 ? round( $red_usd * $rate + $bonus_cup, 2 ) : 0.0,
+			'rate_day' => 'cierre de ' . $month, 'rate_src' => 'programa',
+		);
+	}
+
 	public static function receipt( array $person, string $period, string $mode, string $rate_label = '' ): string {
 		$stone = self::stone( (string) $person['stone'] );
 		$out = array(

@@ -17,6 +17,8 @@ defined( 'ABSPATH' ) || exit;
  * Con «si» los puntos restan también los gastos fijos de cada producto (`_cvd_fixed_usd`, D74; si no tiene, la opción
  * general de CVD_Costs). Siempre se resta el premio de la dependienta de un «extra en tienda» (regla del 15-oct; hoy 0).
  * Un costo provisional (fórmula o por confirmar, D62) cuenta, con la alerta «provisional».
+ * En una venta de proveedor (bajo pedido) se resta el fondo de la operación del reparto (D69). La red y el bono de
+ * un cierre en «sí» se cobran por «Pedir mi pago» (CVD_Payouts) como un renglón más (D75, Ernesto 16-oct).
  *
  * Libro (append-only):
  *  - {prefix}cvd_programa_runs: cada cálculo (diario, manual o mensual), con el JSON completo y su SHA-256.
@@ -27,7 +29,7 @@ final class CVD_Programa {
 	public const OPTION = 'cvd_programa_gestoras';
 	public const VIEW_OPTION = 'cvd_programa_ver';
 	public const FIXED_OPTION = 'cvd_programa_gastos_fijos';
-	private const SCHEMA_VERSION = '1';
+	private const SCHEMA_VERSION = '2'; // 3.14.29: people.payout_id (pago por «Pedir mi pago»)
 	private const SCHEMA_OPTION = 'cvd_programa_schema';
 	private const CRON = 'cvd_programa_diario';
 	private const PAGE = 'cvd-programa';
@@ -106,9 +108,11 @@ final class CVD_Programa {
 			paid_by bigint(20) unsigned NOT NULL DEFAULT 0,
 			paid_ref varchar(190) NOT NULL DEFAULT '',
 			receipt_sha256 char(64) NOT NULL DEFAULT '',
+			payout_id bigint(20) unsigned NOT NULL DEFAULT 0,
 			PRIMARY KEY  (id),
 			KEY run_user (run_id,user_id),
-			KEY user_period (user_id,period)
+			KEY user_period (user_id,period),
+			KEY payout (payout_id)
 		) {$c};" );
 		dbDelta( 'CREATE TABLE ' . self::t( 'lines' ) . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -237,7 +241,9 @@ final class CVD_Programa {
 				$qty = max( 1, (int) ( $b['quantity'] ?? 1 ) );
 				// 3.14.29: premio de la dependienta de un «extra en tienda» (foto de la comisión, 3.14.19) + gastos fijos si se restan.
 				$staff = is_array( $b['extra'] ?? null ) ? max( 0.0, (float) ( $b['extra']['staff'] ?? 0 ) ) : 0.0;
+				$prod = class_exists( 'CVD_Costs' ) ? wc_get_product( $vid ?: $pid ) : null;
 				$lines[] = array(
+					'bajo_pedido' => $prod && CVD_Costs::is_bajo_pedido( $prod ),
 					'product_id' => $vid ?: $pid,
 					'name' => html_entity_decode( (string) get_the_title( $vid ?: $pid ), ENT_QUOTES, 'UTF-8' ),
 					'qty' => $qty,
@@ -248,6 +254,7 @@ final class CVD_Programa {
 					'cost_provisional' => self::cost_provisional( $pid, $vid ),
 				);
 			}
+			self::spread_supplier_fund( $order, $lines );
 			$test = ( class_exists( 'CVD_Delivery' ) && ( CVD_Delivery::is_test_order( $order ) || 'test' === CVD_Delivery::blocks_dispatch( $order ) ) ) || ! empty( $members[ $owner ]['test'] );
 			// Autocompra: el nombre de quien compra o recibe es el de la gestora (la marca self_order de Core sola no basta).
 			$self = CVD_Programa_Calc::self_purchase(
@@ -262,6 +269,28 @@ final class CVD_Programa {
 			);
 		}
 		return $out;
+	}
+
+	/**
+	 * 3.14.29 (Ernesto, 16-oct, D75): en una venta de proveedor (bajo pedido, D66/D69) el fondo de la operación
+	 * (mensajero + dependienta + tienda, ~3.000 CUP) sale del margen: se resta de los puntos de esas líneas,
+	 * repartido según su precio. Usa el reparto sellado al cerrar el pedido (o el calculado si aún no se selló),
+	 * en USD con la tasa de ese reparto. Sin tasa o sin fondo: no cambia nada.
+	 */
+	private static function spread_supplier_fund( WC_Order $order, array &$lines ): void {
+		if ( ! class_exists( 'CVD_Supplier_Split' ) ) { return; }
+		$idx = array_keys( array_filter( $lines, static fn( $l ) => ! empty( $l['bajo_pedido'] ) ) );
+		if ( ! $idx ) { return; }
+		$saved = CVD_Supplier_Split::saved( $order );
+		$s = is_array( $saved['snapshot'] ?? null ) ? $saved['snapshot'] : CVD_Supplier_Split::compute( $order );
+		$rate = (float) ( $s['rate'] ?? 0 ); $fund = (float) ( $s['fundCup'] ?? 0 );
+		if ( $rate <= 0 || $fund <= 0 ) { return; }
+		$fund_usd = $fund / $rate;
+		$total = array_sum( array_map( static fn( $i ) => (float) $lines[ $i ]['base'], $idx ) );
+		foreach ( $idx as $i ) {
+			$share = $total > 0 ? (float) $lines[ $i ]['base'] / $total : 1 / count( $idx );
+			$lines[ $i ]['other'] = round( (float) $lines[ $i ]['other'] + $fund_usd * $share, 4 );
+		}
 	}
 
 	/** Pedidos contados en meses cerrados: id => true. */
@@ -623,12 +652,68 @@ final class CVD_Programa {
 	public static function mark_paid( int $row_id, string $ref ): bool {
 		global $wpdb;
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT p.*, r.status AS run_status, r.payload FROM ' . self::t( 'people' ) . ' p JOIN ' . self::t( 'runs' ) . ' r ON r.id=p.run_id WHERE p.id=%d', $row_id ), ARRAY_A );
-		if ( ! $row || 'cerrado' !== $row['run_status'] || $row['paid_at'] || '' === $ref ) { return false; }
+		if ( ! $row || 'cerrado' !== $row['run_status'] || $row['paid_at'] || '' === $ref || absint( $row['payout_id'] ?? 0 ) ) { return false; } // 3.14.29: si ya está en «Pedir mi pago», se paga allí
 		$data = json_decode( (string) $row['payload'], true );
 		$person = $data['people'][ $row['user_id'] ] ?? null;
 		if ( ! $person ) { return false; }
 		$receipt = CVD_Programa_Calc::receipt( $person, (string) $row['period'], 'si', 'Pagado: ' . $ref );
 		return (bool) $wpdb->update( self::t( 'people' ), array( 'paid_at' => current_time( 'mysql', true ), 'paid_by' => get_current_user_id(), 'paid_ref' => $ref, 'receipt_sha256' => hash( 'sha256', $receipt ) ), array( 'id' => $row_id, 'paid_at' => null ) );
+	}
+
+	/* ================= 3.14.29: red y bono por «Pedir mi pago» (D75) ================= */
+	// Solo cierres de mes en «sí» (status cerrado). En sombra nunca sale nada. Todo dentro de la transacción de CVD_Payouts.
+
+	public static function is_payout_line( int $id ): bool {
+		return $id > CVD_Programa_Calc::PAYOUT_BASE;
+	}
+
+	/** Renglones que la gestora puede pedir: cierres pagables, sin pagar y sin pedir. */
+	public static function payout_lines( int $owner_id ): array {
+		if ( 'no' === self::mode() || self::SCHEMA_VERSION !== (string) get_option( self::SCHEMA_OPTION, '' ) ) { return array(); }
+		global $wpdb;
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT p.id, p.period, p.stone, p.pay_red_usd, p.pay_bonus_cup, r.rate_cup, r.computed_at FROM ' . self::t( 'people' ) . ' p JOIN ' . self::t( 'runs' ) . " r ON r.id=p.run_id WHERE p.user_id=%d AND r.kind='mensual' AND r.status='cerrado' AND p.paid_at IS NULL AND p.payout_id=0 AND (p.pay_red_usd>0 OR p.pay_bonus_cup>0) ORDER BY p.period, p.id", $owner_id ), ARRAY_A );
+		$out = array();
+		foreach ( $rows as $r ) {
+			$out[] = CVD_Programa_Calc::payout_line( (int) $r['id'], (string) $r['period'], (float) $r['pay_red_usd'], (int) $r['pay_bonus_cup'], (float) $r['rate_cup'], (string) $r['stone'], (int) strtotime( $r['computed_at'] . ' UTC' ) );
+		}
+		return $out;
+	}
+
+	/** Ata los renglones a la solicitud; si alguno ya no está libre, lanza y CVD_Payouts deshace todo. */
+	public static function reserve_for_payout( array $line_ids, int $payout_id, int $owner_id ): void {
+		global $wpdb;
+		$rows = array_values( array_unique( array_map( static fn( $id ) => (int) $id - CVD_Programa_Calc::PAYOUT_BASE, $line_ids ) ) );
+		if ( ! $rows ) { return; }
+		$in = implode( ',', array_map( 'absint', $rows ) );
+		$n = $wpdb->query( $wpdb->prepare( 'UPDATE ' . self::t( 'people' ) . " SET payout_id=%d WHERE id IN ({$in}) AND user_id=%d AND payout_id=0 AND paid_at IS NULL", $payout_id, $owner_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- ids enteros.
+		if ( count( $rows ) !== (int) $n ) { throw new RuntimeException( 'La red o el bono ya se pidió o cambió. Recarga la página.' ); }
+	}
+
+	/** Filas del libro dentro de una solicitud. */
+	public static function payout_rows( int $payout_id ): array {
+		global $wpdb;
+		if ( self::SCHEMA_VERSION !== (string) get_option( self::SCHEMA_OPTION, '' ) ) { return array(); }
+		return array_map( 'absint', (array) $wpdb->get_col( $wpdb->prepare( 'SELECT id FROM ' . self::t( 'people' ) . ' WHERE payout_id=%d', $payout_id ) ) );
+	}
+
+	/** Solicitud rechazada: la red y el bono vuelven a estar disponibles. */
+	public static function release_payout( int $payout_id ): void {
+		global $wpdb;
+		if ( false === $wpdb->query( $wpdb->prepare( 'UPDATE ' . self::t( 'people' ) . ' SET payout_id=0 WHERE payout_id=%d AND paid_at IS NULL', $payout_id ) ) ) { throw new RuntimeException( 'No se pudo liberar la red o el bono.' ); }
+	}
+
+	/** Solicitud pagada: cada fila queda pagada con la referencia del pago y la huella de su recibo. */
+	public static function settle_payout( int $payout_id, string $reference, int $by ): void {
+		global $wpdb;
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT p.id, p.user_id, p.period, r.payload FROM ' . self::t( 'people' ) . ' p JOIN ' . self::t( 'runs' ) . ' r ON r.id=p.run_id WHERE p.payout_id=%d AND p.paid_at IS NULL', $payout_id ), ARRAY_A );
+		$ref = 'Pago #' . $payout_id . ( '' !== $reference ? ' · ' . $reference : '' );
+		foreach ( $rows as $row ) {
+			$data = json_decode( (string) $row['payload'], true );
+			$person = $data['people'][ $row['user_id'] ] ?? null;
+			$hash = $person ? hash( 'sha256', CVD_Programa_Calc::receipt( $person, (string) $row['period'], 'si', 'Pagado: ' . $ref ) ) : '';
+			$n = $wpdb->query( $wpdb->prepare( 'UPDATE ' . self::t( 'people' ) . ' SET paid_at=%s, paid_by=%d, paid_ref=%s, receipt_sha256=%s WHERE id=%d AND payout_id=%d AND paid_at IS NULL', current_time( 'mysql', true ), $by, substr( $ref, 0, 190 ), $hash, (int) $row['id'], $payout_id ) );
+			if ( 1 !== (int) $n ) { throw new RuntimeException( 'No se pudo marcar pagada la red o el bono.' ); }
+		}
 	}
 
 	/** Resumen para el panel y la página de administración. */
@@ -718,7 +803,7 @@ final class CVD_Programa {
 	/** Meses cerrados con algo por pagar: recibo de cada gestora y «Pagado» con referencia. */
 	private static function page_payables(): void {
 		global $wpdb;
-		$rows = (array) $wpdb->get_results( 'SELECT p.id, p.user_id, p.period, p.pay_red_usd, p.pay_bonus_cup, p.paid_at, p.paid_ref, r.id AS run_id, r.status AS run_status FROM ' . self::t( 'people' ) . ' p JOIN ' . self::t( 'runs' ) . " r ON r.id=p.run_id WHERE r.kind='mensual' AND r.status IN ('cerrado','sombra') AND (p.pay_red_usd>0 OR p.pay_bonus_cup>0) ORDER BY p.period DESC, p.id LIMIT 200", ARRAY_A );
+		$rows = (array) $wpdb->get_results( 'SELECT p.id, p.user_id, p.period, p.pay_red_usd, p.pay_bonus_cup, p.paid_at, p.paid_ref, p.payout_id, r.id AS run_id, r.status AS run_status FROM ' . self::t( 'people' ) . ' p JOIN ' . self::t( 'runs' ) . " r ON r.id=p.run_id WHERE r.kind='mensual' AND r.status IN ('cerrado','sombra') AND (p.pay_red_usd>0 OR p.pay_bonus_cup>0) ORDER BY p.period DESC, p.id LIMIT 200", ARRAY_A );
 		if ( ! $rows ) { return; }
 		echo '<h2>Cierres del mes y recibos</h2><table class="widefat striped"><thead><tr><th>Mes</th><th>Gestora</th><th>Red</th><th>Bono</th><th>Recibo</th><th>Pago</th></tr></thead><tbody>';
 		$payloads = array();
@@ -731,6 +816,7 @@ final class CVD_Programa {
 			echo '<tr><td>' . esc_html( $row['period'] ) . '</td><td>' . esc_html( (string) ( $person['name'] ?? '#' . $row['user_id'] ) ) . '</td><td>' . esc_html( self::usd( $row['pay_red_usd'] ) ) . '</td><td>' . esc_html( self::cup( $row['pay_bonus_cup'] ) ) . '</td><td><details><summary>Ver</summary><pre style="white-space:pre-wrap">' . esc_html( $receipt ) . '</pre></details></td><td>';
 			if ( $row['paid_at'] ) { echo esc_html( 'Pagado ' . self::local( $row['paid_at'] ) . ' · ' . $row['paid_ref'] ); }
 			elseif ( $shadow ) { echo 'Prueba: no se paga'; }
+			elseif ( absint( $row['payout_id'] ?? 0 ) ) { echo esc_html( 'Pedido en «Pedir mi pago» (#' . absint( $row['payout_id'] ) . ')' ); }
 			else { echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" onsubmit="return confirm(&quot;¿Ya se le pagó?&quot;)"><input type="hidden" name="action" value="cvd_programa"><input type="hidden" name="do" value="pagado"><input type="hidden" name="row" value="' . esc_attr( $row['id'] ) . '">' . wp_nonce_field( 'cvd_programa', '_wpnonce', true, false ) . '<input name="ref" placeholder="Transfermóvil, efectivo…" required size="18"> <button class="button">Pagado</button></form>'; } // phpcs:ignore
 			echo '</td></tr>';
 		}
