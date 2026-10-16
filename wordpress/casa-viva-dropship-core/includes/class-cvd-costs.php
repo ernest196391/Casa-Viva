@@ -18,7 +18,9 @@ defined( 'ABSPATH' ) || exit;
  *   _cvd_under_floor      1 si el precio está por debajo del mínimo, 0 si no
  *
  * Precio mínimo (docs/00-FUENTE-DE-VERDAD/DECISIONES.md D59):
- *   tienda       = costo + gastos fijos (1,58 USD/u.) + comisión + máx(10 % del precio, 1 USD)
+ *   tienda       = costo + gastos fijos + comisión + máx(10 % del precio, 1 USD)
+ *                  gastos fijos = los de ESE producto que manda el panel (_cvd_fixed_usd, 3.14.24: proporcionales a su
+ *                  costo, pedido de Lennys 16-oct) o, si no hay, la opción cvd_cost_fixed_unit_usd (1,58 USD/u.).
  *   bajo pedido  = costo del proveedor + comisión + máx(2,5 % del precio, 1 USD)   (SKU MK-, sin almacén)
  * La misma cuenta está en scripts/precios/costos-y-minimo.mjs (ernesto-rondon-nexo).
  *
@@ -33,13 +35,15 @@ final class CVD_Costs {
 	public const FLOOR = '_cvd_floor_usd';
 	public const STATUS = '_cvd_floor_status';
 	public const UNDER = '_cvd_under_floor';
+	/** 3.14.24: gastos fijos por unidad de este producto (USD), calculados por el panel (gastos del mes × su costo ÷ compras del mes). */
+	public const FIXED = '_cvd_fixed_usd';
 	public const SOURCES = array( 'bizne' => 'BizneCubano / caja', 'proveedor' => 'Proveedor (bajo pedido)', 'manual' => 'Manual', 'formula' => 'Fórmula (provisional)', 'por_confirmar' => 'Por confirmar (dudoso)' );
 	/** Costos provisionales: un costo real (bizne, proveedor, manual) siempre los pisa, también con only_empty. */
 	public const PROVISIONAL = array( 'formula', 'por_confirmar' );
 	public const NO_REPONER = '_cvd_no_reponer';
 	public const ADMIN_NOTE = '_cvd_admin_note';
 	private const NS = 'casa-viva/v1';
-	private const PRIVATE_KEYS = array( self::COST, self::SOURCE, self::UPDATED, self::FLOOR, self::STATUS, self::UNDER, self::NO_REPONER, self::ADMIN_NOTE );
+	private const PRIVATE_KEYS = array( self::COST, self::SOURCE, self::UPDATED, self::FLOOR, self::STATUS, self::UNDER, self::NO_REPONER, self::ADMIN_NOTE, self::FIXED );
 
 	private static bool $busy = false;
 
@@ -71,14 +75,24 @@ final class CVD_Costs {
 	}
 
 	/** Reglas del mínimo según el tipo de producto. Opciones por si Ernesto cambia un número (sin tocar código). */
-	public static function rules( bool $bajo_pedido ): array {
-		if ( ! self::full_mode() ) {
+	public static function rules( bool $bajo_pedido, ?WC_Product $product = null, ?bool $full = null ): array {
+		if ( ! ( $full ?? self::full_mode() ) ) {
 			return array( 'fixed' => 0.0, 'pct' => 0.0, 'min' => (float) get_option( 'cvd_cost_loss_min_usd', 0.5 ) );
 		}
 		if ( $bajo_pedido ) {
 			return array( 'fixed' => 0.0, 'pct' => (float) get_option( 'cvd_cost_pedido_min_profit_pct', 2.5 ), 'min' => (float) get_option( 'cvd_cost_pedido_min_profit_usd', 1 ) );
 		}
-		return array( 'fixed' => (float) get_option( 'cvd_cost_fixed_unit_usd', 1.58 ), 'pct' => (float) get_option( 'cvd_cost_min_profit_pct', 10 ), 'min' => (float) get_option( 'cvd_cost_min_profit_usd', 1 ) );
+		$own = $product ? self::fixed_of( $product ) : null;
+		return array( 'fixed' => $own ?? (float) get_option( 'cvd_cost_fixed_unit_usd', 1.58 ), 'pct' => (float) get_option( 'cvd_cost_min_profit_pct', 10 ), 'min' => (float) get_option( 'cvd_cost_min_profit_usd', 1 ) );
+	}
+
+	/** 3.14.24: gastos fijos de este producto que mandó el panel (o los del padre). null = usar la opción general. */
+	public static function fixed_of( WC_Product $product ): ?float {
+		foreach ( array( $product, $product->get_parent_id() ? wc_get_product( $product->get_parent_id() ) : null ) as $p ) {
+			$v = $p ? (string) $p->get_meta( self::FIXED, true ) : '';
+			if ( '' !== $v && is_numeric( $v ) && (float) $v >= 0 ) { return (float) $v; }
+		}
+		return null;
 	}
 
 	public static function is_bajo_pedido( WC_Product $product ): bool {
@@ -133,7 +147,7 @@ final class CVD_Costs {
 		if ( null === $cost ) {
 			return array( 'cost' => null, 'floor' => null, 'price' => $price, 'status' => 'sin_costo' );
 		}
-		$floor = self::floor_for( $cost, self::commission( $product ), self::rules( self::is_bajo_pedido( $product ) ) );
+		$floor = self::floor_for( $cost, self::commission( $product ), self::rules( self::is_bajo_pedido( $product ), $product ) );
 		return array( 'cost' => $cost, 'floor' => $floor, 'price' => $price, 'status' => $price + 0.005 >= $floor ? 'ok' : 'bajo' );
 	}
 
@@ -386,10 +400,19 @@ final class CVD_Costs {
 		if ( ! $product || ! is_numeric( $cost ) || (float) $cost < 0 ) {
 			return new WP_Error( 'cvd_panel_cost', 'Producto o costo no válido.', array( 'status' => 422 ) );
 		}
-		if ( self::set_cost( $product, (float) $cost, sanitize_key( (string) ( $request->get_param( 'source' ) ?: 'manual' ) ) ) ) { $product->save(); }
+		$changed = self::set_cost( $product, (float) $cost, sanitize_key( (string) ( $request->get_param( 'source' ) ?: 'manual' ) ) );
+		// 3.14.24: gastos fijos de ESTE producto según su costo (los calcula el panel; Lennys 16-oct).
+		$fixed = $request->get_param( 'fixedUsd' );
+		if ( is_numeric( $fixed ) && (float) $fixed >= 0 && (float) $fixed < 1000 ) {
+			$new = wc_format_decimal( (float) $fixed, 2 );
+			if ( (string) $product->get_meta( self::FIXED, true ) !== (string) $new ) { $product->update_meta_data( self::FIXED, $new ); $changed = true; }
+		}
+		if ( $changed ) { $product->save(); }
 		$fresh = wc_get_product( $product->get_id() );
 		$e = self::evaluate( $fresh );
-		$response = new WP_REST_Response( array( 'ok' => true, 'wooId' => $fresh->get_id() ) + $e, 200 );
+		// El mínimo completo (D59) aunque la web esté en modo «pérdida», para que el panel enseñe el mismo número.
+		$full = null === $e['cost'] ? null : self::floor_for( $e['cost'], self::commission( $fresh ), self::rules( self::is_bajo_pedido( $fresh ), $fresh, true ) );
+		$response = new WP_REST_Response( array( 'ok' => true, 'wooId' => $fresh->get_id(), 'mode' => self::full_mode() ? 'completo' : 'perdida', 'floorFull' => $full ) + $e, 200 );
 		$response->header( 'Cache-Control', 'no-store, private' );
 		return $response;
 	}
