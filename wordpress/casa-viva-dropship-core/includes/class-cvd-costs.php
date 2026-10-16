@@ -335,6 +335,9 @@ final class CVD_Costs {
 			$source = sanitize_key( (string) ( $item['source'] ?? 'manual' ) );
 			$current = (string) $product->get_meta( self::SOURCE, true );
 			if ( $only_empty && '' !== (string) $product->get_meta( self::COST, true ) && $current !== $source && ! in_array( $current, self::PROVISIONAL, true ) ) { $out['skipped']++; continue; }
+			// 3.14.24 (Lennys 16-oct: «deja el dato tal y como lo dejo»): un costo puesto a mano (panel o wp-admin) no lo pisa
+			// ninguna carga automática (p. ej. la copia del precio del proveedor de las 8:50). Solo otro costo «manual».
+			if ( 'manual' === $current && 'manual' !== $source && '' !== (string) $product->get_meta( self::COST, true ) ) { $out['skipped']++; continue; }
 			if ( self::set_cost( $product, $cost, $source ) ) { $product->save(); $out['changed']++; } else { $out['same']++; }
 		}
 		return new WP_REST_Response( array( 'ok' => true ) + $out, 200 );
