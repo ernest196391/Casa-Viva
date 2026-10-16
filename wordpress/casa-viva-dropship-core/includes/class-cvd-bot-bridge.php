@@ -30,6 +30,8 @@ final class CVD_Bot_Bridge {
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/claim', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'claim' ), 'permission_callback' => $auth ) );
 		// Relevo (3.13.49): el mensajero asignado suelta la carrera antes de recogerla.
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/release', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'release' ), 'permission_callback' => $auth ) );
+		// 3.14.19: después de recogerlo, el paquete pasa a otro mensajero (lo entrega él y devuelve el dinero).
+		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/handover', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'handover' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/eta', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'eta' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/delivered', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'delivered' ), 'permission_callback' => $auth ) );
 		// 3.13.55: el mensajero dice que ya tiene el paquete → «Entregado al mensajero» automático.
@@ -552,6 +554,32 @@ final class CVD_Bot_Bridge {
 		) );
 		if ( empty( $result['success'] ) ) { return self::no_cache( array( 'result' => 'error', 'code' => $result['error_code'] ?? '' ) ); }
 		return self::no_cache( array( 'result' => 'released', 'messenger' => $messenger->display_name ) );
+	}
+
+	/**
+	 * 3.14.19 (Ernesto, 15-oct): el paquete ya salió de la tienda y lo lleva OTRO mensajero (#3700: Elizabet lo recogió
+	 * y lo entregó Félix). Antes solo se podía soltar antes de recoger; ahora pasa a nombre del nuevo sin cambiar el
+	 * estado, así su «entregado» y el dinero a devolver quedan a su nombre. phone = quien lo tiene; to = el nuevo.
+	 */
+	public static function handover( WP_REST_Request $request ) {
+		$order = self::order( $request );
+		if ( is_wp_error( $order ) ) { return $order; }
+		$holder = self::assigned_messenger( $order, (string) $request->get_param( 'phone' ) );
+		if ( ! $holder ) { return new WP_Error( 'cvd_not_assigned', 'Ese pedido no está asignado a este mensajero.', array( 'status' => 403 ) ); }
+		$to = self::messenger_by_phone( (string) $request->get_param( 'to' ) );
+		if ( ! $to ) { return self::no_cache( array( 'result' => 'not_messenger' ) ); }
+		if ( $to->ID === $holder->ID ) { return self::no_cache( array( 'result' => 'same' ) ); }
+		if ( 'yes' === $order->get_meta( '_cvd_delivery_incident_active', true ) ) { return self::no_cache( array( 'result' => 'too_late', 'status' => 'incident' ) ); }
+		$status = CVD_Delivery::status( $order );
+		if ( 'picked_up' !== $status ) { return self::no_cache( array( 'result' => 'wrong_status', 'status' => $status ) ); }
+		$by = sanitize_text_field( (string) $request->get_param( 'by' ) );
+		$order->update_meta_data( '_cvd_messenger_user_id', $to->ID );
+		$order->delete_meta_data( '_cvd_bot_eta' );
+		$order->delete_meta_data( '_cvd_bot_eta_at' );
+		$order->add_order_note( sprintf( 'Paquete pasado de %1$s a %2$s después de recogerlo en la tienda%3$s (WhatsApp). Lo entrega y devuelve el dinero %2$s.', $holder->display_name, $to->display_name, '' !== $by ? ' · lo pidió ' . $by : '' ) );
+		$order->save();
+		if ( class_exists( 'CVD_Messenger_Reputation' ) ) { CVD_Messenger_Reputation::invalidate( $holder->ID ); CVD_Messenger_Reputation::invalidate( $to->ID ); }
+		return self::no_cache( array( 'result' => 'handed', 'from' => $holder->display_name, 'messenger' => $to->display_name, 'voucher' => self::voucher( wc_get_order( $order->get_id() ) ) ) );
 	}
 
 	/** Hora a la que el mensajero dice que puede ir: queda en el pedido y en el seguimiento. */
