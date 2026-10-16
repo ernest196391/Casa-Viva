@@ -183,7 +183,7 @@ for ( $round = 0; $round < 200; $round++ ) {
 		$sales[] = sale( $o, mt_rand( 1, $n ), $base, $cost, $base * 0.1 );
 	}
 	$r = $C::compute( P, $m, $sales, array(), array( 'rate_cup' => mt_rand( 300, 900 ) ) );
-	if ( $r['totals']['pay_usd'] > $r['totals']['pool_usd'] + 0.05 ) { ok( false, "ronda $round: se pagaría más que el fondo" ); break; }
+	if ( $r['totals']['pay_usd'] > $r['totals']['pool_usd'] + 0.00001 ) { ok( false, "ronda $round: se pagaría más que el fondo (ni 1 céntimo, 3.14.30)" ); break; }
 	foreach ( $r['people'] as $x ) {
 		if ( $x['red_pay'] + $x['bonus_pay_usd'] > $x['fund_usd'] + 0.02 ) { ok( false, "ronda $round: {$x['name']} cobra más que el 15 % de su equipo" ); break 2; }
 	}
@@ -255,7 +255,7 @@ for ( $round = 0; $round < 200; $round++ ) {
 		$sales[] = sale( 1000 + $o, mt_rand( 1, $n ), $base, $cost, $com ); $net += $base - $cost - $com;
 	}
 	$r = $C::compute( P, $m, $sales, array(), array( 'rate_cup' => mt_rand( 300, 900 ) ) );
-	if ( $r['totals']['pay_usd'] > 0.15 * max( 0, $net ) + 0.05 ) { ok( false, "ronda $round: se pagaría más que el 15 % de la ganancia neta" ); break; }
+	if ( $r['totals']['pay_usd'] > 0.15 * max( 0, $net ) + 0.00001 ) { ok( false, "ronda $round: se pagaría más que el 15 % de la ganancia neta" ); break; }
 }
 ok( true, 'invariante del fondo sobre la ganancia neta en 200 rondas con líneas que pierden' );
 

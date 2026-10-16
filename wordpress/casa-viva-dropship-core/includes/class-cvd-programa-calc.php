@@ -354,10 +354,12 @@ final class CVD_Programa_Calc {
 
 		$tot_red = 0.0; $tot_bonus_usd = 0.0; $tot_bonus_cup = 0;
 		foreach ( $people as $id => &$me ) {
-			$me['red_pay'] = round( $me['red_team_capped'] * $f_red, 2 );
-			$me['bonus_pay_usd'] = round( $me['bonus_team_capped'] * $f_bonus, 2 );
-			$me['coverage'] = $me['bonus_usd'] > 0 ? min( 1.0, round( ( $me['bonus_team_capped'] * $f_bonus ) / $me['bonus_usd'], 4 ) ) : ( $me['bonus_cup'] ? 0.0 : 1.0 );
-			$me['bonus_pay_cup'] = (int) round( $me['bonus_cup'] * $me['coverage'] );
+			// 3.14.30 (D77): todo se redondea HACIA ABAJO (céntimos y CUP enteros), para que la suma nunca pase del fondo ni por 1 céntimo.
+			$me['red_pay'] = floor( $me['red_team_capped'] * $f_red * 100 + 1e-6 ) / 100;
+			$cov_exact = $me['bonus_usd'] > 0 ? min( 1.0, ( $me['bonus_team_capped'] * $f_bonus ) / $me['bonus_usd'] ) : ( $me['bonus_cup'] ? 0.0 : 1.0 );
+			$me['bonus_pay_cup'] = (int) floor( $me['bonus_cup'] * $cov_exact + 1e-6 );
+			$me['bonus_pay_usd'] = floor( 100 * $me['bonus_pay_cup'] / $rate + 1e-6 ) / 100;
+			$me['coverage'] = round( $cov_exact, 4 );
 			$me['own_points'] = round( $me['own_points'], 4 );
 			$me['own_sales_usd'] = round( $me['own_sales_usd'], 4 );
 			$me['red1'] = round( $me['red1'], 4 ); $me['red2'] = round( $me['red2'], 4 ); $me['red_lost'] = round( $me['red_lost'], 4 );
