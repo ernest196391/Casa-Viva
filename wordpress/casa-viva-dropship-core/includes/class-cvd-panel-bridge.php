@@ -868,6 +868,17 @@ final class CVD_Panel_Bridge {
 				'status' => $r['status'], 'method' => $r['method'], 'reference' => $r['reference'],
 				'requestedAt' => $r['requested_at'], 'approvedAt' => $r['approved_at'], 'paidAt' => $r['paid_at'],
 			);
+			// 3.14.23: lo que hay que pagar (CUP con la tasa de cada venta) y el enlace a «Pagar a…» firmado para Lennys.
+			if ( class_exists( 'CVD_Payout_Pay_Page' ) ) {
+				$full = CVD_Payouts::get( absint( $r['id'] ) );
+				$view = $full ? CVD_Payouts::view( $full ) : null;
+				$admin = CVD_Payout_Avisos::phones( 'cvd_payout_admin_phones', array( '5356885368' ) );
+				$rows[ count( $rows ) - 1 ] += array(
+					'payMethod' => $view ? $view['kind'] : '', 'payText' => $view ? $view['pay_text'] : '',
+					'payUrl' => $admin && in_array( $r['status'], array( 'requested', 'approved' ), true ) ? CVD_Payout_Pay_Page::signed_url( absint( $r['id'] ), $admin[0] ) : '',
+					'receivedAt' => $full['received_at'] ?? null,
+				);
+			}
 		}
 		return self::no_cache( array( 'payouts' => $rows ) );
 	}

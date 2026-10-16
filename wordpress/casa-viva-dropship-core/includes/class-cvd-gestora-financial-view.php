@@ -143,7 +143,8 @@ final class CVD_Gestora_Financial_View {
 		// Descuentos abiertos (CVD_Payment_Obligations): se restan al pedir el pago, solo en la misma moneda.
 		$debits = class_exists( 'CVD_Payment_Obligations' ) ? CVD_Payment_Obligations::open_debits_by_currency( $user_id ) : array();
 		if ( $debits ) {
-			$html .= '<p class="cvd-cbox-note is-warn">Al pedir tu pago se descuentan ' . esc_html( self::amounts_text( $debits ) ) . ' pendientes.</p>';
+			// 3.14.23: la deuda se descuenta al cobrar, en la moneda del pago (CUP o USD) con la tasa de hoy si hace falta.
+			$html .= '<p class="cvd-cbox-note is-warn">Debes a la tienda ' . esc_html( self::amounts_text( $debits ) ) . '. Se descuenta al pedir tu pago.</p>';
 		}
 		return $html . '<p class="cvd-cbox-note">En CUP, con la tasa del día de cada venta. Si una venta no guardó la tasa (las más viejas), va solo en USD.</p></section>';
 	}

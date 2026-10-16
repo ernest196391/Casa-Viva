@@ -135,6 +135,14 @@ final class CVD_Plugin {
 				created_by bigint(20) unsigned NOT NULL DEFAULT 0,
 				approved_by bigint(20) unsigned NOT NULL DEFAULT 0,
 				paid_by bigint(20) unsigned NOT NULL DEFAULT 0,
+				pay_method varchar(16) NOT NULL DEFAULT '',
+				commission_usd decimal(18,4) NOT NULL DEFAULT 0,
+				commission_cup decimal(18,2) NOT NULL DEFAULT 0,
+				deduction decimal(18,2) NOT NULL DEFAULT 0,
+				phone_value longtext NULL,
+				received_at datetime NULL,
+				received_by bigint(20) unsigned NOT NULL DEFAULT 0,
+				details longtext NULL,
 				created_at datetime NOT NULL,
 				updated_at datetime NOT NULL,
 				PRIMARY KEY  (id),
@@ -152,6 +160,8 @@ final class CVD_Plugin {
 				base_commission decimal(18,4) NOT NULL DEFAULT 0,
 				markup decimal(18,4) NOT NULL DEFAULT 0,
 				currency varchar(8) NOT NULL DEFAULT 'USD',
+				cup_rate decimal(12,4) NOT NULL DEFAULT 0,
+				cup_amount decimal(18,2) NOT NULL DEFAULT 0,
 				created_at datetime NOT NULL,
 				PRIMARY KEY  (id),
 				UNIQUE KEY payout_order (payout_id, order_id),
@@ -170,6 +180,30 @@ final class CVD_Plugin {
 				metadata longtext NULL,
 				PRIMARY KEY  (id),
 				KEY payout_created (payout_id, created_at)
+			) {$charset_collate};"
+		);
+		// 3.14.23: avisos de WhatsApp de los pagos de comisiones. VivaBot los recoge (GET /bot/payout-avisos), los mete en
+		// el buzón y confirma (POST …/done). dedupe: un aviso por pago, tipo y teléfono aunque se pulse dos veces.
+		$payout_avisos_table = $wpdb->prefix . 'cvd_payout_avisos';
+		dbDelta(
+			"CREATE TABLE {$payout_avisos_table} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				payout_id bigint(20) unsigned NOT NULL,
+				kind varchar(32) NOT NULL,
+				role varchar(24) NOT NULL DEFAULT '',
+				phone varchar(32) NOT NULL,
+				name varchar(190) NOT NULL DEFAULT '',
+				body text NOT NULL,
+				dedupe char(64) NOT NULL,
+				test tinyint(1) NOT NULL DEFAULT 0,
+				created_at datetime NOT NULL,
+				notified_at datetime NULL,
+				result varchar(24) NOT NULL DEFAULT '',
+				note varchar(190) NOT NULL DEFAULT '',
+				PRIMARY KEY  (id),
+				UNIQUE KEY dedupe (dedupe),
+				KEY pending (notified_at, created_at),
+				KEY payout_id (payout_id)
 			) {$charset_collate};"
 		);
 		dbDelta(
@@ -301,6 +335,9 @@ final class CVD_Plugin {
 		add_option( 'cvd_pickup_address', 'Nuevo Vedado, La Habana' );
 		add_option( 'cvd_default_max_markup_percent', '30' );
 		add_option( 'cvd_notification_email', get_option( 'admin_email' ) );
+		// 3.14.23: a quién avisa un pedido de pago de comisión. Lennys siempre; en efectivo, también la dependienta.
+		add_option( 'cvd_payout_admin_phones', array( '5356885368' ) );
+		add_option( 'cvd_payout_cash_phones', array( '5359163951' ) );
 		add_option( 'cvd_shipping_platform_percent', '10' );
 		add_option( 'cvd_location_retention_days', '30' );
 		add_option( 'cvd_dispatch_zone_weight', '30' );
@@ -494,7 +531,10 @@ final class CVD_Plugin {
 		require_once CVD_DIR . 'includes/class-cvd-pilot-accounts.php';
 		require_once CVD_DIR . 'includes/class-cvd-inventory.php';
 		require_once CVD_DIR . 'includes/class-cvd-sales.php';
+		require_once CVD_DIR . 'includes/class-cvd-payout-math.php';
 		require_once CVD_DIR . 'includes/class-cvd-payouts.php';
+		require_once CVD_DIR . 'includes/class-cvd-payout-avisos.php';
+		require_once CVD_DIR . 'includes/class-cvd-payout-pay-page.php';
 		require_once CVD_DIR . 'includes/class-cvd-promotional-resources.php';
 		require_once CVD_DIR . 'includes/class-cvd-live-tracking.php';
 		require_once CVD_DIR . 'includes/class-cvd-web-push.php';
@@ -523,6 +563,8 @@ final class CVD_Plugin {
 		CVD_Inventory::register();
 		CVD_Sales::register();
 		CVD_Payouts::register();
+		CVD_Payout_Avisos::register(); // 3.14.23: avisos por WhatsApp de los pagos de comisiones (vía VivaBot).
+		CVD_Payout_Pay_Page::register(); // 3.14.23: página «Pagar a…» con enlace firmado y la captura privada.
 		CVD_Promotional_Resources::register();
 		CVD_Live_Tracking::register();
 		CVD_Web_Push::register();
