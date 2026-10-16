@@ -159,7 +159,7 @@
     var rows = r.rows || [];
     if (!rows.length) { box.hidden = true; return; }
     var usd = function (v) { return v === null || v === undefined ? "—" : Number(v).toFixed(2).replace(".", ","); };
-    var head = r.admin ? "<b>Extras en tienda (33/33/33)</b> · últimos 35 días" : "<b>Tus extras en tienda</b> · llevas <b>" + usd(r.staffTotal) + " USD</b> (33 % de la ganancia) · se pagan un día fijo a la semana";
+    var head = r.admin ? "<b>Extras en tienda</b> · últimos 35 días" : "<b>Tus extras en tienda</b> · llevas <b>" + usd(r.staffTotal) + " USD</b> de premio · se pagan un día fijo a la semana";
     box.hidden = false;
     box.innerHTML = '<details><summary>' + head + "</summary>" + rows.map(function (x) { return '<p style="margin:.4em 0">#' + escapeText(x.number) + " · " + escapeText(x.date) + " · " + escapeText(x.qty + "× " + x.name) + " · gestora " + escapeText(x.gestoraName || "—") + (x.profit === null ? ' · <b style="color:#a35a1f">sin costo apuntado: avisa a Lennys</b>' : (r.admin ? " · ganancia " + usd(x.profit) + " → gestora " + usd(x.gestora) + " · " + escapeText(x.staffName || "sin dependienta") + " " + usd(x.staff) + " · tienda " + usd(x.store) : " · tu parte <b>" + usd(x.staff) + " USD</b>")) + (x.closed ? "" : " · <i>pedido aún abierto</i>") + "</p>"; }).join("") + "</details>";
   }
@@ -256,7 +256,7 @@
     var box = editDialog.querySelector("[data-added]");
     box.innerHTML = editState.add.map(function (a, i) { return '<p class="cvd-edit-line"><span>+ ' + escapeText(a.name) + '</span><input type="number" min="1" max="999" inputmode="numeric" data-add-qty="' + i + '" value="' + a.qty + '" aria-label="Cantidad"><button type="button" data-add-rm="' + i + '" aria-label="Quitar">✕</button></p>'
       // 3.14.18 (33/33/33): en pedidos de gestora, marcar si la clienta lo eligió aquí en la tienda.
-      + (editState.gestora ? '<label class="cvd-edit-extra" style="display:flex;gap:.5em;align-items:flex-start;margin:-.25em 0 .75em;font-size:.92em"><input type="checkbox" data-add-extra="' + i + '"' + (a.extra ? " checked" : "") + '><span><b>Extra en tienda</b> — la clienta lo eligió aquí. La ganancia se reparte: 33 % ' + escapeText(editState.gestoraName || "la gestora") + ', 33 % tú y 33 % la tienda. Va al precio de la tienda.</span></label>' : ""); }).join("");
+      + (editState.gestora ? '<label class="cvd-edit-extra" style="display:flex;gap:.5em;align-items:flex-start;margin:-.25em 0 .75em;font-size:.92em"><input type="checkbox" data-add-extra="' + i + '"' + (a.extra ? " checked" : "") + '><span><b>Extra en tienda</b> — la clienta lo eligió aquí. ' + escapeText(editState.gestoraName || "La gestora") + ' cobra su comisión normal también por esto. Va al precio de la tienda.</span></label>' : ""); }).join("");
   }
   async function openEdit(id) {
     message.className = ""; message.textContent = "Abriendo el pedido…";

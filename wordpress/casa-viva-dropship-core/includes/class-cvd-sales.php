@@ -456,7 +456,7 @@ final class CVD_Sales {
 			$line = $item instanceof WC_Order_Item_Product ? CVD_Order_Lines::line( $order, $item ) : null;
 			// 3.14.18 (33/33/33): lo que la clienta añadió en la tienda sale marcado.
 			$is_extra = class_exists( 'CVD_Commissions' ) && is_array( $item->get_meta( CVD_Commissions::EXTRA_META, true ) ) && $item->get_meta( CVD_Commissions::EXTRA_META, true );
-			$products[] = array( 'name' => $item->get_name(), 'quantity' => (int) $item->get_quantity(), 'url' => $product ? get_permalink( $product->get_parent_id() ?: $product->get_id() ) : '', 'unit' => $line ? $line['unit'] : null, 'lineTotal' => $line ? $line['total'] : null, 'text' => ( $line ? $line['text'] : '' ) . ( $is_extra && $line ? ' · extra en tienda (33/33/33)' : '' ), 'extra' => (bool) $is_extra );
+			$products[] = array( 'name' => $item->get_name(), 'quantity' => (int) $item->get_quantity(), 'url' => $product ? get_permalink( $product->get_parent_id() ?: $product->get_id() ) : '', 'unit' => $line ? $line['unit'] : null, 'lineTotal' => $line ? $line['total'] : null, 'text' => ( $line ? $line['text'] : '' ) . ( $is_extra && $line ? ' · extra en tienda' : '' ), 'extra' => (bool) $is_extra );
 		}
 		$fulfillment = sanitize_key( (string) $order->get_meta( '_cvd_fulfillment_type', true ) );
 		$operation_status = self::operation_status( $order );

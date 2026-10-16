@@ -8,6 +8,8 @@ defined( 'ABSPATH' ) || exit;
  * clientes y visitantes siguen viendo "Disponible / Últimas unidades / Agotado".
  * 3.13.51: junto al precio en USD, su equivalente en CUP con la tasa del día ("7 USD · 5.460 CUP"),
  * solo para gestoras aprobadas. El precio del cliente no cambia.
+ * 3.14.21 (Ernesto, 15-oct): «Ganas X USD» por unidad en la lista, en la ficha y en «Fotos para publicar»:
+ * comisión del producto (fija o %; si no tiene, la de la gestora o la general) + lo que ella subió el precio.
  */
 final class CVD_Gestora_Stock {
 	public static function register(): void {
@@ -15,6 +17,50 @@ final class CVD_Gestora_Stock {
 		add_filter( 'woocommerce_get_availability_text', array( __CLASS__, 'exact_text' ), 30, 2 );
 		add_action( 'wp_head', array( __CLASS__, 'styles' ) );
 		add_filter( 'woocommerce_get_price_html', array( __CLASS__, 'cup_price' ), 40, 2 );
+		// 3.14.22 (Ernesto/Lennys, 15-oct): «Ganas X USD» ya NO sale en la tienda ni en la ficha (la gestora enseña el
+		// móvil o manda capturas y el cliente lo veía). Solo en su área: «Fotos para publicar» e Inicio.
+	}
+
+	/** Precio base de Casa Viva (sin el de la gestora): el del producto o el menor de sus colores. */
+	private static function base_price( WC_Product $product ): float {
+		$base = (float) get_post_meta( $product->get_id(), '_price', true );
+		if ( $base > 0 || ! $product->is_type( 'variable' ) ) { return $base; }
+		$prices = array();
+		foreach ( $product->get_children() as $id ) { $v = (float) get_post_meta( $id, '_price', true ); if ( $v > 0 ) { $prices[] = $v; } }
+		return $prices ? min( $prices ) : 0.0;
+	}
+
+	/** Lo que gana la gestora por unidad: comisión + lo que subió el precio. null si no hay precio. */
+	public static function earn( WC_Product $product, int $user_id ): ?float {
+		$base = self::base_price( $product );
+		if ( $base <= 0 ) { return null; }
+		$source = $product;
+		if ( $product->is_type( 'variation' ) && '' === (string) $product->get_meta( '_cvd_commission_value', true ) ) { $source = wc_get_product( $product->get_parent_id() ) ?: $product; }
+		$type = sanitize_key( (string) $source->get_meta( '_cvd_commission_type', true ) );
+		$value = $source->get_meta( '_cvd_commission_value', true );
+		if ( '' === (string) $value ) {
+			$user_rate = get_user_meta( $user_id, '_cvd_commission_rate', true );
+			$rate = '' !== $user_rate ? (float) $user_rate : (float) get_option( 'cvd_default_commission_rate', 13 );
+			$commission = $base * $rate / 100;
+		} else {
+			$commission = 'fixed' === $type ? (float) $value : $base * (float) $value / 100;
+		}
+		$hers = class_exists( 'CVD_Gestora_Store' ) ? (float) CVD_Gestora_Store::resolve_price( $product, $user_id, $base ) : $base;
+		return round( $commission + max( 0, $hers - $base ), 2 );
+	}
+
+	/** «Ganas 3 USD» (o «Ganas 8,40 USD»). */
+	public static function earn_label( float $earn ): string {
+		return 'Ganas ' . ( abs( $earn - round( $earn ) ) < 0.005 ? (string) (int) round( $earn ) : number_format( $earn, 2, ',', '.' ) ) . ' USD';
+	}
+
+	/** En la ficha, debajo del precio: «Ganas 3 USD por cada uno que vendas». */
+	public static function single_earn(): void {
+		global $product;
+		if ( ! self::is_gestora() || ! $product instanceof WC_Product ) { return; }
+		$earn = self::earn( $product, get_current_user_id() );
+		if ( null === $earn || $earn <= 0 ) { return; }
+		echo '<p class="cvd-gestora-earn">' . esc_html( self::earn_label( $earn ) . ( $product->is_type( 'variable' ) ? ' (desde)' : '' ) . ' por cada uno que vendas' ) . '</p>';
 	}
 
 	private static function is_gestora(): bool {
@@ -80,6 +126,6 @@ final class CVD_Gestora_Stock {
 
 	public static function styles(): void {
 		if ( ! self::is_gestora() ) { return; }
-		echo '<style id="cvd-gestora-stock">.cvd-gestora-stock{margin:4px 0 6px;font-size:13px;font-weight:600;color:#0f3d3a}.cvd-gestora-stock small{display:block;font-weight:400;color:#6f6a62;font-size:12px;line-height:1.35}.cvd-gestora-stock.is-low{color:#a8641c}.cvd-gestora-stock.is-out{color:#a83d32}.cvd-price-cup{font-size:.85em;font-weight:600;color:#0f3d3a;white-space:nowrap}.cvd-price-cup.is-stale{color:#a8641c}</style>';
+		echo '<style id="cvd-gestora-stock">.cvd-gestora-stock{margin:4px 0 6px;font-size:13px;font-weight:600;color:#0f3d3a}.cvd-gestora-stock small{display:block;font-weight:400;color:#6f6a62;font-size:12px;line-height:1.35}.cvd-gestora-stock.is-low{color:#a8641c}.cvd-gestora-stock.is-out{color:#a83d32}.cvd-price-cup{font-size:.85em;font-weight:600;color:#0f3d3a;white-space:nowrap}.cvd-price-cup.is-stale{color:#a8641c}.cvd-gestora-earn{margin:2px 0;font-size:13px;font-weight:700;color:#1d6b3a}</style>';
 	}
 }

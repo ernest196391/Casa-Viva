@@ -319,7 +319,7 @@ final class CVD_Order_Edit {
 				}
 				if ( $item ) { wc_maybe_adjust_line_item_product_stock( $item ); }
 				$items_changed = true;
-				$changes[] = ( $is_extra ? 'Añadido como EXTRA EN TIENDA (33/33/33): ' : 'Añadido: ' ) . $qty . '× ' . $product->get_name();
+				$changes[] = ( $is_extra ? 'Añadido como EXTRA EN TIENDA: ' : 'Añadido: ' ) . $qty . '× ' . $product->get_name();
 			}
 		}
 		if ( ! $changes ) { return array( 'ok' => true, 'changes' => array(), 'stock' => array(), 'total' => (float) $order->get_total(), 'message' => 'No había nada que cambiar.' ); }
@@ -330,7 +330,7 @@ final class CVD_Order_Edit {
 		$order->save();
 		if ( $items_changed && class_exists( 'CVD_Commissions' ) ) { CVD_Commissions::mark_pending( $order->get_id() ); }
 		$saved = wc_get_order( $order->get_id() );
-		// 3.14.18: nota con el reparto 33/33/33 de lo añadido como extra (después de calcular la comisión).
+		// 3.14.18: nota con el reparto de lo añadido como extra (después de calcular la comisión).
 		$extra_note = $has_extra && class_exists( 'CVD_Commissions' ) ? CVD_Commissions::extra_note( $saved ) : '';
 		if ( '' !== $extra_note ) { $saved->add_order_note( $extra_note ); $saved->update_meta_data( '_cvd_has_extra_tienda', 1 ); $saved->save(); }
 		$total = (float) $saved->get_total();
@@ -350,20 +350,20 @@ final class CVD_Order_Edit {
 		return rest_ensure_response( $result );
 	}
 
-	/** 3.14.18: «Extra en tienda apuntado a nombre de Katia: te tocan 2,67 USD (33 % de la ganancia).» */
+	/** 3.14.18: «Extra en tienda apuntado a nombre de Katia: la gestora cobra su comisión normal.» */
 	private static function extra_staff_message( WC_Order $order ): string {
-		$staff = 0.0; $missing = false;
+		$staff = 0.0;
 		foreach ( $order->get_items( 'line_item' ) as $item ) {
 			$snap = $item->get_meta( '_cvd_commission_snapshot', true );
 			$x = is_array( $snap ) && is_array( $snap['extra'] ?? null ) ? $snap['extra'] : null;
 			if ( ! $x ) { continue; }
-			if ( null === $x['profit'] ) { $missing = true; } else { $staff += (float) $x['staff']; }
+			$staff += (float) $x['staff'];
 		}
 		$who = (string) $order->get_meta( 'gestora_nombre', true );
-		return 'Extra en tienda apuntado a nombre de ' . ( '' !== $who ? $who : 'la gestora' ) . ( $staff > 0 ? ': te tocan ' . number_format( $staff, 2, ',', '.' ) . ' USD (33 % de la ganancia), se pagan un día fijo a la semana.' : '.' ) . ( $missing ? ' Un producto no tiene costo apuntado: avisa a Lennys para que lo ponga.' : '' );
+		return 'Extra en tienda apuntado a nombre de ' . ( '' !== $who ? $who : 'la gestora' ) . ( $staff > 0 ? ': te tocan ' . number_format( $staff, 2, ',', '.' ) . ' USD de premio, se pagan un día fijo a la semana.' : '. La gestora cobra su comisión normal.' );
 	}
 
-	/** 3.14.18: la dependienta que atiende (quien pulsa, si es dependienta u operador); administración no cobra el 33 %. */
+	/** 3.14.18: la dependienta que atiende (quien pulsa, si es dependienta u operador); administración no cobra premio. */
 	private static function staff_for_extra( int $user_id ): ?WP_User {
 		$user = get_userdata( $user_id );
 		if ( ! $user || ( class_exists( 'CVD_Panel_Bridge' ) && CVD_Panel_Bridge::via_panel() ) ) { return null; }

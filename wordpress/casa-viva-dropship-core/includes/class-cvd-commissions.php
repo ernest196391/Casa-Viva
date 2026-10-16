@@ -9,10 +9,17 @@ final class CVD_Commissions {
 	 * 3.14.18 (Ernesto, 15-oct, regla 33/33/33): línea que la clienta de una gestora añadió en la tienda al recoger
 	 * su vale. La GANANCIA de esa línea (precio − costo de compra × unidades) se reparte 33,34 % gestora,
 	 * 33,33 % dependienta que la atendió y 33,33 % tienda. La marca la pone CVD_Order_Edit al añadir con «extra».
+	 * 3.14.19 (Ernesto, 15-oct noche, tras escuchar a las gestoras): «tu clienta, tu comisión». La gestora cobra su
+	 * comisión NORMAL también por el extra. Premio de la dependienta = opción cvd_extra_staff_pct (% del precio; 0 = en
+	 * espera hasta que Ernesto y Lennys lo decidan). Lo pone la tienda, nunca sale de la gestora.
 	 */
 	public const EXTRA_META = '_cvd_extra_tienda';
-	public const EXTRA_GESTORA_PCT = 33.34;
-	public const EXTRA_STAFF_PCT = 33.33;
+	public const EXTRA_STAFF_OPTION = 'cvd_extra_staff_pct';
+
+	/** % del precio del extra para la dependienta (0 = en espera). */
+	public static function extra_staff_pct(): float {
+		return max( 0.0, min( 50.0, (float) get_option( self::EXTRA_STAFF_OPTION, 0 ) ) );
+	}
 
 	public static function register(): void {
 		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'mark_pending_from_order' ), 40 );
@@ -288,23 +295,25 @@ final class CVD_Commissions {
 	}
 
 	/**
-	 * 3.14.18: reparto 33/33/33 de una línea «extra en tienda», o null si la línea no lo es.
-	 * → [ cost, profit, gestora, staff, store, staff_user_id, staff_name ] en USD; sin costo: profit/gestora/store = null.
+	 * 3.14.19: reparto de una línea «extra en tienda», o null si la línea no lo es. $gestora = su comisión normal.
+	 * → [ cost, profit, gestora, staff, staff_pct, store, staff_user_id, staff_name ] en USD; sin costo: profit/store = null.
 	 */
-	public static function extra_split( WC_Order_Item_Product $item, ?WC_Product $product, float $line, int $quantity ): ?array {
+	public static function extra_split( WC_Order_Item_Product $item, ?WC_Product $product, float $line, int $quantity, float $gestora = 0.0 ): ?array {
 		$mark = $item->get_meta( self::EXTRA_META, true );
 		if ( ! is_array( $mark ) || ! $mark ) { return null; }
 		$staff_id = absint( $mark['staff'] ?? 0 );
 		$base = array( 'staff_user_id' => $staff_id, 'staff_name' => (string) ( $mark['staffName'] ?? '' ), 'at' => (string) ( $mark['at'] ?? '' ) );
 		$cost = self::unit_cost( $product );
-		if ( null === $cost ) { return $base + array( 'cost' => null, 'profit' => null, 'gestora' => null, 'staff' => 0.0, 'store' => null ); }
+		$gestora = round( $gestora, 4 );
+		$pct = self::extra_staff_pct();
+		$staff = $staff_id ? round( $line * $pct / 100, 4 ) : 0.0;
+		$base += array( 'gestora' => $gestora, 'staff' => $staff, 'staff_pct' => $pct );
+		if ( null === $cost ) { return $base + array( 'cost' => null, 'profit' => null, 'store' => null ); }
 		$profit = max( 0.0, $line - $cost * max( 1, $quantity ) );
-		$gestora = round( $profit * self::EXTRA_GESTORA_PCT / 100, 4 );
-		$staff = $staff_id ? round( $profit * self::EXTRA_STAFF_PCT / 100, 4 ) : 0.0;
-		return $base + array( 'cost' => $cost, 'profit' => round( $profit, 4 ), 'gestora' => $gestora, 'staff' => $staff, 'store' => round( $profit - $gestora - $staff, 4 ) );
+		return $base + array( 'cost' => $cost, 'profit' => round( $profit, 4 ), 'store' => round( $profit - $gestora - $staff, 4 ) );
 	}
 
-	/** «Extra en tienda: Organizador ×1 — ganancia 8,00 USD → gestora 2,67 · Zaymi 2,67 · tienda 2,66.» ('' si no hay). */
+	/** «Extra en tienda: Organizador ×1 (25,00 USD) → gestora 3,00 (su comisión) · Zaymi 0,00 · tienda 5,00.» ('' si no hay). */
 	public static function extra_note( WC_Order $order ): string {
 		$out = array();
 		foreach ( $order->get_items( 'line_item' ) as $item ) {
@@ -313,11 +322,10 @@ final class CVD_Commissions {
 			if ( ! $x ) { continue; }
 			$money = static fn( $v ) => number_format( (float) $v, 2, ',', '.' );
 			$who = '' !== $x['staff_name'] ? $x['staff_name'] : 'sin dependienta';
-			$out[] = null === $x['profit']
-				? $item->get_name() . ' ×' . $item->get_quantity() . ' — SIN COSTO apuntado: va con la comisión normal de la gestora. Pon el costo en el producto para repartir 33/33/33.'
-				: $item->get_name() . ' ×' . $item->get_quantity() . ' — ganancia ' . $money( $x['profit'] ) . ' USD → gestora ' . $money( $x['gestora'] ) . ' · ' . $who . ' ' . $money( $x['staff'] ) . ' · tienda ' . $money( $x['store'] ) . ' USD';
+			$out[] = $item->get_name() . ' ×' . $item->get_quantity() . ' (' . $money( $item->get_total() ) . ' USD) → gestora ' . $money( $x['gestora'] ) . ' (su comisión) · ' . $who . ' ' . $money( $x['staff'] )
+				. ( null === $x['profit'] ? ' · tienda: sin costo apuntado' : ' · tienda ' . $money( $x['store'] ) . ' USD' );
 		}
-		return $out ? 'Extra en tienda (33/33/33): ' . implode( '; ', $out ) . '.' : '';
+		return $out ? 'Extra en tienda: ' . implode( '; ', $out ) . '.' : '';
 	}
 
 	public static function calculate( WC_Order $order, int $owner_user_id ): array {
@@ -340,27 +348,7 @@ final class CVD_Commissions {
 			$line_margin = ( $base_unit > 0 && $pricing_gestora_id === $owner_user_id ) ? max( 0, $line - ( $base_unit * $quantity ) ) : 0;
 
 			$snapshot = $item->get_meta( '_cvd_commission_snapshot', true );
-			$extra = self::extra_split( $item, $product, $line, $quantity );
-			if ( ( ! is_array( $snapshot ) || ! isset( $snapshot['base_commission'], $snapshot['base_amount'], $snapshot['sale_amount'] ) ) && $extra && null !== $extra['profit'] ) {
-				// 3.14.18: extra en tienda con costo conocido → 33,34 % de la ganancia, sin aumento de precio.
-				$snapshot = array(
-					'product_id'       => $item->get_product_id(),
-					'variation_id'     => $item->get_variation_id(),
-					'owner_user_id'    => $owner_user_id,
-					'type'             => 'extra_tienda',
-					'value'            => wc_format_decimal( self::EXTRA_GESTORA_PCT, 4 ),
-					'policy_source'    => 'extra_tienda',
-					'quantity'         => $quantity,
-					'base_amount'      => wc_format_decimal( $line, 4 ),
-					'sale_amount'      => wc_format_decimal( $line, 4 ),
-					'base_commission'  => wc_format_decimal( $extra['gestora'], 4 ),
-					'markup'           => wc_format_decimal( 0, 4 ),
-					'extra'            => $extra,
-					'captured_at'      => current_time( 'mysql', true ),
-				);
-				$item->update_meta_data( '_cvd_commission_snapshot', $snapshot );
-				$item->save_meta_data();
-			}
+			$is_extra = is_array( $item->get_meta( self::EXTRA_META, true ) ) && $item->get_meta( self::EXTRA_META, true );
 			if ( ! is_array( $snapshot ) || ! isset( $snapshot['base_commission'], $snapshot['base_amount'], $snapshot['sale_amount'] ) ) {
 				$policy = self::commission_policy( $product, $gestora_rate );
 				$line_commission = 'fixed' === $policy['type'] ? $policy['value'] * $quantity : $line_base * ( $policy['value'] / 100 );
@@ -378,8 +366,8 @@ final class CVD_Commissions {
 					'markup'           => wc_format_decimal( $line_margin, 4 ),
 					'captured_at'      => current_time( 'mysql', true ),
 				);
-				// Extra en tienda SIN costo apuntado: comisión normal (como antes) y se avisa para poner el costo.
-				if ( $extra ) { $snapshot['policy_source'] = 'extra_sin_costo'; $snapshot['extra'] = $extra; }
+				// 3.14.19: extra en tienda → la gestora cobra su comisión normal; el premio de la dependienta va aparte.
+				if ( $is_extra ) { $snapshot['extra'] = self::extra_split( $item, $product, $line, $quantity, (float) $line_commission ); }
 				$item->update_meta_data( '_cvd_commission_snapshot', $snapshot );
 				$item->save_meta_data();
 			}

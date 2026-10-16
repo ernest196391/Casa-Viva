@@ -137,6 +137,9 @@ final class CVD_Gestora_Fotos {
 			$usd = self::usd( $price );
 			$cup = $rate && $price > 0 ? number_format( (int) round( $price * $rate ), 0, ',', '.' ) . ' CUP' : '';
 			$stock = null === $item['qty'] ? 'En existencia' : ( $item['qty'] <= 3 ? 'Últimas ' . $item['qty'] : 'Quedan ' . $item['qty'] );
+			// 3.14.21: lo que gana ella por unidad, junto a lo que queda.
+			$earn = class_exists( 'CVD_Gestora_Stock' ) ? CVD_Gestora_Stock::earn( $product, $user->ID ) : null;
+			if ( null !== $earn && $earn > 0 ) { $stock .= ' · ' . CVD_Gestora_Stock::earn_label( $earn ); }
 			// Manual de marca: 1.ª línea con sensación, 2.ª con datos, 3.ª con cómo comprar; un emoji como mucho.
 			$text = '*' . $item['name'] . '*' . ( $item['line'] ? "\n" . $item['line'] : '' ) . "\n" . $usd . ( $cup ? ' · ' . $cup : '' ) . "\nPídelo aquí y te lo llevamos 🛵 " . $link;
 			$out[] = array(

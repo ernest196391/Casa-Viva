@@ -225,7 +225,7 @@ final class CVD_Gestora_Financial_View {
 			$type = sanitize_key( (string) ( $line['type'] ?? '' ) );
 			$value = (float) ( $line['value'] ?? 0 );
 			$label = 'extra_tienda' === $type
-				? '33 % de la ganancia de lo que tu clienta añadió en la tienda (regla 33/33/33)'
+				? 'tu comisión de lo que tu clienta añadió en la tienda'
 				: ( 'fixed' === $type
 				? wc_format_localized_decimal( $value ) . ' ' . $order->get_currency() . ' por unidad'
 				: wc_format_localized_decimal( $value ) . ' % de la venta' );

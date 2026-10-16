@@ -57,6 +57,9 @@ final class CVD_Delivery {
 
 	/** Cuándo se puede publicar: ahora (7:30–22:00 en Cuba) o a las 7:30 siguientes. */
 	public static function dispatch_time( int $now ): int {
+		// 3.14.20 (Ernesto, 15-oct noche): las carreras salen al grupo A CUALQUIER HORA (la gestora publica cuando quiera
+		// y el mensajero dice «Yo» cuando quiera). Para volver a frenar de 22:00 a 7:30: opción cvd_dispatch_night_hold = yes.
+		if ( 'yes' !== get_option( 'cvd_dispatch_night_hold', 'no' ) ) { return $now; }
 		$local = ( new DateTimeImmutable( '@' . $now ) )->setTimezone( new DateTimeZone( 'America/Havana' ) );
 		$minutes = (int) $local->format( 'G' ) * 60 + (int) $local->format( 'i' );
 		if ( $minutes >= 450 && $minutes < 1320 ) { return $now; }
