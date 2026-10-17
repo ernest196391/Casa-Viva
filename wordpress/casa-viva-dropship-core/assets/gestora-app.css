@@ -242,4 +242,19 @@ body.cvga-body .cvd-customer-nav{display:none!important}
 .cvga-stones tr.is-me td{background:#fbf3e2}
 .cvga-stones td:last-child{white-space:nowrap}
 .cvga .cvd-pts{display:inline-block;padding:1px 8px;border-radius:99px;background:#fbf3e2;color:#7a5512;border:1px solid #ecd9b0;font-size:12.5px;font-weight:600}
+/* 3.14.33 · «Tus vales del mes» en Mi piedra (Dany, 16-oct). */
+.cvga-vales{list-style:none;margin:8px 0 0;padding:0}
+.cvga-vales li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--ga-line)}
+.cvga-vales li:first-child{border-top:0}
+.cvga-vale-num{min-width:54px;padding:4px 8px;border-radius:10px;background:var(--ga-soft);color:var(--ga-ink);font-size:13px;font-weight:700;text-align:center;font-variant-numeric:tabular-nums}
+.cvga-vale-text{min-width:0}
+.cvga-vale-text b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-weight:600;font-size:14.5px;line-height:1.3;overflow-wrap:anywhere}
+.cvga-vale-text small{display:block;color:var(--ga-muted);font-size:12.5px;margin-top:2px}
+.cvga-vale-pts{font-size:16px;font-weight:700;color:#7a5512;white-space:nowrap;font-variant-numeric:tabular-nums}
+.cvga-vales li.is-refund .cvga-vale-pts{color:#9a3412}
+.cvga-vales li.cvga-vales-total{border-top:2px solid var(--ga-line);padding-top:12px}
+.cvga-vales li.cvga-vales-total .cvga-vale-pts{font-size:19px}
+.cvga-vales-sub{font-size:15px!important;margin:16px 0 0!important;color:var(--ga-muted)}
+.cvga-vales.is-waiting .cvga-vale-pts{color:var(--ga-muted);font-weight:500}
+.cvga-vales.is-waiting .cvga-vale-text b{font-weight:500}
 @media (max-width:640px){.cvga-kpis-3{grid-template-columns:1fr 1fr}.cvga-kpis-3 .cvga-kpi:first-child{grid-column:1/-1}}

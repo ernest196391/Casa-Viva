@@ -647,6 +647,121 @@ final class CVD_Programa {
 	private static function cup( $v ): string { return number_format( (int) $v, 0, ',', '.' ) . ' CUP'; }
 	private static function pts( $v ): string { $n = (float) $v; return number_format( $n, $n == floor( $n ) ? 0 : 1, ',', '.' ); } // phpcs:ignore Universal.Operators.StrictComparisons
 
+	/** 3.14.33: puntos con hasta 2 decimales (la lista de vales y su total cuadran con el cálculo de la noche). */
+	private static function pts2( $v ): string { $n = round( (float) $v, 2 ); return number_format( $n, $n == floor( $n ) ? 0 : 2, ',', '.' ); } // phpcs:ignore Universal.Operators.StrictComparisons
+
+	/** 3.14.33: productos de un vale («Sábanas ×2, Fundas»), sin precios. */
+	private static function vale_products( WC_Order $order ): string {
+		$names = array();
+		foreach ( $order->get_items() as $item ) {
+			$qty = (int) $item->get_quantity();
+			$names[] = wp_strip_all_tags( (string) $item->get_name() ) . ( $qty > 1 ? ' ×' . $qty : '' );
+		}
+		return implode( ', ', $names );
+	}
+
+	/**
+	 * 3.14.33 (Dany, 16-oct): los vales que le dieron puntos este mes, leídos del MISMO cálculo guardado que enseña
+	 * «Tus puntos» (líneas «venta» y «devolucion» de la gestora), así el total cuadra. Solo número, fechas, productos y
+	 * puntos: nada de costo ni margen. Aparte, en vivo, sus vales que todavía no cuentan (falta entregar o cobrar, cobrado
+	 * después del último cálculo o compra para ella misma).
+	 */
+	private static function vales( WP_User $user, ?array $run, ?array $data ): array {
+		$out = array( 'counted' => array(), 'waiting' => array(), 'total' => 0.0, 'period' => (string) ( $data['period'] ?? wp_date( 'Y-m' ) ) );
+		$seen = array();
+		foreach ( (array) ( $data['lines'] ?? array() ) as $l ) {
+			if ( (int) ( $l['user'] ?? 0 ) !== $user->ID || ! in_array( $l['kind'] ?? '', array( 'venta', 'devolucion' ), true ) ) { continue; }
+			$oid = (int) $l['order']; $seen[ $oid ] = true;
+			$order = $oid ? wc_get_order( $oid ) : null;
+			$at = $order ? CVD_Programa_Calc::approved_at( $order->get_meta( '_cvd_commission_history', true ), (string) $order->get_meta( '_cvd_cash_verified_at', true ), $order->get_date_completed() ? gmdate( 'Y-m-d H:i:s', $order->get_date_completed()->getTimestamp() ) : '' ) : '';
+			$out['counted'][] = array(
+				'number' => $order ? (string) $order->get_order_number() : (string) $oid,
+				'made' => $order && $order->get_date_created() ? wp_date( 'j/n', $order->get_date_created()->getTimestamp() ) : '',
+				'paid' => '' !== $at ? wp_date( 'j/n', strtotime( $at . ' UTC' ) ) : '',
+				'ts' => '' !== $at ? strtotime( $at . ' UTC' ) : 0,
+				'products' => $order ? self::vale_products( $order ) : '',
+				'points' => (float) $l['points'],
+				'refund' => 'devolucion' === $l['kind'],
+			);
+			$out['total'] += (float) $l['points'];
+		}
+		usort( $out['counted'], static fn( $a, $b ) => $b['ts'] <=> $a['ts'] );
+		$out['total'] = round( $out['total'], 2 );
+
+		// Los que aún no cuentan (en vivo). Mismo filtro de pedidos que el cálculo: suyos, no «orgánicos», no pruebas.
+		$self = array();
+		foreach ( (array) ( $data['alerts'] ?? array() ) as $a ) {
+			if ( 'autocompra' === ( $a['type'] ?? '' ) && (int) ( $a['user'] ?? 0 ) === $user->ID ) { $self[ (int) $a['order'] ] = true; }
+		}
+		$run_ts = $run ? strtotime( $run['computed_at'] . ' UTC' ) : 0;
+		$since = strtotime( wp_date( 'Y-m-01' ) . ' -1 month 00:00:00 ' . wp_timezone_string() );
+		$orders = wc_get_orders( array( 'type' => 'shop_order', 'limit' => 60, 'status' => array( 'completed', 'processing', 'on-hold' ), 'meta_key' => '_cvd_owner_user_id', 'meta_value' => $user->ID, 'date_created' => '>=' . $since ) ); // phpcs:ignore WordPress.DB.SlowDBQuery
+		foreach ( (array) $orders as $order ) {
+			if ( ! $order instanceof WC_Order || isset( $seen[ $order->get_id() ] ) || absint( $order->get_meta( '_cvd_owner_user_id', true ) ) !== $user->ID ) { continue; }
+			if ( 'organic' === sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) ) { continue; }
+			if ( class_exists( 'CVD_Delivery' ) && ( CVD_Delivery::is_test_order( $order ) || 'test' === CVD_Delivery::blocks_dispatch( $order ) ) ) { continue; }
+			$status = sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ?: 'pending';
+			if ( 'cancelled' === $status ) { continue; }
+			$why = '';
+			if ( in_array( $status, array( 'approved', 'paid' ), true ) ) {
+				$at = CVD_Programa_Calc::approved_at( $order->get_meta( '_cvd_commission_history', true ), (string) $order->get_meta( '_cvd_cash_verified_at', true ), $order->get_date_completed() ? gmdate( 'Y-m-d H:i:s', $order->get_date_completed()->getTimestamp() ) : '' );
+				$ts = '' !== $at ? strtotime( $at . ' UTC' ) : 0;
+				if ( isset( $self[ $order->get_id() ] ) ) { $why = 'No cuenta: es una compra para ti misma'; }
+				elseif ( $ts && $ts > $run_ts && wp_date( 'Y-m', $ts ) === wp_date( 'Y-m' ) ) { $why = 'Cobrado después del último cálculo: cuenta esta noche'; }
+				else { continue; } // cobrado en otro mes, o no cuenta por otra razón del cálculo
+			} else {
+				$why = 'completed' === $order->get_status() ? 'Todavía no cuenta: falta cobrar' : 'Todavía no cuenta: falta entregar y cobrar';
+			}
+			$out['waiting'][] = array(
+				'number' => (string) $order->get_order_number(),
+				'made' => $order->get_date_created() ? wp_date( 'j/n', $order->get_date_created()->getTimestamp() ) : '',
+				'products' => self::vale_products( $order ),
+				'why' => $why,
+			);
+		}
+		return $out;
+	}
+
+	private static function render_vales( WP_User $user, ?array $run, ?array $data ): string {
+		$v = self::vales( $user, $run, $data );
+		$month = CVD_Programa_Calc::MONTHS[ (int) substr( $v['period'], 5, 2 ) ] ?? '';
+		$n = count( array_filter( $v['counted'], static fn( $c ) => ! $c['refund'] ) );
+		ob_start();
+		?>
+		<section class="cvga-card" id="cvga-vales">
+			<div class="cvga-row"><h2>Tus vales de <?php echo esc_html( $month ); ?></h2><span class="cvga-chip"><?php echo esc_html( $n . ( 1 === $n ? ' vale' : ' vales' ) ); ?></span></div>
+			<p class="cvga-note">Solo los vales entregados y cobrados este mes. Cada uno dice los puntos que te dio.</p>
+			<?php if ( ! $v['counted'] ) : ?>
+			<p class="cvga-empty">Todavía no tienes vales que cuenten este mes. Cuando un vale tuyo se entregue y se cobre, saldrá aquí al día siguiente.</p>
+			<?php else : ?>
+			<ul class="cvga-vales">
+				<?php foreach ( $v['counted'] as $c ) : ?>
+				<li<?php echo $c['refund'] ? ' class="is-refund"' : ''; ?>>
+					<span class="cvga-vale-num">#<?php echo esc_html( $c['number'] ); ?></span>
+					<div class="cvga-vale-text"><b><?php echo esc_html( $c['refund'] ? 'Devolución de un vale de otro mes' : ( $c['products'] ?: 'Vale #' . $c['number'] ) ); ?></b><small><?php echo esc_html( $c['refund'] ? 'Se resta este mes' : trim( ( $c['made'] ? 'Hecho el ' . $c['made'] : '' ) . ( $c['paid'] ? ( $c['made'] ? ' · ' : '' ) . 'cobrado el ' . $c['paid'] : '' ) ) ); ?></small></div>
+					<b class="cvga-vale-pts"><?php echo esc_html( ( $c['points'] > 0 ? '+' : '' ) . self::pts2( $c['points'] ) ); ?></b>
+				</li>
+				<?php endforeach; ?>
+				<li class="cvga-vales-total"><span></span><div class="cvga-vale-text"><b>Total de tus puntos</b></div><b class="cvga-vale-pts"><?php echo esc_html( self::pts2( $v['total'] ) ); ?></b></li>
+			</ul>
+			<?php endif; ?>
+			<?php if ( $v['waiting'] ) : ?>
+			<h3 class="cvga-vales-sub">Todavía no cuentan</h3>
+			<ul class="cvga-vales is-waiting">
+				<?php foreach ( $v['waiting'] as $w ) : ?>
+				<li>
+					<span class="cvga-vale-num">#<?php echo esc_html( $w['number'] ); ?></span>
+					<div class="cvga-vale-text"><b><?php echo esc_html( $w['products'] ?: 'Vale #' . $w['number'] ); ?></b><small><?php echo esc_html( ( $w['made'] ? 'Hecho el ' . $w['made'] . ' · ' : '' ) . $w['why'] ); ?></small></div>
+					<span class="cvga-vale-pts">—</span>
+				</li>
+				<?php endforeach; ?>
+			</ul>
+			<?php endif; ?>
+		</section>
+		<?php
+		return (string) ob_get_clean();
+	}
+
 	private static function stone_chip( string $slug, string $empty = 'Sin piedra' ): string {
 		$s = CVD_Programa_Calc::stone( $slug );
 		return '<span class="cvga-gem" data-gem="' . esc_attr( $slug ?: 'none' ) . '">' . esc_html( $s ? $s['name'] : $empty ) . '</span>';
@@ -737,9 +852,10 @@ final class CVD_Programa {
 				</div>
 			</section>
 			<div class="cvga-kpis">
-				<article class="cvga-card cvga-kpi"><small>Tus puntos este mes</small><strong><?php echo esc_html( self::pts( $me['own_points'] ?? 0 ) ); ?></strong><span><?php echo esc_html( self::usd( $me['own_sales_usd'] ?? 0 ) . ' vendidos y cobrados' ); ?></span></article>
+				<article class="cvga-card cvga-kpi"><small>Tus puntos este mes</small><strong><?php echo esc_html( self::pts2( $me['own_points'] ?? 0 ) ); ?></strong><span><?php echo esc_html( self::usd( $me['own_sales_usd'] ?? 0 ) . ' vendidos y cobrados' ); ?></span></article>
 				<article class="cvga-card cvga-kpi"><small>Puntos del equipo</small><strong><?php echo esc_html( self::pts( $me['team_points'] ?? 0 ) ); ?></strong><span>Tú + tus invitadas + las de ellas</span></article>
 			</div>
+			<?php echo self::render_vales( $user, $run, $data ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 			<?php if ( $next ) : ?>
 			<section class="cvga-card">
 				<div class="cvga-row"><h2>Para llegar a <?php echo esc_html( $next['name'] ); ?></h2><span class="cvga-chip"><?php echo esc_html( self::pts( $next['points'] ) . ' puntos' ); ?></span></div>
