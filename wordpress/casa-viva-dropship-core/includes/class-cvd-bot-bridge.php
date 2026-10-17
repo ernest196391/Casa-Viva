@@ -644,7 +644,7 @@ final class CVD_Bot_Bridge {
 		} elseif ( $usd <= 0 && $cup <= 0 && $eur <= 0 ) {
 			return self::no_cache( array( 'result' => 'needs_amount' ) );
 		}
-		if ( $payment && 'transfer_cup' === $payment['kind'] ) { $collection_note .= ' (el cliente transfirió a la tarjeta del mensajero)'; }
+		if ( $payment && 'transfer_cup' === $payment['kind'] ) { $collection_note .= ' (el cliente transfirió a la tarjeta de Casa Viva)'; // 3.14.34 (Ernesto, 16-oct): no a la del mensajero }
 		if ( $eur > 0 ) { $collection_note .= ' · ' . wc_format_decimal( $eur, 2, true ) . ' EUR'; }
 		// 3.13.55: si ya lo entregó, es que tenía el paquete. Si la dependienta no marcó «Entregado al mensajero»,
 		// se marca solo («automático: confirmó el mensajero») en vez de pedirle que vuelva a escribir. Nunca en pruebas.

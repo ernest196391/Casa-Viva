@@ -106,7 +106,7 @@
     // 3.13.74: en la recogida en tienda, lo que se cobra al entregarlo en la tienda.
     var extra = order.isPickup
       ? (p.prepaid ? " · verifica la captura antes de entregarlo (sin devolución)" : " · se cobra en la tienda al recogerlo")
-      : (p.prepaid ? " · verifica la captura antes de coordinar la entrega (sin devolución); el mensajero solo cobra su mensajería" : (p.kind === "transfer_cup" ? " · a la tarjeta del mensajero: él trae el dinero" : ""));
+      : (p.prepaid ? " · verifica la captura antes de coordinar la entrega (sin devolución); el mensajero solo cobra su mensajería" : (p.kind === "transfer_cup" ? " · a la tarjeta de Casa Viva (no a la del mensajero): comprueba que llegó" : ""));
     return '<p><b>Pago</b><span' + (p.prepaid ? ' style="color:#a8641c;font-weight:700"' : "") + ">💳 " + escapeText(p.text + extra) + "</span></p>";
   }
   // Vuelto (3.14.18, Zaymi): con cuánto paga el cliente y cuánto hay que devolverle; en la recogida y en el domicilio.
