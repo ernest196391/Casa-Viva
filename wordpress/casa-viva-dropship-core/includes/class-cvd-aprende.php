@@ -44,8 +44,12 @@ final class CVD_Aprende {
 		}
 		return array(
 			array( 'card' => 'tutorial-primera-venta', 'title' => 'Tu primera venta, paso a paso', 'kind' => 'Vídeo', 'type' => 'video', 'media' => array( 'tutorial-primera-venta' ), 'ids' => array( 'tutorial-primera-venta' ) ),
+			array( 'card' => 'tutorial-tu-precio', 'title' => 'Cómo poner tu precio', 'kind' => 'Vídeo', 'type' => 'video', 'media' => array( 'tutorial-tu-precio' ), 'ids' => array( 'tutorial-tu-precio' ) ),
 			array( 'card' => 'tutorial-como-comprar', 'title' => 'Cómo compra tu cliente', 'kind' => 'Vídeo · para enseñárselo a tus clientes', 'type' => 'video', 'media' => array( 'tutorial-como-comprar' ), 'ids' => array( 'tutorial-como-comprar' ) ),
 			array( 'card' => 'tutorial-fotos-para-publicar', 'title' => 'Fotos para publicar', 'kind' => 'Vídeo', 'type' => 'video', 'media' => array( 'tutorial-fotos-para-publicar' ), 'ids' => array( 'tutorial-fotos-para-publicar' ) ),
+			// 3.14.36 (Ernesto 17-oct): las herramientas nuevas, para que la bienvenida pueda mandar aquí.
+			array( 'card' => 'tutorial-estudio-fotos', 'title' => 'Estudio de fotos: fotos bonitas gratis', 'kind' => 'Vídeo · Herramientas', 'type' => 'video', 'media' => array( 'tutorial-estudio-fotos' ), 'ids' => array( 'tutorial-estudio-fotos' ) ),
+			array( 'card' => 'tutorial-nexo-busca', 'title' => 'NEXO Busca: vende lo que no tenemos', 'kind' => 'Vídeo · Herramientas', 'type' => 'video', 'media' => array( 'tutorial-nexo-busca' ), 'ids' => array( 'tutorial-nexo-busca' ) ),
 			array( 'card' => 'tutorial-dudas-gestoras', 'title' => 'Tus dudas del primer día', 'kind' => 'Vídeo', 'type' => 'video', 'media' => array( 'tutorial-dudas-gestoras' ), 'ids' => array( 'tutorial-dudas-gestoras' ) ),
 			array( 'card' => 'audio-como-funciona-pedidos', 'title' => 'Cómo funcionan los pedidos', 'kind' => 'Nota de voz de Ernesto', 'type' => 'audio', 'media' => array( 'audio-como-funciona-pedidos-ogg', 'audio-como-funciona-pedidos-mp3' ), 'ids' => array( 'audio-como-funciona-pedidos' ) ),
 			array( 'card' => 'guias', 'title' => 'Guías rápidas', 'kind' => '4 imágenes para guardar', 'type' => 'images', 'media' => array( 'guia-gestoras-1', 'guia-gestoras-2', 'guia-gestoras-3', 'guia-gestoras-4' ), 'ids' => array( 'guia-gestoras-1-2', 'guia-gestoras-3-4' ) ),
