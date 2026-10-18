@@ -828,9 +828,8 @@ final class CVD_Bot_Bridge {
 	private static function images( WC_Order $order ): array {
 		$images = array();
 		foreach ( $order->get_items( 'line_item' ) as $item ) {
-			$product = $item->get_product();
-			$id = $product ? ( $product->get_image_id() ?: ( $product->get_parent_id() ? wc_get_product( $product->get_parent_id() )->get_image_id() : 0 ) ) : 0;
-			$url = $id ? wp_get_attachment_image_url( $id, 'large' ) : '';
+			// 3.14.37: la misma regla que la tarjeta de /ventas/ (CVD_Order_Lines::photo_url): foto del diseño, si no la del producto.
+			$url = $item instanceof WC_Order_Item_Product ? CVD_Order_Lines::photo_url( $item, 'large' ) : '';
 			if ( $url ) { $images[] = array( 'url' => $url, 'caption' => $item->get_quantity() . ' × ' . $item->get_name() ); }
 		}
 		return array_slice( $images, 0, 5 );

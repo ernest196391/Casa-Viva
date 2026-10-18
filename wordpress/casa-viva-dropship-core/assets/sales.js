@@ -57,7 +57,16 @@
     return data;
   }
   // 3.14.7 (Nana): cada producto con su precio, uno por renglón («2× Toalla — 15 USD c/u = 30 USD»).
-  function productLinks(products) { return products.map(function (p) { var text = escapeText(p.text || (p.quantity + " × " + p.name)); return p.url ? '<a target="_blank" rel="noopener" href="' + escapeText(p.url) + '">' + text + "</a>" : text; }).join("<br>"); }
+  // 3.14.37 (Lennys 16 y 17-oct: «un cortinero que no era»): la foto de cada producto con su nombre y su color al lado,
+  // para preparar sin confundir productos parecidos. Tocar la foto la abre grande. Sin foto, el renglón de siempre.
+  function productLinks(products) {
+    return '<span class="cvd-sale-products">' + products.map(function (p) {
+      var text = escapeText(p.text || (p.quantity + " × " + p.name));
+      var name = p.url ? '<a target="_blank" rel="noopener" href="' + escapeText(p.url) + '">' + text + "</a>" : text;
+      var photo = p.image ? '<a class="cvd-sale-photo" target="_blank" rel="noopener" href="' + escapeText(p.imageLarge || p.image) + '"><img src="' + escapeText(p.image) + '" alt="' + escapeText("Foto: " + p.name) + '" loading="lazy" decoding="async" width="120" height="120"></a>' : "";
+      return '<span class="cvd-sale-product' + (photo ? " has-photo" : "") + '">' + photo + '<span class="cvd-sale-product-text">' + name + (p.variation ? "<small>" + escapeText(p.variation) + "</small>" : "") + "</span></span>";
+    }).join("") + "</span>";
+  }
   function actionLabel(order, status) {
     if (status === "ready" && order.fulfillment === "Recogida en tienda") return "Listo para recoger";
     if (status === "delivered" && order.fulfillment === "Recogida en tienda") return "Entregar al cliente";

@@ -511,7 +511,11 @@ final class CVD_Sales {
 			$line = $item instanceof WC_Order_Item_Product ? CVD_Order_Lines::line( $order, $item ) : null;
 			// 3.14.18 (33/33/33): lo que la clienta añadió en la tienda sale marcado.
 			$is_extra = class_exists( 'CVD_Commissions' ) && is_array( $item->get_meta( CVD_Commissions::EXTRA_META, true ) ) && $item->get_meta( CVD_Commissions::EXTRA_META, true );
-			$products[] = array( 'name' => $item->get_name(), 'quantity' => (int) $item->get_quantity(), 'url' => $product ? get_permalink( $product->get_parent_id() ?: $product->get_id() ) : '', 'unit' => $line ? $line['unit'] : null, 'lineTotal' => $line ? $line['total'] : null, 'text' => ( $line ? $line['text'] : '' ) . ( $is_extra && $line ? ' · extra en tienda' : '' ), 'extra' => (bool) $is_extra );
+			// 3.14.37 (Lennys 16 y 17-oct: «un cortinero que no era»): la foto de cada producto y su color en la tarjeta, para
+			// preparar sin confundir productos parecidos. Misma foto que el vale del mensajero (CVD_Order_Lines::photo_url):
+			// 'image' pequeña para la tarjeta (conexiones lentas) e 'imageLarge' al tocarla. Solo lectura.
+			$is_line = $item instanceof WC_Order_Item_Product;
+			$products[] = array( 'name' => $item->get_name(), 'quantity' => (int) $item->get_quantity(), 'url' => $product ? get_permalink( $product->get_parent_id() ?: $product->get_id() ) : '', 'unit' => $line ? $line['unit'] : null, 'lineTotal' => $line ? $line['total'] : null, 'text' => ( $line ? $line['text'] : '' ) . ( $is_extra && $line ? ' · extra en tienda' : '' ), 'extra' => (bool) $is_extra, 'image' => $is_line ? CVD_Order_Lines::photo_url( $item, 'medium' ) : '', 'imageLarge' => $is_line ? CVD_Order_Lines::photo_url( $item, 'large' ) : '', 'variation' => $is_line ? CVD_Order_Lines::variation_text( $item ) : '' );
 		}
 		$fulfillment = sanitize_key( (string) $order->get_meta( '_cvd_fulfillment_type', true ) );
 		$operation_status = self::operation_status( $order );

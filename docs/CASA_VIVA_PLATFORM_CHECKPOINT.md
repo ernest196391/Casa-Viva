@@ -19,6 +19,14 @@ CUENTAS DE PRUEBA: gestora de prueba creada con `test-accounts.yml` (secretos JO
 FOTOS: 44 fotos reales ampliadas a 2K con Higgsfield (118 créditos) aplicadas con `catalog-photos-apply.yml` (revert disponible); 15 descartadas porque la IA deformaba etiquetas o texto
 ```
 
+## Foto de cada producto en la tarjeta de la tienda (3.14.37, 2026-10-18)
+
+- Lennys (16 y 17-oct): «Al dependiente hay que mandarle foto con el vale. Ayer se le mandó al cliente un cortinero que no era.»
+- Hoy la dependienta no recibe el vale por WhatsApp: le llega el aviso web «Nuevo pedido #N» y prepara desde la tarjeta de `/ventas/` (que ya trae el vuelto). Las recogidas además salen con foto en el grupo «Recogida en tienda» (VivaBot).
+- Cambio: cada producto de la tarjeta de `/ventas/` lleva su foto (120 px, se abre grande al tocarla) y su color/diseño debajo del nombre. Misma foto que el vale del mensajero: `CVD_Order_Lines::photo_url` (foto del diseño comprado; si no tiene, la del producto), usada también por `CVD_Bot_Bridge::images`.
+- Sin cambios en numeración, estados, reparto, stock ni dinero. Sin mensajes nuevos por WhatsApp.
+- Pruebas: `php artifacts/tests/test-vale-fotos-tienda.php`, `node artifacts/tests/test-vale-fotos-tienda.mjs` (en `validate.yml`).
+
 ## CV-FOTOS-SYNC — Fotos cambiadas en BizneCubano (2026-10-10)
 
 - Lennys cambió fotos en BizneCubano (albornoz, alfombra persa, árbol de Navidad, cestos, mochilas, puertas de corredera…) y no llegaban: la sincronización solo copiaba la foto al crear el producto.

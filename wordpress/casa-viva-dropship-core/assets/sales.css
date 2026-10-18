@@ -166,6 +166,14 @@
   color: inherit;
 }
 .cvd-sale-data a { color: var(--cocoa); font-weight: 800; }
+/* 3.14.37 (Lennys): foto de cada producto en la tarjeta, con su nombre y color al lado. */
+.cvd-sale-data .cvd-sale-products { display: grid; gap: 10px; }
+.cvd-sale-data .cvd-sale-product { align-items: center; display: grid; gap: 12px; grid-template-columns: 1fr; }
+.cvd-sale-data .cvd-sale-product.has-photo { grid-template-columns: 120px 1fr; }
+.cvd-sale-data .cvd-sale-photo { background: #f8f4ef; border: 1px solid var(--line); border-radius: 14px; display: block; height: 120px; overflow: hidden; width: 120px; }
+.cvd-sale-data .cvd-sale-photo img { display: block; height: 100%; object-fit: contain; width: 100%; }
+.cvd-sale-data .cvd-sale-product-text { color: #68524e; display: grid; gap: 3px; }
+.cvd-sale-data .cvd-sale-product-text small { color: var(--cocoa); font-size: 13px; font-weight: 800; }
 .cvd-sale-actions {
   display: flex;
   flex-wrap: wrap;

@@ -59,4 +59,43 @@ final class CVD_Order_Lines {
 	public static function texts( WC_Order $order ): array {
 		return array_map( static fn( array $l ): string => $l['text'], self::lines( $order ) );
 	}
+
+	// ---------- Foto de cada producto (3.14.37, Lennys 16 y 17-oct) ----------
+	// «Al dependiente hay que mandarle foto con el vale. Ayer se le mandó al cliente un cortinero que no era.»
+	// Una sola regla para el vale del mensajero (CVD_Bot_Bridge::images) y la tarjeta de /ventas/ (CVD_Sales):
+	// primero la foto del diseño comprado (color/variación, la foto real de ese color desde 3.14.25); si no tiene,
+	// la foto principal del producto. Sin foto → ''. Solo lectura: no toca el pedido.
+
+	/** URL de la foto de la línea, del tamaño pedido ('medium', 'large'…), o ''. */
+	public static function photo_url( WC_Order_Item_Product $item, string $size = 'large' ): string {
+		$product = $item->get_product();
+		if ( ! $product ) { return ''; }
+		$id = (int) $product->get_image_id();
+		if ( ! $id && $product->get_parent_id() ) {
+			$parent = wc_get_product( $product->get_parent_id() );
+			$id = $parent ? (int) $parent->get_image_id() : 0;
+		}
+		$url = $id ? wp_get_attachment_image_url( $id, $size ) : '';
+		return is_string( $url ) ? $url : '';
+	}
+
+	/**
+	 * El color/diseño comprado para el pie de la foto: «Color: Negro». '' si no es una variación o si el nombre de la
+	 * línea ya lo dice («Cortinero extensible - Negro» no repite «Negro»).
+	 */
+	public static function variation_text( WC_Order_Item_Product $item ): string {
+		$product = $item->get_product();
+		if ( ! $product instanceof WC_Product_Variation || ! function_exists( 'wc_get_formatted_variation' ) ) { return ''; }
+		$name = mb_strtolower( wp_strip_all_tags( (string) $item->get_name() ) );
+		$parts = array();
+		foreach ( explode( ', ', html_entity_decode( wp_strip_all_tags( (string) wc_get_formatted_variation( $product, true, true, false ) ), ENT_QUOTES, 'UTF-8' ) ) as $part ) {
+			$part = trim( preg_replace( '/\s+/u', ' ', $part ) );
+			$colon = strpos( $part, ':' );
+			$value = false === $colon ? $part : trim( substr( $part, $colon + 1 ) );
+			if ( '' === $part || '' === $value ) { continue; }
+			if ( '' !== $name && str_contains( $name, mb_strtolower( $value ) ) ) { continue; } // ya está en el nombre
+			$parts[] = $part;
+		}
+		return implode( ' · ', $parts );
+	}
 }

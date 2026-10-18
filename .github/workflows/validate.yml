@@ -73,6 +73,12 @@ jobs:
       - name: Validar privacidad dependienta y administración
         run: node artifacts/tests/test-staff-privacy-5a.mjs
 
+      - name: Validar foto de cada producto para la tienda (3.14.37)
+        run: |
+          php artifacts/tests/test-order-lines.php
+          php artifacts/tests/test-vale-fotos-tienda.php
+          node artifacts/tests/test-vale-fotos-tienda.mjs
+
       - name: Validar contrato de recogida en tienda
         run: node artifacts/tests/test-store-pickup-5b.mjs
 
