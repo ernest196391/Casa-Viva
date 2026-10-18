@@ -624,47 +624,62 @@ final class CVD_Bot_Bridge {
 		if ( is_wp_error( $order ) ) { return $order; }
 		$messenger = self::assigned_messenger( $order, (string) $request->get_param( 'phone' ) );
 		if ( ! $messenger ) { return new WP_Error( 'cvd_not_assigned', 'Ese pedido no está asignado a este mensajero.', array( 'status' => 403 ) ); }
+		$usd = (float) wc_format_decimal( $request->get_param( 'usd' ) ?? 0, 2 );
+		$cup = (float) wc_format_decimal( $request->get_param( 'cup' ) ?? 0, 2 );
+		$eur = (float) wc_format_decimal( $request->get_param( 'eur' ) ?? 0, 2 ); // 3.13.67: pagó en euros
+		return self::no_cache( self::mark_delivered_by_messenger( $order, $messenger, $usd, $cup, $eur, (string) $request->get_param( 'method' ), 'whatsapp' ) );
+	}
+
+	/**
+	 * 3.14.39 (Lennys 18-oct): el «entregado» del mensajero, el mismo por WhatsApp y por el botón del enlace del vale
+	 * (CVD_Messenger_Delivered_Link). Las mismas claves de idempotencia en los dos canales: marcar por uno y luego por
+	 * el otro no duplica nada. $channel: whatsapp | link (solo cambia la nota y el origen).
+	 * → result: delivered | already | needs_amount | needs_pickup | test_order | error (+ customer al entregar).
+	 */
+	public static function mark_delivered_by_messenger( WC_Order $order, WP_User $messenger, float $usd, float $cup, float $eur, string $method, string $channel = 'whatsapp' ): array {
+		$link   = 'link' === $channel;
+		$source = $link ? 'cvd_delivered_link' : 'cvd_bot_bridge_delivered';
 		$status = CVD_Delivery::status( $order );
-		if ( in_array( $status, array( 'delivered', 'cash_returned', 'closed' ), true ) ) { return self::no_cache( array( 'result' => 'already' ) ); }
-		$usd    = (float) wc_format_decimal( $request->get_param( 'usd' ) ?? 0, 2 );
-		$cup    = (float) wc_format_decimal( $request->get_param( 'cup' ) ?? 0, 2 );
-		$eur    = (float) wc_format_decimal( $request->get_param( 'eur' ) ?? 0, 2 ); // 3.13.67: pagó en euros
-		$method = sanitize_key( (string) $request->get_param( 'method' ) );
+		if ( in_array( $status, array( 'delivered', 'cash_returned', 'closed' ), true ) ) { return array( 'result' => 'already' ); }
+		$usd    = max( 0.0, $usd );
+		$cup    = max( 0.0, $cup );
+		$eur    = max( 0.0, $eur );
+		$method = sanitize_key( $method );
 		if ( ! in_array( $method, array( 'cash_usd', 'cash_cup', 'transfer', 'mixed', 'other' ), true ) ) {
 			$method = count( array_filter( array( $usd, $cup, $eur ), static fn( float $v ): bool => $v > 0 ) ) > 1 ? 'mixed' : ( $usd > 0 ? 'cash_usd' : ( $cup > 0 ? 'cash_cup' : 'other' ) );
 		}
 		// 3.13.67: Zelle / PayPal ya pagados por adelantado (la tienda lo verificó antes): el mensajero no cobra productos,
 		// así que «entregado» vale con 0 y no se le anota dinero de la tienda (solo su mensajería, que es suya).
 		$payment = class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_payment( $order ) : null;
-		$collection_note = 'Declarado por WhatsApp' . ( $payment ? ' · ' . $payment['label'] : '' );
+		$collection_note = ( $link ? 'Marcado con el enlace del vale' : 'Declarado por WhatsApp' ) . ( $payment ? ' · ' . $payment['label'] : '' );
 		if ( $payment && $payment['prepaid'] ) {
 			if ( $usd > 0 || $cup > 0 || $eur > 0 ) { $order->add_order_note( sprintf( 'El mensajero declaró %s USD + %s CUP + %s EUR, pero el pedido es %s (pagado por adelantado): no se le anota dinero de productos.', $usd, $cup, $eur, $payment['label'] ) ); }
 			$usd = 0.0; $cup = 0.0; $eur = 0.0; $method = 'transfer';
 			$collection_note .= ' (pagado por adelantado; sin dinero de productos)';
 		} elseif ( $usd <= 0 && $cup <= 0 && $eur <= 0 ) {
-			return self::no_cache( array( 'result' => 'needs_amount' ) );
+			return array( 'result' => 'needs_amount' );
 		}
 		if ( $payment && 'transfer_cup' === $payment['kind'] ) { $collection_note .= ' (el cliente transfirió a la tarjeta de Casa Viva)'; /* 3.14.34 (Ernesto, 16-oct): no a la del mensajero */ }
 		if ( $eur > 0 ) { $collection_note .= ' · ' . wc_format_decimal( $eur, 2, true ) . ' EUR'; }
 		// 3.13.55: si ya lo entregó, es que tenía el paquete. Si la dependienta no marcó «Entregado al mensajero»,
 		// se marca solo («automático: confirmó el mensajero») en vez de pedirle que vuelva a escribir. Nunca en pruebas.
 		if ( in_array( $status, array( 'assigned', 'accepted', 'to_store' ), true ) ) {
-			$picked = CVD_Delivery::messenger_confirms_pickup( $order, $messenger, 'cvd_bot_bridge_delivered', 'dijo por WhatsApp que ya lo entregó' );
-			if ( ! in_array( $picked, array( 'picked_up', 'already' ), true ) ) { return self::no_cache( array( 'result' => 'test_order' === $picked ? 'test_order' : 'needs_pickup', 'code' => $picked ) ); }
+			$picked = CVD_Delivery::messenger_confirms_pickup( $order, $messenger, $source, $link ? 'tocó «Entregado» en el enlace del vale' : 'dijo por WhatsApp que ya lo entregó' );
+			if ( ! in_array( $picked, array( 'picked_up', 'already' ), true ) ) { return array( 'result' => 'test_order' === $picked ? 'test_order' : 'needs_pickup', 'code' => $picked ); }
 			$order  = wc_get_order( $order->get_id() );
 			$status = CVD_Delivery::status( $order );
 		}
 		if ( 'picked_up' === $status ) {
-			$step = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'handed_over', array( 'actor_user_id' => $messenger->ID, 'idempotency_key' => 'bot-handed:' . $order->get_id(), 'source' => 'cvd_bot_bridge_delivered',
+			$step = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'handed_over', array( 'actor_user_id' => $messenger->ID, 'idempotency_key' => 'bot-handed:' . $order->get_id(), 'source' => $source,
 				'atomic_mutation' => static function ( WC_Order $locked, $from, $to, $actor, $at ): void { $locked->update_meta_data( '_cvd_to_customer_at', $at ); },
 				'after_commit'    => static function ( WC_Order $saved ): void { CVD_Delivery::after_commit_effects( $saved, 'handed_over' ); } ) );
-			if ( empty( $step['success'] ) ) { return self::no_cache( array( 'result' => 'error', 'code' => $step['error_code'] ?? '' ) ); }
+			if ( empty( $step['success'] ) ) { return array( 'result' => 'error', 'code' => $step['error_code'] ?? '' ); }
 		}
 		$done = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'delivered', array(
 			'actor_user_id'        => $messenger->ID,
 			'idempotency_key'      => 'bot-delivered:' . $order->get_id(),
-			'source'               => 'cvd_bot_bridge_delivered',
-			'metadata'             => array( 'collection_method' => $method, 'collected_usd' => $usd, 'collected_cup' => $cup, 'collected_eur' => $eur, 'channel' => 'whatsapp' ),
+			'source'               => $source,
+			'metadata'             => array( 'collection_method' => $method, 'collected_usd' => $usd, 'collected_cup' => $cup, 'collected_eur' => $eur, 'channel' => $link ? 'link' : 'whatsapp' ),
 			'coupled_payment_state'=> 'pending_return',
 			'atomic_mutation'      => static function ( WC_Order $locked, $from, $to, WP_User $actor, string $at ) use ( $method, $usd, $cup, $eur, $collection_note ): void {
 				$locked->update_meta_data( '_cvd_delivered_by', $actor->ID );
@@ -686,8 +701,8 @@ final class CVD_Bot_Bridge {
 			// Mismos avisos que el «Entregado» de la web: web push y nota al cliente con el seguimiento.
 			'after_commit'         => static function ( WC_Order $saved ): void { CVD_Delivery::after_commit_effects( $saved, 'delivered' ); },
 		) );
-		if ( empty( $done['success'] ) ) { return self::no_cache( array( 'result' => 'error', 'code' => $done['error_code'] ?? '' ) ); }
-		return self::no_cache( array( 'result' => 'delivered', 'customer' => self::customer( $order ) ) );
+		if ( empty( $done['success'] ) ) { return array( 'result' => 'error', 'code' => $done['error_code'] ?? '' ); }
+		return array( 'result' => 'delivered', 'customer' => self::customer( $order ) );
 	}
 
 	/** Estado para el bot y Curru: dónde va el pedido, sin datos sensibles. */
@@ -873,6 +888,8 @@ final class CVD_Bot_Bridge {
 			'pickup'      => 'Casa Viva · Calle Conill A esq. 45 #864, Nuevo Vedado',
 			'tracking'    => CVD_Delivery::tracking_url( $order ),
 			'app'         => home_url( '/area-mensajeros/' ),
+			// 3.14.39 (Lennys 18-oct): enlace firmado de este pedido y este mensajero con el botón «Entregado» de un toque.
+			'deliveredUrl'=> class_exists( 'CVD_Messenger_Delivered_Link' ) ? CVD_Messenger_Delivered_Link::url( $order ) : '',
 			'images'      => self::images( $order ),
 			'gestora'     => 'gestora' === sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) ? (string) $order->get_meta( '_cvd_owner_display_name', true ) : '',
 			'gestoraPhone'=> self::gestora_phone( $order ),
