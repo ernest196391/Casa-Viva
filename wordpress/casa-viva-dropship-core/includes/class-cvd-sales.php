@@ -467,6 +467,11 @@ final class CVD_Sales {
 		if ( 'delivered' === $next ) {
 			$order->update_meta_data( '_cvd_commission_review_ready', 'yes' );
 			$order->save();
+			// 3.14.38 (Lennys 18-oct): el mensajero pagó en la tienda pero no marcó «entregado»: lo marca la tienda al recibir el dinero.
+			if ( class_exists( 'CVD_Delivery' ) && in_array( CVD_Delivery::status( $order ), array( 'picked_up', 'handed_over' ), true ) ) {
+				CVD_Delivery::store_marks_delivered( $order );
+				$order = wc_get_order( $order->get_id() );
+			}
 			$delivery_closed = class_exists( 'CVD_Delivery' ) && 'delivered' === CVD_Delivery::status( $order )
 				? CVD_Delivery::close_after_cash_received( $order )
 				: false;
@@ -529,7 +534,8 @@ final class CVD_Sales {
 			$direct = class_exists( 'CVD_Direct_Dispatch' ) && CVD_Direct_Dispatch::is_direct( $order );
 			// Asignación directa: la tienda puede entregárselo aunque aún no haya pulsado «Aceptar» (ver handover_by_staff).
 			if ( in_array( $delivery_status, array( 'accepted', 'to_store' ), true ) || ( 'assigned' === $delivery_status && $direct ) ) { array_unshift( $actions, 'picked_up' ); }
-			if ( 'delivered' === $delivery_status ) { array_unshift( $actions, 'delivered' ); }
+			// 3.14.38: también con el paquete en manos del mensajero, aunque no haya marcado «entregado» (lo marca la tienda al cobrar).
+			if ( in_array( $delivery_status, array( 'picked_up', 'handed_over', 'delivered' ), true ) ) { array_unshift( $actions, 'delivered' ); }
 		}
 		// 3.13.97: «Cancelar» y «Cambiar pedido» según CVD_Order_Edit (quién y en qué etapa).
 		$user_id = get_current_user_id();
@@ -571,6 +577,7 @@ final class CVD_Sales {
 			// 3.13.70 (Ernesto): armado por el mensajero, aparte del total ({ kind, usd, label, text, notice } o null).
 			'assembly' => class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_assembly( $order ) : null,
 			'deliveryStatus' => 'pickup' === $fulfillment ? '' : ( class_exists( 'CVD_Delivery' ) ? CVD_Delivery::label( $delivery_status ) : '' ),
+			'storeMarksDelivered' => 'pickup' !== $fulfillment && in_array( $delivery_status, array( 'picked_up', 'handed_over' ), true ),
 			'trackingUrl' => class_exists( 'CVD_Delivery' ) && 'pickup' !== $fulfillment ? CVD_Delivery::tracking_url( $order ) : '',
 			// Reparto (3.13.48): quién lo lleva, a qué hora, sus pasos y si el mensajero dice que ya entregó el dinero.
 			'messengerName' => $messenger ? $messenger->display_name : '',

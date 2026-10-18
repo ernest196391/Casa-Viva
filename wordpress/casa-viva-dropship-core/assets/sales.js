@@ -247,6 +247,8 @@
         if (pay) document.getElementById("cvd-money-method").value = { cash_usd: "cash_usd", cash_cup: "cash_cup", transfer_cup: "cash_cup", clasica: "transfer", zelle: "zelle" }[pay.kind] || "other";
       }
       if (pay && pay.text) document.getElementById("cvd-money-title").textContent += " · Pago: " + pay.text;
+      // 3.14.38 (Lennys 18-oct): el mensajero no marcó «entregado»; al registrar el dinero queda entregado y se avisa a la gestora.
+      if (sale && sale.storeMarksDelivered) document.getElementById("cvd-money-title").textContent += " · El mensajero no marcó «entregado»: al guardar queda entregado y cerrado";
       syncMoneyAccount(); moneyDialog.showModal(); return;
     }
     if (status === "cancelled" && !window.confirm("¿Cancelar el pedido? Se repondrá el stock y se cancelará la comisión.")) return;

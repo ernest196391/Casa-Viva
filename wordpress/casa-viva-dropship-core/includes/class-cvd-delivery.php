@@ -728,6 +728,29 @@ final class CVD_Delivery {
 		wp_safe_redirect( home_url( $destination . '?actualizado=1' ) ); exit;
 	}
 
+	/**
+	 * 3.14.38 (Lennys 18-oct: «que el mensajero avise sencillo y que sean las dependientas quienes cierren»): el mensajero
+	 * pagó en la tienda pero no marcó «entregado» (sin carga, sin conexión o con prisa). Al registrar el dinero, la tienda
+	 * pasa el reparto a «entregado» sin esperarlo; después se cierra como siempre y la gestora recibe su aviso.
+	 */
+	public static function store_marks_delivered( WC_Order $order ): bool {
+		$user_id = get_current_user_id();
+		foreach ( array( 'handed_over', 'delivered' ) as $step ) {
+			$current = self::status( wc_get_order( $order->get_id() ) );
+			if ( 'delivered' === $current ) { return true; }
+			if ( 'handed_over' === $step && 'picked_up' !== $current ) { continue; }
+			$result=CVD_Order_Transition_Service::transition($order->get_id(),'delivery',$step,array(
+				'actor_user_id'=>$user_id,'idempotency_key'=>'store-money:'.$order->get_id().':'.$step,'source'=>'sales_money_received_by_store','store_money_received'=>true,
+				'metadata'=>array('note'=>'La tienda recibió el dinero; el mensajero no lo había marcado.'),'coupled_payment_state'=>'delivered'===$step?'pending_return':'',
+				'precondition'=>static fn(WC_Order $locked)=>absint($locked->get_meta('_cvd_messenger_user_id',true))?true:CVD_Order_Transition_Service::PRECONDITION_FAILED,
+				'atomic_mutation'=>static function(WC_Order $locked,$from,$to,WP_User $actor,string $at):void{if('handed_over'===$to){$locked->update_meta_data('_cvd_to_customer_at',$at);}if('delivered'===$to){$locked->update_meta_data('_cvd_delivered_by',$actor->ID);$locked->update_meta_data('_cvd_delivered_at',$at);$locked->update_meta_data('_cvd_delivered_marked_by_store','yes');}},
+				'after_commit'=>static function(WC_Order $saved)use($step):void{self::centralized_after_commit($saved,$step);},
+			));
+			if ( empty( $result['success'] ) ) { return false; }
+		}
+		return 'delivered' === self::status( wc_get_order( $order->get_id() ) );
+	}
+
 	/** Cierra la custodia cuando la tienda confirma el dinero y deja las comisiones aprobadas, no pagadas. */
 	public static function close_after_cash_received( WC_Order $order ): bool {
 		$current=self::status($order);

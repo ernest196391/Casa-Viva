@@ -222,4 +222,20 @@ $order=cvt_reset();$order->meta['_cvd_delivery_status']='closed';$order->meta['_
 $order=cvt_reset();$order->meta['_cvd_operation_status']='ready';$order->meta['_cvd_delivery_status']='offered';$rollback_cancel=CVD_Order_Transition_Service::cancel(459,'cancelled',array('actor_user_id'=>11,'failure_stage'=>'after_ledger'));cvt_check(!$rollback_cancel['success']&&'ready'===$order->get_meta('_cvd_operation_status',true)&&'offered'===$order->get_meta('_cvd_delivery_status',true)&&'processing'===$order->get_status(),'rollback de cancelación no deja dominios parciales');
 $order=cvt_reset();$order->meta['_cvd_delivery_status']='failed';cvt_check('processing'===$order->get_status(),'delivery failed no equivale a WooCommerce failed');
 
+// 3.14.38 (Lennys 18-oct): la tienda recibe el dinero y marca «entregado» sin esperar al mensajero.
+$order=cvt_reset();$order->meta['_cvd_operation_status']='delivered';$order->meta['_cvd_delivery_status']='picked_up';$order->meta['_cvd_messenger_user_id']=20;
+$no_flag=CVD_Order_Transition_Service::transition(459,'delivery','handed_over',array('actor_user_id'=>10));
+cvt_check(!$no_flag['success']&&CVD_Order_Transition_Service::UNAUTHORIZED===$no_flag['error_code'],'la dependienta sin «dinero recibido» no mueve el reparto');
+$store=array('actor_user_id'=>10,'store_money_received'=>true);
+$s1=CVD_Order_Transition_Service::transition(459,'delivery','handed_over',$store+array('idempotency_key'=>'store-money:459:handed_over'));
+$s2=CVD_Order_Transition_Service::transition(459,'delivery','delivered',$store+array('idempotency_key'=>'store-money:459:delivered','coupled_payment_state'=>'pending_return'));
+cvt_check($s1['success']&&$s2['success']&&'delivered'===$order->get_meta('_cvd_delivery_status',true)&&'pending_return'===$order->get_meta('_cvd_cash_status',true),'dinero recibido: picked_up → handed_over → delivered por la tienda');
+cvt_check('delivered'===$order->get_meta('_cvd_operation_status',true),'la operación sigue en «entregado»');
+$order=cvt_reset();$order->meta['_cvd_delivery_status']='accepted';$order->meta['_cvd_messenger_user_id']=20;
+$too_early=CVD_Order_Transition_Service::transition(459,'delivery','picked_up',array('actor_user_id'=>12,'store_money_received'=>true));
+cvt_check(!$too_early['success'],'la marca de la tienda no sirve a otros ni antes de que el mensajero tenga el paquete');
+$order=cvt_reset();$order->meta['_cvd_delivery_status']='picked_up';$order->meta['_cvd_messenger_user_id']=20;
+$messenger=CVD_Order_Transition_Service::transition(459,'delivery','handed_over',array('actor_user_id'=>20,'idempotency_key'=>'m-route'));
+cvt_check($messenger['success'],'el mensajero sigue pudiendo marcar su ruta como siempre');
+
 echo "FASE 1C.4: pruebas unitarias completadas.\n";
