@@ -13,7 +13,10 @@ for (const marker of [
   'Confirmar por WhatsApp',
   "'checkout/thankyou.php' === $template_name",
   'Seguir comprando',
-  'inicia sesión o crea tu cuenta antes de tu próxima compra',
+  // 3.13.89: el seguimiento de invitado ya existe; no se exige crear cuenta para consultar su pedido.
+  'Para ver cómo va no hace falta cuenta',
+  'data-cvd-save-order=',
+  "! $order_url && class_exists( 'CVD_Delivery' )",
 ]) {
   if (!source.includes(marker)) {
     throw new Error(`7A order-success access missing contract marker: ${marker}`);
