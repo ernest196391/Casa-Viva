@@ -1,5 +1,13 @@
 # Casa Viva Platform — Checkpoint operativo
 
+## Corrección de Curru: reparto y municipio (19-oct-2026)
+
+- Fase 0, corrección puntual de CV-CURRU. Base `1247e400`, Core 3.14.39 comprobado en producción; el resumen antiguo inferior no acredita la versión actual.
+- Foto y reproducción de Nadielys: «Playa Jaimanita» coincidía con el reparto «Playa» y daba 1.800 CUP; «Jaimanitas» corresponde a 2.500 CUP en la tabla vigente.
+- La búsqueda admite el singular del nombre oficial y pide precisar el reparto cuando solo identifica un municipio homónimo. «Reparto Playa» sigue siendo una consulta explícita válida.
+- No cambia tabla comercial, pedidos, precios, comisiones ni inventario. #4236 conserva su tarifa pactada de 2.500 CUP.
+- Pruebas aisladas de consultas reales y controles de otros repartos en `artifacts/tests/test-curru-repartos.php`, incorporadas a CI. Despliegue pendiente de comprobación; no deducirlo de la creación del PR.
+
 ## Resumen de reanudación
 
 ```text

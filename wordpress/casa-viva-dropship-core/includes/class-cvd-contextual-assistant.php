@@ -402,13 +402,18 @@ final class CVD_Contextual_Assistant {
 		}
 		$found = null;
 		foreach ( CVD_Shipping_Rates::localities() as $municipality => $zones ) {
+			$mkey = CVD_Product_Search::normalize( $municipality );
 			foreach ( $zones as $zone ) {
 				$key = CVD_Product_Search::normalize( $zone );
-				if ( mb_strlen( $key ) >= 4 && preg_match( '/\b' . preg_quote( $key, '/' ) . '\b/', $q ) && ( ! $found || mb_strlen( $key ) > mb_strlen( (string) $found['zone_key'] ) ) ) {
+				// «Playa» solo puede ser el municipio. No cotizar el reparto homónimo sin distinguirlo.
+				if ( $key === $mkey && ! preg_match( '/\b(?:reparto|zona)\s+' . preg_quote( $key, '/' ) . '\b/', $q ) ) { continue; }
+				// Alias singular del nombre oficial: «Jaimanita» debe buscar «Jaimanitas», no el municipio Playa.
+				$pattern = preg_quote( $key, '/' );
+				if ( mb_strlen( $key ) >= 6 && 's' === substr( $key, -1 ) ) { $pattern = preg_quote( mb_substr( $key, 0, -1 ), '/' ) . 's?'; }
+				if ( mb_strlen( $key ) >= 4 && preg_match( '/\b' . $pattern . '\b/', $q ) && ( ! $found || mb_strlen( $key ) > mb_strlen( (string) $found['zone_key'] ) ) ) {
 					$found = array( 'municipality' => $municipality, 'zone' => $zone, 'zone_key' => $key );
 				}
 			}
-			$mkey = CVD_Product_Search::normalize( $municipality );
 			if ( ! $found && preg_match( '/\b' . preg_quote( $mkey, '/' ) . '\b/', $q ) ) {
 				$found = array( 'municipality' => $municipality, 'zone' => '', 'zone_key' => '' );
 			}
