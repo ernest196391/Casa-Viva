@@ -8,6 +8,7 @@
 - No cambia tabla comercial, pedidos, precios, comisiones ni inventario. #4236 conserva su tarifa pactada de 2.500 CUP.
 - Pruebas aisladas de consultas reales y controles de otros repartos en `artifacts/tests/test-curru-repartos.php`, incorporadas a CI. Despliegue pendiente de comprobación; no deducirlo de la creación del PR.
 - CI de `main` ya fallaba en `1247e400`: el contrato 7A seguía exigiendo crear cuenta, aunque 3.13.89 incorporó seguimiento de invitado. Se actualiza esa comprobación al comportamiento vigente, conservando el control de propietario para el seguimiento autenticado y la comprobación contra exposición directa de claves. No cambia el checkout.
+- Otros contratos antiguos exigían la versión exacta 3.14.37, el texto de un botón retirado y vaciar todo el pago en recogida. Ahora comprueban consistencia de versión, envío por `dispatch_ready` respetando preferidos y que la recogida conserve su pago sin heredar vuelto. El lector de incidencias normaliza CRLF solo en el test para poder comprobarlo también en Windows. Ninguno de estos ajustes cambia código de ventas o pagos.
 
 ## Resumen de reanudación
 
