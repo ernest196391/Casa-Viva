@@ -341,9 +341,11 @@ final class CVD_Panel_Bridge {
 		$rows = array();
 		foreach ( wc_get_products( array( 'limit' => -1, 'status' => array( 'publish', 'private' ), 'type' => array( 'simple', 'variable' ) ) ) as $product ) {
 			$items = $product->is_type( 'variable' ) ? array_filter( array_map( 'wc_get_product', $product->get_children() ) ) : array( $product );
+			// 3.14.40: «Falta información» en la lista del panel (lo que le falta a la ficha del producto; los diseños, la del padre).
+			$ficha = class_exists( 'CVD_Ficha_Estado' ) && 'publish' === $product->get_status() && ! CVD_Ficha_Estado::excluded( $product ) ? CVD_Ficha_Estado::of_product( $product )['etiquetas'] : array();
 			foreach ( $items as $p ) {
 				// status = el del producto (padre); itemStatus = el de la variante (private = diseño retirado).
-				$rows[] = array( 'wooId' => $p->get_id(), 'stock' => $p->managing_stock() ? (int) $p->get_stock_quantity() : null, 'price' => (float) $p->get_regular_price(), 'status' => $product->get_status(), 'itemStatus' => $p->get_status() );
+				$rows[] = array( 'wooId' => $p->get_id(), 'stock' => $p->managing_stock() ? (int) $p->get_stock_quantity() : null, 'price' => (float) $p->get_regular_price(), 'status' => $product->get_status(), 'itemStatus' => $p->get_status(), 'ficha' => $ficha );
 			}
 		}
 		return self::no_cache( array( 'products' => $rows ) );
@@ -362,7 +364,7 @@ final class CVD_Panel_Bridge {
 	/**
 	 * Crear (sin wooId) o actualizar (con wooId) un producto simple desde el panel (D39: la caja manda).
 	 * Al crear, el stock empieza en 0 con control de stock: el puente de existencias le suma lo que tenga la caja.
-	 * Campos: nexoId, name, price, category, imageUrl, active, sku.
+	 * Campos: nexoId, name, price, category, imageUrl, active, sku, description (3.14.40: texto; solo si cambió).
 	 */
 	public static function save_product( WP_REST_Request $request ) {
 		$p = (array) $request->get_json_params();
@@ -397,6 +399,8 @@ final class CVD_Panel_Bridge {
 				if ( ! is_wp_error( $term ) ) { $product->set_category_ids( array( (int) ( is_array( $term ) ? $term['term_id'] : $term ) ) ); }
 			}
 		}
+		// 3.14.40 (Lennys 18-oct: «al crear un producto en el panel no me deja añadir la descripción»): texto del panel.
+		if ( isset( $p['description'] ) && is_string( $p['description'] ) && class_exists( 'CVD_Ficha_Estado' ) ) { CVD_Ficha_Estado::set_from_panel( $product, $p['description'] ); }
 		$id = $product->save();
 		$image = esc_url_raw( (string) ( $p['imageUrl'] ?? '' ) );
 		if ( $image && $image !== get_post_meta( $id, '_cvd_nexo_image_url', true ) ) {
@@ -412,7 +416,10 @@ final class CVD_Panel_Bridge {
 			}
 		}
 		$gallery = self::add_gallery( $id, (array) ( $p['galleryUrls'] ?? array() ), $name );
-		return self::no_cache( array( 'ok' => true, 'wooId' => $id, 'gallery' => $gallery, 'created' => ! $woo_id, 'url' => get_permalink( $product->is_type( 'variation' ) ? $product->get_parent_id() : $id ) ) );
+		// 3.14.40: lo que le falta a la ficha (medidas, material…), para que el panel lo diga al guardar.
+		$saved = wc_get_product( $id );
+		$ficha = $saved && class_exists( 'CVD_Ficha_Estado' ) && ! CVD_Ficha_Estado::excluded( $saved ) ? CVD_Ficha_Estado::of_product( $saved )['etiquetas'] : array();
+		return self::no_cache( array( 'ok' => true, 'wooId' => $id, 'gallery' => $gallery, 'created' => ! $woo_id, 'url' => get_permalink( $product->is_type( 'variation' ) ? $product->get_parent_id() : $id ), 'ficha' => $ficha ) );
 	}
 
 	// ---------- 3.13.52: diseños y colores (variaciones) ----------

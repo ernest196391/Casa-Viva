@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.39
+ * Version: 3.14.40
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.39' );
+define( 'CVD_VERSION', '3.14.40' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -64,6 +64,7 @@ require_once CVD_DIR . 'includes/class-cvd-aprende.php';
 require_once CVD_DIR . 'includes/class-cvd-order-edit.php';
 require_once CVD_DIR . 'includes/class-cvd-order-avisos.php';
 require_once CVD_DIR . 'includes/class-cvd-costs.php';
+require_once CVD_DIR . 'includes/class-cvd-ficha-estado.php'; // 3.14.40: ningún producto sin medidas ni características (Ernesto y Lennys, 18-oct)
 require_once CVD_DIR . 'includes/class-cvd-supplier-split.php';
 require_once CVD_DIR . 'includes/class-cvd-programa-calc.php';
 require_once CVD_DIR . 'includes/class-cvd-programa.php';
@@ -117,6 +118,7 @@ add_action(
 			CVD_Order_Edit::register(); // 3.13.97: cancelar con motivo y cambiar pedidos desde /ventas/ y el panel (Ernesto, 14-oct).
 			CVD_Order_Avisos::register(); // 3.13.98: el bot avisa por WhatsApp al cancelar o cambiar un pedido (Ernesto, 14-oct).
 			CVD_Costs::register(); // 3.14.0: costo de cada producto y precio mínimo (Ernesto, 14-oct).
+			CVD_Ficha_Estado::register(); // 3.14.40: «Falta información» (medidas, material, datos técnicos) para gestoras y panel; /bot/fichas para el bot (Ernesto y Lennys, 18-oct).
 			CVD_Supplier_Split::register(); // 3.14.14: reparto de la venta de proveedor apuntado en el pedido y sellado al cerrar (Ernesto, 14-oct, D69).
 			CVD_Programa::register(); // 3.14.29: Programa de gestoras en modo sombra: piedras por ganancia, fondo 15 % (D53–D58). 3.14.30: red 1 % + 0,5 %, fondo sobre la ganancia neta y arrastre de devoluciones (D77). 3.14.32: alerta «cuenta_compartida», «revisar» agrupadas y el cierre espera a las alertas sin revisar (D79). 3.14.33: «Tus vales del mes» en Mi piedra (Dany).
 			CVD_Encuesta::register(); // 3.14.35: encuesta anónima en /encuesta/ (nace cerrada; Ernesto 16-oct).
