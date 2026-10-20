@@ -165,6 +165,7 @@ final class CVD_Caja_Bridge {
 			'status' => 'delivered',
 			'collectionMethod' => sanitize_key( (string) ( $p['collectionMethod'] ?? '' ) ),
 			'collectionReference' => (string) ( $p['collectionReference'] ?? '' ),
+			'collectionAccount' => sanitize_key( (string) ( $p['collectionAccount'] ?? '' ) ), // tarjeta de la tienda (pay-accounts)
 			'collectedUsd' => $p['collectedUsd'] ?? 0,
 			'collectedCup' => $p['collectedCup'] ?? 0,
 			'collectionNote' => trim( 'Cobrado en la caja' . ( '' !== $device ? ' (' . $device . ')' : '' ) . ( '' !== $name ? ' por ' . $name : '' ) . '. ' . sanitize_textarea_field( (string) ( $p['collectionNote'] ?? '' ) ) ),
