@@ -343,6 +343,7 @@ final class CVD_Home_Rails {
 			return false;
 		}
 		foreach ( $children as $variation_id ) {
+			if ( 'publish' !== get_post_status( $variation_id ) ) { continue; } // 3.14.41: un diseño oculto no cuenta
 			// Un color sin control de existencias no tiene cifra: no se puede decir que quedan pocas.
 			if ( 'yes' !== get_post_meta( $variation_id, '_manage_stock', true ) ) {
 				return false;

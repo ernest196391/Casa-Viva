@@ -65,7 +65,7 @@ final class CVD_Gestora_Fotos {
 			if ( $product->is_type( 'variable' ) ) {
 				foreach ( $product->get_children() as $child_id ) {
 					$child = wc_get_product( $child_id );
-					if ( $child && $child->is_in_stock() && $child->get_image_id() ) { $images[] = (int) $child->get_image_id(); }
+					if ( $child && 'publish' === $child->get_status() && $child->is_in_stock() && $child->get_image_id() ) { $images[] = (int) $child->get_image_id(); } // 3.14.41: un diseño oculto no se descarga
 				}
 				$images = array_values( array_unique( $images ) );
 			}

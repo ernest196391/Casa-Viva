@@ -82,7 +82,7 @@ final class CVD_Gestora_Stock {
 			$total = 0;
 			foreach ( $product->get_children() as $child_id ) {
 				$variation = wc_get_product( $child_id );
-				if ( ! $variation || ! $variation->managing_stock() ) { continue; }
+				if ( ! $variation || 'publish' !== $variation->get_status() || ! $variation->managing_stock() ) { continue; } // 3.14.41: un diseño oculto no sale en «Quedan»
 				$qty = max( 0, (int) $variation->get_stock_quantity() );
 				$total += $qty;
 				if ( $qty > 0 ) { $parts[] = wc_get_formatted_variation( $variation, true, false, false ) . ' ' . $qty; }

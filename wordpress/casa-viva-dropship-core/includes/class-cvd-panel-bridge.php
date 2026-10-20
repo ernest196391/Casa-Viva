@@ -53,6 +53,14 @@ final class CVD_Panel_Bridge {
 		register_rest_route( self::NS, '/panel/products/(?P<id>\d+)/variations', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'add_variation' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/variable', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'create_variable' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/visibility', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'set_visibility' ), 'permission_callback' => $auth ) );
+		// 3.14.41 (Lennys 20-oct): descripción de un producto con diseños, foto principal (la misma de la web) y «Duplicar».
+		register_rest_route( self::NS, '/panel/products/(?P<id>\d+)/description', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'save_description' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/products/(?P<id>\d+)/photo', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'set_main_photo' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/products/(?P<id>\d+)/duplicate', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'duplicate' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/products/copies', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'copies' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/products/(?P<id>\d+)/copy', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'copy_read' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/products/(?P<id>\d+)/copy-publish', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'copy_publish' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/products/(?P<id>\d+)/copy-discard', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'copy_discard' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/messengers', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'messengers' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/messengers/(?P<id>\d+)/status', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'gestora_status' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/clients/bulk', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'clients_bulk' ), 'permission_callback' => $auth ) );
@@ -343,9 +351,13 @@ final class CVD_Panel_Bridge {
 			$items = $product->is_type( 'variable' ) ? array_filter( array_map( 'wc_get_product', $product->get_children() ) ) : array( $product );
 			// 3.14.40: «Falta información» en la lista del panel (lo que le falta a la ficha del producto; los diseños, la del padre).
 			$ficha = class_exists( 'CVD_Ficha_Estado' ) && 'publish' === $product->get_status() && ! CVD_Ficha_Estado::excluded( $product ) ? CVD_Ficha_Estado::of_product( $product )['etiquetas'] : array();
+			// 3.14.41 (Lennys 20-oct: «la foto del panel no es la misma de la tienda»): la foto principal de la web
+			// (mainImage = la del producto o del padre) y la del diseño (image; si no tiene, la del padre).
+			$main = self::thumb( (int) $product->get_image_id() );
 			foreach ( $items as $p ) {
 				// status = el del producto (padre); itemStatus = el de la variante (private = diseño retirado).
-				$rows[] = array( 'wooId' => $p->get_id(), 'stock' => $p->managing_stock() ? (int) $p->get_stock_quantity() : null, 'price' => (float) $p->get_regular_price(), 'status' => $product->get_status(), 'itemStatus' => $p->get_status(), 'ficha' => $ficha );
+				$own = $p === $product ? $main : self::thumb( (int) $p->get_image_id() );
+				$rows[] = array( 'wooId' => $p->get_id(), 'stock' => $p->managing_stock() ? (int) $p->get_stock_quantity() : null, 'price' => (float) $p->get_regular_price(), 'status' => $product->get_status(), 'itemStatus' => $p->get_status(), 'ficha' => $ficha, 'mainImage' => $main, 'image' => $own ?? $main );
 			}
 		}
 		return self::no_cache( array( 'products' => $rows ) );
@@ -780,6 +792,274 @@ final class CVD_Panel_Bridge {
 		$product->delete_meta_data( '_cvd_retired' );
 		$product->delete_meta_data( '_cvd_sync_hidden_from' );
 		$product->save();
+	}
+
+	// ---------- 3.14.41 (Lennys 20-oct): descripción para todos, foto principal y «Duplicar» ----------
+
+	/** El producto de un id; si es un diseño (variante), su producto (padre): la descripción y la foto principal son de él. */
+	private static function main_product( int $id ): ?WC_Product {
+		$product = $id ? wc_get_product( $id ) : null;
+		if ( $product && $product->is_type( 'variation' ) ) { $product = wc_get_product( $product->get_parent_id() ); }
+		return $product ?: null;
+	}
+
+	/** {description, by}: la descripción del producto (en uno con diseños, la del padre, que es la que ve todo el mundo). */
+	public static function save_description( WP_REST_Request $request ) {
+		$product = self::main_product( absint( $request['id'] ) );
+		if ( ! $product ) { return new WP_Error( 'cvd_panel_product', 'Ese producto ya no está en la web.', array( 'status' => 404 ) ); }
+		if ( ! class_exists( 'CVD_Ficha_Estado' ) ) { return new WP_Error( 'cvd_panel_product', 'Falta actualizar la web.', array( 'status' => 500 ) ); }
+		$p = (array) $request->get_json_params();
+		$text = is_string( $p['description'] ?? null ) ? (string) $p['description'] : '';
+		if ( '' === trim( $text ) ) { return new WP_Error( 'cvd_panel_product', 'Escribe la descripción.', array( 'status' => 422 ) ); }
+		$changed = CVD_Ficha_Estado::set_from_panel( $product, $text );
+		if ( $changed ) {
+			$product->save();
+			self::log_product( 'descripción cambiada', $product->get_id(), $product->get_name(), self::by( $p ) );
+		}
+		$saved = wc_get_product( $product->get_id() );
+		$ficha = $saved && ! CVD_Ficha_Estado::excluded( $saved ) ? CVD_Ficha_Estado::of_product( $saved )['etiquetas'] : array();
+		return self::no_cache( array( 'ok' => true, 'wooId' => $product->get_id(), 'changed' => $changed, 'ficha' => $ficha ) );
+	}
+
+	/**
+	 * {imageUrl, by}: foto principal de un producto (la de la tienda, la de las gestoras y la del bot). Con el id de un
+	 * producto con diseños se cambia la del producto, no la de un diseño (esa va por /panel/products/save con su wooId).
+	 */
+	public static function set_main_photo( WP_REST_Request $request ) {
+		$product = wc_get_product( absint( $request['id'] ) );
+		if ( ! $product ) { return new WP_Error( 'cvd_panel_product', 'Ese producto ya no está en la web.', array( 'status' => 404 ) ); }
+		$p = (array) $request->get_json_params();
+		$image = esc_url_raw( (string) ( $p['imageUrl'] ?? '' ) );
+		if ( '' === $image ) { return new WP_Error( 'cvd_panel_product', 'Falta la foto.', array( 'status' => 422 ) ); }
+		$att = $image === get_post_meta( $product->get_id(), '_cvd_nexo_image_url', true ) ? (int) $product->get_image_id() : self::sideload( $image, $product->get_id(), $product->get_name() );
+		if ( ! $att ) { return new WP_Error( 'cvd_panel_product', 'Esa foto no se pudo poner en la web. Prueba con otra.', array( 'status' => 422 ) ); }
+		$product->set_image_id( $att );
+		$product->update_meta_data( '_cvd_nexo_image_url', $image );
+		$product->save();
+		self::log_product( 'foto principal cambiada', $product->get_id(), $product->get_name(), self::by( $p ) );
+		return self::no_cache( array( 'ok' => true, 'wooId' => $product->get_id(), 'image' => self::thumb( $att ) ) );
+	}
+
+	/** Datos que una copia NO hereda: enlaces con la caja y el mercado, «retirado», historiales y fotos de las gestoras. */
+	public const COPY_SKIP_META = array( '_cvd_nexo_product_id', '_cvd_panel_ref', '_cvd_panel_created', '_cvd_retired', '_cvd_hold', '_cvd_sync_hidden_from', '_cvd_market_item_id', '_cvd_market_version', '_cvd_ficha_historial', '_cvd_ficha_log', '_cvd_desc_backup_panel', '_cvd_estudio_tienda', '_cvd_original_duplicate_title', '_cvd_no_reponer' );
+	private const COPY_OF = '_cvd_panel_copy_of';
+
+	/** Limpia una copia (o un diseño de la copia): sin datos heredados que no son suyos y con 0 unidades. */
+	public static function clean_copy( WC_Product $copy ): void {
+		foreach ( self::COPY_SKIP_META as $key ) { $copy->delete_meta_data( $key ); }
+		if ( ! $copy->is_type( 'variable' ) ) {
+			// Las unidades son de la mercancía de verdad: la copia empieza en 0 y la caja pone lo que haya.
+			$copy->set_manage_stock( true );
+			$copy->set_stock_quantity( 0 );
+		}
+	}
+
+	/** Una copia en borrador (lo que el panel enseña para editarla antes de publicarla). */
+	private static function copy_row( WC_Product $copy ): array {
+		$vars = array();
+		if ( $copy->is_type( 'variable' ) ) {
+			foreach ( $copy->get_children() as $child_id ) {
+				$v = wc_get_product( $child_id );
+				if ( $v instanceof WC_Product_Variation ) { $vars[] = self::variation_row( $v ); }
+			}
+		}
+		$source = wc_get_product( absint( $copy->get_meta( self::COPY_OF ) ) );
+		$price = $copy->is_type( 'variable' ) ? ( $vars ? (float) $vars[0]['price'] : 0.0 ) : (float) $copy->get_regular_price();
+		$cats = wc_get_product_terms( $copy->get_id(), 'product_cat', array( 'fields' => 'names' ) );
+		return array(
+			'wooId' => $copy->get_id(), 'name' => $copy->get_name(), 'type' => $copy->get_type(), 'status' => $copy->get_status(),
+			'copyOf' => $source ? $source->get_id() : null, 'copyOfName' => $source ? $source->get_name() : '',
+			'price' => $price, 'category' => is_array( $cats ) && $cats ? (string) $cats[0] : '',
+			'description' => class_exists( 'CVD_Ficha_Estado' ) ? mb_substr( CVD_Ficha_Estado::plain( (string) $copy->get_description() ), 0, 6000 ) : '',
+			'image' => self::thumb( (int) $copy->get_image_id() ), 'variations' => $vars,
+			'url' => 'publish' === $copy->get_status() ? get_permalink( $copy->get_id() ) : null,
+		);
+	}
+
+	/** La copia de un id (en borrador o ya publicada) o un error que la dueña entiende. */
+	private static function copy_of_id( int $id ) {
+		$copy = $id ? wc_get_product( $id ) : null;
+		if ( ! $copy || '' === (string) $copy->get_meta( self::COPY_OF ) ) { return new WP_Error( 'cvd_panel_copy', 'No encontré esa copia. Pulsa actualizar.', array( 'status' => 404 ) ); }
+		return $copy;
+	}
+
+	/**
+	 * «Duplicar» {ref, by}: copia un producto (y todos sus diseños, fotos, descripción, categoría y precio) en BORRADOR:
+	 * no sale en la tienda, ni a las gestoras, ni al bot, ni en la caja hasta que la dueña la publica. Las unidades
+	 * empiezan en 0. `ref` (lo genera el panel) evita una segunda copia si se pulsa dos veces o se reintenta.
+	 */
+	public static function duplicate( WP_REST_Request $request ) {
+		$product = self::main_product( absint( $request['id'] ) );
+		$p = (array) $request->get_json_params();
+		if ( ! $product ) { return new WP_Error( 'cvd_panel_product', 'Ese producto ya no está en la web.', array( 'status' => 404 ) ); }
+		if ( ! $product->is_type( array( 'simple', 'variable' ) ) ) { return new WP_Error( 'cvd_panel_copy', 'Este producto no se puede duplicar desde aquí.', array( 'status' => 422 ) ); }
+		if ( '' !== (string) $product->get_meta( '_cvd_market_item_id' ) ) { return new WP_Error( 'cvd_panel_copy', 'Los productos de proveedor (bajo pedido) no se duplican desde aquí.', array( 'status' => 422 ) ); }
+		$ref = substr( sanitize_key( (string) ( $p['ref'] ?? '' ) ), 0, 64 );
+		$existing = $ref ? get_posts( array( 'post_type' => 'product', 'post_status' => array( 'draft', 'publish', 'private' ), 'numberposts' => 1, 'fields' => 'ids', 'meta_key' => '_cvd_panel_ref', 'meta_value' => $ref ) ) : array();
+		if ( $existing ) { return self::no_cache( array( 'ok' => true, 'existing' => true ) + self::copy_row( wc_get_product( (int) $existing[0] ) ) ); }
+		if ( ! class_exists( 'WC_Admin_Duplicate_Product' ) && defined( 'WC_ABSPATH' ) ) { require_once WC_ABSPATH . 'includes/admin/class-wc-admin-duplicate-product.php'; }
+		if ( ! class_exists( 'WC_Admin_Duplicate_Product' ) ) { return new WP_Error( 'cvd_panel_copy', 'La web no puede duplicar productos ahora.', array( 'status' => 500 ) ); }
+		$clean = array( __CLASS__, 'clean_copy' );
+		add_action( 'woocommerce_product_duplicate_before_save', $clean, 10, 1 );
+		try {
+			$copy = ( new WC_Admin_Duplicate_Product() )->product_duplicate( $product );
+		} finally {
+			remove_action( 'woocommerce_product_duplicate_before_save', $clean, 10 );
+		}
+		if ( ! $copy instanceof WC_Product || ! $copy->get_id() ) { return new WP_Error( 'cvd_panel_copy', 'No se pudo duplicar el producto.', array( 'status' => 500 ) ); }
+		// Por si una versión de WooCommerce no avisa al copiar los diseños: se limpian otra vez (no cambia nada si ya están).
+		foreach ( $copy->is_type( 'variable' ) ? $copy->get_children() : array() as $child_id ) {
+			$v = wc_get_product( $child_id );
+			if ( ! $v ) { continue; }
+			self::clean_copy( $v );
+			$v->save();
+		}
+		$copy = wc_get_product( $copy->get_id() );
+		self::clean_copy( $copy );
+		$copy->set_name( $product->get_name() . ' (copia)' );
+		$copy->set_status( 'draft' );
+		if ( 'hidden' === $copy->get_catalog_visibility() ) { $copy->set_catalog_visibility( 'visible' ); }
+		$copy->update_meta_data( self::COPY_OF, (string) $product->get_id() );
+		if ( $ref ) { $copy->update_meta_data( '_cvd_panel_ref', $ref ); }
+		$copy->update_meta_data( '_cvd_panel_created', wp_json_encode( array( 'at' => gmdate( 'c' ), 'by' => self::by( $p ), 'copyOf' => $product->get_id() ) ) );
+		$copy->save();
+		if ( $copy->is_type( 'variable' ) ) { WC_Product_Variable::sync( $copy->get_id() ); }
+		wc_delete_product_transients( $copy->get_id() );
+		self::log_product( 'copia creada (borrador) de #' . $product->get_id(), $copy->get_id(), $copy->get_name(), self::by( $p ) );
+		return self::no_cache( array( 'ok' => true, 'existing' => false ) + self::copy_row( wc_get_product( $copy->get_id() ) ) );
+	}
+
+	/** Copias sin publicar (borradores hechos con «Duplicar»), para que no se pierdan si se cierra el panel. */
+	public static function copies(): WP_REST_Response {
+		$ids = get_posts( array( 'post_type' => 'product', 'post_status' => 'draft', 'numberposts' => 50, 'fields' => 'ids', 'meta_key' => self::COPY_OF, 'orderby' => 'date', 'order' => 'DESC' ) );
+		$rows = array();
+		foreach ( $ids as $id ) {
+			$p = wc_get_product( (int) $id );
+			if ( $p ) { $rows[] = array( 'wooId' => $p->get_id(), 'name' => $p->get_name(), 'type' => $p->get_type(), 'image' => self::thumb( (int) $p->get_image_id() ), 'at' => (string) get_post_field( 'post_date_gmt', $p->get_id() ) ); }
+		}
+		return self::no_cache( array( 'copies' => $rows ) );
+	}
+
+	public static function copy_read( WP_REST_Request $request ) {
+		$copy = self::copy_of_id( absint( $request['id'] ) );
+		return is_wp_error( $copy ) ? $copy : self::no_cache( array( 'ok' => true ) + self::copy_row( $copy ) );
+	}
+
+	/** Quita una opción (color o diseño) del producto cuando su diseño se borra de la copia. */
+	private static function drop_option( WC_Product_Variable $parent, string $key, string $value ): void {
+		$attributes = $parent->get_attributes();
+		$attr = $attributes[ $key ] ?? null;
+		if ( ! $attr instanceof WC_Product_Attribute ) { return; }
+		if ( $attr->is_taxonomy() ) {
+			$term = get_term_by( 'slug', $value, $attr->get_name() );
+			if ( ! $term ) { return; }
+			$attr->set_options( array_values( array_diff( array_map( 'intval', $attr->get_options() ), array( (int) $term->term_id ) ) ) );
+			wp_remove_object_terms( $parent->get_id(), (int) $term->term_id, $attr->get_name() );
+		} else {
+			$attr->set_options( array_values( array_filter( $attr->get_options(), static fn( $o ) => sanitize_title( (string) $o ) !== sanitize_title( $value ) ) ) );
+		}
+		$attributes[ $key ] = $attr;
+		$parent->set_attributes( $attributes );
+		$parent->save();
+	}
+
+	/**
+	 * Publicar una copia {name, price, category, description, imageUrl, keep: [wooId de diseños], photos: {wooId: url},
+	 * add: [{label, imageUrl}], by}. Los diseños de la copia que no se quedan se borran (son de un borrador que nadie
+	 * vio ni vendió). Reintento: si ya está publicada, devuelve la copia como está (el panel la enlaza con la caja).
+	 */
+	public static function copy_publish( WP_REST_Request $request ) {
+		$copy = self::copy_of_id( absint( $request['id'] ) );
+		if ( is_wp_error( $copy ) ) { return $copy; }
+		if ( 'publish' === $copy->get_status() ) { return self::no_cache( array( 'ok' => true, 'published' => true, 'again' => true ) + self::copy_row( $copy ) ); }
+		if ( 'draft' !== $copy->get_status() ) { return new WP_Error( 'cvd_panel_copy', 'Esta copia ya no está en borrador.', array( 'status' => 422 ) ); }
+		$p = (array) $request->get_json_params();
+		$by = self::by( $p );
+		$name = sanitize_text_field( (string) ( $p['name'] ?? '' ) );
+		$price = (float) ( $p['price'] ?? 0 );
+		if ( '' === $name || $price <= 0 ) { return new WP_Error( 'cvd_panel_copy', 'Falta el nombre o el precio.', array( 'status' => 422 ) ); }
+		$variable = $copy->is_type( 'variable' );
+		$children = $variable ? array_map( 'intval', $copy->get_children() ) : array();
+		$keep = array_values( array_intersect( $children, array_map( 'absint', (array) ( $p['keep'] ?? array() ) ) ) );
+		$add = array();
+		foreach ( array_slice( (array) ( $p['add'] ?? array() ), 0, 30 ) as $d ) {
+			$label = trim( sanitize_text_field( (string) ( $d['label'] ?? '' ) ) );
+			if ( '' !== $label && mb_strlen( $label ) <= 60 ) { $add[ sanitize_title( $label ) ] = array( 'label' => $label, 'imageUrl' => (string) ( $d['imageUrl'] ?? '' ) ); }
+		}
+		if ( $variable && ! $keep && ! $add ) { return new WP_Error( 'cvd_panel_copy', 'Deja al menos un diseño o color.', array( 'status' => 422 ) ); }
+		// Antes de cambiar nada: si el producto varía en varias cosas (talla y color) no se le pueden añadir colores desde aquí.
+		$found = $variable ? self::variation_attribute( $copy ) : null;
+		if ( $add && is_wp_error( $found ) ) { return $found; }
+		$photos = (array) ( $p['photos'] ?? array() );
+		$copy->set_name( $name );
+		$category = sanitize_text_field( (string) ( $p['category'] ?? '' ) );
+		if ( '' !== $category ) {
+			$term = term_exists( $category, 'product_cat' ) ?: wp_insert_term( $category, 'product_cat' );
+			if ( ! is_wp_error( $term ) ) { $copy->set_category_ids( array( (int) ( is_array( $term ) ? $term['term_id'] : $term ) ) ); }
+		}
+		if ( isset( $p['description'] ) && is_string( $p['description'] ) && class_exists( 'CVD_Ficha_Estado' ) ) { CVD_Ficha_Estado::set_from_panel( $copy, $p['description'] ); }
+		if ( ! $variable ) {
+			$copy->set_regular_price( wc_format_decimal( $price, 2 ) );
+			$copy->set_sale_price( '' );
+		}
+		$copy->save();
+		$main = esc_url_raw( (string) ( $p['imageUrl'] ?? '' ) );
+		if ( $main ) {
+			$att = self::sideload( $main, $copy->get_id(), $name );
+			if ( $att ) {
+				$copy = wc_get_product( $copy->get_id() );
+				$copy->set_image_id( $att );
+				$copy->update_meta_data( '_cvd_nexo_image_url', $main );
+				$copy->save();
+			}
+		}
+		if ( $variable ) {
+			foreach ( $children as $child_id ) {
+				$v = wc_get_product( $child_id );
+				if ( ! $v instanceof WC_Product_Variation ) { continue; }
+				if ( ! in_array( $child_id, $keep, true ) ) {
+					// Un diseño que no se queda: se quita la opción del producto y se borra (borrador sin ventas).
+					if ( ! is_wp_error( $found ) ) {
+						$value = (string) ( $v->get_variation_attributes( false )[ $found[0] ] ?? '' );
+						if ( '' !== $value ) { self::drop_option( wc_get_product( $copy->get_id() ), $found[0], $value ); }
+					}
+					$v->delete( true );
+					continue;
+				}
+				$v->set_status( 'publish' );
+				$v->set_regular_price( wc_format_decimal( $price, 2 ) );
+				$v->set_sale_price( '' );
+				$photo = esc_url_raw( (string) ( $photos[ $child_id ] ?? $photos[ (string) $child_id ] ?? '' ) );
+				$att = $photo ? self::sideload( $photo, $copy->get_id(), $name . ' — ' . self::variation_label( $v ) ) : 0;
+				if ( $att ) { $v->set_image_id( $att ); }
+				$v->save();
+			}
+			foreach ( $add as $d ) {
+				$copy = wc_get_product( $copy->get_id() );
+				$option = self::add_option( $copy, $d['label'] );
+				if ( is_wp_error( $option ) ) { return $option; }
+				self::create_variation( wc_get_product( $copy->get_id() ), $option[0], $option[1], $price, $d['imageUrl'], $by );
+			}
+		}
+		$copy = wc_get_product( $copy->get_id() );
+		$copy->set_status( 'publish' );
+		if ( 'hidden' === $copy->get_catalog_visibility() ) { $copy->set_catalog_visibility( 'visible' ); }
+		$copy->save();
+		if ( $variable ) { WC_Product_Variable::sync( $copy->get_id() ); }
+		wc_delete_product_transients( $copy->get_id() );
+		self::log_product( 'copia publicada', $copy->get_id(), $copy->get_name(), $by );
+		return self::no_cache( array( 'ok' => true, 'published' => true, 'again' => false ) + self::copy_row( wc_get_product( $copy->get_id() ) ) );
+	}
+
+	/** Descartar una copia sin publicar: va a la papelera de WordPress (se puede recuperar), nunca se borra del todo. */
+	public static function copy_discard( WP_REST_Request $request ) {
+		$copy = self::copy_of_id( absint( $request['id'] ) );
+		if ( is_wp_error( $copy ) ) { return $copy; }
+		if ( 'draft' !== $copy->get_status() ) { return new WP_Error( 'cvd_panel_copy', 'Esa copia ya está publicada: para quitarla, usa «Ocultar».', array( 'status' => 422 ) ); }
+		$p = (array) $request->get_json_params();
+		wp_trash_post( $copy->get_id() );
+		self::log_product( 'copia descartada (papelera)', $copy->get_id(), $copy->get_name(), self::by( $p ) );
+		return self::no_cache( array( 'ok' => true, 'wooId' => $copy->get_id() ) );
 	}
 
 	/** Registro de cambios de productos hechos desde el panel (quién y cuándo), últimos 500. */

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.40
+ * Version: 3.14.41
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.40' );
+define( 'CVD_VERSION', '3.14.41' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -70,6 +70,7 @@ require_once CVD_DIR . 'includes/class-cvd-programa-calc.php';
 require_once CVD_DIR . 'includes/class-cvd-programa.php';
 require_once CVD_DIR . 'includes/class-cvd-encuesta-def.php'; // 3.14.35: encuesta anónima (preguntas y estadísticas, sin WordPress)
 require_once CVD_DIR . 'includes/class-cvd-encuesta.php';
+require_once CVD_DIR . 'includes/class-cvd-catalog-version.php'; // 3.14.41: el bot ve los cambios de productos al momento (Lennys, 20-oct)
 
 register_activation_hook( __FILE__, array( 'CVD_Plugin', 'activate' ) );
 
@@ -121,6 +122,7 @@ add_action(
 			CVD_Ficha_Estado::register(); // 3.14.40: «Falta información» (medidas, material, datos técnicos) para gestoras y panel; /bot/fichas para el bot (Ernesto y Lennys, 18-oct).
 			CVD_Supplier_Split::register(); // 3.14.14: reparto de la venta de proveedor apuntado en el pedido y sellado al cerrar (Ernesto, 14-oct, D69).
 			CVD_Programa::register(); // 3.14.29: Programa de gestoras en modo sombra: piedras por ganancia, fondo 15 % (D53–D58). 3.14.30: red 1 % + 0,5 %, fondo sobre la ganancia neta y arrastre de devoluciones (D77). 3.14.32: alerta «cuenta_compartida», «revisar» agrupadas y el cierre espera a las alertas sin revisar (D79). 3.14.33: «Tus vales del mes» en Mi piedra (Dany).
+			CVD_Catalog_Version::register(); // 3.14.41: marca de cambios del catálogo para VivaBot (/bot/catalogo/cambios), Lennys 20-oct.
 			CVD_Encuesta::register(); // 3.14.35: encuesta anónima en /encuesta/ (nace cerrada; Ernesto 16-oct).
 			CVD_Daily_Rates::register(); // 3.13.64: cada pedido nuevo guarda la tasa CUP del día de la venta (regla de Ernesto, 12-oct).
 		}
