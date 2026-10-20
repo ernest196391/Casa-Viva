@@ -51,6 +51,7 @@ final class CVD_Gestora_App {
 		if ( ! self::active() ) { return; }
 		wp_enqueue_style( 'cvd-gestora-app', CVD_URL . 'assets/gestora-app.css', array( 'cvd-portal' ), CVD_VERSION );
 		wp_enqueue_script( 'cvd-gestora-app', CVD_URL . 'assets/gestora-app.js', array( 'cvd-portal' ), CVD_VERSION, true );
+		wp_enqueue_script( 'cvd-gestora-confianza', CVD_URL . 'assets/gestora-confianza.js', array( 'cvd-gestora-app' ), CVD_VERSION, true ); // 3.14.42
 	}
 
 	/** Todo el cuerpo de la app: menú + vistas nuevas + secciones del portal clásico. */
@@ -80,6 +81,8 @@ final class CVD_Gestora_App {
 			// 3.14.28 (Ernesto, 16-oct): «NEXO Busca» (antes «Buscar precios»), la primera de Herramientas.
 			array( 'buscar', 'NEXO Busca', 'search', '' ),
 			array( 'calculadora', 'Calculadora', 'calc', '' ),
+			// 3.14.42 (Ernesto, 20-oct): mirar si el número del cliente está en la lista de sospechosos de estafa.
+			array( 'confianza', '¿Es de confianza?', 'shield', '' ),
 			array( 'curru', 'Pregúntale a Curru', 'chat', '' ),
 			array( 'fotos', 'Fotos para publicar', 'image', '' ),
 			array( 'herramientas', 'Más herramientas', 'spark', '' ),
@@ -154,6 +157,7 @@ final class CVD_Gestora_App {
 					<?php echo self::herramientas( $estudio ); // phpcs:ignore ?>
 					<?php echo self::calculadora(); // phpcs:ignore ?>
 					<?php echo self::buscar( $zone ); // phpcs:ignore ?>
+				<?php echo class_exists( 'CVD_Gestora_Confianza' ) ? CVD_Gestora_Confianza::render( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php if ( $programa ) { echo CVD_Programa::render_equipo( $user ) . CVD_Programa::render_piedra( $user ); } // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo class_exists( 'CVD_Gestora_Fotos' ) ? CVD_Gestora_Fotos::render( $user, $code ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo $estudio ? CVD_Gestora_Estudio::render( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
@@ -265,6 +269,7 @@ final class CVD_Gestora_App {
 		$pdf_date = $pdf_ts ? wp_date( 'j', $pdf_ts ) . ' ' . $meses[ (int) wp_date( 'n', $pdf_ts ) - 1 ] . ' ' . wp_date( 'Y', $pdf_ts ) : '';
 		$tools = array(
 			array( 'search', 'NEXO Busca', '¿Tu cliente pide algo que no tenemos? Súbele una foto y te buscamos quién lo vende. Lo vendes tú o por Casa Viva.', class_exists( 'CVD_Gestora_Busca' ) && CVD_Gestora_Busca::available() ? 'ready' : 'soon', 'buscar' ),
+			array( 'shield', '¿Es de confianza este número?', 'Antes de mandar un pedido, mira si el número de tu cliente fue reportado por estafa. Y reporta tú los que veas.', class_exists( 'CVD_Gestora_Confianza' ) && CVD_Gestora_Confianza::available() ? 'ready' : 'soon', 'confianza' ),
 			array( 'truck', 'Precios de mensajería', 'Cuánto cuesta llevar el pedido a cada reparto, en CUP. La mensajería es del mensajero.', 'ready', 'precios-mensajeria' ),
 			array( 'calc', 'Calculadora', 'Pon el precio en USD y mira cuánto es en CUP, euros, tarjeta clásica, Zelle o PayPal con la tasa de hoy.', 'ready', 'calculadora' ),
 			array( 'chat', 'Pregúntale a Curru', 'Precios, medidas y si hay en almacén. Responde al momento.', 'ready', 'curru' ),
@@ -553,6 +558,7 @@ final class CVD_Gestora_App {
 			'x'      => '<path d="M6 6l12 12M18 6L6 18"/>',
 			'search' => '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
 			'target' => '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+			'shield' => '<path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6z"/><path d="M9 12l2 2 4-4"/>',
 			'truck'  => '<path d="M2 6h12v10H2z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
 			'calc'   => '<rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M8 6.5h8v3H8z"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/>',
 			'camera' => '<rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/>',

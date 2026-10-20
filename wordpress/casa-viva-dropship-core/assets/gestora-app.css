@@ -258,3 +258,15 @@ body.cvga-body .cvd-customer-nav{display:none!important}
 .cvga-vales.is-waiting .cvga-vale-pts{color:var(--ga-muted);font-weight:500}
 .cvga-vales.is-waiting .cvga-vale-text b{font-weight:500}
 @media (max-width:640px){.cvga-kpis-3{grid-template-columns:1fr 1fr}.cvga-kpis-3 .cvga-kpi:first-child{grid-column:1/-1}}
+/* 3.14.42 «¿Es de confianza este número?» (assets/gestora-confianza.js) */
+.cvga-conf h2{font-size:17px;margin:0 0 6px}
+.cvga-conf .cvga-field input[type=tel],.cvga-conf textarea{border:1px solid var(--ga-line);background:var(--ga-bg);border-radius:10px;padding:10px 12px;font:inherit;font-weight:400;font-size:16px}
+.cvga-conf-box{margin:10px 0 0;padding:12px 14px;border-radius:12px;font-size:14.5px;line-height:1.45}
+.cvga-conf-box.is-ok{background:#e3efe9;color:#0d3b45}
+.cvga-conf-box.is-duda{background:#f6e3c8;color:#5e3a0e}
+.cvga-conf-box.is-no{background:#f3e3e1;color:#6e1f1f}
+.cvga-conf-lista{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column}
+.cvga-conf-lista li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:10px 0;border-top:1px solid var(--ga-line)}
+.cvga-conf-lista li b{font-size:16px;letter-spacing:.02em}
+.cvga-conf-lista li small{flex-basis:100%;color:var(--ga-muted)}
+.cvga-chip.is-no{background:#f3e3e1;color:#6e1f1f}

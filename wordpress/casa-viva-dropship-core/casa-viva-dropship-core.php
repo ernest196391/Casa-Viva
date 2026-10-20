@@ -48,6 +48,7 @@ require_once CVD_DIR . 'includes/class-cvd-data-saver.php';
 require_once CVD_DIR . 'includes/class-cvd-private-products.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-app.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-busca.php';
+require_once CVD_DIR . 'includes/class-cvd-gestora-confianza.php';
 require_once CVD_DIR . 'includes/class-cvd-nexo-busca.php'; // 3.14.28: NEXO Busca (búsquedas guardadas, vender por Casa Viva)
 require_once CVD_DIR . 'includes/class-cvd-gestora-fotos.php';
 require_once CVD_DIR . 'includes/class-cvd-estudio-core.php';
@@ -108,6 +109,7 @@ add_action(
 			CVD_Private_Products::register(); // 3.13.95: los «Privado» no salen en la web, tampoco a administradores (Ernesto, 13-oct).
 			CVD_Gestora_App::register();
 			CVD_Gestora_Busca::register();
+			CVD_Gestora_Confianza::register(); // 3.14.42: «¿Es de confianza este número?» (lista de sospechosos, Ernesto 20-oct).
 			CVD_Nexo_Busca::register(); // 3.14.28: NEXO Busca — precio, proveedor, cliente, foto bonita y «Vender por Casa Viva» (Ernesto, 16-oct).
 			CVD_Gestora_Fotos::register();
 			CVD_Gestora_Estudio::register(); // 3.14.1: «Mi estudio de fotos» con la clave de Google de cada gestora (Ernesto, 14-oct).
