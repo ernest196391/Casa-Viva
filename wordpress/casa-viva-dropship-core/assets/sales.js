@@ -81,8 +81,28 @@
   }
   // 3.13.97 (Ernesto, 14-oct): «Cambiar pedido» (antes de que el mensajero lo recoja) y «Cancelar pedido» (con motivo).
   // Core decide quién y cuándo (canEdit / canCancel); aquí solo se pintan.
+  // 3.14.42 (Lennys 20-oct): poner o cambiar el vuelto que lleva el mensajero, aunque el pedido ya esté en la calle.
+  function changeButton(order) {
+    if (order.isPickup || order.status === "delivered" || order.status === "cancelled") return "";
+    return '<button type="button" class="cvd-sale-extra" data-change-order="' + order.id + '" data-number="' + escapeText(order.number) + '" data-current="' + escapeText(order.change || "") + '">Vuelto</button>';
+  }
+  // Texto «5 USD + 500 CUP» → [{amount, currency}]; vacío o «0» = sin vuelto. null si no se entiende.
+  function parseChange(text) {
+    var t = String(text || "").trim();
+    if (!t || t === "0" || /^sin/i.test(t)) return [];
+    var out = [];
+    var ok = t.split("+").every(function (part) {
+      var m = part.trim().replace(",", ".").match(/^(\d+(?:\.\d+)?)\s*(usd|cup|mn|eur)?$/i);
+      if (!m) return false;
+      var cur = (m[2] || "USD").toUpperCase();
+      out.push({ amount: Number(m[1]), currency: cur === "MN" ? "CUP" : cur });
+      return true;
+    });
+    return ok ? out : null;
+  }
+  function changeText(list) { return (list || []).map(function (c) { return c.amount + " " + c.currency; }).join(" + "); }
   function extraButtons(order) {
-    return (order.canEdit ? '<button type="button" class="cvd-sale-extra" data-edit-order="' + order.id + '">Cambiar pedido</button>' : "")
+    return changeButton(order) + (order.canEdit ? '<button type="button" class="cvd-sale-extra" data-edit-order="' + order.id + '">Cambiar pedido</button>' : "")
       + (order.canCancel ? '<button type="button" class="cvd-sale-extra is-warning" data-cancel-order="' + order.id + '" data-number="' + escapeText(order.number) + '">Cancelar pedido</button>' : "");
   }
   // Mensajería: en qué punto va la entrega. Quién lo lleva sale arriba, en «Mensajero» (peopleRows).
@@ -211,6 +231,17 @@
       catch (error) { message.textContent = error.message; message.className = "is-error"; cancelBtn.disabled = false; }
       return;
     }
+    var changeBtn = event.target.closest("[data-change-order]");
+    if (changeBtn) {
+      var answer = window.prompt("Vuelto del pedido #" + changeBtn.dataset.number + "\n\nAhora: " + (changeBtn.dataset.current || "sin vuelto") + "\n\n¿Cuánto vuelto lleva el mensajero? Ej.: 5 USD · 500 CUP · 5 USD + 500 CUP\n(vacío o 0 = sin vuelto)", "");
+      if (answer === null) return;
+      var list = parseChange(answer);
+      if (!list) { message.className = "is-error"; message.textContent = "No entendí el vuelto. Escribe por ejemplo: 5 USD o 500 CUP."; return; }
+      changeBtn.disabled = true; message.className = ""; message.textContent = "Guardando el vuelto…";
+      try { var ch = await api(cvdSales.url + "/" + changeBtn.dataset.changeOrder + "/change", { method: "POST", body: JSON.stringify({ changeRequired: list }) }); await load(); message.textContent = ch.message || "Vuelto guardado."; }
+      catch (error) { message.textContent = error.message; message.className = "is-error"; changeBtn.disabled = false; }
+      return;
+    }
     var editBtn = event.target.closest("[data-edit-order]");
     if (editBtn) { openEdit(editBtn.dataset.editOrder); return; }
     var button = event.target.closest(".cvd-sale-action"); if (!button) return;
@@ -285,6 +316,7 @@
       + (d.pickup ? '<p class="cvd-edit-hint">Recogida en tienda.</p>'
         : editField("Dirección", "address", d.address, ' maxlength="200"') + (d.locality ? '<p class="cvd-edit-hint">Reparto: ' + escapeText(d.locality) + '. Si cambia de municipio o de reparto, cancélalo y que se haga de nuevo (cambia la mensajería).</p>' : '')
           + '<div class="cvd-edit-two"><label>Día de entrega<input type="date" name="deliveryDate" value="' + escapeText(d.date) + '" min="' + escapeText(d.minDate) + '" max="' + escapeText(d.maxDate) + '"></label><label>Franja<select name="deliveryWindow">' + windows.map(function (w) { return '<option value="' + w[0] + '"' + (w[0] === (d.window || "") ? " selected" : "") + ">" + w[1] + "</option>"; }).join("") + '</select></label></div><p class="cvd-edit-hint">Día vacío = lo antes posible. Ahora: ' + escapeText(d.whenLabel) + '</p>')
+      + (d.pickup ? "" : '<label>Vuelto que lleva el mensajero<input name="changeRequired" value="' + escapeText(changeText(d.change)) + '" placeholder="Ej.: 5 USD · 500 CUP (vacío = sin vuelto)" autocomplete="off"></label><p class="cvd-edit-hint">Sale del fondo de la caja y vuelve con el cobro: no es venta.</p>')
       + '<label>Nota del pedido<textarea name="note" rows="2" maxlength="500">' + escapeText(d.note) + '</textarea></label>'
       + '<h3>Productos</h3>' + d.lines.map(function (l) { return '<p class="cvd-edit-line"><span>' + escapeText(l.name) + (l.extra ? " · <small>extra en tienda</small>" : "") + '</span><input type="number" min="0" max="999" inputmode="numeric" data-line="' + l.itemId + '" value="' + l.qty + '" aria-label="Cantidad"></p>'; }).join("")
       + '<p class="cvd-edit-hint">Pon 0 para quitar un producto. Las existencias se ajustan solas.</p>'
@@ -325,6 +357,11 @@
     if (lines.every(function (l) { return l.qty === 0; }) && !editState.add.length) { msg.textContent = "El pedido no puede quedar sin productos. Si ya no lo quieren, cancélalo."; return; }
     var body = { firstName: f.elements.firstName.value, lastName: f.elements.lastName.value, phone: f.elements.phone.value, note: f.elements.note.value, lines: lines, add: editState.add.map(function (a) { return { wooId: a.wooId, qty: a.qty, extra: !!a.extra }; }) };
     if (f.elements.address) body.address = f.elements.address.value;
+    if (f.elements.changeRequired) {
+      var vuelto = parseChange(f.elements.changeRequired.value);
+      if (!vuelto) { msg.textContent = "No entendí el vuelto. Escribe por ejemplo: 5 USD o 500 CUP (vacío = sin vuelto)."; return; }
+      body.changeRequired = vuelto;
+    }
     if (f.elements.deliveryDate) { body.deliveryDate = f.elements.deliveryDate.value; body.deliveryWindow = f.elements.deliveryWindow.value; }
     submit.disabled = true; msg.textContent = "";
     try {

@@ -15,6 +15,7 @@ defined( 'ABSPATH' ) || exit;
  *  POST /panel/caja/web-orders/{id}/charge     → «Dinero recibido» con las MISMAS reglas de /ventas/
  *                                                 (CVD_Sales::change_status), firmado por la dependienta de
  *                                                 «Atiende» (si se encuentra su usuaria; si no, la del panel).
+ *  POST /panel/caja/web-orders/{id}/change     → poner o cambiar el vuelto que lleva el mensajero (Lennys 20-oct).
  *  GET  /panel/caja/cash-collections?from=ISO  → efectivo recibido en Ventas desde esa hora que NO pasó por la
  *                                                 caja (para el «debería haber» del cajón al cerrar).
  *
@@ -35,6 +36,7 @@ final class CVD_Caja_Bridge {
 		$auth = array( 'CVD_Panel_Bridge', 'authorized' );
 		register_rest_route( self::NS, '/panel/caja/web-orders', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'web_orders' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/caja/web-orders/(?P<id>\d+)/charge', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'charge' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/caja/web-orders/(?P<id>\d+)/change', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'change' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/caja/cash-collections', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'cash_collections' ), 'permission_callback' => $auth ) );
 	}
 
@@ -56,6 +58,13 @@ final class CVD_Caja_Bridge {
 		return in_array( $delivery, array( 'picked_up', 'handed_over', 'delivered' ), true ) ? 'delivery' : '';
 	}
 
+	/** A domicilio con mensajero asignado pero aún sin cobrar: sale en la lista para darle el vuelto (no para cobrar). */
+	public static function outgoing( WC_Order $order ): bool {
+		if ( ! $order->has_status( array( 'pending', 'processing', 'on-hold' ) ) ) { return false; }
+		if ( 'pickup' === sanitize_key( (string) $order->get_meta( '_cvd_fulfillment_type', true ) ) || ! class_exists( 'CVD_Delivery' ) ) { return false; }
+		return in_array( CVD_Delivery::status( $order ), array( 'assigned', 'accepted', 'to_store' ), true );
+	}
+
 	private static function row( WC_Order $order, string $kind ): array {
 		$products = array();
 		$supplier = false;
@@ -65,14 +74,17 @@ final class CVD_Caja_Bridge {
 			if ( preg_match( '/^MK-/i', $sku ) ) { $supplier = true; }
 			$products[] = array( 'name' => $item->get_name(), 'qty' => (int) $item->get_quantity(), 'sku' => $sku );
 		}
-		$delivery = 'delivery' === $kind && class_exists( 'CVD_Delivery' ) ? CVD_Delivery::status( $order ) : '';
-		$messenger = 'delivery' === $kind ? get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) : false;
+		$delivery = 'pickup' !== $kind && class_exists( 'CVD_Delivery' ) ? CVD_Delivery::status( $order ) : '';
+		$messenger = 'pickup' !== $kind ? get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) : false;
 		return array(
 			'id' => $order->get_id(),
 			'number' => $order->get_order_number(),
 			'date' => $order->get_date_created() ? $order->get_date_created()->date( 'c' ) : '',
 			'kind' => $kind,
-			'statusLabel' => 'pickup' === $kind ? 'Listo para recoger' : ( 'delivered' === $delivery ? 'Entregado · efectivo pendiente' : 'Con el mensajero' ),
+			'statusLabel' => 'pickup' === $kind ? 'Listo para recoger' : ( 'outgoing' === $kind ? 'Por salir con el mensajero' : ( 'delivered' === $delivery ? 'Entregado · efectivo pendiente' : 'Con el mensajero' ) ),
+			'chargeable' => 'outgoing' !== $kind,
+			// 3.14.42: vuelto que lleva el mensajero [{amount, currency}] (sale del fondo y vuelve con el cobro).
+			'change' => class_exists( 'CVD_Order_Edit' ) ? CVD_Order_Edit::change_of( $order ) : array(),
 			'customer' => $order->get_formatted_billing_full_name(),
 			'phone' => preg_replace( '/[^0-9+]/', '', $order->get_billing_phone() ),
 			'gestora' => (string) $order->get_meta( 'gestora_nombre', true ),
@@ -93,6 +105,7 @@ final class CVD_Caja_Bridge {
 		foreach ( wc_get_orders( array( 'limit' => 200, 'type' => 'shop_order', 'orderby' => 'date', 'order' => 'DESC', 'status' => array( 'pending', 'processing', 'on-hold' ) ) ) as $order ) {
 			if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund ) { continue; }
 			$kind = self::chargeable( $order );
+			if ( '' === $kind && self::outgoing( $order ) ) { $kind = 'outgoing'; }
 			if ( '' !== $kind ) { $rows[] = self::row( $order, $kind ); }
 		}
 		return self::no_cache( array( 'orders' => $rows, 'generatedAt' => gmdate( 'c' ) ) );
@@ -172,6 +185,18 @@ final class CVD_Caja_Bridge {
 		return self::no_cache( array( 'ok' => true, 'message' => (string) ( $data['message'] ?? 'Pedido cobrado.' ), 'signedBy' => $clerk ? $clerk->display_name : 'panel' ) );
 	}
 
+	/** Vuelto desde la caja: {changeRequired:[{amount, currency}], clerkName, device}. Firma el panel; la nota dice quién. */
+	public static function change( WP_REST_Request $request ) {
+		if ( ! class_exists( 'CVD_Order_Edit' ) ) { return new WP_Error( 'cvd_caja_change', 'No disponible.', array( 'status' => 501 ) ); }
+		$p = (array) $request->get_json_params();
+		$name = substr( sanitize_text_field( (string) ( $p['clerkName'] ?? '' ) ), 0, 80 );
+		$device = substr( sanitize_text_field( (string) ( $p['device'] ?? '' ) ), 0, 60 );
+		$by = trim( ( '' !== $name ? $name : 'la tienda' ) . ( '' !== $device ? ' (' . $device . ')' : '' ) );
+		$result = CVD_Order_Edit::set_change( absint( $request['id'] ), (array) ( $p['changeRequired'] ?? array() ), absint( get_option( 'cvd_panel_actor_user_id', 0 ) ), 'caja', $by );
+		if ( is_wp_error( $result ) ) { return $result; }
+		return self::no_cache( $result );
+	}
+
 	/** Efectivo cerrado en Ventas desde {from} (ISO), por moneda, sin los cobrados en la caja. */
 	public static function cash_collections( WP_REST_Request $request ): WP_REST_Response {
 		$from_raw = (string) $request->get_param( 'from' );
@@ -189,7 +214,8 @@ final class CVD_Caja_Bridge {
 				$currency = strtoupper( (string) $h['currency'] );
 				$totals[ $currency ] = ( $totals[ $currency ] ?? 0 ) + (int) round( (float) $h['amount'] * 100 );
 			}
-			$orders[] = array( 'id' => $order->get_id(), 'number' => $order->get_order_number(), 'at' => $order->get_date_completed() ? $order->get_date_completed()->date( 'c' ) : '', 'cash' => $held,
+			$orders[] = array( 'id' => $order->get_id(), 'number' => $order->get_order_number(),
+				'change' => class_exists( 'CVD_Order_Edit' ) ? CVD_Order_Edit::change_of( $order ) : array(), 'at' => $order->get_date_completed() ? $order->get_date_completed()->date( 'c' ) : '', 'cash' => $held,
 				'method' => (string) $order->get_meta( '_cvd_collection_method', true ) );
 		}
 		$web = array();

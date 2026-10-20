@@ -168,7 +168,7 @@ final class CVD_Panel_Bridge {
 		$p = (array) $request->get_json_params();
 		self::enter( $p );
 		wp_set_current_user( $actor );
-		$data = array_intersect_key( $p, array_flip( array( 'firstName', 'lastName', 'phone', 'address', 'deliveryDate', 'deliveryWindow', 'note', 'lines', 'add' ) ) );
+		$data = array_intersect_key( $p, array_flip( array( 'firstName', 'lastName', 'phone', 'address', 'deliveryDate', 'deliveryWindow', 'note', 'lines', 'add', 'changeRequired' ) ) );
 		// El panel viejo mandaba phone/address vacíos cuando no cambiaban: vacío = no se toca.
 		foreach ( array( 'phone', 'address' ) as $k ) { if ( isset( $data[ $k ] ) && '' === trim( (string) $data[ $k ] ) ) { unset( $data[ $k ] ); } }
 		$result = CVD_Order_Edit::edit( absint( $request['id'] ), $data, $actor, 'panel' );

@@ -38,6 +38,8 @@ final class CVD_Order_Edit {
 			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'detail_request' ), 'permission_callback' => $can ),
 			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'edit_request' ), 'permission_callback' => $can ),
 		) );
+		// 3.14.42 (Lennys 20-oct): poner o cambiar el vuelto que lleva el mensajero, también con el pedido ya en la calle.
+		register_rest_route( 'casa-viva/v1', '/sales/(?P<id>\d+)/change', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'change_request' ), 'permission_callback' => $can ) );
 		register_rest_route( 'casa-viva/v1', '/sales/products', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'products_request' ), 'permission_callback' => $can ) );
 		register_rest_route( 'casa-viva/v1', '/sales/extras', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'extras_request' ), 'permission_callback' => $can ) );
 	}
@@ -185,7 +187,61 @@ final class CVD_Order_Edit {
 			'messenger' => self::messenger_to_warn( $order ),
 			// 3.14.18 (33/33/33): solo en pedidos de gestora se puede añadir un «extra en tienda».
 			'gestoraOrder' => self::is_gestora_order( $order ), 'gestoraName' => (string) $order->get_meta( 'gestora_nombre', true ),
+			// 3.14.42: vuelto que lleva el mensajero [{amount, currency}] (vacío = sin vuelto).
+			'change' => self::change_of( $order ),
 		);
+	}
+
+	/** Vuelto guardado en el pedido como lista [{amount, currency}] (también el formato viejo «yes» + importe). */
+	public static function change_of( WC_Order $order ): array {
+		$raw = $order->get_meta( '_cvd_change_required', true );
+		if ( 'yes' === $raw ) { $raw = array( array( 'amount' => $order->get_meta( '_cvd_change_amount', true ), 'currency' => $order->get_meta( '_cvd_change_currency', true ) ) ); }
+		$list = self::change_list( is_array( $raw ) ? $raw : array() );
+		return is_wp_error( $list ) ? array() : $list;
+	}
+
+	/** Valida un vuelto: hasta 3 líneas, importe > 0, moneda USD, CUP o EUR. Lista vacía = sin vuelto. */
+	public static function change_list( $raw ) {
+		$out = array();
+		foreach ( array_slice( (array) $raw, 0, 3 ) as $line ) {
+			$amount = (float) wc_format_decimal( is_array( $line ) ? ( $line['amount'] ?? 0 ) : 0, 2 );
+			$currency = strtoupper( sanitize_key( (string) ( is_array( $line ) ? ( $line['currency'] ?? '' ) : '' ) ) );
+			if ( $amount <= 0 ) { continue; }
+			if ( ! in_array( $currency, array( 'USD', 'CUP', 'EUR' ), true ) || $amount > 1000000 ) {
+				return new WP_Error( 'cvd_change_invalid', 'El vuelto va en USD, CUP o EUR y con un importe razonable.', array( 'status' => 422 ) );
+			}
+			$out[] = array( 'amount' => $amount, 'currency' => $currency );
+		}
+		return $out;
+	}
+
+	/**
+	 * 3.14.42 (Lennys 20-oct): pone o cambia el vuelto que lleva el mensajero (sale del FONDO de la caja y vuelve
+	 * con el cobro; no es venta). Se puede con el pedido ya en la calle; no con el pedido cerrado o cancelado.
+	 * Deja nota «Vuelto: antes … → ahora …» con quién lo cambió.
+	 */
+	public static function set_change( int $order_id, $raw, int $user_id, string $source = 'ventas', string $by = '' ) {
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof WC_Order || 'shop_order' !== $order->get_type() ) { return new WP_Error( 'cvd_edit_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
+		if ( $order->has_status( array( 'completed', 'cancelled', 'refunded', 'failed' ) ) ) {
+			return new WP_Error( 'cvd_change_closed', 'Este pedido ya está cerrado o cancelado: el vuelto ya no se cambia.', array( 'status' => 409 ) );
+		}
+		$list = self::change_list( $raw );
+		if ( is_wp_error( $list ) ) { return $list; }
+		$label = static fn( array $l ): string => $l ? implode( ' + ', array_map( static fn( $x ) => wc_format_decimal( $x['amount'], 2, true ) . ' ' . $x['currency'], $l ) ) : 'sin vuelto';
+		$before = self::change_of( $order );
+		if ( $before == $list ) { return array( 'ok' => true, 'change' => $list, 'message' => 'El vuelto ya era ' . $label( $list ) . '.' ); }
+		$order->update_meta_data( '_cvd_change_required', $list );
+		$who = '' !== $by ? $by : ( get_userdata( $user_id ) ? get_userdata( $user_id )->display_name : 'la tienda' );
+		$order->add_order_note( sprintf( 'Vuelto (%s): antes %s → ahora %s. Lo cambió %s.', 'caja' === $source ? 'caja' : ( 'panel' === $source ? 'panel' : 'Ventas' ), $label( $before ), $label( $list ), $who ) );
+		$order->save();
+		return array( 'ok' => true, 'change' => $list, 'message' => 'Vuelto del pedido #' . $order->get_order_number() . ': ' . $label( $list ) . '. Avísale al mensajero.' );
+	}
+
+	public static function change_request( WP_REST_Request $request ) {
+		$result = self::set_change( absint( $request['id'] ), (array) $request->get_param( 'changeRequired' ), get_current_user_id(), 'ventas' );
+		if ( is_wp_error( $result ) ) { return $result; }
+		return rest_ensure_response( $result );
 	}
 
 	/** 3.14.18: pedido vendido por una gestora (su enlace o su área), no venta directa. */
@@ -237,6 +293,9 @@ final class CVD_Order_Edit {
 			if ( ! in_array( $window, self::WINDOWS, true ) ) { return new WP_Error( 'cvd_edit_window', 'Elige mañana, tarde o cualquier hora.', array( 'status' => 422 ) ); }
 		}
 		$note = array_key_exists( 'note', $data ) && null !== $data['note'] ? sanitize_textarea_field( (string) $data['note'] ) : null;
+		// 3.14.42: vuelto que lleva el mensajero (se guarda al final con set_change, con su nota).
+		$change = array_key_exists( 'changeRequired', $data ) && null !== $data['changeRequired'] ? self::change_list( $data['changeRequired'] ) : null;
+		if ( is_wp_error( $change ) ) { return $change; }
 		$lines = array();
 		foreach ( (array) ( $data['lines'] ?? array() ) as $l ) {
 			$id = absint( is_array( $l ) ? ( $l['itemId'] ?? 0 ) : 0 );
@@ -333,6 +392,7 @@ final class CVD_Order_Edit {
 		// 3.14.18: nota con el reparto de lo añadido como extra (después de calcular la comisión).
 		$extra_note = $has_extra && class_exists( 'CVD_Commissions' ) ? CVD_Commissions::extra_note( $saved ) : '';
 		if ( '' !== $extra_note ) { $saved->add_order_note( $extra_note ); $saved->update_meta_data( '_cvd_has_extra_tienda', 1 ); $saved->save(); }
+		if ( null !== $change ) { self::set_change( $saved->get_id(), $change, $user_id, $source ); $saved = wc_get_order( $saved->get_id() ); }
 		$total = (float) $saved->get_total();
 		if ( class_exists( 'CVD_Order_Avisos' ) ) { CVD_Order_Avisos::record_edit( $saved, $before, $user_id, sanitize_key( $source ), $messenger ); }
 		$message = 'Pedido #' . $order->get_order_number() . ' cambiado' . ( $items_changed ? '. Nuevo total: ' . wc_format_decimal( $total, 2 ) . ' ' . $order->get_currency() : '' ) . '.';
@@ -344,7 +404,7 @@ final class CVD_Order_Edit {
 
 	public static function edit_request( WP_REST_Request $request ) {
 		$params = (array) $request->get_json_params();
-		$data = array_intersect_key( $params, array_flip( array( 'firstName', 'lastName', 'phone', 'address', 'deliveryDate', 'deliveryWindow', 'note', 'lines', 'add' ) ) );
+		$data = array_intersect_key( $params, array_flip( array( 'firstName', 'lastName', 'phone', 'address', 'deliveryDate', 'deliveryWindow', 'note', 'lines', 'add', 'changeRequired' ) ) );
 		$result = self::edit( absint( $request['id'] ), $data, get_current_user_id(), 'ventas' );
 		if ( is_wp_error( $result ) ) { return $result; }
 		return rest_ensure_response( $result );
