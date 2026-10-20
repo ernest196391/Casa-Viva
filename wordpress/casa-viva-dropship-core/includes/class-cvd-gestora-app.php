@@ -308,8 +308,8 @@ final class CVD_Gestora_App {
 		<section class="cvga-card cvga-rate-card">
 			<div class="cvga-row"><h2>Tasa de hoy</h2><?php if ( $r['updated_at'] ) : ?><span class="cvga-chip<?php echo $stale ? ' is-warn' : ''; ?>"><?php echo esc_html( 'actualizada ' . self::rate_when( $r['updated_at'] ) ); ?></span><?php endif; ?></div>
 			<?php if ( $r['cup'] ) : ?>
-			<p class="cvga-rate-big">1 USD = <b><?php echo esc_html( CVD_Daily_Rates::format_cup( (int) round( $r['cup'] ) ) ); ?></b></p>
-			<p class="cvga-note"><?php echo esc_html( implode( ' · ', self::rate_bits( $r ) ) ); ?></p>
+			<p class="cvga-rate-big">1 USD = <b><?php echo esc_html( CVD_Daily_Rates::format_cup( (int) round( $r['cup'] ) ) ); ?></b> <small>en efectivo</small></p>
+			<p class="cvga-note"><?php echo esc_html( implode( ' · ', array_merge( array( 'Transferencia CUP: ' . CVD_Daily_Rates::format_cup( (int) CVD_Daily_Rates::cup_transfer( (float) $r['cup'] ) ) ), self::rate_bits( $r ) ) ) ); // 3.14.43 ?></p>
 			<?php if ( $stale ) : ?><p class="cvga-warn">Esta tasa tiene más de un día. Confírmala en el grupo General antes de cobrar.</p><?php endif; ?>
 			<?php else : ?>
 			<p class="cvga-empty">Aún no hay tasa del día. La tienda la publica cada mañana en el grupo General.</p>
@@ -349,7 +349,8 @@ final class CVD_Gestora_App {
 				<h2>Tasas de hoy</h2>
 				<p class="cvga-note">Lo que paga el cliente por cada 1 USD del precio.</p>
 				<ul class="cvga-rate-list">
-					<li><span>CUP</span><b><?php echo esc_html( CVD_Daily_Rates::format_cup( (int) round( $r['cup'] ) ) ); ?></b></li>
+					<li><span>CUP efectivo</span><b><?php echo esc_html( CVD_Daily_Rates::format_cup( (int) round( $r['cup'] ) ) ); ?></b></li>
+					<li><span>CUP transferencia</span><b><?php echo esc_html( CVD_Daily_Rates::format_cup( (int) CVD_Daily_Rates::cup_transfer( (float) $r['cup'] ) ) ); // 3.14.43 ?></b></li>
 					<?php foreach ( self::rate_bits( $r, true ) as $label => $value ) : ?><li><span><?php echo esc_html( $label ); ?></span><b><?php echo esc_html( $value ); ?></b></li><?php endforeach; ?>
 					<li><span>USDT</span><b>Consultar</b></li>
 				</ul>

@@ -23,7 +23,7 @@ final class CVD_Cuban_Checkout {
 	public const PAYMENT_KINDS = array(
 		'cash_usd'     => array( 'label' => 'Efectivo USD', 'option' => 'Efectivo en dólares (USD)', 'currency' => 'USD', 'rate' => '' ),
 		'cash_cup'     => array( 'label' => 'Efectivo CUP', 'option' => 'Efectivo en pesos (CUP)', 'currency' => 'CUP', 'rate' => 'cup' ),
-		'transfer_cup' => array( 'label' => 'Transferencia CUP', 'option' => 'Transferencia en CUP (a la tarjeta que da el mensajero)', 'currency' => 'CUP', 'rate' => 'cup' ),
+		'transfer_cup' => array( 'label' => 'Transferencia CUP', 'option' => 'Transferencia en CUP (a la tarjeta que da el mensajero)', 'currency' => 'CUP', 'rate' => 'cup' ), // 3.14.43: tasa cup × 1,20 (payment_factors)
 		'eur'          => array( 'label' => 'Euros (EUR)', 'option' => 'Euros (EUR) en efectivo', 'currency' => 'EUR', 'rate' => 'eur' ),
 		'clasica'      => array( 'label' => 'Tarjeta Clásica', 'option' => 'Tarjeta Clásica (transferencia en el momento)', 'currency' => 'USD', 'rate' => 'clasica' ),
 		'zelle'        => array( 'label' => 'Zelle', 'option' => 'Zelle (paga todo antes)', 'currency' => 'USD', 'rate' => 'zelle', 'prepaid' => true ),
@@ -812,6 +812,8 @@ final class CVD_Cuban_Checkout {
 			$estimated = false;
 			if ( null === $value && isset( self::PAYMENT_FALLBACK[ $field ] ) ) { $value = self::PAYMENT_FALLBACK[ $field ]; $estimated = true; }
 			$factor = null === $value ? 0.0 : ( 'paypal_pct' === $field ? 1 + $value / 100 : $value );
+			// 3.14.43 (Ernesto 20-oct): la transferencia CUP es la tasa de efectivo × 1,20 (CVD_Daily_Rates::cup_transfer).
+			if ( 'transfer_cup' === $kind && $factor > 0 && class_exists( 'CVD_Daily_Rates' ) ) { $factor = (float) CVD_Daily_Rates::cup_transfer( $factor ); }
 			$out[ $kind ] = array( 'factor' => $factor > 0 ? round( $factor, 4 ) : 0.0, 'estimated' => $estimated );
 		}
 		return $out;

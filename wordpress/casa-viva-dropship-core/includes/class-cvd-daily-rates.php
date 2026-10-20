@@ -18,6 +18,13 @@ final class CVD_Daily_Rates {
 	private const OPTION = 'cvd_daily_rates';
 	private const LOG = 'cvd_daily_rates_log';
 	public const STALE_HOURS = 36;
+	/**
+	 * 3.14.43 (regla de Ernesto, 20-oct): `cup` es la tasa de la tienda y el precio en EFECTIVO CUP (el toque de
+	 * elToque + 10). La TRANSFERENCIA CUP cuesta `cup` × 1,20 (redondeado a entero). El factor se puede cambiar con la
+	 * opción `cvd_cup_transfer_factor` (entre 1 y 2); si no existe o no es válida, 1,20.
+	 */
+	public const TRANSFER_FACTOR_OPTION = 'cvd_cup_transfer_factor';
+	public const DEFAULT_TRANSFER_FACTOR = 1.2;
 	// Campo => [mínimo, máximo]: fuera de rango se ignora (un número mal leído no pisa la tasa buena).
 	private const FIELDS = array(
 		'cup'        => array( 50, 5000 ),
@@ -91,6 +98,8 @@ final class CVD_Daily_Rates {
 			'clasica'    => $r['clasica'],
 			'zelle'      => $r['zelle'],
 			'paypalPct'  => $r['paypal_pct'],
+			'cupTransfer'       => self::cup_transfer( $r['cup'] ),
+			'cupTransferFactor' => self::transfer_factor(),
 			'updatedAt'  => $r['updated_at'] ? gmdate( 'c', $r['updated_at'] ) : null,
 			'updatedTs'  => $r['updated_at'],
 			'source'     => $r['source'],
@@ -145,6 +154,19 @@ final class CVD_Daily_Rates {
 		$s = str_replace( array( ' ', '%' ), '', (string) $raw );
 		$s = str_replace( ',', '.', $s );
 		return preg_match( '/^\d+(\.\d+)?$/', $s ) ? (float) $s : null;
+	}
+
+	/** 3.14.43: cuánto más cuesta pagar en transferencia CUP que en efectivo CUP (1,20 si no se cambió). */
+	public static function transfer_factor(): float {
+		$raw = get_option( self::TRANSFER_FACTOR_OPTION, '' );
+		$value = is_numeric( $raw ) ? (float) $raw : 0.0;
+		return $value >= 1 && $value <= 2 ? round( $value, 4 ) : self::DEFAULT_TRANSFER_FACTOR;
+	}
+
+	/** 3.14.43: CUP por cada 1 USD pagando por TRANSFERENCIA = efectivo × factor, entero (815 → 978). null sin tasa. */
+	public static function cup_transfer( ?float $cup = null ): ?float {
+		$cup = null === $cup ? self::get()['cup'] : $cup;
+		return $cup && $cup > 0 ? (float) round( $cup * self::transfer_factor() ) : null;
 	}
 
 	/** CUP de un precio en USD con la tasa del día (entero), o null si aún no hay tasa. */

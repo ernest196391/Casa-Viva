@@ -85,14 +85,17 @@
       var usd = usdValue(calc.elements.usd.value), ship = cupValue(calc.elements.ship.value);
       if (!usd) { calcOut.innerHTML = '<li class="cvga-calc-empty">Escribe un precio para ver cuánto es.</li>'; copyBtn.hidden = true; lastText = ''; return; }
       var rows = [['Efectivo USD', fmtMoney(usd, 'USD'), '']];
-      if (factor(rates.cup)) rows.push(['CUP', fmtCup(usd * factor(rates.cup) + ship), ship ? 'Ya incluye ' + fmtCup(ship) + ' de mensajería' : 'Efectivo o transferencia', true]);
+      // 3.14.43 (Ernesto 20-oct): efectivo CUP = tasa del día; transferencia CUP = tasa × 1,20 (rates.cupTransfer).
+      var cupT = factor(rates.cupTransfer);
+      if (factor(rates.cup)) rows.push(['CUP', fmtCup(usd * factor(rates.cup) + ship), (cupT ? 'Efectivo' : 'Efectivo o transferencia') + (ship ? ' · ya incluye ' + fmtCup(ship) + ' de mensajería' : ''), true]);
+      if (factor(rates.cup) && cupT) rows.push(['CUP transferencia', fmtCup(usd * cupT + ship), 'Transferencia en CUP' + (ship ? ' · ya incluye ' + fmtCup(ship) + ' de mensajería' : '')]);
       if (factor(rates.eur)) rows.push(['Euro', fmtMoney(usd * factor(rates.eur), 'EUR'), 'Efectivo en euros']);
       if (factor(rates.clasica)) rows.push(['Tarjeta clásica', fmtMoney(usd * factor(rates.clasica), 'USD'), 'Transferencia a tarjeta clásica']);
       if (factor(rates.zelle)) rows.push(['Zelle', fmtMoney(usd * factor(rates.zelle), 'USD'), '']);
       if (rates.paypalPct !== null && rates.paypalPct !== undefined && isFinite(Number(rates.paypalPct))) rows.push(['PayPal', fmtMoney(usd * (1 + Number(rates.paypalPct) / 100), 'USD'), '']);
       rows.push(['USDT', 'Consultar', 'Pregunta en el grupo General']);
       calcOut.innerHTML = rows.map(function (r) { return '<li' + (r[3] ? ' class="is-main"' : '') + '><span><b>' + escHtml(r[0]) + '</b>' + (r[2] ? '<small>' + escHtml(r[2]) + '</small>' : '') + '</span><strong>' + escHtml(r[1]) + '</strong></li>'; }).join('') + (ship ? '<li class="cvga-calc-empty">Con las demás formas de pago, la mensajería (' + escHtml(fmtCup(ship)) + ') se paga aparte, en CUP, al mensajero.</li>' : '');
-      lastText = 'Precio: ' + fmtMoney(usd, 'USD') + (ship ? ' + mensajería ' + fmtCup(ship) : '') + '\n' + rows.filter(function (r) { return r[0] !== 'Efectivo USD' && r[1] !== 'Consultar'; }).map(function (r) { return '• ' + r[0] + ': ' + r[1] + (r[0] === 'CUP' && ship ? ' (con mensajería)' : ''); }).join('\n') + (ship ? '\nLa mensajería se paga en CUP al mensajero.' : '');
+      lastText = 'Precio: ' + fmtMoney(usd, 'USD') + (ship ? ' + mensajería ' + fmtCup(ship) : '') + '\n' + rows.filter(function (r) { return r[0] !== 'Efectivo USD' && r[1] !== 'Consultar'; }).map(function (r) { return '• ' + r[0] + ': ' + r[1] + (r[0].indexOf('CUP') === 0 && ship ? ' (con mensajería)' : ''); }).join('\n') + (ship ? '\nLa mensajería se paga en CUP al mensajero.' : '');
       copyBtn.hidden = false; copiedEl.textContent = '';
     }
     calc.addEventListener('input', render);
