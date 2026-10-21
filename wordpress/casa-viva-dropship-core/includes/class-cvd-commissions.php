@@ -15,6 +15,103 @@ final class CVD_Commissions {
 	 */
 	public const EXTRA_META = '_cvd_extra_tienda';
 	public const EXTRA_STAFF_OPTION = 'cvd_extra_staff_pct';
+	/**
+	 * 3.14.45 (Ernesto, 21-oct, pedido #4953 «hay que mejorar eso»): el equipo de la tienda (dependientas
+	 * cvd_manage_sales y administración manage_woocommerce) no cobra comisión de gestora por lo que compra para sí
+	 * o para la tienda. Pedido suyo + cliente «Tienda»/«Casa Viva», su propio teléfono, su propio nombre o una cuenta
+	 * de la tienda (opción cvd_store_account_ids) → comisión 0, riesgo «staff_self» y nota en el pedido. Si vende a
+	 * un cliente de verdad con su enlace, cobra su comisión con la marca «staff_owner» (alerta «equipo» del programa,
+	 * Lennys la marca «Revisada»). El % de mostrador de las dependientas (D80) va aparte y no cambia.
+	 * Excepción por persona (lo decide Ernesto): user meta _cvd_staff_commission_allowed = 'yes' → cobra como
+	 * cualquier gestora, sin ninguna de estas marcas.
+	 */
+	public const STAFF_ALLOW_META = '_cvd_staff_commission_allowed';
+	public const STAFF_ZERO_META = '_cvd_commission_staff_zero';
+	public const STORE_ACCOUNTS_OPTION = 'cvd_store_account_ids';
+	private const STORE_NAMES = array( 'tienda', 'la tienda', 'casa viva', 'casaviva', 'tienda casa viva', 'tienda casaviva', 'casa viva tienda' );
+	private const STAFF_ZERO_LABELS = array( 'tienda' => 'el cliente es la tienda', 'telefono' => 'lleva su propio teléfono', 'nombre' => 'lleva su propio nombre', 'cuenta_tienda' => 'se hizo desde la cuenta de la tienda' );
+
+	/** ¿Es del equipo de la tienda (dependienta o administración) sin la excepción de Ernesto? */
+	public static function is_staff( int $user_id ): bool {
+		if ( ! $user_id || 'yes' === (string) get_user_meta( $user_id, self::STAFF_ALLOW_META, true ) ) { return false; }
+		return user_can( $user_id, 'cvd_manage_sales' ) || user_can( $user_id, 'manage_woocommerce' );
+	}
+
+	/** 3.14.45: '' = no es compra del equipo/tienda; si no, por qué: tienda | cuenta_tienda | telefono | nombre. */
+	public static function staff_zero_reason( WC_Order $order, int $owner_user_id ): string {
+		if ( ! self::is_staff( $owner_user_id ) ) { return ''; }
+		$buyers = array(
+			trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ),
+			trim( $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name() ),
+			(string) $order->get_meta( 'cliente_vinculado', true ),
+		);
+		foreach ( $buyers as $name ) {
+			if ( in_array( CVD_Programa_Calc::name_key( (string) $name ), self::STORE_NAMES, true ) ) { return 'tienda'; }
+		}
+		$accounts = array_map( 'absint', (array) get_option( self::STORE_ACCOUNTS_OPTION, array() ) );
+		$customer = absint( $order->get_customer_id() );
+		if ( $customer && in_array( $customer, $accounts, true ) ) { return 'cuenta_tienda'; }
+		$order_phone = CVD_Programa_Calc::phone_key( (string) $order->get_billing_phone() );
+		$phone_match = false;
+		if ( '' !== $order_phone ) {
+			foreach ( array( '_cvd_whatsapp', '_cvd_phone' ) as $key ) { // billing_phone no: Woo guarda ahí el teléfono del último cliente
+				if ( $order_phone === CVD_Programa_Calc::phone_key( (string) get_user_meta( $owner_user_id, $key, true ) ) ) { $phone_match = true; break; }
+			}
+		}
+		if ( $phone_match ) { return 'telefono'; }
+		$owner = get_userdata( $owner_user_id );
+		if ( $owner ) {
+			$order_email = strtolower( sanitize_email( $order->get_billing_email() ) );
+			$email_match = $order_email && hash_equals( strtolower( sanitize_email( $owner->user_email ) ), $order_email );
+			if ( 'si' === CVD_Programa_Calc::self_purchase( (string) $owner->display_name, $buyers, $email_match ) ) { return 'nombre'; }
+		}
+		return '';
+	}
+
+	/**
+	 * 3.14.45: corregir a mano un pedido del equipo que se aprobó antes de esta regla (p. ej. #4953). Solo pedidos con
+	 * la comisión aprobada o por verificar y fuera de un pago. $apply = false solo dice lo que haría.
+	 * → ['ok' => bool, 'msg' => texto, 'before' => USD, 'after' => USD].
+	 */
+	public static function staff_rule_fix( int $order_id, bool $apply = false, string $why = '' ): array {
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) { return array( 'ok' => false, 'msg' => 'No existe el pedido.' ); }
+		$owner = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
+		$status = sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ?: 'pending';
+		$reason = self::staff_zero_reason( $order, $owner );
+		$before = round( (float) $order->get_meta( '_cvd_commission_amount', true ), 2 );
+		if ( '' === $reason ) { return array( 'ok' => false, 'msg' => 'No es compra del equipo/tienda según la regla.', 'before' => $before ); }
+		if ( ! in_array( $status, array( 'pending', 'approved' ), true ) || absint( $order->get_meta( '_cvd_payout_id', true ) ) ) {
+			return array( 'ok' => false, 'msg' => 'Comisión ' . $status . ( absint( $order->get_meta( '_cvd_payout_id', true ) ) ? ' y ya en un pago' : '' ) . ': no se toca aquí.', 'before' => $before );
+		}
+		if ( ! $apply ) { return array( 'ok' => true, 'msg' => 'Pasaría de ' . number_format( $before, 2, ',', '.' ) . ' USD a 0 (' . self::STAFF_ZERO_LABELS[ $reason ] . '). Estado sigue: ' . $status . '.', 'before' => $before, 'after' => 0.0 ); }
+		foreach ( $order->get_items( 'line_item' ) as $item ) {
+			$snap = $item->get_meta( '_cvd_commission_snapshot', true );
+			if ( ! is_array( $snap ) || ! empty( $snap['staff_zero'] ) ) { continue; }
+			$snap['commission_without_rule'] = wc_format_decimal( (float) ( $snap['base_commission'] ?? 0 ) + (float) ( $snap['markup'] ?? 0 ), 4 );
+			$snap['base_commission'] = wc_format_decimal( 0, 4 );
+			$snap['markup'] = wc_format_decimal( 0, 4 );
+			$snap['staff_zero'] = $reason;
+			if ( is_array( $snap['extra'] ?? null ) ) { $snap['extra']['gestora'] = 0.0; }
+			$item->update_meta_data( '_cvd_commission_snapshot', $snap );
+			$item->save_meta_data();
+		}
+		$calc = self::calculate( $order, $owner );
+		$order->update_meta_data( '_cvd_commission_amount', $calc['amount'] );
+		$order->update_meta_data( '_cvd_base_commission_amount', $calc['commission_amount'] );
+		$order->update_meta_data( '_cvd_margin_amount', $calc['margin_amount'] );
+		$order->update_meta_data( '_cvd_commission_rate', $calc['effective_rate'] );
+		$order->update_meta_data( '_cvd_commission_breakdown', $calc['breakdown'] );
+		$order->update_meta_data( 'comision_base', $calc['commission_amount'] );
+		$order->update_meta_data( 'comision_tasa', $calc['effective_rate'] );
+		$order->update_meta_data( 'ganancia_precio', $calc['margin_amount'] );
+		$order->update_meta_data( '_cvd_commission_risk', 'staff_self' );
+		$order->update_meta_data( self::STAFF_ZERO_META, $reason );
+		$order->update_meta_data( '_cvd_commission_staff_fix', array( 'at' => current_time( 'mysql', true ), 'before' => $before, 'why' => $why ) );
+		$order->add_order_note( 'Compra del equipo/tienda: sin comisión de gestora (' . self::STAFF_ZERO_LABELS[ $reason ] . '). Corregido a mano: antes ' . number_format( $before, 2, ',', '.' ) . ' USD' . ( '' !== $why ? ' · ' . $why : '' ) . '.' );
+		$order->save();
+		return array( 'ok' => true, 'msg' => 'Hecho: ' . number_format( $before, 2, ',', '.' ) . ' USD → ' . number_format( (float) $calc['amount'], 2, ',', '.' ) . ' USD.', 'before' => $before, 'after' => round( (float) $calc['amount'], 2 ) );
+	}
 
 	/** % del precio del extra para la dependienta (0 = en espera). */
 	public static function extra_staff_pct(): float {
@@ -53,6 +150,7 @@ final class CVD_Commissions {
 		if ( ! $owner_user_id || 'organic' === $owner_type ) { return null; }
 		$current = sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ?: 'pending';
 		if ( in_array( $current, array( 'approved', 'paid', 'cancelled' ), true ) ) { return null; }
+		self::flag_self_order_risk( $order, $owner_user_id ); // 3.14.45: regla del equipo/tienda también al aprobar en la caja
 		$calculation = self::calculate( $order, $owner_user_id );
 		$order->update_meta_data( '_cvd_commission_status', 'approved' );
 		$order->update_meta_data( '_cvd_commission_amount', $calculation['amount'] );
@@ -142,7 +240,10 @@ final class CVD_Commissions {
 		echo '<p><strong>Gestor/a:</strong> ' . esc_html( $order->get_meta( 'gestora_nombre', true ) ) . '<br>';
 		echo '<strong>Código:</strong> ' . esc_html( $order->get_meta( 'gestora_codigo', true ) ) . '<br>';
 		echo '<strong>Comisión:</strong> ' . wp_kses_post( wc_price( (float) $order->get_meta( '_cvd_commission_amount', true ), array( 'currency' => $order->get_currency() ) ) ) . '</p>';
-		if ( $order->get_meta( '_cvd_commission_risk', true ) ) { echo '<p class="notice notice-warning"><strong>Revisión requerida:</strong> el pedido coincide con datos de quien vendió.</p>'; }
+		$risk = (string) $order->get_meta( '_cvd_commission_risk', true );
+		if ( 'staff_self' === $risk ) { echo '<p class="notice notice-info"><strong>Compra del equipo/tienda:</strong> sin comisión de gestora.</p>'; }
+		elseif ( 'staff_owner' === $risk ) { echo '<p class="notice notice-warning"><strong>Revisión:</strong> lo vendió alguien del equipo de la tienda con su enlace; cobra comisión de gestora.</p>'; }
+		elseif ( $risk ) { echo '<p class="notice notice-warning"><strong>Revisión requerida:</strong> el pedido coincide con datos de quien vendió.</p>'; }
 		echo '<p><label for="cvd_commission_status"><strong>Estado</strong></label><br><select id="cvd_commission_status" name="cvd_commission_status">';
 		foreach ( self::allowed_admin_statuses( $status ) as $value => $label ) {
 			echo '<option value="' . esc_attr( $value ) . '" ' . selected( $status, $value, false ) . '>' . esc_html( $label ) . '</option>';
@@ -237,6 +338,23 @@ final class CVD_Commissions {
 		if ( ! $owner ) { return; }
 
 		$order->delete_meta_data( '_cvd_commission_risk' );
+		// 3.14.45: equipo de la tienda → «staff_self» (comisión 0, la pone calculate) o «staff_owner» (cobra, a revisar).
+		$zero_before = (string) $order->get_meta( self::STAFF_ZERO_META, true );
+		if ( self::is_staff( $owner_user_id ) ) {
+			$reason = self::staff_zero_reason( $order, $owner_user_id );
+			if ( '' !== $reason ) {
+				$order->update_meta_data( '_cvd_commission_risk', 'staff_self' );
+				$order->update_meta_data( self::STAFF_ZERO_META, $reason );
+				if ( $reason !== $zero_before ) { $order->add_order_note( 'Compra del equipo/tienda: sin comisión de gestora (' . self::STAFF_ZERO_LABELS[ $reason ] . ').' ); }
+				return;
+			}
+			$order->update_meta_data( '_cvd_commission_risk', 'staff_owner' );
+		}
+		if ( '' !== $zero_before ) {
+			$order->delete_meta_data( self::STAFF_ZERO_META );
+			$order->add_order_note( 'Ya no es compra del equipo/tienda: vuelve la comisión de gestora.' );
+		}
+		if ( self::is_staff( $owner_user_id ) ) { return; }
 		$order_email = strtolower( sanitize_email( $order->get_billing_email() ) );
 		$owner_email = strtolower( sanitize_email( $owner->user_email ) );
 		$order_phone = preg_replace( '/\D+/', '', $order->get_billing_phone() );
@@ -338,6 +456,10 @@ final class CVD_Commissions {
 		$margin_amount = 0.0;
 		$breakdown = array();
 		$pricing_gestora_id = absint( $order->get_meta( '_cvd_pricing_gestora_user_id', true ) );
+		// 3.14.45: compra del equipo/tienda → comisión de gestora 0. Con la comisión ya aprobada, pagada o cancelada
+		// no se recalcula nada (se queda la foto guardada): eso solo se corrige a mano con staff_rule_fix().
+		$locked = in_array( sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ), array( 'approved', 'paid', 'cancelled' ), true );
+		$staff_zero = $locked ? '' : self::staff_zero_reason( $order, $owner_user_id );
 
 		foreach ( $order->get_items( 'line_item' ) as $item ) {
 			$product = $item->get_product();
@@ -349,9 +471,13 @@ final class CVD_Commissions {
 
 			$snapshot = $item->get_meta( '_cvd_commission_snapshot', true );
 			$is_extra = is_array( $item->get_meta( self::EXTRA_META, true ) ) && $item->get_meta( self::EXTRA_META, true );
+			// 3.14.45: si el pedido entra o sale de la regla del equipo/tienda (p. ej. se cambió el cliente), la foto se rehace.
+			if ( ! $locked && is_array( $snapshot ) && ( '' !== $staff_zero ) !== ! empty( $snapshot['staff_zero'] ) ) { $snapshot = null; }
 			if ( ! is_array( $snapshot ) || ! isset( $snapshot['base_commission'], $snapshot['base_amount'], $snapshot['sale_amount'] ) ) {
 				$policy = self::commission_policy( $product, $gestora_rate );
 				$line_commission = 'fixed' === $policy['type'] ? $policy['value'] * $quantity : $line_base * ( $policy['value'] / 100 );
+				$without_rule = $line_commission + $line_margin;
+				if ( '' !== $staff_zero ) { $line_commission = 0.0; $line_margin = 0.0; }
 				$snapshot = array(
 					'product_id'       => $item->get_product_id(),
 					'variation_id'     => $item->get_variation_id(),
@@ -366,6 +492,7 @@ final class CVD_Commissions {
 					'markup'           => wc_format_decimal( $line_margin, 4 ),
 					'captured_at'      => current_time( 'mysql', true ),
 				);
+				if ( '' !== $staff_zero ) { $snapshot['staff_zero'] = $staff_zero; $snapshot['commission_without_rule'] = wc_format_decimal( $without_rule, 4 ); }
 				// 3.14.19: extra en tienda → la gestora cobra su comisión normal; el premio de la dependienta va aparte.
 				if ( $is_extra ) { $snapshot['extra'] = self::extra_split( $item, $product, $line, $quantity, (float) $line_commission ); }
 				$item->update_meta_data( '_cvd_commission_snapshot', $snapshot );

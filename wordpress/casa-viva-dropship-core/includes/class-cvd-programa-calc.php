@@ -52,7 +52,7 @@ final class CVD_Programa_Calc {
 	);
 
 	/** D79: alertas que hacen esperar al cierre automático del mes mientras Lennys no las marque «Revisada». */
-	public const REVIEW_TYPES = array( 'ganancia_alta', 'cuenta_compartida' );
+	public const REVIEW_TYPES = array( 'ganancia_alta', 'cuenta_compartida', 'equipo' ); // 3.14.45: «equipo» = venta de alguien de la tienda con su enlace
 
 	/* ---------------- Piezas pequeñas ---------------- */
 
@@ -296,7 +296,7 @@ final class CVD_Programa_Calc {
 	 * @param string $period   'AAAA-MM'.
 	 * @param array  $members  id => ['name', 'inviter' => id|0, 'joined' => 'Y-m-d H:i:s', 'approved' => bool, 'title' => slug].
 	 * @param array  $sales    lista de ['order_id', 'owner', 'at' (hora de Cuba), 'status' (approved|paid|…), 'self_order' (no cuenta),
-	 *                         'self_check' (cuenta con alerta), 'test',
+	 *                         'self_check' (cuenta con alerta), 'staff_self' (compra del equipo/tienda, 3.14.45), 'staff_check' (alerta «equipo»), 'test',
 	 *                         'lines' => [['product_id', 'name', 'qty', 'base', 'cost_unit' (null si no hay), 'commission', 'other' (USD de la línea: gastos fijos si se restan + premio de dependienta; 3.14.29), 'cost_provisional' (bool)]]].
 	 * @param array  $reversals devoluciones de pedidos ya cerrados: ['order_id', 'owner', 'points', 'base', 'red' => [['user', 'level', 'amount']]].
 	 */
@@ -332,8 +332,13 @@ final class CVD_Programa_Calc {
 			if ( ! in_array( (string) ( $s['status'] ?? '' ), array( 'approved', 'paid' ), true ) ) { continue; }
 			if ( ! empty( $s['test'] ) ) { continue; }
 			if ( ! empty( $s['self_order'] ) ) {
-				$alerts[] = array( 'type' => 'autocompra', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': lo compra o lo recibe la misma gestora; no da puntos ni red.' );
+				$alerts[] = array( 'type' => 'autocompra', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ( ! empty( $s['staff_self'] ) ? ': compra del equipo/tienda, sin comisión de gestora; no da puntos ni red.' : ': lo compra o lo recibe la misma gestora; no da puntos ni red.' ) );
 				continue;
+			}
+			if ( ! empty( $s['staff_check'] ) ) {
+				// 3.14.45 (Ernesto, 21-oct): alguien del equipo de la tienda vendió con su enlace a un cliente: cobra su comisión y Lennys lo revisa.
+				$client = ''; foreach ( (array) ( $s['buyer_names'] ?? array() ) as $bn ) { if ( '' !== trim( (string) $bn ) ) { $client = trim( (string) $bn ); break; } }
+				$alerts[] = array( 'type' => 'equipo', 'user' => $owner, 'order' => $order, 'key' => 'equipo:' . $order, 'text' => 'Pedido #' . $order . ': lo vendió ' . $people[ $owner ]['name'] . ' (equipo de la tienda) con su enlace' . ( '' !== $client ? ' a «' . $client . '»' : '' ) . '. Cobra comisión de gestora: márcalo «Revisada» si es un cliente de verdad.' );
 			}
 			if ( ! empty( $s['self_check'] ) ) {
 				// D79: se agrupan al final (group_revisar): sueltas solo si se repite la misma clienta 3 veces o más.

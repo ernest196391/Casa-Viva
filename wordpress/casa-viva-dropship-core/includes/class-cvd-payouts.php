@@ -615,6 +615,8 @@ final class CVD_Payouts {
 		$eligible = array();
 		foreach ( $orders as $order ) {
 			if ( 'approved' !== $order->get_meta( '_cvd_commission_status', true ) || absint( $order->get_meta( '_cvd_payout_id', true ) ) ) { continue; }
+			// 3.14.45: compra del equipo/tienda con comisión 0: no entra en «Pedir mi pago».
+			if ( 'staff_self' === (string) $order->get_meta( '_cvd_commission_risk', true ) && (float) $order->get_meta( '_cvd_commission_amount', true ) <= 0 ) { continue; }
 			$eligible[ $order->get_currency() ][] = $order;
 		}
 		return $eligible;

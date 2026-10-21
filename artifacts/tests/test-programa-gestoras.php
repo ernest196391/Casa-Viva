@@ -352,5 +352,15 @@ ok( 'ganancia_alta:950' === $C::alert_key( $r['alerts'][0] ) && 1 === count( $C:
 // Los números del programa no cambian (D79 no toca red, piedras ni fondo).
 ok( 0.01 === $C::DEFAULTS['red1_pct'] && 0.005 === $C::DEFAULTS['red2_pct'] && 0.15 === $C::DEFAULTS['fund_pct'] && 65 === $C::STONES[0][2] && 5000 === $C::STONES[0][3], 'D79 no cambia red, fondo ni piedras' );
 
+// ---------- 3.14.45. Equipo de la tienda (Ernesto 21-oct, pedido #4953) ----------
+$r = $C::compute( P, array( 64 => member( 'Zaymi' ) ), array( sale( 4953, 64, 12, 6, 0, array( 'self_order' => true, 'staff_self' => true ) ) ) );
+ok( has_alert( $r, 'autocompra', 64 ) && false !== strpos( $r['alerts'][0]['text'], 'equipo/tienda' ), 'compra del equipo/tienda: alerta autocompra con su texto' );
+ok( ! has_alert( $r, 'equipo' ), 'compra de la tienda: sin alerta «equipo»' );
+$r = $C::compute( P, array( 64 => member( 'Zaymi' ) ), array( sale( 4954, 64, 30, 20, 3, array( 'staff_check' => true, 'buyer_names' => array( 'Sharon Pérez' ) ) ) ) );
+$eq = array_values( array_filter( $r['alerts'], static fn( $a ) => 'equipo' === $a['type'] ) );
+ok( 1 === count( $eq ) && 'equipo:4954' === $C::alert_key( $eq[0] ) && false !== strpos( $eq[0]['text'], 'Sharon Pérez' ), 'venta del equipo a un cliente: alerta «equipo:4954» con el cliente' );
+ok( 1 === count( $C::pending_review( $eq, array() ) ) && array() === $C::pending_review( $eq, array( 'equipo:4954' => 1 ) ), '«equipo» se marca «Revisada» (hace esperar al cierre hasta entonces)' );
+near( $r['people'][64]['own_points'], 7, 'venta del equipo con enlace: sí cuenta (30 − 20 − 3)' );
+
 echo $fails ? "\n$fails de $count comprobaciones fallaron\n" : "OK: $count comprobaciones\n";
 exit( $fails ? 1 : 0 );

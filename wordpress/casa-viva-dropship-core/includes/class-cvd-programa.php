@@ -351,15 +351,14 @@ final class CVD_Programa {
 			$test = ( class_exists( 'CVD_Delivery' ) && ( CVD_Delivery::is_test_order( $order ) || 'test' === CVD_Delivery::blocks_dispatch( $order ) ) ) || ! empty( $members[ $owner ]['test'] );
 			// Autocompra: el nombre de quien compra o recibe es el de la gestora (la marca self_order de Core sola no basta).
 			$buyers = array( trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ), trim( $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name() ), (string) $order->get_meta( 'cliente_vinculado', true ) );
-			$self = CVD_Programa_Calc::self_purchase(
-				(string) $members[ $owner ]['name'],
-				$buyers,
-				'self_order' === (string) $order->get_meta( '_cvd_commission_risk', true )
-			);
+			$risk = (string) $order->get_meta( '_cvd_commission_risk', true );
+			// 3.14.45: compra del equipo/tienda (staff_self) = autocompra; venta del equipo a un cliente (staff_owner) = alerta «equipo».
+			$self = 'staff_self' === $risk ? 'si' : CVD_Programa_Calc::self_purchase( (string) $members[ $owner ]['name'], $buyers, 'self_order' === $risk );
 			$out[] = array(
 				'order_id' => $order->get_id(), 'owner' => $owner, 'at' => self::local( $at ), 'status' => $status,
 				'buyer_names' => $buyers, // auditoría 16-oct: la madrina que compra a través de su invitada no cobra red de ese pedido
 				'self_order' => 'si' === $self, 'self_check' => 'revisar' === $self,
+				'staff_self' => 'staff_self' === $risk, 'staff_check' => 'staff_owner' === $risk,
 				'test' => $test, 'lines' => $lines,
 			);
 		}
@@ -1008,7 +1007,7 @@ final class CVD_Programa {
 		usort( $people, static fn( $a, $b ) => $b['teamPoints'] <=> $a['teamPoints'] );
 		// Alertas: lo grave primero; «revisar» (su teléfono con otro cliente) es muy común y va al final.
 		// D79: «cuenta_compartida» es grave (arriba); las «revisar» van agrupadas en un resumen.
-		$order = array( 'cuenta_compartida' => 0, 'autocompra' => 0, 'autocompra_red' => 0, 'concentracion' => 1, 'red_negativa' => 2, 'devolucion' => 3, 'pierde' => 4, 'ganancia_alta' => 4, 'sin_costo' => 5, 'revisar' => 6, 'revisar_resumen' => 6, 'provisional' => 7 );
+		$order = array( 'cuenta_compartida' => 0, 'autocompra' => 0, 'autocompra_red' => 0, 'equipo' => 1, 'concentracion' => 1, 'red_negativa' => 2, 'devolucion' => 3, 'pierde' => 4, 'ganancia_alta' => 4, 'sin_costo' => 5, 'revisar' => 6, 'revisar_resumen' => 6, 'provisional' => 7 );
 		$alerts = (array) ( $data['alerts'] ?? array() );
 		usort( $alerts, static fn( $a, $b ) => ( $order[ $a['type'] ] ?? 9 ) <=> ( $order[ $b['type'] ] ?? 9 ) );
 		$reviewed = self::reviewed();
@@ -1070,7 +1069,7 @@ final class CVD_Programa {
 		}
 		echo '</tbody></table>';
 		if ( $rep['alerts'] ) {
-			$labels = array( 'cuenta_compartida' => 'Comparte teléfono, tarjeta o dirección con su madrina', 'revisar_resumen' => 'Su teléfono con otro cliente (normal)', 'autocompra' => 'Autocompra (no cuenta)', 'autocompra_red' => 'La madrina compra por su invitada (sin red)', 'ganancia_alta' => 'Ganancia muy alta: revisar costo','concentracion' => 'Un miembro con más del 60 %', 'red_negativa' => 'Red en negativo', 'devolucion' => 'Devolución de un mes cerrado', 'pierde' => 'Se vende perdiendo', 'sin_costo' => 'Producto sin costo', 'revisar' => 'Su teléfono, 3 veces o más con la misma clienta', 'provisional' => 'Costo provisional (cuenta)' );
+			$labels = array( 'equipo' => 'Venta del equipo de la tienda con su enlace (cobra comisión: revisar)', 'cuenta_compartida' => 'Comparte teléfono, tarjeta o dirección con su madrina','revisar_resumen' => 'Su teléfono con otro cliente (normal)', 'autocompra' => 'Autocompra (no cuenta)', 'autocompra_red' => 'La madrina compra por su invitada (sin red)', 'ganancia_alta' => 'Ganancia muy alta: revisar costo','concentracion' => 'Un miembro con más del 60 %', 'red_negativa' => 'Red en negativo', 'devolucion' => 'Devolución de un mes cerrado', 'pierde' => 'Se vende perdiendo', 'sin_costo' => 'Producto sin costo', 'revisar' => 'Su teléfono, 3 veces o más con la misma clienta', 'provisional' => 'Costo provisional (cuenta)' );
 			echo '<h2>Alertas (' . esc_html( (string) array_sum( $rep['alertCounts'] ) ) . ')</h2><p>' . esc_html( implode( ' · ', array_map( static fn( $k, $v ) => ( $labels[ $k ] ?? $k ) . ': ' . $v, array_keys( $rep['alertCounts'] ), $rep['alertCounts'] ) ) ) . '</p><ul style="list-style:disc;margin-left:20px">';
 			if ( $rep['pendingReview'] ) { echo '<p><strong>' . esc_html( $rep['pendingReview'] . ( 1 === $rep['pendingReview'] ? ' alerta' : ' alertas' ) . ' sin revisar: el cierre automático del mes espera hasta que las marques «Revisada».' ) . '</strong>' . ( $rep['closeWaiting'] ? esc_html( ' Ahora espera el cierre de ' . $rep['closeWaiting'] . '.' ) : '' ) . '</p>'; }
 			foreach ( $rep['alerts'] as $a ) {
