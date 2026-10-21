@@ -83,9 +83,10 @@ final class CVD_Caja_Bridge {
 			$product = $item instanceof WC_Order_Item_Product ? $item->get_product() : null;
 			$sku = $product ? (string) $product->get_sku() : '';
 			if ( preg_match( '/^MK-/i', $sku ) ) { $supplier = true; }
-			$products[] = array( 'name' => $item->get_name(), 'qty' => (int) $item->get_quantity(), 'sku' => $sku );
+			$products[] = array( 'name' => $item->get_name(), 'qty' => (int) $item->get_quantity(), 'sku' => $sku, 'image' => self::thumb( $product ) );
 		}
 		$delivery = 'pickup' !== $kind && class_exists( 'CVD_Delivery' ) ? CVD_Delivery::status( $order ) : '';
+		$rates = self::order_rates( $order );
 		$messenger = 'pickup' !== $kind ? get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) : false;
 		return array(
 			'id' => $order->get_id(),
@@ -104,6 +105,10 @@ final class CVD_Caja_Bridge {
 			'messenger' => $messenger ? $messenger->display_name : '',
 			'totalUsd' => round( (float) $order->get_total(), 2 ),
 			'payment' => class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_payment( $order ) : null,
+			// 3.14.46: tasa CUP del día del pedido (la caja cobra en CUP con ella) — cupRate, cupTransferRate, cupRateDay.
+			'cupRate' => $rates['cupRate'],
+			'cupTransferRate' => $rates['cupTransferRate'],
+			'cupRateDay' => $rates['cupRateDay'],
 			'prepaid' => class_exists( 'CVD_Cuban_Checkout' ) && CVD_Cuban_Checkout::is_prepaid( $order ),
 			'declaredUsd' => (string) $order->get_meta( '_cvd_declared_usd', true ),
 			'declaredCup' => (string) $order->get_meta( '_cvd_declared_cup', true ),
@@ -111,6 +116,41 @@ final class CVD_Caja_Bridge {
 			'supplier' => $supplier,
 			'test' => class_exists( 'CVD_Delivery' ) && CVD_Delivery::is_test_order( $order ),
 		);
+	}
+
+	/**
+	 * 3.14.46 (Lennys 21-oct: «se cobra como estaba el día del vale; no podemos variarlo para atrás»): la tasa CUP
+	 * del DÍA DEL PEDIDO para que la caja cobre en CUP con ella y nunca con la de hoy.
+	 *  cupRate         = efectivo CUP por 1 USD (_cvd_cup_rate; si falta y pagaba en efectivo CUP, el factor del vale).
+	 *  cupTransferRate = transferencia CUP por 1 USD (el factor del vale si pagaba por transferencia; si no, cupRate × factor).
+	 *  cupRateDay      = «18-oct».
+	 */
+	private static function order_rates( WC_Order $order ): array {
+		$has = class_exists( 'CVD_Daily_Rates' );
+		$cup = $has ? CVD_Daily_Rates::order_rate( $order ) : null;
+		$kind = sanitize_key( (string) $order->get_meta( '_cvd_payment_kind', true ) );
+		$factor = (float) $order->get_meta( '_cvd_payment_factor', true );
+		if ( ! $cup && 'cash_cup' === $kind && $factor > 0 ) { $cup = $factor; }
+		$transfer = 'transfer_cup' === $kind && $factor > 0 ? $factor : ( $cup && $has ? CVD_Daily_Rates::cup_transfer( $cup ) : null );
+		$day = $has ? CVD_Daily_Rates::order_rate_day( $order ) : '';
+		if ( '' === $day && ( $cup || $transfer ) && $order->get_date_created() ) {
+			$ts = $order->get_date_created()->getTimestamp();
+			$names = array( 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic' );
+			$day = wp_date( 'j', $ts ) . '-' . $names[ (int) wp_date( 'n', $ts ) - 1 ];
+		}
+		return array( 'cupRate' => $cup ? (float) $cup : null, 'cupTransferRate' => $transfer ? (float) $transfer : null, 'cupRateDay' => $day );
+	}
+
+	/** 3.14.46 (Lennys 21-oct): miniatura (150 px) del producto o de su padre, para comprobar el pedido en la caja. */
+	private static function thumb( $product ): string {
+		if ( ! $product instanceof WC_Product ) { return ''; }
+		$image = (int) $product->get_image_id();
+		if ( ! $image && $product->get_parent_id() ) {
+			$parent = wc_get_product( $product->get_parent_id() );
+			$image = $parent ? (int) $parent->get_image_id() : 0;
+		}
+		$url = $image ? wp_get_attachment_image_url( $image, 'thumbnail' ) : '';
+		return is_string( $url ) ? $url : '';
 	}
 
 	public static function web_orders(): WP_REST_Response {
