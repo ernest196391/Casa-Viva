@@ -10,7 +10,7 @@ defined( 'ABSPATH' ) || exit;
  * CVD_Panel_Bridge), después de comprobar la clave del equipo. Solo lectura y cobro:
  *
  *  GET  /panel/caja/web-orders                 → pedidos que se pueden cobrar en el mostrador:
- *                                                 recogida «Listo para recoger» y a domicilio con el
+ *                                                 recogida abierta (Nueva, Preparando o «Listo para recoger»; 3.14.44) y a domicilio con el
  *                                                 paquete en manos del mensajero o entregado (dinero pendiente).
  *  POST /panel/caja/web-orders/{id}/charge     → «Dinero recibido» con las MISMAS reglas de /ventas/
  *                                                 (CVD_Sales::change_status), firmado por la dependienta de
@@ -46,13 +46,24 @@ final class CVD_Caja_Bridge {
 		return $response;
 	}
 
+	/** Etapas de una recogida abierta que se cobran en el mostrador (3.14.44); '' = pedido sin etapa (nuevo). */
+	private const PICKUP_OPEN = array( '', 'new', 'confirmed', 'preparing', 'ready' );
+
+	/** Etapa de la recogida ('' cuenta como 'new'). */
+	private static function pickup_stage( WC_Order $order ): string {
+		$stage = sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) );
+		return '' === $stage ? 'new' : $stage;
+	}
+
 	/** '' = no se puede cobrar en el mostrador; si no, 'pickup' o 'delivery'. */
 	public static function chargeable( WC_Order $order ): string {
 		if ( ! $order->has_status( array( 'pending', 'processing', 'on-hold' ) ) ) { return ''; }
 		if ( 'yes' === $order->get_meta( '_cvd_operation_incident_active', true ) ) { return ''; }
 		$pickup = 'pickup' === sanitize_key( (string) $order->get_meta( '_cvd_fulfillment_type', true ) );
 		if ( $pickup ) {
-			return 'ready' === sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) ) ? 'pickup' : '';
+			// 3.14.44 (Lennys 21-oct: «dobla el trabajo»): la recogida se cobra aunque nadie haya pulsado «Listo»
+			// en la web; al cobrar, Core la pasa a Listo y la completa (ver charge()).
+			return in_array( sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) ), self::PICKUP_OPEN, true ) ? 'pickup' : '';
 		}
 		$delivery = class_exists( 'CVD_Delivery' ) ? CVD_Delivery::status( $order ) : '';
 		return in_array( $delivery, array( 'picked_up', 'handed_over', 'delivered' ), true ) ? 'delivery' : '';
@@ -81,7 +92,9 @@ final class CVD_Caja_Bridge {
 			'number' => $order->get_order_number(),
 			'date' => $order->get_date_created() ? $order->get_date_created()->date( 'c' ) : '',
 			'kind' => $kind,
-			'statusLabel' => 'pickup' === $kind ? 'Listo para recoger' : ( 'outgoing' === $kind ? 'Por salir con el mensajero' : ( 'delivered' === $delivery ? 'Entregado · efectivo pendiente' : 'Con el mensajero' ) ),
+			// 3.14.44: recogida sin preparar también sale (se cobra directo); 'prepared' dice si ya pulsaron «Listo».
+			'prepared' => 'pickup' !== $kind || 'ready' === self::pickup_stage( $order ),
+			'statusLabel' => 'pickup' === $kind ? ( 'ready' === self::pickup_stage( $order ) ? 'Listo para recoger' : 'Recogida · sin preparar' ) : ( 'outgoing' === $kind ? 'Por salir con el mensajero' : ( 'delivered' === $delivery ? 'Entregado · efectivo pendiente' : 'Con el mensajero' ) ),
 			'chargeable' => 'outgoing' !== $kind,
 			// 3.14.42: vuelto que lleva el mensajero [{amount, currency}] (sale del fondo y vuelve con el cobro).
 			'change' => class_exists( 'CVD_Order_Edit' ) ? CVD_Order_Edit::change_of( $order ) : array(),
@@ -159,6 +172,19 @@ final class CVD_Caja_Bridge {
 		$order->update_meta_data( self::CHARGE_META, array( 'id' => $charge_id, 'by' => $name, 'clerk' => $clerk ? $clerk->ID : 0, 'device' => $device, 'at' => current_time( 'mysql', true ) ) );
 		$order->save();
 
+		// 3.14.44: recogida aún Nueva/Confirmada/Preparando → se pasa a «Listo» en esta misma petición, con la dependienta
+		// como autora en _cvd_operation_history (ancla caja-charge:<cobro>:<etapa>), para que la recogida se complete como
+		// siempre (CVD_Order_Transition_Service::complete_pickup exige 'ready'). No toca el stock: Woo ya lo descontó al crear el pedido.
+		if ( 'pickup' === $kind ) {
+			$advanced = self::advance_pickup_to_ready( $order, $signer, $charge_id );
+			if ( is_wp_error( $advanced ) ) {
+				$fresh = wc_get_order( $order->get_id() );
+				if ( $fresh ) { $fresh->delete_meta_data( self::CHARGE_META ); $fresh->save(); }
+				return $advanced;
+			}
+			$order = wc_get_order( $order->get_id() );
+		}
+
 		wp_set_current_user( $signer );
 		$inner = new WP_REST_Request( 'POST', '/' . self::NS . '/sales/' . $order->get_id() . '/status' );
 		$params = array(
@@ -184,6 +210,31 @@ final class CVD_Caja_Bridge {
 		$fresh->add_order_note( sprintf( 'Cobrado en la caja NEXO%s por %s%s.', '' !== $device ? ' (' . $device . ')' : '', '' !== $name ? $name : 'la tienda', $clerk ? '' : ' (firmado por el panel: no encontré su usuaria en la web)' ) );
 		$data = (array) $response->get_data();
 		return self::no_cache( array( 'ok' => true, 'message' => (string) ( $data['message'] ?? 'Pedido cobrado.' ), 'signedBy' => $clerk ? $clerk->display_name : 'panel' ) );
+	}
+
+	/** Nueva/Confirmada → Preparando → Listo (o Preparando → Listo), firmado por $signer. Idempotente por cobro. */
+	private static function advance_pickup_to_ready( WC_Order $order, int $signer, string $charge_id ) {
+		$stage = self::pickup_stage( $order );
+		if ( 'ready' === $stage ) { return true; }
+		if ( ! class_exists( 'CVD_Order_Transition_Service' ) ) {
+			return new WP_Error( 'cvd_caja_prepare', 'No se pudo pasar la recogida a «Listo». Púlsalo en la web y cobra otra vez.', array( 'status' => 409 ) );
+		}
+		$steps = in_array( $stage, array( 'new', 'confirmed' ), true ) ? array( 'preparing', 'ready' ) : ( 'preparing' === $stage ? array( 'ready' ) : array() );
+		if ( ! $steps ) {
+			return new WP_Error( 'cvd_not_chargeable', 'Este pedido no está listo para cobrar en la tienda (cancelado, sin entregar o con incidencia).', array( 'status' => 409 ) );
+		}
+		foreach ( $steps as $target ) {
+			$step = CVD_Order_Transition_Service::transition( $order->get_id(), 'operation', $target, array(
+				'actor_user_id' => $signer,
+				'idempotency_key' => 'caja-charge:' . $charge_id . ':' . $target,
+				'source' => 'cvd_caja_charge',
+				'metadata' => array( 'caja_charge' => $charge_id ),
+			) );
+			if ( empty( $step['success'] ) ) {
+				return new WP_Error( 'cvd_caja_prepare', 'No se pudo pasar la recogida a «Listo». Púlsalo en la web y cobra otra vez.', array( 'status' => 409, 'transition' => $step ) );
+			}
+		}
+		return true;
 	}
 
 	/** Vuelto desde la caja: {changeRequired:[{amount, currency}], clerkName, device}. Firma el panel; la nota dice quién. */
