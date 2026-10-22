@@ -352,6 +352,11 @@ final class CVD_Programa {
 			// Autocompra: el nombre de quien compra o recibe es el de la gestora (la marca self_order de Core sola no basta).
 			$buyers = array( trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ), trim( $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name() ), (string) $order->get_meta( 'cliente_vinculado', true ) );
 			$risk = (string) $order->get_meta( '_cvd_commission_risk', true );
+			// 3.14.47 (Ernesto 22-oct: «entran si venden como gestora, no como dependienta»): los pedidos del equipo de la
+			// tienda anteriores a 3.14.45 no llevan staff_self/staff_owner (Zaymi #4222 «Tienda» daba puntos). Se mira ahora.
+			if ( class_exists( 'CVD_Commissions' ) && CVD_Commissions::is_staff( $owner ) && ! in_array( $risk, array( 'staff_self', 'staff_owner' ), true ) ) {
+				$risk = '' !== CVD_Commissions::staff_zero_reason( $order, $owner ) ? 'staff_self' : 'staff_owner';
+			}
 			// 3.14.45: compra del equipo/tienda (staff_self) = autocompra; venta del equipo a un cliente (staff_owner) = alerta «equipo».
 			$self = 'staff_self' === $risk ? 'si' : CVD_Programa_Calc::self_purchase( (string) $members[ $owner ]['name'], $buyers, 'self_order' === $risk );
 			$out[] = array(
