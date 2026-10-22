@@ -208,7 +208,7 @@ unset( $GLOBALS['opts']['cvd_programa_gastos_fijos'] );
 // ---------- 3.14.29 (D75): venta de proveedor resta el fondo de la operación ----------
 if ( ! class_exists( 'CVD_Supplier_Split' ) ) {
 	final class CVD_Supplier_Split { // lo justo de Core 3.14.14
-		public static function saved( $o ) { return array( 'snapshot' => array( 'rate' => 800, 'fundCup' => 2400 ) ); }
+		public static function saved( $o ) { return array( 'snapshot' => array( 'rate' => 800, 'fundCup' => 2400, 'specialCup' => 3200 ) ); } // 3.14.49: su parte 3.200 CUP = 4 USD
 		public static function compute( $o ) { return array(); }
 		public static function owner_gestor_user() { return absint( get_option( 'cvd_owner_gestor_user', 0 ) ); } // 3.14.48
 		public static function offweb_sales( $m = '' ) { return $GLOBALS['offweb'] ?? array(); }
@@ -222,10 +222,20 @@ ok( abs( $r['people'][5]['own_points'] - ( 5 + 7 ) ) < 0.01, 'proveedor: 45 − 
 // 3.14.48 (D92): con la cuenta de gestor del dueño, la línea MK- (5 puntos) suma también a sus puntos de proveedor.
 $GLOBALS['users'][7] = new WP_User( 7, 'Dueño Ejemplo', '2026-10-22 12:00:00' ); $GLOBALS['umeta'][7]['_cvd_account_status'] = 'approved';
 $GLOBALS['opts']['cvd_owner_gestor_user'] = '7';
-$GLOBALS['offweb'] = array( array( 'date' => '2026-11-11', 'points' => 19.0, 'saleUsd' => 380.0, 'state' => 'cerrado' ) );
+$GLOBALS['offweb'] = array( array( 'date' => '2026-11-11', 'points' => 21.0, 'specialUsd' => 19.0, 'saleUsd' => 380.0, 'state' => 'cerrado' ) );
 $r = CVD_Programa::compute( '2026-11' );
-ok( abs( $r['people'][7]['supplier_points'] - ( 5 + 19 ) ) < 0.01 && abs( $r['people'][5]['own_points'] - 12 ) < 0.01, 'D92: el dueño suma 5 (MK- de la gestora) + 19 (fuera de la web); ella sigue con 12: ' . ( $r['people'][7]['supplier_points'] ?? 'x' ) );
+// 3.14.49: de la venta MK- de la gestora solo su parte del reparto (3.200 CUP / 800 = 4, no los 5 puntos de la línea) y de
+// la de fuera de la web su specialUsd (19, no el margen 21). Son sus puntos propios.
+ok( abs( $r['people'][7]['supplier_points'] - ( 4 + 19 ) ) < 0.01 && abs( $r['people'][5]['own_points'] - 12 ) < 0.01, '3.14.49: el dueño suma 4 (su parte del reparto) + 19 (specialUsd de fuera de la web); ella sigue con 12: ' . ( $r['people'][7]['supplier_points'] ?? 'x' ) );
+ok( abs( $r['people'][7]['own_points'] - 23 ) < 0.01, '3.14.49: esos 23 son sus puntos propios: ' . ( $r['people'][7]['own_points'] ?? 'x' ) );
 ok( 0 === $r['people'][7]['bonus_pay_cup'], 'D92: el dueño sin bono' );
+// Su vista «Mi piedra»: «Tus puntos este mes» 23 y la lista de vales con su parte de cada venta de proveedor.
+$prev_latest = $GLOBALS['wpdb']->latest;
+$GLOBALS['wpdb']->latest = array( 'id' => 9, 'period' => '2026-11', 'kind' => 'diario', 'status' => 'vista', 'computed_at' => gmdate( 'Y-m-d H:i:s' ), 'rate_cup' => 800, 'payload_sha256' => str_repeat( 'c', 64 ), 'payload' => json_encode( $r ) );
+$pi = CVD_Programa::render_piedra( $GLOBALS['users'][7] );
+ok( false !== strpos( $pi, 'Tus puntos este mes</small><strong>23</strong>' ), '3.14.49 Mi piedra: «Tus puntos este mes» 23' );
+ok( false !== strpos( $pi, 'tu parte)' ) && false !== strpos( $pi, 'fuera de la web (tu parte)' ) && false !== strpos( $pi, 'Total de tus puntos</b></div><b class="cvga-vale-pts">23</b>' ), '3.14.49 Mi piedra: la lista de vales trae su parte de proveedor y suma 23' );
+$GLOBALS['wpdb']->latest = $prev_latest;
 unset( $GLOBALS['opts']['cvd_owner_gestor_user'], $GLOBALS['users'][7], $GLOBALS['offweb'] );
 
 // ---------- 3.14.29 (D75): red y bono por «Pedir mi pago» ----------

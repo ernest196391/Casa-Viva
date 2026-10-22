@@ -365,9 +365,23 @@ final class CVD_Programa {
 				'self_order' => 'si' === $self, 'self_check' => 'revisar' === $self,
 				'staff_self' => 'staff_self' === $risk, 'staff_check' => 'staff_owner' === $risk,
 				'test' => $test, 'lines' => $lines,
-			);
+			) + self::owner_share_field( $order, $owner, $lines );
 		}
 		return $out;
+	}
+
+	/**
+	 * 3.14.49 (Ernesto 22-oct): venta con líneas de proveedor (MK-) de OTRA gestora → la parte del dueño del reparto
+	 * (specialCup / tasa del reparto, lo sellado si está cerrado), que es lo que suma a SUS puntos (no el margen entero).
+	 * Sin cuenta del dueño, venta suya o sin líneas MK-: nada. Sin tasa: 0.
+	 */
+	private static function owner_share_field( WC_Order $order, int $owner, array $lines ): array {
+		$og = class_exists( 'CVD_Supplier_Split' ) ? CVD_Supplier_Split::owner_gestor_user() : 0;
+		if ( ! $og || $owner === $og || ! array_filter( $lines, static fn( $l ) => ! empty( $l['bajo_pedido'] ) ) ) { return array(); }
+		$saved = CVD_Supplier_Split::saved( $order );
+		$s = is_array( $saved['snapshot'] ?? null ) ? $saved['snapshot'] : CVD_Supplier_Split::compute( $order );
+		$rate = (float) ( $s['rate'] ?? 0 );
+		return array( 'owner_share_usd' => $rate > 0 ? round( max( 0, (int) ( $s['specialCup'] ?? 0 ) ) / $rate, 4 ) : 0.0 );
 	}
 
 	/**
@@ -449,10 +463,10 @@ final class CVD_Programa {
 		return CVD_Programa_Calc::compute( $period, $members, self::sales( $period, $members, $closed ), self::reversals( $closed ), array( 'rate_cup' => self::rate(), 'carry_usd' => self::carry_in( $period ), 'owner_gestor' => class_exists( 'CVD_Supplier_Split' ) ? CVD_Supplier_Split::owner_gestor_user() : 0, 'owner_offweb' => self::offweb_for_calc( $period ) ) );
 	}
 
-	/** 3.14.48 (D92): ventas de proveedor fuera de la web del mes, con sus puntos (margen limpio), para el cálculo. */
+	/** 3.14.48 (D92): ventas de proveedor fuera de la web del mes, para el cálculo. 3.14.49: sus puntos = su parte (specialUsd). */
 	private static function offweb_for_calc( string $period ): array {
 		if ( ! class_exists( 'CVD_Supplier_Split' ) || ! CVD_Supplier_Split::owner_gestor_user() ) { return array(); }
-		return array_map( static fn( $s ) => array( 'date' => $s['date'], 'points' => $s['points'], 'base' => $s['saleUsd'], 'state' => $s['state'] ), CVD_Supplier_Split::offweb_sales( $period ) );
+		return array_map( static fn( $s ) => array( 'date' => $s['date'], 'points' => max( 0.0, (float) ( $s['specialUsd'] ?? 0 ) ), 'base' => $s['saleUsd'], 'state' => $s['state'] ), CVD_Supplier_Split::offweb_sales( $period ) );
 	}
 
 	/**
@@ -680,9 +694,17 @@ final class CVD_Programa {
 	private static function vales( WP_User $user, ?array $run, ?array $data ): array {
 		$out = array( 'counted' => array(), 'waiting' => array(), 'total' => 0.0, 'period' => (string) ( $data['period'] ?? wp_date( 'Y-m' ) ) );
 		$seen = array();
+		// 3.14.49: en la cuenta del dueño, su parte de las ventas de proveedor también es puntos suyos: van en la lista.
+		$kinds = array( 'venta', 'devolucion', 'proveedor', 'proveedor_fuera', 'proveedor_devolucion' );
 		foreach ( (array) ( $data['lines'] ?? array() ) as $l ) {
-			if ( (int) ( $l['user'] ?? 0 ) !== $user->ID || ! in_array( $l['kind'] ?? '', array( 'venta', 'devolucion' ), true ) ) { continue; }
-			$oid = (int) $l['order']; $seen[ $oid ] = true;
+			if ( (int) ( $l['user'] ?? 0 ) !== $user->ID || ! in_array( $l['kind'] ?? '', $kinds, true ) ) { continue; }
+			$oid = (int) $l['order'];
+			if ( 'proveedor_fuera' === $l['kind'] ) {
+				$out['counted'][] = array( 'number' => 'Fuera', 'made' => '', 'paid' => '', 'ts' => 0, 'products' => 'Venta de proveedor fuera de la web (tu parte)', 'points' => (float) $l['points'], 'refund' => false );
+				$out['total'] += (float) $l['points'];
+				continue;
+			}
+			if ( 'venta' === $l['kind'] || 'devolucion' === $l['kind'] ) { $seen[ $oid ] = true; }
 			$order = $oid ? wc_get_order( $oid ) : null;
 			$at = $order ? CVD_Programa_Calc::approved_at( $order->get_meta( '_cvd_commission_history', true ), (string) $order->get_meta( '_cvd_cash_verified_at', true ), $order->get_date_completed() ? gmdate( 'Y-m-d H:i:s', $order->get_date_completed()->getTimestamp() ) : '' ) : '';
 			$out['counted'][] = array(
@@ -690,9 +712,9 @@ final class CVD_Programa {
 				'made' => $order && $order->get_date_created() ? wp_date( 'j/n', $order->get_date_created()->getTimestamp() ) : '',
 				'paid' => '' !== $at ? wp_date( 'j/n', strtotime( $at . ' UTC' ) ) : '',
 				'ts' => '' !== $at ? strtotime( $at . ' UTC' ) : 0,
-				'products' => $order ? self::vale_products( $order ) : '',
+				'products' => ( $order ? self::vale_products( $order ) : '' ) . ( 'proveedor' === $l['kind'] ? ' (venta de proveedor de otra gestora: tu parte)' : '' ),
 				'points' => (float) $l['points'],
-				'refund' => 'devolucion' === $l['kind'],
+				'refund' => 'devolucion' === $l['kind'] || 'proveedor_devolucion' === $l['kind'],
 			);
 			$out['total'] += (float) $l['points'];
 		}
@@ -867,7 +889,7 @@ final class CVD_Programa {
 				<article class="cvga-card cvga-kpi"><small>Tus puntos este mes</small><strong><?php echo esc_html( self::pts2( $me['own_points'] ?? 0 ) ); ?></strong><span><?php echo esc_html( self::usd( $me['own_sales_usd'] ?? 0 ) . ' vendidos y cobrados' ); ?></span></article>
 				<article class="cvga-card cvga-kpi"><small>Puntos del equipo</small><strong><?php echo esc_html( self::pts( $me['team_points'] ?? 0 ) ); ?></strong><span>Tú + tus invitadas + las de ellas</span></article>
 				<?php if ( $owner ) : // 3.14.48 (D92) ?>
-				<article class="cvga-card cvga-kpi"><small>Puntos de proveedor</small><strong><?php echo esc_html( self::pts2( $me['supplier_points'] ?? 0 ) ); ?></strong><span>Ventas de proveedor de las gestoras: solo para tu piedra</span></article>
+				<article class="cvga-card cvga-kpi"><small>De ellos, de proveedor</small><strong><?php echo esc_html( self::pts2( $me['supplier_points'] ?? 0 ) ); ?></strong><span>Tu parte de las ventas de proveedor de las gestoras (ya van en tus puntos). Sin bono</span></article>
 				<?php endif; ?>
 			</div>
 			<?php echo self::render_vales( $user, $run, $data ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>

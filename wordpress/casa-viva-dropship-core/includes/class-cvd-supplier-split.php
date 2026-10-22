@@ -14,6 +14,8 @@ defined( 'ABSPATH' ) || exit;
  * _cvd_supplier_split_closed_at + nota en el pedido con quién gana cuánto. Es información: no mueve dinero ni pagos.
  *
  * Margen mínimo (sugerencia de Claude, aviso y no bloqueo): margen ≥ comisión gestora + fondo + 1 USD.
+ * 3.14.49 (Ernesto 22-oct): ruta C (directo del proveedor al cliente) = dependienta 0 sugerida (los cerrados no cambian:
+ * usan lo sellado). La parte del dueño (specialCup) es SU comisión en su área (owner_commissions) y sus puntos propios.
  * Rutas (clave del panel, como CVD_Panel_Bridge):
  *   GET  /panel/supplier-split/<id>         reparto guardado o sugerido
  *   POST /panel/supplier-split/<id>         guardar {supplier, costUsd, route, vehicle, messengerCup, messengerName, clerkCup, clerkName, storeCup, by}
@@ -129,6 +131,11 @@ final class CVD_Supplier_Split {
 		return 'triciclo' === $vehicle ? self::opt( 'triciclo' ) : self::opt( 'moto' );
 	}
 
+	/** 3.14.49: dependienta sugerida: ruta C = 0 (va directo del proveedor al cliente); si no, 500 CUP (opción) por artículo. */
+	public static function clerk_default( string $route, int $qty ): int {
+		return 'C' === $route ? 0 : self::opt( 'clerk_per_item' ) * max( 1, $qty );
+	}
+
 	/**
 	 * Reparto completo: lo guardado encima de la sugerencia, y las cuentas. $input (opcional) = valores nuevos sin guardar.
 	 * Importes CUP enteros; USD con 2 decimales. Tasa = la guardada en el pedido el día de la venta (o la de hoy si no tiene).
@@ -147,7 +154,8 @@ final class CVD_Supplier_Split {
 		$rate = $order_rate ?: ( class_exists( 'CVD_Daily_Rates' ) ? (float) ( CVD_Daily_Rates::get()['cup'] ?? 0 ) : 0.0 );
 		$cost = isset( $v['costUsd'] ) && is_numeric( $v['costUsd'] ) ? round( (float) $v['costUsd'], 2 ) : $cost_default;
 		$messenger = isset( $v['messengerCup'] ) && is_numeric( $v['messengerCup'] ) ? (int) $v['messengerCup'] : self::messenger_default( $route, $vehicle );
-		$clerk = isset( $v['clerkCup'] ) && is_numeric( $v['clerkCup'] ) ? (int) $v['clerkCup'] : self::opt( 'clerk_per_item' ) * $qty;
+		// 3.14.49 (Ernesto 22-oct): ruta C (el proveedor lo lleva directo al cliente) = la dependienta no lo toca: 0 sugerido.
+		$clerk = isset( $v['clerkCup'] ) && is_numeric( $v['clerkCup'] ) ? (int) $v['clerkCup'] : self::clerk_default( $route, $qty );
 		$store = isset( $v['storeCup'] ) && is_numeric( $v['storeCup'] ) ? (int) $v['storeCup'] : self::opt( 'store' );
 		$gestora_usd = round( array_sum( array_column( $lines, 'gestoraUsd' ) ), 2 );
 		$margin_usd = round( $web - $cost, 2 );
@@ -406,6 +414,56 @@ final class CVD_Supplier_Split {
 		</section>
 		<?php
 		return (string) ob_get_clean();
+	}
+
+	// ---------- Sus comisiones de proveedor (3.14.49, Ernesto 22-oct) ----------
+
+	/** 3.14.49: la parte del dueño de un reparto (compute o lo sellado), en CUP y en USD con la tasa del reparto. Nunca negativa. */
+	public static function owner_share( array $s ): array {
+		$cup = max( 0, (int) ( $s['specialCup'] ?? 0 ) );
+		$rate = (float) ( $s['rate'] ?? 0 );
+		return array( 'cup' => $cup, 'usd' => $rate > 0 ? round( $cup / $rate, 2 ) : 0.0, 'rate' => $rate );
+	}
+
+	/** @var array<int, array> 3.14.49: una sola lectura por petición (Inicio y «Tus comisiones» la usan las dos). */
+	private static $owner_cache = array();
+
+	/**
+	 * 3.14.49 (Ernesto 22-oct): su parte de cada venta de proveedor como SU comisión, solo para la cuenta del dueño
+	 * (opción cvd_owner_gestor_user; cualquier otra cuenta = array()). Todas las ventas MK- de la web (la venda quien la
+	 * venda) y las de fuera de la web: abiertas → «pending» (Pendientes), cerradas → «ready» (Listas para cobrar: la
+	 * tienda se las debe). Canceladas no cuentan. USD = specialCup / tasa del reparto; fuera de la web = specialUsd (en
+	 * CUP solo si tiene tasa). «month_usd» = las de este mes (pedido hecho este mes; fuera de la web, por su fecha).
+	 * Solo lee: no cambia lo que cobra nadie ni lo que va en «Pedir mi pago».
+	 */
+	public static function owner_commissions( int $user_id ): array {
+		$og = self::owner_gestor_user();
+		if ( ! $og || $og !== $user_id ) { return array(); }
+		if ( isset( self::$owner_cache[ $og ] ) ) { return self::$owner_cache[ $og ]; }
+		$empty = array( 'count' => 0, 'usd' => 0.0, 'cup' => 0, 'no_rate_usd' => 0.0 );
+		$out = array( 'pending' => $empty, 'ready' => $empty, 'month_usd' => 0.0, 'month_count' => 0 );
+		$month = wp_date( 'Y-m' );
+		$add = static function ( string $state, float $usd, ?int $cup, bool $this_month ) use ( &$out ): void {
+			$key = 'cerrado' === $state ? 'ready' : ( 'abierto' === $state ? 'pending' : '' );
+			if ( '' === $key ) { return; } // cancelado: no cuenta
+			$out[ $key ]['count']++;
+			$out[ $key ]['usd'] = round( $out[ $key ]['usd'] + $usd, 2 );
+			if ( null === $cup ) { $out[ $key ]['no_rate_usd'] = round( $out[ $key ]['no_rate_usd'] + $usd, 2 ); } else { $out[ $key ]['cup'] += $cup; }
+			if ( $this_month ) { $out['month_usd'] = round( $out['month_usd'] + $usd, 2 ); $out['month_count']++; }
+		};
+		foreach ( self::supplier_order_ids() as $id ) {
+			$order = wc_get_order( $id );
+			if ( ! $order || 'shop_order' !== $order->get_type() || ! $order->get_date_created() ) { continue; }
+			$s = self::compute( $order );
+			if ( ! $s['applies'] ) { continue; }
+			$sh = self::owner_share( $s );
+			$add( (string) $s['state'], $sh['usd'], $sh['rate'] > 0 ? $sh['cup'] : null, wp_date( 'Y-m', $order->get_date_created()->getTimestamp() ) === $month );
+		}
+		foreach ( self::offweb_sales() as $w ) {
+			$usd = round( max( 0.0, (float) $w['specialUsd'] ), 2 );
+			$add( (string) $w['state'], $usd, $w['rate'] > 0 ? (int) round( $usd * $w['rate'] ) : null, 0 === strpos( (string) $w['date'], $month ) );
+		}
+		return self::$owner_cache[ $og ] = $out;
 	}
 
 	// ---------- REST ----------

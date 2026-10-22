@@ -185,7 +185,9 @@ final class CVD_Gestora_App {
 	}
 
 	private static function inicio( WP_User $user, string $first, string $link, string $code, array $orders, string $box, ?array $learn = null ): string {
-		$money = self::money_summary( $orders );
+		// 3.14.49 (Ernesto 22-oct): en la cuenta del dueño, su parte de las ventas de proveedor de este mes suma a «Ganado».
+		$prov = class_exists( 'CVD_Supplier_Split' ) ? CVD_Supplier_Split::owner_commissions( (int) $user->ID ) : array();
+		$money = self::money_summary( $orders, (float) ( $prov['month_usd'] ?? 0 ) );
 		$clients = class_exists( 'CVD_Clients' ) ? CVD_Clients::list( $user->ID, '', 5000 ) : array();
 		$quiet = 0;
 		$limit = gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS );
@@ -198,7 +200,7 @@ final class CVD_Gestora_App {
 		<section class="cvga-view" data-view="inicio" id="cvga-inicio">
 			<div class="cvga-head"><h1>Hola, <?php echo esc_html( $first ); ?></h1><p>Esto es lo que llevas este mes.</p></div>
 			<div class="cvga-kpis">
-				<article class="cvga-card cvga-kpi"><small>Ganado este mes</small><strong><?php echo esc_html( $money['month'] ); ?></strong><span>Incluye ventas aún sin entregar</span></article>
+				<article class="cvga-card cvga-kpi"><small>Ganado este mes</small><strong><?php echo esc_html( $money['month'] ); ?></strong><span>Incluye ventas aún sin entregar<?php echo ! empty( $prov['month_count'] ) ? esc_html( ' · ' . self::money( (float) $prov['month_usd'], 'USD' ) . ' de ventas de proveedor' ) : ''; ?></span></article>
 				<?php // 3.13.68: «Por cobrar» pasó al recuadro «Tus comisiones» como «Listas para cobrar». ?>
 				<article class="cvga-card cvga-kpi"><small>Clientes</small><strong><?php echo esc_html( (string) count( $clients ) ); ?></strong><span><a href="#clientes" data-cvga-go="clientes">Ver la lista</a></span></article>
 			</div>
@@ -503,8 +505,11 @@ final class CVD_Gestora_App {
 		return $p;
 	}
 
-	/** Lo ganado este mes (sus pedidos ya leídos en render()); sin pedidos anulados, comisiones canceladas ni pruebas. */
-	private static function money_summary( array $orders ): array {
+	/**
+	 * Lo ganado este mes (sus pedidos ya leídos en render()); sin pedidos anulados, comisiones canceladas ni pruebas.
+	 * 3.14.49: $supplier_usd = su parte de las ventas de proveedor del mes (solo la cuenta del dueño; 0 para las demás).
+	 */
+	private static function money_summary( array $orders, float $supplier_usd = 0.0 ): array {
 		$month_start = strtotime( gmdate( 'Y-m-01 00:00:00' ) );
 		$month = array();
 		foreach ( $orders as $order ) {
@@ -517,6 +522,7 @@ final class CVD_Gestora_App {
 			$created = $order->get_date_created();
 			if ( $created && $created->getTimestamp() >= $month_start ) { $month[ $cur ] = ( $month[ $cur ] ?? 0 ) + $amount; }
 		}
+		if ( $supplier_usd > 0 ) { $month['USD'] = ( $month['USD'] ?? 0 ) + $supplier_usd; }
 		return array( 'month' => self::money_list( $month ) );
 	}
 

@@ -120,6 +120,15 @@ final class CVD_Gestora_Financial_View {
 	/** 3.13.68: el recuadro «Tus comisiones» (4 cifras) de una gestora a partir de sus pedidos. */
 	public static function commission_box( array $orders, int $user_id ): string {
 		$totals = self::commission_totals( $orders );
+		// 3.14.49 (Ernesto 22-oct): en la cuenta del dueño, su parte de las ventas de proveedor cuenta como su comisión:
+		// abiertas → Pendientes; cerradas → Listas para cobrar (la tienda se las debe). Las demás cuentas: nada cambia.
+		$prov = class_exists( 'CVD_Supplier_Split' ) ? CVD_Supplier_Split::owner_commissions( $user_id ) : array();
+		foreach ( array( 'pending', 'ready' ) as $key ) {
+			if ( empty( $prov[ $key ]['count'] ) ) { continue; }
+			$totals[ $key ]['amounts']['USD'] = ( $totals[ $key ]['amounts']['USD'] ?? 0.0 ) + $prov[ $key ]['usd'];
+			$totals[ $key ]['cup'] += $prov[ $key ]['cup'];
+			if ( $prov[ $key ]['no_rate_usd'] > 0 ) { $totals[ $key ]['no_rate']['USD'] = ( $totals[ $key ]['no_rate']['USD'] ?? 0.0 ) + $prov[ $key ]['no_rate_usd']; }
+		}
 		$cards = array(
 			'pending'   => array( 'Pendientes', 'aún sin entregar' ),
 			'ready'     => array( 'Listas para cobrar', 'ya entregadas' ),
@@ -133,7 +142,11 @@ final class CVD_Gestora_Financial_View {
 			$html .= '<article class="cvd-cbox-card is-' . esc_attr( $key ) . '"><span class="cvd-cbox-label">' . esc_html( $card[0] ) . '</span>'
 				. '<strong class="cvd-cbox-amount">' . esc_html( self::amounts_text( $t['amounts'] ) ) . '</strong>'
 				. '<span class="cvd-cbox-cup">' . esc_html( self::cup_text( $t ) ) . '</span>'
-				. '<small class="cvd-cbox-count">' . esc_html( $count ) . '</small>';
+				. ( $t['count'] || empty( $prov[ $key ]['count'] ) ? '<small class="cvd-cbox-count">' . esc_html( $count ) . '</small>' : '' );
+			if ( ! empty( $prov[ $key ]['count'] ) ) { // 3.14.49: de dónde viene
+				$n = (int) $prov[ $key ]['count'];
+				$html .= '<small class="cvd-cbox-count cvd-cbox-prov">Incluye ' . esc_html( self::amounts_text( array( 'USD' => $prov[ $key ]['usd'] ) ) . ' de ' . $n . ( 1 === $n ? ' venta' : ' ventas' ) . ' de proveedor' . ( 'ready' === $key ? ': la tienda te las debe' : '' ) ) . '</small>';
+			}
 			if ( 'ready' === $key && $t['count'] ) {
 				$html .= '<a class="cvd-cbox-action" href="#cobrar" data-cvga-go="cobrar">Pedir mi pago</a>';
 			}
@@ -145,6 +158,9 @@ final class CVD_Gestora_Financial_View {
 		if ( $debits ) {
 			// 3.14.23: la deuda se descuenta al cobrar, en la moneda del pago (CUP o USD) con la tasa de hoy si hace falta.
 			$html .= '<p class="cvd-cbox-note is-warn">Debes a la tienda ' . esc_html( self::amounts_text( $debits ) ) . '. Se descuenta al pedir tu pago.</p>';
+		}
+		if ( $prov ) { // 3.14.49
+			$html .= '<p class="cvd-cbox-note">Tu parte de las ventas de proveedor (de cualquier gestora) cuenta aquí como comisión tuya: abiertas en «Pendientes», cerradas en «Listas para cobrar». La tienda te la paga aparte, no va en «Pedir mi pago». El detalle, en «Mis ventas de proveedor».</p>';
 		}
 		return $html . '<p class="cvd-cbox-note">En CUP, con la tasa del día de cada venta. Si una venta no guardó la tasa (las más viejas), va solo en USD.</p></section>';
 	}

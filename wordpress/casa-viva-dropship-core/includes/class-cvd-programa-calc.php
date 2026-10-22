@@ -26,6 +26,11 @@ defined( 'ABSPATH' ) || exit;
  *   piedra y su título: su bono es siempre 0, no entran en su fondo de equipo ni en el del mes, y no le abren el
  *   2.º nivel de la red. Para su piedra esas ventas cuentan también como ventas suyas (mínimo propio). Su red
  *   (1 % + 0,5 %) se calcula solo sobre las líneas que NO son de proveedor (en esas ya cobra su parte del reparto).
+ * - 3.14.49 (Ernesto 22-oct): los puntos de proveedor pasan a ser SUS PUNTOS PROPIOS (own_points los incluye; el detalle
+ *   sigue en supplier_points): (a) venta MK- suya = los puntos de esas líneas, como siempre; (b) de otra gestora = solo SU
+ *   parte del reparto ($sale['owner_share_usd'] = specialCup / tasa; sin ese dato, los puntos de las líneas), no el margen
+ *   entero; (c) fuera de la web = specialUsd. Siguen sin bono, sin fondo (ni del equipo ni del mes), sin abrir el 2.º nivel
+ *   de la red y sin sumar al equipo de quien lo invitara: lo de las demás no cambia.
  */
 final class CVD_Programa_Calc {
 	/** slug, nombre, puntos del equipo en el mes, bono CUP, mínimo propio en USD vendidos (precio Casa Viva). */
@@ -387,10 +392,12 @@ final class CVD_Programa_Calc {
 			// a la gestora). Si la vendió él mismo ya están en sus puntos propios: no se cuentan dos veces. No entran en los
 			// totales del mes (no cambian el fondo).
 			if ( $og && $owner !== $og && $mk_lines ) {
-				$people[ $og ]['supplier_points'] += $mk_points;
+				// 3.14.49: solo su parte del reparto (Ernesto: patines #3845 → ≈ 7,32, no el precio ni el margen entero).
+				$share = array_key_exists( 'owner_share_usd', $s ) ? max( 0.0, (float) $s['owner_share_usd'] ) : $mk_points;
+				$people[ $og ]['supplier_points'] += $share;
 				$people[ $og ]['supplier_sales_usd'] += $mk_base;
 				$people[ $og ]['supplier_orders']++;
-				$lines[] = array( 'kind' => 'proveedor', 'user' => $og, 'order' => $order, 'source' => $owner, 'base' => round( $mk_base, 4 ), 'cost' => 0, 'commission' => 0, 'points' => round( $mk_points, 4 ), 'pct' => 0, 'amount' => 0 );
+				$lines[] = array( 'kind' => 'proveedor', 'user' => $og, 'order' => $order, 'source' => $owner, 'base' => round( $mk_base, 4 ), 'cost' => 0, 'commission' => 0, 'points' => round( $share, 4 ), 'pct' => 0, 'amount' => 0 );
 			}
 
 			// Red de esta venta (las condiciones de cobro se aplican después, con el mes completo).
@@ -561,6 +568,11 @@ final class CVD_Programa_Calc {
 			$me['bonus_pay_usd'] = floor( 100 * $me['bonus_pay_cup'] / $rate + 1e-6 ) / 100;
 			$me['coverage'] = round( $cov_exact, 4 );
 			$me['own_points'] = round( $me['own_points'], 4 );
+			if ( $og && $id === $og ) {
+				// 3.14.49: al final (ya no cuenta para nadie más): sus puntos de proveedor son puntos propios.
+				$me['own_points_web'] = $me['own_points'];
+				$me['own_points'] = round( $me['own_points'] + max( 0.0, $me['supplier_points'] ), 4 );
+			}
 			$me['own_sales_usd'] = round( $me['own_sales_usd'], 4 );
 			$me['red1'] = round( $me['red1'], 4 ); $me['red2'] = round( $me['red2'], 4 ); $me['red_lost'] = round( $me['red_lost'], 4 );
 			$me['supplier_points'] = round( $me['supplier_points'], 4 ); $me['supplier_sales_usd'] = round( $me['supplier_sales_usd'], 4 );

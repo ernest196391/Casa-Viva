@@ -380,7 +380,8 @@ $on = $C::compute( P, $m, $s, array(), $OGP );
 $off = $C::compute( P, $m, $s );
 near( $on['people'][1]['own_points'], 78.92, 'D92: Ana conserva sus puntos (8,92 de la tablet MK- + 70)' );
 near( $on['people'][OG]['supplier_points'], 8.92, 'D92: la línea MK- de Ana da 8,92 puntos de proveedor al dueño' );
-near( $on['people'][OG]['own_points'], 0, 'D92: sus puntos propios no cambian (solo los de proveedor)' );
+near( $on['people'][OG]['own_points'], 8.92, '3.14.49: los puntos de proveedor son sus puntos propios' );
+near( $on['people'][OG]['own_points_web'], 0, '3.14.49: sin ventas propias en la web (own_points_web = 0)' );
 near( $on['people'][OG]['team_points'], 8.92, 'D92: sus puntos de equipo incluyen los de proveedor' );
 ok( 1 === count( lines_of( $on, 'proveedor', OG ) ) && 4253 === lines_of( $on, 'proveedor', OG )[0]['order'] && 1 === lines_of( $on, 'proveedor', OG )[0]['source'], 'D92: renglón «proveedor» del pedido #4253 (vendió Ana)' );
 near( $on['totals']['profit_usd'], $off['totals']['profit_usd'], 'D92: los puntos de proveedor no cambian la ganancia del mes' );
@@ -459,6 +460,48 @@ ok( 1 === count( lines_of( $r, 'proveedor_fuera', OG ) ) && 0 === $r['people'][O
 near( $r['totals']['profit_usd'], 0, 'D92 fuera de la web: no entra en la ganancia del mes (ni en el fondo)' );
 $r = $C::compute( P, $m, array(), array(), array( 'owner_offweb' => $offweb ) );
 ok( ! lines_of( $r, 'proveedor_fuera', OG ), 'D92 fuera de la web: sin la opción del dueño, nada' );
+
+// ---------- 3.14.49 (Ernesto 22-oct): sus puntos de proveedor son SUS PUNTOS PROPIOS, solo su parte del reparto ----------
+$m = array( OG => member( 'Ernesto' ), 1 => member( 'Ana' ) );
+// (b) Patines #3845 de otra gestora: margen de las líneas 12,60 (105 − 84 − 8,4), pero su parte del reparto es 7,32
+// (5.817 CUP / 795). Suma 7,32, no 105 ni 12,60.
+$s = array( msale( 3845, 1, array( array( 105, 84, 8.4, 0, true ) ), array( 'owner_share_usd' => 5817 / 795 ) ), msale( 4300, 1, array( array( 200, 120, 10, 0, false ) ) ) );
+$on = $C::compute( P, $m, $s, array(), $OGP );
+$off = $C::compute( P, $m, $s );
+near( $on['people'][OG]['own_points'], 7.32, '3.14.49 (b): patines de otra gestora → sus puntos propios 7,32 (su parte), no 105 ni 12,60' );
+near( $on['people'][OG]['supplier_points'], 7.32, '3.14.49 (b): el detalle «de proveedor» también 7,32' );
+near( lines_of( $on, 'proveedor', OG )[0]['points'], 7.32, '3.14.49 (b): el renglón «proveedor» guarda 7,32 (así una devolución resta lo mismo)' );
+near( $on['people'][OG]['team_points'], 7.32, '3.14.49 (b): sus puntos del equipo = sus propios (no tiene invitadas)' );
+near( $on['people'][1]['own_points'], 12.6 + 70, '3.14.49: Ana conserva todos sus puntos (12,60 + 70)' );
+ok( $on['totals'] === $off['totals'], '3.14.49: el mes (ganancia, fondo, red, bonos) es idéntico con o sin la regla' );
+ok( 0 === $on['people'][OG]['bonus_pay_cup'] && 0.0 === (float) $on['people'][OG]['fund_usd'], '3.14.49: sin bono y sin fondo de equipo' );
+// Sin tasa en el reparto: 0 puntos (nunca el margen entero).
+$r = $C::compute( P, $m, array( msale( 3846, 1, array( array( 105, 84, 8.4, 0, true ) ), array( 'owner_share_usd' => 0.0 ) ) ), array(), $OGP );
+near( $r['people'][OG]['own_points'], 0, '3.14.49 (b): reparto sin tasa = 0 puntos, no el margen' );
+// Reparto que no llega (parte negativa): 0, no resta.
+$r = $C::compute( P, $m, array( msale( 3847, 1, array( array( 105, 84, 8.4, 0, true ) ), array( 'owner_share_usd' => -2.5 ) ) ), array(), $OGP );
+near( $r['people'][OG]['own_points'], 0, '3.14.49 (b): parte negativa = 0 puntos' );
+// (a) Venta MK- suya: los puntos completos de esas líneas (aunque viniera una parte, no se usa: es su venta).
+$r = $C::compute( P, $m, array( msale( 4401, OG, array( array( 105, 84, 0, 4.2, true ) ), array( 'owner_share_usd' => 1.0 ) ) ), array(), $OGP );
+near( $r['people'][OG]['own_points'], 16.8, '3.14.49 (a): venta MK- suya = puntos completos de la línea (105 − 84 − 4,20 de fondo = 16,80)' );
+near( $r['people'][OG]['supplier_points'], 0, '3.14.49 (a): no se cuenta también como «de proveedor»' );
+// (c) Fuera de la web: specialUsd (ya viene como «points» desde CVD_Programa::offweb_for_calc).
+$r = $C::compute( P, $m, array(), array(), $OGP + array( 'owner_offweb' => array( array( 'date' => P . '-11', 'points' => 19, 'base' => 380, 'state' => 'cerrado' ) ) ) );
+near( $r['people'][OG]['own_points'], 19, '3.14.49 (c): Split Parker fuera de la web → 19 puntos propios' );
+// Mezcla: venta propia (a) + parte de otra (b) + fuera (c) + devolución de proveedor de un mes cerrado.
+$s = array( msale( 4402, OG, array( array( 60, 50, 0, 0, false ) ) ), msale( 3848, 1, array( array( 140, 119, 8.4, 3.68, true ) ), array( 'owner_share_usd' => 6.83 ) ) );
+$rev = array( array( 'order_id' => 3693, 'owner' => 1, 'points' => 2.74, 'base' => 45, 'supplier' => array( array( 'user' => OG, 'points' => 6.74, 'base' => 45 ) ) ) );
+$r = $C::compute( P, $m, $s, $rev, $OGP + array( 'owner_offweb' => array( array( 'date' => P . '-11', 'points' => 19, 'base' => 380, 'state' => 'cerrado' ) ) ) );
+near( $r['people'][OG]['own_points'], 10 + 6.83 + 19 - 6.74, '3.14.49: 10 (suya) + 6,83 (parte) + 19 (fuera) − 6,74 (devolución) = 29,09 puntos propios' );
+near( $r['people'][OG]['own_points_web'], 10, '3.14.49: de ellos, 10 de su venta en la web' );
+// Su madrina (si la tuviera) no recibe sus puntos de proveedor: lo de las demás no cambia.
+$m = array( 1 => member( 'Ana' ), OG => member( 'Ernesto', 1 ) );
+$s = array( msale( 4403, OG, array( array( 60, 50, 0, 0, false ) ) ), msale( 3849, 1, array( array( 300, 220, 10, 0, true ) ), array( 'owner_share_usd' => 70 ) ) );
+$on = $C::compute( P, $m, $s, array(), $OGP );
+$off = $C::compute( P, $m, $s );
+near( $on['people'][OG]['own_points'], 80, '3.14.49: él 10 + 70 de su parte' );
+ok( $on['people'][1]['team_points'] === $off['people'][1]['team_points'] && $on['people'][1]['stone'] === $off['people'][1]['stone'] && $on['people'][1]['bonus_pay_cup'] === $off['people'][1]['bonus_pay_cup'], '3.14.49: a su madrina le cuentan solo sus 10 de la web (equipo, piedra y bono iguales)' );
+ok( 'bronce' === $on['people'][OG]['stone'] && 0 === $on['people'][OG]['bonus_pay_cup'], '3.14.49: con 80 puntos propios llega a Bronce, sin bono' );
 
 echo $fails ? "\n$fails de $count comprobaciones fallaron\n" : "OK: $count comprobaciones\n";
 exit( $fails ? 1 : 0 );
