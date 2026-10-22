@@ -25,6 +25,8 @@ final class CVD_Attribution {
 		add_action( 'template_redirect', array( __CLASS__, 'send_private_cache_headers' ), 0 );
 		add_action( 'woocommerce_checkout_create_order', array( __CLASS__, 'attach_to_order' ), 30, 2 );
 		add_action( 'woocommerce_store_api_checkout_update_order_from_request', array( __CLASS__, 'attach_store_api_order' ), 30, 2 );
+		// 3.14.52 (D97, fallo 4): pedido creado a mano en el admin de WordPress → al guardarlo, la gestora del cliente.
+		add_action( 'woocommerce_process_shop_order_meta', array( __CLASS__, 'attach_admin_order' ), 50 );
 	}
 
 	/** Prevent full-page caches from serving Casa Viva prices inside a gestora storefront. */
@@ -60,10 +62,49 @@ final class CVD_Attribution {
 	public static function current_customer_owner(): ?array {
 		if ( is_user_logged_in() ) {
 			$user = wp_get_current_user();
-			$owner = self::find_existing_owner( self::identities( '', $user->user_email, $user->ID ) );
+			$owner = self::customer_owner( '', $user->user_email, $user->ID );
 			if ( $owner ) { return $owner; }
 		}
 		return self::current_referral_owner();
+	}
+
+	/**
+	 * 3.14.52 (D97, Ernesto 22-oct): la gestora del cliente, PARA SIEMPRE. Una sola regla para la web, el bot, los pedidos
+	 * hechos a mano y los vales:
+	 * 1. Si el cliente pidió cambiar de gestora y se aprobó (reasignación anotada con quién y cuándo), manda esa.
+	 * 2. Si no, la PRIMERA gestora que lo trajo: su primer pedido con gestora que no esté cancelado, fallido ni devuelto
+	 *    (aunque aún no se haya entregado), o la que lo apuntó a mano en «Mis clientes» (sin plazo). Gana la más antigua.
+	 * El teléfono se compara normalizado (con o sin 53 delante). null = cliente sin gestora (venta directa, sin comisión).
+	 * → array( owner_user_id, owner_type, referral_code, source ) o null.
+	 */
+	public static function customer_owner( string $phone, string $email = '', int $customer_id = 0 ): ?array {
+		$lookup = self::lookup_identities( $phone, $email, $customer_id );
+		if ( $lookup && class_exists( 'CVD_Attribution_Overrides' ) ) {
+			$override = CVD_Attribution_Overrides::override_owner( $lookup );
+			if ( $override ) { return $override; }
+		}
+		$by_order = $lookup ? self::find_existing_owner( $lookup ) : null;
+		$claim = class_exists( 'CVD_Clients' ) ? CVD_Clients::protected_owner( $phone ) : null;
+		if ( $by_order && $claim ) {
+			return (int) $claim['since'] < (int) $by_order['since'] ? $claim : $by_order;
+		}
+		return $by_order ?: $claim;
+	}
+
+	/** Identidades para BUSCAR al cliente: las guardadas en los pedidos + el teléfono con y sin 53 (los pedidos guardan las dos formas). */
+	private static function lookup_identities( string $phone, string $email, int $customer_id ): array {
+		$identities = self::identities( $phone, $email, $customer_id );
+		$digits = preg_replace( '/\D+/', '', $phone );
+		$norm = class_exists( 'CVD_Clients' ) ? CVD_Clients::phone( $digits ) : '';
+		$seen = array();
+		foreach ( $identities as $identity ) { $seen[ $identity['type'] . $identity['hash'] ] = true; }
+		foreach ( array_filter( array( $norm, 8 === strlen( $norm ) ? '53' . $norm : '' ) ) as $variant ) {
+			$hash = hash( 'sha256', $variant );
+			if ( isset( $seen[ 'phone' . $hash ] ) ) { continue; }
+			$seen[ 'phone' . $hash ] = true;
+			$identities[] = array( 'type' => 'phone', 'hash' => $hash );
+		}
+		return $identities;
 	}
 
 	/** Ensure LiteSpeed never shares one gestora's storefront prices with another visitor. */
@@ -182,7 +223,27 @@ final class CVD_Attribution {
 		self::resolve_and_attach( $order, $order->get_billing_phone(), $order->get_billing_email(), $order->get_customer_id() );
 	}
 
-	private static function resolve_and_attach( WC_Order $order, string $phone, string $email, int $customer_id, int $preferred_owner_id = 0 ): void {
+	/**
+	 * 3.14.52 (D97, fallo 4): pedido creado a mano en el admin de WordPress. Al guardarlo, si aún no tiene atribución,
+	 * lleva la gestora del cliente (customer_owner); si el cliente no tiene gestora, venta directa. No mira el navegador
+	 * de quien lo crea (su enlace o su carrito no son del cliente). Nada retroactivo: solo pedidos de las últimas 24 h
+	 * que no estén cancelados, fallidos ni devueltos; los que ya tienen atribución no se tocan.
+	 */
+	public static function attach_admin_order( $order_id ): void {
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof WC_Order || 'shop_order' !== $order->get_type() || $order->get_meta( '_cvd_attribution_locked', true ) ) { return; }
+		if ( $order->has_status( array( 'cancelled', 'refunded', 'failed', 'trash' ) ) ) { return; }
+		$created = $order->get_date_created();
+		if ( ! $created || $created->getTimestamp() < time() - DAY_IN_SECONDS ) { return; }
+		self::resolve_and_attach( $order, $order->get_billing_phone(), $order->get_billing_email(), $order->get_customer_id(), 0, true );
+		$owner_id = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
+		$order->add_order_note( $owner_id ? sprintf( 'Pedido hecho a mano: lleva la gestora del cliente, %s (D97).', (string) $order->get_meta( 'gestora_nombre', true ) ) : 'Pedido hecho a mano: el cliente no tiene gestora → venta directa (D97).' );
+		$order->save();
+		if ( $owner_id && class_exists( 'CVD_Commissions' ) ) { CVD_Commissions::mark_pending( $order->get_id() ); }
+		if ( class_exists( 'CVD_Clients' ) ) { CVD_Clients::from_order( $order ); }
+	}
+
+	private static function resolve_and_attach( WC_Order $order, string $phone, string $email, int $customer_id, int $preferred_owner_id = 0, bool $admin_order = false ): void {
 		if ( $order->get_meta( '_cvd_attribution_locked', true ) ) {
 			return;
 		}
@@ -192,10 +253,16 @@ final class CVD_Attribution {
 		// Permanent customer ownership always wins. This protects a gestora's client
 		// when the client later arrives organically, through another link, or when a
 		// gestora places the order on the client's behalf.
-		$owner = self::find_existing_owner( $identities );
-		// 3.13.98 (D53, fallo B): cliente apuntado a mano en «Mis clientes» → protegido 30 días para esa gestora.
-		if ( ! $owner && class_exists( 'CVD_Clients' ) ) {
-			$owner = CVD_Clients::protected_owner( $phone );
+		// 3.14.52 (D97): la primera gestora del cliente para siempre (pedido no cancelado aunque no esté entregado, o
+		// apuntado a mano sin plazo), con el teléfono con o sin 53; ver customer_owner().
+		$owner = self::customer_owner( $phone, $email, $customer_id );
+		if ( $admin_order ) {
+			// Pedido hecho a mano en el admin: sin gestora del cliente, solo vale un cupón de gestora puesto en el pedido.
+			$owner = $owner ?: self::owner_from_coupon( $order );
+			$preferred_owner_id = 0;
+			if ( ! $owner ) {
+				$owner = array( 'owner_user_id' => 0, 'owner_type' => 'organic', 'referral_code' => '', 'source' => 'organic' );
+			}
 		}
 		if ( ! $owner && $preferred_owner_id ) {
 			$user = get_userdata( $preferred_owner_id );
@@ -280,6 +347,7 @@ final class CVD_Attribution {
 	 * 3.13.98 (D53, fallo A; Ernesto 14-oct): ¿este pedido hace al cliente «de» su gestora? Solo si se entregó:
 	 * completado, operación «entregado», reparto entregado / dinero devuelto / cerrado, o caja verificada.
 	 * Los pedidos en curso siguen siendo de quien los hizo (su atribución no cambia); solo no «atan» al cliente.
+	 * 3.14.52 (D97): la atribución ya NO usa esta regla (manda el primer pedido no cancelado, ver find_existing_owner).
 	 */
 	public static function owns_customer( WC_Order $order ): bool {
 		if ( $order->has_status( array( 'cancelled', 'refunded', 'failed', 'pending', 'draft', 'checkout-draft', 'trash' ) ) ) { return false; }
@@ -289,7 +357,13 @@ final class CVD_Attribution {
 		return 'verified' === sanitize_key( (string) $order->get_meta( '_cvd_cash_status', true ) );
 	}
 
+	/**
+	 * Primer pedido con gestora del cliente (el más antiguo entre todas sus identidades). 3.14.52 (D97, fallo 2): ya no
+	 * hace falta que esté entregado: basta con que siga vivo (en espera, procesando o completado). Los cancelados,
+	 * fallidos, devueltos y sin pagar siguen sin atar (D53). → owner + 'since' (marca de tiempo del pedido) o null.
+	 */
 	private static function find_existing_owner( array $identities ): ?array {
+		$best = null;
 		foreach ( $identities as $identity ) {
 			$page = 1;
 			do {
@@ -300,8 +374,6 @@ final class CVD_Attribution {
 						'paginate'   => true,
 						'orderby'    => 'date',
 						'order'      => 'ASC',
-						// 3.13.98 (D53, fallo A): solo une al cliente un pedido ENTREGADO (ver owns_customer). Un pedido
-						// sin pagar, en curso o cancelado ya no deja al cliente unido a esa gestora para siempre.
 						'status'     => array( 'processing', 'on-hold', 'completed' ),
 						// WooCommerce 8.2 no filtra de forma fiable el meta_query compuesto
 						// en todos los motores de almacenamiento. La identidad exacta se
@@ -318,23 +390,28 @@ final class CVD_Attribution {
 					// filtro, nunca aceptar una identidad distinta a la solicitada.
 					$stored_hash = (string) $order->get_meta( '_cvd_identity_' . $identity['type'], true );
 					if ( ! $stored_hash || ! hash_equals( $identity['hash'], $stored_hash ) ) { continue; }
-					if ( ! self::owns_customer( $order ) ) { continue; }
 					$owner_user_id = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
 					$owner_type = sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) );
 					if ( ! $owner_user_id || 'organic' === $owner_type ) { continue; }
-					return array(
-						'owner_user_id' => $owner_user_id,
-						'owner_type'    => $owner_type,
-						'referral_code' => self::sanitize_code( (string) $order->get_meta( '_cvd_referral_code', true ) ),
-						'source'        => 'linked_customer',
-					);
+					$since = $order->get_date_created() ? $order->get_date_created()->getTimestamp() : 0;
+					if ( ! $best || $since < $best['since'] ) {
+						$best = array(
+							'owner_user_id' => $owner_user_id,
+							'owner_type'    => $owner_type,
+							'referral_code' => self::sanitize_code( (string) $order->get_meta( '_cvd_referral_code', true ) ),
+							'source'        => 'linked_customer',
+							'since'         => $since,
+							'order_id'      => $order->get_id(),
+						);
+					}
+					break 2; // pedidos en orden de fecha: el primero válido de esta identidad es su más antiguo
 				}
 
 				$max_pages = is_object( $result ) && isset( $result->max_num_pages ) ? max( 1, (int) $result->max_num_pages ) : 1;
 				$page++;
 			} while ( $page <= $max_pages );
 		}
-		return null;
+		return $best;
 	}
 
 	private static function owner_from_saved_referral(): ?array {

@@ -190,13 +190,17 @@ final class CVD_Bot_Bridge {
 		if ( ! $phone ) { return self::no_cache( array( 'found' => false ) ); }
 		CVD_Clients::install();
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT owner_user_id, name FROM ' . CVD_Clients::table() . ' WHERE phone=%s', $phone ) );
-		$user = $row && (int) $row->owner_user_id ? get_userdata( (int) $row->owner_user_id ) : null;
+		// 3.14.52 (D97): la misma regla que la web y los pedidos a mano (CVD_Attribution::customer_owner: reasignación
+		// aprobada, o la primera gestora por pedido no cancelado o apuntado a mano). Si no hay, la de «Clientes de Casa Viva».
+		$owner = class_exists( 'CVD_Attribution' ) ? CVD_Attribution::customer_owner( $phone ) : null;
+		$owner_id = $owner ? absint( $owner['owner_user_id'] ) : ( $row ? (int) $row->owner_user_id : 0 );
+		$user = $owner_id ? get_userdata( $owner_id ) : null;
 		if ( ! $user || ! CVD_Registration::is_approved_gestora( $user ) ) { return self::no_cache( array( 'found' => false ) ); }
 		$wa = preg_replace( '/\D+/', '', (string) get_user_meta( $user->ID, '_cvd_whatsapp', true ) );
 		if ( 8 === strlen( $wa ) ) { $wa = '53' . $wa; }
 		if ( strlen( $wa ) < 10 ) { return self::no_cache( array( 'found' => false ) ); }
 		$first = (string) strtok( trim( (string) $user->display_name ), ' ' );
-		return self::no_cache( array( 'found' => true, 'client' => (string) $row->name, 'gestora' => array( 'id' => $user->ID, 'name' => '' !== $first ? ucfirst( $first ) : 'tu gestora', 'phone' => $wa ) ) );
+		return self::no_cache( array( 'found' => true, 'client' => $row ? (string) $row->name : '', 'gestora' => array( 'id' => $user->ID, 'name' => '' !== $first ? ucfirst( $first ) : 'tu gestora', 'phone' => $wa ) ) );
 	}
 
 	public static function gestora_orders( WP_REST_Request $request ) {

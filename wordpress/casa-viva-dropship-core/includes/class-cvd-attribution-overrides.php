@@ -184,12 +184,12 @@ final class CVD_Attribution_Overrides {
 		}
 		wp_nonce_field( 'cvd_reassign_customer_' . $order->get_id(), 'cvd_reassign_customer_nonce' );
 		echo '<div class="order_data_column"><h4>Propietaria futura del cliente</h4>';
-		echo '<p class="description">No modifica esta venta ni sus comisiones. Solo cambia la atribución de pedidos futuros y deja historial auditable.</p>';
+		echo '<p class="description">No modifica esta venta ni sus comisiones. Solo cambia la atribución de pedidos futuros y deja historial auditable. Regla D97: solo si el CLIENTE lo pide y Lennys lo aprueba.</p>';
 		echo '<p><select name="cvd_reassign_owner_id"><option value="">Sin cambios</option>';
 		foreach ( $users as $user ) {
 			echo '<option value="' . esc_attr( $user->ID ) . '">' . esc_html( $user->display_name ) . '</option>';
 		}
-		echo '</select></p><p><textarea name="cvd_reassign_reason" rows="2" style="width:100%" placeholder="Motivo obligatorio de la reasignación"></textarea></p></div>';
+		echo '</select></p><p><textarea name="cvd_reassign_reason" rows="2" style="width:100%" placeholder="Motivo obligatorio: el cliente lo pidió (cómo y cuándo) y Lennys lo aprobó"></textarea></p></div>';
 	}
 
 	public static function save_admin_reassignment( int $order_id ): void {
@@ -203,6 +203,23 @@ final class CVD_Attribution_Overrides {
 		}
 		$reason = isset( $_POST['cvd_reassign_reason'] ) ? sanitize_text_field( wp_unslash( $_POST['cvd_reassign_reason'] ) ) : '';
 		self::reassign_from_order( $order_id, $new_owner_id, $reason );
+	}
+
+	/**
+	 * 3.14.52 (D97): gestora nueva de un cliente que pidió cambiar y se aprobó (la última reasignación de sus identidades),
+	 * para CVD_Attribution::customer_owner (pedidos a mano, bot, vales). → owner o null.
+	 */
+	public static function override_owner( array $identities ): ?array {
+		$override = self::latest_override( $identities );
+		$owner = $override ? self::approved_owner( absint( $override['to_owner_user_id'] ?? 0 ) ) : null;
+		if ( ! $owner ) { return null; }
+		return array(
+			'owner_user_id' => $owner->ID,
+			'owner_type'    => in_array( 'cvd_influencer', (array) $owner->roles, true ) ? 'influencer' : 'gestora',
+			'referral_code' => self::sanitize_code( (string) get_user_meta( $owner->ID, '_cvd_referral_code', true ) ),
+			'source'        => 'admin_reassignment',
+			'since'         => strtotime( (string) $override['created_at'] . ' UTC' ),
+		);
 	}
 
 	private static function latest_override( array $identities ): ?array {

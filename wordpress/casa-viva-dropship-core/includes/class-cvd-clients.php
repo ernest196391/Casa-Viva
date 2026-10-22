@@ -91,10 +91,11 @@ final class CVD_Clients {
 	}
 
 	/**
-	 * 3.13.98 (D53, fallo B; Ernesto 14-oct): la gestora que apuntó a mano a este cliente en «Mis clientes» hace
-	 * menos de PROTECT_DAYS días se queda la venta si compra por la web o el bot. Pasado el plazo, deja de estar
-	 * protegido (lo que mande entonces es su primera compra entregada: CVD_Attribution::owns_customer).
-	 * → mismo formato que CVD_Attribution (owner_user_id, owner_type, referral_code, source) o null.
+	 * 3.13.98 (D53, fallo B; Ernesto 14-oct): la gestora que apuntó a mano a este cliente en «Mis clientes» se queda la
+	 * venta si compra por la web o el bot. 3.14.52 (D97, fallo 1; Ernesto 22-oct): PARA SIEMPRE (antes, 30 días). La dueña
+	 * que sale de un pedido la decide ese pedido (CVD_Attribution::customer_owner: si se cancela, no ata).
+	 * 'since' = cuándo la apuntó, para que gane la PRIMERA gestora (apuntado o primer pedido, lo que fue antes).
+	 * → mismo formato que CVD_Attribution (owner_user_id, owner_type, referral_code, source, since) o null.
 	 */
 	public static function protected_owner( string $phone_raw ): ?array {
 		global $wpdb;
@@ -104,7 +105,7 @@ final class CVD_Clients {
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT owner_user_id, source, claimed_at, created_at FROM ' . self::table() . ' WHERE phone=%s', $phone ) );
 		if ( ! $row || ! (int) $row->owner_user_id ) { return null; }
 		$since = $row->claimed_at ?: ( 'gestora' === $row->source ? $row->created_at : null );
-		if ( ! $since || strtotime( $since . ' UTC' ) < time() - self::PROTECT_DAYS * DAY_IN_SECONDS ) { return null; }
+		if ( ! $since ) { return null; }
 		$user = get_userdata( (int) $row->owner_user_id );
 		if ( ! $user || ! class_exists( 'CVD_Registration' ) || ! CVD_Registration::is_approved_gestora( $user ) ) { return null; }
 		$code = (string) get_user_meta( $user->ID, '_cvd_referral_code', true );
