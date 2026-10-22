@@ -362,5 +362,103 @@ ok( 1 === count( $eq ) && 'equipo:4954' === $C::alert_key( $eq[0] ) && false !==
 ok( 1 === count( $C::pending_review( $eq, array() ) ) && array() === $C::pending_review( $eq, array( 'equipo:4954' => 1 ) ), '«equipo» se marca «Revisada» (hace esperar al cierre hasta entonces)' );
 near( $r['people'][64]['own_points'], 7, 'venta del equipo con enlace: sí cuenta (30 − 20 − 3)' );
 
+// ---------- 3.14.48 (D92). Cuenta de gestor del dueño (opción cvd_owner_gestor_user) ----------
+/** Venta de varias líneas: cada una [base, costo, comisión, otros (fondo de la operación), ¿proveedor MK-?]. */
+function msale( int $order, int $owner, array $ls, array $extra = array() ): array {
+	$lines = array();
+	foreach ( $ls as $i => $l ) { $lines[] = array( 'product_id' => 900 + $order * 10 + $i, 'name' => ( $l[4] ? 'MK ' : 'CV ' ) . $order . '.' . $i, 'qty' => 1, 'base' => $l[0], 'cost_unit' => $l[1], 'commission' => $l[2], 'other' => $l[3], 'bajo_pedido' => $l[4] ); }
+	return $extra + array( 'order_id' => $order, 'owner' => $owner, 'at' => P . '-12 12:00:00', 'status' => 'approved', 'self_order' => false, 'test' => false, 'lines' => $lines );
+}
+const OG = 137;
+$OGP = array( 'owner_gestor' => OG );
+function lines_of( array $r, string $kind, int $user ): array { return array_values( array_filter( $r['lines'], static fn( $l ) => $kind === $l['kind'] && $user === $l['user'] ) ); }
+
+// Regla 2: los puntos de una línea MK- de otra gestora también suman a su piedra; a ella no se le quitan.
+$m = array( OG => member( 'Ernesto' ), 1 => member( 'Ana' ) );
+$s = array( msale( 4253, 1, array( array( 140, 119, 8.4, 3.68, true ) ) ), msale( 4300, 1, array( array( 200, 120, 10, 0, false ) ) ) );
+$on = $C::compute( P, $m, $s, array(), $OGP );
+$off = $C::compute( P, $m, $s );
+near( $on['people'][1]['own_points'], 78.92, 'D92: Ana conserva sus puntos (8,92 de la tablet MK- + 70)' );
+near( $on['people'][OG]['supplier_points'], 8.92, 'D92: la línea MK- de Ana da 8,92 puntos de proveedor al dueño' );
+near( $on['people'][OG]['own_points'], 0, 'D92: sus puntos propios no cambian (solo los de proveedor)' );
+near( $on['people'][OG]['team_points'], 8.92, 'D92: sus puntos de equipo incluyen los de proveedor' );
+ok( 1 === count( lines_of( $on, 'proveedor', OG ) ) && 4253 === lines_of( $on, 'proveedor', OG )[0]['order'] && 1 === lines_of( $on, 'proveedor', OG )[0]['source'], 'D92: renglón «proveedor» del pedido #4253 (vendió Ana)' );
+near( $on['totals']['profit_usd'], $off['totals']['profit_usd'], 'D92: los puntos de proveedor no cambian la ganancia del mes' );
+near( $on['totals']['pool_usd'], $off['totals']['pool_usd'], 'D92: ni el fondo del mes' );
+ok( $on['people'][1]['bonus_pay_cup'] === $off['people'][1]['bonus_pay_cup'] && $on['people'][1]['stone'] === $off['people'][1]['stone'], 'D92: Ana cobra y tiene la misma piedra con o sin la regla' );
+ok( 0.0 === $off['people'][OG]['supplier_points'] && ! lines_of( $off, 'proveedor', OG ), 'D92: opción vacía = sin efecto' );
+$r = $C::compute( P, $m, $s, array(), array( 'owner_gestor' => 999 ) );
+ok( 0.0 === $r['people'][OG]['supplier_points'] && $r['totals'] === $off['totals'], 'D92: opción con un usuario que no es gestora = sin efecto' );
+
+// Si la vende él mismo, no se cuenta dos veces.
+$r = $C::compute( P, $m, array( msale( 4400, OG, array( array( 140, 119, 8.4, 3.68, true ) ) ) ), array(), $OGP );
+near( $r['people'][OG]['own_points'], 8.92, 'D92: venta MK- propia: sus puntos propios' );
+near( $r['people'][OG]['supplier_points'], 0, 'D92: venta MK- propia: no suma también como «de proveedor»' );
+near( $r['people'][OG]['team_points'], 8.92, 'D92: venta MK- propia: 8,92 una sola vez' );
+
+// Con 70 puntos de proveedor llega a Bronce (las ventas de proveedor cuentan como suyas para la piedra), pero sin bono.
+$s = array( msale( 4500, 1, array( array( 300, 220, 10, 0, true ) ) ) );
+$on = $C::compute( P, $m, $s, array(), $OGP );
+$off = $C::compute( P, $m, $s );
+ok( 'bronce' === $on['people'][OG]['stone'] && 'bronce' === $on['people'][OG]['title'], 'D92: 70 puntos de proveedor y ninguna venta propia → piedra y título Bronce' );
+ok( 0 === $on['people'][OG]['bonus_cup'] && 0 === $on['people'][OG]['bonus_pay_cup'] && 0.0 === (float) $on['people'][OG]['bonus_pay_usd'], 'D92: el dueño nunca cobra bono de piedra' );
+near( $on['people'][OG]['fund_usd'], 0, 'D92: los puntos de proveedor no le dan fondo de equipo' );
+ok( '' === $off['people'][OG]['stone'], 'D92: sin la opción, sin piedra' );
+ok( $on['people'][1]['bonus_pay_cup'] === $off['people'][1]['bonus_pay_cup'] && 5000 === $on['people'][1]['bonus_pay_cup'], 'D92: Ana sigue cobrando sus 5.000 CUP de Bronce' );
+near( $on['totals']['bonus_usd'], $off['totals']['bonus_usd'], 'D92: el total de bonos del mes no cambia' );
+
+// Regla 3: su red (1 % + 0,5 %) solo sobre artículos de Casa Viva; la 2.ª línea según su piedra SIN puntos de proveedor.
+$m = array( OG => member( 'Ernesto' ), 1 => member( 'Ana' ), 2 => member( 'Bea', OG ), 3 => member( 'Cris', 2 ) );
+$s = array(
+	msale( 10, OG, array( array( 60, 50, 0, 0, false ) ) ),                                   // venta propia: 10 puntos, 60 USD
+	msale( 11, 2, array( array( 100, 60, 10, 0, false ), array( 50, 30, 5, 5, true ) ) ),     // Bea: 30 + 10 (MK-)
+	msale( 12, 3, array( array( 200, 150, 10, 0, false ) ) ),                                 // Cris (2.º nivel): 40
+	msale( 13, 1, array( array( 300, 250, 10, 0, true ) ) ),                                  // Ana (fuera de su red): 40 MK-
+	msale( 14, 2, array( array( 80, 60, 5, 5, true ) ) ),                                     // Bea, solo MK-: 10
+);
+$on = $C::compute( P, $m, $s, array(), $OGP );
+$off = $C::compute( P, $m, $s );
+$E = $on['people'][OG];
+near( $E['supplier_points'], 60, 'D92 red: 10 (Bea #11) + 40 (Ana #13) + 10 (Bea #14) puntos de proveedor' );
+near( $E['red1'], 1.0, 'D92 red: 1 % de los 100 USD de Casa Viva de Bea (no de los 150 del pedido)' );
+near( $off['people'][OG]['red1'], 2.3, 'sin la regla sería 1 % de 150 + 80 = 2,30' );
+ok( ! array_filter( lines_of( $on, 'red1', OG ), static fn( $l ) => 14 === $l['order'] ), 'D92 red: el pedido #14 (solo MK-) no le da red' );
+ok( 'bronce' === $E['stone_red'] && 'plata' === $E['stone'], 'D92: piedra Plata con proveedor (10+60 propios + 50 Bea + 40 Cris = 160), pero Bronce para la red (100)' );
+near( $E['red2'], 0, 'D92: sin Plata «de red» no cobra el 0,5 % de Cris' );
+near( $E['red_lost'], 1.0, 'D92: 0,5 % de los 200 de Cris se pierde (como a cualquier madrina Bronce)' );
+near( $E['red_pay'], 1.0, 'D92: su red se paga (1,00 USD) como a cualquier madrina' );
+near( $E['fund_usd'], 0.15 * 100, 'D92: su fondo de equipo es el 15 % de 100 (sin los 60 de proveedor)' );
+ok( 0 === $E['bonus_pay_cup'] && 'plata' === $E['title'], 'D92: título Plata, sin bono' );
+foreach ( array( 1, 2, 3 ) as $g ) {
+	ok( $on['people'][ $g ]['red_pay'] === $off['people'][ $g ]['red_pay'] && $on['people'][ $g ]['bonus_pay_cup'] === $off['people'][ $g ]['bonus_pay_cup'] && $on['people'][ $g ]['own_points'] === $off['people'][ $g ]['own_points'], 'D92: ' . $m[ $g ]['name'] . ' cobra igual con o sin la regla' );
+}
+near( $on['people'][2]['red1'], 2.0, 'D92: Bea sigue cobrando el 1 % de todo lo de Cris' );
+near( $on['totals']['pool_usd'], $off['totals']['pool_usd'], 'D92: el fondo del mes no cambia' );
+
+// Su red, como cualquier madrina, pide 1 venta propia entregada en el mes (las de proveedor no cuentan para cobrar).
+$r = $C::compute( P, $m, array( msale( 20, 2, array( array( 100, 60, 10, 0, false ) ) ), msale( 21, 1, array( array( 300, 220, 10, 0, true ) ) ) ), array(), $OGP );
+ok( 'bronce' === $r['people'][OG]['stone'] && 0.0 === (float) $r['people'][OG]['red_pay'] && abs( $r['people'][OG]['red_lost'] - 1.0 ) < 0.01 && 'Sin venta propia entregada este mes' === $r['people'][OG]['red_lost_reason'], 'D92: sin venta propia no cobra red aunque tenga piedra por proveedor' );
+
+// Devolución de un mes cerrado: también se restan sus puntos de proveedor de ese pedido.
+$m = array( OG => member( 'Ernesto' ), 1 => member( 'Ana' ) );
+$rev = array( array( 'order_id' => 3845, 'owner' => 1, 'points' => 7.32, 'base' => 105, 'supplier' => array( array( 'user' => OG, 'points' => 7.32, 'base' => 105 ) ) ) );
+$r = $C::compute( P, $m, array( msale( 4600, 1, array( array( 140, 119, 8.4, 3.68, true ) ) ) ), $rev, $OGP );
+near( $r['people'][OG]['supplier_points'], 1.6, 'D92: 8,92 − 7,32 de la devolución = 1,60 puntos de proveedor' );
+ok( 1 === count( lines_of( $r, 'proveedor_devolucion', OG ) ), 'D92: renglón «proveedor_devolucion»' );
+near( $r['people'][1]['own_points'], 1.6, 'la devolución resta a Ana como siempre' );
+
+// Ventas de proveedor fuera de la web (opción cvd_owner_offweb_sales): margen limpio = venta − proveedor − gestora.
+$offweb = array(
+	array( 'date' => P . '-11', 'points' => 380 - 351 - 10, 'base' => 380, 'state' => 'cerrado' ), // Split Parker de Harley: 19
+	array( 'date' => P . '-20', 'points' => 50, 'base' => 300, 'state' => 'abierto' ),              // sin entregar: no cuenta
+	array( 'date' => '2026-09-30', 'points' => 50, 'base' => 300, 'state' => 'cerrado' ),           // otro mes: no cuenta
+);
+$r = $C::compute( P, $m, array(), array(), $OGP + array( 'owner_offweb' => $offweb ) );
+near( $r['people'][OG]['supplier_points'], 19, 'D92 fuera de la web: el Split Parker da 19 puntos (solo la cerrada del mes)' );
+ok( 1 === count( lines_of( $r, 'proveedor_fuera', OG ) ) && 0 === $r['people'][OG]['bonus_pay_cup'], 'D92 fuera de la web: 1 renglón «proveedor_fuera», sin bono' );
+near( $r['totals']['profit_usd'], 0, 'D92 fuera de la web: no entra en la ganancia del mes (ni en el fondo)' );
+$r = $C::compute( P, $m, array(), array(), array( 'owner_offweb' => $offweb ) );
+ok( ! lines_of( $r, 'proveedor_fuera', OG ), 'D92 fuera de la web: sin la opción del dueño, nada' );
+
 echo $fails ? "\n$fails de $count comprobaciones fallaron\n" : "OK: $count comprobaciones\n";
 exit( $fails ? 1 : 0 );

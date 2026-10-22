@@ -72,8 +72,10 @@ class WC_Order {
 	public function get_billing_city() { return $this->m['_bc'] ?? ''; }
 	public function get_items() { return $this->m['_items'] ?? array(); }
 	public function get_qty_refunded_for_item( $id ) { return $this->m['_refunded'][ $id ] ?? 0; }
+	public function get_order_number() { return (string) $this->id; } // 3.14.48: lo usa la lista de vales (3.14.33); sin esto la prueba se caía
+	public function get_date_created() { return null; }
 }
-class WC_Item_Stub { public $p; public $v; public function __construct( $p, $v = 0 ) { $this->p = $p; $this->v = $v; } public function get_product_id() { return $this->p; } public function get_variation_id() { return $this->v; } }
+class WC_Item_Stub { public $p; public $v; public function __construct( $p, $v = 0 ) { $this->p = $p; $this->v = $v; } public function get_product_id() { return $this->p; } public function get_variation_id() { return $this->v; } public function get_quantity() { return 1; } public function get_name() { return 'Producto ' . $this->p; } }
 class WC_Product {
 	public $id; public $name; public $parent = 0; public $children = array(); public $m = array();
 	public function __construct( $id, $name, $parent = 0 ) { $this->id = $id; $this->name = $name; $this->parent = $parent; }
@@ -208,6 +210,8 @@ if ( ! class_exists( 'CVD_Supplier_Split' ) ) {
 	final class CVD_Supplier_Split { // lo justo de Core 3.14.14
 		public static function saved( $o ) { return array( 'snapshot' => array( 'rate' => 800, 'fundCup' => 2400 ) ); }
 		public static function compute( $o ) { return array(); }
+		public static function owner_gestor_user() { return absint( get_option( 'cvd_owner_gestor_user', 0 ) ); } // 3.14.48
+		public static function offweb_sales( $m = '' ) { return $GLOBALS['offweb'] ?? array(); }
 	}
 }
 $GLOBALS['products'][400] = new WC_Product( 400, 'Lámpara MK-1155' ); $GLOBALS['products'][400]->m['_bajo'] = '1'; $GLOBALS['meta'][400] = array( '_cvd_cost_usd' => '32', '_cvd_cost_source' => 'proveedor' );
@@ -215,6 +219,14 @@ $GLOBALS['orders'] = array();
 order( 3021, 5, array( array( 400, 0, 1, 45, 5 ), array( 100, 0, 1, 30, 3 ) ) );
 $r = CVD_Programa::compute( '2026-11' );
 ok( abs( $r['people'][5]['own_points'] - ( 5 + 7 ) ) < 0.01, 'proveedor: 45 − 32 − 5 − 3 USD de fondo (2.400 CUP / 800) = 5, más la alfombra 7 = 12: ' . $r['people'][5]['own_points'] );
+// 3.14.48 (D92): con la cuenta de gestor del dueño, la línea MK- (5 puntos) suma también a sus puntos de proveedor.
+$GLOBALS['users'][7] = new WP_User( 7, 'Dueño Ejemplo', '2026-10-22 12:00:00' ); $GLOBALS['umeta'][7]['_cvd_account_status'] = 'approved';
+$GLOBALS['opts']['cvd_owner_gestor_user'] = '7';
+$GLOBALS['offweb'] = array( array( 'date' => '2026-11-11', 'points' => 19.0, 'saleUsd' => 380.0, 'state' => 'cerrado' ) );
+$r = CVD_Programa::compute( '2026-11' );
+ok( abs( $r['people'][7]['supplier_points'] - ( 5 + 19 ) ) < 0.01 && abs( $r['people'][5]['own_points'] - 12 ) < 0.01, 'D92: el dueño suma 5 (MK- de la gestora) + 19 (fuera de la web); ella sigue con 12: ' . ( $r['people'][7]['supplier_points'] ?? 'x' ) );
+ok( 0 === $r['people'][7]['bonus_pay_cup'], 'D92: el dueño sin bono' );
+unset( $GLOBALS['opts']['cvd_owner_gestor_user'], $GLOBALS['users'][7], $GLOBALS['offweb'] );
 
 // ---------- 3.14.29 (D75): red y bono por «Pedir mi pago» ----------
 $GLOBALS['wpdb']->results = array( array( 'id' => 9, 'period' => '2026-11', 'stone' => 'plata', 'pay_red_usd' => '8.00', 'pay_bonus_cup' => '6933', 'rate_cup' => '800', 'computed_at' => '2026-12-01 08:00:00' ) );

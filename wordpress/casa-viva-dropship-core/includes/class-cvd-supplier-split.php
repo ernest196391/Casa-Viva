@@ -26,8 +26,43 @@ final class CVD_Supplier_Split {
 	public const ROUTES = array( 'A' => 'El proveedor lo trae a la tienda', 'B' => 'Nuestro mensajero lo recoge en el proveedor', 'C' => 'El proveedor lo lleva directo al cliente' );
 	public const VEHICLES = array( 'moto' => 'Moto', 'triciclo' => 'Triciclo', 'ninguno' => 'Sin vehículo' );
 	/** Sugerencias por defecto (D69), en CUP. Se pueden cambiar sin tocar código con estas opciones. */
-	private const DEFAULTS = array( 'moto' => 1000, 'triciclo' => 2500, 'clerk_per_item' => 500, 'store' => 1500, 'store_min' => 1000 );
+	private const DEFAULTS = array( 'moto' => 1000, 'triciclo' => 2500, 'clerk_per_item' => 500, 'store' => 3000, 'store_min' => 1000 ); // D92: 3.000 por la opción cvd_supplier_split_store (antes 1.500); los cerrados guardan el suyo
 	public const SPECIAL_NAME = 'Ernesto';
+	/** 3.14.48 (D92): usuario de la cuenta de gestor del dueño (hoy 137). Vacía = nada de lo del dueño-gestor tiene efecto. */
+	public const OWNER_OPTION = 'cvd_owner_gestor_user';
+
+	/** 3.14.48 (D92): ventas de proveedor hechas FUERA de la web (JSON, las apunta Ernesto/Claude a mano). */
+	public const OFFWEB_OPTION = 'cvd_owner_offweb_sales';
+
+	/** 3.14.48: id de la cuenta de gestor del dueño, o 0 si la opción está vacía. */
+	public static function owner_gestor_user(): int {
+		return absint( get_option( self::OWNER_OPTION, 0 ) );
+	}
+
+	/**
+	 * 3.14.48 (D92): ventas de proveedor fuera de la web, limpias. $month 'AAAA-MM' filtra por la fecha ('' = todas).
+	 * Cada una: date, product, supplier, gestora, gestoraUsd, saleUsd, costUsd, specialUsd, rate (0 = sin tasa), paidCup,
+	 * note, state (abierto | cerrado | cancelado) y points = margen limpio (venta − proveedor − gestora, ≥ 0; Ernesto 22-oct).
+	 */
+	public static function offweb_sales( string $month = '' ): array {
+		$raw = get_option( self::OFFWEB_OPTION, '' );
+		$list = is_array( $raw ) ? $raw : json_decode( (string) $raw, true );
+		$out = array();
+		foreach ( is_array( $list ) ? $list : array() as $i => $s ) {
+			if ( ! is_array( $s ) || ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) ( $s['date'] ?? '' ) ) ) { continue; }
+			if ( '' !== $month && 0 !== strpos( (string) $s['date'], $month ) ) { continue; }
+			$num = static fn( string $k ): float => is_numeric( $s[ $k ] ?? null ) ? (float) $s[ $k ] : 0.0;
+			$state = sanitize_key( (string) ( $s['state'] ?? 'abierto' ) );
+			$out[] = array(
+				'key' => 'fuera:' . $i, 'date' => (string) $s['date'], 'product' => (string) ( $s['product'] ?? '' ), 'supplier' => (string) ( $s['supplier'] ?? '' ),
+				'gestora' => (string) ( $s['gestora'] ?? '' ), 'gestoraUsd' => $num( 'gestoraUsd' ), 'saleUsd' => $num( 'saleUsd' ), 'costUsd' => $num( 'costUsd' ),
+				'specialUsd' => $num( 'specialUsd' ), 'rate' => $num( 'rate' ), 'paidCup' => $num( 'paidCup' ), 'note' => (string) ( $s['note'] ?? '' ),
+				'state' => in_array( $state, array( 'abierto', 'cerrado', 'cancelado' ), true ) ? $state : 'abierto',
+				'points' => round( max( 0.0, $num( 'saleUsd' ) - $num( 'costUsd' ) - $num( 'gestoraUsd' ) ), 4 ),
+			);
+		}
+		return $out;
+	}
 
 	public static function register(): void {
 		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
@@ -136,7 +171,7 @@ final class CVD_Supplier_Split {
 		} elseif ( ! $meets ) {
 			$warning = 'No llega al mínimo: al gestor especial le quedan ' . self::cup_text( $special ) . ' y el mínimo es 1 USD (' . self::cup_text( $one_usd ) . '). Sube el precio web, baja el fondo o no aceptes la venta.';
 		}
-		return array(
+		$result = array(
 			'applies' => (bool) $lines || (bool) $saved,
 			'orderId' => $order->get_id(), 'number' => $order->get_order_number(), 'date' => $order->get_date_created() ? $order->get_date_created()->date( 'c' ) : null,
 			'orderStatus' => $order->get_status(), 'lines' => $lines,
@@ -154,6 +189,12 @@ final class CVD_Supplier_Split {
 			'closed' => '' !== $closed_at, 'closedAt' => '' !== $closed_at ? $closed_at : null,
 			'state' => '' !== $closed_at ? 'cerrado' : ( in_array( $order->get_status(), array( 'cancelled', 'refunded', 'failed' ), true ) ? 'cancelado' : 'abierto' ),
 		);
+		// 3.14.48 (D92): un reparto cerrado no cambia. Sin esto, al subir la tienda a 3.000 CUP (opción) los cerrados con
+		// el reparto sugerido (#4201, #4244: tienda 1.500) se recalculaban y Ernesto veía 1.500 CUP menos en cada uno.
+		if ( '' !== $closed_at && is_array( $saved['snapshot'] ?? null ) ) {
+			$result = array_merge( $result, array_intersect_key( $saved['snapshot'], $result ) );
+		}
+		return $result;
 	}
 
 	public static function cup_text( int $cup ): string {
@@ -291,6 +332,80 @@ final class CVD_Supplier_Split {
 		}
 		usort( $rows, static fn( $a, $b ) => strcmp( (string) $b['date'], (string) $a['date'] ) );
 		return array( 'month' => $start->format( 'Y-m' ), 'orders' => $rows, 'totals' => $tot, 'people' => array_values( $people ) );
+	}
+
+	// ---------- «Mis ventas de proveedor» (3.14.48, D92) ----------
+
+	/**
+	 * Vista de solo lectura en el área de gestora, SOLO para la cuenta del dueño (opción cvd_owner_gestor_user): cada
+	 * venta de proveedor del mes (de cualquier gestora) con su parte (specialCup) y los totales cerrado/abierto.
+	 * Mes por ?cvd_mes=AAAA-MM (el actual y los 5 anteriores). '' para cualquier otra cuenta.
+	 */
+	public static function render_owner_sales( WP_User $user ): string {
+		$og = self::owner_gestor_user();
+		if ( ! $og || $og !== (int) $user->ID ) { return ''; }
+		$now = new DateTimeImmutable( 'first day of this month', wp_timezone() );
+		$months = array();
+		for ( $i = 0; $i < 6; $i++ ) { $m = $now->modify( '-' . $i . ' months' ); $months[ $m->format( 'Y-m' ) ] = ( CVD_Programa_Calc::MONTHS[ (int) $m->format( 'n' ) ] ?? '' ) . ' ' . $m->format( 'Y' ); }
+		$want = isset( $_GET['cvd_mes'] ) ? sanitize_text_field( wp_unslash( (string) $_GET['cvd_mes'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- solo lectura.
+		$month = isset( $months[ $want ] ) ? $want : $now->format( 'Y-m' );
+		$data = self::month( $month );
+		// Filas de la lista: las de la web y las de fuera de la web (opción cvd_owner_offweb_sales), las más nuevas arriba.
+		$rows = array();
+		foreach ( $data['orders'] as $o ) {
+			$rows[] = array( 'num' => '#' . $o['number'], 'ts' => $o['date'] ? (int) strtotime( (string) $o['date'] ) : 0, 'products' => (string) $o['products'], 'gestora' => (string) ( $o['gestora'] ?? '' ),
+				'state' => $o['state'], 'cup' => (int) $o['specialCup'], 'usd' => 0.0, 'rate' => (float) $o['rate'], 'offweb' => false );
+		}
+		foreach ( self::offweb_sales( $month ) as $s ) {
+			$rate = (float) $s['rate'];
+			$rows[] = array( 'num' => 'Fuera', 'ts' => (int) strtotime( $s['date'] . ' 12:00:00 ' . wp_timezone_string() ), 'products' => $s['product'], 'gestora' => $s['gestora'],
+				'state' => $s['state'], 'cup' => $rate > 0 ? (int) round( $s['specialUsd'] * $rate ) : 0, 'usd' => $rate > 0 ? 0.0 : (float) $s['specialUsd'], 'rate' => $rate, 'offweb' => true );
+		}
+		usort( $rows, static fn( $a, $b ) => $b['ts'] <=> $a['ts'] );
+		$tot = array( 'cerrado' => array( 'cup' => 0, 'usd' => 0.0, 'n' => 0 ), 'abierto' => array( 'cup' => 0, 'usd' => 0.0, 'n' => 0 ) );
+		foreach ( $rows as $r ) {
+			if ( ! isset( $tot[ $r['state'] ] ) ) { continue; } // cancelado: no suma
+			$tot[ $r['state'] ]['cup'] += $r['cup']; $tot[ $r['state'] ]['usd'] += $r['usd']; $tot[ $r['state'] ]['n']++;
+		}
+		$money = static fn( array $t ): string => $t['usd'] > 0 ? ( $t['cup'] ? self::cup_text( $t['cup'] ) . ' + ' : '' ) . self::usd_text( $t['usd'] ) : self::cup_text( $t['cup'] );
+		$closed = $money( $tot['cerrado'] ); $open = $money( $tot['abierto'] ); $n_closed = $tot['cerrado']['n']; $n_open = $tot['abierto']['n'];
+		$count = static fn( int $n ): string => $n . ( 1 === $n ? ' venta' : ' ventas' );
+		ob_start();
+		?>
+		<section class="cvga-view" data-view="proveedor" id="cvga-proveedor">
+			<div class="cvga-head"><h1>Mis ventas de proveedor</h1><p>Tu parte de cada venta de un producto de proveedor (Kevin, Sergio, TRD…), la venda quien la venda. Solo lo ves tú.</p></div>
+			<form method="get" class="cvga-month-form">
+				<label for="cvga-prov-mes">Mes</label>
+				<select id="cvga-prov-mes" name="cvd_mes">
+					<?php foreach ( $months as $key => $label ) : ?><option value="<?php echo esc_attr( $key ); ?>"<?php selected( $key, $month ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?>
+				</select>
+				<button class="cvga-btn cvga-btn-sm" type="submit">Ver</button>
+			</form>
+			<div class="cvga-kpis">
+				<article class="cvga-card cvga-kpi"><small>Cerrado: la tienda te debe</small><strong><?php echo esc_html( $closed ); ?></strong><span><?php echo esc_html( $count( $n_closed ) . ' entregadas y cobradas' ); ?></span></article>
+				<article class="cvga-card cvga-kpi"><small>Abierto</small><strong><?php echo esc_html( $open ); ?></strong><span><?php echo esc_html( $count( $n_open ) . ': cuando se entreguen' ); ?></span></article>
+			</div>
+			<section class="cvga-card">
+				<div class="cvga-row"><h2>Ventas de <?php echo esc_html( $months[ $month ] ); ?></h2><span class="cvga-chip"><?php echo esc_html( $count( count( $rows ) ) ); ?></span></div>
+				<?php if ( ! $rows ) : ?>
+				<p class="cvga-empty">Este mes no hay ventas de proveedor.</p>
+				<?php else : ?>
+				<ul class="cvga-vales cvga-prov">
+					<?php foreach ( $rows as $o ) : $cancel = 'cancelado' === $o['state']; ?>
+					<li<?php echo $cancel ? ' class="is-cancel"' : ''; ?>>
+						<span class="cvga-vale-num"><?php echo esc_html( $o['num'] ); ?></span>
+						<div class="cvga-vale-text"><b><?php echo esc_html( $o['products'] ); ?></b><small><?php echo esc_html( trim( ( $o['ts'] ? wp_date( 'j/n', $o['ts'] ) . ' · ' : '' ) . ( '' !== $o['gestora'] ? 'Gestora: ' . $o['gestora'] : 'Sin gestora' ) . ' · ' . ( $cancel ? 'Cancelado: no cuenta' : ( 'cerrado' === $o['state'] ? 'Cerrado' : 'Abierto' ) ) . ( $o['offweb'] ? ' · fuera de la web' : '' ) ) ); ?></small></div>
+						<div class="cvga-prov-end"><b class="cvga-vale-pts"><?php echo esc_html( $o['usd'] > 0 ? self::usd_text( $o['usd'] ) : self::cup_text( $o['cup'] ) ); ?></b><small><?php echo esc_html( $o['usd'] > 0 ? 'en USD (sin tasa)' : ( $o['rate'] > 0 ? '≈ ' . self::usd_text( $o['cup'] / $o['rate'] ) . ' a ' . number_format( $o['rate'], 0, ',', '.' ) : 'sin tasa' ) ); ?></small></div>
+					</li>
+					<?php endforeach; ?>
+				</ul>
+				<?php endif; ?>
+				<p class="cvga-note"><b>Cerrado: la tienda te debe <?php echo esc_html( $closed ); ?>.</b> <b>Abierto: <?php echo esc_html( $open ); ?> cuando se entreguen.</b></p>
+				<p class="cvga-note">Tu parte = lo que gana la venta (precio web − precio del proveedor) − la comisión de la gestora − mensajero − dependienta − tienda. «Cerrado» = entregado y cobrado; ya no cambia. «Abierto» puede cambiar hasta que se entregue. El USD es con la tasa del día de cada pedido. «Fuera de la web» = venta sin pedido en la web, apuntada a mano (en USD si no tiene tasa). Solo lectura.</p>
+			</section>
+		</section>
+		<?php
+		return (string) ob_get_clean();
 	}
 
 	// ---------- REST ----------

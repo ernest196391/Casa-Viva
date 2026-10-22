@@ -460,6 +460,10 @@ final class CVD_Commissions {
 		// no se recalcula nada (se queda la foto guardada): eso solo se corrige a mano con staff_rule_fix().
 		$locked = in_array( sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ), array( 'approved', 'paid', 'cancelled' ), true );
 		$staff_zero = $locked ? '' : self::staff_zero_reason( $order, $owner_user_id );
+		// 3.14.48 (D92): la cuenta de gestor del dueño (opción cvd_owner_gestor_user) no cobra comisión de gestora por sus
+		// ventas de productos de proveedor (SKU MK-): ahí su ganancia es su parte del reparto (CVD_Supplier_Split, que con
+		// comisión 0 le deja todo «el resto»). Solo al crear la foto de la línea; lo ya guardado no se toca.
+		$owner_mk = $owner_user_id && class_exists( 'CVD_Supplier_Split' ) && class_exists( 'CVD_Costs' ) && CVD_Supplier_Split::owner_gestor_user() === $owner_user_id;
 
 		foreach ( $order->get_items( 'line_item' ) as $item ) {
 			$product = $item->get_product();
@@ -478,6 +482,8 @@ final class CVD_Commissions {
 				$line_commission = 'fixed' === $policy['type'] ? $policy['value'] * $quantity : $line_base * ( $policy['value'] / 100 );
 				$without_rule = $line_commission + $line_margin;
 				if ( '' !== $staff_zero ) { $line_commission = 0.0; $line_margin = 0.0; }
+				$owner_supplier = '' === $staff_zero && $owner_mk && $product && CVD_Costs::is_bajo_pedido( $product );
+				if ( $owner_supplier ) { $line_commission = 0.0; $line_margin = 0.0; }
 				$snapshot = array(
 					'product_id'       => $item->get_product_id(),
 					'variation_id'     => $item->get_variation_id(),
@@ -493,6 +499,7 @@ final class CVD_Commissions {
 					'captured_at'      => current_time( 'mysql', true ),
 				);
 				if ( '' !== $staff_zero ) { $snapshot['staff_zero'] = $staff_zero; $snapshot['commission_without_rule'] = wc_format_decimal( $without_rule, 4 ); }
+				if ( $owner_supplier ) { $snapshot['owner_supplier'] = 1; $snapshot['commission_without_rule'] = wc_format_decimal( $without_rule, 4 ); }
 				// 3.14.19: extra en tienda → la gestora cobra su comisión normal; el premio de la dependienta va aparte.
 				if ( $is_extra ) { $snapshot['extra'] = self::extra_split( $item, $product, $line, $quantity, (float) $line_commission ); }
 				$item->update_meta_data( '_cvd_commission_snapshot', $snapshot );

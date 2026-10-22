@@ -104,6 +104,11 @@ final class CVD_Gestora_App {
 			$at = (int) array_search( 'invitar', array_column( $nav, 0 ), true );
 			array_splice( $nav, $at, 1, array( array( 'equipo', 'Mi equipo', 'people', '' ), array( 'piedra', 'Mi piedra', 'gem', '' ), array( 'invitar', 'Invitar gestores', 'invite', '' ) ) );
 		}
+		// 3.14.48 (D92): «Mis ventas de proveedor», solo para la cuenta de gestor del dueño (opción cvd_owner_gestor_user).
+		$proveedor = class_exists( 'CVD_Supplier_Split' ) && CVD_Supplier_Split::owner_gestor_user() === (int) $user->ID;
+		if ( $proveedor ) {
+			array_splice( $nav, (int) array_search( 'cobrar', array_column( $nav, 0 ), true ) + 1, 0, array( array( 'proveedor', 'Mis ventas de proveedor', 'truck', '' ) ) );
+		}
 		// 3.13.77: «Aprende» (tutoriales). Mientras le falte algo, justo debajo de Inicio y con lo que lleva (2/6);
 		// cuando lo vio todo, baja al final de Herramientas.
 		$learn = class_exists( 'CVD_Aprende' ) ? CVD_Aprende::progress( $user->ID, 'gestora' ) : null;
@@ -159,6 +164,7 @@ final class CVD_Gestora_App {
 					<?php echo self::buscar( $zone ); // phpcs:ignore ?>
 				<?php echo class_exists( 'CVD_Gestora_Confianza' ) ? CVD_Gestora_Confianza::render( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php if ( $programa ) { echo CVD_Programa::render_equipo( $user ) . CVD_Programa::render_piedra( $user ); } // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
+					<?php echo $proveedor ? CVD_Supplier_Split::render_owner_sales( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo class_exists( 'CVD_Gestora_Fotos' ) ? CVD_Gestora_Fotos::render( $user, $code ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo $estudio ? CVD_Gestora_Estudio::render( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo $estudio && class_exists( 'CVD_Gestora_Contabilidad' ) ? CVD_Gestora_Contabilidad::render( $user, $orders ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>

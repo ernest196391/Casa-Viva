@@ -412,10 +412,11 @@ final class CVD_Programa {
 			// 3.14.30 (D77): reembolso de una parte del pedido después del cierre → se resta esa parte (una vez por pedido).
 			$share = $gone ? 1.0 : self::refund_share( $order );
 			if ( $share <= 0 ) { continue; }
-			$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT l.* FROM ' . self::t( 'lines' ) . ' l JOIN ' . self::t( 'runs' ) . " r ON r.id=l.run_id WHERE r.kind='mensual' AND r.status IN ('cerrado','pagado') AND l.order_id=%d AND l.kind IN ('venta','red1','red2')", $order_id ), ARRAY_A );
-			$rev = array( 'order_id' => $order_id, 'owner' => 0, 'points' => 0, 'base' => 0, 'red' => array() );
+			$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT l.* FROM ' . self::t( 'lines' ) . ' l JOIN ' . self::t( 'runs' ) . " r ON r.id=l.run_id WHERE r.kind='mensual' AND r.status IN ('cerrado','pagado') AND l.order_id=%d AND l.kind IN ('venta','red1','red2','proveedor')", $order_id ), ARRAY_A );
+			$rev = array( 'order_id' => $order_id, 'owner' => 0, 'points' => 0, 'base' => 0, 'red' => array(), 'supplier' => array() );
 			foreach ( (array) $rows as $l ) {
 				if ( 'venta' === $l['kind'] ) { $rev['owner'] = absint( $l['user_id'] ); $rev['points'] += $share * (float) $l['points']; $rev['base'] += $share * (float) $l['base_usd']; }
+				elseif ( 'proveedor' === $l['kind'] ) { $rev['supplier'][] = array( 'user' => absint( $l['user_id'] ), 'points' => $share * (float) $l['points'], 'base' => $share * (float) $l['base_usd'] ); } // 3.14.48 (D92)
 				else { $rev['red'][] = array( 'user' => absint( $l['user_id'] ), 'level' => 'red1' === $l['kind'] ? 1 : 2, 'amount' => $share * (float) $l['amount_usd'] ); }
 			}
 			if ( $rev['owner'] ) { $out[] = $rev; }
@@ -445,7 +446,13 @@ final class CVD_Programa {
 		foreach ( $members as $id => &$m ) { $m['title'] = $titles[ $id ] ?? ''; }
 		unset( $m );
 		$closed = self::closed_orders();
-		return CVD_Programa_Calc::compute( $period, $members, self::sales( $period, $members, $closed ), self::reversals( $closed ), array( 'rate_cup' => self::rate(), 'carry_usd' => self::carry_in( $period ) ) );
+		return CVD_Programa_Calc::compute( $period, $members, self::sales( $period, $members, $closed ), self::reversals( $closed ), array( 'rate_cup' => self::rate(), 'carry_usd' => self::carry_in( $period ), 'owner_gestor' => class_exists( 'CVD_Supplier_Split' ) ? CVD_Supplier_Split::owner_gestor_user() : 0, 'owner_offweb' => self::offweb_for_calc( $period ) ) );
+	}
+
+	/** 3.14.48 (D92): ventas de proveedor fuera de la web del mes, con sus puntos (margen limpio), para el cálculo. */
+	private static function offweb_for_calc( string $period ): array {
+		if ( ! class_exists( 'CVD_Supplier_Split' ) || ! CVD_Supplier_Split::owner_gestor_user() ) { return array(); }
+		return array_map( static fn( $s ) => array( 'date' => $s['date'], 'points' => $s['points'], 'base' => $s['saleUsd'], 'state' => $s['state'] ), CVD_Supplier_Split::offweb_sales( $period ) );
 	}
 
 	/**
@@ -842,6 +849,7 @@ final class CVD_Programa {
 		$current = CVD_Programa_Calc::stone( $stone );
 		$have = (float) ( $me['next']['have'] ?? 0 );
 		$goal = (float) ( $next['points'] ?? 0 );
+		$owner = class_exists( 'CVD_Supplier_Split' ) && CVD_Supplier_Split::owner_gestor_user() === (int) $user->ID; // 3.14.48 (D92)
 		ob_start();
 		?>
 		<section class="cvga-view" data-view="piedra" id="cvga-piedra">
@@ -858,6 +866,9 @@ final class CVD_Programa {
 			<div class="cvga-kpis">
 				<article class="cvga-card cvga-kpi"><small>Tus puntos este mes</small><strong><?php echo esc_html( self::pts2( $me['own_points'] ?? 0 ) ); ?></strong><span><?php echo esc_html( self::usd( $me['own_sales_usd'] ?? 0 ) . ' vendidos y cobrados' ); ?></span></article>
 				<article class="cvga-card cvga-kpi"><small>Puntos del equipo</small><strong><?php echo esc_html( self::pts( $me['team_points'] ?? 0 ) ); ?></strong><span>Tú + tus invitadas + las de ellas</span></article>
+				<?php if ( $owner ) : // 3.14.48 (D92) ?>
+				<article class="cvga-card cvga-kpi"><small>Puntos de proveedor</small><strong><?php echo esc_html( self::pts2( $me['supplier_points'] ?? 0 ) ); ?></strong><span>Ventas de proveedor de las gestoras: solo para tu piedra</span></article>
+				<?php endif; ?>
 			</div>
 			<?php echo self::render_vales( $user, $run, $data ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 			<?php if ( $next ) : ?>
@@ -870,7 +881,9 @@ final class CVD_Programa {
 			<?php endif; ?>
 			<section class="cvga-card">
 				<h2>Tu bono de este mes</h2>
-				<?php if ( ! $current ) : ?>
+				<?php if ( $owner ) : // 3.14.48 (D92): la cuenta del dueño no cobra bono de piedra ?>
+				<p class="cvga-empty">Tu cuenta no cobra bono de piedra: en las ventas de proveedor ya ganas tu parte del reparto («Mis ventas de proveedor»). Tu red sí se cobra como la de cualquier madrina.</p>
+				<?php elseif ( ! $current ) : ?>
 				<p class="cvga-empty">Llega a Bronce (65 puntos del equipo y 1 venta tuya entregada) y cobras 5.000 CUP ese mes.</p>
 				<?php else : $cov = (float) ( $me['coverage'] ?? 0 ); ?>
 				<p class="cvga-bonus"><b><?php echo esc_html( self::cup( $me['bonus_pay_cup'] ?? 0 ) ); ?></b><?php echo $cov < 0.999 ? esc_html( ' de ' . self::cup( $current['bonus_cup'] ) ) : ''; ?></p>

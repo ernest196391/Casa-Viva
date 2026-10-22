@@ -20,6 +20,12 @@ defined( 'ABSPATH' ) || exit;
  * - Fondo = 15 % de la ganancia del equipo. Red primero, bonos con lo que quede. Además, el total del mes
  *   nunca pasa del 15 % de toda la ganancia (cada venta cuenta una vez); si no alcanza, todos cobran el
  *   mismo % (reparto proporcional). Casa Viva nunca pone más.
+ * - 3.14.48 (D92, Ernesto 22-oct): cuenta de gestor del dueño ($params['owner_gestor'], opción cvd_owner_gestor_user).
+ *   Los puntos de cada línea de proveedor (bajo pedido, SKU MK-; ya sin el fondo de la operación, D75.4) que vende
+ *   OTRA gestora se le suman también a él como «puntos de proveedor» (a ella no se le quitan). Solo sirven para su
+ *   piedra y su título: su bono es siempre 0, no entran en su fondo de equipo ni en el del mes, y no le abren el
+ *   2.º nivel de la red. Para su piedra esas ventas cuentan también como ventas suyas (mínimo propio). Su red
+ *   (1 % + 0,5 %) se calcula solo sobre las líneas que NO son de proveedor (en esas ya cobra su parte del reparto).
  */
 final class CVD_Programa_Calc {
 	/** slug, nombre, puntos del equipo en el mes, bono CUP, mínimo propio en USD vendidos (precio Casa Viva). */
@@ -49,6 +55,8 @@ final class CVD_Programa_Calc {
 		'high_margin'     => 0.55, // auditoría 16-oct: línea con ganancia > 55 % del precio = «revisar costo» (¿costo mal puesto?)
 		'high_margin_min' => 10.0, // solo líneas de 10 USD o más (lo barato puede ganar mucho de verdad)
 		'revisar_repeat'  => 3,    // D79: «revisar» sale suelta solo si la misma gestora repite su teléfono con la misma clienta 3 veces o más
+		'owner_gestor'    => 0,    // 3.14.48 (D92): cuenta de gestor del dueño (opción cvd_owner_gestor_user; 0 = sin efecto)
+		'owner_offweb'    => array(), // 3.14.48 (D92): sus ventas de proveedor fuera de la web: [['date' 'AAAA-MM-DD', 'points', 'base', 'state']]
 	);
 
 	/** D79: alertas que hacen esperar al cierre automático del mes mientras Lennys no las marque «Revisada». */
@@ -297,7 +305,7 @@ final class CVD_Programa_Calc {
 	 * @param array  $members  id => ['name', 'inviter' => id|0, 'joined' => 'Y-m-d H:i:s', 'approved' => bool, 'title' => slug].
 	 * @param array  $sales    lista de ['order_id', 'owner', 'at' (hora de Cuba), 'status' (approved|paid|…), 'self_order' (no cuenta),
 	 *                         'self_check' (cuenta con alerta), 'staff_self' (compra del equipo/tienda, 3.14.45), 'staff_check' (alerta «equipo»), 'test',
-	 *                         'lines' => [['product_id', 'name', 'qty', 'base', 'cost_unit' (null si no hay), 'commission', 'other' (USD de la línea: gastos fijos si se restan + premio de dependienta; 3.14.29), 'cost_provisional' (bool)]]].
+	 *                         'lines' => [['product_id', 'name', 'qty', 'base', 'cost_unit' (null si no hay), 'commission', 'other' (USD de la línea: gastos fijos si se restan + premio de dependienta; 3.14.29), 'cost_provisional' (bool), 'bajo_pedido' (bool: producto de proveedor, SKU MK-; 3.14.48)]]].
 	 * @param array  $reversals devoluciones de pedidos ya cerrados: ['order_id', 'owner', 'points', 'base', 'red' => [['user', 'level', 'amount']]].
 	 */
 	public static function compute( string $period, array $members, array $sales, array $reversals = array(), array $params = array() ): array {
@@ -312,8 +320,13 @@ final class CVD_Programa_Calc {
 				'own_points' => 0.0, 'own_sales_usd' => 0.0, 'own_orders' => 0, 'own_profit_lines_sin_costo' => 0,
 				'red1' => 0.0, 'red2' => 0.0, 'red_lost' => 0.0, 'red_lost_reason' => '',
 				'prev_title' => (string) ( $m['title'] ?? '' ),
+				'supplier_points' => 0.0, 'supplier_sales_usd' => 0.0, 'supplier_orders' => 0, // 3.14.48: solo la cuenta del dueño
 			);
 		}
+		// 3.14.48 (D92): cuenta de gestor del dueño (0 = nadie). Tiene que estar entre las gestoras.
+		$og = (int) $p['owner_gestor'];
+		if ( $og && ! isset( $people[ $og ] ) ) { $og = 0; }
+		if ( $og ) { $people[ $og ]['owner_gestor'] = true; }
 		$inviter_of = static function ( int $id ) use ( $people ): int {
 			$inv = $people[ $id ]['inviter'] ?? 0;
 			return ( $inv && $inv !== $id && isset( $people[ $inv ] ) ) ? $inv : 0;
@@ -346,6 +359,7 @@ final class CVD_Programa_Calc {
 				$self_checks[] = array( 'owner' => $owner, 'order' => $order, 'name' => $people[ $owner ]['name'], 'client' => $client );
 			}
 			$base = 0.0; $points = 0.0; $cost = 0.0; $commission = 0.0; $missing = array(); $losing = array(); $provisional = array(); $high = array();
+			$mk_base = 0.0; $mk_points = 0.0; $mk_lines = 0; // 3.14.48: líneas de proveedor (SKU MK-) de esta venta
 			foreach ( (array) ( $s['lines'] ?? array() ) as $l ) {
 				$lb = (float) ( $l['base'] ?? 0 ); $qty = max( 1, (int) ( $l['qty'] ?? 1 ) ); $lc = (float) ( $l['commission'] ?? 0 );
 				$lo = max( 0.0, (float) ( $l['other'] ?? 0 ) ); // 3.14.29: gastos fijos (si se restan) + premio de dependienta
@@ -358,6 +372,7 @@ final class CVD_Programa_Calc {
 				if ( $lb >= (float) $p['high_margin_min'] && $lp > (float) $p['high_margin'] * $lb ) { $high[] = $label; }
 				if ( null !== $unit && $unit > 0 ) { $total_net += $lb - $unit * $qty - $lc - $lo; }
 				$base += $lb; $points += $lp; $commission += $lc; $cost += ( null === $unit ? 0 : $unit * $qty ) + $lo;
+				if ( ! empty( $l['bajo_pedido'] ) ) { $mk_base += $lb; $mk_points += $lp; $mk_lines++; }
 			}
 			if ( $high ) { $alerts[] = array( 'type' => 'ganancia_alta', 'user' => $owner, 'order' => $order, 'key' => 'ganancia_alta:' . $order, 'text' => 'Pedido #' . $order . ': gana más del ' . round( 100 * (float) $p['high_margin'] ) . ' % del precio (' . implode( ', ', array_slice( $high, 0, 3 ) ) . '). Revisar que el costo esté bien puesto.' ); }
 			if ( $missing ) { $alerts[] = array( 'type' => 'sin_costo', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ': sin costo cargado (' . implode( ', ', array_slice( $missing, 0, 3 ) ) . '), esas líneas dan 0 puntos.' ); }
@@ -368,6 +383,15 @@ final class CVD_Programa_Calc {
 			$people[ $owner ]['own_orders']++;
 			$total_points += $points; $total_sales += $base;
 			$lines[] = array( 'kind' => 'venta', 'user' => $owner, 'order' => $order, 'source' => $owner, 'base' => round( $base, 4 ), 'cost' => round( $cost, 4 ), 'commission' => round( $commission, 4 ), 'points' => round( $points, 4 ), 'pct' => 0, 'amount' => 0 );
+			// 3.14.48 (D92): los mismos puntos de las líneas de proveedor, también para la piedra del dueño (sin quitárselos
+			// a la gestora). Si la vendió él mismo ya están en sus puntos propios: no se cuentan dos veces. No entran en los
+			// totales del mes (no cambian el fondo).
+			if ( $og && $owner !== $og && $mk_lines ) {
+				$people[ $og ]['supplier_points'] += $mk_points;
+				$people[ $og ]['supplier_sales_usd'] += $mk_base;
+				$people[ $og ]['supplier_orders']++;
+				$lines[] = array( 'kind' => 'proveedor', 'user' => $og, 'order' => $order, 'source' => $owner, 'base' => round( $mk_base, 4 ), 'cost' => 0, 'commission' => 0, 'points' => round( $mk_points, 4 ), 'pct' => 0, 'amount' => 0 );
+			}
 
 			// Red de esta venta (las condiciones de cobro se aplican después, con el mes completo).
 			$joined = $people[ $owner ]['joined'];
@@ -379,18 +403,35 @@ final class CVD_Programa_Calc {
 				$is_buyer = static function ( int $uid ) use ( $buyers, $people ): bool {
 					return $buyers && 'si' === self::self_purchase( (string) ( $people[ $uid ]['name'] ?? '' ), $buyers, false );
 				};
+				// 3.14.48 (D92): para la cuenta del dueño la red no cuenta las líneas de proveedor (ahí cobra su parte del reparto).
+				$red_base = static fn( int $uid ): float => ( $og && $uid === $og ) ? max( 0.0, $base - $mk_base ) : $base;
 				if ( $b1 ) {
-					$amt = round( $base * (float) $p['red1_pct'], 4 );
-					if ( $is_buyer( $b1 ) ) { $alerts[] = array( 'type' => 'autocompra_red', 'user' => $b1, 'order' => $order, 'text' => 'Pedido #' . $order . ': lo compra o lo recibe la madrina; no cobra red de él.' ); }
-					else { $red_raw[ $b1 ][1][] = array( 'order' => $order, 'source' => $owner, 'base' => $base, 'amount' => $amt ); }
+					$rb1 = $red_base( $b1 );
+					$amt = round( $rb1 * (float) $p['red1_pct'], 4 );
+					if ( $rb1 <= 0 ) { /* venta solo de proveedor: sin red para el dueño */ }
+					elseif ( $is_buyer( $b1 ) ) { $alerts[] = array( 'type' => 'autocompra_red', 'user' => $b1, 'order' => $order, 'text' => 'Pedido #' . $order . ': lo compra o lo recibe la madrina; no cobra red de él.' ); }
+					else { $red_raw[ $b1 ][1][] = array( 'order' => $order, 'source' => $owner, 'base' => $rb1, 'amount' => $amt ); }
 					$b2 = $inviter_of( $b1 );
 					if ( $b2 && $b2 !== $owner ) {
-						$amt2 = round( $base * (float) $p['red2_pct'], 4 );
-						if ( $is_buyer( $b2 ) ) { $alerts[] = array( 'type' => 'autocompra_red', 'user' => $b2, 'order' => $order, 'text' => 'Pedido #' . $order . ': lo compra o lo recibe la madrina de 2.º nivel; no cobra red de él.' ); }
-						else { $red_raw[ $b2 ][2][] = array( 'order' => $order, 'source' => $owner, 'base' => $base, 'amount' => $amt2 ); }
+						$rb2 = $red_base( $b2 );
+						$amt2 = round( $rb2 * (float) $p['red2_pct'], 4 );
+						if ( $rb2 <= 0 ) { /* venta solo de proveedor: sin red para el dueño */ }
+						elseif ( $is_buyer( $b2 ) ) { $alerts[] = array( 'type' => 'autocompra_red', 'user' => $b2, 'order' => $order, 'text' => 'Pedido #' . $order . ': lo compra o lo recibe la madrina de 2.º nivel; no cobra red de él.' ); }
+						else { $red_raw[ $b2 ][2][] = array( 'order' => $order, 'source' => $owner, 'base' => $rb2, 'amount' => $amt2 ); }
 					}
 				}
 			}
+		}
+
+		// 3.14.48 (D92, Ernesto 22-oct): ventas de proveedor hechas fuera de la web (cerradas, del mes): su margen limpio
+		// (venta − proveedor − gestora) suma a los puntos de proveedor del dueño. Igual que las otras: sin bono ni fondo.
+		foreach ( $og ? (array) $p['owner_offweb'] : array() as $i => $ow ) {
+			if ( ! is_array( $ow ) || substr( (string) ( $ow['date'] ?? '' ), 0, 7 ) !== $period || 'cerrado' !== ( $ow['state'] ?? '' ) ) { continue; }
+			$opts = max( 0.0, (float) ( $ow['points'] ?? 0 ) );
+			$people[ $og ]['supplier_points'] += $opts;
+			$people[ $og ]['supplier_sales_usd'] += max( 0.0, (float) ( $ow['base'] ?? 0 ) );
+			$people[ $og ]['supplier_orders']++;
+			$lines[] = array( 'kind' => 'proveedor_fuera', 'user' => $og, 'order' => 0, 'source' => $og, 'base' => round( (float) ( $ow['base'] ?? 0 ), 4 ), 'cost' => 0, 'commission' => 0, 'points' => round( $opts, 4 ), 'pct' => 0, 'amount' => 0 );
 		}
 
 		foreach ( self::group_revisar( $self_checks, (int) $p['revisar_repeat'] ) as $a ) { $alerts[] = $a; } // D79
@@ -413,6 +454,14 @@ final class CVD_Programa_Calc {
 				$red_reversal[ $u ] = ( $red_reversal[ $u ] ?? 0 ) + $amt;
 				$lines[] = array( 'kind' => 'red_devolucion', 'user' => $u, 'order' => $order, 'source' => $owner, 'base' => 0, 'cost' => 0, 'commission' => 0, 'points' => 0, 'pct' => 0, 'amount' => round( -$amt, 4 ) );
 			}
+			// 3.14.48 (D92): los puntos de proveedor que le dio ese pedido al dueño también se restan (solo de su piedra).
+			foreach ( (array) ( $r['supplier'] ?? array() ) as $sp ) {
+				$u = (int) ( $sp['user'] ?? 0 ); $spts = (float) ( $sp['points'] ?? 0 );
+				if ( ! $og || $u !== $og || ! $spts ) { continue; }
+				$people[ $og ]['supplier_points'] -= $spts;
+				$people[ $og ]['supplier_sales_usd'] -= (float) ( $sp['base'] ?? 0 );
+				$lines[] = array( 'kind' => 'proveedor_devolucion', 'user' => $og, 'order' => $order, 'source' => $owner, 'base' => round( -(float) ( $sp['base'] ?? 0 ), 4 ), 'cost' => 0, 'commission' => 0, 'points' => round( -$spts, 4 ), 'pct' => 0, 'amount' => 0 );
+			}
 			$alerts[] = array( 'type' => 'devolucion', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ' se anuló después de cerrar su mes: se resta ahora.' );
 		}
 
@@ -425,14 +474,22 @@ final class CVD_Programa_Calc {
 			foreach ( array_merge( $l1, $l2 ) as $oid ) { $contrib[ $oid ] = max( 0.0, round( $people[ $oid ]['own_points'], 4 ) ); }
 			$own = max( 0.0, round( $me['own_points'], 4 ) );
 			$me['level1'] = $l1; $me['level2'] = $l2; $me['contrib'] = $contrib;
+			// 3.14.48 (D92): la piedra «de red» (sin puntos de proveedor) decide el 2.º nivel; para todas es la misma piedra.
+			$me['stone_red'] = $me['approved'] ? self::month_stone( $own, max( 0.0, $me['own_sales_usd'] ), $me['own_orders'], array_values( $contrib ), $p ) : '';
+			if ( $og && $id === $og ) {
+				// Sus puntos de proveedor cuentan como propios para su piedra (también las ventas, para el mínimo propio).
+				$own = round( $own + max( 0.0, $me['supplier_points'] ), 4 );
+				$me['stone'] = $me['approved'] ? self::month_stone( $own, max( 0.0, $me['own_sales_usd'] ) + $me['supplier_sales_usd'], $me['own_orders'] + $me['supplier_orders'], array_values( $contrib ), $p ) : '';
+			} else {
+				$me['stone'] = $me['stone_red'];
+			}
 			$me['team_points'] = round( $own + array_sum( $contrib ), 4 );
-			$me['stone'] = $me['approved'] ? self::month_stone( $own, max( 0.0, $me['own_sales_usd'] ), $me['own_orders'], array_values( $contrib ), $p ) : '';
 			$me['title'] = self::best_stone( $me['prev_title'], $me['stone'] );
 			$me['qualifying'] = array();
 			$next = self::next_stone( $me['stone'] );
 			if ( $next ) {
 				$q = self::qualifying_points( $own, array_values( $contrib ), $next['points'], (float) $p['member_cap'] );
-				$me['next'] = array( 'slug' => $next['slug'], 'name' => $next['name'], 'points' => $next['points'], 'have' => round( $q, 2 ), 'missing' => round( max( 0, $next['points'] - $q ), 2 ), 'min_own_usd' => $next['min_own_usd'], 'own_usd_missing' => round( max( 0, $next['min_own_usd'] - $me['own_sales_usd'] ), 2 ) );
+				$me['next'] = array( 'slug' => $next['slug'], 'name' => $next['name'], 'points' => $next['points'], 'have' => round( $q, 2 ), 'missing' => round( max( 0, $next['points'] - $q ), 2 ), 'min_own_usd' => $next['min_own_usd'], 'own_usd_missing' => round( max( 0, $next['min_own_usd'] - $me['own_sales_usd'] - ( $og && $id === $og ? $me['supplier_sales_usd'] : 0 ) ), 2 ) );
 			} else { $me['next'] = null; }
 			// Alerta: un miembro con más del 60 % de los puntos del equipo.
 			if ( $me['team_points'] >= self::STONES[0][2] ) {
@@ -451,7 +508,7 @@ final class CVD_Programa_Calc {
 			$active = $me['approved'] && $me['own_orders'] >= (int) $p['min_own_sales'];
 			foreach ( array( 1, 2 ) as $lvl ) {
 				foreach ( $red_raw[ $id ][ $lvl ] ?? array() as $r ) {
-					$ok = $active && ( 1 === $lvl || self::stone_index( $me['stone'] ) >= $min2 );
+					$ok = $active && ( 1 === $lvl || self::stone_index( $me['stone_red'] ) >= $min2 ); // 3.14.48: sin puntos de proveedor
 					$kind = 'red' . $lvl;
 					if ( $ok ) { $me[ $kind ] += $r['amount']; }
 					else {
@@ -472,9 +529,11 @@ final class CVD_Programa_Calc {
 		$rate = max( 1.0, (float) $p['rate_cup'] );
 		$red_capped = 0.0; $bonus_capped = 0.0;
 		foreach ( $people as $id => &$me ) {
-			$me['fund_usd'] = round( (float) $p['fund_pct'] * max( 0.0, $me['team_points'] ), 4 );
+			// 3.14.48 (D92): los puntos de proveedor del dueño no entran en su fondo de equipo y no le dan bono.
+			$is_og = $og && $id === $og;
+			$me['fund_usd'] = round( (float) $p['fund_pct'] * max( 0.0, $me['team_points'] - ( $is_og ? max( 0.0, $me['supplier_points'] ) : 0.0 ) ), 4 );
 			$stone = self::stone( $me['stone'] );
-			$me['bonus_cup'] = $stone ? $stone['bonus_cup'] : 0;
+			$me['bonus_cup'] = $stone && ! $is_og ? $stone['bonus_cup'] : 0;
 			$me['bonus_usd'] = round( $me['bonus_cup'] / $rate, 4 );
 			$red = max( 0.0, $me['red_gross'] );
 			$me['red_team_capped'] = round( min( $red, $me['fund_usd'] ), 4 );
@@ -504,6 +563,7 @@ final class CVD_Programa_Calc {
 			$me['own_points'] = round( $me['own_points'], 4 );
 			$me['own_sales_usd'] = round( $me['own_sales_usd'], 4 );
 			$me['red1'] = round( $me['red1'], 4 ); $me['red2'] = round( $me['red2'], 4 ); $me['red_lost'] = round( $me['red_lost'], 4 );
+			$me['supplier_points'] = round( $me['supplier_points'], 4 ); $me['supplier_sales_usd'] = round( $me['supplier_sales_usd'], 4 );
 			$tot_red += $me['red_pay']; $tot_bonus_usd += $me['bonus_pay_usd']; $tot_bonus_cup += $me['bonus_pay_cup'];
 			if ( $me['bonus_pay_cup'] ) { $lines[] = array( 'kind' => 'bono', 'user' => $id, 'order' => 0, 'source' => $id, 'base' => 0, 'cost' => 0, 'commission' => 0, 'points' => 0, 'pct' => $me['coverage'], 'amount' => $me['bonus_pay_usd'] ); }
 		}
