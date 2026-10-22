@@ -262,6 +262,41 @@ body.cvga-body .cvd-customer-nav{display:none!important}
 .cvga-prov-end{text-align:right}
 .cvga-prov-end small{display:block;color:var(--ga-muted);font-size:12px;white-space:nowrap}
 .cvga-prov li.is-cancel .cvga-vale-text b,.cvga-prov li.is-cancel .cvga-vale-pts{text-decoration:line-through;color:var(--ga-muted)}
+/* 3.14.50: estadísticas arriba y desglose de cada venta al tocarla (<details>, sin JS) */
+.cvga-prov-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:10px 0 0}
+.cvga-prov-grid>div{background:var(--ga-bg);border-radius:12px;padding:10px 12px;min-width:0}
+.cvga-prov-grid dt{font-size:12.5px;color:var(--ga-muted)}
+.cvga-prov-grid dd{margin:2px 0 0;font-size:17px;font-weight:700;line-height:1.25;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.cvga-prov-grid dd.is-sub{font-size:12px;font-weight:400;color:var(--ga-muted);margin-top:3px}
+.cvga-prov-split{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:6px}
+.cvga-prov-split h3{font-size:15px;margin:0 0 4px}
+.cvga-prov-mini{list-style:none;margin:0;padding:0}
+.cvga-prov-mini li{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:7px 0;border-top:1px solid var(--ga-line);font-size:14px}
+.cvga-prov-mini li span{min-width:0;overflow-wrap:anywhere}
+.cvga-prov-mini li small{display:block;color:var(--ga-muted);font-size:12px}
+.cvga-prov-mini li b{white-space:nowrap;font-variant-numeric:tabular-nums}
+.cvga-vales.cvga-prov li{display:block;padding:0}
+.cvga-prov summary{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:10px 0;cursor:pointer;list-style:none;min-height:48px}
+.cvga-prov summary::-webkit-details-marker{display:none}
+.cvga-prov summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--ga-muted);border-bottom:2px solid var(--ga-muted);transform:rotate(45deg);margin:-4px 2px 0 0}
+.cvga-prov details[open] summary::after{transform:rotate(-135deg);margin-top:4px}
+.cvga-prov-detail{padding:2px 0 14px}
+.cvga-prov-facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;margin:0 0 10px;font-size:14px}
+.cvga-prov-facts dt{color:var(--ga-muted)}
+.cvga-prov-facts dd{margin:0;overflow-wrap:anywhere}
+.cvga-prov-table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+.cvga-prov-table th,.cvga-prov-table td{padding:6px 4px;border-top:1px solid var(--ga-line);text-align:right;vertical-align:top}
+.cvga-prov-table th:first-child,.cvga-prov-table td:first-child{text-align:left;overflow-wrap:anywhere}
+.cvga-prov-table td:not(:first-child){white-space:nowrap}
+.cvga-prov-table th{font-weight:500;color:var(--ga-muted);font-size:12.5px;border-top:0}
+.cvga-prov-table td small{display:block;color:var(--ga-muted);font-size:12px}
+.cvga-prov-table tr.is-sum td{font-weight:600}
+.cvga-prov-table tr.is-total td{font-weight:700;border-top:2px solid var(--ga-ink);background:#fbf3e2}
+.cvga-prov-pay{margin:10px 0 0;padding:8px 10px;border-radius:10px;background:var(--ga-soft);font-size:13.5px}
+.cvga-prov-pay.is-warn{background:#f6e3c8;color:#5e3a0e}
+.cvga-prov-small{margin:6px 0 0;color:var(--ga-muted);font-size:12.5px}
+.cvga-prov-state{margin:8px 0 0;font-size:13.5px}
+@media (max-width:640px){.cvga-prov-grid{grid-template-columns:1fr 1fr;gap:8px}.cvga-prov-grid dd{font-size:15px}.cvga-prov-split{grid-template-columns:1fr}.cvga-prov-table{font-size:13px}}
 .cvga-vales.is-waiting .cvga-vale-text b{font-weight:500}
 @media (max-width:640px){.cvga-kpis-3{grid-template-columns:1fr 1fr}.cvga-kpis-3 .cvga-kpi:first-child{grid-column:1/-1}}
 /* 3.14.42 «¿Es de confianza este número?» (assets/gestora-confianza.js) */

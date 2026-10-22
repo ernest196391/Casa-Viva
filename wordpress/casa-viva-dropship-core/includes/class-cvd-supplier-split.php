@@ -16,6 +16,8 @@ defined( 'ABSPATH' ) || exit;
  * Margen mínimo (sugerencia de Claude, aviso y no bloqueo): margen ≥ comisión gestora + fondo + 1 USD.
  * 3.14.49 (Ernesto 22-oct): ruta C (directo del proveedor al cliente) = dependienta 0 sugerida (los cerrados no cambian:
  * usan lo sellado). La parte del dueño (specialCup) es SU comisión en su área (owner_commissions) y sus puntos propios.
+ * 3.14.50 (Ernesto 22-oct): «Mis ventas de proveedor» con el desglose de cada venta (owner_rows + render_detail) y las
+ * estadísticas del mes o de «Todo» (owner_stats). El recargo de la Clásica que es ganancia viene del sellado (surchargeUsd).
  * Rutas (clave del panel, como CVD_Panel_Bridge):
  *   GET  /panel/supplier-split/<id>         reparto guardado o sugerido
  *   POST /panel/supplier-split/<id>         guardar {supplier, costUsd, route, vehicle, messengerCup, messengerName, clerkCup, clerkName, storeCup, by}
@@ -196,6 +198,9 @@ final class CVD_Supplier_Split {
 			'saved' => ! empty( $saved['input'] ), 'savedAt' => $saved['savedAt'] ?? null, 'savedBy' => $saved['savedBy'] ?? null,
 			'closed' => '' !== $closed_at, 'closedAt' => '' !== $closed_at ? $closed_at : null,
 			'state' => '' !== $closed_at ? 'cerrado' : ( in_array( $order->get_status(), array( 'cancelled', 'refunded', 'failed' ), true ) ? 'cancelado' : 'abierto' ),
+			// 3.14.50 (Ernesto 22-oct 14:35): recargo de la forma de pago que SÍ es ganancia (Clásica cambiada a USD). Hoy solo
+			// viene de lo sellado (#3845: webUsd 120,75 = 105 + 15,75); aquí 0 para que el sellado lo pueda traer.
+			'surchargeUsd' => 0.0, 'surchargeNote' => '',
 		);
 		// 3.14.48 (D92): un reparto cerrado no cambia. Sin esto, al subir la tienda a 3.000 CUP (opción) los cerrados con
 		// el reparto sugerido (#4201, #4244: tienda 1.500) se recalculaban y Ernesto veía 1.500 CUP menos en cada uno.
@@ -271,7 +276,7 @@ final class CVD_Supplier_Split {
 	}
 
 	private static function snapshot( array $s ): array {
-		return array_intersect_key( $s, array_flip( array( 'supplier', 'route', 'vehicle', 'webUsd', 'costUsd', 'rate', 'marginUsd', 'marginCup', 'gestora', 'gestoraUsd', 'gestoraCup', 'messengerCup', 'messengerName', 'clerkCup', 'clerkName', 'storeCup', 'fundCup', 'specialCup', 'specialName', 'minCup', 'meetsMin' ) ) );
+		return array_intersect_key( $s, array_flip( array( 'supplier', 'route', 'vehicle', 'webUsd', 'costUsd', 'rate', 'marginUsd', 'marginCup', 'gestora', 'gestoraUsd', 'gestoraCup', 'messengerCup', 'messengerName', 'clerkCup', 'clerkName', 'storeCup', 'fundCup', 'specialCup', 'specialName', 'minCup', 'meetsMin', 'surchargeUsd', 'surchargeNote' ) ) );
 	}
 
 	/** Pedido completado (entregado + dinero confirmado): sella el reparto final y lo apunta en una nota. Nunca rompe el cierre. */
@@ -342,12 +347,256 @@ final class CVD_Supplier_Split {
 		return array( 'month' => $start->format( 'Y-m' ), 'orders' => $rows, 'totals' => $tot, 'people' => array_values( $people ) );
 	}
 
-	// ---------- «Mis ventas de proveedor» (3.14.48, D92) ----------
+	// ---------- «Mis ventas de proveedor» (3.14.48, D92; 3.14.50: desglose de cada venta y estadísticas) ----------
+
+	/** 3.14.50: periodo «Todo» (desde el inicio) del selector de «Mis ventas de proveedor». */
+	public const ALL = 'todo';
+
+	/**
+	 * 3.14.50 (Ernesto 22-oct): cómo pagó el cliente (_cvd_payment_*), o null si el pedido no lo tiene (pedidos viejos).
+	 * surchargePct > 0 = recargo de una forma de pago en USD (Tarjeta Clásica ×1,15, Zelle, PayPal): lo paga el cliente
+	 * encima del precio web y NO entra en el reparto (el reparto sale siempre del precio web).
+	 */
+	public static function payment_info( WC_Order $order ): ?array {
+		$kind = sanitize_key( (string) $order->get_meta( '_cvd_payment_kind', true ) );
+		if ( '' === $kind ) { return null; }
+		$checkout = class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_payment( $order ) : null;
+		$currency = (string) ( $checkout['currency'] ?? $order->get_meta( '_cvd_payment_currency', true ) );
+		$currency = '' !== $currency ? $currency : 'USD';
+		$factor = (float) ( $checkout['factor'] ?? $order->get_meta( '_cvd_payment_factor', true ) );
+		$raw = $checkout ? $checkout['amount'] : $order->get_meta( '_cvd_payment_amount', true );
+		return array(
+			'kind' => $kind, 'label' => (string) ( $checkout['label'] ?? $kind ), 'currency' => $currency,
+			'amount' => is_numeric( $raw ) ? (float) $raw : null, 'factor' => $factor,
+			'surchargePct' => 'USD' === $currency && $factor > 1.0001 ? round( ( $factor - 1 ) * 100, 2 ) : 0.0,
+		);
+	}
+
+	/**
+	 * 3.14.50: «Cobrado al cliente: 120,75 USD por Clásica (recargo 15 % de la tarjeta)». '' sin datos.
+	 * $in_split > 0 = ese recargo (USD) ya está sumado al reparto como ganancia (Ernesto 22-oct 14:35, #3845).
+	 */
+	public static function payment_line( ?array $p, float $in_split = 0.0 ): string {
+		if ( ! $p || null === $p['amount'] ) { return ''; }
+		$money = 'CUP' === $p['currency'] ? self::cup_text( (int) round( $p['amount'] ) ) : number_format( (float) $p['amount'], 2, ',', '.' ) . ' ' . $p['currency'];
+		if ( $p['surchargePct'] > 0 ) {
+			$clasica = 'clasica' === $p['kind'];
+			$name = $clasica ? 'Clásica' : $p['label'];
+			return 'Cobrado al cliente: ' . $money . ' por ' . $name . ' (recargo ' . self::num( (float) $p['surchargePct'] ) . ' % ' . ( $clasica ? 'de la tarjeta' : 'de ' . $name )
+				. ( $in_split > 0 ? ': ' . self::usd_text( $in_split ) . ' de ganancia, ya sumados al margen' : '' ) . ')';
+		}
+		return 'Cobrado al cliente: ' . $money . ' por ' . $p['label'] . ( 'USD' === $p['currency'] ? '' : ' (en ' . $p['currency'] . ' con la tasa del día; el reparto va con el precio web)' );
+	}
+
+	/** 1234.5 → «1.234,50»; 15 → «15». */
+	private static function num( float $v ): string {
+		return number_format( $v, abs( $v - round( $v ) ) < 0.005 ? 0 : 2, ',', '.' );
+	}
+
+	/** «21.002 CUP + 19,00 USD» (usd = lo que no tiene tasa) o solo «21.002 CUP». */
+	private static function money_pair( array $t ): string {
+		return $t['usd'] > 0 ? ( $t['cup'] ? self::cup_text( (int) $t['cup'] ) . ' + ' : '' ) . self::usd_text( (float) $t['usd'] ) : self::cup_text( (int) $t['cup'] );
+	}
+
+	/** «15 de octubre de 2026». */
+	private static function date_text( int $ts ): string {
+		return wp_date( 'j', $ts ) . ' de ' . ( CVD_Programa_Calc::MONTHS[ (int) wp_date( 'n', $ts ) ] ?? '' ) . ' de ' . wp_date( 'Y', $ts );
+	}
+
+	/**
+	 * 3.14.50: filas de «Mis ventas de proveedor» del periodo ('AAAA-MM' o 'todo'), la venda quien la venda: las de la web
+	 * (compute(): lo sellado si está cerrado) y las de fuera de la web, con todo su desglose. Las más nuevas arriba.
+	 * CUP enteros (null = sin tasa); USD con 2 decimales. *Cup de una fila = webCup − costCup = marginCup y
+	 * marginCup − gestoraCup − mensajero − dependienta − tienda − otros = specialCup. Solo lee.
+	 */
+	public static function owner_rows( string $period ): array {
+		$all = self::ALL === $period;
+		$rows = array();
+		foreach ( self::supplier_order_ids() as $id ) {
+			$order = wc_get_order( $id );
+			if ( ! $order || 'shop_order' !== $order->get_type() || ! $order->get_date_created() ) { continue; }
+			$ts = $order->get_date_created()->getTimestamp();
+			if ( ! $all && wp_date( 'Y-m', $ts ) !== $period ) { continue; }
+			$s = self::compute( $order );
+			if ( $s['applies'] ) { $rows[] = self::web_row( $s, $order, $ts ); }
+		}
+		foreach ( self::offweb_sales( $all ? '' : $period ) as $w ) { $rows[] = self::offweb_row( $w ); }
+		usort( $rows, static fn( $a, $b ) => $b['ts'] <=> $a['ts'] );
+		return $rows;
+	}
+
+	private static function web_row( array $s, WC_Order $order, int $ts ): array {
+		$rate = (float) $s['rate'];
+		$has = $rate > 0;
+		// webUsd = lo cobrado que entra en el reparto: precio web + recargo que es ganancia (surchargeUsd, del sellado).
+		$surcharge = round( max( 0.0, (float) ( $s['surchargeUsd'] ?? 0 ) ), 2 );
+		$web_cup = $has ? (int) round( (float) $s['webUsd'] * $rate ) : null;
+		$price_cup = $has ? (int) round( ( (float) $s['webUsd'] - $surcharge ) * $rate ) : null;
+		$route = isset( self::ROUTES[ $s['route'] ] ) ? (string) $s['route'] : 'B';
+		$vehicle = isset( self::VEHICLES[ $s['vehicle'] ] ) ? (string) $s['vehicle'] : 'ninguno';
+		return array(
+			'key' => 'web:' . $s['orderId'], 'offweb' => false, 'num' => '#' . $s['number'], 'ts' => $ts,
+			'products' => implode( ', ', array_map( static fn( $l ) => ( $l['qty'] > 1 ? $l['qty'] . '× ' : '' ) . $l['name'], $s['lines'] ) ),
+			'gestora' => (string) ( $s['gestora'] ?? '' ), 'supplier' => (string) $s['supplier'], 'state' => (string) $s['state'],
+			'route' => $route, 'routeLabel' => self::ROUTES[ $route ], 'vehicle' => $vehicle,
+			'rate' => $rate, 'rateSource' => (string) ( $s['rateSource'] ?? '' ), 'rateDay' => (string) ( $s['rateDay'] ?? '' ),
+			'webUsd' => (float) $s['webUsd'], 'webCup' => $web_cup,
+			'priceUsd' => round( (float) $s['webUsd'] - $surcharge, 2 ), 'priceCup' => $price_cup,
+			'surchargeUsd' => $surcharge, 'surchargeCup' => $has ? $web_cup - $price_cup : null, 'surchargeNote' => (string) ( $s['surchargeNote'] ?? '' ),
+			'costUsd' => (float) $s['costUsd'], 'costCup' => $has ? $web_cup - (int) $s['marginCup'] : null,
+			'marginUsd' => (float) $s['marginUsd'], 'marginCup' => $has ? (int) $s['marginCup'] : null,
+			'gestoraUsd' => (float) $s['gestoraUsd'], 'gestoraCup' => $has ? (int) $s['gestoraCup'] : null,
+			'messengerCup' => (int) $s['messengerCup'], 'messengerName' => (string) $s['messengerName'],
+			'clerkCup' => (int) $s['clerkCup'], 'clerkName' => (string) $s['clerkName'], 'storeCup' => (int) $s['storeCup'],
+			'otherCup' => 0, 'otherUsd' => 0.0,
+			'specialCup' => $has ? (int) $s['specialCup'] : null, 'specialUsd' => $has ? round( (int) $s['specialCup'] / $rate, 2 ) : 0.0,
+			'closedAt' => $s['closedAt'] ?? null, 'warning' => 'abierto' === $s['state'] ? (string) $s['warning'] : '',
+			'payment' => self::payment_info( $order ), 'paidCup' => 0.0, 'note' => '',
+		);
+	}
+
+	/** Venta fuera de la web: venta − costo = margen; − gestora − tu parte = otros gastos (lo que no cuadre). */
+	private static function offweb_row( array $w ): array {
+		$rate = (float) $w['rate'];
+		$has = $rate > 0;
+		$margin = round( (float) $w['saleUsd'] - (float) $w['costUsd'], 2 );
+		$other = round( $margin - (float) $w['gestoraUsd'] - (float) $w['specialUsd'], 2 );
+		$web_cup = $has ? (int) round( (float) $w['saleUsd'] * $rate ) : null;
+		$margin_cup = $has ? (int) round( $margin * $rate ) : null;
+		$gestora_cup = $has ? (int) round( (float) $w['gestoraUsd'] * $rate ) : null;
+		$special_cup = $has ? (int) round( (float) $w['specialUsd'] * $rate ) : null;
+		return array(
+			'key' => (string) $w['key'], 'offweb' => true, 'num' => 'Fuera', 'ts' => (int) strtotime( $w['date'] . ' 12:00:00 ' . wp_timezone_string() ),
+			'products' => (string) $w['product'], 'gestora' => (string) $w['gestora'], 'supplier' => (string) $w['supplier'], 'state' => (string) $w['state'],
+			'route' => '', 'routeLabel' => '', 'vehicle' => '', 'rate' => $rate, 'rateSource' => '', 'rateDay' => '',
+			'webUsd' => (float) $w['saleUsd'], 'webCup' => $web_cup,
+			'priceUsd' => (float) $w['saleUsd'], 'priceCup' => $web_cup, 'surchargeUsd' => 0.0, 'surchargeCup' => $has ? 0 : null, 'surchargeNote' => '',
+			'costUsd' => (float) $w['costUsd'], 'costCup' => $has ? $web_cup - $margin_cup : null,
+			'marginUsd' => $margin, 'marginCup' => $margin_cup,
+			'gestoraUsd' => (float) $w['gestoraUsd'], 'gestoraCup' => $gestora_cup,
+			'messengerCup' => 0, 'messengerName' => '', 'clerkCup' => 0, 'clerkName' => '', 'storeCup' => 0,
+			'otherCup' => $has ? $margin_cup - $gestora_cup - $special_cup : 0, 'otherUsd' => abs( $other ) < 0.005 ? 0.0 : $other,
+			'specialCup' => $special_cup, 'specialUsd' => round( (float) $w['specialUsd'], 2 ),
+			'closedAt' => null, 'warning' => '', 'payment' => null, 'paidCup' => (float) $w['paidCup'], 'note' => (string) $w['note'],
+		);
+	}
+
+	/**
+	 * 3.14.50: estadísticas de las filas (sin las canceladas). Dinero en pares {cup, usd}: cup = lo que tiene tasa,
+	 * usd = lo que no la tiene (fuera de la web sin tasa). mineUsd/avgUsd = tu parte en USD con la tasa de cada venta.
+	 * webUsd = cobrado que entra en el reparto = priceUsd (precio web) + surchargeUsd (recargo que es ganancia).
+	 * marginPct = margen / cobrado (ponderado). byGestora / bySupplier: ventas y tu parte, de mayor a menor.
+	 */
+	public static function owner_stats( array $rows ): array {
+		$z = array( 'cup' => 0, 'usd' => 0.0 );
+		$st = array( 'count' => 0, 'closed' => 0, 'open' => 0, 'webUsd' => 0.0, 'priceUsd' => 0.0, 'surchargeUsd' => 0.0, 'costUsd' => 0.0, 'marginUsd' => 0.0, 'marginPct' => 0.0,
+			'margin' => $z, 'gestoras' => $z, 'fund' => $z, 'messengerCup' => 0, 'clerkCup' => 0, 'storeCup' => 0, 'other' => $z,
+			'mine' => $z, 'mineClosed' => $z, 'mineOpen' => $z, 'mineUsd' => 0.0, 'avgUsd' => 0.0, 'avgCup' => null, 'byGestora' => array(), 'bySupplier' => array() );
+		$put = static function ( array &$acc, ?int $cup, float $usd ): void {
+			if ( null === $cup ) { $acc['usd'] = round( $acc['usd'] + $usd, 2 ); } else { $acc['cup'] += $cup; }
+		};
+		foreach ( $rows as $r ) {
+			if ( 'cancelado' === $r['state'] ) { continue; }
+			$closed = 'cerrado' === $r['state'];
+			$st['count']++;
+			$st[ $closed ? 'closed' : 'open' ]++;
+			foreach ( array( 'webUsd', 'priceUsd', 'surchargeUsd', 'costUsd', 'marginUsd', 'mineUsd' ) as $k ) { $st[ $k ] = round( $st[ $k ] + (float) $r[ 'mineUsd' === $k ? 'specialUsd' : $k ], 2 ); }
+			$put( $st['margin'], $r['marginCup'], (float) $r['marginUsd'] );
+			$put( $st['gestoras'], $r['gestoraCup'], (float) $r['gestoraUsd'] );
+			$put( $st['other'], null === $r['marginCup'] ? null : (int) $r['otherCup'], (float) $r['otherUsd'] );
+			$put( $st['fund'], null === $r['marginCup'] ? null : (int) ( $r['messengerCup'] + $r['clerkCup'] + $r['storeCup'] + $r['otherCup'] ), (float) $r['otherUsd'] );
+			$st['messengerCup'] += (int) $r['messengerCup'];
+			$st['clerkCup'] += (int) $r['clerkCup'];
+			$st['storeCup'] += (int) $r['storeCup'];
+			$put( $st['mine'], $r['specialCup'], (float) $r['specialUsd'] );
+			$put( $st[ $closed ? 'mineClosed' : 'mineOpen' ], $r['specialCup'], (float) $r['specialUsd'] );
+			$groups = array( 'byGestora' => '' !== $r['gestora'] ? $r['gestora'] : 'Sin gestora', 'bySupplier' => '' !== $r['supplier'] ? $r['supplier'] : 'Proveedor sin nombre' );
+			foreach ( $groups as $list => $name ) {
+				$k = mb_strtolower( $name );
+				$st[ $list ][ $k ] = $st[ $list ][ $k ] ?? array( 'name' => $name, 'count' => 0, 'mine' => $z, 'mineUsd' => 0.0 );
+				$st[ $list ][ $k ]['count']++;
+				$put( $st[ $list ][ $k ]['mine'], $r['specialCup'], (float) $r['specialUsd'] );
+				$st[ $list ][ $k ]['mineUsd'] = round( $st[ $list ][ $k ]['mineUsd'] + (float) $r['specialUsd'], 2 );
+			}
+		}
+		$st['marginPct'] = $st['webUsd'] > 0 ? round( $st['marginUsd'] / $st['webUsd'] * 100, 1 ) : 0.0;
+		$st['avgUsd'] = $st['count'] ? round( $st['mineUsd'] / $st['count'], 2 ) : 0.0;
+		$st['avgCup'] = $st['count'] && 0.0 === (float) $st['mine']['usd'] ? (int) round( $st['mine']['cup'] / $st['count'] ) : null; // solo si todas tienen tasa
+		foreach ( array( 'byGestora', 'bySupplier' ) as $list ) {
+			uasort( $st[ $list ], static fn( $a, $b ) => $b['mineUsd'] <=> $a['mineUsd'] ?: strcmp( $a['name'], $b['name'] ) );
+			$st[ $list ] = array_values( $st[ $list ] );
+		}
+		return $st;
+	}
+
+	/** 3.14.50: el desglose de una venta (dentro del <details> de la lista). HTML escapado. */
+	public static function render_detail( array $r ): string {
+		$has = null !== $r['marginCup'];
+		$usd = static fn( float $v ): string => number_format( $v, 2, ',', '.' );
+		$cup = static fn( ?int $v ): string => null === $v ? '—' : number_format( $v, 0, ',', '.' );
+		$by_rate = static fn( int $c ): string => $r['rate'] > 0 ? number_format( $c / $r['rate'], 2, ',', '.' ) : '—';
+		$who = static fn( string $name, string $none ): string => '<small>' . esc_html( '' !== $name ? $name : $none ) . '</small>';
+		$facts = array( 'Fecha' => $r['ts'] ? self::date_text( (int) $r['ts'] ) : '—' );
+		if ( $r['offweb'] ) {
+			$facts['Venta'] = 'Fuera de la web (sin pedido, apuntada a mano)';
+		} else {
+			$facts['Pedido'] = $r['num'];
+		}
+		$facts[ false !== strpos( $r['products'], ', ' ) ? 'Productos' : 'Producto' ] = $r['products'];
+		$facts['Gestora'] = '' !== $r['gestora'] ? $r['gestora'] : 'Sin gestora';
+		$facts['Proveedor'] = '' !== $r['supplier'] ? $r['supplier'] : 'Sin nombre';
+		if ( ! $r['offweb'] ) {
+			$facts['Ruta y vehículo'] = 'Ruta ' . $r['route'] . ': ' . mb_strtolower( $r['routeLabel'] ) . ' · ' . ( self::VEHICLES[ $r['vehicle'] ] ?? '' );
+		}
+		$facts['Tasa'] = $r['rate'] > 0
+			? self::num( (float) $r['rate'] ) . ' CUP por 1 USD' . ( $r['offweb'] ? '' : ( 'pedido' === $r['rateSource'] ? ' (la del día del pedido' . ( '' !== $r['rateDay'] ? ', ' . $r['rateDay'] : '' ) . ')' : ' (la de hoy: el pedido no la tenía guardada)' ) )
+			: 'Sin tasa: las cifras van en USD';
+		$html = '<dl class="cvga-prov-facts">';
+		foreach ( $facts as $k => $v ) { $html .= '<dt>' . esc_html( $k ) . '</dt><dd>' . esc_html( $v ) . '</dd>'; }
+		$html .= '</dl><table class="cvga-prov-table"><thead><tr><th scope="col">Concepto</th><th scope="col">USD</th><th scope="col">CUP</th></tr></thead><tbody>';
+		$row = static fn( string $label, string $u, string $c, string $cls = '' ): string => '<tr' . ( '' !== $cls ? ' class="' . $cls . '"' : '' ) . '><td>' . $label . '</td><td>' . esc_html( $u ) . '</td><td>' . esc_html( $c ) . '</td></tr>';
+		$html .= $row( esc_html( $r['offweb'] ? 'Venta' : 'Precio web' ), $usd( (float) $r['priceUsd'] ), $cup( $r['priceCup'] ) );
+		if ( $r['surchargeUsd'] > 0 ) { // 3.14.50 (Ernesto 22-oct 14:35): el recargo de la Clásica es ganancia.
+			$kind = $r['payment']['kind'] ?? '';
+			$name = 'clasica' === $kind ? 'Tarjeta Clásica' : ( '' !== $kind ? (string) $r['payment']['label'] : 'de la forma de pago' );
+			$html .= $row( esc_html( '+ Recargo ' . $name ) . '<small>ganancia</small>', $usd( (float) $r['surchargeUsd'] ), $cup( $r['surchargeCup'] ) );
+			$html .= $row( esc_html( '= Cobrado al cliente' ), $usd( (float) $r['webUsd'] ), $cup( $r['webCup'] ), 'is-sum' );
+		}
+		$html .= $row( esc_html( '− Costo al proveedor' ), $usd( (float) $r['costUsd'] ), $cup( $r['costCup'] ) );
+		$html .= $row( esc_html( '= Margen' ), $usd( (float) $r['marginUsd'] ), $cup( $r['marginCup'] ), 'is-sum' );
+		$html .= $row( esc_html( '− Comisión de la gestora' ) . $who( $r['gestora'], 'sin gestora' ), $usd( (float) $r['gestoraUsd'] ), $cup( $r['gestoraCup'] ) );
+		if ( ! $r['offweb'] ) {
+			$html .= $row( esc_html( '− Mensajero/transporte' ) . $who( $r['messengerName'], 'C' === $r['route'] ? 'lo lleva el proveedor' : 'sin nombre' ), $by_rate( (int) $r['messengerCup'] ), $cup( (int) $r['messengerCup'] ) );
+			$html .= $row( esc_html( '− Dependienta' ) . $who( $r['clerkName'], 'sin nombre' ), $by_rate( (int) $r['clerkCup'] ), $cup( (int) $r['clerkCup'] ) );
+			$html .= $row( esc_html( '− Tienda Casa Viva' ), $by_rate( (int) $r['storeCup'] ), $cup( (int) $r['storeCup'] ) );
+		} elseif ( 0.0 !== (float) $r['otherUsd'] ) {
+			$html .= $row( esc_html( '− Otros gastos' ), $usd( (float) $r['otherUsd'] ), $cup( $has ? (int) $r['otherCup'] : null ) );
+		}
+		$html .= $row( esc_html( '= Tu comisión' ), $has || $r['offweb'] ? $usd( (float) $r['specialUsd'] ) : '—', $cup( $r['specialCup'] ), 'is-total' );
+		$html .= '</tbody></table>';
+		if ( ! $r['offweb'] && $has ) { $html .= '<p class="cvga-prov-small">El USD de mensajero, dependienta, tienda y tu comisión es su CUP ÷ la tasa.</p>'; }
+		$pay = $r['offweb'] ? ( $r['paidCup'] > 0 ? 'Cobrado al cliente: ' . self::cup_text( (int) round( $r['paidCup'] ) ) : '' ) : self::payment_line( $r['payment'], (float) $r['surchargeUsd'] );
+		if ( '' !== $pay ) { $html .= '<p class="cvga-prov-pay">' . esc_html( $pay ) . '</p>'; }
+		if ( '' !== $r['surchargeNote'] ) { $html .= '<p class="cvga-prov-small">' . esc_html( $r['surchargeNote'] ) . '</p>'; }
+		if ( '' !== $r['warning'] ) { $html .= '<p class="cvga-prov-pay is-warn">' . esc_html( $r['warning'] ) . '</p>'; }
+		if ( '' !== $r['note'] ) { $html .= '<p class="cvga-prov-small">Nota: ' . esc_html( $r['note'] ) . '</p>'; }
+		if ( 'cancelado' === $r['state'] ) {
+			$state = 'Estado: cancelado. No cuenta.';
+		} else {
+			$closed_ts = $r['closedAt'] ? strtotime( (string) $r['closedAt'] ) : 0;
+			$state = 'cerrado' === $r['state']
+				? 'Estado: cerrado (entregado y cobrado' . ( $closed_ts ? ' el ' . wp_date( 'j/n/Y', $closed_ts ) : '' ) . '; ya no cambia).'
+				: 'Estado: abierto (puede cambiar hasta que se entregue y se cobre).';
+			$state .= ' Tu parte: pendiente de pago por la tienda.';
+		}
+		return $html . '<p class="cvga-prov-state">' . esc_html( $state ) . '</p>';
+	}
 
 	/**
 	 * Vista de solo lectura en el área de gestora, SOLO para la cuenta del dueño (opción cvd_owner_gestor_user): cada
-	 * venta de proveedor del mes (de cualquier gestora) con su parte (specialCup) y los totales cerrado/abierto.
-	 * Mes por ?cvd_mes=AAAA-MM (el actual y los 5 anteriores). '' para cualquier otra cuenta.
+	 * venta de proveedor del periodo (de cualquier gestora) con su parte (specialCup) y los totales cerrado/abierto.
+	 * 3.14.50: estadísticas del periodo arriba y el desglose de cada venta al tocarla (<details>, sin JS).
+	 * Periodo por ?cvd_mes=AAAA-MM (el actual y los 5 anteriores) o ?cvd_mes=todo. '' para cualquier otra cuenta.
 	 */
 	public static function render_owner_sales( WP_User $user ): string {
 		$og = self::owner_gestor_user();
@@ -355,29 +604,34 @@ final class CVD_Supplier_Split {
 		$now = new DateTimeImmutable( 'first day of this month', wp_timezone() );
 		$months = array();
 		for ( $i = 0; $i < 6; $i++ ) { $m = $now->modify( '-' . $i . ' months' ); $months[ $m->format( 'Y-m' ) ] = ( CVD_Programa_Calc::MONTHS[ (int) $m->format( 'n' ) ] ?? '' ) . ' ' . $m->format( 'Y' ); }
+		$months[ self::ALL ] = 'Todo (desde el inicio)';
 		$want = isset( $_GET['cvd_mes'] ) ? sanitize_text_field( wp_unslash( (string) $_GET['cvd_mes'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- solo lectura.
 		$month = isset( $months[ $want ] ) ? $want : $now->format( 'Y-m' );
-		$data = self::month( $month );
-		// Filas de la lista: las de la web y las de fuera de la web (opción cvd_owner_offweb_sales), las más nuevas arriba.
-		$rows = array();
-		foreach ( $data['orders'] as $o ) {
-			$rows[] = array( 'num' => '#' . $o['number'], 'ts' => $o['date'] ? (int) strtotime( (string) $o['date'] ) : 0, 'products' => (string) $o['products'], 'gestora' => (string) ( $o['gestora'] ?? '' ),
-				'state' => $o['state'], 'cup' => (int) $o['specialCup'], 'usd' => 0.0, 'rate' => (float) $o['rate'], 'offweb' => false );
-		}
-		foreach ( self::offweb_sales( $month ) as $s ) {
-			$rate = (float) $s['rate'];
-			$rows[] = array( 'num' => 'Fuera', 'ts' => (int) strtotime( $s['date'] . ' 12:00:00 ' . wp_timezone_string() ), 'products' => $s['product'], 'gestora' => $s['gestora'],
-				'state' => $s['state'], 'cup' => $rate > 0 ? (int) round( $s['specialUsd'] * $rate ) : 0, 'usd' => $rate > 0 ? 0.0 : (float) $s['specialUsd'], 'rate' => $rate, 'offweb' => true );
-		}
-		usort( $rows, static fn( $a, $b ) => $b['ts'] <=> $a['ts'] );
-		$tot = array( 'cerrado' => array( 'cup' => 0, 'usd' => 0.0, 'n' => 0 ), 'abierto' => array( 'cup' => 0, 'usd' => 0.0, 'n' => 0 ) );
-		foreach ( $rows as $r ) {
-			if ( ! isset( $tot[ $r['state'] ] ) ) { continue; } // cancelado: no suma
-			$tot[ $r['state'] ]['cup'] += $r['cup']; $tot[ $r['state'] ]['usd'] += $r['usd']; $tot[ $r['state'] ]['n']++;
-		}
-		$money = static fn( array $t ): string => $t['usd'] > 0 ? ( $t['cup'] ? self::cup_text( $t['cup'] ) . ' + ' : '' ) . self::usd_text( $t['usd'] ) : self::cup_text( $t['cup'] );
-		$closed = $money( $tot['cerrado'] ); $open = $money( $tot['abierto'] ); $n_closed = $tot['cerrado']['n']; $n_open = $tot['abierto']['n'];
+		$all = self::ALL === $month;
+		$rows = self::owner_rows( $month );
+		$st = self::owner_stats( $rows );
+		$closed = self::money_pair( $st['mineClosed'] ); $open = self::money_pair( $st['mineOpen'] );
 		$count = static fn( int $n ): string => $n . ( 1 === $n ? ' venta' : ' ventas' );
+		$pct = static fn( float $v ): string => number_format( $v, 1, ',', '.' ) . ' %';
+		$margin_sub = '= ' . self::cup_text( (int) $st['margin']['cup'] ) . ( $st['margin']['usd'] > 0 ? ' + ' . self::usd_text( $st['margin']['usd'] ) . ' sin tasa' : '' );
+		$fund_sub = 'Mensajeros ' . self::cup_text( $st['messengerCup'] ) . ' · dependientas ' . self::cup_text( $st['clerkCup'] ) . ' · tienda ' . self::cup_text( $st['storeCup'] )
+			. ( $st['other']['cup'] || $st['other']['usd'] ? ' · otros ' . self::money_pair( $st['other'] ) : '' );
+		$grid = array(
+			array( 'Ventas', (string) $st['count'], $st['closed'] . ' cerradas · ' . $st['open'] . ' abiertas' ),
+			array( 'Vendido (precio web)', self::usd_text( $st['priceUsd'] ), ( $st['surchargeUsd'] > 0 ? '+ ' . self::usd_text( $st['surchargeUsd'] ) . ' de recargo (ganancia) · ' : '' ) . 'costo al proveedor ' . self::usd_text( $st['costUsd'] ) ),
+			array( 'Margen', self::usd_text( $st['marginUsd'] ), $margin_sub ),
+			array( 'Margen medio', $pct( (float) $st['marginPct'] ), $st['surchargeUsd'] > 0 ? 'de lo cobrado (precio web + recargo)' : 'del precio web' ),
+			array( 'Comisiones de gestoras', self::money_pair( $st['gestoras'] ), '' ),
+			array( 'Fondo', self::money_pair( $st['fund'] ), $fund_sub ),
+			array( 'Tu comisión', self::money_pair( $st['mine'] ), '≈ ' . self::usd_text( $st['mineUsd'] ) . ' con la tasa de cada venta' ),
+			array( 'Tu parte media por venta', self::usd_text( $st['avgUsd'] ), null !== $st['avgCup'] ? '≈ ' . self::cup_text( $st['avgCup'] ) : 'con la tasa de cada venta' ),
+		);
+		$mini = static function ( array $list ) use ( $count ): string {
+			if ( ! $list ) { return '<p class="cvga-empty">Nada todavía.</p>'; }
+			$html = '<ul class="cvga-prov-mini">';
+			foreach ( $list as $g ) { $html .= '<li><span>' . esc_html( $g['name'] ) . '<small>' . esc_html( $count( (int) $g['count'] ) ) . '</small></span><b>' . esc_html( self::money_pair( $g['mine'] ) ) . '</b></li>'; }
+			return $html . '</ul>';
+		};
 		ob_start();
 		?>
 		<section class="cvga-view" data-view="proveedor" id="cvga-proveedor">
@@ -390,26 +644,41 @@ final class CVD_Supplier_Split {
 				<button class="cvga-btn cvga-btn-sm" type="submit">Ver</button>
 			</form>
 			<div class="cvga-kpis">
-				<article class="cvga-card cvga-kpi"><small>Cerrado: la tienda te debe</small><strong><?php echo esc_html( $closed ); ?></strong><span><?php echo esc_html( $count( $n_closed ) . ' entregadas y cobradas' ); ?></span></article>
-				<article class="cvga-card cvga-kpi"><small>Abierto</small><strong><?php echo esc_html( $open ); ?></strong><span><?php echo esc_html( $count( $n_open ) . ': cuando se entreguen' ); ?></span></article>
+				<article class="cvga-card cvga-kpi"><small>Cerrado: la tienda te debe</small><strong><?php echo esc_html( $closed ); ?></strong><span><?php echo esc_html( $count( $st['closed'] ) . ' entregadas y cobradas' ); ?></span></article>
+				<article class="cvga-card cvga-kpi"><small>Abierto</small><strong><?php echo esc_html( $open ); ?></strong><span><?php echo esc_html( $count( $st['open'] ) . ': cuando se entreguen' ); ?></span></article>
 			</div>
+			<section class="cvga-card cvga-prov-stats">
+				<div class="cvga-row"><h2><?php echo esc_html( $all ? 'Resumen desde el inicio' : 'Resumen de ' . $months[ $month ] ); ?></h2><span class="cvga-chip"><?php echo esc_html( $count( $st['count'] ) ); ?></span></div>
+				<dl class="cvga-prov-grid">
+					<?php foreach ( $grid as $g ) : ?><div><dt><?php echo esc_html( $g[0] ); ?></dt><dd><?php echo esc_html( $g[1] ); ?></dd><?php if ( '' !== $g[2] ) : ?><dd class="is-sub"><?php echo esc_html( $g[2] ); ?></dd><?php endif; ?></div><?php endforeach; ?>
+				</dl>
+				<p class="cvga-note">Margen = comisiones de gestoras + fondo + tu comisión. Las canceladas no cuentan.</p>
+				<div class="cvga-prov-split">
+					<div><h3>Por gestora</h3><?php echo $mini( $st['byGestora'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?></div>
+					<div><h3>Por proveedor</h3><?php echo $mini( $st['bySupplier'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?></div>
+				</div>
+			</section>
 			<section class="cvga-card">
-				<div class="cvga-row"><h2>Ventas de <?php echo esc_html( $months[ $month ] ); ?></h2><span class="cvga-chip"><?php echo esc_html( $count( count( $rows ) ) ); ?></span></div>
+				<div class="cvga-row"><h2><?php echo esc_html( $all ? 'Todas las ventas' : 'Ventas de ' . $months[ $month ] ); ?></h2><span class="cvga-chip"><?php echo esc_html( $count( count( $rows ) ) ); ?></span></div>
 				<?php if ( ! $rows ) : ?>
-				<p class="cvga-empty">Este mes no hay ventas de proveedor.</p>
+				<p class="cvga-empty"><?php echo esc_html( $all ? 'Todavía no hay ventas de proveedor.' : 'Este mes no hay ventas de proveedor.' ); ?></p>
 				<?php else : ?>
+				<p class="cvga-note">Toca una venta para ver su desglose.</p>
 				<ul class="cvga-vales cvga-prov">
-					<?php foreach ( $rows as $o ) : $cancel = 'cancelado' === $o['state']; ?>
-					<li<?php echo $cancel ? ' class="is-cancel"' : ''; ?>>
-						<span class="cvga-vale-num"><?php echo esc_html( $o['num'] ); ?></span>
-						<div class="cvga-vale-text"><b><?php echo esc_html( $o['products'] ); ?></b><small><?php echo esc_html( trim( ( $o['ts'] ? wp_date( 'j/n', $o['ts'] ) . ' · ' : '' ) . ( '' !== $o['gestora'] ? 'Gestora: ' . $o['gestora'] : 'Sin gestora' ) . ' · ' . ( $cancel ? 'Cancelado: no cuenta' : ( 'cerrado' === $o['state'] ? 'Cerrado' : 'Abierto' ) ) . ( $o['offweb'] ? ' · fuera de la web' : '' ) ) ); ?></small></div>
-						<div class="cvga-prov-end"><b class="cvga-vale-pts"><?php echo esc_html( $o['usd'] > 0 ? self::usd_text( $o['usd'] ) : self::cup_text( $o['cup'] ) ); ?></b><small><?php echo esc_html( $o['usd'] > 0 ? 'en USD (sin tasa)' : ( $o['rate'] > 0 ? '≈ ' . self::usd_text( $o['cup'] / $o['rate'] ) . ' a ' . number_format( $o['rate'], 0, ',', '.' ) : 'sin tasa' ) ); ?></small></div>
-					</li>
+					<?php foreach ( $rows as $o ) : $cancel = 'cancelado' === $o['state']; $no_rate = null === $o['specialCup']; ?>
+					<li<?php echo $cancel ? ' class="is-cancel"' : ''; ?>><details>
+						<summary>
+							<span class="cvga-vale-num"><?php echo esc_html( $o['num'] ); ?></span>
+							<div class="cvga-vale-text"><b><?php echo esc_html( $o['products'] ); ?></b><small><?php echo esc_html( trim( ( $o['ts'] ? wp_date( 'j/n', $o['ts'] ) . ' · ' : '' ) . ( '' !== $o['gestora'] ? 'Gestora: ' . $o['gestora'] : 'Sin gestora' ) . ' · ' . ( $cancel ? 'Cancelado: no cuenta' : ( 'cerrado' === $o['state'] ? 'Cerrado' : 'Abierto' ) ) . ( $o['offweb'] ? ' · fuera de la web' : '' ) ) ); ?></small></div>
+							<div class="cvga-prov-end"><b class="cvga-vale-pts"><?php echo esc_html( $no_rate ? self::usd_text( (float) $o['specialUsd'] ) : self::cup_text( (int) $o['specialCup'] ) ); ?></b><small><?php echo esc_html( $no_rate ? 'en USD (sin tasa)' : '≈ ' . self::usd_text( (float) $o['specialUsd'] ) . ' a ' . number_format( (float) $o['rate'], 0, ',', '.' ) ); ?></small></div>
+						</summary>
+						<div class="cvga-prov-detail"><?php echo self::render_detail( $o ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?></div>
+					</details></li>
 					<?php endforeach; ?>
 				</ul>
 				<?php endif; ?>
 				<p class="cvga-note"><b>Cerrado: la tienda te debe <?php echo esc_html( $closed ); ?>.</b> <b>Abierto: <?php echo esc_html( $open ); ?> cuando se entreguen.</b></p>
-				<p class="cvga-note">Tu parte = lo que gana la venta (precio web − precio del proveedor) − la comisión de la gestora − mensajero − dependienta − tienda. «Cerrado» = entregado y cobrado; ya no cambia. «Abierto» puede cambiar hasta que se entregue. El USD es con la tasa del día de cada pedido. «Fuera de la web» = venta sin pedido en la web, apuntada a mano (en USD si no tiene tasa). Solo lectura.</p>
+				<p class="cvga-note">Tu parte = lo que gana la venta (precio web − precio del proveedor) − la comisión de la gestora − mensajero − dependienta − tienda. «Cerrado» = entregado y cobrado; ya no cambia. «Abierto» puede cambiar hasta que se entregue. El USD es con la tasa del día de cada pedido. Si una venta tiene «Recargo Tarjeta Clásica (ganancia)», ese recargo se suma al margen. «Fuera de la web» = venta sin pedido en la web, apuntada a mano (en USD si no tiene tasa). Solo lectura.</p>
 			</section>
 		</section>
 		<?php
