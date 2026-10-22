@@ -872,11 +872,18 @@ final class CVD_Programa {
 		$have = (float) ( $me['next']['have'] ?? 0 );
 		$goal = (float) ( $next['points'] ?? 0 );
 		$owner = class_exists( 'CVD_Supplier_Split' ) && CVD_Supplier_Split::owner_gestor_user() === (int) $user->ID; // 3.14.48 (D92)
+		$video = esc_url( trim( (string) get_option( 'cvd_programa_video_url', '' ) ) ); // 3.14.51: video tutorial de las piedras (vacía = no sale)
 		ob_start();
 		?>
 		<section class="cvga-view" data-view="piedra" id="cvga-piedra">
 			<div class="cvga-head"><h1>Mi piedra</h1><p>Sube de piedra con la ganancia que dejan tus ventas y las de tu equipo.</p></div>
 			<?php echo self::shadow_note(); // phpcs:ignore ?>
+			<?php if ( '' !== $video ) : ?>
+			<section class="cvga-card">
+				<h2>Así funciona (1 minuto)</h2>
+				<video src="<?php echo $video; // phpcs:ignore -- esc_url arriba. ?>" controls playsinline preload="metadata" style="display:block;width:100%;max-width:360px;margin:0 auto;border-radius:12px;background:#000"></video>
+			</section>
+			<?php endif; ?>
 			<section class="cvga-card cvga-stone-card">
 				<div class="cvga-stone-big" data-gem="<?php echo esc_attr( $title ?: 'none' ); ?>" aria-hidden="true"><?php echo self::gem_svg(); // phpcs:ignore ?></div>
 				<div>
