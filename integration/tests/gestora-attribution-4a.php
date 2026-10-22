@@ -108,11 +108,16 @@ cvt_assert(
 cvt_assert( 'referral_link' === $order_one->get_meta( '_cvd_attribution_source', true ), 'La fuente inicial no quedó registrada como referral_link.' );
 cvt_assert( 'yes' === $order_one->get_meta( '_cvd_attribution_locked', true ), 'La atribución inicial no quedó bloqueada.' );
 
-// 2. Un enlace posterior B no roba el navegador ni el cliente ya vinculado a A.
+// D53: un pedido en curso no vincula permanentemente al cliente; uno entregado sí.
+cvt_assert( ! CVD_Attribution::owns_customer( $order_one ), 'Un pedido sin entregar no debe fijar propietaria permanente.' );
+$order_one->update_status( 'completed' );
+cvt_assert( CVD_Attribution::owns_customer( wc_get_order( $order_one->get_id() ) ), 'El pedido completado debe vincular al cliente.' );
+
+// 2. D50: el enlace B cambia el navegador, pero no roba el cliente que ya recibió su compra de A.
 $_GET['ref'] = 'CVB4A';
 CVD_Attribution::capture_referral();
 $current = CVD_Attribution::current_referral_owner();
-cvt_assert( $current && (int) $current['owner_user_id'] === $gestora_a->ID, 'Un segundo enlace sustituyó el first touch guardado. owner=' . cvt_owner_debug( $current ) );
+cvt_assert( $current && (int) $current['owner_user_id'] === $gestora_b->ID, 'El último enlace B no sustituyó el referido transitorio. owner=' . cvt_owner_debug( $current ) );
 $order_two = cvt_attach( cvt_order( $customer->ID, '5355510001', $customer->user_email, 'Cliente Uno' ) );
 cvt_assert( (int) $order_two->get_meta( '_cvd_owner_user_id', true ) === $gestora_a->ID, 'Un segundo enlace reasignó un cliente permanente.' );
 cvt_assert( 'linked_customer' === $order_two->get_meta( '_cvd_attribution_source', true ), 'El cliente recurrente no se resolvió desde su vínculo permanente.' );
@@ -137,7 +142,8 @@ $order_delegated_new = cvt_attach( cvt_order( $gestora_a->ID, '5355510099', 'nue
 cvt_assert( (int) $order_delegated_new->get_meta( '_cvd_owner_user_id', true ) === $gestora_a->ID, 'La compra delegada de cliente nuevo no se atribuyó a la gestora.' );
 cvt_assert( '' !== (string) $order_delegated_new->get_meta( '_cvd_identity_phone', true ), 'La compra delegada no guardó identidad de teléfono del cliente.' );
 
-// 6. Ese cliente nuevo vuelve sin enlace y conserva a A.
+// 6. D53: después de entregar la compra delegada, vuelve sin enlace y conserva a A.
+$order_delegated_new->update_status( 'completed' );
 cvt_clear_referral();
 $order_delegated_return = cvt_attach( cvt_order( 0, '5355510099', 'nuevo-delegado@example.invalid', 'Cliente Delegado' ) );
 cvt_assert( (int) $order_delegated_return->get_meta( '_cvd_owner_user_id', true ) === $gestora_a->ID, 'El cliente delegado recurrente perdió su gestora al volver orgánicamente.' );
@@ -148,4 +154,4 @@ $order_organic = cvt_attach( cvt_order( 0, '5355510777', 'organico-4a@example.in
 cvt_assert( 0 === (int) $order_organic->get_meta( '_cvd_owner_user_id', true ), 'Un cliente orgánico recibió gestora artificial.' );
 cvt_assert( 'organic' === $order_organic->get_meta( '_cvd_owner_type', true ), 'La venta directa no quedó marcada como orgánica.' );
 
-echo "OK 4A: first-touch permanente, compra delegada y retorno orgánico validados.\n";
+echo "OK 4A: último enlace, vínculo tras entrega, compra delegada y retorno orgánico validados.\n";

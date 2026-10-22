@@ -63,6 +63,9 @@ jobs:
       - name: Validar contrato de ayuda contextual del cliente
         run: node artifacts/tests/test-customer-order-support-3e.mjs
 
+      - name: Validar reparto específico antes de cotizar mensajería
+        run: php artifacts/tests/test-curru-repartos.php
+
       - name: Validar acceso post-compra, catálogo y launch polish
         run: |
           node artifacts/tests/test-order-success-access-7a.mjs
