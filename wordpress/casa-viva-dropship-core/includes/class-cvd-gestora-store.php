@@ -551,6 +551,9 @@ final class CVD_Gestora_Store {
 	 * iniciada la página no se guarda en caché, así que el enlace nunca llega a un cliente por la caché.
 	 */
 	public static function leave_link_html(): string {
+		// 3.14.58.1 (Ernesto 23-oct): quitado de la tienda de las gestoras (Maryta temía que su cliente saliera por ahí).
+		// Se vuelve a enseñar con la opción cvd_store_exit_link = si. ?ref=salir sigue funcionando para quien lo abra.
+		if ( 'si' !== get_option( 'cvd_store_exit_link', 'no' ) ) { return ''; }
 		if ( ! class_exists( 'CVD_Attribution' ) || ! self::sees_leave_link() ) { return ''; }
 		return '<a class="cvd-store-exit" href="' . esc_url( CVD_Attribution::leave_url() ) . '" rel="nofollow">Ver la tienda de Casa Viva</a>';
 	}
