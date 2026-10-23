@@ -77,6 +77,8 @@ final class CVD_Gestora_App {
 			array( 'ver-tienda', 'Ver la tienda', 'shop', $link ),
 			array( 'precios', 'Mis precios', 'tag', '' ),
 			array( 'clientes', 'Clientes', 'people', '' ),
+			// 3.14.56 (D107): «Preguntas a la tienda» (Ficha que contesta), solo con cvd_ficha_contesta = si.
+			...( class_exists( 'CVD_Ficha_Contesta' ) && 'si' === CVD_Ficha_Contesta::mode() ? array( array( 'preguntas', 'Preguntas a la tienda', 'chat', '' ) ) : array() ),
 			array( '', 'Herramientas', '', '' ),
 			// 3.14.28 (Ernesto, 16-oct): «NEXO Busca» (antes «Buscar precios»), la primera de Herramientas.
 			array( 'buscar', 'NEXO Busca', 'search', '' ),
@@ -159,6 +161,7 @@ final class CVD_Gestora_App {
 					<?php echo self::inicio( $user, $first, $link, $code, $orders, $box, $learn ); // phpcs:ignore ?>
 					<?php echo $learn ? CVD_Aprende::render( $user, 'gestora' ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo self::tienda( $link ); // phpcs:ignore ?>
+					<?php echo class_exists( 'CVD_Ficha_Contesta' ) ? CVD_Ficha_Contesta::render_app_section( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo self::herramientas( $estudio ); // phpcs:ignore ?>
 					<?php echo self::calculadora(); // phpcs:ignore ?>
 					<?php echo self::buscar( $zone ); // phpcs:ignore ?>

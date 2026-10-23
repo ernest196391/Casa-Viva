@@ -73,6 +73,7 @@ require_once CVD_DIR . 'includes/class-cvd-encuesta-def.php'; // 3.14.35: encues
 require_once CVD_DIR . 'includes/class-cvd-encuesta.php';
 require_once CVD_DIR . 'includes/class-cvd-catalog-version.php'; // 3.14.41: el bot ve los cambios de productos al momento (Lennys, 20-oct)
 require_once CVD_DIR . 'includes/class-cvd-caja-bridge.php'; // 3.14.42: la caja NEXO cobra pedidos web y cuadra el cajón (Ernesto 20-oct)
+require_once CVD_DIR . 'includes/class-cvd-ficha-contesta.php'; // 3.14.56: «Ficha que contesta» — datos de la tienda y preguntas atadas al producto (D107, mejora 7 del diagnóstico)
 
 register_activation_hook( __FILE__, array( 'CVD_Plugin', 'activate' ) );
 
@@ -129,6 +130,7 @@ add_action(
 			CVD_Caja_Bridge::register(); // 3.14.42: /panel/caja/* (pedidos web en la caja, efectivo de Ventas para el cierre).
 			CVD_Encuesta::register(); // 3.14.35: encuesta anónima en /encuesta/ (nace cerrada; Ernesto 16-oct).
 			CVD_Daily_Rates::register(); // 3.13.64: cada pedido nuevo guarda la tasa CUP del día de la venta (regla de Ernesto, 12-oct).
+			CVD_Ficha_Contesta::register(); // 3.14.56: «Datos de la tienda» y «Preguntar a la tienda» en la ficha; la tienda contesta con enlace firmado (opción cvd_ficha_contesta = no|datos|si).
 		}
 	}
 );
