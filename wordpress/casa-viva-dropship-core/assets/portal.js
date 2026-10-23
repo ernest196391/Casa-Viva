@@ -5,10 +5,20 @@
     if (!button) return;
     var input = document.getElementById(button.getAttribute('data-copy-target'));
     if (!input) return;
-    navigator.clipboard.writeText(input.value).then(function () {
+    // 3.14.58 (Rafael Codina, 23-oct): sin navigator.clipboard o con el permiso denegado (navegador dentro de
+    // WhatsApp/Facebook, Android viejo) el botón no hacía nada. Ahora: copia a la antigua y, si tampoco, deja
+    // el enlace a la vista para copiarlo a mano. Siempre responde algo.
+    var done = function () {
       button.textContent = 'Copiado';
       setTimeout(function () { button.textContent = 'Copiar'; }, 1800);
-    });
+    };
+    var fallback = function () {
+      var copied = false;
+      try { input.focus(); input.select(); input.setSelectionRange(0, input.value.length); copied = document.execCommand('copy'); } catch (ignore) {}
+      if (copied) done(); else window.prompt('Copia tu enlace:', input.value);
+    };
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(input.value).then(done, fallback);
+    else fallback();
   });
   var search = document.getElementById('cvd-price-search');
   if (search) search.addEventListener('input', function () {
