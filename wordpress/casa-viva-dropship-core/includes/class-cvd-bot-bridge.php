@@ -522,14 +522,24 @@ final class CVD_Bot_Bridge {
 		if ( is_wp_error( $order ) ) { return $order; }
 		$messenger = self::assigned_messenger( $order, (string) $request->get_param( 'phone' ) );
 		if ( ! $messenger ) { return new WP_Error( 'cvd_not_assigned', 'Ese pedido no está asignado a este mensajero.', array( 'status' => 403 ) ); }
-		$status = CVD_Delivery::status( $order ); // 'incident' si hay una incidencia abierta: entonces no se suelta
-		if ( ! in_array( $status, array( 'assigned', 'accepted', 'to_store' ), true ) ) { return self::no_cache( array( 'result' => 'too_late', 'status' => $status ) ); }
 		$how = 'revoke' === sanitize_key( (string) $request->get_param( 'reason' ) ) ? 'borró su «Yo» en el grupo' : 'lo dijo por WhatsApp';
+		return self::no_cache( self::release_by_messenger( $order, $messenger, $how ) );
+	}
+
+	/**
+	 * 3.14.54: el «soltar la carrera» de siempre, el mismo por WhatsApp y por el botón «Ya no puedo» de la tarjeta de
+	 * carrera (CVD_Tarjeta_Carrera). Solo el mensajero asignado y solo antes de recoger el paquete.
+	 * → result: released | too_late (+ status) | not_assigned | error (+ code).
+	 */
+	public static function release_by_messenger( WC_Order $order, WP_User $messenger, string $how, string $source = 'cvd_bot_bridge_release', string $channel = 'whatsapp' ): array {
+		if ( $messenger->ID !== absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { return array( 'result' => 'not_assigned' ); }
+		$status = CVD_Delivery::status( $order ); // 'incident' si hay una incidencia abierta: entonces no se suelta
+		if ( ! in_array( $status, array( 'assigned', 'accepted', 'to_store' ), true ) ) { return array( 'result' => 'too_late', 'status' => $status ); }
 		$result = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'offered', array(
 			'actor_user_id'     => $messenger->ID,
-			'source'            => 'cvd_bot_bridge_release',
+			'source'            => sanitize_key( $source ) ?: 'cvd_bot_bridge_release',
 			'messenger_release' => true,
-			'metadata'          => array( 'messenger' => $messenger->ID, 'release' => true, 'source' => 'whatsapp' ),
+			'metadata'          => array( 'messenger' => $messenger->ID, 'release' => true, 'source' => sanitize_key( $channel ) ?: 'whatsapp' ),
 			'precondition'      => static function ( WC_Order $locked, string $current ) use ( $messenger ) {
 				if ( 'yes' === $locked->get_meta( '_cvd_delivery_incident_active', true ) ) { return CVD_Order_Transition_Service::PRECONDITION_FAILED; }
 				if ( ! in_array( $current, array( 'assigned', 'accepted', 'to_store' ), true ) || absint( $locked->get_meta( '_cvd_messenger_user_id', true ) ) !== $messenger->ID ) { return CVD_Order_Transition_Service::CONFLICT; }
@@ -556,8 +566,8 @@ final class CVD_Bot_Bridge {
 				if ( class_exists( 'CVD_Messenger_Reputation' ) ) { CVD_Messenger_Reputation::invalidate( $messenger->ID ); }
 			},
 		) );
-		if ( empty( $result['success'] ) ) { return self::no_cache( array( 'result' => 'error', 'code' => $result['error_code'] ?? '' ) ); }
-		return self::no_cache( array( 'result' => 'released', 'messenger' => $messenger->display_name ) );
+		if ( empty( $result['success'] ) ) { return array( 'result' => 'error', 'code' => $result['error_code'] ?? '' ); }
+		return array( 'result' => 'released', 'messenger' => $messenger->display_name );
 	}
 
 	/**
@@ -641,8 +651,9 @@ final class CVD_Bot_Bridge {
 	 * → result: delivered | already | needs_amount | needs_pickup | test_order | error (+ customer al entregar).
 	 */
 	public static function mark_delivered_by_messenger( WC_Order $order, WP_User $messenger, float $usd, float $cup, float $eur, string $method, string $channel = 'whatsapp' ): array {
-		$link   = 'link' === $channel;
-		$source = $link ? 'cvd_delivered_link' : 'cvd_bot_bridge_delivered';
+		$card   = 'card' === $channel; // 3.14.54: botón «Entregado» de la tarjeta de carrera (CVD_Tarjeta_Carrera)
+		$link   = 'link' === $channel || $card;
+		$source = $card ? 'cvd_tarjeta_carrera' : ( $link ? 'cvd_delivered_link' : 'cvd_bot_bridge_delivered' );
 		$status = CVD_Delivery::status( $order );
 		if ( in_array( $status, array( 'delivered', 'cash_returned', 'closed' ), true ) ) { return array( 'result' => 'already' ); }
 		$usd    = max( 0.0, $usd );
@@ -655,7 +666,7 @@ final class CVD_Bot_Bridge {
 		// 3.13.67: Zelle / PayPal ya pagados por adelantado (la tienda lo verificó antes): el mensajero no cobra productos,
 		// así que «entregado» vale con 0 y no se le anota dinero de la tienda (solo su mensajería, que es suya).
 		$payment = class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_payment( $order ) : null;
-		$collection_note = ( $link ? 'Marcado con el enlace del vale' : 'Declarado por WhatsApp' ) . ( $payment ? ' · ' . $payment['label'] : '' );
+		$collection_note = ( $card ? 'Marcado en la tarjeta de carrera' : ( $link ? 'Marcado con el enlace del vale' : 'Declarado por WhatsApp' ) ) . ( $payment ? ' · ' . $payment['label'] : '' );
 		if ( $payment && $payment['prepaid'] ) {
 			if ( $usd > 0 || $cup > 0 || $eur > 0 ) { $order->add_order_note( sprintf( 'El mensajero declaró %s USD + %s CUP + %s EUR, pero el pedido es %s (pagado por adelantado): no se le anota dinero de productos.', $usd, $cup, $eur, $payment['label'] ) ); }
 			$usd = 0.0; $cup = 0.0; $eur = 0.0; $method = 'transfer';
@@ -668,7 +679,7 @@ final class CVD_Bot_Bridge {
 		// 3.13.55: si ya lo entregó, es que tenía el paquete. Si la dependienta no marcó «Entregado al mensajero»,
 		// se marca solo («automático: confirmó el mensajero») en vez de pedirle que vuelva a escribir. Nunca en pruebas.
 		if ( in_array( $status, array( 'assigned', 'accepted', 'to_store' ), true ) ) {
-			$picked = CVD_Delivery::messenger_confirms_pickup( $order, $messenger, $source, $link ? 'tocó «Entregado» en el enlace del vale' : 'dijo por WhatsApp que ya lo entregó' );
+			$picked = CVD_Delivery::messenger_confirms_pickup( $order, $messenger, $source, $card ? 'tocó «Entregado» en su tarjeta de carrera' : ( $link ? 'tocó «Entregado» en el enlace del vale' : 'dijo por WhatsApp que ya lo entregó' ) );
 			if ( ! in_array( $picked, array( 'picked_up', 'already' ), true ) ) { return array( 'result' => 'test_order' === $picked ? 'test_order' : 'needs_pickup', 'code' => $picked ); }
 			$order  = wc_get_order( $order->get_id() );
 			$status = CVD_Delivery::status( $order );
@@ -683,7 +694,7 @@ final class CVD_Bot_Bridge {
 			'actor_user_id'        => $messenger->ID,
 			'idempotency_key'      => 'bot-delivered:' . $order->get_id(),
 			'source'               => $source,
-			'metadata'             => array( 'collection_method' => $method, 'collected_usd' => $usd, 'collected_cup' => $cup, 'collected_eur' => $eur, 'channel' => $link ? 'link' : 'whatsapp' ),
+			'metadata'             => array( 'collection_method' => $method, 'collected_usd' => $usd, 'collected_cup' => $cup, 'collected_eur' => $eur, 'channel' => $card ? 'card' : ( $link ? 'link' : 'whatsapp' ) ),
 			'coupled_payment_state'=> 'pending_return',
 			'atomic_mutation'      => static function ( WC_Order $locked, $from, $to, WP_User $actor, string $at ) use ( $method, $usd, $cup, $eur, $collection_note ): void {
 				$locked->update_meta_data( '_cvd_delivered_by', $actor->ID );
@@ -894,6 +905,8 @@ final class CVD_Bot_Bridge {
 			'app'         => home_url( '/area-mensajeros/' ),
 			// 3.14.39 (Lennys 18-oct): enlace firmado de este pedido y este mensajero con el botón «Entregado» de un toque.
 			'deliveredUrl'=> class_exists( 'CVD_Messenger_Delivered_Link' ) ? CVD_Messenger_Delivered_Link::url( $order ) : '',
+			// 3.14.54 (D103, mejora 6 del diagnóstico del 23-oct): tarjeta de carrera firmada (48 h) con Recogí · Entregado · Problema · Ya no puedo.
+			'cardUrl'     => class_exists( 'CVD_Tarjeta_Carrera' ) ? CVD_Tarjeta_Carrera::url( $order ) : '',
 			'images'      => self::images( $order ),
 			'gestora'     => 'gestora' === sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) ? (string) $order->get_meta( '_cvd_owner_display_name', true ) : '',
 			'gestoraPhone'=> self::gestora_phone( $order ),

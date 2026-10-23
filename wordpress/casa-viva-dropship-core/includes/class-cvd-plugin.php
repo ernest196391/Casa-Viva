@@ -536,6 +536,7 @@ final class CVD_Plugin {
 		require_once CVD_DIR . 'includes/class-cvd-payout-avisos.php';
 		require_once CVD_DIR . 'includes/class-cvd-payout-pay-page.php';
 		require_once CVD_DIR . 'includes/class-cvd-messenger-delivered-link.php';
+		require_once CVD_DIR . 'includes/class-cvd-tarjeta-carrera.php';
 		require_once CVD_DIR . 'includes/class-cvd-promotional-resources.php';
 		require_once CVD_DIR . 'includes/class-cvd-live-tracking.php';
 		require_once CVD_DIR . 'includes/class-cvd-web-push.php';
@@ -567,6 +568,7 @@ final class CVD_Plugin {
 		CVD_Payout_Avisos::register(); // 3.14.23: avisos por WhatsApp de los pagos de comisiones (vía VivaBot).
 		CVD_Payout_Pay_Page::register(); // 3.14.23: página «Pagar a…» con enlace firmado y la captura privada.
 		CVD_Messenger_Delivered_Link::register(); // 3.14.39 (Lennys 18-oct): botón «Entregado» de un toque desde el vale.
+		CVD_Tarjeta_Carrera::register(); // 3.14.54 (D103): tarjeta de carrera del mensajero (Recogí · Entregado · Problema · Ya no puedo).
 		CVD_Promotional_Resources::register();
 		CVD_Live_Tracking::register();
 		CVD_Web_Push::register();
