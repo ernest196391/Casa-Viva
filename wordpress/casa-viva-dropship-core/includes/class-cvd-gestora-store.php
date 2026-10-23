@@ -49,6 +49,25 @@ final class CVD_Gestora_Store {
 		return '' !== $code ? add_query_arg( 'ref', $code, $url ) : $url;
 	}
 
+	/**
+	 * 3.14.53 (#48, Ernesto 23-oct): código de la gestora del pedido ('' si el pedido no tiene gestora aprobada).
+	 * Va en los enlaces que ve el CLIENTE (seguimiento «Mi pedido», el vale, sus productos y «Seguir comprando»):
+	 * si compra desde ahí, ve la tienda de su gestora y la venta queda con ella (además de D97).
+	 */
+	public static function order_ref_code( WC_Order $order ): string {
+		if ( 'gestora' !== sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) ) { return ''; }
+		$uid = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
+		if ( ! $uid || 'approved' !== get_user_meta( $uid, '_cvd_account_status', true ) ) { return ''; }
+		return strtoupper( (string) preg_replace( '/[^A-Z0-9_-]/i', '', (string) get_user_meta( $uid, '_cvd_referral_code', true ) ) );
+	}
+
+	/** 3.14.53 (#48): $url con ?ref=<código de la gestora del pedido>; sin gestora, el mismo $url (también quita otro ref). */
+	public static function with_order_ref( string $url, WC_Order $order ): string {
+		if ( '' === $url ) { return $url; }
+		$code = self::order_ref_code( $order );
+		return '' !== $code ? add_query_arg( 'ref', $code, $url ) : remove_query_arg( array( 'ref', 'cv_ref' ), $url );
+	}
+
 	public static function lock_cart_price( array $cart_item_data, int $product_id, int $variation_id ): array {
 		$gestora = self::active_gestora(); if ( ! $gestora ) { return $cart_item_data; }
 		$product = wc_get_product( $variation_id ?: $product_id ); if ( ! $product ) { return $cart_item_data; }

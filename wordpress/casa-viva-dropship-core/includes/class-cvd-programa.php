@@ -358,7 +358,9 @@ final class CVD_Programa {
 				$risk = '' !== CVD_Commissions::staff_zero_reason( $order, $owner ) ? 'staff_self' : 'staff_owner';
 			}
 			// 3.14.45: compra del equipo/tienda (staff_self) = autocompra; venta del equipo a un cliente (staff_owner) = alerta «equipo».
-			$self = 'staff_self' === $risk ? 'si' : CVD_Programa_Calc::self_purchase( (string) $members[ $owner ]['name'], $buyers, 'self_order' === $risk );
+			// 3.14.53 («Vender seguro»): «Es para mí» al hacer el pedido (_cvd_self_declared) = autocompra, sin dudar.
+			$declared = 'yes' === (string) $order->get_meta( '_cvd_self_declared', true );
+			$self = 'staff_self' === $risk || $declared ? 'si' : CVD_Programa_Calc::self_purchase( (string) $members[ $owner ]['name'], $buyers, 'self_order' === $risk );
 			$out[] = array(
 				'order_id' => $order->get_id(), 'owner' => $owner, 'at' => self::local( $at ), 'status' => $status,
 				'buyer_names' => $buyers, // auditoría 16-oct: la madrina que compra a través de su invitada no cobra red de ese pedido

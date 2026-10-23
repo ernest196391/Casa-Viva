@@ -493,7 +493,7 @@
 	  var shipping = pickup ? '' : (/\d/.test(fee) ? fee : 'por confirmar con la tienda (tu reparto no está en la lista)');
 	  // 3.13.70: armado por el mensajero, aparte (no está en el total de productos).
 	  var assembly = pickup || !$('#cvd_assembly').val() ? '' : fieldText('#cvd_assembly') + ' · se le paga aparte al mensajero, como la mensajería (no está en el total)';
-	  return line('Productos', rows.join(' · ')) + line('Total productos', total) + line('Mensajería', shipping) + line('Armado', assembly) + line('Entrega', where) + line('Cuándo', when) + line('Pago', change) + line(pickup ? 'Recoge' : 'Recibe', [$.trim([fieldText('#billing_first_name'), fieldText('#billing_last_name')].join(' ')), fieldText('#billing_phone') || (pickup ? 'sin teléfono' : '')].filter(Boolean).join(' · '));
+	  return line('Productos', rows.join(' · ')) + line('Total productos', total) + line('Mensajería', shipping) + line('Armado', assembly) + line('Entrega', where) + line('Cuándo', when) + line('Pago', change) + line(pickup ? 'Recoge' : 'Recibe', [$.trim([fieldText('#billing_first_name'), fieldText('#billing_last_name')].join(' ')), fieldText('#billing_phone') || (pickup ? 'sin teléfono' : '')].filter(Boolean).join(' · ')) + line('Compra', $('#cvd_own_phone_ok').is(':checked') ? 'para ti (Es para mí)' : '');
 	}
 	function showReview(onConfirm) {
 	  $('#cvd-review').remove();
@@ -506,8 +506,60 @@
 	  $('body').append(box);
 	  box.on('click', '[data-review]', function () { var ok = $(this).data('review') === 'ok'; box.remove(); if (ok) onConfirm(); });
 	}
+	// 3.14.53 («Vender seguro», errores #10 y #51): si el teléfono de quien recibe es el de quien vende, no se finaliza
+	// sin confirmar. «Es para mí» marca la casilla cvd_own_phone_ok (compra propia); el servidor lo vuelve a comprobar.
+	function phoneKey(v) {
+	  var d = String(v || '').replace(/\D+/g, '');
+	  if (d.length >= 10 && d.indexOf('53') === 0) d = d.slice(2);
+	  if (d.length < 8) return '';
+	  d = d.slice(-8);
+	  return /^(\d)\1{7}$/.test(d) ? '' : d;
+	}
+	function ownPhoneTyped() {
+	  var k = phoneKey($('#billing_phone').val());
+	  return !!k && ((typeof cvdCheckout !== 'undefined' && cvdCheckout.ownPhones) || []).indexOf(k) >= 0;
+	}
+	var ownPhoneServer = false; // lo avisó el servidor (enlace de una gestora, sin sesión)
+	function syncOwnPhone() {
+	  var mine = ownPhoneTyped();
+	  if (!mine && !ownPhoneServer) $('#cvd_own_phone_ok').prop('checked', false);
+	  $('#cvd_own_phone_ok_field').toggleClass('is-on', mine || ownPhoneServer);
+	  var $warn = $('#billing_phone_field .cvd-own-phone-warn');
+	  if (mine && !$warn.length) $('#billing_phone_field').append($('<small class="cvd-own-phone-warn" role="alert"></small>').text(cvdCheckout.ownPhoneText));
+	  if (!mine) $warn.remove();
+	}
+	$(document.body).on('input change', '#billing_phone', function () { ownPhoneServer = false; syncOwnPhone(); });
+	function showOwnPhone(text, onMine) {
+	  $('#cvd-own-phone').remove();
+	  var box = $('<div id="cvd-own-phone" role="alertdialog" aria-modal="true" style="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px">' +
+	    '<div style="background:#fff;color:#222;max-width:440px;width:100%;border-radius:16px;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.3)">' +
+	    '<h3 style="margin:0 0 .6em">Revisa el teléfono</h3><p data-own-text style="margin:0 0 1em"></p>' +
+	    '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="button alt" data-own="fix" style="flex:1">Poner el teléfono del cliente</button>' +
+	    '<button type="button" class="button" data-own="mine" style="flex:1">Es para mí</button></div></div></div>');
+	  box.find('[data-own-text]').text(text);
+	  $('body').append(box);
+	  box.on('click', '[data-own]', function () {
+	    var mine = $(this).data('own') === 'mine';
+	    box.remove();
+	    if (mine) { $('#cvd_own_phone_ok').prop('checked', true); onMine(); }
+	    else { $('#billing_phone').trigger('focus').trigger('select'); }
+	  });
+	}
+	$(document.body).on('checkout_error', function () {
+	  var msg = '';
+	  $('.woocommerce-error li, .woocommerce-NoticeGroup-checkout li').each(function () { var t = $.trim($(this).text()); if (!msg && t.indexOf('Es para mí') >= 0) msg = t; });
+	  if (!msg) return;
+	  ownPhoneServer = true; syncOwnPhone();
+	  showOwnPhone(msg.split(' Si ')[0], function () { $('#place_order').trigger('click'); });
+	});
+	$(syncOwnPhone);
+
 	$('form.checkout').on('checkout_place_order', function () {
 	  if (reviewed) { reviewed = false; return true; }
+	  if (ownPhoneTyped() && !$('#cvd_own_phone_ok').is(':checked')) {
+	    showOwnPhone(cvdCheckout.ownPhoneText, function () { syncOwnPhone(); $('#place_order').trigger('click'); });
+	    return false;
+	  }
 	  showReview(function () { reviewed = true; $('#place_order').trigger('click'); });
 	  return false;
 	});

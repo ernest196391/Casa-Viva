@@ -855,8 +855,16 @@ final class CVD_Delivery {
 		return '' !== $preferred && '' !== $destination && ( false !== strpos( $destination, $preferred ) || false !== strpos( $preferred, $destination ) );
 	}
 
+	/** 3.14.53 (#48): con ?ref= de la gestora del pedido (sin gestora, sin ref): es el enlace que ve el cliente. */
 	public static function tracking_url( WC_Order $order ): string {
-		return add_query_arg( array( 'pedido' => $order->get_id(), 'clave' => $order->get_order_key() ), home_url( '/seguimiento/' ) );
+		$url = add_query_arg( array( 'pedido' => $order->get_id(), 'clave' => $order->get_order_key() ), home_url( '/seguimiento/' ) );
+		return class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::with_order_ref( $url, $order ) : $url;
+	}
+
+	/** 3.14.53 (#48): «Seguir comprando» del cliente: la tienda con el código de su gestora (sin gestora, la de Casa Viva). */
+	public static function shop_url( WC_Order $order ): string {
+		$url = function_exists( 'wc_get_page_permalink' ) ? (string) wc_get_page_permalink( 'shop' ) : home_url( '/tienda/' );
+		return class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::with_order_ref( $url, $order ) : $url;
 	}
 
 	private static function tracking_order(): ?WC_Order {
@@ -948,6 +956,8 @@ final class CVD_Delivery {
 			if ( $confirmed ) { $html .= '<div class="cvd-confirmed-delivery"><strong>Entrega confirmada</strong><span>Gracias por evaluar el servicio.</span></div>'; }
 			else { $html .= '<form class="cvd-delivery-rating" data-delivery-rating><h2>Confirma tu entrega</h2><p>Tu confirmación no libera pagos automáticamente; Casa Viva verificará la operación.</p><label>Evaluación<select name="rating" required><option value="">Selecciona</option><option value="5">5 · Excelente</option><option value="4">4 · Muy buena</option><option value="3">3 · Buena</option><option value="2">2 · Regular</option><option value="1">1 · Mala</option></select></label><label>Comentario opcional<textarea name="comment" maxlength="400" rows="3"></textarea></label><button class="cvd-primary" type="submit">Confirmar entrega</button><span data-rating-status></span></form>'; }
 		}
+		// 3.14.53 (#48): «Seguir comprando» con el código de su gestora (sin gestora, la tienda de Casa Viva).
+		$html .= '<p class="cvd-tracking-shop"><a class="cvd-secondary" href="' . esc_url( self::shop_url( $order ) ) . '">Seguir comprando</a></p>';
 		return $html . '</section>';
 	}
 

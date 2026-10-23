@@ -105,6 +105,80 @@ final class CVD_Cuban_Checkout {
 		return $team ? false : $update;
 	}
 
+	/**
+	 * 3.14.53 (Ernesto 23-oct, errores #10 y #51; 58 pedidos de 24 gestoras con el teléfono de la gestora, ESTADO L24):
+	 * «Vender seguro». Si el teléfono de quien recibe es el de quien hace el pedido (gestora o equipo con sesión) o, sin
+	 * sesión de equipo, el de la gestora del enlace, no se guarda sin confirmar. «Es para mí» = compra propia:
+	 * _cvd_self_declared = yes → no da puntos ni red (CVD_Programa) y, si es del equipo, comisión 0 (D87, CVD_Commissions).
+	 */
+	public const OWN_PHONE_FIELD = 'cvd_own_phone_ok';
+	public const SELF_DECLARED_META = '_cvd_self_declared';
+	public const OWN_PHONE_TEXT = 'Ese es tu número. Pon el teléfono de tu cliente para que el mensajero lo pueda llamar.';
+	public const OWN_PHONE_TEXT_REF = 'Ese es el número de tu gestora. Pon el teléfono de quien recibe para que el mensajero lo pueda llamar.';
+
+	/** 3.14.53: teléfono para comparar: solo dígitos, sin 53 delante, las 8 últimas ('' si no hay 8 o son todas iguales). */
+	public static function phone_key( string $phone ): string {
+		$d = (string) preg_replace( '/\D+/', '', $phone );
+		if ( strlen( $d ) >= 10 && 0 === strpos( $d, '53' ) ) { $d = substr( $d, 2 ); }
+		if ( strlen( $d ) < 8 ) { return ''; }
+		$d = substr( $d, -8 );
+		return preg_match( '/^(\d)\1{7}$/', $d ) ? '' : $d;
+	}
+
+	/** 3.14.53: los teléfonos propios de una cuenta (WhatsApp y teléfono del perfil; billing_phone no: guarda el del último cliente). */
+	public static function own_phone_keys( int $user_id ): array {
+		if ( ! $user_id ) { return array(); }
+		$keys = array();
+		foreach ( array( '_cvd_whatsapp', '_cvd_phone' ) as $meta ) {
+			$key = self::phone_key( (string) get_user_meta( $user_id, $meta, true ) );
+			if ( '' !== $key && ! in_array( $key, $keys, true ) ) { $keys[] = $key; } // valores, no claves: PHP vuelve número una clave «52544351»
+		}
+		return $keys;
+	}
+
+	/** 3.14.53: ¿la cuenta vende para clientes? Gestora/influencer aprobada o equipo de la tienda (no basta con ser mensajero). */
+	public static function is_seller( int $user_id ): bool {
+		$user = $user_id ? get_userdata( $user_id ) : false;
+		if ( ! $user ) { return false; }
+		if ( user_can( $user, 'cvd_manage_sales' ) || user_can( $user, 'manage_woocommerce' ) ) { return true; }
+		return array_intersect( array( 'cvd_gestora', 'cvd_influencer' ), (array) $user->roles ) && 'approved' === get_user_meta( $user_id, '_cvd_account_status', true );
+	}
+
+	/**
+	 * 3.14.53: ¿el teléfono del pedido es el de quien vende? → array( 'user_id', 'self' ) o null. self = true: la cuenta con
+	 * sesión («Ese es tu número»); false: la gestora del enlace con el que se compra sin sesión de equipo.
+	 * $extra_ids: otras cuentas que venden en este pedido (p. ej. la gestora elegida en el vale de NEXO).
+	 */
+	public static function own_phone_match( string $phone, array $extra_ids = array() ): ?array {
+		$key = self::phone_key( $phone );
+		if ( '' === $key ) { return null; }
+		$me = get_current_user_id();
+		if ( $me && self::is_seller( $me ) ) {
+			if ( in_array( $key, self::own_phone_keys( $me ), true ) ) { return array( 'user_id' => $me, 'self' => true ); }
+		} elseif ( class_exists( 'CVD_Attribution' ) ) {
+			$owner = CVD_Attribution::current_referral_owner();
+			if ( $owner && 'gestora' === ( $owner['owner_type'] ?? '' ) ) { $extra_ids[] = absint( $owner['owner_user_id'] ?? 0 ); }
+		}
+		foreach ( array_unique( array_filter( array_map( 'absint', $extra_ids ) ) ) as $uid ) {
+			if ( $uid !== $me && in_array( $key, self::own_phone_keys( $uid ), true ) ) { return array( 'user_id' => $uid, 'self' => false ); }
+		}
+		return null;
+	}
+
+	/** 3.14.53: el aviso (siempre con «Es para mí»: checkout.js lo busca para enseñar el botón). */
+	public static function own_phone_error( array $match ): string {
+		return ( ! empty( $match['self'] ) ? self::OWN_PHONE_TEXT . ' Si de verdad es para ti, marca «Es para mí» debajo del teléfono.' : self::OWN_PHONE_TEXT_REF . ' Si eres la gestora y es para ti, marca «Es para mí» debajo del teléfono.' );
+	}
+
+	/** 3.14.53: marca de compra propia en el pedido, con nota (quién la confirmó). */
+	public static function mark_self_declared( WC_Order $order, array $match, string $where ): void {
+		$order->update_meta_data( self::SELF_DECLARED_META, 'yes' );
+		$order->update_meta_data( '_cvd_self_declared_by', absint( $match['user_id'] ?? 0 ) );
+		$order->update_meta_data( '_cvd_self_declared_at', current_time( 'mysql', true ) );
+		$who = get_userdata( absint( $match['user_id'] ?? 0 ) );
+		self::note( $order, 'Compra propia (' . $where . '): el teléfono del pedido es el de ' . ( $who ? $who->display_name : 'quien lo hizo' ) . ' y confirmó «Es para mí». No da puntos ni red; si es del equipo de la tienda, sin comisión de gestora (D87).' );
+	}
+
 	public static function payment_gateways( array $gateways ): array {
 		unset( $gateways['cheque'], $gateways['cod'] );
 		return $gateways;
@@ -266,6 +340,11 @@ final class CVD_Cuban_Checkout {
 			'type' => 'tel', 'label' => 'Teléfono alternativo', 'required' => false,
 			'class' => array( 'form-row-wide' ), 'priority' => 41, 'autocomplete' => 'tel',
 		);
+		// 3.14.53 («Vender seguro»): solo se ve cuando el teléfono es el de quien vende (checkout.js). Sin prefijo billing_.
+		$fields['billing'][ self::OWN_PHONE_FIELD ] = array(
+			'type' => 'checkbox', 'label' => 'Es para mí (es una compra mía, no de un cliente)', 'required' => false,
+			'class' => array( 'form-row-wide', 'cvd-own-phone-field' ), 'priority' => 40.5,
+		);
 		$fields['billing']['billing_email']['label'] = 'Correo de quien compra';
 		$fields['billing']['billing_email']['required'] = false;
 		$fields['billing']['billing_email']['class'] = array( 'form-row-wide' );
@@ -422,6 +501,9 @@ final class CVD_Cuban_Checkout {
 				'ajaxUrl'        => admin_url( 'admin-ajax.php' ),
 				'addressNonce'   => wp_create_nonce( 'cvd_address_search' ),
 				'payment'        => self::payment_script_data(),
+				// 3.14.53 («Vender seguro»): los teléfonos propios de quien vende con sesión (8 cifras), para avisar al escribir.
+				'ownPhones'      => is_user_logged_in() && self::is_seller( get_current_user_id() ) ? self::own_phone_keys( get_current_user_id() ) : array(),
+				'ownPhoneText'   => self::OWN_PHONE_TEXT,
 			),
 		);
 	}
@@ -432,6 +514,9 @@ final class CVD_Cuban_Checkout {
 			$errors->add( 'cvd_fulfillment', 'Selecciona mensajería o recogida en tienda.' );
 		}
 		$phone = isset( $_POST['billing_phone'] ) ? preg_replace( '/\D+/', '', wp_unslash( $_POST['billing_phone'] ) ) : '';
+		// 3.14.53 («Vender seguro», #10 y #51): el teléfono de quien vende no pasa sin «Es para mí».
+		$own = self::own_phone_match( $phone );
+		if ( $own && empty( $_POST[ self::OWN_PHONE_FIELD ] ) ) { $errors->add( 'billing_phone', self::own_phone_error( $own ) ); }
 		if ( 'delivery' !== $type ) {
 			// Recogida (3.13.69): el teléfono puede ir vacío, pero si lo escriben tiene que estar completo.
 			if ( '' !== $phone && strlen( $phone ) < 8 ) {
@@ -492,6 +577,9 @@ final class CVD_Cuban_Checkout {
 		$order->update_meta_data( '_cvd_fulfillment_type', $type );
 		$order->update_meta_data( '_cvd_buyer_name', isset( $_POST['billing_cvd_buyer_name'] ) ? sanitize_text_field( wp_unslash( $_POST['billing_cvd_buyer_name'] ) ) : '' );
 		$order->update_meta_data( '_cvd_alternate_phone', sanitize_text_field( wp_unslash( $_POST['billing_cvd_alternate_phone'] ?? '' ) ) );
+		// 3.14.53: «Es para mí» (validate() ya no deja pasar el teléfono propio sin marcarlo).
+		$own = ! empty( $_POST[ self::OWN_PHONE_FIELD ] ) ? self::own_phone_match( (string) ( $data['billing_phone'] ?? $order->get_billing_phone() ) ) : null;
+		if ( $own ) { self::mark_self_declared( $order, $own, 'web' ); }
 		// Pedido de prueba automático (3.13.54): «PRUEBA» en el nombre o la nota → nunca sale al reparto (ver CVD_Delivery::is_test_order).
 		if ( class_exists( 'CVD_Delivery' ) && ! CVD_Delivery::is_test_order( $order ) && CVD_Delivery::looks_like_test(
 			(string) ( $data['billing_first_name'] ?? '' ), (string) ( $data['billing_last_name'] ?? '' ), (string) ( $data['order_comments'] ?? '' ),

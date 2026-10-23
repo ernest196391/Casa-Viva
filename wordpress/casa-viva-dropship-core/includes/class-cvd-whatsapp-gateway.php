@@ -88,7 +88,8 @@ final class CVD_WhatsApp_Gateway {
 		} elseif ( $tracking_url ) {
 			echo '<a class="cvd-thanks__button" href="' . esc_url( $tracking_url ) . '" data-cvd-save-order="' . esc_attr( $order->get_order_number() ) . '">Ver mi pedido</a>';
 		}
-		echo '<a class="cvd-thanks__button" href="' . esc_url( wc_get_page_permalink( 'shop' ) ) . '">Seguir comprando</a>';
+		// 3.14.53 (#48): «Seguir comprando» con el código de la gestora del pedido (sin gestora, la tienda de Casa Viva).
+		echo '<a class="cvd-thanks__button" href="' . esc_url( class_exists( 'CVD_Delivery' ) ? CVD_Delivery::shop_url( $order ) : wc_get_page_permalink( 'shop' ) ) . '">Seguir comprando</a>';
 		echo '</div>';
 		if ( $tracking_url ) {
 			echo '<p class="cvd-thanks__note">Tu pedido es el <strong>#' . esc_html( $order->get_order_number() ) . '</strong>. Para ver cómo va no hace falta cuenta: toca «Ver mi pedido», o en «Pedidos» escribe este número y el teléfono del pedido (' . esc_html( wp_parse_url( home_url( '/' ), PHP_URL_HOST ) . '/seguimiento' ) . ').</p>';

@@ -228,3 +228,7 @@
 /* 3.13.54: las sugerencias de calle van en su sitio (no flotan encima de «Entre calles»): un toque en ese campo no puede elegir una sugerencia. */
 .cvd-predictive-list.cvd-address-list { position: static; margin-top: .35rem; border-radius: 14px; box-shadow: none; }
 .cvd-day-chip[aria-pressed="true"] { background: #004042; color: #fff; border-color: #004042; }
+/* 3.14.53 «Vender seguro»: casilla «Es para mí» solo cuando el teléfono es el de quien vende. */
+.cvd-own-phone-field{display:none}
+.cvd-own-phone-field.is-on{display:block}
+.cvd-own-phone-warn{display:block;margin-top:4px;color:#a35a1f;font-weight:600}

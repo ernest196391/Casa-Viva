@@ -54,6 +54,13 @@ final class CVD_Voucher_Intake {
 		if ( ! $customer || ! $phones || ! $address || ! $municipality || ! $zone || ! $lines ) { delete_option( $lock ); return new WP_Error( 'cvd_voucher_required', 'Confirma cliente, teléfono, dirección, municipio, zona y productos.', array( 'status' => 400 ) ); }
 		$owner_id = self::preferred_owner( sanitize_text_field( (string) ( $draft['managerCode'] ?? '' ) ) );
 		if ( is_wp_error( $owner_id ) ) { delete_option( $lock ); return $owner_id; }
+		// 3.14.53 («Vender seguro», #10 y #51): el teléfono de quien vende (o de la gestora del vale) no pasa sin «Es para mí».
+		$own = class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::own_phone_match( $phones[0], array( $owner_id ) ) : null;
+		if ( $own && empty( $draft['selfPurchase'] ) ) {
+			delete_option( $lock );
+			$text = ! empty( $own['self'] ) ? CVD_Cuban_Checkout::OWN_PHONE_TEXT . ' Si de verdad es para ti, confirma «Es para mí».' : 'Ese es el número de la gestora del vale. Pon el teléfono del cliente para que el mensajero lo pueda llamar. Si de verdad es para ella, confirma «Es para mí».';
+			return new WP_Error( 'cvd_own_phone', $text, array( 'status' => 422 ) );
+		}
 		$order = null;
 		try {
 			$order = wc_create_order( array( 'status' => 'pending', 'created_via' => 'casa-viva-voucher' ) );
@@ -75,6 +82,7 @@ final class CVD_Voucher_Intake {
 			$order->update_meta_data( '_cvd_voucher_confirmation_key', $key_hash ); $order->update_meta_data( '_cvd_source_order_code', sanitize_text_field( (string) ( $draft['orderCode'] ?? '' ) ) ); $order->update_meta_data( '_cvd_order_intake_source', 'nexo_confirmed_voucher' ); $order->update_meta_data( '_cvd_source_store', sanitize_text_field( (string) ( $draft['store'] ?? $draft['origin'] ?? '' ) ) ); $order->update_meta_data( '_cvd_source_url', esc_url_raw( (string) ( $draft['sourceUrl'] ?? '' ) ) ); $order->update_meta_data( '_cvd_pricing_gestora_user_id', $owner_id );
 			$notes = array_map( 'sanitize_text_field', (array) ( $draft['notes'] ?? array() ) ); if ( $notes ) { $order->set_customer_note( implode( "\n", array_filter( $notes ) ) ); }
 			CVD_Attribution::attach_operator_order( $order, $owner_id ); $order->calculate_totals();
+			if ( $own ) { CVD_Cuban_Checkout::mark_self_declared( $order, $own, 'vale de NEXO' ); } // 3.14.53: confirmó «Es para mí»
 			$obligations = self::payment_obligations( $draft, $owner_id, absint( $quote['fee'] ?? 0 ) );
 			if ( is_wp_error( $obligations ) ) { throw new RuntimeException( $obligations->get_error_message() ); }
 			if ( $obligations ) { $configured = CVD_Payment_Obligations::configure( $order, $obligations, get_current_user_id() ); if ( is_wp_error( $configured ) ) { throw new RuntimeException( $configured->get_error_message() ); } }

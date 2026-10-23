@@ -363,7 +363,10 @@ final class CVD_Commissions {
 			$owner_phone = (string) get_user_meta( $owner_user_id, '_cvd_phone', true );
 		}
 		$owner_phone = preg_replace( '/\D+/', '', $owner_phone );
-		if ( ( $order_email && $owner_email && hash_equals( $owner_email, $order_email ) ) || ( $order_phone && $owner_phone && hash_equals( $owner_phone, $order_phone ) ) ) {
+		// 3.14.53: también «Es para mí» al hacer el pedido, o el mismo teléfono con o sin 53 delante (8 últimas cifras).
+		$same_phone = class_exists( 'CVD_Cuban_Checkout' ) && '' !== CVD_Cuban_Checkout::phone_key( (string) $order->get_billing_phone() )
+			&& in_array( CVD_Cuban_Checkout::phone_key( (string) $order->get_billing_phone() ), CVD_Cuban_Checkout::own_phone_keys( $owner_user_id ), true );
+		if ( 'yes' === (string) $order->get_meta( '_cvd_self_declared', true ) || $same_phone || ( $order_email && $owner_email && hash_equals( $owner_email, $order_email ) ) || ( $order_phone && $owner_phone && hash_equals( $owner_phone, $order_phone ) ) ) {
 			$order->update_meta_data( '_cvd_commission_risk', 'self_order' );
 		}
 	}

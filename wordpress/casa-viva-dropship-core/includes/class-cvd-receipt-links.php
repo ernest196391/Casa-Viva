@@ -73,7 +73,10 @@ final class CVD_Receipt_Links {
 		}
 
 		$product = $item->get_product();
-		return $product ? esc_url_raw( $product->get_permalink() ) : '';
+		if ( ! $product ) { return ''; }
+		// 3.14.53 (#48): el producto del vale se abre en la tienda de la gestora del pedido (?ref=); sin gestora, sin ref.
+		$url = esc_url_raw( $product->get_permalink() );
+		return class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::with_order_ref( $url, $order ) : $url;
 	}
 
 	private static function map_target( WC_Order $order ): string {
