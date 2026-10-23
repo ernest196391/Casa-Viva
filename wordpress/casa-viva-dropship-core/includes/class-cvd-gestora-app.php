@@ -214,7 +214,7 @@ final class CVD_Gestora_App {
 						<?php $max = max( 1, (int) $top['items'][0]['qty'] ); foreach ( $top['items'] as $p ) : $p = self::for_gestora( $p, $user->ID, $code ); ?>
 						<li>
 							<?php if ( $p['image'] ) : ?><img src="<?php echo esc_url( $p['image'] ); ?>" alt="" width="48" height="48" loading="lazy"><?php else : ?><span class="cvga-thumb" aria-hidden="true"></span><?php endif; ?>
-							<div class="cvga-top-text"><b><?php echo esc_html( $p['name'] ); ?></b><small><?php echo $p['qty'] ? esc_html( $p['qty'] . ' vendidos · ' ) : ''; ?><?php $cup = class_exists( 'CVD_Daily_Rates' ) ? CVD_Daily_Rates::cup_for( (float) $p['price_for_her'] ) : null; echo $cup ? esc_html( self::money( $p['price_for_her'] ) . ' (' . CVD_Daily_Rates::format_cup( $cup ) . ') · ' ) : ''; ?>ganas <?php echo esc_html( self::money( $p['earn'] ) ); ?> c/u</small><?php if ( $p['qty'] ) : ?><span class="cvga-bar"><i style="width:<?php echo esc_attr( (string) round( $p['qty'] / $max * 100 ) ); ?>%"></i></span><?php endif; ?></div>
+							<div class="cvga-top-text"><b><?php echo esc_html( $p['name'] ); ?></b><?php echo self::avail_tag( (int) $p['id'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML fijo. ?><small><?php echo $p['qty'] ? esc_html( $p['qty'] . ' vendidos · ' ) : ''; ?><?php $cup = class_exists( 'CVD_Daily_Rates' ) ? CVD_Daily_Rates::cup_for( (float) $p['price_for_her'] ) : null; echo $cup ? esc_html( self::money( $p['price_for_her'] ) . ' (' . CVD_Daily_Rates::format_cup( $cup ) . ') · ' ) : ''; ?>ganas <?php echo esc_html( self::money( $p['earn'] ) ); ?> c/u</small><?php if ( $p['qty'] ) : ?><span class="cvga-bar"><i style="width:<?php echo esc_attr( (string) round( $p['qty'] / $max * 100 ) ); ?>%"></i></span><?php endif; ?></div>
 							<a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="<?php echo esc_url( 'https://wa.me/?text=' . rawurlencode( $share_text( $p ) ) ); ?>" target="_blank" rel="noopener">Compartir</a>
 						</li>
 						<?php endforeach; ?>
@@ -257,6 +257,26 @@ final class CVD_Gestora_App {
 				<div class="cvga-actions"><a class="cvga-btn" href="<?php echo esc_url( 'https://wa.me/?text=' . rawurlencode( 'Mira mi tienda Casa Viva: ' . $link ) ); ?>" target="_blank" rel="noopener">Mandar por WhatsApp</a><a class="cvga-btn cvga-btn-soft" href="<?php echo esc_url( $link ); ?>">Ver mi tienda</a></div>
 				<p class="cvga-note">Para mandar un solo producto: ábrelo en tu tienda y copia el enlace de esa página. Ya lleva tu código.</p>
 			</section>
+			<?php
+			// 3.14.55 (D104): la misma tienda, solo con lo que está en la tienda (listo para hoy) o solo lo bajo pedido.
+			$parts = class_exists( 'CVD_Departments' ) ? array(
+				'tienda' => array( '🏪 Solo lo que está en tienda', 'Listo para hoy: se entrega o se recoge enseguida.', 'Mira lo que tengo listo para hoy en mi tienda Casa Viva: ' ),
+				'pedido' => array( '📦 Solo bajo pedido', 'Lo pedimos al proveedor: llega en 24–48 h.', 'Mira lo que te consigo por encargo (llega en 24–48 h) en mi tienda Casa Viva: ' ),
+			) : array();
+			if ( $parts ) :
+			?>
+			<section class="cvga-card cvga-avail-card">
+				<h2>Comparte solo una parte</h2>
+				<p class="cvga-note">Tu cliente ve tu tienda ya filtrada. Arriba de los productos puede cambiar a «Todo».</p>
+				<?php foreach ( $parts as $mode => $part ) : $url = add_query_arg( CVD_Departments::AVAIL_PARAM, $mode, $link ); ?>
+				<div class="cvga-avail-row">
+					<b><?php echo esc_html( $part[0] ); ?></b><small class="cvga-note"><?php echo esc_html( $part[1] ); ?></small>
+					<div class="cvga-link-box"><input id="cvga-link-<?php echo esc_attr( $mode ); ?>" readonly value="<?php echo esc_attr( $url ); ?>" aria-label="<?php echo esc_attr( $part[0] ); ?>"><button class="cvga-btn cvga-btn-sm" type="button" data-copy-target="cvga-link-<?php echo esc_attr( $mode ); ?>">Copiar</button></div>
+					<div class="cvga-actions"><a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="<?php echo esc_url( 'https://wa.me/?text=' . rawurlencode( $part[2] . $url ) ); ?>" target="_blank" rel="noopener">Mandar por WhatsApp</a><a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="<?php echo esc_url( $url ); ?>">Ver</a></div>
+				</div>
+				<?php endforeach; ?>
+			</section>
+			<?php endif; ?>
 			<section class="cvga-card cvga-qr-card">
 				<canvas data-qr="<?php echo esc_attr( $link ); ?>" aria-label="QR de tu tienda"></canvas>
 				<div><h2>Tu QR</h2><p class="cvga-note">Ponlo en tu estado o imprímelo. Al escanearlo se abre tu tienda.</p><button class="cvga-btn cvga-btn-soft cvga-btn-sm" type="button" data-cvga-save-qr>Guardar imagen</button></div>
@@ -481,6 +501,14 @@ final class CVD_Gestora_App {
 		$product = wc_get_product( $pid );
 		if ( ! $product || 'publish' !== $product->get_status() ) { return null; }
 		return array( 'id' => $pid, 'name' => $product->get_name(), 'qty' => $qty, 'price' => (float) $product->get_price(), 'image' => (string) get_the_post_thumbnail_url( $pid, 'thumbnail' ), 'url' => (string) get_permalink( $pid ) );
+	}
+
+	/** 3.14.55 (D104): etiqueta «🏪 En tienda» / «📦 Bajo pedido · 24–48 h» de un producto de la lista. */
+	private static function avail_tag( int $pid ): string {
+		if ( ! class_exists( 'CVD_Departments' ) ) { return ''; }
+		return CVD_Departments::is_bajo_pedido_id( $pid )
+			? '<span class="cvga-avail-tag cvga-avail-tag--pedido">📦 Bajo pedido · 24–48 h</span>'
+			: '<span class="cvga-avail-tag">🏪 En tienda</span>';
 	}
 
 	/** Precio que ve su cliente y lo que gana ella por unidad (comisión + lo que subió). */

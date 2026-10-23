@@ -13,11 +13,25 @@ defined( 'ABSPATH' ) || exit;
  *
  * Solo presentación y orden: no cambia productos, precios, existencias ni categorías.
  * Los departamentos son las categorías que ya existen (nombres de BizneCubano). «Bajo pedido» no es un departamento.
+ *
+ * 3.14.55 (D104, una gestora pidió filtrar; Ernesto 23-oct «piensa tú y decide»): filtro por disponibilidad.
+ * - Fila «Todo · 🏪 En tienda (listo para hoy) · 📦 Bajo pedido (24–48 h)» arriba del listado en la Tienda, en cada
+ *   categoría, en la búsqueda y en la tienda espejo de cada gestora (?ref=). Va por la URL: ?disponible=tienda|pedido,
+ *   se conserva al paginar, al ordenar, en las fichas de departamento y en el formulario de filtros del tema.
+ * - Bajo pedido = categoría «Bajo pedido» o SKU MK- (o _cvd_market_item_id), como CVD_Costs::is_bajo_pedido().
+ *   En tienda = el resto, sin agotados. Una sola condición SQL con subconsultas por índice (nada de cargar productos).
+ * - Cada tarjeta lleva «🏪 En tienda» o «📦 Bajo pedido · 24–48 h».
+ * - LiteSpeed guarda una página por URL completa (la consulta cuenta): cada filtro tiene su copia; la tienda espejo
+ *   ya va sin caché (CVD_Attribution). La API del bot y de la caja no cambia.
  */
 final class CVD_Departments {
 	/** Orden de las fichas (slugs de product_cat). Ampliable con el filtro `cvd_department_order`. */
 	private const ORDER = array( 'bano', 'cocina', 'habitacion', 'sala-y-muebles', 'organizacion', 'electrodomesticos', 'apagones-y-energia', 'tecnologia', 'cuidado-personal', 'accesorios', 'movilidad', 'ferreteria', 'navidad' );
 	private const OTHER_RANK = 999;
+	/** 3.14.55: parámetro de la URL del filtro por disponibilidad y sus valores. */
+	public const AVAIL_PARAM = 'disponible';
+	public const AVAIL_MODES = array( 'tienda', 'pedido' );
+	private const MARKET_SLUG = 'bajo-pedido';
 
 	private static ?array $terms = null;
 	private static ?int $last_rank = null;
@@ -26,6 +40,10 @@ final class CVD_Departments {
 	public static function register(): void {
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 41 );
 		add_action( 'woocommerce_archive_description', array( __CLASS__, 'render_bar' ), 2 );
+		// 3.14.55: filtro «En tienda / Bajo pedido» (justo debajo de los departamentos; sale aunque no haya resultados).
+		add_action( 'woocommerce_archive_description', array( __CLASS__, 'render_avail_bar' ), 3 );
+		add_action( 'woocommerce_product_query', array( __CLASS__, 'avail_query' ), 20 );
+		add_filter( 'posts_where', array( __CLASS__, 'avail_where' ), 20, 2 );
 		add_action( 'wp_footer', array( __CLASS__, 'home_bar' ), 4 );
 		add_filter( 'posts_clauses', array( __CLASS__, 'group_clauses' ), 20, 2 );
 		// woocommerce_content() (el que usa el tema) no lanza woocommerce_shop_loop: el título va en the_post, justo antes
@@ -55,15 +73,107 @@ final class CVD_Departments {
 		return ! is_admin() && is_front_page();
 	}
 
-	public static function assets(): void {
-		if ( ! self::is_catalog() && ! self::is_home() ) { return; }
-		wp_enqueue_style( 'cvd-departments', CVD_URL . 'assets/departments.css', array(), CVD_VERSION );
+	/** 3.14.55: búsqueda de productos (?s=…&post_type=product), que también lleva el filtro por disponibilidad. */
+	private static function is_product_search(): bool {
+		return ! is_admin() && is_search() && 'product' === get_query_var( 'post_type' );
 	}
 
-	/** El código de la gestora (tienda espejo) viaja en los enlaces, como en la cabecera del tema. */
+	public static function assets(): void {
+		if ( ! self::is_catalog() && ! self::is_home() && ! self::is_product_search() ) { return; }
+		// 3.14.55: + fecha del archivo, para que un arreglo de estilo llegue aunque el navegador guarde la versión (7 días).
+		$file = CVD_DIR . 'assets/departments.css';
+		wp_enqueue_style( 'cvd-departments', CVD_URL . 'assets/departments.css', array(), CVD_VERSION . ( is_readable( $file ) ? '.' . filemtime( $file ) : '' ) );
+	}
+
+	/** El código de la gestora (tienda espejo) viaja en los enlaces, como en la cabecera del tema. 3.14.55: y el filtro. */
 	private static function link( string $url ): string {
 		$ref = isset( $_GET['ref'] ) ? strtoupper( preg_replace( '/[^A-Z0-9_-]/i', '', (string) wp_unslash( $_GET['ref'] ) ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- enlace público de solo lectura.
-		return $ref ? add_query_arg( 'ref', $ref, $url ) : $url;
+		$url = $ref ? add_query_arg( 'ref', $ref, $url ) : $url;
+		$mode = self::avail_mode();
+		return '' !== $mode ? add_query_arg( self::AVAIL_PARAM, $mode, $url ) : $url;
+	}
+
+	/** 3.14.55: filtro pedido en la URL: 'tienda', 'pedido' o '' (todo). */
+	public static function avail_mode(): string {
+		$mode = isset( $_GET[ self::AVAIL_PARAM ] ) ? sanitize_key( (string) wp_unslash( $_GET[ self::AVAIL_PARAM ] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- filtro público de solo lectura.
+		return in_array( $mode, self::AVAIL_MODES, true ) ? $mode : '';
+	}
+
+	/** 3.14.55: ¿producto de proveedor? Misma regla que CVD_Costs::is_bajo_pedido() + la categoría «Bajo pedido». */
+	public static function is_bajo_pedido_id( int $product_id ): bool {
+		$product = $product_id ? wc_get_product( $product_id ) : null;
+		if ( ! $product instanceof WC_Product ) { return false; }
+		if ( class_exists( 'CVD_Costs' ) ? CVD_Costs::is_bajo_pedido( $product ) : 0 === stripos( (string) $product->get_sku( 'edit' ), 'MK-' ) ) { return true; }
+		$id = $product->get_parent_id() ?: $product->get_id();
+		return has_term( self::MARKET_SLUG, 'product_cat', $id );
+	}
+
+	/** 3.14.55: la página de la categoría «Bajo pedido» (ahí el filtro no tiene sentido). */
+	private static function is_market_category(): bool {
+		if ( ! function_exists( 'is_product_category' ) || ! is_product_category() ) { return false; }
+		$term = get_queried_object();
+		return $term instanceof WP_Term && self::MARKET_SLUG === $term->slug;
+	}
+
+	/** 3.14.55: «Todo · 🏪 En tienda · 📦 Bajo pedido». Enlaces = esta misma página (página 1) con todo lo demás de la URL. */
+	public static function render_avail_bar(): void {
+		static $done = false;
+		if ( $done || ( ! self::is_catalog() && ! self::is_product_search() ) || self::is_market_category() ) { return; }
+		$done = true;
+		$base = remove_query_arg( array( self::AVAIL_PARAM, 'paged', 'product-page' ), get_pagenum_link( 1, false ) );
+		$mode = self::avail_mode();
+		$chips = array(
+			''       => array( 'Todo', '', '' ),
+			'tienda' => array( 'En tienda', 'listo para hoy', '🏪' ),
+			'pedido' => array( 'Bajo pedido', '24–48 h', '📦' ),
+		);
+		$html = '<nav class="cvd-avail" aria-label="Disponibilidad"><div class="cvd-avail__rail">';
+		foreach ( $chips as $key => $chip ) {
+			$active = $key === $mode;
+			$url = '' === $key ? $base : add_query_arg( self::AVAIL_PARAM, $key, $base );
+			$html .= '<a class="cvd-avail__chip cvd-avail__chip--' . esc_attr( '' === $key ? 'todo' : $key ) . ( $active ? ' is-active' : '' ) . '" href="' . esc_url( $url ) . '" rel="nofollow"' . ( $active ? ' aria-current="page"' : '' ) . '>'
+				. ( '' !== $chip[2] ? '<span class="cvd-avail__icon" aria-hidden="true">' . $chip[2] . '</span>' : '' )
+				. '<span class="cvd-avail__text"><b>' . esc_html( $chip[0] ) . '</b>' . ( '' !== $chip[1] ? '<small>' . esc_html( $chip[1] ) . '</small>' : '' ) . '</span></a>';
+		}
+		echo $html . '</div></nav>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado arriba.
+		if ( '' !== $mode ) {
+			// El formulario «Filtros» del tema (categoría y precio) no conoce el parámetro: se le añade para no perderlo.
+			echo '<script>document.addEventListener("DOMContentLoaded",function(){document.querySelectorAll("form").forEach(function(f){if(!f.querySelector("[name=cv_category],[name=orderby]")||f.querySelector("[name=' . esc_js( self::AVAIL_PARAM ) . ']"))return;var i=document.createElement("input");i.type="hidden";i.name="' . esc_js( self::AVAIL_PARAM ) . '";i.value="' . esc_js( $mode ) . '";f.appendChild(i);});});</script>';
+		}
+	}
+
+	/** 3.14.55: marca la consulta principal de productos (Tienda, categorías, etiquetas, búsqueda) con el filtro. */
+	public static function avail_query( WP_Query $query ): void {
+		$mode = self::avail_mode();
+		if ( '' === $mode || is_admin() || ! $query->is_main_query() ) { return; }
+		$query->set( 'cvd_disponible', $mode );
+		if ( 'tienda' === $mode && 'yes' !== get_option( 'woocommerce_hide_out_of_stock_items' ) ) {
+			// «En tienda» = listo para hoy: sin agotados (si la tienda ya los oculta, WooCommerce lo hace solo).
+			$terms = wc_get_product_visibility_term_ids();
+			if ( ! empty( $terms['outofstock'] ) ) {
+				$tax = (array) $query->get( 'tax_query' );
+				$tax[] = array( 'taxonomy' => 'product_visibility', 'field' => 'term_taxonomy_id', 'terms' => array( (int) $terms['outofstock'] ), 'operator' => 'NOT IN' );
+				$query->set( 'tax_query', $tax );
+			}
+		}
+	}
+
+	/** 3.14.55: una condición SQL (subconsultas por índice): categoría «Bajo pedido», SKU MK- o artículo del mercado. */
+	public static function avail_where( string $where, WP_Query $query ): string {
+		$mode = (string) $query->get( 'cvd_disponible' );
+		if ( ! in_array( $mode, self::AVAIL_MODES, true ) ) { return $where; }
+		global $wpdb;
+		$term = get_term_by( 'slug', self::MARKET_SLUG, 'product_cat' );
+		$tt = $term instanceof WP_Term ? (int) $term->term_taxonomy_id : 0;
+		$prefix = class_exists( 'CVD_Market_Bridge' ) ? CVD_Market_Bridge::SKU_PREFIX : 'MK-';
+		$market = $wpdb->prepare(
+			"( {$wpdb->posts}.ID IN ( SELECT object_id FROM {$wpdb->term_relationships} WHERE term_taxonomy_id = %d )"
+			. " OR {$wpdb->posts}.ID IN ( SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_sku' AND meta_value LIKE %s )"
+			. " OR {$wpdb->posts}.ID IN ( SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_cvd_market_item_id' AND meta_value <> '' ) )",
+			$tt,
+			$wpdb->esc_like( $prefix ) . '%'
+		);
+		return $where . ( 'pedido' === $mode ? " AND {$market}" : " AND NOT {$market}" );
 	}
 
 	public static function bar_html( string $context ): string {
@@ -135,8 +245,7 @@ final class CVD_Departments {
 	}
 
 	private static function is_market( int $product_id ): bool {
-		$product = wc_get_product( $product_id );
-		return $product instanceof WC_Product && class_exists( 'CVD_Market_Bridge' ) && CVD_Market_Bridge::is_market_sku( (string) $product->get_sku() );
+		return self::is_bajo_pedido_id( $product_id ); // 3.14.55: la misma regla que el filtro (antes solo el SKU MK-).
 	}
 
 	public static function on_the_post( $post, $query = null ): void {
@@ -173,10 +282,17 @@ final class CVD_Departments {
 		self::$last_market = $market;
 	}
 
+	/** 3.14.55: cada tarjeta dice de dónde sale: «🏪 En tienda» (listo para hoy) o «📦 Bajo pedido · 24–48 h». */
 	public static function market_badge(): void {
 		$id = (int) get_the_ID();
-		if ( $id && self::is_market( $id ) ) {
-			echo '<span class="cvd-market-badge">Bajo pedido · confirmamos en 1 h</span>';
+		if ( ! $id ) { return; }
+		if ( self::is_market( $id ) ) {
+			echo '<span class="cvd-market-badge"><span><span aria-hidden="true">📦</span> Bajo pedido</span> <span>· 24–48&nbsp;h</span></span>';
+			return;
+		}
+		$product = wc_get_product( $id );
+		if ( $product instanceof WC_Product && $product->is_in_stock() ) {
+			echo '<span class="cvd-market-badge cvd-market-badge--tienda"><span aria-hidden="true">🏪</span> En tienda</span>';
 		}
 	}
 }

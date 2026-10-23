@@ -311,3 +311,10 @@ body.cvga-body .cvd-customer-nav{display:none!important}
 .cvga-conf-lista li b{font-size:16px;letter-spacing:.02em}
 .cvga-conf-lista li small{flex-basis:100%;color:var(--ga-muted)}
 .cvga-chip.is-no{background:#f3e3e1;color:#6e1f1f}
+/* 3.14.55 (D104): «Comparte solo una parte» (Mi tienda) y etiqueta En tienda / Bajo pedido en «Lo que más se vende». */
+.cvga-avail-row{display:flex;flex-direction:column;gap:6px;padding:12px 0;border-top:1px solid var(--ga-line)}
+.cvga-avail-row:first-of-type{border-top:0}
+.cvga-avail-row > b{font-size:15px}
+.cvga-avail-row .cvga-actions{margin-top:2px}
+.cvga-avail-tag{display:inline-block;margin:2px 6px 2px 0;padding:1px 8px;border:1px solid #cfe0cc;border-radius:99px;background:#eef4ea;color:#2f5b36;font-size:11.5px;font-weight:600;line-height:1.5;white-space:nowrap}
+.cvga-avail-tag--pedido{border-color:#e8d9bf;background:#fbf1e4;color:#8a4b19}
