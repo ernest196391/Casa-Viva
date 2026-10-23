@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * 3.14.56 «Ficha que contesta» (mejora nº 7 del diagnóstico del 23-oct, aprobada por Ernesto; D107).
+ * 3.14.57 «Ficha que contesta» (mejora nº 7 del diagnóstico del 23-oct, aprobada por Ernesto; D107).
  *
  * El problema (P2 del diagnóstico): un tercio de los errores del bot son preguntas de producto. Cada respuesta de Nana
  * o Zaymi se quedaba en un chat y la misma pregunta se volvía a hacer. Ahora:
