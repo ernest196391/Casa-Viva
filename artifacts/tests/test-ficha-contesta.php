@@ -1,6 +1,6 @@
 <?php
 /**
- * 3.14.56 «Ficha que contesta» (CVD_Ficha_Contesta): reglas puras, sin WordPress.
+ * 3.14.57 «Ficha que contesta» (CVD_Ficha_Contesta): reglas puras, sin WordPress.
  * Corre con: php artifacts/tests/test-ficha-contesta.php
  */
 
