@@ -546,7 +546,7 @@ final class CVD_Gestora_Store {
 
 	/**
 	 * 3.14.56: «Ver la tienda de Casa Viva» → esta misma página con ?ref=salir (gestora-store.js no le pone el ?ref= de la gestora).
-	 * 3.14.57 (D107, Ernesto 23-oct): solo lo ven gestoras, administración y el equipo de la tienda con su sesión iniciada; los
+	 * 3.14.57 (D108, Ernesto 23-oct): solo lo ven gestoras, administración y el equipo de la tienda con su sesión iniciada; los
 	 * clientes no (D67: el cliente no sale de la tienda de su gestora). ?ref=salir sigue valiendo para cualquiera. Con sesión
 	 * iniciada la página no se guarda en caché, así que el enlace nunca llega a un cliente por la caché.
 	 */
@@ -555,7 +555,7 @@ final class CVD_Gestora_Store {
 		return '<a class="cvd-store-exit" href="' . esc_url( CVD_Attribution::leave_url() ) . '" rel="nofollow">Ver la tienda de Casa Viva</a>';
 	}
 
-	/** 3.14.57 (D107): ¿quien mira es gestora, administración o equipo de la tienda (dependienta, operador) con sesión? */
+	/** 3.14.57 (D108): ¿quien mira es gestora, administración o equipo de la tienda (dependienta, operador) con sesión? */
 	private static function sees_leave_link(): bool {
 		if ( ! is_user_logged_in() ) { return false; }
 		return (bool) array_intersect( array( 'cvd_gestora', 'administrator', 'shop_manager', 'cvd_operator', 'cvd_clerk' ), (array) wp_get_current_user()->roles );
