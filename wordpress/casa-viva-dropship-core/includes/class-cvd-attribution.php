@@ -15,6 +15,13 @@ final class CVD_Attribution {
 	 * LiteSpeed se salta su caché con cualquiera de las dos (ajuste «No cachear cookies», ver ESTADO 14-oct).
 	 */
 	public const BYPASS_COOKIE = 'cvd_wp_woocommerce_session_tienda';
+	/**
+	 * 3.14.56 (Ernesto 23-oct): «?ref=salir» (o «?ref=casaviva») = salir de la tienda de una gestora. Ernesto abrió en su
+	 * móvil el enlace de Harley y la web solo le enseñaba esa tienda (cookie de 400 días) sin forma de volver a la de
+	 * Casa Viva. Borra la marca del navegador y lleva a la misma página sin el parámetro. No cambia de quién es un
+	 * cliente que ya compró (D97: eso va por su teléfono/correo, no por esta marca).
+	 */
+	public const LEAVE_CODES = array( 'salir', 'casaviva' );
 	private static bool $bypass_checked = false;
 
 	public static function register(): void {
@@ -22,7 +29,9 @@ final class CVD_Attribution {
 		add_filter( 'litespeed_vary_cookies', array( __CLASS__, 'litespeed_vary_cookies' ) );
 		add_action( 'init', array( __CLASS__, 'capture_referral' ), 20 );
 		add_action( 'wp_loaded', array( __CLASS__, 'capture_referral' ), 1 );
-		add_action( 'template_redirect', array( __CLASS__, 'send_private_cache_headers' ), 0 );
+		// 3.14.56: después de que WooCommerce cargue la sesión y el carrito (wp_loaded 5).
+		add_action( 'wp_loaded', array( __CLASS__, 'leave_gestora_store' ), 20 );
+		add_action( 'template_redirect',array( __CLASS__, 'send_private_cache_headers' ), 0 );
 		add_action( 'woocommerce_checkout_create_order', array( __CLASS__, 'attach_to_order' ), 30, 2 );
 		add_action( 'woocommerce_store_api_checkout_update_order_from_request', array( __CLASS__, 'attach_store_api_order' ), 30, 2 );
 		// 3.14.52 (D97, fallo 4): pedido creado a mano en el admin de WordPress → al guardarlo, la gestora del cliente.
@@ -115,6 +124,7 @@ final class CVD_Attribution {
 	}
 
 	public static function capture_referral(): void {
+		if ( self::is_leave_request() ) { return; } // 3.14.56: lo atiende leave_gestora_store().
 		self::ensure_bypass_cookie();
 		$raw_code = '';
 		if ( isset( $_GET['ref'] ) ) {
@@ -200,6 +210,61 @@ final class CVD_Attribution {
 			);
 		}
 		$_COOKIE[ self::BYPASS_COOKIE ] = '1';
+	}
+
+	/** 3.14.56: ¿esta visita pide salir de la tienda de una gestora (?ref=salir / ?ref=casaviva)? */
+	public static function is_leave_request(): bool {
+		$raw = isset( $_GET['ref'] ) ? wp_unslash( $_GET['ref'] ) : ( isset( $_GET['cv_ref'] ) ? wp_unslash( $_GET['cv_ref'] ) : '' );
+		return is_string( $raw ) && in_array( strtolower( trim( $raw ) ), self::LEAVE_CODES, true );
+	}
+
+	/** 3.14.56: enlace para volver a la tienda de Casa Viva desde esta misma página (lo pinta el aviso de la tienda espejo). */
+	public static function leave_url(): string {
+		$uri = wp_doing_ajax() || ! isset( $_SERVER['REQUEST_URI'] ) ? '/' : (string) wp_unslash( $_SERVER['REQUEST_URI'] );
+		return add_query_arg( 'ref', 'salir', remove_query_arg( array( 'ref', 'cv_ref' ), $uri ) );
+	}
+
+	/**
+	 * 3.14.56: ?ref=salir → borra la marca del navegador (cookie firmada, la de las cachés y la de la sesión de WooCommerce),
+	 * devuelve el carrito a los precios de Casa Viva y lleva a la misma dirección sin el parámetro. Respuesta sin caché.
+	 */
+	public static function leave_gestora_store(): void {
+		if ( ! self::is_leave_request() || wp_doing_ajax() || wp_doing_cron() ) { return; }
+		self::forget_referral();
+		if ( class_exists( 'CVD_Gestora_Store' ) ) { CVD_Gestora_Store::unlock_cart(); }
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+		do_action( 'litespeed_control_set_nocache', 'Casa Viva: salir de la tienda de una gestora' );
+		if ( headers_sent() ) { return; }
+		nocache_headers();
+		$target = remove_query_arg( array( 'ref', 'cv_ref' ), (string) wp_unslash( $_SERVER['REQUEST_URI'] ?? '/' ) );
+		wp_safe_redirect( '' !== $target ? $target : home_url( '/' ), 302, 'Casa Viva' );
+		exit;
+	}
+
+	private static function forget_referral(): void {
+		foreach ( array( self::COOKIE_NAME, self::BYPASS_COOKIE ) as $name ) {
+			if ( ! headers_sent() ) {
+				setcookie(
+					$name,
+					'',
+					array(
+						'expires'  => time() - YEAR_IN_SECONDS,
+						'path'     => COOKIEPATH ?: '/',
+						'domain'   => COOKIE_DOMAIN,
+						'secure'   => is_ssl(),
+						'httponly' => true,
+						'samesite' => 'Lax',
+					)
+				);
+			}
+			unset( $_COOKIE[ $name ] );
+		}
+		self::$bypass_checked = true;
+		if ( function_exists( 'WC' ) && WC()->session ) {
+			WC()->session->__unset( self::SESSION_KEY );
+		}
 	}
 
 	/** Último enlace de gestora guardado en este navegador (cookie firmada o sesión), sin mirar la dirección. */

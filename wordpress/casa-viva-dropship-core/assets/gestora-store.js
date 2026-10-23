@@ -17,6 +17,8 @@
     if (url.origin !== origin || !/^https?:$/.test(url.protocol)) return null;
     if (excluded.some(function (path) { return url.pathname.indexOf(path) === 0; })) return null;
     if (url.searchParams.has("wc-ajax") || url.searchParams.has("action")) return null;
+    // 3.14.56: «Ver la tienda de Casa Viva» (?ref=salir) no se cambia por el código de la gestora.
+    if (/^(salir|casaviva)$/i.test(url.searchParams.get("ref") || url.searchParams.get("cv_ref") || "")) return null;
     url.searchParams.set("ref", code);
     return url.toString();
   }

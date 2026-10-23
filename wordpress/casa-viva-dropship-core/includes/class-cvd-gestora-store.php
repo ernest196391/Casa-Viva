@@ -93,16 +93,33 @@ final class CVD_Gestora_Store {
 	public static function relock_cart( WC_Cart $cart ): void {
 		$gestora = self::active_gestora();
 		if ( ! $gestora ) { return; }
+		self::rekey_cart( $cart, $gestora->ID );
+	}
+
+	/**
+	 * 3.14.56 (?ref=salir, Ernesto 23-oct): quien sale de la tienda de una gestora ve los precios de Casa Viva y su carrito
+	 * también (antes seguía con los precios fijados de la gestora). Mismo criterio que relock_cart: el último enlace manda.
+	 */
+	public static function unlock_cart(): void {
+		if ( function_exists( 'WC' ) && WC()->cart instanceof WC_Cart ) { self::rekey_cart( WC()->cart, 0 ); }
+	}
+
+	/** Fija las líneas del carrito al precio de la gestora $gestora_id, o (0) las devuelve al precio de Casa Viva. */
+	private static function rekey_cart( WC_Cart $cart, int $gestora_id ): void {
 		$contents = array(); $changed = false;
 		// Lo que no es dato propio de la línea; lo que queda es lo que add_to_cart usó para su clave.
 		$not_line_data = array_flip( array( 'key', 'product_id', 'variation_id', 'variation', 'quantity', 'data', 'data_hash', 'line_tax_data', 'line_subtotal', 'line_subtotal_tax', 'line_total', 'line_tax' ) );
 		foreach ( $cart->get_cart_contents() as $key => $item ) {
 			$product = $item['data'] ?? null;
-			if ( $product instanceof WC_Product && absint( $item['_cvd_gestora_id'] ?? 0 ) !== $gestora->ID ) {
-				$base = (float) get_post_meta( $product->get_id(), '_price', true );
-				$item['_cvd_gestora_id'] = $gestora->ID;
-				$item['_cvd_base_price'] = $base;
-				$item['_cvd_locked_price'] = (float) self::resolve_price( $product, $gestora->ID, $base );
+			if ( $product instanceof WC_Product && absint( $item['_cvd_gestora_id'] ?? 0 ) !== $gestora_id ) {
+				if ( $gestora_id ) {
+					$base = (float) get_post_meta( $product->get_id(), '_price', true );
+					$item['_cvd_gestora_id'] = $gestora_id;
+					$item['_cvd_base_price'] = $base;
+					$item['_cvd_locked_price'] = (float) self::resolve_price( $product, $gestora_id, $base );
+				} else {
+					unset( $item['_cvd_gestora_id'], $item['_cvd_base_price'], $item['_cvd_locked_price'] );
+				}
 				// Nueva clave, la misma que daría añadirlo ahora desde su tienda: así no salen dos líneas del mismo producto.
 				$key = $cart->generate_cart_id( $item['product_id'], $item['variation_id'], $item['variation'], array_diff_key( $item, $not_line_data ) );
 				$item['key'] = $key;
@@ -523,7 +540,14 @@ final class CVD_Gestora_Store {
 
 	public static function store_banner(): void {
 		$gestora = self::active_gestora(); if ( ! $gestora ) { return; }
-		echo '<aside class="cvd-store-banner"><span>Tienda atendida por</span><strong>' . esc_html( $gestora->display_name ) . '</strong><small>Precios y pedidos gestionados con el respaldo de Casa Viva.</small></aside>';
+		// 3.14.56: enlace discreto para volver a la tienda de Casa Viva (?ref=salir borra la marca de este navegador).
+		echo '<aside class="cvd-store-banner"><span>Tienda atendida por</span><strong>' . esc_html( $gestora->display_name ) . '</strong><small>Precios y pedidos gestionados con el respaldo de Casa Viva.</small>' . self::leave_link_html() . '</aside>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado en leave_link_html().
+	}
+
+	/** 3.14.56: «Ver la tienda de Casa Viva» → esta misma página con ?ref=salir (gestora-store.js no le pone el ?ref= de la gestora). */
+	public static function leave_link_html(): string {
+		if ( ! class_exists( 'CVD_Attribution' ) ) { return ''; }
+		return '<a class="cvd-store-exit" href="' . esc_url( CVD_Attribution::leave_url() ) . '" rel="nofollow">Ver la tienda de Casa Viva</a>';
 	}
 
 	public static function snapshot_line( WC_Order_Item_Product $item, string $cart_item_key, array $values, WC_Order $order ): void {

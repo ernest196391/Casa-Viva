@@ -522,7 +522,8 @@ final class CVD_Home_Rails {
 			echo CVD_Departments::bar_html( 'home' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado en bar_html().
 		}
 		if ( $gestora ) {
-			echo '<p class="cvd-home__wrap cvd-home-store">Tienda atendida por <strong>' . esc_html( $gestora->display_name ) . '</strong></p>';
+			// 3.14.56: con el enlace discreto para volver a la tienda de Casa Viva (?ref=salir).
+			echo '<p class="cvd-home__wrap cvd-home-store">Tienda atendida por <strong>' . esc_html( $gestora->display_name ) . '</strong> ' . CVD_Gestora_Store::leave_link_html() . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado en leave_link_html().
 		}
 		echo self::search_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado arriba.
 		foreach ( $rails as $i => $rail ) {

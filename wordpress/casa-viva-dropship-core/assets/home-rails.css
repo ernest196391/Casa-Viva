@@ -79,3 +79,5 @@ html body .cvd-home .cvd-rail__title{margin:0;color:var(--h-marron);font:600 16p
 	.cvd-home-gift__go{margin-left:0}
 }
 @media (prefers-reduced-motion:reduce){.cvd-rail__list{scroll-behavior:auto}}
+/* 3.14.56: enlace discreto para volver a la tienda de Casa Viva */
+.cvd-home-store .cvd-store-exit{margin-left:6px;color:inherit;font-size:12.5px;text-decoration:underline;text-underline-offset:2px;white-space:nowrap}
