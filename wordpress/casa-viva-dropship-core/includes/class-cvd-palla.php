@@ -143,6 +143,8 @@ final class CVD_Palla {
 			'/palla/sw.js'                => 'sw',
 			'/palla/manifest.webmanifest' => 'manifest',
 			'/palla/sesion'               => 'sesion',
+			'/palla/tienda'               => 'tienda',
+			'/palla/tienda/'              => 'tienda',
 		)[ $path ] ?? '';
 	}
 
@@ -156,6 +158,7 @@ final class CVD_Palla {
 		if ( 'sw' === $kind ) { self::service_worker(); }
 		if ( 'manifest' === $kind ) { self::manifest(); }
 		if ( 'sesion' === $kind ) { self::session(); }
+		if ( 'tienda' === $kind ) { self::store_page(); }
 		self::page();
 	}
 
@@ -226,6 +229,96 @@ final class CVD_Palla {
 			. '<link rel="preload" href="' . esc_url( self::asset( 'fonts/Archivo-400.woff2' ) ) . '" as="font" type="font/woff2" crossorigin>'
 			. '<link rel="stylesheet" href="' . esc_url( self::asset( 'app.css' ) ) . '">'
 			. '</head><body>' . $body . '</body></html>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- armado con esc_* arriba.
+		exit;
+	}
+
+	// ------------------------------------------------------------------ /palla/tienda (3.14.67.1)
+
+	/**
+	 * La tienda ve el reparto en vivo (Nana, Zaymi, Lennys, Ernesto: sesión de la web con rol de tienda). Solo lectura.
+	 * Quita los «¿quién tiene el #N?», «prepara que viene el mensajero» y las carreras que nadie coge sin que nadie lo sepa.
+	 * Se recarga sola cada minuto. Nunca escribe en los pedidos (la mensajería y el dinero salen de lo guardado).
+	 */
+	private static function store_page(): void {
+		nocache_headers();
+		header( 'Content-Type: text/html; charset=utf-8' );
+		$user = wp_get_current_user();
+		if ( ! $user instanceof WP_User || ! $user->ID ) { wp_safe_redirect( wp_login_url( home_url( '/palla/tienda' ) ) ); exit; }
+		if ( ! array_intersect( array( 'administrator', 'shop_manager', 'cvd_clerk', 'cvd_operator' ), (array) $user->roles ) ) {
+			status_header( 403 );
+			self::store_shell( '<main class="pl-closed"><div class="pl-logo" aria-hidden="true">P</div><h1>Solo para la tienda</h1><p>Esta página es para las dependientas y la administración de Casa Viva.</p></main>' );
+		}
+		$g = self::store_groups();
+		$card = static function ( array $r, string $extra = '' ): string {
+			$who = '' !== $r['messenger'] ? '<div class="pl-muted">🛵 <span class="pl-strong">' . esc_html( $r['messenger'] ) . '</span>' . ( '' !== $r['phone'] ? ' · <a href="tel:+' . esc_attr( $r['phone'] ) . '">' . esc_html( $r['phoneLabel'] ) . '</a>' : '' ) . '</div>' : '';
+			return '<article class="pl-card"><div class="pl-row" style="align-items:center"><span class="pl-strong">#' . esc_html( $r['number'] ) . ' · ' . esc_html( $r['zone'] ) . '</span>' . $extra . '</div>' . $who
+				. ( '' !== $r['eta'] ? '<div class="pl-muted">🕒 Entrega: <span class="pl-strong">' . esc_html( $r['eta'] ) . '</span></div>' : '' )
+				. ( '' !== $r['gestora'] ? '<div class="pl-muted">Gestora: <span class="pl-strong">' . esc_html( $r['gestora'] ) . '</span></div>' : '' )
+				. '<div class="pl-muted">' . esc_html( implode( ' · ', $r['items'] ) ) . '</div>'
+				. '<div class="pl-muted">Cobra: <span class="pl-strong">' . esc_html( $r['collect'] ) . '</span>' . ( '' !== $r['change'] ? ' · <span class="pl-strong">Dale ' . esc_html( $r['change'] ) . ' de vuelto</span>' : '' ) . ( '' !== $r['fee'] ? ' · mensajería ' . esc_html( $r['fee'] ) : '' ) . '</div></article>';
+		};
+		$section = static function ( string $title, string $empty, array $rows, callable $render ): string {
+			$html = '<h2 class="pl-h2">' . esc_html( $title ) . ' (' . count( $rows ) . ')</h2>';
+			if ( ! $rows ) { return $html . '<div class="pl-muted">' . esc_html( $empty ) . '</div>'; }
+			foreach ( $rows as $r ) { $html .= $render( $r ); }
+			return $html;
+		};
+		$now = new DateTimeImmutable( 'now', new DateTimeZone( 'America/Havana' ) );
+		$body = '<header class="pl-top"><div><div class="pl-brand">Reparto en vivo</div><div class="pl-sub">Casa Viva · ' . esc_html( $now->format( 'g:i a' ) ) . ' · se pone al día sola cada minuto</div></div></header><main class="pl-main">';
+		$body .= $section( 'Sin mensajero', 'Todas las carreras tienen mensajero.', $g['free'], static function ( array $r ) use ( $card ): string {
+			$late = $r['minutes'] >= 30;
+			return $card( $r, '<span class="pl-badge pl-badge--' . ( $late ? 'danger' : 'warning' ) . '">' . esc_html( $r['minutes'] < 60 ? $r['minutes'] . ' min' : floor( $r['minutes'] / 60 ) . ' h' ) . '</span>' );
+		} );
+		$body .= $section( 'Por recoger (prepáralo)', 'Nadie tiene que venir a recoger ahora.', $g['pickup'], static fn( array $r ): string => $card( $r, '' !== $r['eta'] ? '<span class="pl-badge pl-badge--info">Viene</span>' : '<span class="pl-badge pl-badge--warning">Sin hora</span>' ) );
+		$body .= $section( 'En camino', 'Nadie va de camino ahora.', $g['route'], static fn( array $r ): string => $card( $r, '<span class="pl-badge pl-badge--info">En camino</span>' ) );
+		$body .= $section( 'Problema avisado', 'Ningún problema abierto.', $g['incident'], static fn( array $r ): string => $card( $r, '<span class="pl-badge pl-badge--danger">Problema</span>' ) );
+		$money = class_exists( 'CVD_Messenger_Cash' ) ? CVD_Messenger_Cash::pending() : array();
+		$body .= $section( 'Dinero por recibir', 'Nadie debe dinero a la tienda.', $money, static function ( array $r ): string {
+			return '<article class="pl-card"><div class="pl-row" style="align-items:center"><span class="pl-strong">#' . esc_html( (string) $r['number'] ) . ' · ' . esc_html( (string) $r['messengerName'] ) . '</span><span class="pl-num pl-strong">' . esc_html( (string) $r['label'] ) . '</span></div><div class="pl-muted">Entregado ' . esc_html( (string) $r['sinceLocal'] ) . ( null !== $r['hours'] && $r['hours'] >= 24 ? ' · <b>hace más de un día</b>' : '' ) . '</div></article>';
+		} );
+		self::store_shell( $body . '</main>' );
+	}
+
+	/** Las carreras abiertas por paso, sin datos que no hagan falta en la tienda. */
+	public static function store_groups(): array {
+		$orders = wc_get_orders( array( 'limit' => 150, 'type' => 'shop_order', 'orderby' => 'date', 'order' => 'ASC', 'status' => array( 'pending', 'processing', 'on-hold' ),
+			'meta_query' => array( array( 'key' => '_cvd_delivery_status', 'value' => array( 'offered', 'assigned', 'accepted', 'to_store', 'picked_up', 'handed_over', 'incident' ), 'compare' => 'IN' ) ) ) );
+		$groups = array( 'free' => array(), 'pickup' => array(), 'route' => array(), 'incident' => array() );
+		foreach ( $orders as $order ) {
+			if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund || CVD_Tarjeta_Carrera::is_test( $order ) ) { continue; }
+			$status = CVD_Delivery::status( $order );
+			$messenger = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
+			$key = 'incident' === $status ? 'incident' : ( 'offered' === $status && ! $messenger ? 'free' : ( in_array( $status, array( 'picked_up', 'handed_over' ), true ) ? 'route' : ( in_array( $status, array( 'assigned', 'accepted', 'to_store' ), true ) ? 'pickup' : '' ) ) );
+			if ( '' === $key || ( 'free' === $key && '' !== CVD_Delivery::blocks_dispatch( $order ) ) ) { continue; }
+			$phone = $messenger ? preg_replace( '/\D+/', '', (string) ( get_user_meta( $messenger->ID, '_cvd_whatsapp', true ) ?: get_user_meta( $messenger->ID, 'billing_phone', true ) ) ) : '';
+			$phone = 8 === strlen( $phone ) ? '53' . $phone : $phone;
+			$a = CVD_Messenger_Delivered_Link::default_amounts( class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_payment( $order ) : null, (float) $order->get_total() );
+			$products = array_filter( array( 'USD' => $a['usd'], 'CUP' => $a['cup'], 'EUR' => $a['eur'] ), static fn( $v ): bool => (float) $v > 0 );
+			$fee = absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) ) ?: (int) round( CVD_Delivery::courier_amount( $order ) );
+			$offered = (string) $order->get_meta( '_cvd_delivery_offered_at', true );
+			$groups[ $key ][] = array(
+				'number'     => (string) $order->get_order_number(),
+				'zone'       => CVD_Delivery::destination_zone( $order ),
+				'items'      => CVD_Order_Lines::texts( $order ),
+				'messenger'  => $messenger ? (string) $messenger->display_name : '',
+				'phone'      => strlen( $phone ) >= 8 ? $phone : '',
+				'phoneLabel' => strlen( $phone ) >= 8 && class_exists( 'CVD_Sales' ) ? CVD_Sales::phone_label( $phone ) : '+' . $phone,
+				'eta'        => (string) $order->get_meta( '_cvd_bot_eta', true ),
+				'gestora'    => 'gestora' === sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) ? (string) $order->get_meta( '_cvd_owner_display_name', true ) : '',
+				'collect'    => $a['prepaid'] ? 'nada, ya pagó' : ( CVD_Tarjeta_Carrera::money_text( $products ) ?: 'según la tasa' ),
+				'change'     => CVD_Tarjeta_Carrera::money_text( CVD_Tarjeta_Carrera::store_change( $order ) ),
+				'fee'        => $fee > 0 ? CVD_Messenger_Delivered_Link::money( (float) $fee, 'CUP' ) : '',
+				'minutes'    => '' !== $offered ? max( 0, (int) floor( ( time() - (int) strtotime( $offered . ' UTC' ) ) / 60 ) ) : 0,
+			);
+		}
+		usort( $groups['free'], static fn( array $x, array $y ): int => $y['minutes'] <=> $x['minutes'] );
+		return $groups;
+	}
+
+	private static function store_shell( string $body ): void {
+		echo '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">'
+			. '<meta http-equiv="refresh" content="60"><meta name="theme-color" content="#121212"><title>Reparto en vivo · Casa Viva</title>'
+			. '<link rel="stylesheet" href="' . esc_url( self::asset( 'app.css' ) ) . '"></head><body><div class="pl-shell">' . $body . '</div></body></html>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- armado con esc_* arriba.
 		exit;
 	}
 

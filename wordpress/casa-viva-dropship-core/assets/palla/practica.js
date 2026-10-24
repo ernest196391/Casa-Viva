@@ -1,4 +1,4 @@
-/* Pa'llá 3.14.62 · MODO PRÁCTICA (/palla/?practica=1). Nada es real: ni pedidos, ni dinero, ni mensajes.
+/* Pa'llá 3.14.64.1 · MODO PRÁCTICA (/palla/?practica=1). Nada es real: ni pedidos, ni dinero, ni mensajes.
  * Un «servidor» de mentira con las MISMAS reglas que Core (CVD_Tarjeta_Carrera::stage/allowed/submit,
  * CVD_Bot_Bridge::claim_by_messenger, CVD_Palla_Api) para entrenar a mensajeros y probar la app sin tocar pedidos.
  * La barra de arriba simula lo que pasa fuera: perder la señal, otro mensajero que coge, la tienda que cancela o quita
@@ -87,7 +87,7 @@
 	function card(o) {
 		var st = stage(o);
 		return {
-			id: o.id, number: String(o.id), stage: st, test: false, when: o.when,
+			id: o.id, number: String(o.id), stage: st, test: false, when: o.when, eta: o.eta || '', pase: o.pase && o.pase.from === W.me ? { to: o.pase.to, toName: compaName(o.pase.to) } : null,
 			customer: { name: o.cust.name, first: o.cust.name.split(' ')[0], address: o.cust.address, zone: o.zone, reference: o.cust.ref, note: '', phone: o.cust.phone, phoneLabel: '+53 ' + o.cust.phone.slice(2, 6) + ' ' + o.cust.phone.slice(6), alt: '', altLabel: '' },
 			map: '', items: o.items, pickup: { place: STORE, zone: 'Nuevo Vedado', hours: 'de 10:00 a. m. a 4:00 p. m.', suppliers: [] }, assembly: '',
 			money: st === 'delivered' ? { after: true, prepaid: defaults(o).prepaid, bring: moneyText(bringAfter(o)) || 'Nada', sentence: sentence(o), deadline: deadline(o.atHour || hour()), fee: o.fee, feeText: money(o.fee, 'CUP') } : moneyBefore(o)
@@ -110,6 +110,7 @@
 			ok: true, now: d.toISOString(), practica: true,
 			yo: { id: W.me, name: 'Mensajero de práctica', first: (window.PALLA_PRACTICA_NOMBRE || 'tú'), vehicle: 'Moto', available: true },
 			ofertas: W.orders.filter(function (o) { return o.stage === 'offered' && !o.owner; }).map(offer),
+			pases: pasesParaMi(), companeros: COMPAS,
 			carreras: W.orders.filter(function (o) { return ['pickup', 'route', 'incident'].indexOf(stage(o)) !== -1; }).map(card),
 			dinero: { label: days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()] + ' · ' + rows.length + (rows.length === 1 ? ' carrera entregada' : ' carreras entregadas'), delivered: rows.length, earned: earned, earnedText: String(earned).replace(/\B(?=(\d{3})+(?!\d))/g, '.'), pending: pending, pendingText: moneyText(pending), deadline: deadline(hour()), rows: rows }
 		};
@@ -172,12 +173,49 @@
 		return out;
 	}
 
+	function hora(b) { // CVD_Palla_Api::eta
+		var o = find(b.order), n = String(b.order), t = String(b.texto || '').trim().slice(0, 80);
+		if (!o) { return { result: 'not_found', message: MSG.not_found() }; }
+		if (['pickup', 'route', 'incident'].indexOf(stage(o)) === -1) { return { result: 'not_now', number: n, message: MSG.not_now(n) }; }
+		if (t.length < 2) { return { result: 'eta_empty', number: n, message: 'Elige a qué hora lo entregas.' }; }
+		o.eta = t; note('#' + n + ': hora «' + t + '» (la gestora o el cliente la recibirían).');
+		return { result: 'eta', number: n, message: '🕒 #' + n + ': anotado, lo entregas ' + t + '. Se lo decimos a quien lo espera.', carrera: card(o) };
+	}
+
+	var COMPAS = [{ id: 2, name: 'Pedri (práctica)' }, { id: 3, name: 'Ana (práctica)' }];
+	function compaName(id) { var c = COMPAS.filter(function (x) { return x.id === id; })[0]; return c ? c.name : 'tu compañero'; }
+	function pasar(b) { // CVD_Palla_Api::pass_request
+		var o = find(b.order), n = String(b.order), to = parseInt(b.to, 10);
+		if (!o) { return { result: 'not_found', message: MSG.not_found() }; }
+		if (['pickup', 'route'].indexOf(stage(o)) === -1) { return { result: 'not_now', number: n, message: '#' + n + ': ahora no se puede pasar (si hay un problema avisado, la tienda decide).' }; }
+		if (!COMPAS.some(function (x) { return x.id === to; })) { return { result: 'bad_to', number: n, message: 'Elige a un compañero que use Pa\'llá.' }; }
+		o.pase = { from: W.me, to: to }; note('#' + n + ': le pides a ' + compaName(to) + ' que la acepte (el bot le escribiría con su enlace).');
+		return { result: 'pass_sent', number: n, message: '🔁 #' + n + ': le pedimos a ' + compaName(to).split(' ')[0] + ' que la acepte. Sigue siendo tuya hasta que diga que sí.', carrera: card(o) };
+	}
+	function pase(b) { // CVD_Palla_Api::pass_answer
+		var o = find(b.order), n = String(b.order), d = b.decision;
+		if (!o || !o.pase) { return { result: 'gone', number: n, message: '#' + n + ': ese pase ya no está (la soltó, la entregó o lo canceló).' }; }
+		if (d === 'cancelar' && o.pase.from === W.me) { o.pase = null; note('#' + n + ': cancelaste el pase.'); return { result: 'pass_cancelled', number: n, message: '#' + n + ': cancelaste el pase. Sigue siendo tuya.', carrera: card(o) }; }
+		if (o.pase.to !== W.me) { return { result: 'gone', number: n, message: '#' + n + ': ese pase ya no está.' }; }
+		if (d === 'no') { o.pase = null; note('#' + n + ': no aceptaste el pase.'); return { result: 'pass_declined', number: n, message: 'Listo, no aceptaste #' + n + '. Se lo decimos a tu compañero.' }; }
+		if (o.incident) { o.pase = null; return { result: 'not_now', number: n, message: '#' + n + ': ya no se puede pasar.' }; }
+		o.owner = W.me; o.eta = ''; o.pase = null; note('#' + n + ': aceptaste el pase (el bot te mandaría el vale y avisaría a la gestora).');
+		return { result: 'pass_accepted', number: n, message: '✅ #' + n + ' ahora es tuya. Pon a qué hora la entregas.', carrera: card(o) };
+	}
+	function pasesParaMi() {
+		return W.orders.filter(function (o) { return o.pase && o.pase.to === W.me && o.owner === o.pase.from; }).map(function (o) {
+			return { id: o.id, number: String(o.id), from: compaName(o.owner), zone: o.zone, picked: o.stage === 'picked', items: o.items, feeText: money(o.fee, 'CUP'), when: o.when };
+		});
+	}
+
 	// ----- Lo que pasa fuera de la app (la barra de práctica) -----
 	var EVENTS = {
 		otro: function (id) { var o = id ? find(id) : W.orders.filter(function (x) { return x.stage === 'offered' && !x.owner; })[0]; if (!o) { return 'No hay carreras libres para que las coja otro.'; } o.owner = 2; o.stage = 'assigned'; note('Otro mensajero cogió #' + o.id + '.'); return 'Otro mensajero cogió #' + o.id + ' (si la tenías en pantalla, verás «ya la cogió otro»).'; },
 		cancela: function (id) { var o = id ? find(id) : W.orders.filter(function (x) { return x.owner === W.me && ['assigned', 'picked'].indexOf(x.stage) !== -1; })[0]; if (!o) { return 'No tienes carreras en curso para cancelar.'; } o.stage = 'cancelled'; note('La tienda canceló #' + o.id + '.'); return 'La tienda canceló #' + o.id + '.'; },
 		quita: function () { var o = W.orders.filter(function (x) { return x.owner === W.me && x.stage === 'assigned'; })[0]; if (!o) { return 'No tienes carreras por recoger que la tienda te pueda quitar.'; } o.owner = 3; note('La tienda pasó #' + o.id + ' a otro mensajero.'); return 'La tienda pasó #' + o.id + ' a otro mensajero.'; },
 		recibido: function () { var c = 0; W.orders.forEach(function (o) { if (o.owner === W.me && o.stage === 'delivered' && !o.received) { o.received = true; c++; } }); note('La dependienta marcó «Dinero recibido» (' + c + ').'); return c ? 'La dependienta marcó «Dinero recibido» en ' + c + (c === 1 ? ' carrera.' : ' carreras.') : 'No había dinero por recibir.'; },
+		acepta: function () { var o = W.orders.filter(function (x) { return x.pase && x.pase.from === W.me; })[0]; if (!o) { return 'No tienes ningún pase esperando.'; } o.owner = o.pase.to; var who = compaName(o.pase.to); o.pase = null; o.eta = ''; note(who + ' aceptó #' + o.id + '.'); return who + ' aceptó #' + o.id + ': ya no es tuya.'; },
+		mepasan: function () { var id = 9000 + W.orders.length + 1; W.orders.push({ id: id, when: 'hoy · por la tarde', zone: 'Cerro', items: ['2× Toalla de baño — 9 USD c/u = 18 USD'], fee: 1800, kind: 'cash_usd', amount: 18, change: {}, cust: { name: 'Yanelis (práctica)', address: 'Calzada del Cerro #1820', ref: '', phone: '5350000010' }, owner: 2, stage: 'assigned', at: '', collected: null, transfer: false, received: false, incident: '', pase: { from: 2, to: W.me } }); note('Pedri te quiere pasar #' + id + '.'); return 'Pedri (práctica) te quiere pasar #' + id + '. Mira arriba en «Carreras».'; },
 		nueva: function () { var id = 9000 + W.orders.length + 1; W.orders.push({ id: id, when: 'hoy · lo antes posible', zone: 'Centro Habana', items: ['1× Lámpara de mesa — 15 USD'], fee: 1200, kind: 'cash_usd', amount: 15, change: {}, cust: { name: 'Lisandra (práctica)', address: 'San Lázaro #410', ref: '', phone: '5350000009' }, owner: 0, stage: 'offered', at: '', collected: null, transfer: false, received: false, incident: '' }); note('Salió una carrera nueva #' + id + '.'); return 'Salió una carrera nueva: #' + id + '.'; }
 	};
 
@@ -196,7 +234,7 @@
 					if (!W.online) { reject(new TypeError('Sin señal (práctica)')); return; }
 					var key = body && body.cid ? String(body.cid) : '';
 					if (key && W.cids[key]) { resolve({ status: 200, offline: false, data: Object.assign({ replay: true }, W.cids[key]) }); return; }
-					var data = path === 'hoy' ? hoy() : path === 'cojo' ? claim(body || {}) : path === 'carrera' ? action(body || {}) : { code: 'rest_no_route' };
+					var data = path === 'hoy' ? hoy() : path === 'cojo' ? claim(body || {}) : path === 'carrera' ? action(body || {}) : path === 'hora' ? hora(body || {}) : path === 'pasar' ? pasar(body || {}) : path === 'pase' ? pase(body || {}) : { code: 'rest_no_route' };
 					if (key) { W.cids[key] = data; }
 					save();
 					resolve({ status: data.code ? 404 : 200, offline: false, data: data });

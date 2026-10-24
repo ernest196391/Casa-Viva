@@ -121,6 +121,7 @@
 			if (q.action === 'recogi' && c.stage === 'pickup') { c.stage = 'route'; }
 			if (q.action === 'entregado') { c.stage = 'delivered'; c.money = { after: true, bring: '', sentence: 'Se manda solo cuando vuelva la señal. Luego te digo cuánto llevas a la tienda.', fee: c.money.fee, feeText: c.money.feeText }; }
 			if (q.action === 'problema') { c.stage = 'incident'; }
+			if (q.action === 'hora') { c.eta = q.payload.texto; }
 			if (q.action === 'suelto') { state.hoy.carreras = state.hoy.carreras.filter(function (x) { return x !== c; }); }
 		});
 	}
@@ -133,7 +134,11 @@
 			var before = (state.hoy && !state.offline ? state.hoy.carreras : []).filter(function (c) { return !c.queued && !state.done[c.id]; });
 			state.hoy = res.data;
 			var gone = before.filter(function (c) { return !findCarrera(c.id); });
-			if (gone.length) { showToast(gone.map(function (c) { return '#' + c.number; }).join(', ') + (gone.length === 1 ? ' ya no está' : ' ya no están') + ' a tu nombre: la tienda la canceló o se la pasó a otro mensajero. Si tenías el paquete, llama a la tienda.'); }
+			var passed = gone.filter(function (c) { return c.pase; });
+			var lost = gone.filter(function (c) { return !c.pase; });
+			var notes = passed.map(function (c) { return '✅ ' + c.pase.toName + ' aceptó #' + c.number + ': ya no es tuya.'; });
+			if (lost.length) { notes.push(lost.map(function (c) { return '#' + c.number; }).join(', ') + (lost.length === 1 ? ' ya no está' : ' ya no están') + ' a tu nombre: la tienda la canceló o se la pasó a otro mensajero. Si tenías el paquete, llama a la tienda.'); }
+			if (notes.length) { showToast(notes.join(' ')); }
 			state.offline = res.offline;
 			if (!res.offline) { store.set(PFX + 'hoy', JSON.stringify(res.data)); }
 			applyQueue();
@@ -155,13 +160,13 @@
 		var step = function (i) {
 			if (i >= list.length) { return Promise.resolve(); }
 			var q = list[i];
-			return api('carrera', Object.assign({ order: q.order, action: q.action, cid: q.cid }, q.payload)).then(function (res) {
+			return api(q.path || 'carrera', Object.assign({ order: q.order, action: q.action, cid: q.cid }, q.payload)).then(function (res) {
 				if (res.status >= 500) { throw new Error('servidor'); }
 				if (blockedFrom(res)) { throw new Error('bloqueado'); }
 				state.offline = false;
 				return Q.del(q.cid).then(function () {
 					state.queue = state.queue.filter(function (x) { return x.cid !== q.cid; });
-					state.done[q.order] = 1;
+					if (endsCarrera(q.action, res.data.result)) { state.done[q.order] = 1; }
 					showToast(res.data.message || ('#' + q.number + ': listo.'));
 					return step(i + 1);
 				});
@@ -187,7 +192,7 @@
 			if (blockedFrom(res)) { render(); return; }
 			state.offline = false;
 			var d = res.data;
-			if (d.carrera) { putCarrera(d.carrera); showToast(d.message); go('#carrera/' + d.carrera.id); return; }
+			if (d.carrera) { putCarrera(d.carrera); showToast(d.message); go(d.carrera.eta ? '#carrera/' + d.carrera.id : '#hora/' + d.carrera.id); return; }
 			state.hoy.ofertas = state.hoy.ofertas.filter(function (o) { return String(o.id) !== String(id); });
 			showToast(d.message || 'Ya la cogió otro.');
 		}).catch(function () {
@@ -197,11 +202,35 @@
 		});
 	}
 
-	function act(c, action, payload) {
+	/** Pasar / aceptar / no / cancelar un pase. Necesita señal: lo contesta otra persona, no se guarda en la cola. */
+	function passCall(pathName, body, busyKey, after) {
 		if (state.busy) { return; }
-		var item = { cid: newCid(), order: c.id, number: c.number, action: action, payload: payload || {}, at: Date.now() };
+		state.busy = busyKey; render();
+		api(pathName, Object.assign({ cid: newCid() }, body)).then(function (res) {
+			state.busy = '';
+			if (blockedFrom(res)) { render(); return; }
+			state.offline = false;
+			var d = res.data || {};
+			if (d.result === 'bad_to') { state.form.err = d.message; render(); return; }
+			if (d.carrera) { putCarrera(d.carrera); }
+			state.form = {};
+			showToast(d.message || 'Listo.');
+			after(d);
+			load();
+		}).catch(function () { state.busy = ''; state.offline = true; showToast('Para pasar o aceptar una carrera necesitas señal. Prueba otra vez en un momento.'); });
+	}
+
+	/** La carrera sale de «Mis carreras» por algo que hizo el mensajero (no avisar «ya no está a tu nombre»). */
+	function endsCarrera(action, result) {
+		return ['entregado', 'suelto'].indexOf(action) !== -1 || ['not_now', 'not_found', 'test'].indexOf(result) !== -1;
+	}
+
+	function act(c, action, payload, pathName) {
+		var where = pathName || 'carrera';
+		if (state.busy) { return; }
+		var item = { cid: newCid(), order: c.id, number: c.number, action: action, path: where, payload: payload || {}, at: Date.now() };
 		state.busy = action + '-' + c.id; render();
-		api('carrera', Object.assign({ order: c.id, action: action, cid: item.cid }, item.payload)).then(function (res) {
+		api(where, Object.assign({ order: c.id, action: action, cid: item.cid }, item.payload)).then(function (res) {
 			state.busy = '';
 			if (res.status >= 500) { throw new Error('servidor'); }
 			if (blockedFrom(res)) { render(); return; }
@@ -209,9 +238,9 @@
 			var d = res.data;
 			if (d.carrera) { putCarrera(d.carrera); } else if (d.stage) { state.hoy.carreras = state.hoy.carreras.filter(function (x) { return String(x.id) !== String(c.id); }); }
 			if (d.result === 'needs_amount') { state.form.err = d.message; render(); return; }
-			if (d.result === 'problem_empty') { state.form.err = d.message; render(); return; }
+			if (d.result === 'problem_empty' || d.result === 'eta_empty') { state.form.err = d.message; render(); return; }
 			state.form = {};
-			state.done[c.id] = 1;
+			if (endsCarrera(action, d.result)) { state.done[c.id] = 1; }
 			showToast(d.message);
 			go(d.result === 'released' ? '#carreras' : '#carrera/' + c.id, true);
 			load();
@@ -260,6 +289,12 @@
 		var h = state.hoy, yo = h.yo || {};
 		var html = '<header class="pl-top"><div><div class="pl-brand">Pa\'llá</div><div class="pl-sub">' + esc('Hola, ' + (yo.first || 'mensajero') + (yo.vehicle ? ' · ' + yo.vehicle : '')) + '</div></div>' + (yo.available ? badge('success', 'Disponible') : badge('muted', 'No disponible')) + '</header>' + offlineBar();
 		html += '<main class="pl-main">';
+		(h.pases || []).forEach(function (x) {
+			html += '<article class="pl-card pl-card--brand"><div class="pl-row" style="align-items:center"><span class="pl-strong">🔁 ' + esc(x.from) + ' te quiere pasar #' + esc(x.number) + '</span>' + (x.picked ? badge('info', 'Ya recogida') : '') + '</div>'
+				+ '<div class="pl-muted">' + esc(x.zone) + (x.when ? ' · ' + esc(x.when) : '') + (x.feeText ? ' · ' + esc(x.feeText) : '') + '</div>'
+				+ '<div class="pl-muted">' + esc((x.items || []).join(' · ')) + '</div>'
+				+ '<div class="pl-grid2"><button type="button" class="pl-btn pl-btn--primary" data-act="pase-si" data-id="' + x.id + '">' + icon('bien', 18) + 'La acepto</button><button type="button" class="pl-btn pl-btn--secondary" data-act="pase-no" data-id="' + x.id + '">No puedo</button></div></article>';
+		});
 		if (h.carreras.length) {
 			html += '<h2 class="pl-h2">Mis carreras</h2>';
 			h.carreras.forEach(function (c) {
@@ -298,6 +333,7 @@
 		var picked = c.stage !== 'pickup';
 		html += '<div class="pl-steps"><div class="pl-step ' + (picked ? 'pl-step--done' : 'pl-step--now') + '">' + (picked ? '✓' : '1 ·') + ' Recoger</div><div class="pl-step ' + (c.stage === 'delivered' ? 'pl-step--done' : (picked ? 'pl-step--now' : '')) + '">' + (c.stage === 'delivered' ? '✓' : '2 ·') + ' Entregar</div></div>';
 		if (c.queued) { html += '<div class="pl-alert pl-alert--info">' + icon('sincronizar', 20) + '<div><b>Guardado sin conexión</b>Se manda solo cuando vuelva la señal. No tienes que repetir nada.</div></div>'; }
+		if (c.pase) { html += '<div class="pl-alert pl-alert--info">' + icon('sincronizar', 20) + '<div><b>Esperando que ' + esc(c.pase.toName) + ' la acepte</b>Sigue siendo tuya hasta que diga que sí.<br><button type="button" class="pl-btn pl-btn--link" style="padding:0" data-act="pase-cancelar" data-id="' + c.id + '">Cancelar el pase</button></div></div>'; }
 		if (c.stage === 'incident' && !c.queued) { html += '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>Hay un problema avisado</b>La tienda te dice qué hacer. No lo marques entregado hasta entonces.</div></div>'; }
 		if (c.stage === 'delivered' && m.after) { html += '<div class="pl-alert pl-alert--success">' + icon('bien', 20) + '<div><b>Entregado</b>' + esc(m.sentence || '') + ' La mensajería es tuya.</div></div>'; }
 		html += '<section class="pl-card"><div class="pl-label">' + (c.stage === 'pickup' ? 'Recoges en' : 'Llevas') + '</div>';
@@ -307,7 +343,8 @@
 		if (c.assembly) { html += '<div class="pl-muted">🔧 Hay que armarlo: cobras <span class="pl-strong">' + esc(c.assembly) + '</span> de armado aparte (es tuyo).</div>'; }
 		html += '</section>';
 		html += '<section class="pl-card"><div class="pl-label">Entregas a</div><div class="pl-strong">' + esc(cu.name + (cu.address ? ' · ' + cu.address : '')) + '</div><div class="pl-muted">' + esc([cu.zone, cu.reference].filter(Boolean).join(' · ')) + '</div>';
-		if (c.when) { html += '<div class="pl-muted">Cuándo: <span class="pl-strong">' + esc(c.when) + '</span></div>'; }
+		if (c.when) { html += '<div class="pl-muted">Pidió: <span class="pl-strong">' + esc(c.when) + '</span></div>'; }
+		html += c.eta ? '<div class="pl-row" style="align-items:center"><span>🕒 Lo entregas: <span class="pl-strong">' + esc(c.eta) + '</span></span><a class="pl-btn pl-btn--link" href="#hora/' + c.id + '">Cambiar</a></div>' : '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>Di a qué hora lo entregas</b>Se lo decimos a quien lo espera. Sin la hora no puedes marcar «Recogí».</div></div>';
 		if (cu.note) { html += '<div class="pl-muted">Nota: ' + esc(cu.note) + '</div>'; }
 		html += '<div class="pl-grid2">' + (cu.phone ? '<a class="pl-btn pl-btn--secondary" href="tel:+' + esc(cu.phone) + '" aria-label="Llamar al cliente">' + icon('tel', 20) + 'Llamar</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin teléfono</span>')
 			+ (c.map ? '<a class="pl-btn pl-btn--secondary" href="' + esc(c.map) + '" target="_blank" rel="noopener noreferrer" aria-label="Abrir en el mapa">' + icon('mapa', 20) + 'Mapa</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin mapa</span>') + '</div>';
@@ -327,7 +364,10 @@
 		// Botones de abajo según el paso (los mismos que la tarjeta de carrera).
 		var w = wordFor(c), b = function (a) { return state.busy === a + '-' + c.id ? ' pl-btn--busy' : ''; };
 		var acts = '<div class="pl-actions">';
-		if (c.stage === 'pickup') {
+		if (c.stage === 'pickup' && !c.eta) {
+			acts += '<a class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block" href="#hora/' + c.id + '">🕒 Poner la hora</a>'
+				+ '<div class="pl-grid2"><a class="pl-btn pl-btn--secondary" href="#problema/' + c.id + '">' + icon('aviso', 18) + 'Problema</a><a class="pl-btn pl-btn--secondary" href="#suelto/' + c.id + '">No puedo</a></div>';
+		} else if (c.stage === 'pickup') {
 			acts += '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + b('recogi') + '" data-act="recogi" data-id="' + c.id + '">' + icon('bien') + 'Recogí</button>'
 				+ '<div class="pl-grid3"><button type="button" class="pl-btn pl-btn--secondary" disabled>Entregado</button><a class="pl-btn pl-btn--secondary" href="#problema/' + c.id + '">' + icon('aviso', 18) + 'Problema</a><a class="pl-btn pl-btn--secondary" href="#suelto/' + c.id + '">No puedo</a></div>'
 				+ '<div class="pl-hint">¿Sin conexión? Escribe <span class="pl-strong">' + esc(w.recogi) + '</span> por WhatsApp</div>';
@@ -340,6 +380,7 @@
 		} else {
 			acts += '<div class="pl-hint">La tienda te llama o te escribe. Si tienes dudas, llama a la tienda.</div>';
 		}
+		if (['pickup', 'route'].indexOf(c.stage) !== -1 && !c.pase && !c.queued) { acts += '<a class="pl-btn pl-btn--link" href="#pasar/' + c.id + '">🔁 Pasar a otro mensajero</a>'; }
 		return html + acts + '</div>';
 	}
 
@@ -415,6 +456,42 @@
 		if (f.err) { html += '<div class="pl-err" role="alert">' + esc(f.err) + '</div>'; }
 		return html + '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + (state.busy === 'problema-' + c.id ? ' pl-btn--busy' : '') + '" data-act="problema" data-id="' + c.id + '">Avisar a la tienda</button>';
 	}
+	var HORAS = ['en 30 min', 'en 1 hora', 'en 2 horas', 'hoy por la tarde', 'mañana por la mañana'];
+	/** «15:30» + hoy|mañana → «hoy a las 3:30 p. m.» */
+	function horaTexto(hhmm, dia) {
+		var p = String(hhmm || '').split(':'), h = parseInt(p[0], 10), m = p[1] || '00';
+		if (!(h >= 0 && h <= 23)) { return ''; }
+		return (dia === 'manana' ? 'mañana' : 'hoy') + ' a las ' + (h % 12 || 12) + ':' + m + (h < 12 ? ' a. m.' : ' p. m.');
+	}
+	function horaElegida() { var f = state.form; return f.hora === 'otra' ? horaTexto(f.hhmm, f.dia) : (f.hora || ''); }
+	function sheetHora(c) {
+		var f = state.form, sel = f.hora || '';
+		var html = '<div class="pl-sheet-head"><h1 class="pl-h1" id="pl-sheet-t">¿A qué hora lo entregas?</h1><a class="pl-x" href="#carrera/' + c.id + '" aria-label="Cerrar">' + icon('cerrar') + '</a></div>'
+			+ '<div class="pl-muted" style="font-size:16px;line-height:24px">#' + esc(c.number) + ' · ' + esc(c.customer.zone) + (c.when ? ' · pidió ' + esc(c.when) : '') + '</div><fieldset class="pl-fs"><legend>Elige una</legend>';
+		HORAS.concat(['otra']).forEach(function (h) {
+			html += '<label class="pl-opt' + (sel === h ? ' pl-opt--on' : '') + '"><span><input type="radio" name="hora" value="' + esc(h) + '" data-act="hora-op"' + (sel === h ? ' checked' : '') + '> ' + (h === 'otra' ? 'Otra hora' : esc(h.charAt(0).toUpperCase() + h.slice(1))) + '</span></label>';
+			if (h === 'otra' && sel === 'otra') {
+				html += '<div class="pl-fields"><label class="pl-field">Día<select data-f="dia" style="min-height:48px;font-size:18px;border:1px solid var(--line-strong);border-radius:8px;padding:0 8px"><option value="hoy"' + (f.dia !== 'manana' ? ' selected' : '') + '>Hoy</option><option value="manana"' + (f.dia === 'manana' ? ' selected' : '') + '>Mañana</option></select></label><label class="pl-field">Hora<input data-f="hhmm" type="time" value="' + esc(f.hhmm || '') + '"></label></div>';
+			}
+		});
+		html += '</fieldset>';
+		if (f.err) { html += '<div class="pl-err" role="alert">' + esc(f.err) + '</div>'; }
+		return html + '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + (state.busy === 'hora-' + c.id ? ' pl-btn--busy' : '') + '" data-act="hora" data-id="' + c.id + '">🕒 Guardar la hora</button>'
+			+ '<div class="pl-hint">La gestora o el cliente reciben la hora al momento.</div>';
+	}
+
+	function sheetPasar(c) {
+		var list = (state.hoy && state.hoy.companeros) || [], f = state.form;
+		var html = '<div class="pl-sheet-head"><h1 class="pl-h1" id="pl-sheet-t">¿A quién se la pasas?</h1><a class="pl-x" href="#carrera/' + c.id + '" aria-label="Cerrar">' + icon('cerrar') + '</a></div>'
+			+ '<p style="margin:0">#' + esc(c.number) + ' sigue siendo tuya hasta que tu compañero la acepte en su Pa\'llá.' + (c.stage === 'route' ? ' Ya tienes el paquete: dáselo en mano.' : '') + '</p>';
+		if (!list.length) { return html + '<div class="pl-alert pl-alert--info">' + icon('pregunta', 20) + '<div><b>Todavía no hay compañeros con Pa\'llá</b>Pásala como siempre o toca «No puedo».</div></div>'; }
+		html += '<fieldset class="pl-fs"><legend>Compañeros</legend>';
+		list.forEach(function (m) { html += '<label class="pl-opt' + (String(f.to) === String(m.id) ? ' pl-opt--on' : '') + '"><span><input type="radio" name="to" value="' + m.id + '" data-act="pasar-a"' + (String(f.to) === String(m.id) ? ' checked' : '') + '> ' + esc(m.name) + '</span></label>'; });
+		html += '</fieldset>';
+		if (f.err) { html += '<div class="pl-err" role="alert">' + esc(f.err) + '</div>'; }
+		return html + '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + (state.busy === 'pasar-' + c.id ? ' pl-btn--busy' : '') + '" data-act="pasar" data-id="' + c.id + '">🔁 Pedir que la acepte</button>';
+	}
+
 	function sheetSuelto(c) {
 		return '<div class="pl-sheet-head"><h1 class="pl-h1" id="pl-sheet-t">¿Sueltas la #' + esc(c.number) + '?</h1><a class="pl-x" href="#carrera/' + c.id + '" aria-label="Cerrar">' + icon('cerrar') + '</a></div>'
 			+ '<p style="margin:0">La carrera vuelve a estar libre para otro mensajero. Solo se puede antes de recoger el paquete.</p>'
@@ -469,7 +546,7 @@
 		var on = P.online;
 		return '<div class="pl-practica" role="region" aria-label="Modo práctica"><span><b>PRÁCTICA</b> · nada es real</span>'
 			+ '<button type="button" data-act="p-senal" aria-pressed="' + (on ? 'true' : 'false') + '">' + (on ? 'Con señal' : 'Sin señal') + '</button>'
-			+ '<label class="pl-sr" for="pl-evento">Simular algo de fuera</label><select id="pl-evento" data-act="p-evento"><option value="">Pasa algo…</option><option value="otro">Otro mensajero coge una</option><option value="nueva">Sale una carrera nueva</option><option value="quita">La tienda me quita una</option><option value="cancela">La tienda cancela una mía</option><option value="recibido">La tienda recibe mi dinero</option></select>'
+			+ '<label class="pl-sr" for="pl-evento">Simular algo de fuera</label><select id="pl-evento" data-act="p-evento"><option value="">Pasa algo…</option><option value="otro">Otro mensajero coge una</option><option value="nueva">Sale una carrera nueva</option><option value="quita">La tienda me quita una</option><option value="cancela">La tienda cancela una mía</option><option value="recibido">La tienda recibe mi dinero</option><option value="acepta">Mi compañero acepta mi pase</option><option value="mepasan">Un compañero me pasa una</option></select>'
 			+ '<button type="button" data-act="p-reset">Reiniciar</button></div>';
 	}
 
@@ -482,12 +559,14 @@
 				: '<main class="pl-closed"><div class="pl-logo" aria-hidden="true">P</div><h1>Sin conexión</h1><p>La primera vez hace falta señal para bajar tus carreras.</p><button type="button" class="pl-btn pl-btn--secondary" data-act="retry">Probar otra vez</button></main>';
 		} else {
 			var c = r.id ? findCarrera(r.id) : null;
-			if (['carrera', 'entregado', 'problema', 'suelto'].indexOf(r.view) !== -1 && !c) { r.view = 'carreras'; }
-			if (r.view === 'carrera' || r.view === 'entregado' || r.view === 'problema' || r.view === 'suelto') {
+			if (['carrera', 'entregado', 'problema', 'suelto', 'hora', 'pasar'].indexOf(r.view) !== -1 && !c) { r.view = 'carreras'; }
+			if (['carrera', 'entregado', 'problema', 'suelto', 'hora', 'pasar'].indexOf(r.view) !== -1) {
 				html = screenCarrera(c);
 				if (r.view === 'entregado' && c.stage !== 'delivered') { sheet = sheetEntregado(c); }
 				if (r.view === 'problema') { sheet = sheetProblema(c); }
 				if (r.view === 'suelto' && c.stage === 'pickup') { sheet = sheetSuelto(c); }
+				if (r.view === 'hora' && ['pickup', 'route', 'incident'].indexOf(c.stage) !== -1) { sheet = sheetHora(c); }
+				if (r.view === 'pasar' && ['pickup', 'route'].indexOf(c.stage) !== -1) { sheet = sheetPasar(c); }
 			} else if (r.view === 'dinero') { html = screenDinero(); }
 			else if (r.view === 'ayuda') { html = screenAyuda(r.id); }
 			else { html = screenCarreras(); }
@@ -511,6 +590,23 @@
 		if (a === 'cojo') { claim(el.getAttribute('data-id')); return; }
 		if (a === 'recogi' && c) { act(c, 'recogi'); return; }
 		if (a === 'suelto' && c) { act(c, 'suelto'); return; }
+		if (a === 'pasar' && c) {
+			if (!state.form.to) { state.form.err = 'Elige a quién se la pasas.'; render(); return; }
+			passCall('pasar', { order: c.id, to: state.form.to }, 'pasar-' + c.id, function () { go('#carrera/' + c.id, true); }); return;
+		}
+		if (a === 'pase-cancelar' && c) { passCall('pase', { order: c.id, decision: 'cancelar' }, 'pase-' + c.id, function () { render(); }); return; }
+		if (a === 'pase-si' || a === 'pase-no') {
+			var pid = el.getAttribute('data-id');
+			passCall('pase', { order: pid, decision: a === 'pase-si' ? 'acepto' : 'no' }, 'pase-' + pid, function (d) {
+				if (state.hoy) { state.hoy.pases = (state.hoy.pases || []).filter(function (x) { return String(x.id) !== String(pid); }); }
+				if (d.result === 'pass_accepted') { go('#hora/' + pid); }
+			}); return;
+		}
+		if (a === 'hora' && c) {
+			var t = horaElegida();
+			if (!t) { state.form.err = state.form.hora === 'otra' ? 'Pon la hora.' : 'Elige a qué hora lo entregas.'; render(); return; }
+			act(c, 'hora', { texto: t }, 'hora'); return;
+		}
 		if (a === 'entregado' && c) {
 			var plan = payPlan(c);
 			if (!plan.ok) { state.form.err = 'Escribe cuánto cobraste de los productos.'; render(); return; }
@@ -544,6 +640,9 @@
 		if (a === 'pay') { state.form = { pay: el.value }; render(); }
 		if (a === 'como') { state.form.como = el.value; updateBring(); }
 		if (a === 'p-evento' && P && el.value) { showToast(P.event(el.value)); el.value = ''; load(); return; }
+		if (a === 'pasar-a') { state.form = { to: el.value }; render(); return; }
+		if (a === 'hora-op') { state.form = { hora: el.value, dia: state.form.dia, hhmm: state.form.hhmm }; render(); return; }
+		if (el.getAttribute('data-f') === 'dia') { state.form.dia = el.value; return; }
 		if (a === 'motivo') { state.form.motivo = el.value; state.form.err = ''; render(); }
 	});
 	app.addEventListener('input', function (e) {
@@ -556,12 +655,12 @@
 		var r = route(), c = findCarrera(r.id), box = document.getElementById('pl-bring');
 		if (c && box && r.view === 'entregado') { box.innerHTML = bringNote(c); }
 	}
-	window.addEventListener('hashchange', function () { var v = route().view; if (['entregado', 'problema', 'suelto'].indexOf(v) === -1) { state.form = {}; } render(); });
+	window.addEventListener('hashchange', function () { var v = route().view; if (['entregado', 'problema', 'suelto', 'hora', 'pasar'].indexOf(v) === -1) { state.form = {}; } render(); });
 	window.addEventListener('online', function () { flush().then(load); });
 	document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && state.token) { flush().then(load); } });
 	setInterval(function () {
 		var v = route().view;
-		if (document.visibilityState === 'visible' && state.token && !state.blocked && ['entregado', 'problema', 'suelto'].indexOf(v) === -1) { flush().then(load); }
+		if (document.visibilityState === 'visible' && state.token && !state.blocked && ['entregado', 'problema', 'suelto', 'hora', 'pasar'].indexOf(v) === -1) { flush().then(load); }
 	}, 30000);
 
 	// ------------------------------------------------------------ Arranque

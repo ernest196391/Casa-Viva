@@ -13,6 +13,8 @@ defined( 'ABSPATH' ) || exit;
  * - POST carrera {order, action: recogi|entregado|problema|suelto, otra, usd, cup, eur, como, motivo, texto, cid}
  *                → CVD_Tarjeta_Carrera::submit() (los 4 botones de la tarjeta, mismos códigos). El cid va como cvd_n
  *                del «Problema».
+ * - POST hora    {order, texto, cid} (3.14.67.1) — a qué hora lo entrega: lo mismo que la hora por WhatsApp (_cvd_bot_eta y, si estaba
+ *                «asignada», aceptarla). Marca _cvd_palla_eta_at: el bot la avisa a la gestora o al cliente (GET /bot/dispatch/palla).
  * - Idempotencia de la cola sin conexión: cada acción lleva cid; se guardan los últimos 50 cid del mensajero con su
  *   respuesta y un reenvío devuelve lo mismo sin repetir nada.
  *
@@ -35,6 +37,10 @@ final class CVD_Palla_Api {
 		register_rest_route( self::NS, '/palla/hoy', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'today' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/palla/cojo', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'claim' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/palla/carrera', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'action' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/palla/hora', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'eta' ), 'permission_callback' => $auth ) );
+		// 3.14.67.1: pasar la carrera a un compañero (él la acepta en su app; hasta entonces sigue siendo de quien la pasa).
+		register_rest_route( self::NS, '/palla/pasar', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'pass_request' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/palla/pase', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'pass_answer' ), 'permission_callback' => $auth ) );
 	}
 
 	/** @return true|WP_Error */
@@ -67,7 +73,152 @@ final class CVD_Palla_Api {
 			'ofertas'  => self::offers(),
 			'carreras' => $mine,
 			'dinero'   => self::money_today( $me ),
+			'pases'    => self::passes_for( $me ),     // 3.14.67.1: carreras que un compañero me quiere pasar
+			'companeros' => self::companions( $me ), // a quién puedo pasar una carrera (solo nombre)
 		) );
+	}
+
+	// ------------------------------------------------------------------ Pasar la carrera (3.14.67.1)
+
+	/** El pase pendiente del pedido: {from, to, at} o null. */
+	public static function pass_of( WC_Order $order ): ?array {
+		$raw = json_decode( (string) $order->get_meta( '_cvd_palla_pase', true ), true );
+		return is_array( $raw ) && ! empty( $raw['from'] ) && ! empty( $raw['to'] ) ? array( 'from' => absint( $raw['from'] ), 'to' => absint( $raw['to'] ), 'at' => (string) ( $raw['at'] ?? '' ) ) : null;
+	}
+
+	private static function clear_pass( WC_Order $order ): void {
+		$order->delete_meta_data( '_cvd_palla_pase' );
+		$order->delete_meta_data( '_cvd_palla_pase_to' );
+	}
+
+	/** El pase que yo pedí y todavía no contestaron: {to, toName} o null. */
+	private static function outgoing_pass( WC_Order $order, WP_User $me ): ?array {
+		$pass = self::pass_of( $order );
+		if ( ! $pass || $pass['from'] !== $me->ID ) { return null; }
+		$to = get_userdata( $pass['to'] );
+		return array( 'to' => $pass['to'], 'toName' => $to ? (string) $to->display_name : 'tu compañero' );
+	}
+
+	/** Mensajeros a los que se les puede pasar una carrera: los que pueden entrar en Pa'llá (para poder aceptarla), sin mí. */
+	public static function companions( WP_User $me ): array {
+		$list = array();
+		foreach ( get_users( array( 'role' => 'cvd_messenger', 'number' => 200 ) ) as $user ) {
+			if ( $user->ID === $me->ID || '' !== CVD_Palla::blocked_reason( $user ) ) { continue; }
+			$list[] = array( 'id' => $user->ID, 'name' => (string) $user->display_name );
+		}
+		usort( $list, static fn( array $a, array $b ): int => strcasecmp( $a['name'], $b['name'] ) );
+		return array_slice( $list, 0, 60 );
+	}
+
+	/** Las carreras que me quieren pasar (quien la pasa sigue teniéndola y antes de que haya un problema abierto). */
+	public static function passes_for( WP_User $me ): array {
+		$orders = wc_get_orders( array( 'limit' => 10, 'type' => 'shop_order', 'status' => self::OPEN_STATUSES, 'meta_key' => '_cvd_palla_pase_to', 'meta_value' => $me->ID ) );
+		$out = array();
+		foreach ( $orders as $order ) {
+			if ( ! $order instanceof WC_Order ) { continue; }
+			$pass = self::pass_of( $order );
+			if ( ! $pass || $pass['to'] !== $me->ID || $pass['from'] !== absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { continue; }
+			$from = get_userdata( $pass['from'] );
+			$out[] = array(
+				'id'       => $order->get_id(),
+				'number'   => (string) $order->get_order_number(),
+				'from'     => $from ? (string) $from->display_name : 'Un compañero',
+				'zone'     => CVD_Delivery::destination_zone( $order ),
+				'picked'   => in_array( CVD_Delivery::status( $order ), array( 'picked_up', 'handed_over' ), true ),
+				'items'    => CVD_Order_Lines::texts( $order ),
+				'feeText'  => self::fee( $order ) > 0 ? self::money( (float) self::fee( $order ), 'CUP' ) : '',
+				'when'     => self::when( $order ),
+			);
+		}
+		return $out;
+	}
+
+	/** POST pasar {order, to, cid}: le pido a un compañero que acepte mi carrera. Sigue siendo mía hasta que diga que sí. */
+	public static function pass_request( WP_REST_Request $request ): WP_REST_Response {
+		$me = self::user( $request );
+		$cid = self::cid( $request );
+		$replay = self::replay( $me->ID, $cid );
+		if ( $replay ) { return self::out( $replay ); }
+		$order = self::order_param( $request );
+		if ( ! $order ) { return self::out( array( 'result' => 'not_found', 'message' => self::message( 'not_found', '' ) ) ); }
+		$number = (string) $order->get_order_number();
+		$to = get_userdata( absint( $request->get_param( 'to' ) ) );
+		$stage = CVD_Tarjeta_Carrera::stage( $order, $me->ID );
+		if ( CVD_Tarjeta_Carrera::is_test( $order ) ) { $out = array( 'result' => 'test', 'message' => self::message( 'test', $number ) ); }
+		elseif ( ! in_array( $stage, array( 'pickup', 'route' ), true ) ) { $out = array( 'result' => 'not_now', 'message' => '#' . $number . ': ahora no se puede pasar (si hay un problema avisado, la tienda decide).' ); }
+		elseif ( ! $to instanceof WP_User || $to->ID === $me->ID || '' !== CVD_Palla::blocked_reason( $to ) ) { $out = array( 'result' => 'bad_to', 'message' => 'Elige a un compañero que use Pa\'llá.' ); }
+		else {
+			$order->update_meta_data( '_cvd_palla_pase', wp_json_encode( array( 'from' => $me->ID, 'to' => $to->ID, 'at' => current_time( 'mysql', true ) ) ) );
+			$order->update_meta_data( '_cvd_palla_pase_to', $to->ID );
+			$order->add_order_note( 'Pa\'llá: ' . $me->display_name . ' le pide a ' . $to->display_name . ' que coja esta carrera (sigue a nombre de ' . $me->display_name . ' hasta que acepte).' );
+			$order->save();
+			$out = array( 'result' => 'pass_sent', 'message' => '🔁 #' . $number . ': le pedimos a ' . self::first( (string) $to->display_name ) . ' que la acepte. Sigue siendo tuya hasta que diga que sí.' );
+		}
+		$out['number'] = $number;
+		$fresh = wc_get_order( $order->get_id() );
+		if ( $fresh instanceof WC_Order && in_array( CVD_Tarjeta_Carrera::stage( $fresh, $me->ID ), array( 'pickup', 'route', 'incident' ), true ) ) { $out['carrera'] = self::card( $fresh, $me ); }
+		self::remember( $me->ID, $cid, $out );
+		return self::out( $out );
+	}
+
+	/**
+	 * POST pase {order, decision: acepto | no | cancelar, cid}. «acepto»/«no» los dice quien la recibe; «cancelar», quien la pasa.
+	 * Al aceptar, el pedido pasa a su nombre sin cambiar el paso (como CVD_Bot_Bridge::handover): antes o después de recoger.
+	 * La hora se borra (la pone el nuevo) y queda _cvd_palla_paso_at para que el bot le mande el vale y avise a la gestora.
+	 */
+	public static function pass_answer( WP_REST_Request $request ): WP_REST_Response {
+		$me = self::user( $request );
+		$cid = self::cid( $request );
+		$replay = self::replay( $me->ID, $cid );
+		if ( $replay ) { return self::out( $replay ); }
+		$order = self::order_param( $request );
+		if ( ! $order ) { return self::out( array( 'result' => 'not_found', 'message' => self::message( 'not_found', '' ) ) ); }
+		$number = (string) $order->get_order_number();
+		$decision = sanitize_key( (string) $request->get_param( 'decision' ) );
+		$pass = self::pass_of( $order );
+		$owner = absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
+		$status = CVD_Delivery::status( $order );
+		$out = array( 'result' => 'gone', 'message' => '#' . $number . ': ese pase ya no está (la soltó, la entregó o lo canceló).' );
+		if ( $pass && 'cancelar' === $decision && $pass['from'] === $me->ID ) {
+			self::clear_pass( $order );
+			$order->add_order_note( 'Pa\'llá: ' . $me->display_name . ' canceló el pase de la carrera.' );
+			$order->save();
+			$out = array( 'result' => 'pass_cancelled', 'message' => '#' . $number . ': cancelaste el pase. Sigue siendo tuya.' );
+		} elseif ( $pass && $pass['to'] === $me->ID && $pass['from'] !== $owner ) {
+			self::clear_pass( $order ); // quien la pasaba ya no la tiene
+			$order->save();
+		} elseif ( $pass && $pass['to'] === $me->ID && 'no' === $decision ) {
+			$from = get_userdata( $pass['from'] );
+			self::clear_pass( $order );
+			$order->add_order_note( 'Pa\'llá: ' . $me->display_name . ' no aceptó el pase' . ( $from ? ' de ' . $from->display_name : '' ) . '.' );
+			$order->save();
+			$out = array( 'result' => 'pass_declined', 'message' => 'Listo, no aceptaste #' . $number . '. Se lo decimos a tu compañero.' );
+		} elseif ( $pass && $pass['to'] === $me->ID && 'acepto' === $decision ) {
+			if ( 'yes' === $order->get_meta( '_cvd_delivery_incident_active', true ) || ! in_array( $status, array( 'assigned', 'accepted', 'to_store', 'picked_up', 'handed_over' ), true ) ) {
+				self::clear_pass( $order );
+				$order->save();
+				$out = array( 'result' => 'not_now', 'message' => '#' . $number . ': ya no se puede pasar (la tienda tiene un problema abierto o cambió el pedido).' );
+			} else {
+				$from = get_userdata( $pass['from'] );
+				$now = current_time( 'mysql', true );
+				$order->update_meta_data( '_cvd_messenger_user_id', $me->ID );
+				$order->delete_meta_data( '_cvd_bot_eta' );
+				$order->delete_meta_data( '_cvd_bot_eta_at' );
+				$order->delete_meta_data( '_cvd_palla_eta_at' );
+				$order->update_meta_data( '_cvd_palla_paso', wp_json_encode( array( 'from' => $pass['from'], 'to' => $me->ID, 'at' => $now ) ) );
+				$order->update_meta_data( '_cvd_palla_paso_at', $now );
+				self::clear_pass( $order );
+				$order->add_order_note( 'Pa\'llá: carrera pasada de ' . ( $from ? $from->display_name : 'otro mensajero' ) . ' a ' . $me->display_name . ( in_array( $status, array( 'picked_up', 'handed_over' ), true ) ? ' con el paquete ya recogido. Lo entrega y devuelve el dinero ' . $me->display_name . '.' : ' antes de recogerla.' ) );
+				$order->save();
+				if ( class_exists( 'CVD_Messenger_Reputation' ) ) { CVD_Messenger_Reputation::invalidate( $pass['from'] ); CVD_Messenger_Reputation::invalidate( $me->ID ); }
+				$out = array( 'result' => 'pass_accepted', 'message' => '✅ #' . $number . ' ahora es tuya. Pon a qué hora la entregas.' );
+			}
+		}
+		$out['number'] = $number;
+		$fresh = wc_get_order( $order->get_id() );
+		if ( $fresh instanceof WC_Order && in_array( CVD_Tarjeta_Carrera::stage( $fresh, $me->ID ), array( 'pickup', 'route', 'incident' ), true ) ) { $out['carrera'] = self::card( $fresh, $me ); }
+		self::remember( $me->ID, $cid, $out );
+		return self::out( $out );
 	}
 
 	private static function first( string $name ): string { $name = trim( $name ); return '' !== $name ? (string) strtok( $name, ' ' ) : ''; }
@@ -175,6 +326,8 @@ final class CVD_Palla_Api {
 			'stage'    => $stage,
 			'test'     => CVD_Tarjeta_Carrera::is_test( $order ),
 			'when'     => self::when( $order ),
+			'eta'      => (string) $order->get_meta( '_cvd_bot_eta', true ), // hora que dio el mensajero (app o WhatsApp)
+			'pase'     => self::outgoing_pass( $order, $me ),                // 3.14.67.1: «Esperando que X acepte»
 			'customer' => array(
 				'name'       => '' !== $name ? $name : 'Cliente',
 				'first'      => self::first( $name ),
@@ -361,6 +514,42 @@ final class CVD_Palla_Api {
 		);
 		$out = array( 'result' => $code, 'number' => $number, 'message' => $messages[ $code ] ?? $messages['taken'] );
 		if ( in_array( $code, array( 'won', 'yours' ), true ) ) { $out['carrera'] = self::card( wc_get_order( $order->get_id() ), $me ); }
+		self::remember( $me->ID, $cid, $out );
+		return self::out( $out );
+	}
+
+	// ------------------------------------------------------------------ POST hora
+
+	/**
+	 * A qué hora lo entrega (obligatorio en la app antes de «Recogí»). Igual que CVD_Bot_Bridge::eta (la hora por WhatsApp):
+	 * queda en el pedido y en el seguimiento, y si la entrega estaba «asignada» (directa), darla es aceptarla.
+	 */
+	public static function eta( WP_REST_Request $request ): WP_REST_Response {
+		$me = self::user( $request );
+		$cid = self::cid( $request );
+		$replay = self::replay( $me->ID, $cid );
+		if ( $replay ) { return self::out( $replay ); }
+		$order = self::order_param( $request );
+		if ( ! $order ) { return self::out( array( 'result' => 'not_found', 'message' => self::message( 'not_found', '' ) ) ); }
+		$number = (string) $order->get_order_number();
+		$text = trim( sanitize_text_field( (string) $request->get_param( 'texto' ) ) );
+		$text = function_exists( 'mb_substr' ) ? mb_substr( $text, 0, 80 ) : substr( $text, 0, 80 );
+		$stage = CVD_Tarjeta_Carrera::stage( $order, $me->ID );
+		if ( CVD_Tarjeta_Carrera::is_test( $order ) ) { $out = array( 'result' => 'test', 'number' => $number, 'message' => self::message( 'test', $number ) ); }
+		elseif ( ! in_array( $stage, array( 'pickup', 'route', 'incident' ), true ) ) { $out = array( 'result' => 'not_now', 'number' => $number, 'message' => self::message( 'not_now', $number ) ); }
+		elseif ( strlen( $text ) < 2 ) { $out = array( 'result' => 'eta_empty', 'number' => $number, 'message' => 'Elige a qué hora lo entregas.' ); }
+		else {
+			$now = current_time( 'mysql', true );
+			$order->update_meta_data( '_cvd_bot_eta', $text );
+			$order->update_meta_data( '_cvd_bot_eta_at', $now );
+			$order->update_meta_data( '_cvd_palla_eta_at', $now );
+			$order->add_order_note( 'Pa\'llá: ' . $me->display_name . ' lo entrega ' . $text . '.' );
+			$order->save();
+			if ( 'assigned' === CVD_Delivery::status( $order ) ) { CVD_Delivery::accept_assigned( $order, $me->ID, 'cvd_palla_eta', 'en Pa\'llá al dar la hora' ); }
+			$out = array( 'result' => 'eta', 'number' => $number, 'message' => '🕒 #' . $number . ': anotado, lo entregas ' . $text . '. Se lo decimos a quien lo espera.' );
+		}
+		$fresh = wc_get_order( $order->get_id() );
+		if ( $fresh instanceof WC_Order && in_array( CVD_Tarjeta_Carrera::stage( $fresh, $me->ID ), array( 'pickup', 'route', 'incident' ), true ) ) { $out['carrera'] = self::card( $fresh, $me ); }
 		self::remember( $me->ID, $cid, $out );
 		return self::out( $out );
 	}

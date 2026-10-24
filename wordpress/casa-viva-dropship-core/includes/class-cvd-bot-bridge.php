@@ -30,6 +30,7 @@ final class CVD_Bot_Bridge {
 		// 3.14.61: carreras cogidas en Pa'llá («La cojo») que el bot todavía no avisó.
 		register_rest_route( self::NS, '/bot/dispatch/palla', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'palla_claims' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/palla-announced', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'palla_announced' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/palla-eta-told', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'palla_eta_told' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/claim', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'claim' ), 'permission_callback' => $auth ) );
 		// Relevo (3.13.49): el mensajero asignado suelta la carrera antes de recogerla.
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/release', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'release' ), 'permission_callback' => $auth ) );
@@ -486,23 +487,56 @@ final class CVD_Bot_Bridge {
 	 * oferta nueva es más reciente que la marca de Pa'llá y ya no sale aquí.
 	 */
 	public static function palla_claims(): WP_REST_Response {
-		$orders = wc_get_orders( array( 'limit' => 30, 'type' => 'shop_order', 'orderby' => 'date', 'order' => 'DESC', 'status' => array( 'pending', 'processing', 'on-hold' ),
-			'meta_query' => array( array( 'key' => '_cvd_palla_claimed_at', 'compare' => 'EXISTS' ) ) ) );
+		// 3.14.67.1: también las horas puestas en la app que el bot aún no avisó (etaPending), aunque la cogiera con «Yo».
+		$orders = wc_get_orders( array( 'limit' => 40, 'type' => 'shop_order', 'orderby' => 'date', 'order' => 'DESC', 'status' => array( 'pending', 'processing', 'on-hold' ),
+			'meta_query' => array( 'relation' => 'OR', array( 'key' => '_cvd_palla_claimed_at', 'compare' => 'EXISTS' ), array( 'key' => '_cvd_palla_eta_at', 'compare' => 'EXISTS' ),
+				array( 'key' => '_cvd_palla_pase_to', 'compare' => 'EXISTS' ), array( 'key' => '_cvd_palla_paso_at', 'compare' => 'EXISTS' ) ) ) );
 		$list = array();
 		foreach ( $orders as $order ) {
 			if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund ) { continue; }
 			$status = CVD_Delivery::status( $order );
-			if ( ! in_array( $status, array( 'assigned', 'accepted', 'to_store' ), true ) ) { continue; }
 			if ( '' !== CVD_Delivery::blocks_dispatch( $order ) ) { continue; }
-			$claimed_at = (string) $order->get_meta( '_cvd_palla_claimed_at', true ); // 'Y-m-d H:i:s' UTC, como las demás
-			if ( $claimed_at < (string) $order->get_meta( '_cvd_delivery_offered_at', true ) ) { continue; } // la volvieron a ofertar después
-			$announced_at = (string) $order->get_meta( '_cvd_bot_palla_announced_at', true );
-			if ( '' !== $announced_at && $announced_at >= $claimed_at ) { continue; }
 			$messenger = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
 			if ( ! $messenger ) { continue; }
+			// La cogida de Pa'llá: antes de recoger, sin avisar todavía y sin que la volvieran a ofertar después.
+			$claimed_at = (string) $order->get_meta( '_cvd_palla_claimed_at', true ); // 'Y-m-d H:i:s' UTC, como las demás
+			$announced_at = (string) $order->get_meta( '_cvd_bot_palla_announced_at', true );
+			$claim = '' !== $claimed_at && $claimed_at >= (string) $order->get_meta( '_cvd_delivery_offered_at', true )
+				&& ( '' === $announced_at || $announced_at < $claimed_at ) && in_array( $status, array( 'assigned', 'accepted', 'to_store' ), true );
+			// La hora puesta en la app que la gestora o el cliente todavía no saben.
+			$eta = (string) $order->get_meta( '_cvd_bot_eta', true );
+			$eta_at = (string) $order->get_meta( '_cvd_palla_eta_at', true );
+			$told_at = (string) $order->get_meta( '_cvd_bot_palla_eta_told_at', true );
+			$eta_pending = '' !== $eta && '' !== $eta_at && ( '' === $told_at || $told_at < $eta_at )
+				&& in_array( $status, array( 'assigned', 'accepted', 'to_store', 'picked_up', 'handed_over', 'incident' ), true );
+			// Pase pedido en la app que el compañero todavía no sabe (el bot le escribe con su enlace de Pa'llá).
+			$pass = class_exists( 'CVD_Palla_Api' ) ? CVD_Palla_Api::pass_of( $order ) : null;
+			$pass_ask = null;
+			if ( $pass && $pass['from'] === $messenger->ID && (string) $order->get_meta( '_cvd_bot_palla_pase_told_at', true ) < $pass['at'] ) {
+				$to = get_userdata( $pass['to'] );
+				if ( $to ) {
+					$pass_ask = array( 'toName' => $to->display_name, 'toPhone' => preg_replace( '/\D+/', '', (string) ( get_user_meta( $to->ID, '_cvd_whatsapp', true ) ?: get_user_meta( $to->ID, 'billing_phone', true ) ) ),
+						'link' => CVD_Palla::link_for( $to->ID ), 'zone' => CVD_Delivery::destination_zone( $order ) );
+				}
+			}
+			// Pase aceptado que el bot todavía no apuntó (vale al nuevo, hilo de crm_dispatch y aviso a la gestora).
+			$paso_at = (string) $order->get_meta( '_cvd_palla_paso_at', true );
+			$paso = json_decode( (string) $order->get_meta( '_cvd_palla_paso', true ), true );
+			$pass_done = null;
+			if ( '' !== $paso_at && (string) $order->get_meta( '_cvd_bot_palla_paso_told_at', true ) < $paso_at && is_array( $paso ) && absint( $paso['to'] ?? 0 ) === $messenger->ID ) {
+				$from = get_userdata( absint( $paso['from'] ?? 0 ) );
+				$pass_done = array( 'fromName' => $from ? $from->display_name : '', 'fromPhone' => $from ? preg_replace( '/\D+/', '', (string) ( get_user_meta( $from->ID, '_cvd_whatsapp', true ) ?: get_user_meta( $from->ID, 'billing_phone', true ) ) ) : '' );
+			}
+			if ( ! $claim && ! $eta_pending && ! $pass_ask && ! $pass_done ) { continue; }
 			$list[] = array(
 				'id'             => $order->get_id(),
 				'status'         => $status,
+				'passAsk'        => $pass_ask,
+				'passDone'       => $pass_done,
+				'claimPending'   => $claim,
+				'eta'            => $eta,
+				'etaAt'          => $eta_at,
+				'etaPending'     => $eta_pending,
 				'claimedAt'      => $claimed_at,
 				'messengerId'    => $messenger->ID,
 				'messengerName'  => $messenger->display_name,
@@ -511,6 +545,20 @@ final class CVD_Bot_Bridge {
 			);
 		}
 		return self::no_cache( array( 'palla' => $list ) );
+	}
+
+	/**
+	 * 3.14.67.1: el bot ya avisó algo de Pa'llá. what: eta (la hora a la gestora o al cliente) | pase (al compañero que se la
+	 * quieren pasar) | paso (el vale al nuevo y el aviso a la gestora tras aceptar el pase).
+	 */
+	public static function palla_eta_told( WP_REST_Request $request ) {
+		$order = self::order( $request );
+		if ( is_wp_error( $order ) ) { return $order; }
+		$what = sanitize_key( (string) $request->get_param( 'what' ) );
+		$key = array( 'pase' => '_cvd_bot_palla_pase_told_at', 'paso' => '_cvd_bot_palla_paso_told_at' )[ $what ] ?? '_cvd_bot_palla_eta_told_at';
+		$order->update_meta_data( $key, current_time( 'mysql', true ) );
+		$order->save();
+		return self::no_cache( array( 'ok' => true ) );
 	}
 
 	public static function palla_announced( WP_REST_Request $request ) {

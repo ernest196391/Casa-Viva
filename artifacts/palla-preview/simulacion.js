@@ -13,7 +13,17 @@
 	var world = function () { return JSON.parse(localStorage.getItem('palla.p.mundo')); };
 	var order = function (id) { return world().orders.filter(function (o) { return o.id === id; })[0]; };
 	var go = async function (h) { location.hash = h; await wait(150); };
-	var click = async function (sel, ms) { var el = typeof sel === 'string' ? $(sel) : sel; if (!el) { throw new Error('no encuentro ' + sel); } el.click(); await wait(ms || 600); };
+	var autoHora = true; // tras «La cojo» sale la hoja de la hora: el simulador elige «en 1 hora» (salvo donde se prueba eso)
+	var ponerHora = async function (valor) {
+		var r = $('input[name=hora][value="' + (valor || 'en 1 hora') + '"]'); if (!r) { return false; }
+		r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); await wait(150);
+		$('[data-act=hora]').click(); await wait(700); return true;
+	};
+	var click = async function (sel, ms) {
+		var el = typeof sel === 'string' ? $(sel) : sel; if (!el) { throw new Error('no encuentro ' + sel); }
+		el.click(); await wait(ms || 600);
+		if (autoHora && el.getAttribute('data-act') === 'cojo' && /^#hora\//.test(location.hash)) { await ponerHora(); }
+	};
 	var refresh = async function () { var b = $('[data-act=refresh]'); window.dispatchEvent(new Event('online')); await wait(900); };
 	var check = function (caso, cond, detalle) { out.push({ caso: caso, ok: !!cond, detalle: cond ? '' : detalle || '' }); };
 	var setPay = async function (v) { var r = $('input[name=pago][value=' + v + ']'); r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); await wait(150); };
@@ -24,9 +34,21 @@
 		P.reset(); P.setOnline(true);
 		await go('#carreras'); await refresh();
 
-		// 1. Coger con señal
+		// 1. Coger con señal → primero la hora (obligatoria)
+		autoHora = false;
 		await click('[data-act=cojo][data-id="9001"]', 900);
-		check('1. «La cojo» con señal: es mía y voy a «Mi carrera»', location.hash === '#carrera/9001' && order(9001).owner === 1, location.hash + ' owner=' + order(9001).owner);
+		var hashHora = location.hash;
+		await go('#carrera/9001');
+		var sinHora = $$('.pl-actions a, .pl-actions button').map(function (x) { return x.innerText; }).join('|');
+		check('1. «La cojo» con señal: es mía y se abre «¿A qué hora lo entregas?»', hashHora === '#hora/9001' && order(9001).owner === 1, hashHora + ' owner=' + order(9001).owner);
+		check('1b. Sin hora no sale «Recogí»: sale «Poner la hora»', /Poner la hora/.test(sinHora) && !/Recogí/.test(sinHora), sinHora);
+		await go('#hora/9001'); await click('[data-act=hora]', 400);
+		var pideHora = /Elige a qué hora/.test(text());
+		await ponerHora('otra'); // «Otra hora» sin escribir la hora → la pide
+		var pideHH = /Pon la hora/.test(text());
+		await type('[data-f=hhmm]', '15:30'); await click('[data-act=hora]', 700);
+		check('1c. La hora: pide elegir, «Otra hora» pide la hora, y guarda «hoy a las 3:30 p. m.»', pideHora && pideHH && order(9001).eta === 'hoy a las 3:30 p. m.' && /Lo entregas/.test(text()), [pideHora, pideHH, order(9001).eta].join(' / '));
+		autoHora = true;
 		// 2. Doble toque en «La cojo»
 		await go('#carreras');
 		var b = $('[data-act=cojo][data-id="9002"]'); b.click(); b.click(); await wait(900);
@@ -41,7 +63,7 @@
 		// 4. «La cojo» sin señal
 		P.setOnline(false);
 		await click('[data-act=cojo][data-id="9003"]', 900);
-		check('4. «La cojo» sin señal: NO se guarda; pantalla de ayuda con «Yo»', /#ayuda\/oferta-9003/.test(location.hash) && order(9003).owner === 0 && /\bYo\b/.test(text()), location.hash);
+		check('4. «La cojo» sin señal: NO se guarda; pantalla de ayuda con «Yo»', /#ayuda\/oferta-9003/.test(location.hash) && order(9003).owner === 0 && /\bYo\b/.test(text()), location.hash + ' dueño=' + order(9003).owner + ' yo=' + /\bYo\b/.test(text()) + ' ' + text().slice(0, 160));
 		P.setOnline(true); await refresh();
 		// 5. «No puedo» antes de recoger (#54)
 		await go('#suelto/9002'); await click('[data-act=suelto]', 900);
@@ -96,17 +118,20 @@
 		check('13b. Transferencia: entregado sin dinero para la tienda', order(9004).stage === 'delivered' && order(9004).transfer === true, JSON.stringify(order(9004)));
 		// 14. Sin señal: Recogí + Entregado en cola, en orden, sin repetir
 		P.event('nueva'); await refresh(); var n3 = world().orders[world().orders.length - 1].id;
+		autoHora = false;
 		await go('#carreras'); await click('[data-act=cojo][data-id="' + n3 + '"]', 900);
+		autoHora = true;
 		P.setOnline(false);
+		await ponerHora('en 2 horas'); // la hora también se guarda sin señal
+		var conHora = /Lo entregas/.test(text()) || /en 2 horas/.test(text());
 		await go('#carrera/' + n3); await click('[data-act=recogi]', 900);
 		var trasRecogi = text();
 		await go('#entregado/' + n3); await click('[data-act=entregado]', 900);
-		var cola = JSON.parse(localStorage.getItem('palla.p.cola') || '[]');
-		var enCola = cola.length;
-		check('14a. Sin señal se puede seguir: «Recogí» guardado y luego «Entregado»', /Guardado sin conexión/.test(trasRecogi) && order(n3).stage === 'assigned', 'cola=' + enCola + ' etapa=' + order(n3).stage);
-		P.setOnline(true); await wait(2500);
+		var enCola = 0;
+		check('14a. Sin señal se puede seguir: hora, «Recogí» y «Entregado» guardados', conHora && /Guardado sin conexión/.test(trasRecogi) && order(n3).stage === 'assigned' && !order(n3).eta, 'hora=' + conHora + ' etapa=' + order(n3).stage);
+		P.setOnline(true); await wait(3000);
 		var logs = world().log.filter(function (l) { return l.indexOf('#' + n3 + ':') !== -1; });
-		check('14b. Al volver la señal se mandan solas y en orden (Recogí → Entregado), una vez cada una', order(n3).stage === 'delivered' && logs.length === 2 && /Recogí/.test(logs[0]) && /Entregado/.test(logs[1]), JSON.stringify(logs));
+		check('14b. Al volver la señal se mandan solas y en orden (hora → Recogí → Entregado), una vez cada una', order(n3).stage === 'delivered' && logs.length === 3 && /hora/.test(logs[0]) && /Recogí/.test(logs[1]) && /Entregado/.test(logs[2]), JSON.stringify(logs));
 		// 15. Reenvío de la misma acción (respuesta perdida): no se repite
 		var cid = newCid();
 		var a1 = await P.request('carrera', { order: n3, action: 'problema', motivo: 'parte', cid: cid });
@@ -143,6 +168,38 @@
 		// 20. Ayuda sin conexión: las palabras de WhatsApp de una carrera mía
 		await go('#ayuda/' + n4);
 		check('20. Ayuda: las 4 palabras para WhatsApp con el número de la carrera', text().indexOf('Recogí ' + n4) !== -1, text().slice(0, 300));
+
+		// 21. Pasar a otro mensajero (#54, #65): pide elegir, queda esperando, se puede cancelar
+		P.event('nueva'); await refresh(); var n7 = world().orders[world().orders.length - 1].id;
+		await go('#carreras'); await click('[data-act=cojo][data-id="' + n7 + '"]', 900);
+		await go('#pasar/' + n7); await click('[data-act=pasar]', 400);
+		var pideA = /Elige a quién/.test(text());
+		var ra = $('input[name=to][value="2"]'); ra.checked = true; ra.dispatchEvent(new Event('change', { bubbles: true })); await wait(150);
+		await click('[data-act=pasar]', 900);
+		var esperando = /Esperando que Pedri/.test(text()) && !/Pasar a otro mensajero/.test(text()) && order(n7).owner === 1;
+		await click('[data-act=pase-cancelar]', 900);
+		check('21. Pasar: pide a quién, queda «esperando» (sigue siendo mía) y se puede cancelar', pideA && esperando && !order(n7).pase && /cancelaste el pase/.test(toast()), [pideA, esperando, JSON.stringify(order(n7).pase), toast()].join(' / '));
+		// 22. El compañero acepta: la app me avisa y ya no es mía
+		await go('#pasar/' + n7); ra = $('input[name=to][value="2"]'); ra.checked = true; ra.dispatchEvent(new Event('change', { bubbles: true })); await wait(150);
+		await click('[data-act=pasar]', 900); await go('#carreras');
+		P.event('acepta'); await refresh(); await wait(300);
+		check('22. Mi compañero acepta el pase: «Pedri aceptó #N, ya no es tuya»', order(n7).owner === 2 && /aceptó #' + n7 + '/.test(toast()) || new RegExp('aceptó #' + n7).test(toast()), toast());
+		// 23. Me pasan una y la acepto → primero la hora
+		P.event('mepasan'); await refresh(); var n8 = world().orders[world().orders.length - 1].id;
+		var veo = /te quiere pasar #/.test(text());
+		autoHora = false; await click('[data-act=pase-si][data-id="' + n8 + '"]', 900); autoHora = true;
+		check('23. Me pasan una: la veo arriba, «La acepto» → es mía y pide la hora', veo && order(n8).owner === 1 && location.hash === '#hora/' + n8, [veo, order(n8).owner, location.hash].join(' / '));
+		await ponerHora();
+		// 24. Me pasan otra y digo que no
+		P.event('mepasan'); await refresh(); var n9 = world().orders[world().orders.length - 1].id;
+		await go('#carreras'); await click('[data-act=pase-no][data-id="' + n9 + '"]', 900);
+		check('24. Me pasan otra y digo «No puedo»: sigue siendo del compañero y desaparece', order(n9).owner === 2 && !order(n9).pase && !$('[data-act=pase-si][data-id="' + n9 + '"]'), JSON.stringify(order(n9)));
+		// 25. Pasar sin señal: no se guarda (lo decide otra persona)
+		P.setOnline(false);
+		await go('#pasar/' + n8); ra = $('input[name=to][value="3"]'); ra.checked = true; ra.dispatchEvent(new Event('change', { bubbles: true })); await wait(150);
+		await click('[data-act=pasar]', 900);
+		check('25. Pasar sin señal: avisa que hace falta señal y no cambia nada', /necesitas señal/.test(toast()) && !order(n8).pase, toast());
+		P.setOnline(true); await refresh();
 
 		var ok = out.filter(function (x) { return x.ok; }).length;
 		window.SIM = { ok: ok, total: out.length, casos: out };
