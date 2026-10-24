@@ -22,7 +22,7 @@ Ernesto decide cuándo se sube, después de 3.14.59 y 3.14.60. La rama sale de `
 ## Aviso del bot (24-oct, hecho)
 - Core: «La cojo» guarda `_cvd_palla_claimed_at`; `GET /bot/dispatch/palla` da las cogidas en la app aún sin avisar (con el vale) y
   `POST /bot/dispatch/{id}/palla-announced` las marca. Si se suelta y la coge otro por el grupo, la oferta nueva es más reciente y ya no sale.
-- VivaBot (rama `feat/palla-avisos`, worktree `C:UsersErnestoivabot-palla`): `processPalla()` en `src/dispatch.js` → «✅ #N es de X (la cogió en Pa'llá)» en el grupo si se
+- VivaBot (rama `feat/palla-avisos`, worktree `vivabot-palla`): `processPalla()` en `src/dispatch.js` → «✅ #N es de X (la cogió en Pa'llá)» en el grupo si se
   había publicado, el vale por privado y la carrera queda esperando la hora (como tras un «Yo»). Con Core sin 3.14.61 no hace nada.
   Orden de subida: Core 3.14.61 primero, luego el bot.
 
