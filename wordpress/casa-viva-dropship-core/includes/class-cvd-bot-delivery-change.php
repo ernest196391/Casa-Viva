@@ -31,6 +31,8 @@ final class CVD_Bot_Delivery_Change {
 		$auth = array( 'CVD_Bot_Bridge', 'authorized' );
 		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)/to-delivery', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'to_delivery' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/assign', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'assign' ), 'permission_callback' => $auth ) );
+		// 3.14.64 (Ernesto 24-oct: «los avisos de WhatsApp no me llegan, déjalo en mi correo, gratis»): aviso del bot por correo.
+		register_rest_route( self::NS, '/bot/aviso-correo', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'owner_mail' ), 'permission_callback' => $auth ) );
 	}
 
 	/**
@@ -140,6 +142,23 @@ final class CVD_Bot_Delivery_Change {
 			return self::out( array( 'result' => $data['result'] ?? 'error', 'voucher' => $data['voucher'] ?? null ) + $base );
 		}
 		return self::out( array( 'result' => 'too_late', 'status' => $status ) + $base );
+	}
+
+	/**
+	 * Aviso del bot a Ernesto por correo (cambios de entrega, mensajero asignado, recordatorios). Sale con el correo de la
+	 * propia web (wp_mail de Hostinger, sin coste). Destino: opción cvd_bot_aviso_correo (si no, el correo del administrador).
+	 * Tope de 40 por hora para que un error del bot no llene el buzón. → { sent: bool } | { sent: false, reason }.
+	 */
+	public static function owner_mail( WP_REST_Request $request ): WP_REST_Response {
+		$to = sanitize_email( (string) get_option( 'cvd_bot_aviso_correo', '' ) ) ?: sanitize_email( (string) get_option( 'admin_email' ) );
+		$subject = self::text( $request->get_param( 'asunto' ), 140 );
+		$body = trim( wp_strip_all_tags( (string) $request->get_param( 'texto' ) ) );
+		if ( '' === $to || '' === $body ) { return self::out( array( 'sent' => false, 'reason' => 'missing' ) ); }
+		$count = (int) get_transient( 'cvd_bot_aviso_correo_hora' );
+		if ( $count >= 40 ) { return self::out( array( 'sent' => false, 'reason' => 'limit' ) ); }
+		set_transient( 'cvd_bot_aviso_correo_hora', $count + 1, HOUR_IN_SECONDS );
+		$sent = wp_mail( $to, '[Casa Viva] ' . ( '' !== $subject ? $subject : 'Aviso del bot' ), mb_substr( $body, 0, 5000 ) . "\n\n— VivaBot (aviso automático, no hace falta responder)" );
+		return self::out( array( 'sent' => (bool) $sent ) );
 	}
 
 	/** Mensajero elegido (CVD_Direct_Dispatch): dispatch_ready() se lo asigna directo en vez de publicarlo en el grupo. */
