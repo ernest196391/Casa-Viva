@@ -25,11 +25,16 @@ final class CVD_WhatsApp_Receipt_Template {
 		$address   = $data['delivery']['address_lines'];
 		$units     = array_sum( array_map( static fn( array $item ): int => (int) $item['quantity'], $data['items'] ) );
 		$products  = count( $data['items'] );
+		// 3.14.66 (Ana, #5445, 24-oct): «pendiente de confirmación / disponibilidad» asustaba aunque el producto ya estaba
+		// separado. Todo de la tienda y existencia ya descontada → «apartado»; con algo de proveedor → bajo pedido.
+		$dam       = $order && class_exists( 'CVD_Datos_A_Mano' );
+		$reserved  = $dam && CVD_Datos_A_Mano::order_reserved( $order );
+		$market    = $dam && CVD_Datos_A_Mano::order_has_bajo_pedido( $order );
 
 		$lines = array(
 			'🛍️ *PEDIDO CASA VIVA*',
 			'*Pedido #' . $number . '*',
-			'🟠 *PENDIENTE DE CONFIRMACIÓN*',
+			$reserved ? '✅ *APARTADO PARA TI* · ya está separado en la tienda' : ( $market ? '🟠 *PENDIENTE DE CONFIRMACIÓN* · 📦 ' . CVD_Datos_A_Mano::BAJO_PEDIDO : '🟠 *PENDIENTE DE CONFIRMACIÓN*' ),
 			'',
 			'*TOTAL · ' . implode( ' + ', $data['totals']['total_lines'] ) . '*',
 			$products . ( 1 === $products ? ' producto' : ' productos' ) . ' · ' . $units . ( 1 === $units ? ' unidad' : ' unidades' ),
@@ -119,15 +124,28 @@ final class CVD_WhatsApp_Receipt_Template {
 			self::section( $lines, 'SEGUIMIENTO', array( $data['extras']['tracking_url'] ) );
 		}
 
-		self::section(
-			$lines,
-			'PARA CONFIRMAR EL PEDIDO',
-			array(
-				'1. Disponibilidad de los productos',
-				'2. Total final y forma de pago',
-				'3. Horario estimado de ' . ( $is_pickup ? 'recogida' : 'entrega' ),
-			)
-		);
+		if ( $reserved ) {
+			// 3.14.66: ya está separado; solo queda coordinar (y la forma de pago, si no la dieron).
+			$how_pays = $order && class_exists( 'CVD_Cuban_Checkout' ) && CVD_Cuban_Checkout::order_payment( $order );
+			self::section(
+				$lines,
+				'PRÓXIMO PASO',
+				array_values( array_filter( array(
+					$is_pickup ? '' : 'El mensajero te llama para coordinar la hora de entrega.', // la recogida ya lo dice en RECOGIDA
+					$how_pays ? '' : 'Dinos cómo vas a pagar (efectivo USD o CUP, transferencia, Zelle…).',
+				) ) )
+			);
+		} else {
+			self::section(
+				$lines,
+				'PARA CONFIRMAR EL PEDIDO',
+				array(
+					$market ? '1. Disponibilidad con el proveedor (bajo pedido · llega en 24 h)' : '1. Disponibilidad de los productos',
+					'2. Total final y forma de pago',
+					'3. Horario estimado de ' . ( $is_pickup ? 'recogida' : 'entrega' ),
+				)
+			);
+		}
 		$lines[] = '';
 		$lines[] = '_Pedido registrado en Casa Viva. Conserva la referencia #' . $number . '._';
 

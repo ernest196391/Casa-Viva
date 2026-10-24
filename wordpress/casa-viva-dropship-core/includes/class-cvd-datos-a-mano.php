@@ -34,11 +34,66 @@ final class CVD_Datos_A_Mano {
 		add_action( 'woocommerce_admin_process_product_object', array( __CLASS__, 'admin_save_back' ) );
 		add_filter( 'the_content', array( __CLASS__, 'rates_table_in_page' ), 20 );
 		add_action( 'wp_head', array( __CLASS__, 'styles' ) );
+		add_action( 'wp_footer', array( __CLASS__, 'back_script' ), 30 ); // 3.14.66: «← Volver a los resultados» (zhu)
+	}
+
+	/**
+	 * 3.14.66 (zhu, 24-oct): busca «alfombra de chenilla», abre una, descarga las fotos… y para ver otro color tenía que
+	 * ir a Tienda, abrir el buscador y escribirlo otra vez (con la app instalada no hay botón «atrás» del navegador, y con
+	 * mala conexión cada vuelta tarda). Ahora:
+	 * - En la lista (Tienda, departamento, etiqueta o búsqueda) se apunta en el teléfono (sessionStorage) cuál era y por
+	 *   dónde iba (scroll).
+	 * - En la ficha sale arriba «← Volver a «alfombra de chenilla»». Si se llegó desde esa lista, vuelve con el «atrás»
+	 *   del navegador (la página guardada, sin volver a cargar); si no, abre la lista y baja a donde estaba.
+	 */
+	public static function back_script(): void {
+		if ( is_admin() || ! function_exists( 'is_product' ) ) { return; }
+		$is_search = is_search() && 'product' === get_query_var( 'post_type' );
+		$is_list = is_shop() || is_product_category() || is_product_tag() || $is_search;
+		if ( ! $is_list && ! is_product() ) { return; }
+		$label = '';
+		if ( $is_search ) { $label = '«' . get_search_query( false ) . '»'; }
+		elseif ( is_product_category() || is_product_tag() ) { $label = single_term_title( '', false ); }
+		elseif ( $is_list ) { $label = 'la tienda'; }
+		$data = array( 'mode' => $is_list ? 'list' : 'product', 'label' => $label );
+		?>
+		<script>(function(){var d=<?php echo wp_json_encode( $data ); ?>,K='cvdVolver',S;try{S=window.sessionStorage;S.setItem('cvdT','1');}catch(e){return;}
+		function get(){try{return JSON.parse(S.getItem(K)||'null');}catch(e){return null;}}
+		if(d.mode==='list'){var u=location.href;S.setItem(K,JSON.stringify({u:u,t:d.label}));
+			var y=parseInt(S.getItem('cvdY:'+u)||'0',10);if(y>0&&!(performance.getEntriesByType&&(performance.getEntriesByType('navigation')[0]||{}).type==='back_forward')){window.addEventListener('load',function(){window.scrollTo(0,y);});}
+			var t;window.addEventListener('scroll',function(){clearTimeout(t);t=setTimeout(function(){try{S.setItem('cvdY:'+u,String(window.scrollY));}catch(e){}},200);},{passive:true});return;}
+		var l=get();if(!l||!l.u||l.u===location.href)return;
+		var a=document.createElement('a');a.className='cvd-volver';a.href=l.u;a.textContent='← Volver a '+(l.t||'los resultados');
+		a.addEventListener('click',function(e){if(document.referrer===l.u&&history.length>1){e.preventDefault();history.back();}});
+		var h=document.querySelector('.product .product_title, h1.product_title, .product h1, main h1');var at=h?h.closest('.summary')||h:null;
+		if(at&&at.parentNode){at.parentNode.insertBefore(a,at);}else{var m=document.querySelector('main')||document.body;m.insertBefore(a,m.firstChild);}
+		})();</script>
+		<style>.cvd-volver{display:inline-flex;align-items:center;gap:4px;min-height:40px;margin:4px 0 10px;padding:8px 14px;border:1px solid #E0D5C1;border-radius:999px;background:#FFFDF8;color:#0D3B45!important;font:600 14px/1.2 "Figtree",system-ui,sans-serif;text-decoration:none!important;max-width:100%;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cvd-volver:focus-visible{outline:2px solid #A35A1F;outline-offset:2px}</style>
+		<?php
 	}
 
 	public static function is_bajo_pedido( WC_Product $product ): bool {
 		if ( class_exists( 'CVD_Departments' ) ) { return CVD_Departments::is_bajo_pedido_id( $product->get_id() ); }
 		return class_exists( 'CVD_Costs' ) && CVD_Costs::is_bajo_pedido( $product );
+	}
+
+	/** 3.14.66: ¿lleva algún producto de proveedor (bajo pedido)? */
+	public static function order_has_bajo_pedido( WC_Order $order ): bool {
+		foreach ( $order->get_items() as $item ) {
+			$product = $item instanceof WC_Order_Item_Product ? $item->get_product() : null;
+			if ( $product instanceof WC_Product && self::is_bajo_pedido( $product ) ) { return true; }
+		}
+		return false;
+	}
+
+	/**
+	 * 3.14.66 (Ana, #5445, 24-oct): ¿ya está apartado? Todo es de la tienda y WooCommerce ya descontó la existencia al
+	 * hacer el pedido (lo mismo que ve la tienda). Entonces el vale ya no dice «pendiente de confirmación / disponibilidad».
+	 */
+	public static function order_reserved( WC_Order $order ): bool {
+		if ( ! $order->has_status( array( 'on-hold', 'processing', 'pending' ) ) || ! $order->get_items() ) { return false; }
+		if ( ! wc_string_to_bool( (string) $order->get_data_store()->get_stock_reduced( $order->get_id() ) ) ) { return false; }
+		return ! self::order_has_bajo_pedido( $order );
 	}
 
 	/** Fecha en que vuelve (Y-m-d) si está agotado y la fecha es de hoy en adelante; si no, ''. */

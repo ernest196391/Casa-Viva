@@ -136,7 +136,11 @@
       grid.innerHTML = fdata.items.filter(function (p) { return p.c.indexOf(cat) > -1; }).map(card).join('');
     }, true);
     var ftimer;
+    // 3.14.66 (zhu, 24-oct): la búsqueda se recuerda en este teléfono (al volver de WhatsApp la página puede recargarse).
+    var fkey = 'cvgfQ', fstore = null;
+    try { fstore = window.sessionStorage; } catch (ignore) {}
     fq.addEventListener('input', function () {
+      try { if (fstore) fstore.setItem(fkey, fq.value); } catch (ignore) {}
       clearTimeout(ftimer);
       ftimer = setTimeout(function () {
         var words = fnorm(fq.value).split(/\s+/).filter(function (w) { return w.length > 1; });
@@ -147,6 +151,8 @@
         fcount.textContent = hits.length + (hits.length === 1 ? ' producto' : ' productos');
       }, 150);
     });
+    var fsaved = ''; try { fsaved = fstore ? fstore.getItem(fkey) || '' : ''; } catch (ignore) {}
+    if (fsaved && !fq.value) { fq.value = fsaved; fq.dispatchEvent(new Event('input')); }
     fotos.addEventListener('click', function (e) {
       var item = e.target.closest('.cvgf-item'); if (!item) return;
       var p = byId[item.getAttribute('data-id')]; if (!p) return;

@@ -45,6 +45,10 @@ final class CVD_WhatsApp_Gateway {
 
 		echo '<section class="cvd-thanks" aria-label="Pedido recibido">';
 		echo '<p class="cvd-thanks__ref">✅ Pedido #' . esc_html( $order->get_order_number() ) . ' finalizado</p>';
+		// 3.14.66 (Ana, #5445): si todo es de la tienda y ya se descontó, decirlo claro (el número ya sirve para el cliente).
+		if ( class_exists( 'CVD_Datos_A_Mano' ) && CVD_Datos_A_Mano::order_reserved( $order ) ) {
+			echo '<p class="cvd-thanks__lead"><strong>Ya está apartado para ti</strong> en la tienda. El número #' . esc_html( $order->get_order_number() ) . ' ya sirve: puedes pasárselo a tu cliente.</p>';
+		}
 		if ( $url ) {
 			// Lennys: dejar claro que falta un último paso (mandar el vale) y que el pedido ya está hecho.
 			echo '<p class="cvd-thanks__lead" data-cvd-thanks-lead><strong>Último paso:</strong> envía el vale por WhatsApp. Así lo tienes en tu chat y te avisamos de todo: quién lo lleva, a qué hora y cuándo se entregó.</p>';

@@ -7,8 +7,8 @@ const dir = new URL('../../wordpress/casa-viva-dropship-core/', import.meta.url)
 const read = (p) => readFileSync(new URL(p, dir), 'utf8');
 
 const main = read('casa-viva-dropship-core.php');
-assert.match(main, /Version: 3.14.63/);
-assert.match(main, /define\( 'CVD_VERSION', '3.14.63' \)/);
+assert.match(main, /Version: 3\.14\.(6[3-9]|[7-9]\d)/); // 3.14.63 o posterior
+assert.match(main, /define\( 'CVD_VERSION', '3\.14\.(6[3-9]|[7-9]\d)/);
 assert.match(main, /class-cvd-datos-a-mano\.php/);
 assert.match(main, /CVD_Datos_A_Mano::register\(\)/);
 
