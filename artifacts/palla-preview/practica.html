@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pa'llá · práctica (local)</title>
+<!-- El modo práctica de verdad (assets/palla/practica.js) sin servidor: abrir con ?practica=1 (y &sim=1 para el simulador). -->
+<link rel="stylesheet" href="../../wordpress/casa-viva-dropship-core/assets/palla/app.css?v=3"></head>
+<body><div id="app"></div>
+<script>window.PALLA = { api: '/no-hay-api/', session: '/no-hay-sesion', sw: '', scope: '', version: 'local', mode: 'no', whatsapp: '5354056173', storeMap: 'https://www.google.com/maps' };</script>
+<script>
+(function () {
+	var v = Date.now(), b = '../../wordpress/casa-viva-dropship-core/assets/palla/';
+	[b + 'practica.js', b + 'app.js', 'simulacion.js'].forEach(function (s) {
+		document.write('<script src="' + s + '?v=' + v + '"><' + '/script>');
+	});
+})();
+</script>
+</body></html>

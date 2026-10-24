@@ -206,12 +206,17 @@ final class CVD_Palla {
 		nocache_headers();
 		header( 'Content-Type: text/html; charset=utf-8' );
 		header( 'Referrer-Policy: no-referrer' );
-		$closed = 'no' === self::mode();
+		// 3.14.61.1: /palla/?practica=1 = modo práctica (assets/palla/practica.js): carreras inventadas, nada real. Se abre
+		// aunque Pa'llá esté cerrada (sirve para enseñar a los mensajeros antes de darles su enlace).
+		$practice = isset( $_GET['practica'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- solo elige la página, no cambia nada.
+		$closed = 'no' === self::mode() && ! $practice;
 		$body = $closed
 			? '<main class="pl-closed"><div class="pl-logo" aria-hidden="true">P</div><h1>Todavía no está abierta</h1><p>' . esc_html( self::closed_text( 'closed' ) ) . '</p></main>'
 			: '<div id="app" aria-live="polite"><main class="pl-closed"><div class="pl-logo" aria-hidden="true">P</div><p>Cargando Pa\'llá…</p></main></div>'
 				. '<noscript><main class="pl-closed"><h1>Activa JavaScript</h1><p>Pa\'llá necesita JavaScript para funcionar.</p></main></noscript>'
-				. '<script>window.PALLA=' . wp_json_encode( self::config() ) . ';</script><script src="' . esc_url( self::asset( 'app.js' ) ) . '" defer></script>';
+				. '<script>window.PALLA=' . wp_json_encode( self::config() ) . ';</script>'
+				. ( $practice ? '<script src="' . esc_url( self::asset( 'practica.js' ) ) . '" defer></script>' : '' )
+				. '<script src="' . esc_url( self::asset( 'app.js' ) ) . '" defer></script>';
 		echo '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
 			. '<meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#121212"><title>Pa\'llá</title>'
 			. '<link rel="manifest" href="' . esc_url( home_url( '/palla/manifest.webmanifest' ) ) . '">'
@@ -258,7 +263,7 @@ final class CVD_Palla {
 		header( 'Content-Type: application/javascript; charset=utf-8' );
 		header( 'Cache-Control: no-cache, no-store, must-revalidate' );
 		$shell = wp_json_encode( home_url( '/palla/' ) );
-		$files = wp_json_encode( array_map( array( __CLASS__, 'asset' ), array( 'app.js', 'app.css', 'icon.svg', 'fonts/Archivo-400.woff2', 'fonts/Archivo-600.woff2', 'fonts/Archivo-700.woff2', 'fonts/Archivo-800.woff2' ) ), JSON_UNESCAPED_SLASHES );
+		$files = wp_json_encode( array_map( array( __CLASS__, 'asset' ), array( 'app.js', 'practica.js', 'app.css', 'icon.svg', 'fonts/Archivo-400.woff2', 'fonts/Archivo-600.woff2', 'fonts/Archivo-700.woff2', 'fonts/Archivo-800.woff2' ) ), JSON_UNESCAPED_SLASHES );
 		$hoy = wp_json_encode( rest_url( self::NS . '/palla/hoy' ), JSON_UNESCAPED_SLASHES );
 		echo "const CACHE='palla-" . esc_js( CVD_VERSION ) . "',DATA='palla-datos',SHELL={$shell},FILES={$files},HOY={$hoy};\n";
 		echo "self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll([SHELL].concat(FILES))));self.skipWaiting()});\n";

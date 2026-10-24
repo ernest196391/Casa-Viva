@@ -122,3 +122,10 @@ a{color:var(--accent)}
 .pl-closed p{margin:0;color:var(--ink-muted)}
 .pl-logo{width:72px;height:72px;border-radius:16px;background:var(--ink);color:var(--brand);display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:800}
 .pl-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+/* Modo práctica */
+.pl-practica{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 16px;background:var(--accent);color:#fff;font-size:14px}
+.pl-practica button,.pl-practica select{min-height:40px;border-radius:var(--r-sm);border:1px solid rgba(255,255,255,.6);background:transparent;color:#fff;font:600 14px/18px var(--font);padding:0 10px;cursor:pointer}
+.pl-practica span{flex:1 1 auto}
+.pl-practica select{flex:1 1 150px}
+.pl-practica select option{color:var(--ink)}
+.pl-practica button[aria-pressed=false]{background:var(--brand);color:var(--ink);border-color:var(--brand)}

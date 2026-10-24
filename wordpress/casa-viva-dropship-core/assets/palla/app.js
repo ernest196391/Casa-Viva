@@ -7,11 +7,14 @@
 (function () {
 	'use strict';
 	var C = window.PALLA || {};
+	// Modo práctica (/palla/?practica=1, practica.js): misma app con carreras inventadas; nada toca pedidos reales.
+	var P = /[?&]practica=1(?:&|$)/.test(location.search) ? window.PALLA_PRACTICA || null : null;
+	var PFX = P ? 'palla.p.' : 'palla.';
 	var API = C.api || '/wp-json/casa-viva/v1/palla/';
 	var app = document.getElementById('app');
 	if (!app) { return; }
 
-	var state = { token: '', hoy: null, offline: false, blocked: null, toast: '', form: {}, busy: '', queue: [], loading: true };
+	var state = { token: '', hoy: null, offline: false, blocked: null, toast: '', form: {}, busy: '', queue: [], loading: true, done: {} };
 	var toastTimer = 0;
 
 	// ------------------------------------------------------------ Utilidades
@@ -57,7 +60,7 @@
 				var timer = setTimeout(function () { resolve(null); }, 1500);
 				var done = function (db) { clearTimeout(timer); Q.db = db; resolve(db); };
 				try {
-					var rq = window.indexedDB.open('palla', 1);
+					var rq = window.indexedDB.open(P ? 'palla-practica' : 'palla', 1);
 					rq.onupgradeneeded = function () { rq.result.createObjectStore('cola', { keyPath: 'cid' }); };
 					rq.onsuccess = function () { done(rq.result); };
 					rq.onerror = rq.onblocked = function () { done(null); };
@@ -70,21 +73,22 @@
 			});
 		},
 		all: function () {
-			if (!Q.db) { try { return Promise.resolve(JSON.parse(store.get('palla.cola') || '[]')); } catch (e) { return Promise.resolve([]); } }
+			if (!Q.db) { try { return Promise.resolve(JSON.parse(store.get(PFX + 'cola') || '[]')); } catch (e) { return Promise.resolve([]); } }
 			return Q.tx('readonly', function (s) { return s.getAll(); }).then(function (r) { return (r || []).sort(function (a, b) { return a.at - b.at; }); });
 		},
 		put: function (item) {
-			if (!Q.db) { return Q.all().then(function (l) { l.push(item); store.set('palla.cola', JSON.stringify(l)); }); }
+			if (!Q.db) { return Q.all().then(function (l) { l.push(item); store.set(PFX + 'cola', JSON.stringify(l)); }); }
 			return Q.tx('readwrite', function (s) { return s.put(item); });
 		},
 		del: function (cid) {
-			if (!Q.db) { return Q.all().then(function (l) { store.set('palla.cola', JSON.stringify(l.filter(function (x) { return x.cid !== cid; }))); }); }
+			if (!Q.db) { return Q.all().then(function (l) { store.set(PFX + 'cola', JSON.stringify(l.filter(function (x) { return x.cid !== cid; }))); }); }
 			return Q.tx('readwrite', function (s) { return s.delete(cid); });
 		}
 	};
 
 	// ------------------------------------------------------------ Red
 	function api(path, body) {
+		if (P) { return P.request(path, body); }
 		var headers = { 'Accept': 'application/json', 'X-Palla-Token': state.token };
 		if (body) { headers['Content-Type'] = 'application/json'; }
 		return fetch(API + path, { method: body ? 'POST' : 'GET', headers: headers, body: body ? JSON.stringify(body) : undefined, cache: 'no-store', credentials: 'omit' })
@@ -126,15 +130,18 @@
 			if (blockedFrom(res)) { state.loading = false; render(); return; }
 			if (res.status !== 200 || !res.data.ok) { throw new Error('hoy'); }
 			state.blocked = null;
+			var before = (state.hoy && !state.offline ? state.hoy.carreras : []).filter(function (c) { return !c.queued && !state.done[c.id]; });
 			state.hoy = res.data;
+			var gone = before.filter(function (c) { return !findCarrera(c.id); });
+			if (gone.length) { showToast(gone.map(function (c) { return '#' + c.number; }).join(', ') + (gone.length === 1 ? ' ya no está' : ' ya no están') + ' a tu nombre: la tienda la canceló o se la pasó a otro mensajero. Si tenías el paquete, llama a la tienda.'); }
 			state.offline = res.offline;
-			if (!res.offline) { store.set('palla.hoy', JSON.stringify(res.data)); }
+			if (!res.offline) { store.set(PFX + 'hoy', JSON.stringify(res.data)); }
 			applyQueue();
 			state.loading = false;
 			render();
 		}).catch(function () {
 			state.offline = true;
-			if (!state.hoy) { try { state.hoy = JSON.parse(store.get('palla.hoy') || 'null'); } catch (e) { state.hoy = null; } applyQueue(); }
+			if (!state.hoy) { try { state.hoy = JSON.parse(store.get(PFX + 'hoy') || 'null'); } catch (e) { state.hoy = null; } applyQueue(); }
 			state.loading = false;
 			render();
 		});
@@ -154,6 +161,7 @@
 				state.offline = false;
 				return Q.del(q.cid).then(function () {
 					state.queue = state.queue.filter(function (x) { return x.cid !== q.cid; });
+					state.done[q.order] = 1;
 					showToast(res.data.message || ('#' + q.number + ': listo.'));
 					return step(i + 1);
 				});
@@ -203,6 +211,7 @@
 			if (d.result === 'needs_amount') { state.form.err = d.message; render(); return; }
 			if (d.result === 'problem_empty') { state.form.err = d.message; render(); return; }
 			state.form = {};
+			state.done[c.id] = 1;
 			showToast(d.message);
 			go(d.result === 'released' ? '#carreras' : '#carrera/' + c.id, true);
 			load();
@@ -338,7 +347,8 @@
 	function payOptions(m) {
 		var o = [];
 		if (m.prepaid) { return o; }
-		if (!m.unknown) { o.push({ k: 'vale', label: KIND[m.kind] || m.label || 'Lo del vale', amount: m.productsText }); }
+		// Primera opción: SIEMPRE cómo dice el pedido que paga (sin tasa, con el campo para escribir los CUP).
+		o.push({ k: 'vale', label: KIND[m.kind] || m.label || 'Lo del vale', amount: m.unknown ? '' : m.productsText });
 		if (m.kind !== 'cash_cup' && m.currency !== 'CUP') { o.push({ k: 'cup', label: 'Efectivo CUP' }); }
 		if (!m.transfer) { o.push({ k: 'transfer', label: 'Transferencia', amount: m.unknown ? '' : m.productsText }); }
 		o.push({ k: 'otra', label: 'Otra cantidad' });
@@ -348,7 +358,11 @@
 	function payPlan(c) {
 		var m = c.money, f = state.form, opts = payOptions(m), k = f.pay || (opts[0] && opts[0].k) || 'vale';
 		if (m.prepaid) { return { payload: {}, bring: m.change || {}, ok: true }; }
-		if (k === 'vale') { return { payload: {}, bring: addMoney(m.transfer ? {} : m.products, m.change), ok: true }; }
+		if (k === 'vale' && !m.unknown) { return { payload: {}, bring: addMoney(m.transfer ? {} : m.products, m.change), ok: true }; }
+		if (k === 'vale') {
+			var cupv = num(f.cup);
+			return { payload: { otra: 1, cup: cupv, como: m.transfer ? 'transferencia' : 'efectivo' }, bring: addMoney(m.transfer ? {} : { CUP: cupv }, m.change), ok: cupv > 0 };
+		}
 		if (k === 'cup' || (k === 'transfer' && m.unknown)) {
 			var cup = num(f.cup), tr = k === 'transfer';
 			return { payload: { otra: 1, cup: cup, como: tr ? 'transferencia' : 'efectivo' }, bring: addMoney(tr ? {} : { CUP: cup }, m.change), ok: cup > 0 };
@@ -373,7 +387,7 @@
 			opts.forEach(function (o) {
 				html += '<label class="pl-opt' + (o.k === k ? ' pl-opt--on' : '') + '"><span><input type="radio" name="pago" value="' + o.k + '" data-act="pay"' + (o.k === k ? ' checked' : '') + '> ' + esc(o.label) + '</span>' + (o.amount ? '<span class="pl-num">' + esc(o.amount) + '</span>' : '') + '</label>';
 				if (o.k !== k) { return; }
-				if (o.k === 'cup' || (o.k === 'transfer' && m.unknown)) {
+				if (o.k === 'cup' || ((o.k === 'transfer' || o.k === 'vale') && m.unknown)) {
 					html += '<label class="pl-field">CUP que cobraste (solo productos)<input data-f="cup" type="number" inputmode="decimal" min="0" step="1" value="' + esc(f.cup || '') + '" placeholder="0"></label>';
 				}
 				if (o.k === 'otra') {
@@ -451,6 +465,14 @@
 		return '<main class="pl-closed"><div class="pl-logo" aria-hidden="true">P</div><h1>' + esc(title) + '</h1><p>' + esc(b.message || '') + '</p><button type="button" class="pl-btn pl-btn--secondary" data-act="retry">Probar otra vez</button></main>';
 	}
 
+	function practiceBar() {
+		var on = P.online;
+		return '<div class="pl-practica" role="region" aria-label="Modo práctica"><span><b>PRÁCTICA</b> · nada es real</span>'
+			+ '<button type="button" data-act="p-senal" aria-pressed="' + (on ? 'true' : 'false') + '">' + (on ? 'Con señal' : 'Sin señal') + '</button>'
+			+ '<label class="pl-sr" for="pl-evento">Simular algo de fuera</label><select id="pl-evento" data-act="p-evento"><option value="">Pasa algo…</option><option value="otro">Otro mensajero coge una</option><option value="nueva">Sale una carrera nueva</option><option value="quita">La tienda me quita una</option><option value="cancela">La tienda cancela una mía</option><option value="recibido">La tienda recibe mi dinero</option></select>'
+			+ '<button type="button" data-act="p-reset">Reiniciar</button></div>';
+	}
+
 	var lastView = '';
 	function render() {
 		var r = route(), html, sheet = '';
@@ -472,7 +494,7 @@
 		}
 		var view = r.view + '/' + r.id;
 		var scroll = view === lastView ? window.scrollY : 0;
-		app.innerHTML = '<div class="pl-shell">' + html + '</div>'
+		app.innerHTML = '<div class="pl-shell">' + (P ? practiceBar() : '') + html + '</div>'
 			+ (sheet ? '<div class="pl-scrim" data-act="scrim"><div class="pl-sheet" role="dialog" aria-modal="true" aria-labelledby="pl-sheet-t">' + sheet + '</div></div>' : '')
 			+ (state.toast ? '<div class="pl-toast" role="status">' + esc(state.toast) + '</div>' : '');
 		window.scrollTo(0, scroll);
@@ -500,6 +522,17 @@
 			if (f.motivo === 'otro' && (f.texto || '').trim().length < 3) { f.err = 'Escribe en una frase qué pasó.'; render(); return; }
 			act(c, 'problema', { motivo: f.motivo, texto: f.texto || '' }); return;
 		}
+		if (a === 'p-senal' && P) {
+			P.setOnline(!P.online);
+			if (P.online) { showToast('Volvió la señal: la app manda sola lo que quedó guardado.'); flush().then(load); } else { state.offline = true; showToast('Sin señal (práctica). Sigue trabajando: lo que toques queda guardado.'); }
+			return;
+		}
+		if (a === 'p-reset' && P) {
+			if (!window.confirm('¿Empezar la práctica de nuevo? Se borra lo que hiciste.')) { return; }
+			P.reset();
+			Q.all().then(function (l) { return Promise.all((l || []).map(function (x) { return Q.del(x.cid); })); }).then(function () { state.queue = []; state.hoy = null; state.done = {}; state.offline = false; go('#carreras', true); load(); });
+			return;
+		}
 		if (a === 'copiar') {
 			var t = el.getAttribute('data-text');
 			var done = function () { showToast('Copiado: «' + t + '». Pégalo en WhatsApp.'); };
@@ -510,6 +543,7 @@
 		var el = e.target, a = el.getAttribute('data-act');
 		if (a === 'pay') { state.form = { pay: el.value }; render(); }
 		if (a === 'como') { state.form.como = el.value; updateBring(); }
+		if (a === 'p-evento' && P && el.value) { showToast(P.event(el.value)); el.value = ''; load(); return; }
 		if (a === 'motivo') { state.form.motivo = el.value; state.form.err = ''; render(); }
 	});
 	app.addEventListener('input', function (e) {
@@ -532,18 +566,19 @@
 
 	// ------------------------------------------------------------ Arranque
 	function getToken() {
+		if (P) { return Promise.resolve('practica'); }
 		var m = /(?:^#|&)k=([0-9a-f.]+)/i.exec(location.hash || '');
 		if (m) {
-			store.set('palla.k', m[1]);
+			store.set(PFX + 'k', m[1]);
 			if (history.replaceState) { history.replaceState(null, '', location.pathname + location.search + '#carreras'); }
 			return Promise.resolve(m[1]);
 		}
-		var saved = store.get('palla.k');
+		var saved = store.get(PFX + 'k');
 		if (saved) { return Promise.resolve(saved); }
 		// Con la sesión de WordPress abierta (mensajero que ya entró en la web).
 		return fetch(C.session || '/palla/sesion', { headers: { 'X-Palla': '1', 'Accept': 'application/json' }, credentials: 'include', cache: 'no-store' })
 			.then(function (r) { return r.json(); })
-			.then(function (d) { if (d && d.token) { store.set('palla.k', d.token); return d.token; } if (d && d.message) { state.blocked = { code: d.code, message: d.message }; } return ''; })
+			.then(function (d) { if (d && d.token) { store.set(PFX + 'k', d.token); return d.token; } if (d && d.message) { state.blocked = { code: d.code, message: d.message }; } return ''; })
 			.catch(function () { return ''; });
 	}
 
