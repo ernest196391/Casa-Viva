@@ -32,6 +32,8 @@ final class CVD_Cuban_Checkout {
 	/** Formas de pago en efectivo: las únicas en las que el cliente puede pedir vuelto. */
 	public const CASH_KINDS = array( 'cash_usd', 'cash_cup', 'eur' );
 	public const PREPAID_NOTICE = 'Consulta antes con la tienda; el cliente paga todo antes y manda la captura.';
+	/** 3.14.63 (maratón 24-oct): la calle cuando el cliente no la dio al reservar (con mensajería solo se piden teléfono y zona). */
+	public const ADDRESS_PENDING = 'Dirección por confirmar: llamar al cliente';
 	/**
 	 * Respaldo SOLO si todavía no hay ninguna tasa guardada de ese tipo: lo que publicó la tienda el 12-oct
 	 * (1 EUR = 1 USD, Clásica ×1,15, Zelle ×1,04, PayPal +4 %). El pedido queda marcado «tasa por confirmar».
@@ -322,6 +324,10 @@ final class CVD_Cuban_Checkout {
 			'priority' => 10,
 		);
 		$fields['billing']['billing_first_name']['label'] = 'Nombre de quien recibe';
+		// 3.14.63 (maratón 24-oct, Ernesto): el nombre es opcional; muchos clientes no lo quieren dar al reservar.
+		// Lo único obligatorio: el teléfono y, con mensajería, la zona (provincia, municipio y reparto).
+		$fields['billing']['billing_first_name']['required'] = false;
+		$fields['billing']['billing_first_name']['placeholder'] = 'Si no lo quiere dar, déjalo vacío';
 		$fields['billing']['billing_first_name']['class'] = array( 'form-row-wide' );
 		$fields['billing']['billing_first_name']['priority'] = 20;
 		// Opcional (Dany, 12-oct): muchos clientes solo dan el nombre.
@@ -330,9 +336,9 @@ final class CVD_Cuban_Checkout {
 		$fields['billing']['billing_last_name']['class'] = array( 'form-row-wide' );
 		$fields['billing']['billing_last_name']['priority'] = 30;
 		$fields['billing']['billing_phone']['label'] = 'WhatsApp o teléfono de quien recibe';
-		// 3.13.69 (Dany, 13-oct): con «Recogida en tienda» el teléfono es opcional (el cliente pasa por la tienda);
-		// con mensajería sigue siendo obligatorio. checkout.js cambia el asterisco por «(opcional)» al elegir recogida.
-		$fields['billing']['billing_phone']['required'] = $is_delivery;
+		// 3.14.63 (maratón 24-oct, Ernesto): el teléfono es lo único que se pide siempre, también en la recogida
+		// (de 3.13.69 a 3.14.61 era opcional en la recogida; sin nombre, el teléfono es la única forma de saber de quién es).
+		$fields['billing']['billing_phone']['required'] = true;
 		$fields['billing']['billing_phone']['class'] = array( 'form-row-wide' );
 		$fields['billing']['billing_phone']['autocomplete'] = 'tel';
 		$fields['billing']['billing_phone']['priority'] = 40;
@@ -378,13 +384,15 @@ final class CVD_Cuban_Checkout {
 			'type'        => 'text',
 			'label'       => 'Reparto o localidad',
 			'placeholder' => 'Toca y elige tu reparto de la lista',
+			// 3.14.63 (maratón 24-oct, Nadielys): la tabla de precios por zona, a un toque.
+			'description' => '<a href="' . esc_url( home_url( '/tarifas-mensajeria/' ) ) . '" target="_blank" rel="noopener">Ver precios de mensajería por zona</a>',
 			'required'    => $is_delivery,
 			'class'       => array( 'form-row-wide', 'cvd-delivery-field' ),
 			'priority'    => 90,
 		);
 		$fields['billing']['billing_address_1']['label'] = 'Calle, número y edificio';
-		$fields['billing']['billing_address_1']['placeholder'] = 'Ej.: Calle 26 #123';
-		$fields['billing']['billing_address_1']['required'] = $is_delivery;
+		$fields['billing']['billing_address_1']['placeholder'] = 'Ej.: Calle 26 #123 · vacío = el mensajero la pide por teléfono';
+		$fields['billing']['billing_address_1']['required'] = false; // 3.14.63: vacía → ADDRESS_PENDING en el pedido (save_order_fields)
 		$fields['billing']['billing_address_1']['class'] = array( 'form-row-wide', 'cvd-delivery-field' );
 		$fields['billing']['billing_address_1']['autocomplete'] = 'address-line1';
 		$fields['billing']['billing_address_1']['priority'] = 100;
@@ -414,9 +422,10 @@ final class CVD_Cuban_Checkout {
 		);
 		// 3.13.67 (Lennys, 12-oct): forma de pago, obligatoria con mensajería. checkout.js enseña cuánto es con la tasa de hoy
 		// y, en Zelle/PayPal, el aviso de consultar antes con la tienda. El vuelto (abajo) solo sale si paga en efectivo.
+		// 3.14.63 (maratón 24-oct): opcional también con mensajería; vacía = «por confirmar con el cliente» en el vale.
 		$fields['billing']['billing_cvd_payment_kind'] = array(
-			'type' => 'select', 'label' => '¿Cómo paga el cliente?', 'required' => $is_delivery,
-			'options' => array( '' => 'Elige cómo paga' ) + array_map( static fn( array $kind ): string => $kind['option'], self::PAYMENT_KINDS ),
+			'type' => 'select', 'label' => '¿Cómo paga el cliente?', 'required' => false,
+			'options' => array( '' => 'Elige cómo paga (o déjalo para después)' ) + array_map( static fn( array $kind ): string => $kind['option'], self::PAYMENT_KINDS ),
 			// 3.13.74 (Dany): también en la recogida en tienda, ahí opcional (sin cvd-delivery-field: no se oculta).
 			'class' => array( 'form-row-wide', 'cvd-payment-kind' ), 'priority' => 123,
 		);
@@ -518,9 +527,9 @@ final class CVD_Cuban_Checkout {
 		$own = self::own_phone_match( $phone );
 		if ( $own && empty( $_POST[ self::OWN_PHONE_FIELD ] ) ) { $errors->add( 'billing_phone', self::own_phone_error( $own ) ); }
 		if ( 'delivery' !== $type ) {
-			// Recogida (3.13.69): el teléfono puede ir vacío, pero si lo escriben tiene que estar completo.
-			if ( '' !== $phone && strlen( $phone ) < 8 ) {
-				$errors->add( 'billing_phone', 'Escribe el teléfono completo (8 cifras) o déjalo vacío: en la recogida en tienda es opcional.' );
+			// Recogida: 3.14.63 (maratón 24-oct) solo se pide el teléfono (antes podía ir vacío).
+			if ( strlen( $phone ) < 8 ) {
+				$errors->add( 'billing_phone', 'Escribe el teléfono de quien recoge (8 cifras). Es lo único obligatorio: el nombre puede ir vacío.' );
 			}
 			// 3.13.74: «¿Cómo paga el cliente?» es opcional en la recogida; si lo eligen, tiene que ser de la lista.
 			$pickup_kind = sanitize_key( wp_unslash( $_POST['billing_cvd_payment_kind'] ?? '' ) );
@@ -535,10 +544,10 @@ final class CVD_Cuban_Checkout {
 		$date = sanitize_text_field( wp_unslash( $_POST['billing_cvd_delivery_date'] ?? '' ) );
 		$date_error = CVD_Delivery_When::error( $date );
 		if ( $date_error ) { $errors->add( 'billing_cvd_delivery_date', $date_error ); }
-		// 3.13.67: forma de pago obligatoria con mensajería (con nuestro mensaje, no el genérico de WooCommerce).
+		// 3.14.63 (maratón 24-oct): forma de pago opcional también con mensajería; si la eligen, tiene que ser de la lista.
 		$errors->remove( 'billing_cvd_payment_kind_required' );
 		$kind = sanitize_key( wp_unslash( $_POST['billing_cvd_payment_kind'] ?? '' ) );
-		if ( ! isset( self::PAYMENT_KINDS[ $kind ] ) ) { $errors->add( 'billing_cvd_payment_kind', 'Elige cómo paga el cliente: efectivo (USD o CUP), transferencia CUP, euros, Tarjeta Clásica, Zelle o PayPal.' ); }
+		if ( '' !== $kind && ! isset( self::PAYMENT_KINDS[ $kind ] ) ) { $errors->add( 'billing_cvd_payment_kind', 'Elige cómo paga el cliente de la lista, o déjalo vacío (el mensajero lo confirma con el cliente).' ); }
 		$assembly = sanitize_key( wp_unslash( $_POST[ self::ASSEMBLY_FIELD ] ?? '' ) );
 		// 3.13.96: solo una de las opciones que se ofrecieron para este carrito (la puerta corredera no se arma a 5 USD).
 		if ( '' !== $assembly && 'no' !== $assembly && ! in_array( $assembly, self::assembly_kinds_offered(), true ) ) { $errors->add( self::ASSEMBLY_FIELD, 'Elige de la lista si hay que armar el producto (o «No»).' ); }
@@ -555,7 +564,7 @@ final class CVD_Cuban_Checkout {
 			'billing_state'      => 'Selecciona la provincia de entrega.',
 			'billing_city'       => 'Selecciona el municipio de entrega.',
 			'billing_cvd_locality' => 'Elige el reparto de entrega de la lista.',
-			'billing_address_1'  => 'Escribe la calle, el número y el edificio.',
+			// 3.14.63: la calle ya no es obligatoria (se guarda ADDRESS_PENDING y el mensajero la pide por teléfono).
 		);
 		foreach ( $required as $key => $message ) {
 			if ( empty( $_POST[ $key ] ) ) {
@@ -603,6 +612,12 @@ final class CVD_Cuban_Checkout {
 			self::save_payment( $order, sanitize_key( wp_unslash( $_POST['billing_cvd_payment_kind'] ?? '' ) ), true ); // 3.13.74
 			return;
 		}
+		// 3.14.63 (maratón 24-oct): sin calle, el pedido lo dice en la dirección (así sale igual en el vale, la tarjeta del
+		// mensajero, la caja y el bot sin tocarlos) y el mensajero llama al cliente. Se cambia luego desde «Cambiar pedido».
+		if ( '' === trim( (string) $order->get_billing_address_1() ) ) {
+			$order->set_billing_address_1( self::ADDRESS_PENDING );
+			self::note( $order, 'El cliente no dio la calle al reservar: el mensajero se la pide por teléfono.' );
+		}
 		$order->update_meta_data( '_cvd_province_name', self::provinces()[ $state ] ?? $state );
 		$order->update_meta_data( '_cvd_locality', isset( $_POST['billing_cvd_locality'] ) ? sanitize_text_field( wp_unslash( $_POST['billing_cvd_locality'] ) ) : '' );
 		$order->update_meta_data( '_cvd_reference', isset( $_POST['billing_cvd_reference'] ) ? sanitize_text_field( wp_unslash( $_POST['billing_cvd_reference'] ) ) : '' );
@@ -629,6 +644,7 @@ final class CVD_Cuban_Checkout {
 		// 3.13.67: forma de pago y cuánto es en su moneda con la tasa de hoy (save_payment()).
 		$kind = sanitize_key( wp_unslash( $_POST['billing_cvd_payment_kind'] ?? '' ) );
 		$due = self::save_payment( $order, $kind, false );
+		if ( ! isset( self::PAYMENT_KINDS[ $kind ] ) ) { self::note( $order, 'Forma de pago: por confirmar con el cliente (no la dio al reservar).' ); } // 3.14.63
 		$cash_currency = isset( self::PAYMENT_KINDS[ $kind ] ) && in_array( $kind, self::CASH_KINDS, true ) ? self::PAYMENT_KINDS[ $kind ]['currency'] : '';
 		// El cliente dice con cuánto paga (solo en efectivo, en la moneda de su forma de pago) y el vuelto se calcula aquí.
 		// Sin forma de pago (pedido de antes): como siempre, la moneda que eligió y el vuelto solo si es en USD.

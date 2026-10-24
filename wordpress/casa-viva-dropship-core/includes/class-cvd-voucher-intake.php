@@ -51,7 +51,9 @@ final class CVD_Voucher_Intake {
 		$customer = sanitize_text_field( (string) ( $draft['customer'] ?? '' ) );
 		$phones = array_values( array_filter( array_map( static fn( $phone ) => preg_replace( '/[^0-9+]/', '', (string) $phone ), (array) ( $draft['phones'] ?? array() ) ) ) );
 		$address = sanitize_text_field( (string) ( $draft['address'] ?? '' ) ); $municipality = sanitize_text_field( (string) ( $draft['municipality'] ?? '' ) ); $zone = sanitize_text_field( (string) ( $draft['zone'] ?? '' ) );
-		if ( ! $customer || ! $phones || ! $address || ! $municipality || ! $zone || ! $lines ) { delete_option( $lock ); return new WP_Error( 'cvd_voucher_required', 'Confirma cliente, teléfono, dirección, municipio, zona y productos.', array( 'status' => 400 ) ); }
+		// 3.14.63 (maratón 24-oct): como en la web, solo teléfono y zona; sin nombre ni calle también vale.
+		if ( ! $phones || ! $municipality || ! $zone || ! $lines ) { delete_option( $lock ); return new WP_Error( 'cvd_voucher_required', 'Confirma teléfono, municipio, zona y productos.', array( 'status' => 400 ) ); }
+		if ( '' === $address ) { $address = CVD_Cuban_Checkout::ADDRESS_PENDING; }
 		$owner_id = self::preferred_owner( sanitize_text_field( (string) ( $draft['managerCode'] ?? '' ) ) );
 		if ( is_wp_error( $owner_id ) ) { delete_option( $lock ); return $owner_id; }
 		// 3.14.53 («Vender seguro», #10 y #51): el teléfono de quien vende (o de la gestora del vale) no pasa sin «Es para mí».

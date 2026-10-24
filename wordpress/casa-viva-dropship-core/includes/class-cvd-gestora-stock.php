@@ -6,6 +6,7 @@ defined( 'ABSPATH' ) || exit;
  * Existencias exactas para las gestoras (pedido de Dany, 11-oct): en la lista de la tienda cada
  * producto dice "Quedan N" (y por color si tiene varios) y en la ficha la cifra exacta. Los
  * clientes y visitantes siguen viendo "Disponible / Últimas unidades / Agotado".
+ * 3.14.63 (maratón 24-oct, Ernesto): «Quedan N» y «Agotado · vuelve el …» también para clientes (CVD_Datos_A_Mano).
  * 3.13.51: junto al precio en USD, su equivalente en CUP con la tasa del día ("7 USD · 5.460 CUP"),
  * solo para gestoras aprobadas. El precio del cliente no cambia.
  * 3.14.21 (Ernesto, 15-oct): «Ganas X USD» por unidad en la lista, en la ficha y en «Fotos para publicar»:
@@ -74,8 +75,14 @@ final class CVD_Gestora_Stock {
 
 	public static function loop_badge(): void {
 		global $product;
-		if ( ! self::is_gestora() || ! $product instanceof WC_Product ) { return; }
-		if ( ! $product->is_in_stock() ) { echo '<p class="cvd-gestora-stock is-out">Agotado</p>'; return; }
+		// 3.14.63 (maratón 24-oct, Ernesto): «Quedan X» también para los clientes (en la tienda de la gestora y en la de
+		// Casa Viva). Lo de proveedor no tiene existencia: ya lleva «📦 Bajo pedido · llega en 24 h» (CVD_Departments).
+		if ( ! $product instanceof WC_Product || ( class_exists( 'CVD_Datos_A_Mano' ) && CVD_Datos_A_Mano::is_bajo_pedido( $product ) ) ) { return; }
+		if ( ! $product->is_in_stock() ) {
+			$back = class_exists( 'CVD_Datos_A_Mano' ) ? CVD_Datos_A_Mano::back_label( $product ) : '';
+			echo '<p class="cvd-gestora-stock is-out">Agotado' . ( '' !== $back ? '<small>' . esc_html( $back ) . '</small>' : '' ) . '</p>';
+			return;
+		}
 		$parts = array();
 		$total = null;
 		if ( $product->is_type( 'variable' ) ) {
@@ -125,7 +132,7 @@ final class CVD_Gestora_Stock {
 	}
 
 	public static function styles(): void {
-		if ( ! self::is_gestora() ) { return; }
+		// 3.14.63: «Quedan X» sale a todos (loop_badge); el CUP y «Ganas» siguen siendo solo de la gestora.
 		echo '<style id="cvd-gestora-stock">.cvd-gestora-stock{margin:4px 0 6px;font-size:13px;font-weight:600;color:#0f3d3a}.cvd-gestora-stock small{display:block;font-weight:400;color:#6f6a62;font-size:12px;line-height:1.35}.cvd-gestora-stock.is-low{color:#a8641c}.cvd-gestora-stock.is-out{color:#a83d32}.cvd-price-cup{font-size:.85em;font-weight:600;color:#0f3d3a;white-space:nowrap}.cvd-price-cup.is-stale{color:#a8641c}.cvd-gestora-earn{margin:2px 0;font-size:13px;font-weight:700;color:#1d6b3a}</style>';
 	}
 }

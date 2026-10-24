@@ -261,7 +261,7 @@ final class CVD_Gestora_App {
 			// 3.14.55 (D104): la misma tienda, solo con lo que está en la tienda (listo para hoy) o solo lo bajo pedido.
 			$parts = class_exists( 'CVD_Departments' ) ? array(
 				'tienda' => array( '🏪 Solo lo que está en tienda', 'Listo para hoy: se entrega o se recoge enseguida.', 'Mira lo que tengo listo para hoy en mi tienda Casa Viva: ' ),
-				'pedido' => array( '📦 Solo bajo pedido', 'Lo pedimos al proveedor: llega en 24–48 h.', 'Mira lo que te consigo por encargo (llega en 24–48 h) en mi tienda Casa Viva: ' ),
+				'pedido' => array( '📦 Solo bajo pedido', 'Lo pedimos al proveedor: llega en 24 h.', 'Mira lo que te consigo por encargo (llega en 24 h) en mi tienda Casa Viva: ' ),
 			) : array();
 			if ( $parts ) :
 			?>
@@ -503,11 +503,11 @@ final class CVD_Gestora_App {
 		return array( 'id' => $pid, 'name' => $product->get_name(), 'qty' => $qty, 'price' => (float) $product->get_price(), 'image' => (string) get_the_post_thumbnail_url( $pid, 'thumbnail' ), 'url' => (string) get_permalink( $pid ) );
 	}
 
-	/** 3.14.55 (D104): etiqueta «🏪 En tienda» / «📦 Bajo pedido · 24–48 h» de un producto de la lista. */
+	/** 3.14.55 (D104): etiqueta «🏪 En tienda» / «📦 Bajo pedido · llega en 24 h» de un producto de la lista. */
 	private static function avail_tag( int $pid ): string {
 		if ( ! class_exists( 'CVD_Departments' ) ) { return ''; }
 		return CVD_Departments::is_bajo_pedido_id( $pid )
-			? '<span class="cvga-avail-tag cvga-avail-tag--pedido">📦 Bajo pedido · 24–48 h</span>'
+			? '<span class="cvga-avail-tag cvga-avail-tag--pedido">📦 Bajo pedido · llega en 24 h</span>'
 			: '<span class="cvga-avail-tag">🏪 En tienda</span>';
 	}
 

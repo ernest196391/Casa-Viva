@@ -36,7 +36,7 @@
 .woocommerce ul.products li.cvd-dept-sub{padding:10px 14px;border-radius:12px;background:#F6F1E6;color:#5E544D;font:400 14px/1.4 "Figtree",system-ui,sans-serif}
 .cvd-dept-sub span{margin-right:6px;color:#8A4B19;font-weight:600;letter-spacing:.04em;text-transform:uppercase;font-size:12px}
 
-/* Etiqueta de las tarjetas: «📦 Bajo pedido · 24–48 h» (ámbar) y, 3.14.55, «🏪 En tienda» (verde sobre crema). */
+/* Etiqueta de las tarjetas: «📦 Bajo pedido · llega en 24 h» (ámbar) y, 3.14.55, «🏪 En tienda» (verde sobre crema). */
 .cvd-market-badge{display:inline-block;align-self:flex-start;margin:6px 0 0;padding:3px 9px;border:1px solid #E8D9BF;border-radius:999px;background:#FBF1E4;color:#8A4B19;font:600 12px/1.3 "Figtree",system-ui,sans-serif;max-width:100%;box-sizing:border-box}
 .cvd-market-badge > span{white-space:nowrap}
 @media (max-width:480px){.cvd-market-badge{padding:3px 7px;font-size:11px}}
@@ -56,5 +56,13 @@
 .cvd-avail__chip.is-active{background:#0D3B45;border-color:#0D3B45;color:#F6F1E6!important}
 .cvd-avail__chip.is-active small{color:#E9DFCB}
 @media (max-width:380px){.cvd-avail__rail{gap:6px}.cvd-avail__chip{gap:6px;padding:6px 8px}.cvd-avail__icon{font-size:16px}.cvd-avail__text b{font-size:13px}}
+
+/* 3.14.63 · Orden: Por departamento · A–Z (Oliuska, maratón 24-oct). */
+.cvd-sort{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-6px 0 16px;font:400 13px/1.2 "Figtree",system-ui,sans-serif;color:#5E544D}
+.cvd-sort__label{margin-right:2px}
+.cvd-sort__opt{display:inline-flex;align-items:center;min-height:36px;padding:6px 12px;border:1px solid #E0D5C1;border-radius:999px;background:#FFFDF8;color:#2B2420!important;font-weight:600;text-decoration:none!important;box-sizing:border-box}
+.cvd-sort__opt:hover{border-color:#A35A1F}
+.cvd-sort__opt:focus-visible{outline:2px solid #A35A1F;outline-offset:2px}
+.cvd-sort__opt.is-active{background:#0D3B45;border-color:#0D3B45;color:#F6F1E6!important}
 
 @media (prefers-reduced-motion:reduce){.cvd-depts__chip,.cvd-avail__chip{transition:none}}

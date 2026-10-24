@@ -80,7 +80,9 @@ final class CVD_WhatsApp_Receipt_Template {
 				$how && ! $assembly && ! $is_pickup ? 'La mensajería se paga aparte, en CUP, al mensajero.' : '',
 				$how && $is_pickup && ! $how['prepaid'] ? 'Se paga en la tienda al recogerlo.' : '',
 				$assembly ? 'La mensajería (en CUP) y el armado (' . CVD_Cuban_Checkout::money( (float) $assembly['usd'], 'USD' ) . ') se pagan aparte, al mensajero.' : '',
-				! $how && $data['payment']['label'] ? 'Forma de pago: ' . $data['payment']['label'] : '', // la pasarela de WooCommerce, solo en pedidos de antes
+				// 3.14.63 (maratón 24-oct): la forma de pago es opcional al reservar.
+				! $how && $order && '' !== (string) $order->get_meta( '_cvd_fulfillment_type', true ) ? 'Cómo paga: por confirmar con el cliente' : '',
+				! $how && $data['payment']['label'] && ( ! $order || '' === (string) $order->get_meta( '_cvd_fulfillment_type', true ) ) ? 'Forma de pago: ' . $data['payment']['label'] : '', // la pasarela de WooCommerce, solo en pedidos de antes
 				$change ? 'Vuelto: ' . $change : '',
 			)
 		);

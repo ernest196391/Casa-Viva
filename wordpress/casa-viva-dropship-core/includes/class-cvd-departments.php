@@ -15,12 +15,12 @@ defined( 'ABSPATH' ) || exit;
  * Los departamentos son las categorías que ya existen (nombres de BizneCubano). «Bajo pedido» no es un departamento.
  *
  * 3.14.55 (D104, una gestora pidió filtrar; Ernesto 23-oct «piensa tú y decide»): filtro por disponibilidad.
- * - Fila «Todo · 🏪 En tienda (listo para hoy) · 📦 Bajo pedido (24–48 h)» arriba del listado en la Tienda, en cada
+ * - Fila «Todo · 🏪 En tienda (listo para hoy) · 📦 Bajo pedido (llega en 24 h)» arriba del listado en la Tienda, en cada
  *   categoría, en la búsqueda y en la tienda espejo de cada gestora (?ref=). Va por la URL: ?disponible=tienda|pedido,
  *   se conserva al paginar, al ordenar, en las fichas de departamento y en el formulario de filtros del tema.
  * - Bajo pedido = categoría «Bajo pedido» o SKU MK- (o _cvd_market_item_id), como CVD_Costs::is_bajo_pedido().
  *   En tienda = el resto, sin agotados. Una sola condición SQL con subconsultas por índice (nada de cargar productos).
- * - Cada tarjeta lleva «🏪 En tienda» o «📦 Bajo pedido · 24–48 h».
+ * - Cada tarjeta lleva «🏪 En tienda» o «📦 Bajo pedido · llega en 24 h (3.14.63)».
  * - LiteSpeed guarda una página por URL completa (la consulta cuenta): cada filtro tiene su copia; la tienda espejo
  *   ya va sin caché (CVD_Attribution). La API del bot y de la caja no cambia.
  */
@@ -51,6 +51,7 @@ final class CVD_Departments {
 		add_action( 'the_post', array( __CLASS__, 'on_the_post' ), 20, 2 );
 		add_action( 'woocommerce_shop_loop', array( __CLASS__, 'loop_separator' ), 5 );
 		add_action( 'woocommerce_after_shop_loop_item_title', array( __CLASS__, 'market_badge' ), 6 );
+		add_filter( 'woocommerce_catalog_orderby', array( __CLASS__, 'catalog_orderby' ) ); // 3.14.63: A–Z
 	}
 
 	/** Departamentos con productos, en el orden de las fichas: slug => WP_Term. */
@@ -125,7 +126,7 @@ final class CVD_Departments {
 		$chips = array(
 			''       => array( 'Todo', '', '' ),
 			'tienda' => array( 'En tienda', 'listo para hoy', '🏪' ),
-			'pedido' => array( 'Bajo pedido', '24–48 h', '📦' ),
+			'pedido' => array( 'Bajo pedido', 'llega en 24 h', '📦' ),
 		);
 		$html = '<nav class="cvd-avail" aria-label="Disponibilidad"><div class="cvd-avail__rail">';
 		foreach ( $chips as $key => $chip ) {
@@ -136,10 +137,39 @@ final class CVD_Departments {
 				. '<span class="cvd-avail__text"><b>' . esc_html( $chip[0] ) . '</b>' . ( '' !== $chip[1] ? '<small>' . esc_html( $chip[1] ) . '</small>' : '' ) . '</span></a>';
 		}
 		echo $html . '</div></nav>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado arriba.
+		echo self::sort_bar_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado en sort_bar_html().
 		if ( '' !== $mode ) {
 			// El formulario «Filtros» del tema (categoría y precio) no conoce el parámetro: se le añade para no perderlo.
 			echo '<script>document.addEventListener("DOMContentLoaded",function(){document.querySelectorAll("form").forEach(function(f){if(!f.querySelector("[name=cv_category],[name=orderby]")||f.querySelector("[name=' . esc_js( self::AVAIL_PARAM ) . ']"))return;var i=document.createElement("input");i.type="hidden";i.name="' . esc_js( self::AVAIL_PARAM ) . '";i.value="' . esc_js( $mode ) . '";f.appendChild(i);});});</script>';
 		}
+	}
+
+	/**
+	 * 3.14.63 (maratón 24-oct, Oliuska): «Orden: Por departamento · A–Z». A–Z = ?orderby=title (WooCommerce ya lo sabe
+	 * ordenar; grouping() no agrupa con otro orden). Va en la URL: se conserva con el filtro, al paginar y con ?ref=.
+	 * En la búsqueda no sale (ahí manda la relevancia).
+	 */
+	private static function sort_bar_html(): string {
+		if ( self::is_product_search() ) { return ''; }
+		$orderby = isset( $_GET['orderby'] ) ? sanitize_key( (string) wp_unslash( $_GET['orderby'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- orden público de solo lectura.
+		$base = remove_query_arg( array( 'orderby', 'paged', 'product-page' ), get_pagenum_link( 1, false ) );
+		$is_shop = function_exists( 'is_shop' ) && is_shop() && ! is_product_category() && ! is_product_tag();
+		$options = array(
+			''      => $is_shop ? 'Por departamento' : 'Recomendado',
+			'title' => 'A–Z',
+		);
+		$html = '<nav class="cvd-sort" aria-label="Orden"><span class="cvd-sort__label">Orden:</span>';
+		foreach ( $options as $key => $label ) {
+			$active = 'title' === $key ? 'title' === $orderby : in_array( $orderby, array( '', 'menu_order' ), true );
+			$url = '' === $key ? $base : add_query_arg( 'orderby', $key, $base );
+			$html .= '<a class="cvd-sort__opt' . ( $active ? ' is-active' : '' ) . '" href="' . esc_url( $url ) . '" rel="nofollow"' . ( $active ? ' aria-current="true"' : '' ) . '>' . esc_html( $label ) . '</a>';
+		}
+		return $html . '</nav>';
+	}
+
+	/** 3.14.63: «Alfabético (A–Z)» también en el desplegable de orden de WooCommerce, si el tema lo enseña. */
+	public static function catalog_orderby( array $options ): array {
+		return $options + array( 'title' => 'Alfabético (A–Z)' );
 	}
 
 	/** 3.14.55: marca la consulta principal de productos (Tienda, categorías, etiquetas, búsqueda) con el filtro. */
@@ -277,17 +307,17 @@ final class CVD_Departments {
 			}
 		}
 		if ( $market && true !== self::$last_market ) {
-			echo '<li class="cvd-dept-sub" role="presentation"><span>Bajo pedido</span> Los pedimos al proveedor: te confirmamos en 1 hora antes de cobrar.</li>';
+			echo '<li class="cvd-dept-sub" role="presentation"><span>Bajo pedido · llega en 24 h</span> No están en la tienda: los pedimos al proveedor cuando reservas y te confirmamos en 1 hora antes de cobrar.</li>';
 		}
 		self::$last_market = $market;
 	}
 
-	/** 3.14.55: cada tarjeta dice de dónde sale: «🏪 En tienda» (listo para hoy) o «📦 Bajo pedido · 24–48 h». */
+	/** 3.14.55: cada tarjeta dice de dónde sale: «🏪 En tienda» (listo para hoy) o «📦 Bajo pedido · llega en 24 h». */
 	public static function market_badge(): void {
 		$id = (int) get_the_ID();
 		if ( ! $id ) { return; }
 		if ( self::is_market( $id ) ) {
-			echo '<span class="cvd-market-badge"><span><span aria-hidden="true">📦</span> Bajo pedido</span> <span>· 24–48&nbsp;h</span></span>';
+			echo '<span class="cvd-market-badge"><span><span aria-hidden="true">📦</span> Bajo pedido</span> <span>· llega en 24&nbsp;h</span></span>';
 			return;
 		}
 		$product = wc_get_product( $id );

@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
  * y solo se rehace si cambia un producto o una foto.
  */
 final class CVD_Gestora_Fotos {
-	private const CACHE = 'cvd_fotos_catalog_v1';
+	private const CACHE = 'cvd_fotos_catalog_v2'; // 3.14.63: + 'market' (bajo pedido) en cada producto
 	private const DIR = 'cvd-fotos';
 	private const MAX_IMAGES = 6;
 
@@ -78,6 +78,7 @@ final class CVD_Gestora_Fotos {
 				'url'   => (string) get_permalink( $product->get_id() ),
 				'cats'  => $terms,
 				'qty'   => null === $qty ? null : (int) $qty,
+				'market' => class_exists( 'CVD_Datos_A_Mano' ) && CVD_Datos_A_Mano::is_bajo_pedido( $product ), // 3.14.63
 				'line'  => self::selling_line( $product ),
 				'imgs'  => array_map( static fn( int $id ): array => array( 'id' => $id, 'src' => (string) wp_get_attachment_image_url( $id, 'medium' ) ), $images ),
 				'sig'   => $product->get_date_modified() ? $product->get_date_modified()->getTimestamp() : 0,
@@ -136,12 +137,16 @@ final class CVD_Gestora_Fotos {
 			$link = add_query_arg( 'ref', $code, $item['url'] );
 			$usd = self::usd( $price );
 			$cup = $rate && $price > 0 ? number_format( (int) round( $price * $rate ), 0, ',', '.' ) . ' CUP' : '';
-			$stock = null === $item['qty'] ? 'En existencia' : ( $item['qty'] <= 3 ? 'Últimas ' . $item['qty'] : 'Quedan ' . $item['qty'] );
+			$market = ! empty( $item['market'] );
+			// 3.14.63 (maratón 24-oct): lo de proveedor decía «En existencia» y el cliente creía que ya estaba en la tienda.
+			$stock = $market ? '📦 ' . CVD_Datos_A_Mano::BAJO_PEDIDO : ( null === $item['qty'] ? 'En existencia' : ( $item['qty'] <= 3 ? 'Últimas ' . $item['qty'] : 'Quedan ' . $item['qty'] ) );
 			// 3.14.21: lo que gana ella por unidad, junto a lo que queda.
 			$earn = class_exists( 'CVD_Gestora_Stock' ) ? CVD_Gestora_Stock::earn( $product, $user->ID ) : null;
 			if ( null !== $earn && $earn > 0 ) { $stock .= ' · ' . CVD_Gestora_Stock::earn_label( $earn ); }
 			// Manual de marca: 1.ª línea con sensación, 2.ª con datos, 3.ª con cómo comprar; un emoji como mucho.
-			$text = '*' . $item['name'] . '*' . ( $item['line'] ? "\n" . $item['line'] : '' ) . "\n" . $usd . ( $cup ? ' · ' . $cup : '' ) . "\nPídelo aquí y te lo llevamos 🛵 " . $link;
+			$text = '*' . $item['name'] . '*' . ( $item['line'] ? "\n" . $item['line'] : '' ) . "\n" . $usd . ( $cup ? ' · ' . $cup : '' )
+				. ( $market ? "\n📦 *" . CVD_Datos_A_Mano::BAJO_PEDIDO . '* (lo pedimos al proveedor al reservarlo)' : '' ) // 3.14.63
+				. "\nPídelo aquí y te lo llevamos 🛵 " . $link;
 			$out[] = array(
 				'id' => $item['id'], 'n' => $item['name'], 'c' => $item['cats'], 'p' => $usd, 'cup' => $cup, 's' => $stock,
 				't' => $text, 'i' => array_map( static fn( array $img ): array => array( $img['src'], self::jpg_url( $img['id'], $item['name'] ) ), $item['imgs'] ),

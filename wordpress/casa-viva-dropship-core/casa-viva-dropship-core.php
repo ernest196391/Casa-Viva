@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.62
+ * Version: 3.14.63
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.62' );
+define( 'CVD_VERSION', '3.14.63' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -50,6 +50,7 @@ require_once CVD_DIR . 'includes/class-cvd-private-products.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-app.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-busca.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-confianza.php';
+require_once CVD_DIR . 'includes/class-cvd-datos-a-mano.php'; // 3.14.63: bajo pedido 24 h, quedan X, vuelve el día, tabla de mensajería (maratón 24-oct)
 require_once CVD_DIR . 'includes/class-cvd-nexo-busca.php'; // 3.14.28: NEXO Busca (búsquedas guardadas, vender por Casa Viva)
 require_once CVD_DIR . 'includes/class-cvd-gestora-fotos.php';
 require_once CVD_DIR . 'includes/class-cvd-estudio-core.php';
@@ -119,6 +120,7 @@ add_action(
 			CVD_Gestora_Estudio::register(); // 3.14.1: «Mi estudio de fotos» con la clave de Google de cada gestora (Ernesto, 14-oct).
 			CVD_Program_Login::register();
 			CVD_Gestora_Stock::register();
+			CVD_Datos_A_Mano::register(); // 3.14.63: «Datos a mano» (maratón de ideas, Ernesto 24-oct).
 			CVD_Direct_Dispatch::register();
 			CVD_Messenger_Cash::register();
 			CVD_Fichas::register();

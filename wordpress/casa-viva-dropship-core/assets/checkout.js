@@ -189,8 +189,9 @@
         $('<div>', { class: 'cvd-pickup-note', text: 'Recogida: ' + cvdCheckout.pickupAddress })
       );
     }
-    syncPhoneRequired(delivery);
-    markRequired('#billing_cvd_payment_kind_field', '#billing_cvd_payment_kind', delivery); // 3.13.74: opcional en la recogida
+    // 3.14.63 (maratón 24-oct): el teléfono, siempre obligatorio; la forma de pago, siempre opcional.
+    syncPhoneRequired(true);
+    markRequired('#billing_cvd_payment_kind_field', '#billing_cvd_payment_kind', false);
     syncPaymentOptions(delivery);
     syncPayment(delivery);
   }
@@ -485,6 +486,8 @@
 	  // 3.13.67: con forma de pago, la cifra en su moneda y, si paga en efectivo, el vuelto en esa misma moneda.
 	  var pay = paymentQuote();
 	  if (pay) change = pay.def.label + ' · ' + pay.text + (pay.def.prepaid ? ' · paga todo antes' : '') + (pay.def.cash && payWith > 0 ? ' · paga con ' + cubanMoney(payWith, pay.def.currency) + (pay.amount !== null && payWith > pay.amount ? ' → vuelto ' + cubanMoney(payWith - pay.amount, pay.def.currency) : '') : '');
+	  else if (!payWith) change = 'por confirmar con el cliente'; // 3.14.63: la forma de pago ya es opcional
+	  if (!pickup && !fieldText('#billing_address_1')) where += ' · la calle la pide el mensajero por teléfono'; // 3.14.63
 	  // Recogida: sin vuelto (mejora #23); desde 3.13.74 sí dice cómo paga y cuánto, si lo eligieron.
 	  if (pickup) change = pay ? pay.def.label + ' · ' + pay.text + (pay.def.prepaid ? ' · paga todo antes' : (cvdCheckout.pickupAtStore === false ? ' · al recogerlo' : ' · en la tienda al recogerlo')) : '';
 	  var line = function (label, value) { return value ? '<p style="margin:.35em 0"><b>' + label + ':</b> ' + $('<span>').text(value).html() + '</p>' : ''; };

@@ -15,7 +15,7 @@ final class CVD_Market_Bridge {
 	private const NS = 'casa-viva/v1';
 	public const SKU_PREFIX = 'MK-';
 	public const CATEGORY = 'Bajo pedido';
-	public const NOTICE = 'Producto bajo pedido: confirmamos disponibilidad en 1 hora antes de cobrar.';
+	public const NOTICE = 'Bajo pedido · llega en 24 h. No está en la tienda: lo pedimos al proveedor y te confirmamos en 1 hora antes de cobrar.'; // 3.14.63 (maratón 24-oct)
 	/** 3.13.72: en la Tienda, primero lo que hay en la tienda (menu_order 0) y después lo bajo pedido. */
 	public const MENU_ORDER = 10;
 
