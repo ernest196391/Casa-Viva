@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pa'llá · vista previa (datos de ejemplo)</title>
+<!-- Vista previa de Pa'llá 3.14.61 SIN servidor: la API se simula aquí con datos de ejemplo (nada real).
+     Abrir: file:///…/artifacts/palla-preview/index.html?escena=1#carreras
+     escena=1 → solo ofertas (pantalla 1 del diseño) · sin escena → con #4986 «por recoger» · &offline=1 → sin red. -->
+<link rel="stylesheet" href="../../wordpress/casa-viva-dropship-core/assets/palla/app.css">
+</head>
+<body>
+<div id="app"></div>
+<script>
+(function () {
+	var q = new URLSearchParams(location.search);
+	var offline = q.get('offline') === '1';
+	var escena = q.get('escena') || '';
+	window.PALLA = { api: 'https://demo.palla/api/', session: 'https://demo.palla/sesion', sw: '', scope: '', version: '3.14.61', mode: 'prueba', whatsapp: '5354056173', storeMap: 'https://www.google.com/maps' };
+	try { localStorage.setItem('palla.k', '7.1798000000.demo'); if (!q.get('cola')) { localStorage.removeItem('palla.cola'); } } catch (e) {}
+	if (!q.get('cola')) { try { indexedDB.deleteDatabase('palla'); } catch (e) {} }
+	if (offline) { try { Object.defineProperty(navigator, 'onLine', { get: function () { return false; } }); } catch (e) {} }
+
+	var lines = function (a) { return a; };
+	var offer = function (id, when, zone, items, fee, collect) { return { id: id, number: String(id), when: when, zone: zone, from: 'Casa Viva · Nuevo Vedado', items: items, fee: fee, feeText: String(fee).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' CUP', collect: collect, change: '', assembly: '', supplier: false }; };
+	var card4986 = {
+		id: 4986, number: '4986', stage: 'pickup', test: false, when: 'hoy · por la tarde',
+		customer: { name: 'Dasiel', first: 'Dasiel', address: 'Calle 15 e/ 180 y 182', zone: 'Siboney, Playa', reference: 'frente a la escuela', note: '', phone: '5350000000', phoneLabel: '+53 5000 0000', alt: '', altLabel: '' },
+		map: 'https://www.google.com/maps', items: lines(['4× Cojín decorativo — 11 USD c/u = 44 USD']),
+		pickup: { place: 'Casa Viva · Conill A esq. 45 #864', zone: 'Nuevo Vedado', hours: 'de 10:00 a. m. a 4:00 p. m.', suppliers: [] },
+		assembly: '',
+		money: { after: false, prepaid: false, unknown: false, transfer: false, kind: 'cash_usd', label: 'Efectivo USD', currency: 'USD', products: { USD: 44 }, productsText: '44 USD', change: {}, changeText: '', payWith: '', charge: '44 USD en efectivo', chargeShort: '44 USD', bring: '44 USD', bringDetail: '', deadline: 'Antes de las 4:00 p. m.', fee: 2300, feeText: '2.300 CUP' }
+	};
+	var data = {
+		ok: true, now: new Date().toISOString(),
+		yo: { id: 7, name: 'Pedro Ramos', first: 'Pedro', vehicle: 'Moto', available: true },
+		ofertas: escena === '1'
+			? [offer(4986, 'hoy, en 1 hora', 'Siboney, Playa', ['4× Cojín decorativo — 11 USD c/u = 44 USD'], 2300, '44 USD'), offer(4994, 'hoy · 1:00 p. m.', 'El Vedado, Plaza', ['1× Sábana — 25 USD'], 1500, '25 USD'), offer(5003, 'mañana · por la mañana', 'Lawton, Diez de Octubre', ['1× Base de nevera — 20 USD'], 2000, '20 USD')]
+			: [offer(4994, 'hoy · 1:00 p. m.', 'El Vedado, Plaza', ['1× Sábana — 25 USD'], 1500, '25 USD'), offer(5003, 'mañana · por la mañana', 'Lawton, Diez de Octubre', ['1× Base de nevera — 20 USD'], 2000, '20 USD')],
+		carreras: escena === '1' ? [] : [card4986],
+		dinero: { label: 'sáb 24 oct · 3 carreras entregadas', delivered: 3, earned: 5800, earnedText: '5.800', pending: { USD: 89 }, pendingText: '89 USD', deadline: 'antes de las 4:00 p. m.',
+			rows: [{ id: 4961, number: '4961', zone: 'Siboney', feeText: '2.300 CUP', cash: '44 USD', pending: true }, { id: 4966, number: '4966', zone: 'El Vedado', feeText: '1.500 CUP', cash: '25 USD', pending: true }, { id: 4971, number: '4971', zone: 'Lawton', feeText: '2.000 CUP', cash: '20 USD', pending: true }] }
+	};
+	if (q.get('etapa') === 'route') { card4986.stage = 'route'; }
+	// Sin red: la app enseña lo último que bajó (aquí, los mismos datos de ejemplo).
+	if (offline) { try { localStorage.setItem('palla.hoy', JSON.stringify(data)); } catch (e) {} }
+	var reply = function (status, body) { return new Response(JSON.stringify(body), { status: status, headers: { 'Content-Type': 'application/json' } }); };
+	window.fetch = function (url, opts) {
+		return new Promise(function (resolve, reject) {
+			setTimeout(function () {
+				if (offline) { reject(new TypeError('Failed to fetch')); return; }
+				var body = opts && opts.body ? JSON.parse(opts.body) : {};
+				if (/\/hoy$/.test(url)) { resolve(reply(200, data)); return; }
+				if (/\/cojo$/.test(url)) {
+					var o = data.ofertas.filter(function (x) { return x.id == body.order; })[0];
+					data.ofertas = data.ofertas.filter(function (x) { return x !== o; });
+					var c = JSON.parse(JSON.stringify(card4986)); c.id = o.id; c.number = o.number; c.customer.zone = o.zone;
+					data.carreras.push(c);
+					resolve(reply(200, { result: 'won', number: o.number, message: '✅ #' + o.number + ' es tuya. Ve a recogerla a la tienda.', carrera: c })); return;
+				}
+				if (/\/carrera$/.test(url)) {
+					var k = data.carreras.filter(function (x) { return x.id == body.order; })[0];
+					var res = { recogi: 'picked', entregado: 'delivered', problema: 'problem', suelto: 'released' }[body.action];
+					if (body.action === 'recogi') { k.stage = 'route'; }
+					if (body.action === 'problema') { k.stage = 'incident'; }
+					if (body.action === 'entregado') { k.stage = 'delivered'; k.money = { after: true, bring: '44 USD', sentence: 'Lleva 44 USD a la tienda antes de las 4:00 p. m.', fee: 2300, feeText: '2.300 CUP' }; }
+					if (body.action === 'suelto') { data.carreras = data.carreras.filter(function (x) { return x !== k; }); }
+					var msg = { picked: '✅ #' + k.number + ': anotado, ya tienes el paquete. Ahora llévalo al cliente.', delivered: '✅ ¡#' + k.number + ' entregado! La mensajería es tuya. Lleva 44 USD a la tienda antes de las 4:00 p. m.', problem: '⚠️ #' + k.number + ': avisado. La tienda ya lo sabe.', released: 'Soltaste #' + k.number + '.' }[res];
+					resolve(reply(200, { result: res, action: body.action, number: k.number, message: msg, carrera: body.action === 'suelto' ? undefined : k, stage: k.stage })); return;
+				}
+				reject(new TypeError('Failed to fetch'));
+			}, 120);
+		});
+	};
+})();
+</script>
+<script src="../../wordpress/casa-viva-dropship-core/assets/palla/app.js"></script>
+</body>
+</html>

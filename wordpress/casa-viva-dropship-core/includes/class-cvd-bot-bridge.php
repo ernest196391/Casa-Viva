@@ -482,33 +482,44 @@ final class CVD_Bot_Bridge {
 		if ( is_wp_error( $order ) ) { return $order; }
 		$messenger = self::messenger_by_phone( (string) $request->get_param( 'phone' ) );
 		if ( ! $messenger ) { return self::no_cache( array( 'result' => 'not_messenger' ) ); }
+		return self::no_cache( self::claim_by_messenger( $order, $messenger, 'whatsapp_group' ) );
+	}
+
+	/**
+	 * 3.14.61 (Pa'llá): el «Yo» de siempre, el mismo desde el grupo de WhatsApp y desde «La cojo» de la app del
+	 * mensajero (CVD_Palla_Api). Primero que llega gana; los demás reciben «taken».
+	 * $source: whatsapp_group | palla (solo cambian la nota del pedido y el origen anotado).
+	 * → result: won (+ messenger, voucher) | yours (+ voucher) | taken.
+	 */
+	public static function claim_by_messenger( WC_Order $order, WP_User $messenger, string $source ): array {
+		$palla = 'palla' === $source;
 		$current_owner = absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
-		if ( $current_owner === $messenger->ID ) { return self::no_cache( array( 'result' => 'yours', 'voucher' => self::voucher( $order ) ) ); }
-		if ( $current_owner || 'offered' !== CVD_Delivery::status( $order ) || '' !== CVD_Delivery::blocks_dispatch( $order ) ) { return self::no_cache( array( 'result' => 'taken' ) ); }
+		if ( $current_owner === $messenger->ID ) { return array( 'result' => 'yours', 'voucher' => self::voucher( $order ) ); }
+		if ( $current_owner || 'offered' !== CVD_Delivery::status( $order ) || '' !== CVD_Delivery::blocks_dispatch( $order ) ) { return array( 'result' => 'taken' ); }
 		$result = CVD_Order_Transition_Service::transition( $order->get_id(), 'delivery', 'accepted', array(
 			'actor_user_id'   => $messenger->ID,
 			// Con la hora de la oferta: si la carrera se soltó (relevo) y el mismo mensajero la vuelve a
 			// coger, no se repite el recibo viejo (que daría "ganada" sin asignarla de verdad).
 			'idempotency_key' => 'bot-claim:' . $order->get_id() . ':' . $messenger->ID . ':' . (string) $order->get_meta( '_cvd_delivery_offered_at', true ),
-			'source'          => 'cvd_bot_bridge_claim',
-			'metadata'        => array( 'messenger' => $messenger->ID, 'source' => 'whatsapp_group' ),
+			'source'          => $palla ? 'cvd_palla_claim' : 'cvd_bot_bridge_claim',
+			'metadata'        => array( 'messenger' => $messenger->ID, 'source' => $palla ? 'palla' : 'whatsapp_group' ),
 			'precondition'    => static function ( WC_Order $locked, string $current ) use ( $messenger ) {
 				$assigned = absint( $locked->get_meta( '_cvd_messenger_user_id', true ) );
 				if ( ( $assigned && $assigned !== $messenger->ID ) || 'offered' !== $current ) { return CVD_Order_Transition_Service::CONFLICT; }
 				return true;
 			},
-			'atomic_mutation' => static function ( WC_Order $locked, $from, $to, $actor, $at ) use ( $messenger ): void {
+			'atomic_mutation' => static function ( WC_Order $locked, $from, $to, $actor, $at ) use ( $messenger, $palla ): void {
 				$locked->update_meta_data( '_cvd_messenger_user_id', $messenger->ID );
 				$locked->update_meta_data( '_cvd_delivery_accepted_at', $at );
-				$locked->add_order_note( 'Carrera aceptada por ' . $messenger->display_name . ' desde el grupo de WhatsApp.' );
+				$locked->add_order_note( 'Carrera aceptada por ' . $messenger->display_name . ( $palla ? ' desde Pa\'llá (la app del mensajero).' : ' desde el grupo de WhatsApp.' ) );
 				update_user_meta( $messenger->ID, '_cvd_last_delivery_accepted_at', time() );
 			},
 			// Mismos avisos que cuando se acepta desde la web (web push, reputación).
 			'after_commit'    => static function ( WC_Order $saved ): void { CVD_Delivery::after_commit_effects( $saved, 'accepted' ); },
 		) );
-		if ( empty( $result['success'] ) ) { return self::no_cache( array( 'result' => 'taken' ) ); }
+		if ( empty( $result['success'] ) ) { return array( 'result' => 'taken' ); }
 		$fresh = wc_get_order( $order->get_id() );
-		return self::no_cache( array( 'result' => 'won', 'messenger' => $messenger->display_name, 'voucher' => self::voucher( $fresh ) ) );
+		return array( 'result' => 'won', 'messenger' => $messenger->display_name, 'voucher' => self::voucher( $fresh ) );
 	}
 
 	/**

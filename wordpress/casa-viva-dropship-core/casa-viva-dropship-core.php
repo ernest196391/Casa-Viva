@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.58.1
+ * Version: 3.14.61
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.58.1' );
+define( 'CVD_VERSION', '3.14.61' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -73,6 +73,8 @@ require_once CVD_DIR . 'includes/class-cvd-encuesta-def.php'; // 3.14.35: encues
 require_once CVD_DIR . 'includes/class-cvd-encuesta.php';
 require_once CVD_DIR . 'includes/class-cvd-catalog-version.php'; // 3.14.41: el bot ve los cambios de productos al momento (Lennys, 20-oct)
 require_once CVD_DIR . 'includes/class-cvd-caja-bridge.php'; // 3.14.42: la caja NEXO cobra pedidos web y cuadra el cajón (Ernesto 20-oct)
+require_once CVD_DIR . 'includes/class-cvd-palla.php'; // 3.14.61: Pa'llá, la app del mensajero en /palla/ (Ernesto 23-oct). Nace apagada: cvd_palla = no.
+require_once CVD_DIR . 'includes/class-cvd-palla-api.php'; // 3.14.61: su API (casa-viva/v1/palla/…), aparte para llevarla a NEXO.
 
 register_activation_hook( __FILE__, array( 'CVD_Plugin', 'activate' ) );
 
@@ -129,6 +131,8 @@ add_action(
 			CVD_Caja_Bridge::register(); // 3.14.42: /panel/caja/* (pedidos web en la caja, efectivo de Ventas para el cierre).
 			CVD_Encuesta::register(); // 3.14.35: encuesta anónima en /encuesta/ (nace cerrada; Ernesto 16-oct).
 			CVD_Daily_Rates::register(); // 3.13.64: cada pedido nuevo guarda la tasa CUP del día de la venta (regla de Ernesto, 12-oct).
+			CVD_Palla::register(); // 3.14.61: Pa'llá (interruptor cvd_palla: no | prueba | si; testers en cvd_palla_testers).
+			CVD_Palla_Api::register(); // 3.14.61: GET hoy · POST cojo · POST carrera (mismos caminos que el «Yo» y la tarjeta de carrera).
 		}
 	}
 );

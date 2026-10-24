@@ -25,6 +25,7 @@ SOFTWARE.
 Fuentes Cinzel y Figtree (assets/fonts/, 3.13.72)
 Cinzel: Copyright 2020 The Cinzel Project Authors (https://github.com/NDISCOVER/Cinzel)
 Figtree: Copyright 2022 The Figtree Project Authors (https://github.com/erikdkennedy/figtree)
+Archivo (assets/palla/fonts/, 3.14.61, Pa'llá): Copyright 2016 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo)
 License: SIL Open Font License, Version 1.1
 
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007

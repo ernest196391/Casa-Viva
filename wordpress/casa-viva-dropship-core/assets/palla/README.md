@@ -1,10 +1,35 @@
 # Pa'llá — app del mensajero (PWA) · Core 3.14.61 · rama `feat/palla`
 
-**Estado (23-oct, pausa pedida por Ernesto):** solo está hecha la lectura y el plan técnico. **Todavía no hay código.**
-Nada desplegado ni tocado en el servidor. La rama sale de `origin/main` = Core 3.14.58.1 (d083479).
-En cola antes que esta: 3.14.59 (`feat/carrera-palabras`) y 3.14.60 (`feat/ficha-contesta`).
+**Estado (24-oct): construida y probada en vista previa. NO subida. Nace apagada (`cvd_palla` = `no`).**
+Ernesto decide cuándo se sube, después de 3.14.59 y 3.14.60. La rama sale de `origin/main` = Core 3.14.58.1 (d083479).
 
-## Qué quedó hecho
+## Hecho el 24-oct
+- `includes/class-cvd-palla.php` — interruptor, token del enlace (30 días, época para anular), `/palla/` (página),
+  `/palla/manifest.webmanifest`, `/palla/sw.js`, `/palla/sesion`, `GET /bot/palla/enlace?phone=`. Las rutas se leen de la
+  dirección (`parse_request`), sin reglas de reescritura: no hace falta «guardar enlaces permanentes» al subir.
+- `includes/class-cvd-palla-api.php` — `GET palla/hoy`, `POST palla/cojo`, `POST palla/carrera`, idempotencia por `cid`
+  (últimos 50 en `_cvd_palla_cids`). Al leer no escribe nada (la mensajería de las ofertas sale de lo guardado).
+- `class-cvd-bot-bridge.php` — `claim()` llama a `claim_by_messenger( $order, $messenger, 'whatsapp_group' )`; «La cojo» usa
+  `'palla'` (misma clave de idempotencia: un «Yo» y un «La cojo» del mismo mensajero no se pisan). Solo cambian la nota
+  («desde Pa'llá») y el origen anotado.
+- `assets/palla/app.js|app.css|icon.svg|icon-192/512/maskable-512.png|fonts/Archivo-400/600/700/800.woff2`.
+- Vista previa sin servidor con datos de ejemplo: `artifacts/palla-preview/index.html` (`?escena=1`, `?etapa=route`,
+  `?offline=1`, `?cola=1`) y `marco.html` para capturas. Capturas en `ernesto-rondon-nexo/docs/nexo-business/apps/palla/capturas/`.
+- Pruebas: `php -l` limpio (PHP 8.2 de Hostinger); `wp eval-file` EN SECO con las clases solo en memoria (token válido,
+  tocado y caducado; ofertas reales; dinero de Daiquel = usuario 59; rutas); flujo completo en el navegador a 375×812
+  (La cojo → Recogí → Entregado con CUP → cola sin conexión → reenvío al volver la señal con el mismo `cid`).
+
+## Para encenderla con Daiquel (modo prueba), después de subir 3.14.61
+1. `wp option update cvd_palla_testers '[59]' --format=json` y `wp option update cvd_palla prueba`.
+2. Su enlace: `wp eval 'echo CVD_Palla::link_for(59);'` → mandárselo por privado (no por el grupo).
+3. Anular sus enlaces si pierde el teléfono: `wp eval 'CVD_Palla::revoke(59);'`. Apagar todo: `wp option update cvd_palla no`.
+
+## Choques con las otras ramas (comprobado con `git merge-tree`, sin fusionar)
+- `feat/carrera-palabras` (3.14.59) y `core/bot-recogida-a-mensajeria` (3.14.59): solo las 2 líneas de versión del archivo
+  principal. `feat/ficha-contesta` (su punta dice 3.14.57): versión + las líneas `require`/`register` vecinas (quedarse con
+  las dos). Ninguna toca `class-cvd-bot-bridge.php` ni los archivos nuevos de Pa'llá.
+
+## Lo que se leyó el 23-oct
 - Leídos: ficha `docs/productos/app-mensajeria-cuba.md`, diseño aprobado (5 pantallas del artifact HGgfiy4NwTDgPr1Dbg5XoU),
   `class-cvd-tarjeta-carrera.php` (3.14.54), `class-cvd-bot-bridge.php` (claim/release/delivered), `class-cvd-delivery.php`
   (ofertas, `messenger_confirms_pickup`, `/messenger/feed`), `class-cvd-pwa.php` (la PWA de Casa Viva, SW en `/casa-viva-sw.js`)
@@ -12,7 +37,7 @@ En cola antes que esta: 3.14.59 (`feat/carrera-palabras`) y 3.14.60 (`feat/ficha
 - Comprobado: ni 3.14.59 ni 3.14.60 tocan `class-cvd-bot-bridge.php`; 3.14.59 añade a `CVD_Tarjeta_Carrera::submit()` un 5.º
   argumento opcional (`$via`), así que llamar a `submit()` con 4 argumentos vale con y sin 3.14.59.
 
-## Plan (lo que falta construir)
+## Plan del 23-oct (ya construido)
 Archivos nuevos (no chocan con otras ramas):
 - `includes/class-cvd-palla.php` — interruptor, entrada, página `/palla/`, manifest, service worker.
 - `includes/class-cvd-palla-api.php` — la API (clase aparte para moverla a NEXO en la fase 2).
