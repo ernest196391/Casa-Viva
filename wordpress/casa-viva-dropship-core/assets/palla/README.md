@@ -19,6 +19,13 @@ Ernesto decide cuándo se sube, después de 3.14.59 y 3.14.60. La rama sale de `
   tocado y caducado; ofertas reales; dinero de Daiquel = usuario 59; rutas); flujo completo en el navegador a 375×812
   (La cojo → Recogí → Entregado con CUP → cola sin conexión → reenvío al volver la señal con el mismo `cid`).
 
+## Aviso del bot (24-oct, hecho)
+- Core: «La cojo» guarda `_cvd_palla_claimed_at`; `GET /bot/dispatch/palla` da las cogidas en la app aún sin avisar (con el vale) y
+  `POST /bot/dispatch/{id}/palla-announced` las marca. Si se suelta y la coge otro por el grupo, la oferta nueva es más reciente y ya no sale.
+- VivaBot (rama `feat/palla-avisos`, worktree `C:UsersErnestoivabot-palla`): `processPalla()` en `src/dispatch.js` → «✅ #N es de X (la cogió en Pa'llá)» en el grupo si se
+  había publicado, el vale por privado y la carrera queda esperando la hora (como tras un «Yo»). Con Core sin 3.14.61 no hace nada.
+  Orden de subida: Core 3.14.61 primero, luego el bot.
+
 ## Para encenderla con Daiquel (modo prueba), después de subir 3.14.61
 1. `wp option update cvd_palla_testers '[59]' --format=json` y `wp option update cvd_palla prueba`.
 2. Su enlace: `wp eval 'echo CVD_Palla::link_for(59);'` → mandárselo por privado (no por el grupo).
@@ -86,9 +93,7 @@ Pruebas previstas: `php -l`; `wp eval` en SECO en el servidor (sin cambiar pedid
 devuelva `test` sin tocar nada); vista previa 375×812 en el navegador integrado; capturas en
 `ernesto-rondon-nexo/docs/nexo-business/apps/palla/capturas/`.
 
-Hueco conocido (VivaBot, fuera de Core): si la carrera se coge en Pa'llá, el bot no pone «✅ #N es de X» en el grupo ni manda el
-vale por privado (hoy solo lo hace tras un «Yo»; un pedido cogido por la web solo pasa a `cancelled` en `crm_dispatch`). Hace falta
-un cambio pequeño en `src/dispatch.js` antes de `cvd_palla = si`.
+Hueco del bot (23-oct): resuelto el 24-oct, ver «Aviso del bot» arriba.
 
 ## Fase 2 — varios comercios (NEXO)
 - `business_id` en cada carrera y en el token del mensajero (hoy todo es Casa Viva implícito).

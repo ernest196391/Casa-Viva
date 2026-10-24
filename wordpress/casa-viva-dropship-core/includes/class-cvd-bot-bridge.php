@@ -27,6 +27,9 @@ final class CVD_Bot_Bridge {
 		// Asignación directa (la gestora eligió mensajero): el vale va por privado, nunca al grupo.
 		register_rest_route( self::NS, '/bot/dispatch/direct', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'direct' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/direct-announced', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'direct_announced' ), 'permission_callback' => $auth ) );
+		// 3.14.61: carreras cogidas en Pa'llá («La cojo») que el bot todavía no avisó.
+		register_rest_route( self::NS, '/bot/dispatch/palla', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'palla_claims' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/palla-announced', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'palla_announced' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/claim', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'claim' ), 'permission_callback' => $auth ) );
 		// Relevo (3.13.49): el mensajero asignado suelta la carrera antes de recogerla.
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/release', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'release' ), 'permission_callback' => $auth ) );
@@ -476,6 +479,54 @@ final class CVD_Bot_Bridge {
 		return self::no_cache( array( 'ok' => true ) );
 	}
 
+	/**
+	 * 3.14.61: carreras cogidas con «La cojo» en Pa'llá que el bot todavía no avisó. El bot pone «✅ #N es de X» en el
+	 * grupo (si la había publicado), manda el vale por privado (lo mismo que tras un «Yo») y llama a palla-announced.
+	 * Solo mientras sigue a nombre del que la cogió y antes de recoger. Si se soltó y la cogió otro (por el grupo), la
+	 * oferta nueva es más reciente que la marca de Pa'llá y ya no sale aquí.
+	 */
+	public static function palla_claims(): WP_REST_Response {
+		$orders = wc_get_orders( array( 'limit' => 30, 'type' => 'shop_order', 'orderby' => 'date', 'order' => 'DESC', 'status' => array( 'pending', 'processing', 'on-hold' ),
+			'meta_query' => array( array( 'key' => '_cvd_palla_claimed_at', 'compare' => 'EXISTS' ) ) ) );
+		$list = array();
+		foreach ( $orders as $order ) {
+			if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund ) { continue; }
+			$status = CVD_Delivery::status( $order );
+			if ( ! in_array( $status, array( 'assigned', 'accepted', 'to_store' ), true ) ) { continue; }
+			if ( '' !== CVD_Delivery::blocks_dispatch( $order ) ) { continue; }
+			$claimed_at = (string) $order->get_meta( '_cvd_palla_claimed_at', true ); // 'Y-m-d H:i:s' UTC, como las demás
+			if ( $claimed_at < (string) $order->get_meta( '_cvd_delivery_offered_at', true ) ) { continue; } // la volvieron a ofertar después
+			$announced_at = (string) $order->get_meta( '_cvd_bot_palla_announced_at', true );
+			if ( '' !== $announced_at && $announced_at >= $claimed_at ) { continue; }
+			$messenger = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
+			if ( ! $messenger ) { continue; }
+			$list[] = array(
+				'id'             => $order->get_id(),
+				'status'         => $status,
+				'claimedAt'      => $claimed_at,
+				'messengerId'    => $messenger->ID,
+				'messengerName'  => $messenger->display_name,
+				'messengerPhone' => preg_replace( '/\D+/', '', (string) ( get_user_meta( $messenger->ID, '_cvd_whatsapp', true ) ?: get_user_meta( $messenger->ID, 'billing_phone', true ) ) ),
+				'voucher'        => self::voucher( $order ),
+			);
+		}
+		return self::no_cache( array( 'palla' => $list ) );
+	}
+
+	public static function palla_announced( WP_REST_Request $request ) {
+		$order = self::order( $request );
+		if ( is_wp_error( $order ) ) { return $order; }
+		$claimed_at = (string) $order->get_meta( '_cvd_palla_claimed_at', true );
+		if ( '' === $claimed_at ) { return new WP_Error( 'cvd_not_palla', 'Ese pedido no se cogió en Pa\'llá.', array( 'status' => 409 ) ); }
+		$previous = (string) $order->get_meta( '_cvd_bot_palla_announced_at', true );
+		if ( '' === $previous || $previous < $claimed_at ) {
+			$order->update_meta_data( '_cvd_bot_palla_announced_at', current_time( 'mysql', true ) );
+			$order->add_order_note( 'VivaBot: avisó en el grupo y mandó el vale por privado (carrera cogida en Pa\'llá).' );
+			$order->save();
+		}
+		return self::no_cache( array( 'ok' => true ) );
+	}
+
 	/** "Yo" en el grupo: Core asigna al primero; los demás reciben "ya está cogido". */
 	public static function claim( WP_REST_Request $request ) {
 		$order = self::order( $request );
@@ -512,6 +563,8 @@ final class CVD_Bot_Bridge {
 				$locked->update_meta_data( '_cvd_messenger_user_id', $messenger->ID );
 				$locked->update_meta_data( '_cvd_delivery_accepted_at', $at );
 				$locked->add_order_note( 'Carrera aceptada por ' . $messenger->display_name . ( $palla ? ' desde Pa\'llá (la app del mensajero).' : ' desde el grupo de WhatsApp.' ) );
+				// El bot la ve en GET /bot/dispatch/palla: «✅ es de X» en el grupo y el vale por privado, como tras un «Yo».
+				if ( $palla ) { $locked->update_meta_data( '_cvd_palla_claimed_at', $at ); }
 				update_user_meta( $messenger->ID, '_cvd_last_delivery_accepted_at', time() );
 			},
 			// Mismos avisos que cuando se acepta desde la web (web push, reputación).
