@@ -150,6 +150,7 @@ final class CVD_Palla_Api {
 		else {
 			$order->update_meta_data( '_cvd_palla_pase', wp_json_encode( array( 'from' => $me->ID, 'to' => $to->ID, 'at' => current_time( 'mysql', true ) ) ) );
 			$order->update_meta_data( '_cvd_palla_pase_to', $to->ID );
+			$order->update_meta_data( '_cvd_palla_bot', '1' ); // el bot le escribe al compañero
 			$order->add_order_note( 'Pa\'llá: ' . $me->display_name . ' le pide a ' . $to->display_name . ' que coja esta carrera (sigue a nombre de ' . $me->display_name . ' hasta que acepte).' );
 			$order->save();
 			$out = array( 'result' => 'pass_sent', 'message' => '🔁 #' . $number . ': le pedimos a ' . self::first( (string) $to->display_name ) . ' que la acepte. Sigue siendo tuya hasta que diga que sí.' );
@@ -207,6 +208,7 @@ final class CVD_Palla_Api {
 				$order->delete_meta_data( '_cvd_palla_eta_at' );
 				$order->update_meta_data( '_cvd_palla_paso', wp_json_encode( array( 'from' => $pass['from'], 'to' => $me->ID, 'at' => $now ) ) );
 				$order->update_meta_data( '_cvd_palla_paso_at', $now );
+				$order->update_meta_data( '_cvd_palla_bot', '1' ); // el bot manda el vale al nuevo y avisa a la gestora
 				self::clear_pass( $order );
 				$order->add_order_note( 'Pa\'llá: carrera pasada de ' . ( $from ? $from->display_name : 'otro mensajero' ) . ' a ' . $me->display_name . ( in_array( $status, array( 'picked_up', 'handed_over' ), true ) ? ' con el paquete ya recogido. Lo entrega y devuelve el dinero ' . $me->display_name . '.' : ' antes de recogerla.' ) );
 				$order->save();
@@ -543,6 +545,7 @@ final class CVD_Palla_Api {
 			$order->update_meta_data( '_cvd_bot_eta', $text );
 			$order->update_meta_data( '_cvd_bot_eta_at', $now );
 			$order->update_meta_data( '_cvd_palla_eta_at', $now );
+			$order->update_meta_data( '_cvd_palla_bot', '1' ); // el bot lo ve en /bot/dispatch/palla
 			$order->add_order_note( 'Pa\'llá: ' . $me->display_name . ' lo entrega ' . $text . '.' );
 			$order->save();
 			if ( 'assigned' === CVD_Delivery::status( $order ) ) { CVD_Delivery::accept_assigned( $order, $me->ID, 'cvd_palla_eta', 'en Pa\'llá al dar la hora' ); }

@@ -487,17 +487,18 @@ final class CVD_Bot_Bridge {
 	 * oferta nueva es más reciente que la marca de Pa'llá y ya no sale aquí.
 	 */
 	public static function palla_claims(): WP_REST_Response {
-		// 3.14.67.1: también las horas puestas en la app que el bot aún no avisó (etaPending), aunque la cogiera con «Yo».
-		$orders = wc_get_orders( array( 'limit' => 40, 'type' => 'shop_order', 'orderby' => 'date', 'order' => 'DESC', 'status' => array( 'pending', 'processing', 'on-hold' ),
-			'meta_query' => array( 'relation' => 'OR', array( 'key' => '_cvd_palla_claimed_at', 'compare' => 'EXISTS' ), array( 'key' => '_cvd_palla_eta_at', 'compare' => 'EXISTS' ),
-				array( 'key' => '_cvd_palla_pase_to', 'compare' => 'EXISTS' ), array( 'key' => '_cvd_palla_paso_at', 'compare' => 'EXISTS' ) ) ) );
+		// 3.14.67.2: una sola marca (_cvd_palla_bot = 1) en los pedidos con algo de Pa'llá para el bot (cogida, hora, pase).
+		// La versión con 4 «EXISTS» unidos por OR tardaba más de 20 s en cada vuelta del bot (24-oct, 19:17).
+		$orders = wc_get_orders( array( 'limit' => 40, 'type' => 'shop_order', 'orderby' => 'date', 'order' => 'DESC', 'meta_key' => '_cvd_palla_bot', 'meta_value' => '1' ) );
 		$list = array();
 		foreach ( $orders as $order ) {
 			if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund ) { continue; }
 			$status = CVD_Delivery::status( $order );
-			if ( '' !== CVD_Delivery::blocks_dispatch( $order ) ) { continue; }
+			// Ya no hay nada que avisar (terminado, cancelado o avisado): se quita la marca para que la lista no crezca.
+			$drop = static function () use ( $order ): void { $order->delete_meta_data( '_cvd_palla_bot' ); $order->save(); };
+			if ( ! in_array( $order->get_status(), array( 'pending', 'processing', 'on-hold' ), true ) || '' !== CVD_Delivery::blocks_dispatch( $order ) ) { $drop(); continue; }
 			$messenger = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
-			if ( ! $messenger ) { continue; }
+			if ( ! $messenger ) { $drop(); continue; }
 			// La cogida de Pa'llá: antes de recoger, sin avisar todavía y sin que la volvieran a ofertar después.
 			$claimed_at = (string) $order->get_meta( '_cvd_palla_claimed_at', true ); // 'Y-m-d H:i:s' UTC, como las demás
 			$announced_at = (string) $order->get_meta( '_cvd_bot_palla_announced_at', true );
@@ -527,7 +528,7 @@ final class CVD_Bot_Bridge {
 				$from = get_userdata( absint( $paso['from'] ?? 0 ) );
 				$pass_done = array( 'fromName' => $from ? $from->display_name : '', 'fromPhone' => $from ? preg_replace( '/\D+/', '', (string) ( get_user_meta( $from->ID, '_cvd_whatsapp', true ) ?: get_user_meta( $from->ID, 'billing_phone', true ) ) ) : '' );
 			}
-			if ( ! $claim && ! $eta_pending && ! $pass_ask && ! $pass_done ) { continue; }
+			if ( ! $claim && ! $eta_pending && ! $pass_ask && ! $pass_done ) { $drop(); continue; }
 			$list[] = array(
 				'id'             => $order->get_id(),
 				'status'         => $status,
@@ -612,7 +613,7 @@ final class CVD_Bot_Bridge {
 				$locked->update_meta_data( '_cvd_delivery_accepted_at', $at );
 				$locked->add_order_note( 'Carrera aceptada por ' . $messenger->display_name . ( $palla ? ' desde Pa\'llá (la app del mensajero).' : ' desde el grupo de WhatsApp.' ) );
 				// El bot la ve en GET /bot/dispatch/palla: «✅ es de X» en el grupo y el vale por privado, como tras un «Yo».
-				if ( $palla ) { $locked->update_meta_data( '_cvd_palla_claimed_at', $at ); }
+				if ( $palla ) { $locked->update_meta_data( '_cvd_palla_claimed_at', $at ); $locked->update_meta_data( '_cvd_palla_bot', '1' ); }
 				update_user_meta( $messenger->ID, '_cvd_last_delivery_accepted_at', time() );
 			},
 			// Mismos avisos que cuando se acepta desde la web (web push, reputación).
