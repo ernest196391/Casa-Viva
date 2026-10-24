@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pa'llá · capturas para la guía</title>
+<!-- Capturas de la guía de mensajeros (casaviva.company/palla/guia) desde el MODO PRÁCTICA (nada real).
+     guia-captura.html?practica=1&paso=1..8 deja la app en esa pantalla, sin la barra de práctica.
+     Se fotografía con marco.html (375×812). -->
+<link rel="stylesheet" href="../../wordpress/casa-viva-dropship-core/assets/palla/app.css?v=g1">
+<style>.pl-practica{display:none!important}.pl-toast{display:none!important}</style></head>
+<body><div id="app"></div>
+<script>
+window.PALLA = { api: '/no-hay-api/', session: '/no-hay-sesion', sw: '', scope: '', version: 'guia', mode: 'si', whatsapp: '5354056173', storeMap: 'https://www.google.com/maps' };
+window.PALLA_PRACTICA_NOMBRE = 'Pedro';
+try { localStorage.clear(); } catch (e) {}
+</script>
+<script src="../../wordpress/casa-viva-dropship-core/assets/palla/practica.js?v=g1"></script>
+<script>
+(function () {
+	var P = window.PALLA_PRACTICA, paso = (new URLSearchParams(location.search)).get('paso') || '1';
+	P.reset();
+	var R = function (path, body) { return P.request(path, Object.assign({ cid: 'g' + Math.random() }, body || {})); };
+	// Deja el mundo listo ANTES de que arranque la app, y la dirección (#) en la pantalla de cada paso.
+	var setup = {
+		'1': function () { return Promise.resolve('#carreras'); },
+		'2': function () { return R('cojo', { order: 9001 }).then(function () { return '#hora/9001'; }); },
+		'3': function () { return R('cojo', { order: 9001 }).then(function () { return R('hora', { order: 9001, texto: 'en 1 hora' }); }).then(function () { return '#carrera/9001'; }); },
+		'4': function () { return R('cojo', { order: 9002 }).then(function () { return R('hora', { order: 9002, texto: 'hoy a las 5:30 p. m.' }); }).then(function () { return R('carrera', { order: 9002, action: 'recogi' }); }).then(function () { return '#entregado/9002'; }); },
+		'5': function () {
+			return R('cojo', { order: 9001 }).then(function () { return R('hora', { order: 9001, texto: 'en 1 hora' }); }).then(function () { return R('carrera', { order: 9001, action: 'recogi' }); }).then(function () { return R('carrera', { order: 9001, action: 'entregado' }); })
+				.then(function () { return R('cojo', { order: 9002 }); }).then(function () { return R('hora', { order: 9002, texto: 'hoy a las 5:30 p. m.' }); }).then(function () { return R('carrera', { order: 9002, action: 'recogi' }); }).then(function () { return R('carrera', { order: 9002, action: 'entregado' }); })
+				.then(function () { return '#dinero'; });
+		},
+		'6': function () { return R('cojo', { order: 9003 }).then(function () { return R('hora', { order: 9003, texto: 'en 2 horas' }); }).then(function () { return '#carrera/9003'; }); },
+		'7': function () { P.event('mepasan'); return Promise.resolve('#carreras'); },
+		'8': function () { return R('cojo', { order: 9001 }).then(function () { return R('hora', { order: 9001, texto: 'en 1 hora' }); }).then(function () { return '#pasar/9001'; }); }
+	}[paso];
+	setup().then(function (hash) {
+		history.replaceState(null, '', location.pathname + location.search + hash);
+		var s = document.createElement('script');
+		s.src = '../../wordpress/casa-viva-dropship-core/assets/palla/app.js?v=g1';
+		s.onload = function () {
+			// Paso 6: sin señal, toca «Recogí» (queda guardado). Paso 8: elige a Ana en la lista.
+			if (paso === '6') { setTimeout(function () { P.setOnline(false); var b = document.querySelector('[data-act=recogi]'); if (b) { b.click(); } }, 3500); }
+			if (paso === '8') { setTimeout(function () { var r = document.querySelector('input[name=to][value="3"]'); if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); } }, 3000); }
+			if (paso === '2') { setTimeout(function () { var r = document.querySelector('input[name=hora][value="en 1 hora"]'); if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); } }, 3000); }
+		};
+		document.body.appendChild(s);
+	});
+})();
+</script>
+</body></html>

@@ -143,6 +143,8 @@ final class CVD_Palla {
 			'/palla/sw.js'                => 'sw',
 			'/palla/manifest.webmanifest' => 'manifest',
 			'/palla/sesion'               => 'sesion',
+			'/palla/guia'                 => 'guia',
+			'/palla/guia/'                => 'guia',
 			'/palla/tienda'               => 'tienda',
 			'/palla/tienda/'              => 'tienda',
 		)[ $path ] ?? '';
@@ -159,6 +161,7 @@ final class CVD_Palla {
 		if ( 'manifest' === $kind ) { self::manifest(); }
 		if ( 'sesion' === $kind ) { self::session(); }
 		if ( 'tienda' === $kind ) { self::store_page(); }
+		if ( 'guia' === $kind ) { self::guide(); }
 		self::page();
 	}
 
@@ -229,6 +232,20 @@ final class CVD_Palla {
 			. '<link rel="preload" href="' . esc_url( self::asset( 'fonts/Archivo-400.woff2' ) ) . '" as="font" type="font/woff2" crossorigin>'
 			. '<link rel="stylesheet" href="' . esc_url( self::asset( 'app.css' ) ) . '">'
 			. '</head><body>' . $body . '</body></html>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- armado con esc_* arriba.
+		exit;
+	}
+
+	/**
+	 * /palla/guia (3.14.67.3, Ernesto 24-oct): página para mensajeros con capturas de cómo funciona (estilo Hormozi), abierta a
+	 * cualquiera con el enlace (sin sesión). El texto está en assets/palla/guia.html; {{A}} = carpeta assets/palla/, {{P}} = la práctica.
+	 */
+	private static function guide(): void {
+		$file = CVD_DIR . 'assets/palla/guia.html';
+		$html = is_readable( $file ) ? (string) file_get_contents( $file ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- archivo propio del plugin.
+		if ( '' === $html ) { status_header( 404 ); exit; }
+		header( 'Content-Type: text/html; charset=utf-8' );
+		header( 'Cache-Control: public, max-age=600' );
+		echo strtr( $html, array( '{{A}}' => esc_url( CVD_URL . 'assets/palla/' ), '{{P}}' => esc_url( home_url( '/palla/?practica=1' ) ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- página fija del plugin.
 		exit;
 	}
 

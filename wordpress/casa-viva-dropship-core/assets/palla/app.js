@@ -321,7 +321,9 @@
 	}
 
 	function wordFor(c) {
-		var amount = c.money && !c.money.after && c.money.chargeShort && /\d/.test(c.money.chargeShort) ? ' ' + c.money.chargeShort.split(' + ')[0].toLowerCase() : ' cantidad';
+		// Ya pagado: «Entregado N» a secas. Con cifra: la del vale. Sin tasa: «cantidad» (la escribe él).
+		var m = c.money || {};
+		var amount = m.prepaid ? '' : (!m.after && m.chargeShort && /\d/.test(m.chargeShort) ? ' ' + m.chargeShort.split(' + ')[0].toLowerCase() : ' cantidad');
 		return { recogi: 'Recogí ' + c.number, entregado: 'Entregado ' + c.number + amount, problema: 'Problema ' + c.number + ' no estaba', suelto: 'No puedo ' + c.number };
 	}
 

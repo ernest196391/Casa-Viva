@@ -89,7 +89,7 @@
 		return {
 			id: o.id, number: String(o.id), stage: st, test: false, when: o.when, eta: o.eta || '', pase: o.pase && o.pase.from === W.me ? { to: o.pase.to, toName: compaName(o.pase.to) } : null,
 			customer: { name: o.cust.name, first: o.cust.name.split(' ')[0], address: o.cust.address, zone: o.zone, reference: o.cust.ref, note: '', phone: o.cust.phone, phoneLabel: '+53 ' + o.cust.phone.slice(2, 6) + ' ' + o.cust.phone.slice(6), alt: '', altLabel: '' },
-			map: '', items: o.items, pickup: { place: STORE, zone: 'Nuevo Vedado', hours: 'de 10:00 a. m. a 4:00 p. m.', suppliers: [] }, assembly: '',
+			map: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(o.cust.address + ', ' + o.zone + ', La Habana'), items: o.items, pickup: { place: STORE, zone: 'Nuevo Vedado', hours: 'de 10:00 a. m. a 4:00 p. m.', suppliers: [] }, assembly: '',
 			money: st === 'delivered' ? { after: true, prepaid: defaults(o).prepaid, bring: moneyText(bringAfter(o)) || 'Nada', sentence: sentence(o), deadline: deadline(o.atHour || hour()), fee: o.fee, feeText: money(o.fee, 'CUP') } : moneyBefore(o)
 		};
 	}

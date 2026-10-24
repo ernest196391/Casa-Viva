@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#121212">
+<title>Pa'llá · la app del mensajero de Casa Viva</title>
+<meta name="description" content="Coge carreras con un toque, sabe al centavo cuánto llevas a la tienda y sigue trabajando aunque se vaya la señal.">
+<meta property="og:title" content="Pa'llá · la app del mensajero de Casa Viva">
+<meta property="og:description" content="Coge carreras con un toque. Cobra claro. Funciona sin señal.">
+<meta property="og:image" content="../../wordpress/casa-viva-dropship-core/assets/palla/guia/paso-1.jpg">
+<link rel="icon" href="../../wordpress/casa-viva-dropship-core/assets/palla/icon.svg" type="image/svg+xml">
+<style>
+@font-face{font-family:Archivo;font-weight:400;font-display:swap;src:url("../../wordpress/casa-viva-dropship-core/assets/palla/fonts/Archivo-400.woff2") format("woff2")}
+@font-face{font-family:Archivo;font-weight:600;font-display:swap;src:url("../../wordpress/casa-viva-dropship-core/assets/palla/fonts/Archivo-600.woff2") format("woff2")}
+@font-face{font-family:Archivo;font-weight:800;font-display:swap;src:url("../../wordpress/casa-viva-dropship-core/assets/palla/fonts/Archivo-800.woff2") format("woff2")}
+:root{--ink:#121212;--muted:#545454;--line:#E2E2DF;--sunken:#F3F3F2;--brand:#FFC21A;--brand-soft:#FFF3CC;--ok:#1A7438;--ok-soft:#E4F4E8;--bad:#B42318;--bad-soft:#FCE6E4;--blue:#0B5F8A}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:#fff;color:var(--ink);font:400 17px/1.5 Archivo,"Helvetica Neue",Helvetica,Arial,sans-serif}
+a{color:var(--blue)}
+.wrap{max-width:560px;margin:0 auto;padding:0 18px}
+.hero{background:var(--ink);color:#fff;padding:28px 0 36px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;letter-spacing:-.01em}
+.logo span{width:36px;height:36px;border-radius:9px;background:var(--brand);color:var(--ink);display:grid;place-items:center;font-size:22px}
+.hero h1{font-size:36px;line-height:1.08;font-weight:800;letter-spacing:-.02em;margin:22px 0 12px}
+.hero h1 em{font-style:normal;color:var(--brand)}
+.hero p{margin:0 0 18px;color:#D9D9D6;font-size:18px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:54px;padding:0 20px;border-radius:12px;font-weight:800;font-size:18px;text-decoration:none;border:2px solid transparent}
+.btn-main{background:var(--brand);color:var(--ink)}
+.btn-ghost{border-color:#fff;color:#fff;margin-top:10px}
+.small{font-size:14px;color:#BDBDB8;margin-top:10px;text-align:center}
+section{padding:34px 0;border-bottom:1px solid var(--line)}
+h2{font-size:27px;line-height:1.15;font-weight:800;letter-spacing:-.015em;margin:0 0 14px}
+.kicker{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+.pains{list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.pains li{background:var(--bad-soft);border-radius:12px;padding:12px 14px;font-weight:600}
+.pains li::before{content:"✘ ";color:var(--bad)}
+.promise{background:var(--brand-soft);border-radius:14px;padding:16px;font-size:19px;font-weight:600;margin-top:16px}
+.step{display:grid;gap:12px;margin:26px 0 0}
+.step .num{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:var(--ink);color:var(--brand);font-weight:800;font-size:18px;margin-right:8px;flex:none}
+.step h3{display:flex;align-items:center;font-size:21px;line-height:1.2;margin:0;font-weight:800}
+.step p{margin:0;color:var(--muted)}
+.step p b{color:var(--ink)}
+.phone{width:min(300px,82%);margin:4px auto 0;border:10px solid var(--ink);border-radius:30px;overflow:hidden;box-shadow:0 10px 30px rgba(18,18,18,.18);background:var(--sunken)}
+.phone img{display:block;width:100%;height:auto}
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:15px}
+.vs div{padding:10px 12px;border-bottom:1px solid var(--line)}
+.vs .h{font-weight:800;font-size:14px;letter-spacing:.04em;text-transform:uppercase}
+.vs .a{background:var(--bad-soft)}
+.vs .b{background:var(--ok-soft)}
+.vs div:nth-last-child(-n+2){border-bottom:0}
+.keep{list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.keep li{background:var(--ok-soft);border-radius:12px;padding:12px 14px;font-weight:600}
+.keep li::before{content:"✔ ";color:var(--ok)}
+details{border:1px solid var(--line);border-radius:12px;padding:0 14px;margin-bottom:10px}
+summary{cursor:pointer;font-weight:800;min-height:52px;display:flex;align-items:center;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";margin-left:auto;font-size:22px;color:var(--muted)}
+details[open] summary::after{content:"–"}
+details p{margin:0 0 14px;color:var(--muted)}
+.cta{background:var(--ink);color:#fff;padding:34px 0 44px;border:0}
+.cta h2{color:#fff}
+.cta p{color:#D9D9D6}
+footer{padding:20px 0 34px;color:var(--muted);font-size:14px;text-align:center}
+</style>
+</head>
+<body>
+
+<header class="hero">
+	<div class="wrap">
+		<div class="logo"><span aria-hidden="true">P</span>Pa'llá · Casa Viva</div>
+		<h1>Coge la carrera <em>con un toque</em>. Cobra claro. Sigue trabajando <em>aunque se vaya la señal</em>.</h1>
+		<p>Pa'llá es la app de Casa Viva para mensajeros. Es gratis, no tiene contraseña y no hay que instalar nada de ninguna tienda.</p>
+		<a class="btn btn-main" href="practica.html?practica=1">Pruébala ahora, sin riesgo</a>
+		<div class="small">Es una práctica con carreras inventadas: nada de lo que toques es real.</div>
+	</div>
+</header>
+
+<main>
+<section>
+	<div class="wrap">
+		<p class="kicker">¿Te ha pasado?</p>
+		<h2>El grupo de WhatsApp sirve para repartir, pero se enreda</h2>
+		<ul class="pains">
+			<li>Dijiste «Yo» y no te la contaron, o se la dieron a otro.</li>
+			<li>Escribiste «entregado» y no se apuntó. Te lo volvieron a preguntar.</li>
+			<li>No sabías cuánto llevar a la tienda con el vuelto sumado.</li>
+			<li>Se fue la señal en medio de la carrera y nadie supo nada.</li>
+			<li>Quisiste pasarle la carrera a un compañero y se lió.</li>
+		</ul>
+		<div class="promise">Con Pa'llá todo eso se hace con un botón. Y lo que tocas queda apuntado al momento en la tienda.</div>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<p class="kicker">Cómo funciona</p>
+		<h2>Una carrera en 6 toques</h2>
+
+		<div class="step">
+			<h3><span class="num">1</span>Ves las carreras libres y tocas «La cojo»</h3>
+			<p>Lo mismo que el «Yo» del grupo: <b>el primero que toca, gana</b>. Ves de dónde a dónde, cuánto ganas y cuánto cobras al cliente antes de cogerla.</p>
+			<div class="phone"><img src="../../wordpress/casa-viva-dropship-core/assets/palla/guia/paso-1.jpg" width="560" height="1212" alt="Lista de carreras disponibles con el botón amarillo «La cojo»"></div>
+		</div>
+
+		<div class="step">
+			<h3><span class="num">2</span>Dices a qué hora la entregas</h3>
+			<p>Eliges «en 1 hora», «hoy por la tarde» u otra hora. <b>La gestora o el cliente se enteran solos</b>: nadie te escribe para preguntarte.</p>
+			<div class="phone"><img src="../../wordpress/casa-viva-dropship-core/assets/palla/guia/paso-2.jpg" width="560" height="1212" loading="lazy" alt="Pantalla «¿A qué hora lo entregas?» con opciones rápidas"></div>
+		</div>
+
+		<div class="step">
+			<h3><span class="num">3</span>Todo de tu carrera en una pantalla</h3>
+			<p>Dónde recoges, a quién entregas, <b>Llamar</b> y <b>Mapa</b> con un toque. Al recoger tocas <b>«Recogí»</b> y la tienda lo ve.</p>
+			<div class="phone"><img src="../../wordpress/casa-viva-dropship-core/assets/palla/guia/paso-3.jpg" width="560" height="1212" loading="lazy" alt="Pantalla de la carrera con el botón «Recogí»"></div>
+		</div>
+
+		<div class="step">
+			<h3><span class="num">4</span>«Entregado» y te dice cuánto llevas</h3>
+			<p>Marcas cómo pagó el cliente y la app <b>te dice exacto cuánto llevar a la tienda, con el vuelto ya sumado</b>. Se acabaron las cuentas a mano.</p>
+			<div class="phone"><img src="../../wordpress/casa-viva-dropship-core/assets/palla/guia/paso-4.jpg" width="560" height="1212" loading="lazy" alt="Pantalla «¿Cuánto cobraste?» con lo que hay que llevar a la tienda"></div>
+		</div>
+
+		<div class="step">
+			<h3><span class="num">5</span>Tu dinero del día, siempre claro</h3>
+			<p>Cuánto <b>ganaste</b> de mensajería y cuánto <b>debes a la tienda</b>. Cuando la dependienta marca «Dinero recibido», se pone en cero.</p>
+			<div class="phone"><img src="../../wordpress/casa-viva-dropship-core/assets/palla/guia/paso-5.jpg" width="560" height="1212" loading="lazy" alt="Pantalla «Mi dinero de hoy»"></div>
+		</div>
+
+		<div class="step">
+			<h3><span class="num">6</span>¿Se fue la señal? Sigue trabajando</h3>
+			<p>Lo que toques sin señal <b>queda guardado</b> y se manda solo cuando vuelve. No tienes que repetir nada.</p>
+			<div class="phone"><img src="../../wordpress/casa-viva-dropship-core/assets/palla/guia/paso-6.jpg" width="560" height="1212" loading="lazy" alt="Aviso «Guardado sin conexión»"></div>
+		</div>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<p class="kicker">Y además</p>
+		<h2>Pasar una carrera sin líos</h2>
+		<p>¿No puedes? Tocas «Pasar a otro mensajero», eliges al compañero y <b>sigue siendo tuya hasta que él la acepte</b> en su Pa'llá. Si alguien te pasa una a ti, te sale arriba con «La acepto».</p>
+		<div class="step">
+			<div class="phone"><img src="../../wordpress/casa-viva-dropship-core/assets/palla/guia/paso-7.jpg" width="560" height="1212" loading="lazy" alt="Aviso «te quiere pasar» con «La acepto» y «No puedo»"></div>
+		</div>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<p class="kicker">Antes y ahora</p>
+		<h2>Lo mismo, sin perder tiempo</h2>
+		<div class="vs">
+			<div class="h a">Antes (solo el grupo)</div><div class="h b">Con Pa'llá</div>
+			<div class="a">«Yo» y a esperar</div><div class="b">«La cojo» y es tuya al momento</div>
+			<div class="a">Te preguntan la hora</div><div class="b">La pones una vez y avisa sola</div>
+			<div class="a">«¿Ya entregaste?»</div><div class="b">Un toque y queda apuntado</div>
+			<div class="a">Cuentas del vuelto a mano</div><div class="b">Te dice cuánto llevar</div>
+			<div class="a">Sin señal, nadie sabe nada</div><div class="b">Se guarda y se manda solo</div>
+		</div>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<p class="kicker">Tranquilo</p>
+		<h2>Lo que NO cambia</h2>
+		<ul class="keep">
+			<li>La mensajería es tuya, igual que siempre.</li>
+			<li>El grupo de Mensajerías sigue funcionando.</li>
+			<li>Si un día la app no carga, escribes al WhatsApp de Casa Viva como siempre.</li>
+			<li>No hay contraseña: entras con tu enlace personal.</li>
+		</ul>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<h2>Preguntas</h2>
+		<details><summary>¿Cuesta algo?</summary><p>No. Es gratis para los mensajeros de Casa Viva.</p></details>
+		<details><summary>¿Gasta muchos datos?</summary><p>Muy pocos. Se guarda en el teléfono y solo baja lo nuevo.</p></details>
+		<details><summary>¿Cómo entro?</summary><p>Con tu enlace personal. Es solo tuyo: no lo pases a nadie. Se abre con Chrome y, si te sale «Instalar» o «Añadir a pantalla de inicio», le das y te queda como una app.</p></details>
+		<details><summary>¿Y si pierdo el teléfono?</summary><p>Avisas a la tienda y anula tu enlace al momento. Te dan uno nuevo.</p></details>
+		<details><summary>¿Y si me equivoco?</summary><p>Toca «Problema» y la tienda lo ve al instante. Antes de recoger también puedes tocar «No puedo» y la carrera vuelve a quedar libre.</p></details>
+	</div>
+</section>
+
+<section class="cta">
+	<div class="wrap">
+		<h2>Pruébala hoy. No pierdes nada.</h2>
+		<p>Entra en la práctica, coge una carrera inventada y entrégala. En 5 minutos sabes usarla.</p>
+		<a class="btn btn-main" href="practica.html?practica=1">Abrir la práctica</a>
+		<p style="margin-top:18px">¿Quieres usarla de verdad? <b style="color:#fff">Pídele tu enlace personal a la tienda.</b> Estamos empezando con pocos mensajeros y vamos sumando.</p>
+	</div>
+</section>
+</main>
+
+<footer>Casa Viva · Pa'llá, la app del mensajero</footer>
+</body>
+</html>
