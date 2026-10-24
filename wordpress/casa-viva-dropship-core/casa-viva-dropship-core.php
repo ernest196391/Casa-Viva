@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.61
+ * Version: 3.14.62
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.61' );
+define( 'CVD_VERSION', '3.14.62' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -37,6 +37,7 @@ require_once CVD_DIR . 'includes/class-cvd-product-search.php';
 require_once CVD_DIR . 'includes/class-cvd-contextual-assistant.php';
 require_once CVD_DIR . 'includes/class-cvd-premium-storefront.php';
 require_once CVD_DIR . 'includes/class-cvd-bot-bridge.php';
+require_once CVD_DIR . 'includes/class-cvd-bot-delivery-change.php';
 require_once CVD_DIR . 'includes/class-cvd-panel-bridge.php';
 require_once CVD_DIR . 'includes/class-cvd-clients.php';
 require_once CVD_DIR . 'includes/class-cvd-site-privacy.php';
@@ -100,6 +101,7 @@ add_action(
 			CVD_Contextual_Assistant::register();
 			CVD_Premium_Storefront::register();
 			CVD_Bot_Bridge::register();
+			CVD_Bot_Delivery_Change::register(); // 3.14.62: recogida → mensajería y «me lo asignó a mí» desde VivaBot (#4223, 20-oct)
 			CVD_Panel_Bridge::register();
 			CVD_Clients::register();
 			CVD_Site_Privacy::register();

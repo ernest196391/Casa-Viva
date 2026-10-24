@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || exit;
 /** Configurable CUP delivery prices. Product totals remain in the store currency. */
 final class CVD_Shipping_Rates {
 	private const OPTION = 'cvd_shipping_rates';
-	private const VERSION = '2026-09-23-v3';
+	public const VERSION = '2026-09-23-v3'; // 3.14.62: pública para CVD_Bot_Delivery_Change
 	private const DATA_VERSION_OPTION = 'cvd_shipping_rates_data_version';
 
 	public static function register(): void {
