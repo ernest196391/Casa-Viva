@@ -77,7 +77,7 @@ final class CVD_Gestora_App {
 			array( 'ver-tienda', 'Ver la tienda', 'shop', $link ),
 			array( 'precios', 'Mis precios', 'tag', '' ),
 			array( 'clientes', 'Clientes', 'people', '' ),
-			// 3.14.57 (D107): «Preguntas a la tienda» (Ficha que contesta), solo con cvd_ficha_contesta = si.
+			// 3.14.65 (D107): «Preguntas a la tienda» (Ficha que contesta), solo con cvd_ficha_contesta = si.
 			...( class_exists( 'CVD_Ficha_Contesta' ) && 'si' === CVD_Ficha_Contesta::mode() ? array( array( 'preguntas', 'Preguntas a la tienda', 'chat', '' ) ) : array() ),
 			array( '', 'Herramientas', '', '' ),
 			// 3.14.28 (Ernesto, 16-oct): «NEXO Busca» (antes «Buscar precios»), la primera de Herramientas.

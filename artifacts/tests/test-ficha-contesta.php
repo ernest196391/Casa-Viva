@@ -1,6 +1,6 @@
 <?php
 /**
- * 3.14.57 «Ficha que contesta» (CVD_Ficha_Contesta): reglas puras, sin WordPress.
+ * 3.14.65 «Ficha que contesta» (CVD_Ficha_Contesta): reglas puras, sin WordPress.
  * Corre con: php artifacts/tests/test-ficha-contesta.php
  */
 
@@ -72,7 +72,7 @@ eq( count( $cort['colores'] ), 1, 'el atributo Color no repite la lista' );
 eq( $cort['medidas'][0]['texto'], 'Medidas: 160 x 280', 'atributo Medidas' );
 
 // Estado
-eq( $C::stock_state( array( 'bajo_pedido' => true, 'in_stock' => true ) ), array( 'bajo_pedido', '📦 Bajo pedido · llega en 24–48 h' ), 'bajo pedido' );
+eq( $C::stock_state( array( 'bajo_pedido' => true, 'in_stock' => true ) ), array( 'bajo_pedido', '📦 Bajo pedido · llega en 24 h' ), 'bajo pedido' );
 eq( $C::stock_state( array( 'in_stock' => false ) )[0], 'agotado', 'agotado' );
 eq( $C::stock_state( array( 'in_stock' => true, 'qty' => 11 ) )[1], '🏪 Hay 11 en la tienda', 'hay 11' );
 eq( $C::stock_state( array( 'in_stock' => true, 'qty' => null ) )[1], '🏪 Hay en la tienda', 'hay (sin contar)' );

@@ -3,14 +3,14 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * 3.14.57 «Ficha que contesta» (mejora nº 7 del diagnóstico del 23-oct, aprobada por Ernesto; D107).
+ * 3.14.65 «Ficha que contesta» (mejora nº 7 del diagnóstico del 23-oct, aprobada por Ernesto; D107).
  *
  * El problema (P2 del diagnóstico): un tercio de los errores del bot son preguntas de producto. Cada respuesta de Nana
  * o Zaymi se quedaba en un chat y la misma pregunta se volvía a hacer. Ahora:
  *
  * 1) GESTORA (página del producto con su sesión; también la abre desde «Preguntas a la tienda» de su app):
  *    bloque «Datos de la tienda» con lo fijo de la ficha (medidas, material, voltaje/carga/cable, qué trae, colores y
- *    modelos que quedan, garantía si la hay, fotos reales) y el estado (🏪 hay N / agotado / 📦 bajo pedido 24–48 h).
+ *    modelos que quedan, garantía si la hay, fotos reales) y el estado (🏪 hay N / agotado / 📦 bajo pedido · llega en 24 h).
  *    Si falta algo: «Preguntar a la tienda» con 6 opciones (¿Medidas? · ¿Material? · ¿Voltaje/cable? · ¿Qué trae? ·
  *    ¿Colores? · ¿Foto real?) y texto libre. Cada pregunta queda ATADA al producto (y a la variante si la eligió).
  *    Si otra gestora ya preguntó lo mismo, se suma a esa pregunta (se agrupa): la tienda contesta una sola vez.
@@ -207,7 +207,7 @@ final class CVD_Ficha_Contesta {
 
 	/** Estado de existencias para la gestora. $in = bajo_pedido, in_stock, qty (null = sin contar). → [code, texto]. */
 	public static function stock_state( array $in ): array {
-		if ( ! empty( $in['bajo_pedido'] ) ) { return array( 'bajo_pedido', '📦 Bajo pedido · llega en 24–48 h' ); }
+		if ( ! empty( $in['bajo_pedido'] ) ) { return array( 'bajo_pedido', '📦 ' . ( class_exists( 'CVD_Datos_A_Mano' ) ? CVD_Datos_A_Mano::BAJO_PEDIDO : 'Bajo pedido · llega en 24 h' ) ); } // 3.14.65: misma frase que la web (3.14.63)
 		if ( empty( $in['in_stock'] ) ) { return array( 'agotado', 'Agotado ahora' ); }
 		$qty = $in['qty'] ?? null;
 		if ( null !== $qty && (int) $qty > 0 ) { return array( 'hay', '🏪 Hay ' . (int) $qty . ' en la tienda' ); }
@@ -382,6 +382,8 @@ final class CVD_Ficha_Contesta {
 	}
 
 	public static function is_supplier( WC_Product $p ): bool {
+		// 3.14.65: la misma regla que la línea de existencia de la web (MK-, artículo del mercado o categoría «Bajo pedido»).
+		if ( class_exists( 'CVD_Datos_A_Mano' ) && CVD_Datos_A_Mano::is_bajo_pedido( $p ) ) { return true; }
 		if ( class_exists( 'CVD_Costs' ) && CVD_Costs::is_bajo_pedido( $p ) ) { return true; }
 		return 0 === stripos( (string) $p->get_sku( 'edit' ), 'MK-' );
 	}
