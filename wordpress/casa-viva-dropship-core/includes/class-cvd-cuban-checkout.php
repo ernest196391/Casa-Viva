@@ -669,6 +669,11 @@ final class CVD_Cuban_Checkout {
 	 * _amount (y _estimated si usó el respaldo). El vale, la tienda y la gestora leen lo mismo (order_payment()).
 	 * 3.13.74: también en la recogida en tienda (Dany). Devuelve el importe (null si no hay forma o no hay tasa).
 	 */
+	/** 3.14.67: lo mismo para pedidos que no vienen del carrito (vale por chat, CVD_Vale_Chat). Llamar con el total ya calculado. */
+	public static function apply_payment( WC_Order $order, string $kind, bool $pickup ): ?float {
+		return self::save_payment( $order, $kind, $pickup );
+	}
+
 	private static function save_payment( WC_Order $order, string $kind, bool $pickup ): ?float {
 		if ( ! isset( self::PAYMENT_KINDS[ $kind ] ) ) { return null; }
 		$def = self::PAYMENT_KINDS[ $kind ];
