@@ -26,6 +26,9 @@ final class CVD_Datos_A_Mano {
 	public static function register(): void {
 		add_action( 'woocommerce_single_product_summary', array( __CLASS__, 'single_notice' ), 12 );
 		add_filter( 'woocommerce_get_availability_text', array( __CLASS__, 'availability_text' ), 40, 2 );
+		// El tema (casa-viva-storefront) pinta su propio «Disponible / Última unidad» con woocommerce_get_stock_html (10)
+		// sin mirar el texto de arriba: se vuelve a pintar con él.
+		add_filter( 'woocommerce_get_stock_html', array( __CLASS__, 'stock_html' ), 40, 2 );
 		add_filter( 'woocommerce_get_item_data', array( __CLASS__, 'cart_item_data' ), 20, 2 );
 		add_action( 'woocommerce_product_options_stock_status', array( __CLASS__, 'admin_back_field' ) );
 		add_action( 'woocommerce_admin_process_product_object', array( __CLASS__, 'admin_save_back' ) );
@@ -70,6 +73,15 @@ final class CVD_Datos_A_Mano {
 			return '' !== $back ? 'Agotado · ' . lcfirst( $back ) : $text;
 		}
 		return class_exists( 'CVD_Product_Search' ) ? CVD_Product_Search::availability( $product, true ) : $text;
+	}
+
+	/** La línea de existencia de la ficha (y del color elegido) con el texto de availability_text(). */
+	public static function stock_html( $html, $product ) {
+		if ( ! $product instanceof WC_Product || ( is_admin() && ! wp_doing_ajax() ) ) { return $html; }
+		$text = (string) self::availability_text( '', $product );
+		if ( '' === $text ) { return $html; }
+		$class = ! $product->is_in_stock() ? 'out-of-stock' : ( self::is_bajo_pedido( $product ) ? 'in-stock cvd-stock-pedido' : 'in-stock' );
+		return '<p class="stock ' . esc_attr( $class ) . '">' . esc_html( $text ) . '</p>';
 	}
 
 	/** Recuadro en la ficha, debajo del precio: bajo pedido, o agotado con su fecha de vuelta. */
