@@ -22,7 +22,7 @@ final class CVD_Payouts {
 	/** 3.14.23: teléfono para la transferencia (cifrado) y la última forma de cobro elegida. */
 	private const PROFILE_PHONE = '_cvd_payout_phone';
 	private const PROFILE_PAY = '_cvd_payout_pay_method';
-	public const METHOD_LABELS = array( 'transfer' => 'Transferencia en CUP', 'cash_cup' => 'Efectivo en CUP', 'cash_usd' => 'Efectivo en USD', 'other' => 'Otro' );
+	public const METHOD_LABELS = array( 'transfer' => 'Transferencia en CUP', 'cash_cup' => 'Efectivo en CUP', 'cash_usd' => 'Efectivo en USD', 'mixed' => 'Efectivo: parte en USD y parte en CUP', 'other' => 'Otro' );
 
 	public static function register(): void {
 		add_shortcode( 'casa_viva_accounting', array( __CLASS__, 'render_admin' ) );
@@ -177,7 +177,10 @@ final class CVD_Payouts {
 			'id' => (int) $payout['id'], 'status' => (string) $payout['status'], 'kind' => $kind, 'legacy' => $legacy,
 			'name' => $owner ? $owner->display_name : 'Gestora', 'first' => $owner ? ( strtok( (string) $owner->display_name, ' ' ) ?: $owner->display_name ) : 'Gestora',
 			'owner_id' => (int) $payout['owner_user_id'], 'whatsapp' => $whatsapp,
-			'pay' => $pay, 'currency' => $currency, 'pay_text' => CVD_Payout_Math::money( $pay, $currency ),
+			'pay' => $pay, 'currency' => $currency,
+			// 3.14.68: mixto = «40 USD + 520 CUP» (los dos en efectivo); pay_cup es la parte en CUP ya sin deudas.
+			'pay_cup' => 'mixed' === $kind ? (float) ( $details['quote']['pay_cup'] ?? 0 ) : 0.0,
+			'pay_text' => 'mixed' === $kind ? CVD_Payout_Math::mixed_text( $pay, (float) ( $details['quote']['pay_cup'] ?? 0 ) ) : CVD_Payout_Math::money( $pay, $currency ),
 			'usd' => $usd ?: (float) ( $payout['commission_usd'] ?? 0 ), 'cup' => $cup, 'missing_rate' => $missing,
 			'deduction' => (float) ( $payout['deduction'] ?? 0 ), 'deduction_currency' => 'cash_usd' === $kind ? 'USD' : 'CUP',
 			'lines' => $lines, 'debts' => $debts,
@@ -185,7 +188,7 @@ final class CVD_Payouts {
 			'phone' => $phone, 'reference' => (string) $payout['reference'], 'proof' => absint( $payout['proof_attachment_id'] ),
 			'requested_at' => (string) $payout['requested_at'], 'paid_at' => (string) $payout['paid_at'],
 			'received_at' => (string) ( $payout['received_at'] ?? '' ), 'paid_by' => absint( $payout['paid_by'] ),
-			'cash' => in_array( $kind, array( 'cash_cup', 'cash_usd' ), true ),
+			'cash' => in_array( $kind, array( 'cash_cup', 'cash_usd', 'mixed' ), true ),
 		);
 	}
 
@@ -211,7 +214,9 @@ final class CVD_Payouts {
 		$missing = (bool) array_filter( $lines, static fn( array $l ): bool => $l['rate'] <= 0 );
 		$debt_cup = 0.0; $debt_usd = 0.0;
 		foreach ( $debts as $d ) { if ( 'USD' === $d['currency'] ) { $debt_usd += $d['amount']; } else { $debt_cup += $d['amount']; } }
-		$quote = $lines ? CVD_Payout_Math::quote( $lines, $debts, $profile['pay'], $today ) : null;
+		// 3.14.68: en mixto, de entrada todo en USD menos 1 (lo cambia ella; payouts.js recalcula al momento).
+		$usd_part = $usd > 1 ? floor( $usd - 0.01 ) : 0.0;
+		$quote = $lines ? CVD_Payout_Math::quote( $lines, $debts, $profile['pay'], $today, $usd_part ) : null;
 		$data = array(
 			'lines' => array_map( static fn( array $l ): array => array( 'id' => $l['id'], 'usd' => $l['usd'], 'cup' => $l['cup'], 'rate' => $l['rate'] ), $lines ),
 			'debtCup' => $debt_cup, 'debtUsd' => $debt_usd, 'today' => $today,
@@ -234,16 +239,19 @@ final class CVD_Payouts {
 					<small id="cvp-amount-help" data-cvp-split>Retiras todo. Van pedidos enteros; lo que no retires queda guardado.</small>
 				</label>
 				<fieldset class="cvp-field"><legend>¿Cómo cobras?</legend>
-					<?php foreach ( array( 'transfer' => array( 'Transferencia', 'en CUP a tu tarjeta' ), 'cash_cup' => array( 'Efectivo en CUP', 'lo recoges en la tienda' ), 'cash_usd' => array( 'Efectivo en USD', 'lo recoges en la tienda' ) ) as $value => $label ) : ?>
+					<?php foreach ( array( 'transfer' => array( 'Transferencia', 'en CUP a tu tarjeta' ), 'cash_cup' => array( 'Efectivo en CUP', 'lo recoges en la tienda' ), 'cash_usd' => array( 'Efectivo en USD', 'lo recoges en la tienda' ), 'mixed' => array( 'Una parte en USD y el resto en CUP', 'en efectivo, lo recoges en la tienda' ) ) as $value => $label ) : ?>
 					<label class="cvp-option"><input type="radio" name="cvd_pay_method" value="<?php echo esc_attr( $value ); ?>" <?php checked( $profile['pay'], $value ); ?> data-cvp-method><span><b><?php echo esc_html( $label[0] ); ?></b><small><?php echo esc_html( $label[1] ); ?></small></span></label>
 					<?php endforeach; ?>
 				</fieldset>
+				<label class="cvp-field" data-cvp-mixed<?php echo 'mixed' === $profile['pay'] ? '' : ' hidden'; ?>><span>¿Cuánto en USD? (el resto te lo damos en CUP)</span>
+					<span class="cvp-amount"><input name="cvd_usd_part" type="number" inputmode="decimal" min="0" step="0.01" value="<?php echo esc_attr( (string) $usd_part ); ?>" data-cvp-usd-part><b>USD</b></span>
+				</label>
 				<div class="cvp-transfer" data-cvp-transfer<?php echo 'transfer' === $profile['pay'] ? '' : ' hidden'; ?>>
 					<label class="cvp-field"><span>Tu tarjeta (16 números)</span><input name="cvd_card" inputmode="numeric" autocomplete="off" maxlength="23" placeholder="9200 0000 0000 0000" value="<?php echo esc_attr( CVD_Payout_Math::card_pretty( $profile['card'] ) ); ?>"></label>
 					<label class="cvp-field"><span>Teléfono para confirmar</span><input name="cvd_phone" inputmode="tel" autocomplete="off" maxlength="14" placeholder="5X XXX XXX" value="<?php echo esc_attr( $profile['phone'] ); ?>"></label>
 					<small class="cvp-muted">Se guardan para la próxima. Solo los ve quien te paga.</small>
 				</div>
-				<div class="cvp-total"><span>Te pagan</span><strong data-cvp-pay><?php echo esc_html( $quote && $quote['ok'] ? CVD_Payout_Math::money( $quote['pay'], $quote['currency'] ) : '—' ); ?></strong><small data-cvp-deduct><?php echo esc_html( $quote && $quote['deduction'] > 0 ? 'Ya descontada la deuda: ' . CVD_Payout_Math::money( $quote['deduction'], $quote['currency'] ) : '' ); ?></small><small class="cvp-error" data-cvp-error><?php echo esc_html( $quote && ! $quote['ok'] ? $quote['error'] : '' ); ?></small></div>
+				<div class="cvp-total"><span>Te pagan</span><strong data-cvp-pay><?php echo esc_html( $quote && $quote['ok'] ? ( 'mixed' === $quote['method'] ? CVD_Payout_Math::mixed_text( $quote['pay'], $quote['pay_cup'] ) : CVD_Payout_Math::money( $quote['pay'], $quote['currency'] ) ) : '—' ); ?></strong><small data-cvp-deduct><?php echo esc_html( $quote && $quote['deduction'] > 0 ? 'Ya descontada la deuda: ' . CVD_Payout_Math::money( $quote['deduction'], 'mixed' === $quote['method'] ? 'CUP' : $quote['currency'] ) : '' ); ?></small><small class="cvp-error" data-cvp-error><?php echo esc_html( $quote && ! $quote['ok'] ? $quote['error'] : '' ); ?></small></div>
 				<details class="cvp-detail"><summary>Ver el detalle por pedido (<?php echo esc_html( (string) count( $lines ) ); ?>)</summary>
 					<ul class="cvp-lines">
 					<?php foreach ( $lines as $line ) : ?>
@@ -335,6 +343,7 @@ final class CVD_Payouts {
 				'card'      => sanitize_text_field( wp_unslash( $_POST['cvd_card'] ?? '' ) ),
 				'phone'     => sanitize_text_field( wp_unslash( $_POST['cvd_phone'] ?? '' ) ),
 				'token'     => sanitize_text_field( wp_unslash( $_POST['cvd_token'] ?? '' ) ),
+				'usd_part'  => (float) str_replace( ',', '.', sanitize_text_field( wp_unslash( $_POST['cvd_usd_part'] ?? '0' ) ) ), // 3.14.68
 			) );
 			if ( is_wp_error( $result ) ) { return $result->get_error_message(); }
 			$payout = self::get( (int) $result );
@@ -487,7 +496,7 @@ final class CVD_Payouts {
 			$lines = array_values( array_filter( $available, static fn( array $l ): bool => in_array( $l['id'], $wanted, true ) ) );
 			$debts = self::open_debts( $owner_id, true );
 			$today = self::today_rate();
-			$quote = CVD_Payout_Math::quote( $lines, $debts, $method, $today );
+			$quote = CVD_Payout_Math::quote( $lines, $debts, $method, $today, (float) ( $opts['usd_part'] ?? 0 ) ); // 3.14.68: usd_part solo en 'mixed'
 			if ( ! $quote['ok'] ) { throw new RuntimeException( $quote['error'] ); }
 			$now = current_time( 'mysql', true );
 			$details = array( 'v' => 1, 'lines' => $lines, 'debts' => $debts, 'today' => $today, 'quote' => $quote );

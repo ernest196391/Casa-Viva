@@ -148,7 +148,8 @@ final class CVD_Payout_Pay_Page {
 		$h .= '<h1>Pagar a ' . esc_html( $v['name'] ) . '</h1>';
 		$h .= '<div class="total"><small>' . esc_html( $label ) . '</small><strong>' . esc_html( $v['pay_text'] ) . '</strong>';
 		$sub = array();
-		if ( 'USD' !== $v['currency'] ) { $sub[] = '= ' . CVD_Payout_Math::usd( $v['usd'] ) . ' de comisión'; } elseif ( $v['cup'] > 0 && ! $v['missing_rate'] ) { $sub[] = '≈ ' . CVD_Payout_Math::cup( $v['cup'] ) . ' con la tasa de cada venta'; }
+		if ( 'mixed' === $v['kind'] ) { $sub[] = '= ' . CVD_Payout_Math::usd( $v['usd'] ) . ' de comisión: ' . CVD_Payout_Math::usd( $v['pay'] ) . ' en dólares y el resto en CUP con la tasa de cada venta'; } // 3.14.68
+		elseif ( 'USD' !== $v['currency'] ) { $sub[] = '= ' . CVD_Payout_Math::usd( $v['usd'] ) . ' de comisión'; } elseif ( $v['cup'] > 0 && ! $v['missing_rate'] ) { $sub[] = '≈ ' . CVD_Payout_Math::cup( $v['cup'] ) . ' con la tasa de cada venta'; }
 		$sub[] = $n . ( 1 === $n ? ' pedido' : ' pedidos' );
 		if ( $v['deduction'] > 0 ) { $sub[] = 'ya restada la deuda de ' . CVD_Payout_Math::money( $v['deduction'], $v['deduction_currency'] ); }
 		$h .= '<span>' . esc_html( implode( ' · ', $sub ) ) . '</span></div>';
@@ -162,7 +163,12 @@ final class CVD_Payout_Pay_Page {
 			}
 			$phone = $v['phone'] ?: CVD_Payout_Math::phone8( $v['whatsapp'] );
 			if ( $phone ) { $rows[] = array( 'Teléfono', $phone, $phone, 'Copiar teléfono' ); }
-			$rows[] = array( 'Importe', $v['pay_text'], 'USD' === $v['currency'] ? number_format( $v['pay'], 2, '.', '' ) : rtrim( rtrim( number_format( $v['pay'], 2, '.', '' ), '0' ), '.' ), 'Copiar importe' );
+			if ( 'mixed' === $v['kind'] ) { // 3.14.68: dos importes, los dos en efectivo
+				$rows[] = array( 'En dólares', CVD_Payout_Math::usd( $v['pay'] ), '', '' );
+				$rows[] = array( 'En CUP', CVD_Payout_Math::cup( $v['pay_cup'] ), '', '' );
+			} else {
+				$rows[] = array( 'Importe', $v['pay_text'], 'USD' === $v['currency'] ? number_format( $v['pay'], 2, '.', '' ) : rtrim( rtrim( number_format( $v['pay'], 2, '.', '' ), '0' ), '.' ), 'Copiar importe' );
+			}
 			$h .= '<div class="copy">';
 			foreach ( $rows as $row ) {
 				$h .= '<div class="row"><div><small>' . esc_html( $row[0] ) . '</small><b>' . esc_html( $row[1] ) . '</b></div>' . ( '' !== (string) $row[2] ? '<button type="button" class="btn soft" data-copy="' . esc_attr( (string) $row[2] ) . '">' . esc_html( $row[3] ) . '</button>' : '' ) . '</div>';

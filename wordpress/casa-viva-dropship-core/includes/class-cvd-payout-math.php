@@ -14,7 +14,12 @@
 if ( ! defined( 'ABSPATH' ) && ! defined( 'CVD_PAYOUT_MATH_STANDALONE' ) ) { exit; }
 
 final class CVD_Payout_Math {
-	public const METHODS = array( 'transfer', 'cash_cup', 'cash_usd' );
+	/**
+	 * 3.14.68 (Dany, 24-oct): 'mixed' = una parte en efectivo USD y el resto en efectivo CUP (las dos en la tienda). La parte
+	 * en CUP es la comisión que queda en USD pasada con la tasa media de esos pedidos (la de cada venta, en proporción) y
+	 * de ella se descuentan las deudas (todas en CUP; las de USD con la tasa de hoy). Efectivo CUP: al peso entero.
+	 */
+	public const METHODS = array( 'transfer', 'cash_cup', 'cash_usd', 'mixed' );
 
 	/** Una línea: comisión USD (en centavos, como la ve la gestora) × tasa de esa venta = CUP (con centavos). */
 	public static function line( float $usd, float $rate ): array {
@@ -69,7 +74,8 @@ final class CVD_Payout_Math {
 	 * abiertas; $method: transfer | cash_cup | cash_usd; $today: tasa CUP de hoy (para convertir deudas).
 	 * Devuelve ok, error, usd (bruto), cup (bruto), deduction (en la moneda del pago), pay, currency.
 	 */
-	public static function quote( array $lines, array $debts, string $method, float $today ): array {
+	public static function quote( array $lines, array $debts, string $method, float $today, float $usd_part = 0.0 ): array {
+		if ( 'mixed' === $method ) { return self::quote_mixed( $lines, $debts, $today, $usd_part ); }
 		$out = array( 'ok' => false, 'error' => '', 'usd' => 0.0, 'cup' => 0.0, 'deduction' => 0.0, 'debt_cup' => 0.0, 'debt_usd' => 0.0, 'pay' => 0.0, 'currency' => 'cash_usd' === $method ? 'USD' : 'CUP', 'method' => $method, 'missing_rate' => false );
 		if ( ! in_array( $method, self::METHODS, true ) ) { $out['error'] = 'Elige cómo quieres cobrar.'; return $out; }
 		if ( ! $lines ) { $out['error'] = 'Elige al menos un pedido.'; return $out; }
@@ -107,6 +113,46 @@ final class CVD_Payout_Math {
 		}
 		$out['ok'] = true;
 		return $out;
+	}
+
+	/**
+	 * 3.14.68: X USD en efectivo + el resto en CUP en efectivo. Devuelve lo mismo que quote() con currency 'USD',
+	 * pay = la parte en USD, pay_cup = la parte en CUP ya sin deudas, deduction en CUP y deduction_currency 'CUP'.
+	 */
+	public static function quote_mixed( array $lines, array $debts, float $today, float $usd_part ): array {
+		$out = self::quote( $lines, array(), 'cash_usd', $today ); // suma de pedidos (sin deudas)
+		$out['method'] = 'mixed'; $out['currency'] = 'USD'; $out['pay_cup'] = 0.0; $out['deduction_currency'] = 'CUP'; $out['ok'] = false; $out['deduction'] = 0.0;
+		if ( '' !== $out['error'] && 0.0 === (float) $out['usd'] ) { return $out; }
+		$out['error'] = '';
+		if ( $out['missing_rate'] ) { $out['error'] = 'Falta la tasa de un pedido. Cóbralo todo en USD o avisa a Lennys.'; return $out; }
+		$usd_part = round( $usd_part, 2 );
+		if ( $usd_part <= 0 ) { $out['error'] = 'Escribe cuánto quieres en USD.'; return $out; }
+		if ( $usd_part >= $out['usd'] - 0.004 ) { $out['error'] = 'Eso es todo en USD: elige «Efectivo en USD».'; return $out; }
+		$cup_debt = 0.0; $usd_debt = 0.0;
+		foreach ( $debts as $debt ) {
+			$amount = (float) ( $debt['amount'] ?? 0 );
+			if ( $amount <= 0 ) { continue; }
+			if ( 'USD' === strtoupper( (string) ( $debt['currency'] ?? '' ) ) ) { $usd_debt += $amount; } else { $cup_debt += $amount; }
+		}
+		if ( $usd_debt > 0 && $today <= 0 ) { $out['error'] = 'No hay tasa de hoy para convertir la deuda. Avisa a Lennys.'; return $out; }
+		$rest_usd = round( $out['usd'] - $usd_part, 2 );
+		$rest_cup = $out['usd'] > 0 ? $out['cup'] * $rest_usd / $out['usd'] : 0.0;
+		$out['debt_cup'] = round( $cup_debt + $usd_debt * $today, 2 );
+		$out['deduction'] = $out['debt_cup'];
+		$out['pay'] = $usd_part;
+		$out['pay_cup'] = (float) round( $rest_cup - $out['debt_cup'], 0 );
+		$out['rest_usd'] = $rest_usd;
+		if ( $out['pay_cup'] <= 0 ) {
+			$out['error'] = $out['debt_cup'] > 0 ? 'La parte en CUP no alcanza para la deuda con la tienda (' . self::cup( $out['debt_cup'] ) . '). Pon menos en USD.' : 'Deja algo para el CUP o elige «Efectivo en USD».';
+			return $out;
+		}
+		$out['ok'] = true;
+		return $out;
+	}
+
+	/** «40 USD + 520 CUP». */
+	public static function mixed_text( float $usd, float $cup ): string {
+		return self::usd( $usd ) . ' + ' . self::cup( $cup );
 	}
 
 	/** 5854.5 → «5.854,5 CUP»; 5854 → «5.854 CUP»; 5854.25 → «5.854,25 CUP». */

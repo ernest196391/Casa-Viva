@@ -110,5 +110,19 @@ check( 'tarjeta corta', CVD_Payout_Math::valid_card( '9205 1299' ), false );
 check( 'teléfono +53', CVD_Payout_Math::phone8( '+53 5378 4147' ), '53784147' );
 check( 'teléfono fijo no', CVD_Payout_Math::phone8( '72041234' ), '' );
 
+// 3.14.68 (Dany, 24-oct): una parte en efectivo USD y el resto en efectivo CUP.
+$dany = array( array( 'id' => 1, 'usd' => 5.0, 'cup' => 2600.0, 'rate' => 520.0 ), array( 'id' => 2, 'usd' => 20.0, 'cup' => 10400.0, 'rate' => 520.0 ), array( 'id' => 3, 'usd' => 16.2, 'cup' => 8586.0, 'rate' => 530.0 ) );
+$m = CVD_Payout_Math::quote( $dany, array(), 'mixed', 540.0, 40.0 );
+check( 'mixto ok', $m['ok'], true );
+check( 'mixto USD', $m['pay'], 40.0 );
+check( 'mixto CUP = 1,20 USD con la tasa de esas ventas', $m['pay_cup'], 629.0 );
+check( 'mixto texto', CVD_Payout_Math::mixed_text( $m['pay'], $m['pay_cup'] ), '40 USD + 629 CUP' );
+$m = CVD_Payout_Math::quote( $dany, array( array( 'amount' => 100, 'currency' => 'CUP' ), array( 'amount' => 1, 'currency' => 'USD' ) ), 'mixed', 540.0, 30.0 );
+check( 'mixto: deudas (CUP y USD a la tasa de hoy) salen del CUP', array( $m['deduction'], $m['pay_cup'] ), array( 640.0, 5228.0 ) );
+check( 'mixto: todo en USD no', CVD_Payout_Math::quote( $dany, array(), 'mixed', 540.0, 41.2 )['ok'], false );
+check( 'mixto: 0 USD no', CVD_Payout_Math::quote( $dany, array(), 'mixed', 540.0, 0 )['ok'], false );
+check( 'mixto: deuda mayor que el CUP', CVD_Payout_Math::quote( $dany, array( array( 'amount' => 900, 'currency' => 'CUP' ) ), 'mixed', 540.0, 40.0 )['ok'], false );
+check( 'mixto: sin tasa no', CVD_Payout_Math::quote( array( array( 'id' => 9, 'usd' => 10.0, 'cup' => 0.0, 'rate' => 0.0 ) ), array(), 'mixed', 540.0, 5.0 )['ok'], false );
+
 echo ( $fails ? "FALLARON {$fails} de {$count}\n" : "OK: {$count} pruebas de cuentas de pagos\n" );
 exit( $fails ? 1 : 0 );
