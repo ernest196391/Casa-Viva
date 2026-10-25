@@ -117,12 +117,20 @@ final class CVD_Palla {
 		$messenger = CVD_Bot_Bridge::messenger_by_phone( (string) $request->get_param( 'phone' ) );
 		if ( ! $messenger ) { $response = rest_ensure_response( array( 'ok' => false, 'result' => 'not_messenger' ) ); }
 		else {
+			// 3.14.67.4 (Ernesto 24-oct: «que pidan su enlace»): alta=1 = el mensajero lo pidió → en modo prueba entra en
+			// cvd_palla_testers (solo quien lo pide; los compañeros a los que se puede pasar una carrera son los que tienen la app).
+			$added = false;
+			if ( rest_sanitize_boolean( $request->get_param( 'alta' ) ) && 'prueba' === self::mode() && 'not_tester' === self::blocked_reason( $messenger ) ) {
+				update_option( self::TESTERS, array_values( array_unique( array_merge( self::testers(), array( $messenger->ID ) ) ) ), false );
+				$added = true;
+			}
 			$response = rest_ensure_response( array(
 				'ok'      => true,
 				'id'      => $messenger->ID,
 				'name'    => $messenger->display_name,
 				'link'    => self::link_for( $messenger->ID ),
 				'mode'    => self::mode(),
+				'added'   => $added,
 				'blocked' => self::blocked_reason( $messenger ), // '' = ya puede entrar
 			) );
 		}
