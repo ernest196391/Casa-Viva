@@ -38,6 +38,9 @@ a{color:var(--accent)}
 /* Botones (NEXO.Button) */
 .pl-btn{min-height:var(--target);padding:0 20px;border-radius:var(--r-sm);border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;font:600 16px/20px var(--font);cursor:pointer;text-decoration:none;color:var(--ink)}
 .pl-btn:disabled,.pl-btn[aria-disabled=true]{opacity:.45;cursor:not-allowed}
+/* Pedri 25-oct: que se note el toque en los botones */
+.pl-btn{-webkit-tap-highlight-color:transparent;transition:transform .08s,filter .08s}
+.pl-btn:active:not(:disabled){transform:scale(.96);filter:brightness(.85)}
 .pl-btn--primary{background:var(--brand);color:var(--on-brand)}
 .pl-btn--secondary{background:var(--surface);border-color:var(--line-strong)}
 .pl-btn--link{background:transparent;color:var(--accent);padding:0 8px}

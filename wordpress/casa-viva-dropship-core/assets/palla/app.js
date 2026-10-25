@@ -133,7 +133,9 @@
 			state.blocked = null;
 			var before = (state.hoy && !state.offline ? state.hoy.carreras : []).filter(function (c) { return !c.queued && !state.done[c.id]; });
 			state.hoy = res.data;
-			var gone = before.filter(function (c) { return !findCarrera(c.id); });
+			// Pedri 25-oct: si la cerró él por WhatsApp sale en «Mi dinero» de hoy; no es «ya no está a tu nombre».
+			var mineDone = ((res.data.dinero && res.data.dinero.rows) || []).map(function (r) { return String(r.id); });
+			var gone = before.filter(function (c) { return !findCarrera(c.id) && mineDone.indexOf(String(c.id)) === -1; });
 			var passed = gone.filter(function (c) { return c.pase; });
 			var lost = gone.filter(function (c) { return !c.pase; });
 			var notes = passed.map(function (c) { return '✅ ' + c.pase.toName + ' aceptó #' + c.number + ': ya no es tuya.'; });
@@ -529,6 +531,14 @@
 		cmds.push([w.recogi, 'Ya tienes el paquete'], [w.entregado, 'Lo entregaste y cobraste'], [w.problema, 'Algo salió mal'], [w.suelto, 'La suelta para otro']);
 		var html = '<header class="pl-top pl-top--bar">' + back + '</header>' + (state.offline ? '<div class="pl-offline" role="status">' + icon('senal') + '<span>' + (o ? 'Sin conexión. No se pudo coger la carrera.' : 'Sin conexión. Tu carrera sigue guardada.') + '</span></div>' : '');
 		html += '<main class="pl-main"><h1 class="pl-h1">Escríbelo por WhatsApp</h1><p style="margin:0;color:var(--ink-muted)">Hace lo mismo que los botones. Manda una sola línea al WhatsApp de Casa Viva.</p>';
+		// Pedri 25-oct: con varias carreras, elegir de cuál copiar las palabras (sin cambiar el número a mano).
+		var mias = (state.hoy && state.hoy.carreras) || [];
+		if (c && mias.length > 1) {
+			html += '<div role="group" aria-label="¿De qué carrera?" style="display:flex;flex-wrap:wrap;gap:8px">' + mias.map(function (x) {
+				var on = String(x.id) === String(c.id);
+				return '<a class="pl-btn ' + (on ? 'pl-btn--primary' : 'pl-btn--secondary') + '" href="#ayuda/' + esc(x.id) + '"' + (on ? ' aria-current="true"' : '') + '>#' + esc(x.number) + '</a>';
+			}).join('') + '</div>';
+		}
 		if (o) { html += '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>«La cojo» necesita conexión</b>Otro mensajero puede cogerla antes. Escribe <b style="display:inline">Yo</b> en el grupo o prueba otra vez cuando tengas señal.</div></div>'; }
 		html += '<div class="pl-list">' + cmds.map(function (x, i) {
 			return '<div class="pl-li" style="min-height:64px"><div><span class="pl-num" style="font-weight:700">' + esc(x[0]) + '</span><span class="pl-muted">' + esc(x[1]) + '</span></div><button type="button" class="pl-btn pl-btn--link" data-act="copiar" data-text="' + esc(x[0]) + '" aria-label="Copiar ' + esc(x[0]) + '">Copiar</button></div>';
