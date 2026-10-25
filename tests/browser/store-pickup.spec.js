@@ -24,7 +24,7 @@ test('dependienta completa una recogida con entrega física y cobro confirmados'
   const card = page.locator('.cvd-sale-card', { hasText: `Pedido #${pickupId}` }).first();
   await expect(card).toBeVisible({ timeout: 15000 });
   await expect(card.getByText('Listo para recoger')).toBeVisible();
-  await expect(card.getByText('No aplica')).toBeVisible();
+  await expect(card.getByText('Recogida en tienda', { exact: true }).first()).toBeVisible(); // 3.13.78
 
   await card.getByRole('button', { name: 'Entregar al cliente' }).click();
   const dialog = page.locator('#cvd-money-dialog');
@@ -37,6 +37,9 @@ test('dependienta completa una recogida con entrega física y cobro confirmados'
   await dialog.getByRole('button', { name: 'Completar' }).click();
 
   await expect(dialog).toBeHidden({ timeout: 15000 });
+  // 3.13.61 (Nana): lo cerrado pasa a la pestaña «Cerrados».
+  await expect(page.getByText('Pedido cerrado: ahora está en «Cerrados».')).toBeVisible({ timeout: 15000 });
+  await page.locator('[data-sales-view="closed"]').click();
   await expect(card.getByText('Dinero recibido · completado')).toBeVisible({ timeout: 15000 });
   await expect(card.getByRole('button', { name: 'Entregar al cliente' })).toHaveCount(0);
 });

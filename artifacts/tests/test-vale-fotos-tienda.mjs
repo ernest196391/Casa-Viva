@@ -31,7 +31,10 @@ assert(sales.includes("'variation' => $is_line ? CVD_Order_Lines::variation_text
 for (const f of ['image', 'imageLarge', 'variation', 'products']) assert(!privacy.includes(`'${f}'`) && !privacy.includes(`['${f}']`), `la privacidad no debe quitar ${f}`);
 
 // Versión del Core (la caché de sales.js/sales.css se renueva con CVD_VERSION).
-assert(boot.includes(' * Version: 3.14.37') && boot.includes("define( 'CVD_VERSION', '3.14.37' );"), 'la versión del Core no es 3.14.37');
+// Desde la 3.14.37 en adelante (antes la prueba fijaba la versión exacta y fallaba con cada versión nueva).
+const ver = (boot.match(/define\( 'CVD_VERSION', '([\d.]+)' \);/) || [])[1] || '0';
+const [ma, mi, pa] = ver.split('.').map(Number);
+assert(boot.includes(` * Version: ${ver}`) && (ma > 3 || (ma === 3 && (mi > 14 || (mi === 14 && pa >= 37)))), `la versión del Core (${ver}) es anterior a 3.14.37 o no coincide con la cabecera`);
 assert(css.includes('.cvd-sale-data .cvd-sale-photo') && css.includes('object-fit: contain'), 'falta el estilo de la foto en la tarjeta');
 
 // productLinks real de sales.js, con el escapeText de la página.

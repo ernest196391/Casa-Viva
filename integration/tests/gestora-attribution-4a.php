@@ -73,6 +73,9 @@ function cvt_attach( WC_Order $order ): WC_Order {
 			'billing_email' => $order->get_billing_email(),
 		)
 	);
+	// Como el checkout real (CVD_WhatsApp_Gateway::process_payment): el pedido queda «En espera» al instante. La
+	// gestora del cliente se busca en pedidos confirmados (processing/on-hold/completed), no en carritos sin pagar.
+	$order->set_status( 'on-hold' );
 	$order->save();
 	return wc_get_order( $order->get_id() );
 }
@@ -108,11 +111,12 @@ cvt_assert(
 cvt_assert( 'referral_link' === $order_one->get_meta( '_cvd_attribution_source', true ), 'La fuente inicial no quedó registrada como referral_link.' );
 cvt_assert( 'yes' === $order_one->get_meta( '_cvd_attribution_locked', true ), 'La atribución inicial no quedó bloqueada.' );
 
-// 2. Un enlace posterior B no roba el navegador ni el cliente ya vinculado a A.
+// 2. Un enlace posterior B no roba el cliente ya vinculado a A. Desde 3.13.79 en el NAVEGADOR manda el último enlace
+//    (marca para clientes nuevos), pero quien ya compró sigue con su gestora por su identidad (D97: para siempre).
 $_GET['ref'] = 'CVB4A';
 CVD_Attribution::capture_referral();
 $current = CVD_Attribution::current_referral_owner();
-cvt_assert( $current && (int) $current['owner_user_id'] === $gestora_a->ID, 'Un segundo enlace sustituyó el first touch guardado. owner=' . cvt_owner_debug( $current ) );
+cvt_assert( $current && (int) $current['owner_user_id'] === $gestora_b->ID, 'El último enlace del navegador debe ser el de B (3.13.79). owner=' . cvt_owner_debug( $current ) );
 $order_two = cvt_attach( cvt_order( $customer->ID, '5355510001', $customer->user_email, 'Cliente Uno' ) );
 cvt_assert( (int) $order_two->get_meta( '_cvd_owner_user_id', true ) === $gestora_a->ID, 'Un segundo enlace reasignó un cliente permanente.' );
 cvt_assert( 'linked_customer' === $order_two->get_meta( '_cvd_attribution_source', true ), 'El cliente recurrente no se resolvió desde su vínculo permanente.' );

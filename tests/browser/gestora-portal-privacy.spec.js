@@ -75,11 +75,14 @@ async function assertFinancialMobileLabels(page) {
     'Cliente',
     'Producto',
     'Importe',
-    'Comisión base',
-    'Margen propio',
-    'Total',
-    'Regla aplicada',
+    // 3.13.68 (Cely): las cifras con palabras sencillas, como en BizneCubano.
+    'Comisión',
+    'Lo que subiste',
+    'Ganas',
+    'Cómo se calcula',
     'Estado',
+    // 3.13.48: «Mensajero que lo lleva» (reparto directo). En el móvil también lleva su título.
+    'Mensajero',
   ];
   const labels = await page.locator('.cvd-history-panel tbody tr').first().locator('td').evaluateAll((cells) =>
     cells.map((cell) => getComputedStyle(cell, '::before').content.replace(/^['"]|['"]$/g, '')),

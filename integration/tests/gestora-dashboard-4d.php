@@ -48,10 +48,11 @@ cvt_4d_assert( false !== strpos( $summary, 'USD' ) && false !== strpos( $summary
 cvt_4d_assert( false !== strpos( $summary, 'Clientes vinculados' ), 'Falta el contador de clientes.' );
 
 $history = CVD_Gestora_Financial_View::history_html( array( $usd, $cup ) );
-cvt_4d_assert( false !== strpos( $history, 'Comisión base' ), 'Falta comisión base.' );
-cvt_4d_assert( false !== strpos( $history, 'Margen propio' ), 'Falta margen propio.' );
-cvt_4d_assert( false !== strpos( $history, '13% · tasa de gestora' ), 'No se explica la regla porcentual.' );
-cvt_4d_assert( false !== strpos( $history, '500 fijo por unidad · producto' ), 'No se explica la regla fija.' );
+// 3.13.68 (Cely): las mismas columnas con palabras sencillas.
+cvt_4d_assert( false !== strpos( $history, '<th>Comisión</th>' ), 'Falta comisión base.' );
+cvt_4d_assert( false !== strpos( $history, 'Lo que subiste' ), 'Falta margen propio.' );
+cvt_4d_assert( false !== strpos( $history, '13 % de la venta' ), 'No se explica la regla porcentual.' );
+cvt_4d_assert( false !== strpos( $history, '500 CUP por unidad' ), 'No se explica la regla fija.' );
 cvt_4d_assert( false === strpos( $history, '_cvd_' ), 'Se filtraron nombres de metadatos internos al panel.' );
 
 echo "OK 4D: resumen por moneda y desglose auditable de comisiones validados.\n";

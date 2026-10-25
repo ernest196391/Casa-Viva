@@ -43,6 +43,7 @@
   .cvd-history-panel .cvd-table-wrap td:nth-child(8)::before { content: 'Ganas'; }
   .cvd-history-panel .cvd-table-wrap td:nth-child(9)::before { content: 'Cómo se calcula'; }
   .cvd-history-panel .cvd-table-wrap td:nth-child(10)::before { content: 'Estado'; }
+  .cvd-history-panel .cvd-table-wrap td:nth-child(11)::before { content: 'Mensajero'; } /* 3.14.69: faltaba (columna de 3.13.48) */
 }
 
 /* 3.13.68 «Tus comisiones» (pedido de Cely): 4 cifras como en BizneCubano. Colores y letras de la marca (casa-viva-marca). */

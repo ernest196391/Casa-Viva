@@ -44,7 +44,7 @@ $order_center_request = new WP_REST_Request( 'GET', '/casa-viva/v1/order-center/
 wp_set_current_user( $clerk->ID );
 $clerk_sales = CVD_Staff_Privacy::filter_response( CVD_Sales::orders( $sales_request ), $server, $sales_request );
 $clerk_sales_data = $clerk_sales->get_data();
-cvt_5a_assert( 1 === count( $clerk_sales_data['orders'] ), 'La dependienta no recibió el pedido operativo esperado.' );
+cvt_5a_assert( 1 === count( $clerk_sales_data['orders'] ), 'La dependienta no recibió el pedido operativo esperado. recibidos=' . wp_json_encode( array_map( static fn( $o ) => array( $o['id'] ?? null, $o['status'] ?? null, $o['customer'] ?? null ), $clerk_sales_data['orders'] ?? array() ) ) );
 $clerk_order = $clerk_sales_data['orders'][0];
 foreach ( array( 'commission', 'commissionStatus', 'adminUrl' ) as $forbidden ) {
 	cvt_5a_assert( ! array_key_exists( $forbidden, $clerk_order ), "La dependienta recibió {$forbidden}." );

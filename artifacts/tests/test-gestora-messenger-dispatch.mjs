@@ -10,13 +10,14 @@ for (const marker of [
   "'ready' === sanitize_key",
   "'_cvd_operation_status'",
   "'unassigned' === CVD_Delivery::status",
-  'CVD_Delivery::publish_offer',
+  'CVD_Delivery::dispatch_ready', // 3.13.48: reparto directo si eligió mensajero; si no, publish_offer (dentro de dispatch_ready)
   'check_admin_referer',
-  'Enviar vale',
+  'Enviar a mensajeros', // 3.13.42: antes «Enviar vale»
 ]) {
   if (!portal.includes(marker)) throw new Error(`Falta frontera canónica de envío: ${marker}`);
 }
-for (const marker of ['available_messengers', "'_cvd_messenger_available'", "'_cvd_account_status'"]) {
+// 3.13.46: aprobación por programa (cuenta doble), antes '_cvd_account_status'.
+for (const marker of ['available_messengers', "'_cvd_messenger_available'", 'is_approved_messenger']) {
   if (!delivery.includes(marker)) throw new Error(`Falta disponibilidad canónica: ${marker}`);
 }
 if (/update_meta_data\(\s*'_cvd_messenger_user_id'/.test(portal)) throw new Error('La gestora no debe asignar directamente al mensajero.');

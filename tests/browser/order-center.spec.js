@@ -96,7 +96,8 @@ test('estados ready, handed_over y conflict se proyectan correctamente', async (
 
   await openOrder(page, ids.handed);
   await expect(page.locator('.cvd-oc-stage')).toHaveText('ON_THE_WAY_TO_CUSTOMER');
-  await expect(page.locator('.cvd-oc-card').filter({ hasText: 'Mensajería' })).toContainText('cvt_messenger');
+  // 3.13.78: quién lo lleva sale en «Gestor/a y mensajero», con su WhatsApp.
+  await expect(page.locator('.cvd-oc-card').filter({ hasText: 'Gestor/a y mensajero' })).toContainText('cvt_messenger');
 
   await openOrder(page, ids.conflict);
   await expect(page.getByText('Revisión requerida')).toBeVisible();
@@ -113,10 +114,11 @@ test('dependienta no recibe datos comerciales ni diagnósticos internos', async 
     });
     return response.json();
   }, ids.handed);
-  expect(payload.gestora).toBeUndefined();
+  // 3.13.78 (Nana): la tienda SÍ ve quién vendió (sin su id interno). El dinero de la gestora nunca.
+  expect(payload.gestora?.id).toBeUndefined();
   expect(payload.commission_summary).toBeUndefined();
   expect(payload.consistency.reasons).toEqual([]);
-  await expect(page.locator('.cvd-oc-card').filter({ hasText: /^Gestora/ })).toHaveCount(0);
+  await expect(page.locator('.cvd-oc-card').filter({ hasText: /^Gestor\/a y mensajero/ })).toHaveCount(1);
   await expect(page.locator('.cvd-oc-card').filter({ hasText: /^Comisión/ })).toHaveCount(0);
   expect(documentTextHasTechnicalIds(await page.locator('body').innerText())).toBeFalsy();
 });
@@ -133,7 +135,8 @@ test('administración conserva la vista comercial completa', async ({ page }) =>
   }, ids.handed);
   expect(payload.gestora).toBeDefined();
   expect(payload.commission_summary).toBeDefined();
-  await expect(page.locator('.cvd-oc-card').filter({ hasText: /^Gestora/ })).toHaveCount(1);
+  expect(payload.gestora.id).toBeDefined();
+  await expect(page.locator('.cvd-oc-card').filter({ hasText: /^Gestor\/a y mensajero/ })).toHaveCount(1);
   await expect(page.locator('.cvd-oc-card').filter({ hasText: /^Comisión/ })).toHaveCount(1);
 });
 

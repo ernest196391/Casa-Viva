@@ -35,6 +35,8 @@ console.log('OK 5B: contrato de recogida en tienda canónica validado.');
   if (!pick.includes("set_billing_address_1( '' )") || !pick.includes("'_cvd_pay_with'") || !pick.includes("set_billing_city( '' )") || !pick.includes("'_cvd_province_name'") || !pick.includes("'_cvd_change_required', array()")) throw new Error('#23: recogida debe limpiar dirección y vuelto.');
   if (save.indexOf("if ( 'pickup' === $type )") > save.indexOf("'_cvd_locality', isset")) throw new Error('#23: la recogida debe salir antes de guardar campos de mensajería.');
   const js = fs2.readFileSync('wordpress/casa-viva-dropship-core/assets/checkout.js', 'utf8');
-  if (!js.includes("if (pickup) change = ''")) throw new Error('#23: el resumen no muestra vuelto en recogida.');
+  // 3.13.74 (Dany): en la recogida el resumen dice cómo paga, pero nunca el vuelto.
+  const pickupLine = js.split(/\r?\n/).find((l) => /^\s*if \(pickup\) change = /.test(l)) || '';
+  if (!pickupLine || /vuelto|payWith/.test(pickupLine)) throw new Error('#23: el resumen no muestra vuelto en recogida.');
   console.log('Pickup ignores prefilled delivery fields OK');
 }

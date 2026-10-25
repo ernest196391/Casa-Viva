@@ -19,7 +19,7 @@ for (const marker of ['Subir vale', 'messenger_assistant', 'Asistente operativo'
 for (const marker of ['CVD_Messenger_Simplification::register', 'class-cvd-messenger-simplification.php']) {
   if (!plugin.includes(marker)) throw new Error(`Falta registro P0.3: ${marker}`);
 }
-if (!/define\( 'CVD_VERSION', '\d+\.\d+\.\d+' \)/.test(plugin)) throw new Error('La versión del plugin debe conservar semver.');
+if (!/define\( 'CVD_VERSION', '\d+\.\d+\.\d+(?:\.\d+)?' \)/.test(plugin)) // 3.14.58.1: un cuarto número para arreglos pequeños throw new Error('La versión del plugin debe conservar semver.');
 for (const marker of ["'area-mensajeros'", "'ruta-cv'", "'interpretar-vale'", 'messenger-simplify.css', 'messenger-simplify.js']) {
   if (!simplifyPhp.includes(marker)) throw new Error(`Falta superficie P0.3: ${marker}`);
 }

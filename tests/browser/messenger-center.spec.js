@@ -97,7 +97,9 @@ test('Más compacta contactos, preparación y asistente bajo demanda', async ({ 
 test('Dinero concentra liquidaciones y navegación activa', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await login(page); await openCenter(page);
-  await expect(page.locator('.cvd-messenger-nav a')).toHaveCount(4);
+  // 3.13.77: con la pestaña «Aprende» son 5 (Hoy, Aprende, Ruta, Dinero, Más).
+  const learn = await page.locator('#aprende').count();
+  await expect(page.locator('.cvd-messenger-nav a')).toHaveCount(learn ? 5 : 4);
   await page.getByRole('link', { name: 'Dinero', exact: true }).click();
   await expect(page.locator('.cvd-messenger-nav a[aria-current="page"]')).toHaveText('Dinero');
   await expect(page.locator('#liquidaciones')).toBeVisible();

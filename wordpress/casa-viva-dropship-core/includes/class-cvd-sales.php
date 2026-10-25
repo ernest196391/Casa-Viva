@@ -323,7 +323,13 @@ final class CVD_Sales {
 		} catch ( Throwable $e ) { unset( $e ); }
 		// La gestora del pedido («Rafael» encuentra los pedidos de su gestora).
 		if ( strlen( $search ) >= 3 ) {
-			$ids = array_merge( $ids, (array) wc_get_orders( array_merge( $base, array( 'meta_query' => array( array( 'key' => 'gestora_nombre', 'value' => $search, 'compare' => 'LIKE' ) ) ) ) ) );
+			$by_gestora = (array) wc_get_orders( array_merge( $base, array( 'meta_query' => array( array( 'key' => 'gestora_nombre', 'value' => $search, 'compare' => 'LIKE' ) ) ) ) );
+			// 3.14.69: WooCommerce 8.2 sin HPOS ignora este meta_query y devolvía los últimos pedidos sin filtrar
+			// (lo destapó la prueba 5A). Se comprueba la gestora de cada uno, como en CVD_Attribution::find_existing_owner.
+			$ids = array_merge( $ids, array_filter( $by_gestora, static function ( $id ) use ( $search ): bool {
+				$order = wc_get_order( (int) $id );
+				return $order instanceof WC_Order && false !== stripos( (string) $order->get_meta( 'gestora_nombre', true ), $search );
+			} ) );
 		}
 		// Teléfono escrito sin espacios («53388455» encuentra «+53 5 3388455»): últimos 8 dígitos.
 		$digits = preg_replace( '/\D+/', '', $search );

@@ -27,7 +27,8 @@ test('dependienta opera pedidos sin datos financieros o administrativos', async 
   await login(page, clerk);
   await openSales(page);
 
-  await expect(page.locator('.cvd-sale-data b', { hasText: 'Gestora' })).toHaveCount(0);
+  // 3.13.78 (Nana): la tienda ve quién vendió y quién lo lleva para anotarlo; la comisión no.
+  await expect(page.locator('.cvd-sale-people b', { hasText: 'Gestor/a' }).first()).toBeVisible();
   await expect(page.locator('.cvd-sale-data b', { hasText: 'Comisión' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Ver pedido' })).toHaveCount(0);
 
@@ -41,7 +42,7 @@ test('dependienta opera pedidos sin datos financieros o administrativos', async 
 
   expect(payload.orders.length).toBeGreaterThan(0);
   for (const order of payload.orders) {
-    expect(order.gestora).toBeUndefined();
+    // 3.13.78: el nombre de quien vendió sí llega (va en «people»); el dinero no.
     expect(order.commission).toBeUndefined();
     expect(order.commissionStatus).toBeUndefined();
     expect(order.adminUrl).toBeUndefined();
@@ -55,7 +56,7 @@ test('administración conserva contexto comercial y acceso al pedido', async ({ 
   await login(page, admin);
   await openSales(page);
 
-  await expect(page.locator('.cvd-sale-data b', { hasText: 'Gestora' }).first()).toBeVisible();
+  await expect(page.locator('.cvd-sale-people b', { hasText: 'Gestor/a' }).first()).toBeVisible();
   await expect(page.locator('.cvd-sale-data b', { hasText: 'Comisión' }).first()).toBeVisible();
   await expect(page.getByRole('link', { name: 'Ver pedido' }).first()).toBeVisible();
 
