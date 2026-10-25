@@ -320,7 +320,11 @@ final class CVD_Vale_Chat {
 			$order->set_payment_method( 'cvd_whatsapp' ); $order->set_payment_method_title( 'Vale por chat (VivaBot)' );
 			CVD_Attribution::attach_operator_order( $order, $gestora->ID );
 			$order->calculate_totals();
-			CVD_Cuban_Checkout::apply_payment( $order, $kind, 'pickup' === $delivery['type'] );
+			$due = CVD_Cuban_Checkout::apply_payment( $order, $kind, 'pickup' === $delivery['type'] );
+			// 3.14.70 (Dany 24-oct): «¿con cuánto paga?» del vale por chat → vuelto, con las mismas cuentas que la web.
+			$pay_with = max( 0.0, (float) wc_format_decimal( (string) ( $p['payWith'] ?? 0 ), 2 ) );
+			$change = CVD_Cuban_Checkout::apply_change( $order, $kind, $due, $pay_with );
+			if ( $change ) { $order->add_order_note( 'Vuelto (vale por chat): paga con ' . wc_format_decimal( $pay_with, 2 ) . ' ' . $change[0]['currency'] . ', vuelto ' . wc_format_decimal( $change[0]['amount'], 2 ) . ' ' . $change[0]['currency'] . '.' ); }
 			if ( $own ) { CVD_Cuban_Checkout::mark_self_declared( $order, $own, 'vale por chat' ); }
 			$order->add_order_note( 'Vale por chat (VivaBot): lo hizo ' . $gestora->display_name . ' desde WhatsApp.' . ( '' === $kind ? ' Forma de pago: por confirmar con el cliente.' : '' ) );
 			$order->save();

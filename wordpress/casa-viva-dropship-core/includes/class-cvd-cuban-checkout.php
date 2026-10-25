@@ -645,11 +645,20 @@ final class CVD_Cuban_Checkout {
 		$kind = sanitize_key( wp_unslash( $_POST['billing_cvd_payment_kind'] ?? '' ) );
 		$due = self::save_payment( $order, $kind, false );
 		if ( ! isset( self::PAYMENT_KINDS[ $kind ] ) ) { self::note( $order, 'Forma de pago: por confirmar con el cliente (no la dio al reservar).' ); } // 3.14.63
-		$cash_currency = isset( self::PAYMENT_KINDS[ $kind ] ) && in_array( $kind, self::CASH_KINDS, true ) ? self::PAYMENT_KINDS[ $kind ]['currency'] : '';
-		// El cliente dice con cuánto paga (solo en efectivo, en la moneda de su forma de pago) y el vuelto se calcula aquí.
-		// Sin forma de pago (pedido de antes): como siempre, la moneda que eligió y el vuelto solo si es en USD.
 		$pay_with = (float) wc_format_decimal( wp_unslash( $_POST['billing_cvd_change_amount'] ?? 0 ), 2 );
 		$pay_currency = strtoupper( sanitize_key( wp_unslash( $_POST['billing_cvd_change_currency'] ?? '' ) ) );
+		self::apply_change( $order, $kind, $due, $pay_with, $pay_currency );
+	}
+
+	/**
+	 * El cliente dice con cuánto paga (solo en efectivo, en la moneda de su forma de pago) y el vuelto se calcula aquí.
+	 * Sin forma de pago (pedido de antes): como siempre, la moneda que eligió y el vuelto solo si es en USD.
+	 * 3.14.70: pública para el vale por chat (CVD_Vale_Chat, «¿con cuánto paga?», Dany 24-oct). $due = lo que devolvió
+	 * apply_payment() (el importe en la moneda de la forma de pago). Llamar con el total ya calculado.
+	 */
+	public static function apply_change( WC_Order $order, string $kind, ?float $due, float $pay_with, string $pay_currency = '' ): array {
+		$cash_currency = isset( self::PAYMENT_KINDS[ $kind ] ) && in_array( $kind, self::CASH_KINDS, true ) ? self::PAYMENT_KINDS[ $kind ]['currency'] : '';
+		$pay_currency = strtoupper( $pay_currency );
 		$pay_currency = '' !== $cash_currency ? $cash_currency : ( in_array( $pay_currency, array( 'USD', 'CUP', 'EUR' ), true ) ? $pay_currency : 'USD' );
 		if ( isset( self::PAYMENT_KINDS[ $kind ] ) && '' === $cash_currency ) { $pay_with = 0; } // transferencia, Clásica, Zelle o PayPal: no hay vuelto
 		$change_required = array();
@@ -662,6 +671,7 @@ final class CVD_Cuban_Checkout {
 			}
 		}
 		$order->update_meta_data( '_cvd_change_required', $change_required );
+		return $change_required;
 	}
 
 	/**
