@@ -315,7 +315,7 @@
 	}
 	function pushCard() {
 		if (pushState() !== 'off' || store.get(PFX + 'push-no')) { return ''; }
-		return '<article class="pl-card pl-card--brand"><b>🔔 Activa los avisos</b><span>Te avisamos al teléfono cuando salga una carrera libre, cuando te asignen una o si cancelan la tuya. Aunque tengas la app cerrada.</span>'
+		return '<article class="pl-card pl-card--brand"><b>🔔 Activa los avisos</b><span>Te avisamos al teléfono cuando salga una carrera libre, para que la cojas antes. Aunque tengas la app cerrada.</span>'
 			+ '<div class="pl-grid2"><button type="button" class="pl-btn pl-btn--primary' + (state.busy === 'push' ? ' pl-btn--busy' : '') + '" data-act="push-on">Activar avisos</button><button type="button" class="pl-btn pl-btn--secondary" data-act="push-no">Ahora no</button></div></article>';
 	}
 
