@@ -8,14 +8,21 @@ defined( 'ABSPATH' ) || exit;
  * cvd_push_subscriptions, aviso sin datos y el teléfono pide el último con su cookie), con los teléfonos de Pa'llá marcados
  * aparte: solo reciben avisos de Pa'llá, que abren la app en la carrera.
  *
- * Un solo aviso (Ernesto eligió solo este, 25-oct): «🛵 Carrera libre #N» cada vez que se oferta una carrera sin mensajero,
- * a todos los de Pa'llá con avisos, menos al que la soltó. Sin recordatorios repetidos (uno por cada vez que se oferta).
+ * Avisos (uno por cosa, sin recordatorios repetidos; se detectan al guardar el pedido):
+ *   1. offer     — sale una carrera libre (a todos los de Pa'llá con avisos, menos al que la soltó).
+ *   2. assigned  — te asignaron una carrera (asignación directa o un pase que aceptaste no cuenta: solo si lo hizo otro).
+ *   3. cancelled — tu carrera se canceló · lost — ya no está a tu nombre · changed — cambió la dirección, los productos o el día.
  * Interruptor `cvd_palla_push`: no | prueba (solo `cvd_palla_push_testers`, por defecto Daiquel 59 y la cuenta de prueba 161)
  * | si (todo el que entra en Pa'llá). Siempre además CVD_Palla::blocked_reason() vacío (respeta `cvd_palla`).
+ * 3.14.69.3 (Ernesto 25-oct eligió solo «Carrera libre»): un interruptor por tipo, `cvd_palla_push_tipos` (lista de
+ * offer, assigned, cancelled, lost, changed); por defecto solo `offer`. Los apagados se siguen vigilando sin enviar («changed»
+ * empieza a contar al encenderlo), así al encenderlos no salen avisos viejos. Encender uno: wp option update cvd_palla_push_tipos "offer,assigned".
  */
 final class CVD_Palla_Push {
 	public const OPTION = 'cvd_palla_push';
 	public const TESTERS = 'cvd_palla_push_testers';
+	public const TYPES = 'cvd_palla_push_tipos';
+	private const ALL_TYPES = array( 'offer', 'assigned', 'cancelled', 'lost', 'changed' );
 	private const NS = 'casa-viva/v1';
 	private const TTL = 604800; // 7 días: lo último avisado de cada pedido
 	private static bool $busy = false;
@@ -42,6 +49,13 @@ final class CVD_Palla_Push {
 	public static function testers(): array {
 		$raw = get_option( self::TESTERS, array( 59, 161 ) );
 		return array_values( array_filter( array_map( 'absint', is_array( $raw ) ? $raw : preg_split( '/[\s,]+/', (string) $raw ) ) ) );
+	}
+
+	/** Tipos de aviso encendidos (por defecto solo «Carrera libre»). @return string[] */
+	public static function types(): array {
+		$raw = get_option( self::TYPES, array( 'offer' ) );
+		$list = array_map( 'sanitize_key', is_array( $raw ) ? $raw : preg_split( '/[\s,]+/', (string) $raw ) );
+		return array_values( array_intersect( self::ALL_TYPES, $list ) );
 	}
 
 	public static function allowed( WP_User $user ): bool {
@@ -106,9 +120,17 @@ final class CVD_Palla_Push {
 	}
 
 	private static function send( int $user_id, WC_Order $order, string $type, string $title, string $message, string $hash ): void {
+		if ( ! in_array( $type, self::types(), true ) ) { return; }
 		$user = get_userdata( $user_id );
 		if ( ! $user || ! self::allowed( $user ) ) { return; }
 		CVD_Web_Push::notify_palla( $user_id, $order->get_id(), $type, $title, $message, home_url( '/palla/' ) . $hash );
+	}
+
+	/** Dirección, productos, total y día: si cambian con la carrera en curso, se avisa al mensajero. */
+	private static function fingerprint( WC_Order $order ): string {
+		$items = class_exists( 'CVD_Order_Lines' ) ? CVD_Order_Lines::texts( $order ) : array();
+		return md5( wp_json_encode( array( $order->get_shipping_address_1() ?: $order->get_billing_address_1(), $order->get_shipping_address_2() ?: $order->get_billing_address_2(),
+			(string) $order->get_meta( '_cvd_locality', true ), (string) $order->get_total(), $items, (string) $order->get_meta( '_cvd_delivery_date', true ), (string) $order->get_meta( '_cvd_delivery_window', true ) ) ) );
 	}
 
 	public static function on_save( $order ): void {
@@ -118,20 +140,83 @@ final class CVD_Palla_Push {
 		try { self::check( $order ); } catch ( Throwable $e ) { error_log( 'Pa\'llá avisos: ' . $e->getMessage() ); } finally { self::$busy = false; } // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 	}
 
-	/** Carrera libre: cada vez que se oferta (de nuevo) sin mensajero, un aviso a cada uno (menos al que la soltó). */
 	private static function check( WC_Order $order ): void {
-		if ( 'offered' !== CVD_Delivery::status( $order ) || absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) || '' !== CVD_Delivery::blocks_dispatch( $order ) ) { return; }
-		if ( in_array( $order->get_status(), array( 'cancelled', 'refunded', 'failed', 'trash' ), true ) ) { return; }
 		$id = $order->get_id();
-		$at = (string) $order->get_meta( '_cvd_delivery_offered_at', true ); // cambia cada vez que se vuelve a ofertar
-		if ( '' === $at || get_transient( 'cvd_palla_offer_' . $id ) === $at ) { return; }
-		set_transient( 'cvd_palla_offer_' . $id, $at, self::TTL );
-		$fee = absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) ) ?: (int) round( CVD_Delivery::courier_amount( $order ) );
-		$body = CVD_Delivery::destination_zone( $order ) . ( $fee > 0 ? ' · ' . CVD_Messenger_Delivered_Link::money( (float) $fee, 'CUP' ) : '' ) . ' · toca para verla y cogerla';
-		$skip = array_map( 'absint', (array) $order->get_meta( '_cvd_delivery_rejected_by', true ) );
-		foreach ( self::subscribers() as $user ) {
-			if ( in_array( $user->ID, $skip, true ) ) { continue; }
-			self::send( $user->ID, $order, 'offer', '🛵 Carrera libre #' . $order->get_order_number(), $body, '#carreras' );
+		$n = (string) $order->get_order_number();
+		$status = CVD_Delivery::status( $order );
+		$owner = absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
+		$actor = get_current_user_id();
+		$zone = CVD_Delivery::destination_zone( $order );
+		$closed = 'cancelled' === $status || in_array( $order->get_status(), array( 'cancelled', 'refunded', 'failed', 'trash' ), true );
+		$prev = get_transient( 'cvd_palla_owner_' . $id ); // false = no lo habíamos visto
+
+		// 1. Carrera libre (cada vez que se oferta de nuevo: _cvd_delivery_offered_at cambia).
+		if ( ! $closed && 'offered' === $status && ! $owner && '' === CVD_Delivery::blocks_dispatch( $order ) ) {
+			// Volvió a quedar libre: si la tenía alguien y no la soltó él, ya no es suya.
+			$had = absint( $prev );
+			$skip = array_map( 'absint', (array) $order->get_meta( '_cvd_delivery_rejected_by', true ) );
+			if ( $had && $actor !== $had && ! in_array( $had, $skip, true ) ) {
+				self::send( $had, $order, 'lost', '#' . $n . ' ya no está a tu nombre', 'La tienda la volvió a dejar libre. Si tienes el paquete, llama a la tienda.', '#carreras' );
+			}
+			set_transient( 'cvd_palla_owner_' . $id, 0, self::TTL );
+			$at = (string) $order->get_meta( '_cvd_delivery_offered_at', true );
+			if ( '' !== $at && get_transient( 'cvd_palla_offer_' . $id ) !== $at ) {
+				set_transient( 'cvd_palla_offer_' . $id, $at, self::TTL );
+				$fee = absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) ) ?: (int) round( CVD_Delivery::courier_amount( $order ) );
+				foreach ( self::subscribers() as $user ) {
+					if ( in_array( $user->ID, $skip, true ) ) { continue; }
+					self::send( $user->ID, $order, 'offer', '🛵 Carrera libre #' . $n, $zone . ( $fee > 0 ? ' · ' . CVD_Messenger_Delivered_Link::money( (float) $fee, 'CUP' ) : '' ) . ' · toca para verla y cogerla', '#carreras' );
+				}
+			}
+			return;
+		}
+
+		// 3a. Cancelada con mensajero.
+		$who = $owner ?: absint( $prev );
+		if ( $closed ) {
+			if ( $who && ! get_transient( 'cvd_palla_cx_' . $id ) ) {
+				set_transient( 'cvd_palla_cx_' . $id, 1, self::TTL );
+				self::send( $who, $order, 'cancelled', '❌ #' . $n . ' se canceló', 'No la lleves. Si ya tienes el paquete, devuélvelo a la tienda.', '#carreras' );
+			}
+			delete_transient( 'cvd_palla_owner_' . $id );
+			return;
+		}
+		if ( ! in_array( $status, array( 'assigned', 'accepted', 'to_store', 'picked_up', 'handed_over', 'incident' ), true ) && ! ( false !== $prev && absint( $prev ) && ! $owner ) ) { return; }
+
+		// 2 y 3b. Cambio de dueño.
+		if ( false === $prev ) {
+			// Primera vez que lo vemos: solo cuenta como «te la asignaron» si es una asignación directa de hace poco.
+			$assigned_at = (string) $order->get_meta( '_cvd_direct_assigned_at', true );
+			$prev = ( $owner && 'assigned' === $status && '' !== $assigned_at && strtotime( $assigned_at . ' UTC' ) > time() - 600 ) ? 0 : $owner;
+		}
+		$prev = absint( $prev );
+		if ( $owner !== $prev ) {
+			set_transient( 'cvd_palla_owner_' . $id, $owner, self::TTL );
+			delete_transient( 'cvd_palla_h_' . $id );
+			$paso = json_decode( (string) $order->get_meta( '_cvd_palla_paso', true ), true );
+			$passed = is_array( $paso ) && absint( $paso['to'] ?? 0 ) === $owner && absint( $paso['from'] ?? 0 ) === $prev;
+			if ( $owner && $actor !== $owner && 'assigned' === $status ) {
+				self::send( $owner, $order, 'assigned', '📦 Te asignaron #' . $n, $zone . ' · pon la hora y ve a recogerla', '#hora/' . $id );
+			}
+			if ( $prev && $actor !== $prev ) {
+				$released = in_array( $prev, array_map( 'absint', (array) $order->get_meta( '_cvd_delivery_rejected_by', true ) ), true );
+				if ( $passed ) {
+					$to = get_userdata( $owner );
+					self::send( $prev, $order, 'lost', '✅ ' . ( $to ? strtok( (string) $to->display_name, ' ' ) : 'Tu compañero' ) . ' aceptó #' . $n, 'Ya no es tuya. ¡Gracias por pasarla!', '#carreras' );
+				} elseif ( ! $released ) {
+					self::send( $prev, $order, 'lost', '#' . $n . ' ya no está a tu nombre', 'La tienda se la pasó a otro mensajero o la quitó. Si tienes el paquete, llama a la tienda.', '#carreras' );
+				}
+			}
+		}
+
+		// 3c. Cambió la dirección, los productos o el día con la carrera en curso.
+		if ( $owner && in_array( 'changed', self::types(), true ) ) {
+			$fp = self::fingerprint( $order );
+			$old = get_transient( 'cvd_palla_h_' . $id );
+			set_transient( 'cvd_palla_h_' . $id, $fp, self::TTL );
+			if ( false !== $old && $old !== $fp && $actor !== $owner ) {
+				self::send( $owner, $order, 'changed', '✏️ #' . $n . ' cambió', 'Revisa la dirección, los productos o el día antes de salir.', '#carrera/' . $id );
+			}
 		}
 	}
 
