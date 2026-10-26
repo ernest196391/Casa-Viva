@@ -419,7 +419,7 @@
 		} else if (c.stage === 'pickup') {
 			acts += '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + b('recogi') + '" data-act="recogi" data-id="' + c.id + '">' + icon('bien') + 'Recogí</button>'
 				+ '<div class="pl-grid3"><button type="button" class="pl-btn pl-btn--secondary" disabled>Entregado</button><a class="pl-btn pl-btn--secondary" href="#problema/' + c.id + '">' + icon('aviso', 18) + 'Problema</a><a class="pl-btn pl-btn--secondary" href="#suelto/' + c.id + '">No puedo</a></div>'
-				+ '<div class="pl-hint">¿Sin conexión? Escribe <span class="pl-strong">' + esc(w.recogi) + '</span> por WhatsApp</div>';
+				+ '<div class="pl-hint">¿Sin conexión? Toca «Recogí» igual: se guarda y se manda solo cuando vuelva la señal.</div>'; // 3.14.69.8: el bot aún no entiende «Recogí N» (feat/carrera-palabras sin subir)
 		} else if (c.stage === 'route') {
 			acts += '<a class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block" href="#entregado/' + c.id + '">' + icon('bien') + 'Entregado</a>'
 				+ '<a class="pl-btn pl-btn--secondary pl-btn--block" href="#problema/' + c.id + '">' + icon('aviso', 18) + 'Problema</a>'
@@ -573,9 +573,11 @@
 		var w = c ? wordFor(c) : { recogi: 'Recogí ' + n, entregado: 'Entregado ' + n + ' 44 usd', problema: 'Problema ' + n + ' no estaba', suelto: 'No puedo ' + n };
 		var cmds = [];
 		if (o) { cmds.push(['Yo', 'En el grupo de Mensajerías, debajo del anuncio de #' + n]); }
-		cmds.push([w.recogi, 'Ya tienes el paquete'], [w.entregado, 'Lo entregaste y cobraste'], [w.problema, 'Algo salió mal'], [w.suelto, 'La suelta para otro']);
+		// 3.14.69.8: solo lo que el bot en vivo ya entiende («Recogí N» llega con feat/carrera-palabras; hasta entonces el
+		// «Recogí» sin señal se guarda en la app y se manda solo).
+		cmds.push([w.entregado, 'Lo entregaste y cobraste'], [w.problema, 'Algo salió mal'], [w.suelto, 'La suelta para otro']);
 		var html = '<header class="pl-top pl-top--bar">' + back + '</header>' + (state.offline ? '<div class="pl-offline" role="status">' + icon('senal') + '<span>' + (o ? 'Sin conexión. No se pudo coger la carrera.' : 'Sin conexión. Tu carrera sigue guardada.') + '</span></div>' : '');
-		html += '<main class="pl-main"><h1 class="pl-h1">Escríbelo por WhatsApp</h1><p style="margin:0;color:var(--ink-muted)">Hace lo mismo que los botones. Manda una sola línea al WhatsApp de Casa Viva.</p>';
+		html += '<main class="pl-main"><h1 class="pl-h1">Escríbelo por WhatsApp</h1><p style="margin:0;color:var(--ink-muted)">El bot de Casa Viva lo entiende. Manda una sola línea a su WhatsApp. «Recogí» no hace falta escribirlo: tócalo en la app y se manda solo cuando vuelva la señal.</p>';
 		if (o) { html += '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>«La cojo» necesita conexión</b>Otro mensajero puede cogerla antes. Escribe <b style="display:inline">Yo</b> en el grupo o prueba otra vez cuando tengas señal.</div></div>'; }
 		html += '<div class="pl-list">' + cmds.map(function (x, i) {
 			return '<div class="pl-li" style="min-height:64px"><div><span class="pl-num" style="font-weight:700">' + esc(x[0]) + '</span><span class="pl-muted">' + esc(x[1]) + '</span></div><button type="button" class="pl-btn pl-btn--link" data-act="copiar" data-text="' + esc(x[0]) + '" aria-label="Copiar ' + esc(x[0]) + '">Copiar</button></div>';

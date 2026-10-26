@@ -167,7 +167,8 @@
 		check('19. La dependienta marca «Dinero recibido»: «Mi dinero» se pone en cero', /No debes dinero a la tienda/.test(text()), text().slice(0, 300));
 		// 20. Ayuda sin conexión: las palabras de WhatsApp de una carrera mía
 		await go('#ayuda/' + n4);
-		check('20. Ayuda: las 4 palabras para WhatsApp con el número de la carrera', text().indexOf('Recogí ' + n4) !== -1, text().slice(0, 300));
+		// 3.14.69.8: solo las 3 que el bot en vivo entiende (sin «Recogí N»: eso se toca en la app y va en la cola).
+		check('20. Ayuda: las 3 palabras para WhatsApp con el número de la carrera (sin «Recogí N»)', text().indexOf('Entregado ' + n4) !== -1 && text().indexOf('Problema ' + n4) !== -1 && text().indexOf('No puedo ' + n4) !== -1 && text().indexOf('Recogí ' + n4) === -1, text().slice(0, 400));
 
 		// 21. Pasar a otro mensajero (#54, #65): pide elegir, queda esperando, se puede cancelar
 		P.event('nueva'); await refresh(); var n7 = world().orders[world().orders.length - 1].id;
