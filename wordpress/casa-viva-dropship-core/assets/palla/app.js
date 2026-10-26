@@ -313,6 +313,19 @@
 		navigator.serviceWorker.ready.then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (sub) { if (sub) { ep = sub.endpoint; return sub.unsubscribe(); } })
 			.then(function () { return ep ? pushCall('DELETE', ep) : null; }).catch(function () {}).then(function () { showToast('Avisos desactivados en este teléfono.'); });
 	}
+	// «Probar aquí»: aviso hecho por el propio teléfono (si no sale, Android tiene los avisos bloqueados o en silencio).
+	function pushLocal() {
+		navigator.serviceWorker.ready.then(function (reg) { return reg.showNotification('🔔 Prueba en este teléfono', { body: 'Si ves esto, el teléfono deja enseñar avisos de Pa\'llá.', icon: C.icon192 || undefined, tag: 'palla-local', renotify: true, vibrate: [300, 120, 300] }); })
+			.then(function () { showToast('Mira arriba en el teléfono: debe salir «Prueba en este teléfono».'); }, function () { showToast('El teléfono no deja enseñar avisos. Ajustes → Apps → Chrome → Notificaciones.'); });
+	}
+	// «Probar desde la tienda»: Core manda un aviso de verdad por internet (cierra la app para verlo como llegará).
+	function pushTest() {
+		if (state.busy) { return; }
+		state.busy = 'push-test'; render();
+		fetch(API + 'push/prueba', { method: 'POST', headers: { 'Accept': 'application/json', 'X-Palla-Token': state.token }, credentials: 'include', cache: 'no-store' }).then(function (r) { return r.json(); })
+			.then(function (d) { state.busy = ''; showToast(d && d.sent ? 'Enviado. Cierra la app y espera un minuto: debe sonar «Prueba de Pa\'llá».' : ((d && d.message) || 'No se pudo enviar ahora.')); })
+			.catch(function () { state.busy = ''; showToast('Sin señal: prueba otra vez con internet.'); });
+	}
 	function pushCard() {
 		if (pushState() !== 'off' || store.get(PFX + 'push-no')) { return ''; }
 		return '<article class="pl-card pl-card--brand"><b>🔔 Activa los avisos</b><span>Te avisamos al teléfono cuando salga una carrera libre, para que la cojas antes. Aunque tengas la app cerrada.</span>'
@@ -568,7 +581,9 @@
 			return '<div class="pl-li" style="min-height:64px"><div><span class="pl-num" style="font-weight:700">' + esc(x[0]) + '</span><span class="pl-muted">' + esc(x[1]) + '</span></div><button type="button" class="pl-btn pl-btn--link" data-act="copiar" data-text="' + esc(x[0]) + '" aria-label="Copiar ' + esc(x[0]) + '">Copiar</button></div>';
 		}).join('') + '</div>';
 		var ps = pushState();
-		if (ps === 'on') { html += '<div class="pl-note pl-note--info">🔔<div><b>Avisos activados</b> en este teléfono. <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="push-off">Desactivar</button></div></div>'; }
+		if (ps === 'on') { html += '<div class="pl-note pl-note--info">🔔<div><b>Avisos activados</b> en este teléfono. <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="push-off">Desactivar</button></div></div>'
+			+ '<div class="pl-grid2"><button type="button" class="pl-btn pl-btn--secondary" data-act="push-local">Probar aquí</button><button type="button" class="pl-btn pl-btn--secondary' + (state.busy === 'push-test' ? ' pl-btn--busy' : '') + '" data-act="push-test">Probar desde la tienda</button></div>'
+			+ '<p class="pl-muted">«Probar aquí» enseña un aviso sin internet. Si no sale ninguno: Ajustes del teléfono → Apps → Pa\'llá (o Chrome) → Notificaciones → activar, con sonido.</p>'; }
 		else if (ps === 'off') { html += '<div class="pl-note">🔔<div><b>Avisos apagados.</b> <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="push-on">Activar avisos</button></div></div>'; }
 		else if (ps === 'denied') { html += '<div class="pl-note">🔕<div><b>Avisos bloqueados en Chrome.</b> Para activarlos: Chrome → ⋮ → Configuración → Notificaciones → casaviva.company → Permitir.</div></div>'; }
 		html += '<div class="pl-note pl-note--info">' + icon('sincronizar') + '<div>Cuando vuelva la señal, la app se pone al día sola. No tienes que repetir nada.' + (state.queue.length ? ' Tienes <b style="display:inline">' + state.queue.length + '</b> ' + (state.queue.length === 1 ? 'acción guardada' : 'acciones guardadas') + ' esperando la señal.' : '') + '</div></div>';
@@ -632,6 +647,8 @@
 		if (a === 'push-on') { store.set(PFX + 'push-no', null); pushOn(); return; }
 		if (a === 'push-no') { store.set(PFX + 'push-no', '1'); render(); return; }
 		if (a === 'push-off') { pushOff(); return; }
+		if (a === 'push-local') { pushLocal(); return; }
+		if (a === 'push-test') { pushTest(); return; }
 		if (a === 'suelto' && c) { act(c, 'suelto'); return; }
 		if (a === 'pasar' && c) {
 			if (!state.form.to) { state.form.err = 'Elige a quién se la pasas.'; render(); return; }

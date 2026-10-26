@@ -38,6 +38,16 @@ final class CVD_Palla_Push {
 			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'subscribe' ), 'permission_callback' => $auth ),
 			array( 'methods' => 'DELETE', 'callback' => array( __CLASS__, 'unsubscribe' ), 'permission_callback' => $auth ),
 		) );
+		// 3.14.69.4: botón «Probar desde la tienda» en Ayuda (una vez cada 30 s).
+		register_rest_route( self::NS, '/palla/push/prueba', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'self_test' ), 'permission_callback' => $auth ) );
+	}
+
+	public static function self_test( WP_REST_Request $request ): WP_REST_Response {
+		$me = CVD_Palla::request_user( $request );
+		if ( get_transient( 'cvd_palla_push_prueba_' . $me->ID ) ) { return self::out( array( 'sent' => false, 'message' => 'Ya te mandamos uno hace un momento. Espera medio minuto.' ) ); }
+		set_transient( 'cvd_palla_push_prueba_' . $me->ID, 1, 30 );
+		$result = self::test( $me->ID );
+		return self::out( 'enviado' === $result ? array( 'sent' => true ) : array( 'sent' => false, 'message' => 'Los avisos no están activados para ti todavía.' ) );
 	}
 
 	public static function mode(): string {

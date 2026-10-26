@@ -209,6 +209,7 @@ final class CVD_Palla {
 			'session'  => home_url( '/palla/sesion' ),
 			'sw'       => home_url( '/palla/sw.js' ),
 			'scope'    => home_url( '/palla/' ),
+			'icon192'  => self::asset( 'icon-192.png' ),
 			'version'  => CVD_VERSION,
 			'mode'     => self::mode(),
 			'whatsapp' => self::whatsapp(),
@@ -395,7 +396,8 @@ final class CVD_Palla {
 		$latest = wp_json_encode( rest_url( 'casa-viva/v1/push/latest' ), JSON_UNESCAPED_SLASHES );
 		$icon = wp_json_encode( self::asset( 'icon-192.png' ), JSON_UNESCAPED_SLASHES );
 		echo "const LATEST={$latest},ICON={$icon};\n";
-		echo "self.addEventListener('push',e=>{e.waitUntil((async()=>{let n={};try{const r=await fetch(LATEST+(LATEST.indexOf('?')>-1?'&':'?')+'_='+Date.now(),{credentials:'include',cache:'no-store'});if(r.status===200)n=await r.json()}catch(x){}await self.registration.showNotification(n.title||\"Pa'llá\",{body:n.message||'Tienes algo nuevo en Pa\\'llá. Toca para verlo.',icon:ICON,badge:ICON,tag:'palla-'+(n.id||Date.now()),renotify:true,vibrate:[300,120,300],data:{url:n.action_url||SHELL}})})())});\n";
+		// 3.14.69.4: la consulta tiene 4 s como mucho (con mala señal se quedaba colgada y Chrome no enseñaba nada).
+		echo "self.addEventListener('push',e=>{e.waitUntil((async()=>{let n={};try{n=await Promise.race([fetch(LATEST+(LATEST.indexOf('?')>-1?'&':'?')+'_='+Date.now(),{credentials:'include',cache:'no-store'}).then(r=>r.status===200?r.json():{}),new Promise(ok=>setTimeout(()=>ok({}),4000))])||{}}catch(x){}await self.registration.showNotification(n.title||\"Pa'llá\",{body:n.message||'Tienes algo nuevo en Pa\\'llá. Toca para verlo.',icon:ICON,badge:ICON,tag:'palla-'+(n.id||Date.now()),renotify:true,vibrate:[300,120,300],data:{url:n.action_url||SHELL}})})())});\n";
 		echo "self.addEventListener('notificationclick',e=>{e.notification.close();const u=(e.notification.data&&e.notification.data.url)||SHELL;e.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(cs=>{for(const c of cs){if(c.url.indexOf(SHELL)===0&&'focus'in c){c.navigate(u);return c.focus()}}return clients.openWindow(u)}))});\n";
 		exit;
 	}
