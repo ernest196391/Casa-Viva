@@ -845,6 +845,7 @@ final class CVD_Bot_Bridge {
 			'messenger' => $messenger ? $messenger->display_name : null,
 			'eta' => (string) $order->get_meta( '_cvd_bot_eta', true ),
 			'tracking' => CVD_Delivery::tracking_url( $order ),
+			'seq' => class_exists( 'CVD_Order_Seq' ) ? CVD_Order_Seq::label( $order ) : '', // 3.14.69.11 (#581)
 		) );
 	}
 
@@ -1015,6 +1016,7 @@ final class CVD_Bot_Bridge {
 			'note'        => wp_strip_all_tags( (string) $order->get_customer_note() ),
 			'pickup'      => 'Casa Viva · Calle Conill A esq. 45 #864, Nuevo Vedado',
 			'tracking'    => CVD_Delivery::tracking_url( $order ),
+			'seq'         => class_exists( 'CVD_Order_Seq' ) ? CVD_Order_Seq::label( $order ) : '', // 3.14.69.11 (#581)
 			'app'         => home_url( '/area-mensajeros/' ),
 			// 3.14.39 (Lennys 18-oct): enlace firmado de este pedido y este mensajero con el botón «Entregado» de un toque.
 			'deliveredUrl'=> class_exists( 'CVD_Messenger_Delivered_Link' ) ? CVD_Messenger_Delivered_Link::url( $order ) : '',
