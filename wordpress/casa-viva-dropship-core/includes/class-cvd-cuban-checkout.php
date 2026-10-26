@@ -336,9 +336,10 @@ final class CVD_Cuban_Checkout {
 		$fields['billing']['billing_last_name']['class'] = array( 'form-row-wide' );
 		$fields['billing']['billing_last_name']['priority'] = 30;
 		$fields['billing']['billing_phone']['label'] = 'WhatsApp o teléfono de quien recibe';
-		// 3.14.63 (maratón 24-oct, Ernesto): el teléfono es lo único que se pide siempre, también en la recogida
-		// (de 3.13.69 a 3.14.61 era opcional en la recogida; sin nombre, el teléfono es la única forma de saber de quién es).
-		$fields['billing']['billing_phone']['required'] = true;
+		// 3.14.69.12 (Dany, aprobado por Ernesto 26-oct): con «Recogida en tienda» el teléfono vuelve a ser opcional (como de
+		// 3.13.69 a 3.14.61), pero entonces hace falta el nombre (validate): sin los dos no se sabría de quién es. Con
+		// mensajería sigue obligatorio teléfono + zona (D110). checkout.js pone «(opcional si pones el nombre)».
+		$fields['billing']['billing_phone']['required'] = $is_delivery;
 		$fields['billing']['billing_phone']['class'] = array( 'form-row-wide' );
 		$fields['billing']['billing_phone']['autocomplete'] = 'tel';
 		$fields['billing']['billing_phone']['priority'] = 40;
@@ -527,9 +528,13 @@ final class CVD_Cuban_Checkout {
 		$own = self::own_phone_match( $phone );
 		if ( $own && empty( $_POST[ self::OWN_PHONE_FIELD ] ) ) { $errors->add( 'billing_phone', self::own_phone_error( $own ) ); }
 		if ( 'delivery' !== $type ) {
-			// Recogida: 3.14.63 (maratón 24-oct) solo se pide el teléfono (antes podía ir vacío).
-			if ( strlen( $phone ) < 8 ) {
-				$errors->add( 'billing_phone', 'Escribe el teléfono de quien recoge (8 cifras). Es lo único obligatorio: el nombre puede ir vacío.' );
+			// Recogida, 3.14.69.12 (Dany, Ernesto 26-oct): el teléfono es opcional, pero si lo escriben va completo; sin
+			// teléfono hace falta el nombre de quien recoge.
+			$first = trim( sanitize_text_field( wp_unslash( $_POST['billing_first_name'] ?? '' ) ) );
+			if ( '' !== $phone && strlen( $phone ) < 8 ) {
+				$errors->add( 'billing_phone', 'Escribe el teléfono completo (8 cifras) o déjalo vacío: en la recogida en tienda es opcional.' );
+			} elseif ( '' === $phone && '' === $first ) {
+				$errors->add( 'billing_first_name', 'En la recogida en tienda pon el nombre o el teléfono de quien recoge (uno de los dos).' );
 			}
 			// 3.13.74: «¿Cómo paga el cliente?» es opcional en la recogida; si lo eligen, tiene que ser de la lista.
 			$pickup_kind = sanitize_key( wp_unslash( $_POST['billing_cvd_payment_kind'] ?? '' ) );

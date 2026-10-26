@@ -189,8 +189,9 @@
         $('<div>', { class: 'cvd-pickup-note', text: 'Recogida: ' + cvdCheckout.pickupAddress })
       );
     }
-    // 3.14.63 (maratón 24-oct): el teléfono, siempre obligatorio; la forma de pago, siempre opcional.
-    syncPhoneRequired(true);
+    // 3.14.69.12 (Dany, Ernesto 26-oct): en la recogida el teléfono es opcional si ponen el nombre; la forma de pago,
+    // siempre opcional (3.14.63).
+    syncPhoneRequired(delivery);
     markRequired('#billing_cvd_payment_kind_field', '#billing_cvd_payment_kind', false);
     syncPaymentOptions(delivery);
     syncPayment(delivery);
@@ -228,7 +229,7 @@
     if (!delivery) $row.removeClass('woocommerce-invalid woocommerce-invalid-required-field');
     $label.find('.required').toggle(delivery);
     $label.find('.cvd-phone-optional').remove();
-    if (!delivery && !$label.find('.optional').length) $label.append($('<span>', { class: 'optional cvd-phone-optional', text: '(opcional)' }));
+    if (!delivery && !$label.find('.optional').length) $label.append($('<span>', { class: 'optional cvd-phone-optional', text: '(opcional si pones el nombre)' }));
   }
 
   // Forma de pago (3.13.67, Lennys): cuánto es con la tasa de hoy (mismas cuentas que CVD_Cuban_Checkout::payment_amount),

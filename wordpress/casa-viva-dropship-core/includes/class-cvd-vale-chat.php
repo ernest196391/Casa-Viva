@@ -270,7 +270,12 @@ final class CVD_Vale_Chat {
 			$customer = (array) ( $p['customer'] ?? array() );
 			$phone = preg_replace( '/\D+/', '', (string) ( $customer['phone'] ?? '' ) );
 			if ( strlen( $phone ) === 10 && 0 === strpos( $phone, '53' ) ) { $phone = substr( $phone, 2 ); }
-			if ( strlen( $phone ) < 8 ) { delete_option( $lock ); return new WP_Error( 'cvd_vale_phone', 'Falta el teléfono del cliente (8 cifras).', array( 'status' => 400 ) ); }
+			// 3.14.69.12 (Dany, Ernesto 26-oct): en la recogida en tienda el teléfono del cliente es opcional (el vale es de la
+			// gestora, que sabe quién recoge; el bot lo pide con «0 = sin teléfono»); con mensajería, obligatorio (D110).
+			// Si lo escriben, completo.
+			$pickup = 'delivery' !== $delivery['type'];
+			if ( '' !== $phone && strlen( $phone ) < 8 ) { delete_option( $lock ); return new WP_Error( 'cvd_vale_phone', 'El teléfono del cliente va completo (8 cifras).', array( 'status' => 400 ) ); }
+			if ( '' === $phone && ! $pickup ) { delete_option( $lock ); return new WP_Error( 'cvd_vale_phone', 'Falta el teléfono del cliente (8 cifras).', array( 'status' => 400 ) ); }
 			$own = CVD_Cuban_Checkout::own_phone_match( $phone, array( $gestora->ID ) );
 			if ( $own && empty( $p['selfPurchase'] ) ) { delete_option( $lock ); return new WP_Error( 'cvd_vale_own_phone', 'Ese teléfono es el tuyo. Si la compra es para ti, dilo («es para mí»); si es de un cliente, pon el teléfono del cliente.', array( 'status' => 422 ) ); }
 			$kind = sanitize_key( (string) ( $p['paymentKind'] ?? '' ) );

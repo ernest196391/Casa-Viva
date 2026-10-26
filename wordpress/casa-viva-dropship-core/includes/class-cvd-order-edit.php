@@ -276,6 +276,8 @@ final class CVD_Order_Edit {
 		$text = static fn( $key ): ?string => array_key_exists( $key, $data ) && null !== $data[ $key ] ? trim( preg_replace( '/\s+/', ' ', sanitize_text_field( (string) $data[ $key ] ) ) ) : null;
 		$first = $text( 'firstName' ); $last = $text( 'lastName' ); $phone = $text( 'phone' ); $address = $text( 'address' );
 		if ( null !== $first && '' === $first ) { return new WP_Error( 'cvd_edit_name', 'El nombre no puede quedar vacío.', array( 'status' => 422 ) ); }
+		// 3.14.69.12 (Dany, Ernesto 26-oct): una recogida en tienda puede no tener teléfono; vacío = no se toca.
+		if ( null !== $phone && '' === preg_replace( '/\D/', '', $phone ) && self::is_pickup( $order ) ) { $phone = null; }
 		if ( null !== $phone ) {
 			$phone = preg_replace( '/[^0-9+ ]/', '', $phone );
 			if ( strlen( preg_replace( '/\D/', '', $phone ) ) < 8 ) { return new WP_Error( 'cvd_edit_phone', 'El teléfono necesita al menos 8 números.', array( 'status' => 422 ) ); }
