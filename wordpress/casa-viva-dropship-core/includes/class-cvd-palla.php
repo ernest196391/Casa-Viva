@@ -385,7 +385,9 @@ final class CVD_Palla {
 		$files = wp_json_encode( array_map( array( __CLASS__, 'asset' ), array( 'app.js', 'practica.js', 'app.css', 'icon.svg', 'fonts/Archivo-400.woff2', 'fonts/Archivo-600.woff2', 'fonts/Archivo-700.woff2', 'fonts/Archivo-800.woff2' ) ), JSON_UNESCAPED_SLASHES );
 		$hoy = wp_json_encode( rest_url( self::NS . '/palla/hoy' ), JSON_UNESCAPED_SLASHES );
 		echo "const CACHE='palla-" . esc_js( CVD_VERSION ) . "',DATA='palla-datos',SHELL={$shell},FILES={$files},HOY={$hoy};\n";
-		echo "self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll([SHELL].concat(FILES))));self.skipWaiting()});\n";
+		// 3.14.69.5: instalar nunca falla ni tarda más de 10 s (con mala señal un archivo fallaba, el SW nuevo no entraba y el
+		// teléfono seguía con uno viejo sin avisos). Lo que no se guarde ahora se guarda la primera vez que se pida.
+		echo "self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>Promise.race([Promise.all([SHELL].concat(FILES).map(u=>c.add(u).catch(()=>null))),new Promise(ok=>setTimeout(ok,10000))])).catch(()=>null))});\n";
 		echo "self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k.startsWith('palla-')&&k!==CACHE&&k!==DATA).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});\n";
 		echo "self.addEventListener('fetch',e=>{const r=e.request,u=new URL(r.url);if(r.method!=='GET'||u.origin!==location.origin)return;\n";
 		echo "if(r.mode==='navigate'){e.respondWith(fetch(r).then(res=>{if(res.ok){const cp=res.clone();caches.open(CACHE).then(c=>c.put(SHELL,cp))}return res}).catch(()=>caches.match(SHELL)));return}\n";
