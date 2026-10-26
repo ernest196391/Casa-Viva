@@ -22,6 +22,7 @@ final class CVD_Palla_Push {
 	public const OPTION = 'cvd_palla_push';
 	public const TESTERS = 'cvd_palla_push_testers';
 	public const TYPES = 'cvd_palla_push_tipos';
+	public const NTFY_TOPIC = '_cvd_palla_ntfy_topic';
 	private const ALL_TYPES = array( 'offer', 'assigned', 'cancelled', 'lost', 'changed' );
 	private const NS = 'casa-viva/v1';
 	private const TTL = 604800; // 7 días: lo último avisado de cada pedido
@@ -121,8 +122,9 @@ final class CVD_Palla_Push {
 	private static function subscribers(): array {
 		global $wpdb;
 		$ids = $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT user_id FROM ' . CVD_Web_Push::subscriptions_table() . ' WHERE failure_count<5 AND user_agent LIKE %s', $wpdb->esc_like( CVD_Web_Push::PALLA_DEVICE ) . '%' ) );
+		$ids = array_merge( (array) $ids, (array) $wpdb->get_col( $wpdb->prepare( "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key=%s AND meta_value<>''", self::NTFY_TOPIC ) ) );
 		$out = array();
-		foreach ( array_map( 'absint', (array) $ids ) as $id ) {
+		foreach ( array_unique( array_map( 'absint', $ids ) ) as $id ) {
 			$user = get_userdata( $id );
 			if ( $user && self::allowed( $user ) ) { $out[] = $user; }
 		}
@@ -134,6 +136,26 @@ final class CVD_Palla_Push {
 		$user = get_userdata( $user_id );
 		if ( ! $user || ! self::allowed( $user ) ) { return; }
 		CVD_Web_Push::notify_palla( $user_id, $order->get_id(), $type, $title, $message, home_url( '/palla/' ) . $hash );
+		self::ntfy( $user_id, $title, $message, home_url( '/palla/' ) . $hash );
+	}
+
+	/**
+	 * 3.14.69.7 (Ernesto 26-oct: «Mandao, La Nave… funcionan sin VPN»): el mismo aviso por nuestro ntfy del VPS, que no
+	 * pasa por Google. Solo a quien tiene tema (user meta `_cvd_palla_ntfy_topic`, secreto y de solo lectura en ntfy);
+	 * publica el usuario `core` con su token (`cvd_palla_ntfy_token`). Sin esperar respuesta: no frena el guardado.
+	 */
+	private static function ntfy( int $user_id, string $title, string $message, string $click ): bool {
+		$topic = (string) get_user_meta( $user_id, self::NTFY_TOPIC, true );
+		$url = (string) get_option( 'cvd_palla_ntfy_url', '' );
+		$token = (string) get_option( 'cvd_palla_ntfy_token', '' );
+		if ( '' === $topic || 0 !== strpos( $url, 'https://' ) || '' === $token ) { return false; }
+		wp_remote_post( $url, array(
+			'timeout'  => 5,
+			'blocking' => false,
+			'headers'  => array( 'Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json' ),
+			'body'     => wp_json_encode( array( 'topic' => $topic, 'title' => $title, 'message' => $message, 'click' => $click, 'priority' => 5, 'tags' => array( 'motor_scooter' ) ) ),
+		) );
+		return true;
 	}
 
 	/** Dirección, productos, total y día: si cambian con la carrera en curso, se avisa al mensajero. */
@@ -235,6 +257,14 @@ final class CVD_Palla_Push {
 		$user = get_userdata( $user_id );
 		if ( ! $user || ! self::allowed( $user ) ) { return 'no puede recibir avisos (cvd_palla_push o cvd_palla)'; }
 		CVD_Web_Push::notify_palla( $user_id, 0, 'test', '🔔 Prueba de Pa\'llá', 'Si ves esto, los avisos funcionan. Toca para abrir la app.', home_url( '/palla/#carreras' ) );
+		self::ntfy( $user_id, '🔔 Prueba de Pa\'llá', 'Si ves esto, los avisos funcionan sin Google. Toca para abrir la app.', home_url( '/palla/#carreras' ) );
 		return 'enviado';
+	}
+
+	/** Enlace para suscribirse en la app oficial de ntfy (F-Droid/GitHub, sin Google): '' si ese mensajero no tiene tema. */
+	public static function ntfy_link( int $user_id ): string {
+		$topic = (string) get_user_meta( $user_id, self::NTFY_TOPIC, true );
+		$host = (string) wp_parse_url( (string) get_option( 'cvd_palla_ntfy_url', '' ), PHP_URL_HOST );
+		return ( '' !== $topic && '' !== $host ) ? 'ntfy://' . $host . '/' . $topic : '';
 	}
 }
