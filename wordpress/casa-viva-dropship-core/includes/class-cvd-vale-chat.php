@@ -338,9 +338,10 @@ final class CVD_Vale_Chat {
 	private static function created( WC_Order $order, bool $replayed ): array {
 		$reserved = class_exists( 'CVD_Datos_A_Mano' ) && CVD_Datos_A_Mano::order_reserved( $order );
 		$market = class_exists( 'CVD_Datos_A_Mano' ) && CVD_Datos_A_Mano::order_has_bajo_pedido( $order );
-		$tracking = '';
-		if ( class_exists( 'CVD_Customer_Orders' ) && method_exists( 'CVD_Customer_Orders', 'tracking_url' ) ) { $tracking = (string) CVD_Customer_Orders::tracking_url( $order ); }
-		if ( '' === $tracking ) { $tracking = add_query_arg( array( 'pedido' => $order->get_order_number(), 'clave' => $order->get_order_key() ), home_url( '/seguimiento/' ) ); }
+		// 3.14.69.10 (enlaces-ref, D111): el seguimiento del vale lleva ?ref= de la gestora (CVD_Delivery::tracking_url, #48),
+		// así si el cliente vuelve a comprar desde ahí la venta es de su gestora. Antes salía sin ref.
+		$tracking = class_exists( 'CVD_Delivery' ) ? CVD_Delivery::tracking_url( $order ) : '';
+		if ( '' === $tracking ) { $tracking = add_query_arg( array( 'pedido' => $order->get_id(), 'clave' => $order->get_order_key() ), home_url( '/seguimiento/' ) ); }
 		$messenger = class_exists( 'CVD_Direct_Dispatch' ) ? CVD_Direct_Dispatch::preferred_messenger( $order ) : null;
 		return array(
 			'ok'          => true,
