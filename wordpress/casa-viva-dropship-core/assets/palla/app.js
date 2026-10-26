@@ -334,7 +334,7 @@
 
 	function screenCarreras() {
 		var h = state.hoy, yo = h.yo || {};
-		var html = '<header class="pl-top"><div><div class="pl-brand">Pa\'llá</div><div class="pl-sub">' + esc('Hola, ' + (yo.first || 'mensajero') + (yo.vehicle ? ' · ' + yo.vehicle : '')) + '</div></div>' + (yo.available ? badge('success', 'Disponible') : badge('muted', 'No disponible')) + '</header>' + offlineBar();
+		var html = '<header class="pl-top"><div><div class="pl-brand">Pa\'llá</div><div class="pl-sub">' + esc('Hola, ' + (yo.first || 'mensajero') + (yo.vehicle ? ' · ' + yo.vehicle : '')) + '</div></div>' + (yo.available ? badge('success', 'Disponible') : '') /* 3.14.69.6: sin «No disponible» (se leía como que la app no funcionaba; coger carreras no depende de la jornada) */ + '</header>' + offlineBar();
 		html += '<main class="pl-main">' + pushCard();
 		(h.pases || []).forEach(function (x) {
 			html += '<article class="pl-card pl-card--brand"><div class="pl-row" style="align-items:center"><span class="pl-strong">🔁 ' + esc(x.from) + ' te quiere pasar #' + esc(x.number) + '</span>' + (x.picked ? badge('info', 'Ya recogida') : '') + '</div>'
