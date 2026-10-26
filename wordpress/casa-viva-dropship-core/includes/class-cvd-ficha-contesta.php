@@ -775,9 +775,9 @@ final class CVD_Ficha_Contesta {
 		header( 'X-Content-Type-Options: nosniff' );
 	}
 
-	/** Nombres para «¿quién contesta?» (opción cvd_ficha_tienda_nombres; por defecto Nana y Zaymi). */
+	/** Nombres para «¿quién contesta?» (opción cvd_ficha_tienda_nombres; por defecto Nana, Zaymi y Lennys: 3.14.69.13, Lennys 26-oct). */
 	public static function store_names(): array {
-		$raw = (string) get_option( 'cvd_ficha_tienda_nombres', 'Nana,Zaymi' );
+		$raw = (string) get_option( 'cvd_ficha_tienda_nombres', 'Nana,Zaymi,Lennys' );
 		return array_values( array_filter( array_map( static fn( $x ) => self::clip( sanitize_text_field( $x ), 30 ), explode( ',', $raw ) ) ) );
 	}
 
@@ -861,9 +861,10 @@ final class CVD_Ficha_Contesta {
 				$h .= '<p class="ask"><b>' . esc_html( 'otra' === $r['tipo'] ? 'Pregunta' : $pub['chip'] ) . '</b>' . ( '' !== $pub['variante'] ? ' · ' . esc_html( $pub['variante'] ) : '' ) . ( $pub['test'] ? ' <span class="test">PRUEBA</span>' : '' ) . '<small>' . esc_html( $pub['personas'] > 1 ? $pub['personas'] . ' gestoras esperando' : '1 gestora esperando' ) . '</small></p>';
 				foreach ( $pub['textos'] as $t ) { $h .= '<p class="said">«' . esc_html( $t ) . '»</p>'; }
 				$ph = array( 'medidas' => 'Ej.: 45 × 70 cm, 12 cm de alto', 'material' => 'Lo que dice la etiqueta. Ej.: 100 % poliéster', 'voltaje' => 'Ej.: 110–220 V, carga por USB tipo C, 4 horas', 'trae' => 'Ej.: 2 soportes, tornillos y tacos', 'colores' => 'Los que hay HOY. Ej.: gris (2) y beige (1)', 'foto' => 'Algo que decir de la foto (opcional)', 'otra' => 'Tu respuesta' );
+				// 3.14.69.13 (Lennys 26-oct): sin capture="environment", el teléfono deja elegir galería o cámara.
 				$h .= $foto
-					? '<label class="file">📷 Hacer o elegir la foto<input type="file" name="cvd_fc_foto" accept="image/*" capture="environment" required></label><input name="cvd_fc_respuesta" maxlength="300" placeholder="' . esc_attr( $ph['foto'] ) . '">'
-					: '<textarea name="cvd_fc_respuesta" rows="2" maxlength="300" required placeholder="' . esc_attr( $ph[ $r['tipo'] ] ?? 'Tu respuesta' ) . '"></textarea><label class="file small">📷 Añadir foto (opcional)<input type="file" name="cvd_fc_foto" accept="image/*" capture="environment"></label>';
+					? '<label class="file">📷 Hacer o elegir la foto<input type="file" name="cvd_fc_foto" accept="image/*" required></label><input name="cvd_fc_respuesta" maxlength="300" placeholder="' . esc_attr( $ph['foto'] ) . '">'
+					: '<textarea name="cvd_fc_respuesta" rows="2" maxlength="300" required placeholder="' . esc_attr( $ph[ $r['tipo'] ] ?? 'Tu respuesta' ) . '"></textarea><label class="file small">📷 Añadir foto (opcional)<input type="file" name="cvd_fc_foto" accept="image/*"></label>';
 				$h .= '<button class="btn" type="submit" data-once>✅ Guardar en la ficha</button>';
 				$h .= '<button class="link" type="submit" name="cvd_fc_nose" value="1" formnovalidate>No se puede saber</button></form>';
 			}
