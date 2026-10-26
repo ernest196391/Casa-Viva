@@ -61,9 +61,12 @@ final class CVD_Web_Push {
 		global $wpdb;
 		$token = sanitize_text_field( wp_unslash( $_COOKIE['cvd_push_device'] ?? '' ) );
 		if ( ! preg_match( '/^[a-f0-9]{64}$/', $token ) ) { return new WP_REST_Response( array(), 204 ); }
-		$user_id = absint( $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM '.self::subscriptions_table().' WHERE device_token=%s LIMIT 1', $token ) ) );
+		$device = $wpdb->get_row( $wpdb->prepare( 'SELECT user_id,user_agent FROM '.self::subscriptions_table().' WHERE device_token=%s LIMIT 1', $token ) );
+		$user_id = $device ? absint( $device->user_id ) : 0;
 		if ( ! $user_id ) { return new WP_REST_Response( array(), 204 ); }
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT id,title,message,action_url,type,created_at FROM '.self::notifications_table().' WHERE user_id=%d ORDER BY id DESC LIMIT 1', $user_id ), ARRAY_A );
+		// 3.14.69.1: un teléfono dado de alta en Pa'llá solo enseña avisos de Pa'llá (type palla_*), y los demás, los de siempre.
+		$palla = 0 === strpos( (string) $device->user_agent, self::PALLA_DEVICE );
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT id,title,message,action_url,type,created_at FROM '.self::notifications_table().' WHERE user_id=%d AND type ' . ( $palla ? 'LIKE' : 'NOT LIKE' ) . ' %s ORDER BY id DESC LIMIT 1', $user_id, 'palla\_%' ), ARRAY_A );
 		$response = new WP_REST_Response( $row ?: array(), $row ? 200 : 204 );
 		$response->header( 'Cache-Control', 'no-store, private' );
 		return $response;
@@ -157,10 +160,19 @@ final class CVD_Web_Push {
 		$order->save();
 	}
 
-	private static function notify_user( int $user_id, int $order_id, string $type, string $title, string $message, string $action_url ): void {
+	/** 3.14.69.1: marca de los teléfonos dados de alta desde Pa'llá (columna user_agent). */
+	public const PALLA_DEVICE = 'palla|';
+
+	/** Aviso de Pa'llá (type palla_*): solo a los teléfonos dados de alta en Pa'llá. Lo usa CVD_Palla_Push. */
+	public static function notify_palla( int $user_id, int $order_id, string $type, string $title, string $message, string $action_url ): void {
+		self::notify_user( $user_id, $order_id, 'palla_' . sanitize_key( $type ), $title, $message, $action_url, true );
+	}
+
+	private static function notify_user( int $user_id, int $order_id, string $type, string $title, string $message, string $action_url, bool $palla = false ): void {
 		global $wpdb;
 		$wpdb->insert( self::notifications_table(), array('user_id'=>$user_id,'order_id'=>$order_id,'type'=>$type,'title'=>$title,'message'=>$message,'action_url'=>$action_url,'created_at'=>current_time('mysql',true)), array('%d','%d','%s','%s','%s','%s','%s') );
-		$subscriptions = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM '.self::subscriptions_table().' WHERE user_id=%d AND failure_count<5', $user_id ) );
+		// Los teléfonos de Pa'llá no reciben los avisos de siempre (llevan al área vieja y repetirían los de Pa'llá), y al revés.
+		$subscriptions = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM '.self::subscriptions_table().' WHERE user_id=%d AND failure_count<5 AND user_agent ' . ( $palla ? 'LIKE' : 'NOT LIKE' ) . ' %s', $user_id, $wpdb->esc_like( self::PALLA_DEVICE ) . '%' ) );
 		foreach ( $subscriptions as $subscription ) { self::send_signal( $subscription ); }
 	}
 

@@ -46,7 +46,10 @@ final class CVD_Palla_Api {
 	/** @return true|WP_Error */
 	public static function permission( WP_REST_Request $request ) {
 		$user = CVD_Palla::request_user( $request );
-		return is_wp_error( $user ) ? $user : true;
+		if ( is_wp_error( $user ) ) { return $user; }
+		// 3.14.69.1: lo que toca el mensajero queda a su nombre (historial y avisos: no se le avisa de lo que hizo él).
+		wp_set_current_user( $user->ID );
+		return true;
 	}
 
 	private static function user( WP_REST_Request $request ): WP_User {
@@ -75,6 +78,7 @@ final class CVD_Palla_Api {
 			'dinero'   => self::money_today( $me ),
 			'pases'    => self::passes_for( $me ),     // 3.14.67.1: carreras que un compañero me quiere pasar
 			'companeros' => self::companions( $me ), // a quién puedo pasar una carrera (solo nombre)
+			'push'     => class_exists( 'CVD_Palla_Push' ) ? CVD_Palla_Push::status_for( $me ) : array( 'allowed' => false, 'key' => '' ), // 3.14.69.1
 		) );
 	}
 

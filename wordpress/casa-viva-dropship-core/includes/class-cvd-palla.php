@@ -390,6 +390,13 @@ final class CVD_Palla {
 		echo "if(r.mode==='navigate'){e.respondWith(fetch(r).then(res=>{if(res.ok){const cp=res.clone();caches.open(CACHE).then(c=>c.put(SHELL,cp))}return res}).catch(()=>caches.match(SHELL)));return}\n";
 		echo "if(u.href.split('?')[0]===HOY.split('?')[0]){e.respondWith(fetch(r).then(res=>{if(res.ok){const cp=res.clone();caches.open(DATA).then(c=>c.put(HOY,cp))}return res}).catch(()=>caches.open(DATA).then(c=>c.match(HOY)).then(x=>{if(!x)throw new Error('sin datos');return x.text().then(t=>new Response(t,{status:200,headers:{'Content-Type':'application/json','X-Palla-Offline':'1'}}))})));return}\n";
 		echo "if(u.pathname.indexOf('/assets/palla/')!==-1){e.respondWith(caches.match(r).then(x=>x||fetch(r).then(res=>{if(res.ok){const cp=res.clone();caches.open(CACHE).then(c=>c.put(r,cp))}return res})))}});\n";
+		// 3.14.69.1: avisos push (CVD_Palla_Push). Llega una señal sin datos; se pide el último aviso de este teléfono (cookie) y
+		// al tocarlo se abre la app en la carrera. Si no se puede leer, se avisa igual para que abra la app.
+		$latest = wp_json_encode( rest_url( 'casa-viva/v1/push/latest' ), JSON_UNESCAPED_SLASHES );
+		$icon = wp_json_encode( self::asset( 'icon-192.png' ), JSON_UNESCAPED_SLASHES );
+		echo "const LATEST={$latest},ICON={$icon};\n";
+		echo "self.addEventListener('push',e=>{e.waitUntil((async()=>{let n={};try{const r=await fetch(LATEST+(LATEST.indexOf('?')>-1?'&':'?')+'_='+Date.now(),{credentials:'include',cache:'no-store'});if(r.status===200)n=await r.json()}catch(x){}await self.registration.showNotification(n.title||\"Pa'llá\",{body:n.message||'Tienes algo nuevo en Pa\\'llá. Toca para verlo.',icon:ICON,badge:ICON,tag:'palla-'+(n.id||Date.now()),renotify:true,vibrate:[300,120,300],data:{url:n.action_url||SHELL}})})())});\n";
+		echo "self.addEventListener('notificationclick',e=>{e.notification.close();const u=(e.notification.data&&e.notification.data.url)||SHELL;e.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(cs=>{for(const c of cs){if(c.url.indexOf(SHELL)===0&&'focus'in c){c.navigate(u);return c.focus()}}return clients.openWindow(u)}))});\n";
 		exit;
 	}
 }

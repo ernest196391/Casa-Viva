@@ -285,10 +285,44 @@
 		return { pickup: badge('warning', 'Por recoger'), route: badge('info', 'En camino'), incident: badge('danger', 'Problema avisado'), delivered: badge('success', 'Entregado') }[c.stage] || '';
 	}
 
+	// ------------------------------------------------------------ Avisos push (3.14.69.1)
+	// El teléfono se da de alta en Core (POST palla/push, con cookie): llega una señal y /palla/sw.js enseña el último aviso.
+	function pushSupported() { return !P && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && location.protocol === 'https:'; }
+	function pushAllowed() { return pushSupported() && state.hoy && state.hoy.push && state.hoy.push.allowed && state.hoy.push.key; }
+	function pushState() { if (!pushAllowed()) { return 'none'; } if (Notification.permission === 'denied') { return 'denied'; } return Notification.permission === 'granted' && store.get(PFX + 'push') ? 'on' : 'off'; }
+	function keyBytes(b64) { var pad = '='.repeat((4 - b64.length % 4) % 4), raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/')), out = new Uint8Array(raw.length); for (var i = 0; i < raw.length; i++) { out[i] = raw.charCodeAt(i); } return out; }
+	function pushCall(method, endpoint) {
+		return fetch(API + 'push', { method: method, headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Palla-Token': state.token }, body: JSON.stringify({ endpoint: endpoint }), credentials: 'include', cache: 'no-store' }).then(function (r) { return r.json(); });
+	}
+	function pushOn() {
+		if (!pushAllowed() || state.busy) { return; }
+		state.busy = 'push'; render();
+		Notification.requestPermission().then(function (perm) {
+			if (perm !== 'granted') { throw new Error('permiso'); }
+			return navigator.serviceWorker.ready;
+		}).then(function (reg) {
+			return reg.pushManager.getSubscription().then(function (sub) { return sub || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(state.hoy.push.key) }); });
+		}).then(function (sub) {
+			return pushCall('POST', sub.endpoint).then(function (d) { if (!d || !d.subscribed) { throw new Error('core'); } store.set(PFX + 'push', sub.endpoint); });
+		}).then(function () { state.busy = ''; showToast('🔔 Avisos activados. Te avisamos aunque tengas la app cerrada.'); })
+			.catch(function (e) { state.busy = ''; showToast(e && e.message === 'permiso' ? 'Sin permiso no te podemos avisar. Si cambias de idea: Chrome → ⋮ → Configuración → Notificaciones.' : 'No se pudieron activar los avisos ahora. Prueba otra vez con señal.'); });
+	}
+	function pushOff() {
+		var ep = store.get(PFX + 'push');
+		store.set(PFX + 'push', null);
+		navigator.serviceWorker.ready.then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (sub) { if (sub) { ep = sub.endpoint; return sub.unsubscribe(); } })
+			.then(function () { return ep ? pushCall('DELETE', ep) : null; }).catch(function () {}).then(function () { showToast('Avisos desactivados en este teléfono.'); });
+	}
+	function pushCard() {
+		if (pushState() !== 'off' || store.get(PFX + 'push-no')) { return ''; }
+		return '<article class="pl-card pl-card--brand"><b>🔔 Activa los avisos</b><span>Te avisamos al teléfono cuando salga una carrera libre, cuando te asignen una o si cancelan la tuya. Aunque tengas la app cerrada.</span>'
+			+ '<div class="pl-grid2"><button type="button" class="pl-btn pl-btn--primary' + (state.busy === 'push' ? ' pl-btn--busy' : '') + '" data-act="push-on">Activar avisos</button><button type="button" class="pl-btn pl-btn--secondary" data-act="push-no">Ahora no</button></div></article>';
+	}
+
 	function screenCarreras() {
 		var h = state.hoy, yo = h.yo || {};
 		var html = '<header class="pl-top"><div><div class="pl-brand">Pa\'llá</div><div class="pl-sub">' + esc('Hola, ' + (yo.first || 'mensajero') + (yo.vehicle ? ' · ' + yo.vehicle : '')) + '</div></div>' + (yo.available ? badge('success', 'Disponible') : badge('muted', 'No disponible')) + '</header>' + offlineBar();
-		html += '<main class="pl-main">';
+		html += '<main class="pl-main">' + pushCard();
 		(h.pases || []).forEach(function (x) {
 			html += '<article class="pl-card pl-card--brand"><div class="pl-row" style="align-items:center"><span class="pl-strong">🔁 ' + esc(x.from) + ' te quiere pasar #' + esc(x.number) + '</span>' + (x.picked ? badge('info', 'Ya recogida') : '') + '</div>'
 				+ '<div class="pl-muted">' + esc(x.zone) + (x.when ? ' · ' + esc(x.when) : '') + (x.feeText ? ' · ' + esc(x.feeText) : '') + '</div>'
@@ -533,6 +567,10 @@
 		html += '<div class="pl-list">' + cmds.map(function (x, i) {
 			return '<div class="pl-li" style="min-height:64px"><div><span class="pl-num" style="font-weight:700">' + esc(x[0]) + '</span><span class="pl-muted">' + esc(x[1]) + '</span></div><button type="button" class="pl-btn pl-btn--link" data-act="copiar" data-text="' + esc(x[0]) + '" aria-label="Copiar ' + esc(x[0]) + '">Copiar</button></div>';
 		}).join('') + '</div>';
+		var ps = pushState();
+		if (ps === 'on') { html += '<div class="pl-note pl-note--info">🔔<div><b>Avisos activados</b> en este teléfono. <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="push-off">Desactivar</button></div></div>'; }
+		else if (ps === 'off') { html += '<div class="pl-note">🔔<div><b>Avisos apagados.</b> <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="push-on">Activar avisos</button></div></div>'; }
+		else if (ps === 'denied') { html += '<div class="pl-note">🔕<div><b>Avisos bloqueados en Chrome.</b> Para activarlos: Chrome → ⋮ → Configuración → Notificaciones → casaviva.company → Permitir.</div></div>'; }
 		html += '<div class="pl-note pl-note--info">' + icon('sincronizar') + '<div>Cuando vuelva la señal, la app se pone al día sola. No tienes que repetir nada.' + (state.queue.length ? ' Tienes <b style="display:inline">' + state.queue.length + '</b> ' + (state.queue.length === 1 ? 'acción guardada' : 'acciones guardadas') + ' esperando la señal.' : '') + '</div></div>';
 		html += '</main><div class="pl-actions"><a class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block" href="https://wa.me/' + esc(C.whatsapp || '') + '" target="_blank" rel="noopener noreferrer">' + icon('mensaje') + 'Abrir WhatsApp</a></div>';
 		return html;
@@ -591,6 +629,9 @@
 		if (a === 'refresh' || a === 'retry') { state.blocked = null; state.loading = true; render(); start(); return; }
 		if (a === 'cojo') { claim(el.getAttribute('data-id')); return; }
 		if (a === 'recogi' && c) { act(c, 'recogi'); return; }
+		if (a === 'push-on') { store.set(PFX + 'push-no', null); pushOn(); return; }
+		if (a === 'push-no') { store.set(PFX + 'push-no', '1'); render(); return; }
+		if (a === 'push-off') { pushOff(); return; }
 		if (a === 'suelto' && c) { act(c, 'suelto'); return; }
 		if (a === 'pasar' && c) {
 			if (!state.form.to) { state.form.err = 'Elige a quién se la pasas.'; render(); return; }
