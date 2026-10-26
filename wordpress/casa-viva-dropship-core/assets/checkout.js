@@ -209,7 +209,7 @@
     if (!required && !$label.find('.optional').length) $label.append($('<span>', { class: 'optional cvd-optional-mark', text: '(opcional)' }));
   }
 
-  // 3.13.74: en la recogida, «Transferencia en CUP» sin «a la tarjeta que da el mensajero» (no hay mensajero).
+  // 3.13.74: en la recogida, «Transferencia en CUP» a secas (3.14.69.9: con mensajería dice «a la tarjeta de Casa Viva»).
   function syncPaymentOptions(delivery) {
     var $opt = $('#billing_cvd_payment_kind option[value="transfer_cup"]');
     if (!$opt.length) return;
@@ -271,7 +271,7 @@
     var $hint = $('#cvd-payment-hint');
     if (!pay) { $hint.remove(); return; }
     if (!$hint.length) $hint = $('<div>', { id: 'cvd-payment-hint', class: 'cvd-payment-hint', 'aria-live': 'polite' }).css({ margin: '6px 0 0', fontSize: '.92em', lineHeight: 1.4 }).appendTo('#billing_cvd_payment_kind_field');
-    var how = (delivery ? { transfer_cup: 'El cliente transfiere a la tarjeta que le da el mensajero y le enseña la captura.', clasica: 'Se paga en el momento, por transferencia.' } : { clasica: 'Se paga en el momento, por transferencia.' })[pay.kind] || '';
+    var how = (delivery ? { transfer_cup: 'El cliente transfiere a la tarjeta de Casa Viva y le enseña la captura al mensajero.', clasica: 'Se paga en el momento, por transferencia.' } : { clasica: 'Se paga en el momento, por transferencia.' })[pay.kind] || '';
     var foot = delivery ? (pay.def.prepaid ? 'El mensajero solo cobra su mensajería (en CUP).' : 'La mensajería se paga aparte, en CUP, al mensajero.') : (pay.def.prepaid ? '' : (cvdCheckout.pickupAtStore === false ? 'Se paga al recogerlo.' : 'Se paga en la tienda al recogerlo.'));
     $hint.empty()
       .append(pay.def.prepaid ? $('<p>', { text: cvdCheckout.payment.prepaidNotice + ' No hay devolución.' }).css({ margin: '0 0 4px', padding: '8px 10px', borderRadius: '10px', background: '#fff4e5', color: '#8a4b00', fontWeight: 700 }) : null)

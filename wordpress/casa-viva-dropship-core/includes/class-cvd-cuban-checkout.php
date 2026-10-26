@@ -15,15 +15,15 @@ final class CVD_Cuban_Checkout {
 	/**
 	 * 3.13.67 (Lennys, 12-oct): «¿Cómo paga el cliente?». Cada forma de pago dice en qué moneda se cobra y qué tasa
 	 * del día usa (CVD_Daily_Rates: lo que paga el cliente por cada 1 USD del precio; `rate` vacío = 1:1).
-	 * Transferencia CUP: el cliente transfiere a la tarjeta que le da el MENSAJERO y le enseña la captura; el mensajero
-	 * luego le da el dinero a la tienda. Zelle y PayPal (prepaid): consulta antes con la tienda, el cliente paga TODO antes
+	 * Transferencia CUP: el cliente transfiere a la tarjeta de CASA VIVA (la que confirma Lennys; nunca a la del mensajero,
+	 * 3.14.69.9, error #104) y le enseña la captura al mensajero. Zelle y PayPal (prepaid): consulta antes con la tienda, el cliente paga TODO antes
 	 * y manda la captura, la tienda lo verifica antes de coordinar la entrega y no hay devolución; el mensajero solo cobra
 	 * su mensajería. La mensajería siempre se paga aparte, en CUP, al mensajero.
 	 */
 	public const PAYMENT_KINDS = array(
 		'cash_usd'     => array( 'label' => 'Efectivo USD', 'option' => 'Efectivo en dólares (USD)', 'currency' => 'USD', 'rate' => '' ),
 		'cash_cup'     => array( 'label' => 'Efectivo CUP', 'option' => 'Efectivo en pesos (CUP)', 'currency' => 'CUP', 'rate' => 'cup' ),
-		'transfer_cup' => array( 'label' => 'Transferencia CUP', 'option' => 'Transferencia en CUP (a la tarjeta que da el mensajero)', 'currency' => 'CUP', 'rate' => 'cup' ), // 3.14.43: tasa cup × 1,20 (payment_factors)
+		'transfer_cup' => array( 'label' => 'Transferencia CUP', 'option' => 'Transferencia en CUP (a la tarjeta de Casa Viva)', 'currency' => 'CUP', 'rate' => 'cup' ), // 3.14.43: tasa cup × 1,20 (payment_factors)
 		'eur'          => array( 'label' => 'Euros (EUR)', 'option' => 'Euros (EUR) en efectivo', 'currency' => 'EUR', 'rate' => 'eur' ),
 		'clasica'      => array( 'label' => 'Tarjeta Clásica', 'option' => 'Tarjeta Clásica (transferencia en el momento)', 'currency' => 'USD', 'rate' => 'clasica' ),
 		'zelle'        => array( 'label' => 'Zelle', 'option' => 'Zelle (paga todo antes)', 'currency' => 'USD', 'rate' => 'zelle', 'prepaid' => true ),
