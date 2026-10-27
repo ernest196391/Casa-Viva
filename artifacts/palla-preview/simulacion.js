@@ -172,6 +172,10 @@
 
 		// 21. Pasar a otro mensajero (#54, #65): pide elegir, queda esperando, se puede cancelar
 		P.event('nueva'); await refresh(); var n7 = world().orders[world().orders.length - 1].id;
+		// 3.14.69.15: carrera nueva con la app abierta → aviso arriba (y bocina si el sonido está activado); al tocarlo se quita.
+		var aviso = $('.pl-alarm') ? $('.pl-alarm').innerText : '';
+		await go('#carrera/' + n4); await click('.pl-alarm', 400);
+		check('20b. Carrera nueva: sale arriba «🛵 Carrera nueva #N» y al tocarlo se quita y lleva a Carreras', /Carrera nueva #\d+/.test(aviso) && !$('.pl-alarm') && location.hash === '#carreras', aviso + ' / ' + location.hash);
 		await go('#carreras'); await click('[data-act=cojo][data-id="' + n7 + '"]', 900);
 		await go('#pasar/' + n7); await click('[data-act=pasar]', 400);
 		var pideA = /Elige a quién/.test(text());

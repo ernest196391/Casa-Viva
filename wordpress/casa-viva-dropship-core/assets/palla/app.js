@@ -133,6 +133,7 @@
 			state.blocked = null;
 			var before = (state.hoy && !state.offline ? state.hoy.carreras : []).filter(function (c) { return !c.queued && !state.done[c.id]; });
 			state.hoy = res.data;
+			if (!res.offline) { newOffers(res.data.ofertas || []); } // 3.14.69.15: bocina si sale una carrera nueva
 			var gone = before.filter(function (c) { return !findCarrera(c.id); });
 			var passed = gone.filter(function (c) { return c.pase; });
 			var lost = gone.filter(function (c) { return !c.pase; });
@@ -326,6 +327,102 @@
 			.then(function (d) { state.busy = ''; showToast(d && d.sent ? 'Enviado. Cierra la app y espera un minuto: debe sonar «Prueba de Pa\'llá».' : ((d && d.message) || 'No se pudo enviar ahora.')); })
 			.catch(function () { state.busy = ''; showToast('Sin señal: prueba otra vez con internet.'); });
 	}
+	// ------------------------------------------------------------ Sonido de «carrera nueva» (3.14.69.15, Ernesto 27-oct)
+	// Con la app abierta: si sale una carrera libre nueva, suena una bocina, vibra y sale arriba «🛵 Carrera nueva», y se
+	// repite cada 3 s hasta que el mensajero toque la pantalla (máx. 5 min). El teléfono solo deja sonar después de un
+	// primer toque («Activar sonido» o cualquier toque). «Esperando carreras» deja la pantalla encendida (Wake Lock) para
+	// que no se apague. Sin Google ni VPN; con la app cerrada no suena (eso es ntfy / la app instalable).
+	var snd = { ctx: null, seen: null, timer: 0, until: 0, lock: null };
+	function audioCtx() {
+		var A = window.AudioContext || window.webkitAudioContext;
+		if (!A) { return null; }
+		if (!snd.ctx) { try { snd.ctx = new A(); } catch (e) { return null; } }
+		if (snd.ctx.state === 'suspended') { snd.ctx.resume().catch(function () {}); }
+		return snd.ctx;
+	}
+	function soundReady() { return !!(snd.ctx && snd.ctx.state === 'running'); }
+	function honk() { // bocina de moto: dos pitidos fuertes, distintos de WhatsApp
+		var ctx = audioCtx();
+		if (!ctx || ctx.state !== 'running') { return; }
+		[0, 0.34].forEach(function (d) {
+			var t = ctx.currentTime + d, g = ctx.createGain();
+			g.gain.setValueAtTime(0.0001, t);
+			g.gain.exponentialRampToValueAtTime(0.6, t + 0.02);
+			g.gain.setValueAtTime(0.6, t + 0.22);
+			g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+			g.connect(ctx.destination);
+			[660, 880].forEach(function (f) { var o = ctx.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(f, t); o.connect(g); o.start(t); o.stop(t + 0.3); });
+		});
+	}
+	function alarmTick() {
+		if (!state.alarm || Date.now() > snd.until) { alarmStop(); return; }
+		honk();
+		if (navigator.vibrate) { try { navigator.vibrate([400, 150, 400]); } catch (e) {} }
+	}
+	function alarmStart(fresh) {
+		var o = fresh[0];
+		state.alarm = { id: o.id, number: o.number, zone: o.zone || '', more: fresh.length - 1 };
+		snd.until = Date.now() + 5 * 60000;
+		clearInterval(snd.timer);
+		alarmTick();
+		snd.timer = setInterval(alarmTick, 3000);
+	}
+	function alarmStop() {
+		clearInterval(snd.timer);
+		snd.timer = 0;
+		if (navigator.vibrate) { try { navigator.vibrate(0); } catch (e) {} }
+	}
+	/** Cada vez que llega la lista: ¿hay alguna carrera libre que no estaba? (la 1.ª vez solo se apunta lo que hay). */
+	function newOffers(list) {
+		var ids = list.map(function (o) { return String(o.id); });
+		var seen = snd.seen;
+		if (!seen) { try { seen = JSON.parse(store.get(PFX + 'vistas') || 'null'); } catch (e) { seen = null; } }
+		snd.seen = ids;
+		store.set(PFX + 'vistas', JSON.stringify(ids));
+		if (state.alarm && ids.indexOf(String(state.alarm.id)) === -1) { state.alarm = null; alarmStop(); } // ya la cogió otro
+		if (!seen) { return; }
+		var fresh = list.filter(function (o) { return seen.indexOf(String(o.id)) === -1; });
+		if (fresh.length) { alarmStart(fresh); }
+	}
+	function waiting() { return store.get(PFX + 'espera') === '1'; }
+	function lockScreen() {
+		if (!waiting() || snd.lock || !('wakeLock' in navigator) || document.visibilityState !== 'visible') { return; }
+		navigator.wakeLock.request('screen').then(function (l) { snd.lock = l; l.addEventListener('release', function () { snd.lock = null; }); }).catch(function () {});
+	}
+	function waitOn() {
+		audioCtx();
+		store.set(PFX + 'espera', '1');
+		store.set(PFX + 'espera-desde', String(Date.now()));
+		lockScreen();
+		showToast('wakeLock' in navigator ? '🛵 Esperando carreras: la pantalla se queda encendida y suena cuando salga una.' : 'Este teléfono no deja mantener la pantalla encendida desde la app: sube «Suspender después de» en Ajustes → Pantalla. El sonido sí está activado.');
+		setTimeout(honk, 150);
+	}
+	function waitOff() {
+		store.set(PFX + 'espera', null);
+		if (snd.lock) { snd.lock.release().catch(function () {}); snd.lock = null; }
+		showToast('Listo: la pantalla ya se puede apagar.');
+	}
+	function alarmBar() {
+		var a = state.alarm;
+		if (!a) { return ''; }
+		return '<a class="pl-alarm" href="#carreras" data-act="alarm-ver" role="alert">🛵 <span><b>Carrera nueva #' + esc(a.number) + '</b>' + (a.zone ? ' · ' + esc(a.zone) : '') + (a.more > 0 ? ' (y ' + a.more + ' más)' : '') + ' — toca para verla</span></a>';
+	}
+	function waitBar() {
+		if (!waiting()) { return ''; }
+		return '<div class="pl-wait" role="status"><span>🛵 <b>Esperando carreras</b> · ' + (soundReady() ? 'pantalla encendida, suena al salir una' : 'toca la pantalla una vez para activar el sonido') + '</span><button type="button" class="pl-btn pl-btn--link" data-act="wait-off">Parar</button></div>';
+	}
+	function soundCard() {
+		if (waiting()) { return ''; }
+		if (soundReady()) { return '<button type="button" class="pl-btn pl-btn--secondary pl-btn--block" data-act="wait-on">🛵 Esperando carreras (pantalla encendida)</button>'; }
+		return '<article class="pl-card"><b>🔊 Que suene cuando salga una carrera</b><span>Con la app abierta suena una bocina hasta que toques la pantalla. El teléfono pide un toque para dejarla sonar.</span>'
+			+ '<div class="pl-grid2"><button type="button" class="pl-btn pl-btn--primary" data-act="snd-on">Activar sonido</button><button type="button" class="pl-btn pl-btn--secondary" data-act="wait-on">Esperando carreras</button></div></article>';
+	}
+	// Cualquier toque: deja sonar al teléfono y para la bocina (sin redibujar aquí, para no perder el toque).
+	document.addEventListener('pointerdown', function () {
+		audioCtx();
+		if (snd.timer) { alarmStop(); if (route().view === 'carreras') { state.alarm = null; } }
+	}, true);
+
 	function pushCard() {
 		if (pushState() !== 'off' || store.get(PFX + 'push-no')) { return ''; }
 		return '<article class="pl-card pl-card--brand"><b>🔔 Activa los avisos</b><span>Te avisamos al teléfono cuando salga una carrera libre, para que la cojas antes. Aunque tengas la app cerrada.</span>'
@@ -335,7 +432,7 @@
 	function screenCarreras() {
 		var h = state.hoy, yo = h.yo || {};
 		var html = '<header class="pl-top"><div><div class="pl-brand">Pa\'llá</div><div class="pl-sub">' + esc('Hola, ' + (yo.first || 'mensajero') + (yo.vehicle ? ' · ' + yo.vehicle : '')) + '</div></div>' + (yo.available ? badge('success', 'Disponible') : '') /* 3.14.69.6: sin «No disponible» (se leía como que la app no funcionaba; coger carreras no depende de la jornada) */ + '</header>' + offlineBar();
-		html += '<main class="pl-main">' + pushCard();
+		html += '<main class="pl-main">' + pushCard() + soundCard();
 		(h.pases || []).forEach(function (x) {
 			html += '<article class="pl-card pl-card--brand"><div class="pl-row" style="align-items:center"><span class="pl-strong">🔁 ' + esc(x.from) + ' te quiere pasar #' + esc(x.number) + '</span>' + (x.picked ? badge('info', 'Ya recogida') : '') + '</div>'
 				+ '<div class="pl-muted">' + esc(x.zone) + (x.when ? ' · ' + esc(x.when) : '') + (x.feeText ? ' · ' + esc(x.feeText) : '') + '</div>'
@@ -612,7 +709,7 @@
 		var r = route(), html, sheet = '';
 		if (state.blocked) { html = screenBlocked(); }
 		else if (!state.hoy) {
-			html = state.loading ? '<main class="pl-closed"><div class="pl-logo" aria-hidden="true">P</div><p>Cargando Pa\'llá…</p></main>'
+			html = state.loading ? '<main class="pl-closed pl-loading" role="status"><div class="pl-logo" aria-hidden="true">P</div><div class="pl-bar" aria-hidden="true"></div><p class="pl-dots">Cargando Pa\'llá</p></main>' // 3.14.69.15: logo animado
 				: '<main class="pl-closed"><div class="pl-logo" aria-hidden="true">P</div><h1>Sin conexión</h1><p>La primera vez hace falta señal para bajar tus carreras.</p><button type="button" class="pl-btn pl-btn--secondary" data-act="retry">Probar otra vez</button></main>';
 		} else {
 			var c = r.id ? findCarrera(r.id) : null;
@@ -630,7 +727,8 @@
 		}
 		var view = r.view + '/' + r.id;
 		var scroll = view === lastView ? window.scrollY : 0;
-		app.innerHTML = '<div class="pl-shell">' + (P ? practiceBar() : '') + html + '</div>'
+		var top = state.hoy && !state.blocked ? alarmBar() + waitBar() : ''; // 3.14.69.15
+		app.innerHTML = '<div class="pl-shell">' + (P ? practiceBar() : '') + top + html + '</div>'
 			+ (sheet ? '<div class="pl-scrim" data-act="scrim"><div class="pl-sheet" role="dialog" aria-modal="true" aria-labelledby="pl-sheet-t">' + sheet + '</div></div>' : '')
 			+ (state.toast ? '<div class="pl-toast" role="status">' + esc(state.toast) + '</div>' : '');
 		window.scrollTo(0, scroll);
@@ -649,6 +747,10 @@
 		if (a === 'push-on') { store.set(PFX + 'push-no', null); pushOn(); return; }
 		if (a === 'push-no') { store.set(PFX + 'push-no', '1'); render(); return; }
 		if (a === 'push-off') { pushOff(); return; }
+		if (a === 'snd-on') { audioCtx(); setTimeout(function () { honk(); render(); }, 150); showToast('🔊 Sonido activado: suena cuando salga una carrera libre (con la app abierta).'); return; }
+		if (a === 'wait-on') { waitOn(); return; }
+		if (a === 'wait-off') { waitOff(); return; }
+		if (a === 'alarm-ver') { state.alarm = null; alarmStop(); if (location.hash === '#carreras') { e.preventDefault(); render(); } return; } // si no, el enlace lleva a #carreras
 		if (a === 'push-local') { pushLocal(); return; }
 		if (a === 'push-test') { pushTest(); return; }
 		if (a === 'suelto' && c) { act(c, 'suelto'); return; }
@@ -719,8 +821,10 @@
 	}
 	window.addEventListener('hashchange', function () { var v = route().view; if (['entregado', 'problema', 'suelto', 'hora', 'pasar'].indexOf(v) === -1) { state.form = {}; } render(); });
 	window.addEventListener('online', function () { flush().then(load); });
-	document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && state.token) { flush().then(load); } });
+	document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && state.token) { lockScreen(); flush().then(load); } });
 	setInterval(function () {
+		// 3.14.69.15: «Esperando carreras» se apaga solo a las 4 h (batería).
+		if (waiting() && Date.now() - Number(store.get(PFX + 'espera-desde') || 0) > 4 * 3600000) { waitOff(); render(); }
 		var v = route().view;
 		if (document.visibilityState === 'visible' && state.token && !state.blocked && ['entregado', 'problema', 'suelto', 'hora', 'pasar'].indexOf(v) === -1) { flush().then(load); }
 	}, 30000);

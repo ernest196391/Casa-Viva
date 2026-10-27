@@ -227,7 +227,7 @@ final class CVD_Palla {
 		$closed = 'no' === self::mode() && ! $practice;
 		$body = $closed
 			? '<main class="pl-closed"><div class="pl-logo" aria-hidden="true">P</div><h1>Todavía no está abierta</h1><p>' . esc_html( self::closed_text( 'closed' ) ) . '</p></main>'
-			: '<div id="app" aria-live="polite"><main class="pl-closed"><div class="pl-logo" aria-hidden="true">P</div><p>Cargando Pa\'llá…</p></main></div>'
+			: '<div id="app" aria-live="polite"><main class="pl-closed pl-loading" role="status"><div class="pl-logo" aria-hidden="true">P</div><div class="pl-bar" aria-hidden="true"></div><p class="pl-dots">Cargando Pa\'llá</p></main></div>' // 3.14.69.15: logo animado
 				. '<noscript><main class="pl-closed"><h1>Activa JavaScript</h1><p>Pa\'llá necesita JavaScript para funcionar.</p></main></noscript>'
 				. '<script>window.PALLA=' . wp_json_encode( self::config() ) . ';</script>'
 				. ( $practice ? '<script src="' . esc_url( self::asset( 'practica.js' ) ) . '" defer></script>' : '' )

@@ -129,3 +129,17 @@ a{color:var(--accent)}
 .pl-practica select{flex:1 1 150px}
 .pl-practica select option{color:var(--ink)}
 .pl-practica button[aria-pressed=false]{background:var(--brand);color:var(--ink);border-color:var(--brand)}
+/* 3.14.69.15 (Ernesto 27-oct): «carrera nueva» con bocina, «Esperando carreras» y pantalla de carga con el logo animado */
+.pl-alarm{position:sticky;top:0;z-index:30;display:flex;gap:10px;align-items:center;min-height:56px;padding:12px 16px;background:var(--brand);color:var(--on-brand);font-size:16px;line-height:22px;text-decoration:none;animation:pl-flash 1s ease-in-out infinite}
+.pl-alarm b{font-weight:800}
+.pl-wait{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--brand-surface);font-size:14px;line-height:20px}
+.pl-wait .pl-btn{min-height:40px;padding:0 8px;flex:none}
+.pl-loading .pl-logo{animation:pl-pulse 1.2s ease-in-out infinite}
+.pl-bar{position:relative;width:140px;height:6px;border-radius:3px;background:var(--surface-sunken);overflow:hidden}
+.pl-bar::before{content:"";position:absolute;top:0;bottom:0;left:-40%;width:40%;border-radius:3px;background:var(--brand);animation:pl-slide 1.1s ease-in-out infinite}
+.pl-dots::after{content:"";display:inline-block;width:1.2em;text-align:left;animation:pl-dots 1.2s steps(1) infinite}
+@keyframes pl-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+@keyframes pl-slide{0%{left:-40%}100%{left:100%}}
+@keyframes pl-dots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
+@keyframes pl-flash{0%,100%{filter:none}50%{filter:brightness(1.12)}}
+@media (prefers-reduced-motion:reduce){.pl-loading .pl-logo,.pl-bar::before,.pl-dots::after,.pl-alarm{animation:none}.pl-dots::after{content:"…"}}
