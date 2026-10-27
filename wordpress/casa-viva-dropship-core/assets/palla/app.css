@@ -143,3 +143,24 @@ a{color:var(--accent)}
 @keyframes pl-dots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
 @keyframes pl-flash{0%,100%{filter:none}50%{filter:brightness(1.12)}}
 @media (prefers-reduced-motion:reduce){.pl-loading .pl-logo,.pl-bar::before,.pl-dots::after,.pl-alarm{animation:none}.pl-dots::after{content:"…"}}
+/* 3.14.69.16 (Ernesto y Pedri 27-oct): minimalista; los botones responden al tocarlos; 4 pasos; historial */
+.pl-btn{transition:transform .08s ease,filter .08s ease;-webkit-tap-highlight-color:transparent;user-select:none}
+.pl-btn:active,.pl-card--tap:active,.pl-chip:active,.pl-links a:active{transform:scale(.97);filter:brightness(.92)}
+.pl-btn--icon{min-width:var(--target);padding:0;background:var(--surface-sunken);border-radius:999px}
+.pl-spin svg{animation:pl-rot .8s linear infinite}
+@keyframes pl-rot{to{transform:rotate(360deg)}}
+.pl-track{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;counter-reset:s}
+.pl-track li{padding:8px 4px;text-align:center;font-size:13px;line-height:16px;border-radius:var(--r-sm);background:var(--surface-sunken);color:var(--ink-muted)}
+.pl-track li.is-done{background:var(--ink);color:var(--brand);font-weight:700}
+.pl-track li.is-now{background:var(--brand);color:var(--on-brand);font-weight:700}
+.pl-links{display:flex;justify-content:center;gap:4px;flex-wrap:wrap}
+.pl-links a{min-height:44px;display:inline-flex;align-items:center;padding:0 14px;color:var(--accent);font-weight:600;text-decoration:none;border-radius:var(--r-sm)}
+.pl-empty{margin:8px 0;color:var(--ink-muted);text-align:center}
+.pl-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:var(--r-md);background:var(--surface-sunken)}
+.pl-tabs button{min-height:44px;border:0;border-radius:var(--r-sm);background:transparent;font:600 16px/20px var(--font);color:var(--ink-muted);cursor:pointer}
+.pl-tabs button[aria-selected=true]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.pl-day{margin-top:8px;align-items:center}
+.pl-chips{display:flex;gap:8px;flex-wrap:wrap}
+.pl-chip{min-height:40px;display:inline-flex;align-items:center;padding:0 14px;border-radius:999px;border:1.5px solid var(--line-strong);color:var(--ink);text-decoration:none;font-weight:600}
+.pl-chip.is-on{background:var(--ink);border-color:var(--ink);color:var(--brand)}
+@media (prefers-reduced-motion:reduce){.pl-btn,.pl-spin svg{transition:none;animation:none}}

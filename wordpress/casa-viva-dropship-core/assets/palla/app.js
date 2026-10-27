@@ -136,9 +136,13 @@
 			if (!res.offline) { newOffers(res.data.ofertas || []); } // 3.14.69.15: bocina si sale una carrera nueva
 			var gone = before.filter(function (c) { return !findCarrera(c.id); });
 			var passed = gone.filter(function (c) { return c.pase; });
-			var lost = gone.filter(function (c) { return !c.pase; });
-			var notes = passed.map(function (c) { return '✅ ' + c.pase.toName + ' aceptó #' + c.number + ': ya no es tuya.'; });
-			if (lost.length) { notes.push(lost.map(function (c) { return '#' + c.number; }).join(', ') + (lost.length === 1 ? ' ya no está' : ' ya no están') + ' a tu nombre: la tienda la canceló o se la pasó a otro mensajero. Si tenías el paquete, llama a la tienda.'); }
+			// 3.14.69.16 (Pedri 25-oct): si la cerró por WhatsApp no es «ya no está a tu nombre», es «entregado».
+			var deliveredNow = ((res.data.dinero && res.data.dinero.rows) || []).map(function (r) { return String(r.number); });
+			var closed = gone.filter(function (c) { return !c.pase && deliveredNow.indexOf(String(c.number)) !== -1; });
+			var lost = gone.filter(function (c) { return !c.pase && deliveredNow.indexOf(String(c.number)) === -1; });
+			var notes = passed.map(function (c) { return '✅ ' + c.pase.toName + ' aceptó #' + c.number + '.'; });
+			closed.forEach(function (c) { notes.push('✅ #' + c.number + ' entregado.'); });
+			if (lost.length) { notes.push(lost.map(function (c) { return '#' + c.number; }).join(', ') + (lost.length === 1 ? ' ya no es tuya' : ' ya no son tuyas') + '. Si tienes el paquete, llama a la tienda.'); }
 			if (notes.length) { showToast(notes.join(' ')); }
 			state.offline = res.offline;
 			if (!res.offline) { store.set(PFX + 'hoy', JSON.stringify(res.data)); }
@@ -276,6 +280,20 @@
 		};
 		return '<nav class="pl-nav" aria-label="Menú">' + item('#carreras', 'pedidos', 'Carreras', 'carreras') + item('#dinero', 'dinero', 'Mi dinero', 'dinero', !!pending) + item('#ayuda', 'pregunta', 'Ayuda', 'ayuda') + '</nav>';
 	}
+	// 3.14.69.16 «Ir» (Ernesto 27-oct: «que la app lo lleve a la ubicación del cliente»): en Android abre la app de mapas
+	// que tenga (Google Maps, OsmAnd, Maps.me… funcionan sin datos si tiene el mapa bajado) en el punto exacto si el pedido
+	// tiene coordenadas (_cvd_map_url de OpenStreetMap), o buscando la dirección; en otro teléfono, el mapa web.
+	function goUrl(c) {
+		var cu = c.customer || {}, m = /mlat=(-?\d+(?:\.\d+)?)&mlon=(-?\d+(?:\.\d+)?)/.exec(c.map || '');
+		var where = [cu.address, cu.zone, 'La Habana', 'Cuba'].filter(Boolean).join(', ');
+		if (!/Android/i.test(navigator.userAgent)) { return c.map || 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(where); }
+		if (m) { return 'geo:' + m[1] + ',' + m[2] + '?q=' + m[1] + ',' + m[2] + '(' + encodeURIComponent('#' + c.number + ' ' + (cu.first || '')) + ')'; }
+		return 'geo:0,0?q=' + encodeURIComponent(where);
+	}
+	// 3.14.69.16 (Pedri 25-oct: «lo tocas y no se nota»): el botón gira mientras actualiza.
+	function refreshBtn() {
+		return '<button type="button" class="pl-btn pl-btn--icon' + (state.busy === 'refresh' ? ' pl-btn--busy pl-spin' : '') + '" data-act="refresh" aria-label="Actualizar">' + icon('sincronizar', 22) + '</button>';
+	}
 	function offlineBar(text) {
 		if (!state.offline) { return ''; }
 		var q = state.queue.length ? ' ' + state.queue.length + (state.queue.length === 1 ? ' acción guardada.' : ' acciones guardadas.') : '';
@@ -411,11 +429,10 @@
 		if (!waiting()) { return ''; }
 		return '<div class="pl-wait" role="status"><span>🛵 <b>Esperando carreras</b> · ' + (soundReady() ? 'pantalla encendida, suena al salir una' : 'toca la pantalla una vez para activar el sonido') + '</span><button type="button" class="pl-btn pl-btn--link" data-act="wait-off">Parar</button></div>';
 	}
+	// 3.14.69.16 (Ernesto 27-oct: «quitar botones innecesarios y textos explicativos»): una sola línea, sin explicación.
 	function soundCard() {
 		if (waiting()) { return ''; }
-		if (soundReady()) { return '<button type="button" class="pl-btn pl-btn--secondary pl-btn--block" data-act="wait-on">🛵 Esperando carreras (pantalla encendida)</button>'; }
-		return '<article class="pl-card"><b>🔊 Que suene cuando salga una carrera</b><span>Con la app abierta suena una bocina hasta que toques la pantalla. El teléfono pide un toque para dejarla sonar.</span>'
-			+ '<div class="pl-grid2"><button type="button" class="pl-btn pl-btn--primary" data-act="snd-on">Activar sonido</button><button type="button" class="pl-btn pl-btn--secondary" data-act="wait-on">Esperando carreras</button></div></article>';
+		return '<button type="button" class="pl-btn pl-btn--secondary pl-btn--block" data-act="' + (soundReady() ? 'wait-on' : 'snd-on') + '">' + (soundReady() ? '🛵 Esperando carreras' : '🔊 Activar sonido') + '</button>';
 	}
 	// Cualquier toque: deja sonar al teléfono y para la bocina (sin redibujar aquí, para no perder el toque).
 	document.addEventListener('pointerdown', function () {
@@ -423,43 +440,39 @@
 		if (snd.timer) { alarmStop(); if (route().view === 'carreras') { state.alarm = null; } }
 	}, true);
 
-	function pushCard() {
-		if (pushState() !== 'off' || store.get(PFX + 'push-no')) { return ''; }
-		return '<article class="pl-card pl-card--brand"><b>🔔 Activa los avisos</b><span>Te avisamos al teléfono cuando salga una carrera libre, para que la cojas antes. Aunque tengas la app cerrada.</span>'
-			+ '<div class="pl-grid2"><button type="button" class="pl-btn pl-btn--primary' + (state.busy === 'push' ? ' pl-btn--busy' : '') + '" data-act="push-on">Activar avisos</button><button type="button" class="pl-btn pl-btn--secondary" data-act="push-no">Ahora no</button></div></article>';
-	}
+	// 3.14.69.16: los avisos del navegador van por Google y en Cuba no son fiables: ya no se ofrecen en Carreras (sigue la
+	// línea en Ayuda para quien ya los tiene). Los avisos de verdad llegarán con la app instalable.
+	function pushCard() { return ''; }
 
 	function screenCarreras() {
 		var h = state.hoy, yo = h.yo || {};
-		var html = '<header class="pl-top"><div><div class="pl-brand">Pa\'llá</div><div class="pl-sub">' + esc('Hola, ' + (yo.first || 'mensajero') + (yo.vehicle ? ' · ' + yo.vehicle : '')) + '</div></div>' + (yo.available ? badge('success', 'Disponible') : '') /* 3.14.69.6: sin «No disponible» (se leía como que la app no funcionaba; coger carreras no depende de la jornada) */ + '</header>' + offlineBar();
-		html += '<main class="pl-main">' + pushCard() + soundCard();
+		// 3.14.69.16 (Ernesto 27-oct): minimalista. Sin tarjetas de explicación, sin «Ver mi carrera» (toda la tarjeta se
+		// toca), «Cobras 44 USD» en vez de frases, y «Por llevar» arriba si debe dinero a la tienda.
+		var d = h.dinero || {};
+		var html = '<header class="pl-top"><div><div class="pl-brand">Pa\'llá</div><div class="pl-sub">' + esc('Hola, ' + (yo.first || 'mensajero')) + '</div></div>' + refreshBtn() + '</header>' + offlineBar();
+		html += '<main class="pl-main">' + soundCard();
+		if (d.pendingText) { html += '<a class="pl-card pl-card--tap pl-card--brand pl-row" style="text-decoration:none;color:inherit;align-items:center" href="#dinero"><span>💵 Por llevar a la tienda</span><span class="pl-strong pl-num">' + esc(d.pendingText) + '</span></a>'; }
 		(h.pases || []).forEach(function (x) {
-			html += '<article class="pl-card pl-card--brand"><div class="pl-row" style="align-items:center"><span class="pl-strong">🔁 ' + esc(x.from) + ' te quiere pasar #' + esc(x.number) + '</span>' + (x.picked ? badge('info', 'Ya recogida') : '') + '</div>'
-				+ '<div class="pl-muted">' + esc(x.zone) + (x.when ? ' · ' + esc(x.when) : '') + (x.feeText ? ' · ' + esc(x.feeText) : '') + '</div>'
-				+ '<div class="pl-muted">' + esc((x.items || []).join(' · ')) + '</div>'
-				+ '<div class="pl-grid2"><button type="button" class="pl-btn pl-btn--primary" data-act="pase-si" data-id="' + x.id + '">' + icon('bien', 18) + 'La acepto</button><button type="button" class="pl-btn pl-btn--secondary" data-act="pase-no" data-id="' + x.id + '">No puedo</button></div></article>';
+			html += '<article class="pl-card pl-card--brand"><div class="pl-row" style="align-items:center"><span class="pl-strong">🔁 ' + esc(x.from) + ' te pasa #' + esc(x.number) + '</span>' + (x.picked ? badge('info', 'Recogida') : '') + '</div>'
+				+ '<div class="pl-muted">' + esc([x.zone, x.when, x.feeText].filter(Boolean).join(' · ')) + '</div>'
+				+ '<div class="pl-grid2"><button type="button" class="pl-btn pl-btn--primary" data-act="pase-si" data-id="' + x.id + '">La acepto</button><button type="button" class="pl-btn pl-btn--secondary" data-act="pase-no" data-id="' + x.id + '">No puedo</button></div></article>';
 		});
 		if (h.carreras.length) {
 			html += '<h2 class="pl-h2">Mis carreras</h2>';
 			h.carreras.forEach(function (c) {
-				var where = c.stage === 'pickup' ? 'Recoges en Casa Viva · ' + c.pickup.zone : 'Entregas en ' + c.customer.zone;
-				html += '<a class="pl-card pl-card--tap" style="text-decoration:none;color:inherit" href="#carrera/' + c.id + '"><div class="pl-row" style="align-items:center"><span class="pl-strong">#' + esc(c.number) + ' · ' + esc(c.customer.zone) + '</span>' + stageBadge(c) + '</div><div class="pl-muted">' + esc(where) + '</div><span class="pl-btn pl-btn--secondary pl-btn--block">Ver mi carrera</span></a>';
+				html += '<a class="pl-card pl-card--tap" style="text-decoration:none;color:inherit" href="#carrera/' + c.id + '"><div class="pl-row" style="align-items:center"><span class="pl-strong">#' + esc(c.number) + ' · ' + esc(c.customer.zone) + '</span>' + stageBadge(c) + '</div>'
+					+ (c.eta ? '<div class="pl-muted">🕒 ' + esc(c.eta) + '</div>' : '') + '</a>';
 			});
 		}
-		html += '<div class="pl-row"><h1 class="pl-h1">Carreras disponibles</h1><span class="pl-muted">' + h.ofertas.length + (h.ofertas.length === 1 ? ' libre' : ' libres') + '</span></div>';
-		if (!h.ofertas.length) {
-			html += '<div class="pl-card"><b>No hay carreras libres ahora</b><span class="pl-muted">Cuando la tienda tenga una lista, sale aquí. La lista se pone al día sola.</span><button class="pl-btn pl-btn--secondary pl-btn--block" data-act="refresh" type="button">' + icon('sincronizar', 20) + 'Actualizar</button></div>';
-		}
+		html += '<div class="pl-row"><h1 class="pl-h1">Libres</h1><span class="pl-muted">' + h.ofertas.length + '</span></div>';
+		if (!h.ofertas.length) { html += '<p class="pl-empty">No hay carreras libres.</p>'; }
 		h.ofertas.forEach(function (o, i) {
 			var busy = state.busy === 'cojo-' + o.id;
 			var items = o.items.length > 1 ? o.items[0] + ' y ' + (o.items.length - 1) + ' más' : (o.items[0] || '');
-			html += '<article class="pl-card"><div class="pl-row" style="align-items:center"><span class="pl-strong">#' + esc(o.number) + ' · ' + esc(o.when || 'lo antes posible') + '</span><span class="pl-num" style="font-weight:800;white-space:nowrap">' + esc(o.feeText) + '</span></div>'
-				+ '<div class="pl-route"><div><span class="pl-dot"></span><span>' + esc(o.from) + '</span></div><div><span class="pl-sq"></span><span>' + esc(o.zone) + '</span></div></div>'
-				+ '<div class="pl-meta"><span>' + esc(items) + '</span></div>'
-				+ '<div class="pl-muted">Cobras al cliente: <span class="pl-strong">' + esc(o.collect) + '</span>' + (o.change ? ' · la tienda te da ' + esc(o.change) + ' de vuelto' : '') + '</div>'
-				+ (o.assembly ? '<div class="pl-muted">🔧 ' + esc(o.assembly) + '</div>' : '')
-				+ (o.supplier ? '<div class="pl-muted">Bajo pedido: la tienda te dice dónde se recoge.</div>' : '')
-				+ '<button type="button" class="pl-btn pl-btn--block ' + (i === 0 ? 'pl-btn--primary' : 'pl-btn--secondary') + (busy ? ' pl-btn--busy' : '') + '" data-act="cojo" data-id="' + o.id + '">' + (i === 0 ? icon('bien', 20) : '') + (busy ? 'Cogiéndola…' : 'La cojo') + '</button></article>';
+			html += '<article class="pl-card"><div class="pl-row" style="align-items:center"><span class="pl-strong">#' + esc(o.number) + ' · ' + esc(o.zone) + '</span><span class="pl-num" style="font-weight:800;white-space:nowrap">' + esc(o.feeText) + '</span></div>'
+				+ '<div class="pl-muted">' + esc(o.when || 'lo antes posible') + ' · ' + esc(items) + '</div>'
+				+ '<div class="pl-muted">Cobras <span class="pl-strong">' + esc(o.collect) + '</span>' + (o.change ? ' · vuelto ' + esc(o.change) : '') + (o.assembly ? ' · 🔧 armar' : '') + (o.supplier ? ' · bajo pedido' : '') + '</div>'
+				+ '<button type="button" class="pl-btn pl-btn--block ' + (i === 0 ? 'pl-btn--primary' : 'pl-btn--secondary') + (busy ? ' pl-btn--busy' : '') + '" data-act="cojo" data-id="' + o.id + '">' + (busy ? 'Cogiéndola…' : 'La cojo') + '</button></article>';
 		});
 		return html + '</main>' + nav('carreras');
 	}
@@ -475,58 +488,52 @@
 		var m = c.money || {}, cu = c.customer || {};
 		var html = '<header class="pl-top pl-top--bar"><a class="pl-back" href="#carreras">‹ Carreras</a>' + stageBadge(c) + '</header>' + offlineBar('Sin conexión. Tu carrera sigue guardada.');
 		html += '<main class="pl-main pl-main--pad-actions"><h1 class="pl-h1">#' + esc(c.number) + ' · ' + esc(cu.zone) + '</h1>';
-		if (c.test) { html += '<div class="pl-test">PRUEBA · los botones no cambian nada</div>'; }
-		var picked = c.stage !== 'pickup';
-		html += '<div class="pl-steps"><div class="pl-step ' + (picked ? 'pl-step--done' : 'pl-step--now') + '">' + (picked ? '✓' : '1 ·') + ' Recoger</div><div class="pl-step ' + (c.stage === 'delivered' ? 'pl-step--done' : (picked ? 'pl-step--now' : '')) + '">' + (c.stage === 'delivered' ? '✓' : '2 ·') + ' Entregar</div></div>';
-		if (c.queued) { html += '<div class="pl-alert pl-alert--info">' + icon('sincronizar', 20) + '<div><b>Guardado sin conexión</b>Se manda solo cuando vuelva la señal. No tienes que repetir nada.</div></div>'; }
-		if (c.pase) { html += '<div class="pl-alert pl-alert--info">' + icon('sincronizar', 20) + '<div><b>Esperando que ' + esc(c.pase.toName) + ' la acepte</b>Sigue siendo tuya hasta que diga que sí.<br><button type="button" class="pl-btn pl-btn--link" style="padding:0" data-act="pase-cancelar" data-id="' + c.id + '">Cancelar el pase</button></div></div>'; }
-		if (c.stage === 'incident' && !c.queued) { html += '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>Hay un problema avisado</b>La tienda te dice qué hacer. No lo marques entregado hasta entonces.</div></div>'; }
-		if (c.stage === 'delivered' && m.after) { html += '<div class="pl-alert pl-alert--success">' + icon('bien', 20) + '<div><b>Entregado</b>' + esc(m.sentence || '') + ' La mensajería es tuya.</div></div>'; }
-		html += '<section class="pl-card"><div class="pl-label">' + (c.stage === 'pickup' ? 'Recoges en' : 'Llevas') + '</div>';
-		if (c.stage === 'pickup') { html += '<div class="pl-strong">' + esc(c.pickup.place) + '</div><div class="pl-muted">' + esc(c.pickup.zone + ' · ' + c.pickup.hours) + '</div>'; }
-		html += '<ul class="pl-items">' + c.items.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
-		if (c.pickup.suppliers && c.pickup.suppliers.length && c.stage === 'pickup') { html += '<div class="pl-muted">Bajo pedido (' + esc(c.pickup.suppliers.join(', ')) + '): pregunta en la tienda si lo recoges allí o en el proveedor antes de salir.</div>'; }
-		if (c.assembly) { html += '<div class="pl-muted">🔧 Hay que armarlo: cobras <span class="pl-strong">' + esc(c.assembly) + '</span> de armado aparte (es tuyo).</div>'; }
+		if (c.test) { html += '<div class="pl-test">PRUEBA · nada es real</div>'; }
+		// 3.14.69.16 (Ernesto 27-oct): 4 pasos que se van marcando solos — hora · recogí · entregado · dinero en la tienda —
+		// y la carrera se cierra cuando la tienda recibe el dinero (Mi dinero). Sin cuadros de explicación.
+		var done = { hora: !!c.eta || c.stage !== 'pickup', recogi: c.stage !== 'pickup', entregado: c.stage === 'delivered' };
+		var steps = [['hora', 'Hora'], ['recogi', 'Recogí'], ['entregado', 'Entregado'], ['dinero', 'Dinero']];
+		var now = steps.filter(function (s) { return !done[s[0]]; })[0];
+		html += '<ol class="pl-track">' + steps.map(function (s) { return '<li class="' + (done[s[0]] ? 'is-done' : (now && now[0] === s[0] ? 'is-now' : '')) + '">' + (done[s[0]] ? '✓ ' : '') + s[1] + '</li>'; }).join('') + '</ol>';
+		if (c.queued) { html += '<div class="pl-note">' + icon('sincronizar', 20) + '<div>Guardado. Se manda al volver la señal.</div></div>'; }
+		if (c.pase) { html += '<div class="pl-note">🔁<div>Esperando que ' + esc(c.pase.toName) + ' la acepte. <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="pase-cancelar" data-id="' + c.id + '">Cancelar</button></div></div>'; }
+		if (c.stage === 'incident' && !c.queued) { html += '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>Problema avisado</b>Espera lo que diga la tienda.</div></div>'; }
+		if (c.stage === 'delivered' && m.after) { html += '<div class="pl-alert pl-alert--success">' + icon('bien', 20) + '<div><b>Entregado</b>' + esc(m.sentence || '') + '</div></div>'; }
+		// Cliente: dónde, cuándo y los dos botones que importan (Llamar · Ir).
+		html += '<section class="pl-card"><div class="pl-strong">' + esc(cu.name) + '</div><div>' + esc(cu.address || cu.zone) + '</div><div class="pl-muted">' + esc([cu.address ? cu.zone : '', cu.reference].filter(Boolean).join(' · ')) + '</div>';
+		if (c.eta) { html += '<div class="pl-row" style="align-items:center"><span>🕒 <span class="pl-strong">' + esc(c.eta) + '</span></span><a class="pl-btn pl-btn--link" href="#hora/' + c.id + '">Cambiar</a></div>'; }
+		else if (c.when) { html += '<div class="pl-muted">Pidió ' + esc(c.when) + '</div>'; }
+		if (cu.note) { html += '<div class="pl-muted">📝 ' + esc(cu.note) + '</div>'; }
+		html += '<div class="pl-grid2">' + (cu.phone ? '<a class="pl-btn pl-btn--secondary" href="tel:+' + esc(cu.phone) + '">' + icon('tel', 20) + 'Llamar</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin teléfono</span>')
+			+ (c.map || cu.address || cu.zone ? '<a class="pl-btn pl-btn--secondary" href="' + esc(goUrl(c)) + '" target="_blank" rel="noopener noreferrer">' + icon('mapa', 20) + 'Ir</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin mapa</span>') + '</div>';
+		if (cu.alt) { html += '<div class="pl-muted">Otro: <a href="tel:+' + esc(cu.alt) + '">' + esc(cu.altLabel) + '</a></div>'; }
 		html += '</section>';
-		html += '<section class="pl-card"><div class="pl-label">Entregas a</div><div class="pl-strong">' + esc(cu.name + (cu.address ? ' · ' + cu.address : '')) + '</div><div class="pl-muted">' + esc([cu.zone, cu.reference].filter(Boolean).join(' · ')) + '</div>';
-		if (c.when) { html += '<div class="pl-muted">Pidió: <span class="pl-strong">' + esc(c.when) + '</span></div>'; }
-		html += c.eta ? '<div class="pl-row" style="align-items:center"><span>🕒 Lo entregas: <span class="pl-strong">' + esc(c.eta) + '</span></span><a class="pl-btn pl-btn--link" href="#hora/' + c.id + '">Cambiar</a></div>' : '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>Di a qué hora lo entregas</b>Se lo decimos a quien lo espera. Sin la hora no puedes marcar «Recogí».</div></div>';
-		if (cu.note) { html += '<div class="pl-muted">Nota: ' + esc(cu.note) + '</div>'; }
-		html += '<div class="pl-grid2">' + (cu.phone ? '<a class="pl-btn pl-btn--secondary" href="tel:+' + esc(cu.phone) + '" aria-label="Llamar al cliente">' + icon('tel', 20) + 'Llamar</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin teléfono</span>')
-			+ (c.map ? '<a class="pl-btn pl-btn--secondary" href="' + esc(c.map) + '" target="_blank" rel="noopener noreferrer" aria-label="Abrir en el mapa">' + icon('mapa', 20) + 'Mapa</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin mapa</span>') + '</div>';
-		if (cu.alt) { html += '<div class="pl-muted">Otro teléfono: <a href="tel:+' + esc(cu.alt) + '">' + esc(cu.altLabel) + '</a></div>'; }
+		// Paquete: qué llevas (y de dónde, si aún no lo recogió).
+		html += '<section class="pl-card"><ul class="pl-items">' + c.items.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
+		if (c.stage === 'pickup') { html += '<div class="pl-muted">' + esc(c.pickup.place + ' · ' + c.pickup.hours) + '</div>'; }
+		if (c.pickup.suppliers && c.pickup.suppliers.length && c.stage === 'pickup') { html += '<div class="pl-muted">Bajo pedido: pregunta en la tienda dónde se recoge.</div>'; }
+		if (c.assembly) { html += '<div class="pl-muted">🔧 Armado: <span class="pl-strong">' + esc(c.assembly) + '</span> (tuyo)</div>'; }
 		html += '</section>';
 		if (!m.after) {
 			var small = function (t) { return String(t).length > 11 ? ' pl-amount--sm' : ''; };
-			html += '<section class="pl-card"><div class="pl-money"><div><span class="pl-muted">Cobras al cliente</span><span class="pl-amount' + small(m.chargeShort) + '">' + esc(m.chargeShort) + '</span></div><div><span class="pl-muted">Llevas a la tienda</span><span class="pl-amount' + small(m.bring) + '">' + esc(m.bring) + '</span></div>'
-				+ '<div class="pl-muted">Tu mensajería: <span class="pl-strong">' + esc(m.feeText) + '</span></div><div class="pl-muted">' + esc(m.deadline) + '</div></div>'
-				+ '<div class="pl-muted">' + esc(m.charge) + '</div>'
-				+ (m.changeText ? '<div class="pl-muted">Vuelto: la tienda te da <span class="pl-strong">' + esc(m.changeText) + '</span> para el cliente' + (m.payWith ? ' (paga con ' + esc(m.payWith) + ')' : '') + '.</div>' : '')
-				+ (m.bringDetail ? '<div class="pl-muted">' + esc(m.bringDetail) + '</div>' : '') + '</section>';
+			html += '<section class="pl-card"><div class="pl-money"><div><span class="pl-muted">Cobras</span><span class="pl-amount' + small(m.chargeShort) + '">' + esc(m.chargeShort) + '</span></div><div><span class="pl-muted">A la tienda</span><span class="pl-amount' + small(m.bring) + '">' + esc(m.bring) + '</span></div></div>'
+				+ '<div class="pl-muted">Mensajería <span class="pl-strong">' + esc(m.feeText) + '</span>' + (m.changeText ? ' · vuelto <span class="pl-strong">' + esc(m.changeText) + '</span>' + (m.payWith ? ' (paga con ' + esc(m.payWith) + ')' : '') : '') + '</div></section>';
 		} else if (m.feeText) {
-			html += '<section class="pl-card"><div class="pl-muted">Tu mensajería: <span class="pl-strong">' + esc(m.feeText) + '</span></div></section>';
+			html += '<section class="pl-card"><div class="pl-muted">Mensajería <span class="pl-strong">' + esc(m.feeText) + '</span></div></section>';
 		}
 		html += '</main>';
-		// Botones de abajo según el paso (los mismos que la tarjeta de carrera).
-		var w = wordFor(c), b = function (a) { return state.busy === a + '-' + c.id ? ' pl-btn--busy' : ''; };
+		// Abajo: UN botón grande según el paso; lo demás, en una línea de enlaces.
+		var b = function (a) { return state.busy === a + '-' + c.id ? ' pl-btn--busy' : ''; };
+		var links = [];
 		var acts = '<div class="pl-actions">';
-		if (c.stage === 'pickup' && !c.eta) {
-			acts += '<a class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block" href="#hora/' + c.id + '">🕒 Poner la hora</a>'
-				+ '<div class="pl-grid2"><a class="pl-btn pl-btn--secondary" href="#problema/' + c.id + '">' + icon('aviso', 18) + 'Problema</a><a class="pl-btn pl-btn--secondary" href="#suelto/' + c.id + '">No puedo</a></div>';
-		} else if (c.stage === 'pickup') {
-			acts += '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + b('recogi') + '" data-act="recogi" data-id="' + c.id + '">' + icon('bien') + 'Recogí</button>'
-				+ '<div class="pl-grid3"><button type="button" class="pl-btn pl-btn--secondary" disabled>Entregado</button><a class="pl-btn pl-btn--secondary" href="#problema/' + c.id + '">' + icon('aviso', 18) + 'Problema</a><a class="pl-btn pl-btn--secondary" href="#suelto/' + c.id + '">No puedo</a></div>'
-				+ '<div class="pl-hint">¿Sin conexión? Toca «Recogí» igual: se guarda y se manda solo cuando vuelva la señal.</div>'; // 3.14.69.8: el bot aún no entiende «Recogí N» (feat/carrera-palabras sin subir)
-		} else if (c.stage === 'route') {
-			acts += '<a class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block" href="#entregado/' + c.id + '">' + icon('bien') + 'Entregado</a>'
-				+ '<a class="pl-btn pl-btn--secondary pl-btn--block" href="#problema/' + c.id + '">' + icon('aviso', 18) + 'Problema</a>'
-				+ '<div class="pl-hint">Ya tienes el paquete: si no puedes entregarlo, toca «Problema». ¿Sin conexión? Escribe <span class="pl-strong">' + esc(w.entregado) + '</span></div>';
-		} else if (c.stage === 'delivered') {
-			acts += '<a class="pl-btn pl-btn--secondary pl-btn--block" href="#problema/' + c.id + '">' + icon('aviso', 18) + 'Avisar un problema</a><a class="pl-btn pl-btn--link" href="#dinero">Ver mi dinero de hoy</a>';
-		} else {
-			acts += '<div class="pl-hint">La tienda te llama o te escribe. Si tienes dudas, llama a la tienda.</div>';
-		}
-		if (['pickup', 'route'].indexOf(c.stage) !== -1 && !c.pase && !c.queued) { acts += '<a class="pl-btn pl-btn--link" href="#pasar/' + c.id + '">🔁 Pasar a otro mensajero</a>'; }
+		if (c.stage === 'pickup' && !c.eta) { acts += '<a class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block" href="#hora/' + c.id + '">🕒 Poner la hora</a>'; }
+		else if (c.stage === 'pickup') { acts += '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + b('recogi') + '" data-act="recogi" data-id="' + c.id + '">' + icon('bien') + 'Recogí</button>'; }
+		else if (c.stage === 'route') { acts += '<a class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block" href="#entregado/' + c.id + '">' + icon('bien') + 'Entregado</a>'; }
+		else if (c.stage === 'delivered') { acts += '<a class="pl-btn pl-btn--secondary pl-btn--lg pl-btn--block" href="#dinero">💵 Mi dinero</a>'; }
+		if (['pickup', 'route', 'delivered'].indexOf(c.stage) !== -1) { links.push('<a href="#problema/' + c.id + '">Problema</a>'); }
+		if (c.stage === 'pickup') { links.push('<a href="#suelto/' + c.id + '">No puedo</a>'); }
+		if (['pickup', 'route'].indexOf(c.stage) !== -1 && !c.pase && !c.queued) { links.push('<a href="#pasar/' + c.id + '">Pasar</a>'); }
+		if (links.length) { acts += '<div class="pl-links">' + links.join('') + '</div>'; }
 		return html + acts + '</div>';
 	}
 
@@ -560,7 +567,7 @@
 	}
 	function bringNote(c) {
 		var t = moneyText(payPlan(c).bring);
-		return t ? 'Llevas <span style="font-weight:700">' + esc(t) + '</span> a la tienda antes de las 4:00 p. m. La mensajería es tuya.' : 'No llevas dinero de productos a la tienda. La mensajería es tuya.';
+		return t ? 'A la tienda: <span style="font-weight:700">' + esc(t) + '</span> antes de las 4 p. m.' : 'No llevas dinero a la tienda.'; // 3.14.69.16: más corto
 	}
 
 	function sheetEntregado(c) {
@@ -568,7 +575,7 @@
 		var html = '<div class="pl-sheet-head"><h1 class="pl-h1" id="pl-sheet-t">¿Cuánto cobraste?</h1><a class="pl-x" href="#carrera/' + c.id + '" aria-label="Cerrar">' + icon('cerrar') + '</a></div>'
 			+ '<div class="pl-muted" style="font-size:16px;line-height:24px">Pedido #' + esc(c.number) + ' · ' + esc(c.customer.first || c.customer.name) + ' · ' + esc(c.customer.zone) + '</div>';
 		if (m.prepaid) {
-			html += '<div class="pl-alert pl-alert--success">' + icon('bien', 20) + '<div><b>Ya estaba pagado</b>No cobras productos' + (m.label ? ' (' + esc(m.label) + ')' : '') + '.</div></div>';
+			html += '<div class="pl-alert pl-alert--success">' + icon('bien', 20) + '<div><b>Ya pagado</b>No cobras nada.</div></div>';
 		} else {
 			html += '<fieldset class="pl-fs"><legend>Cómo pagó</legend>';
 			opts.forEach(function (o) {
@@ -581,24 +588,23 @@
 					html += '<div class="pl-fields"><label class="pl-field">USD<input data-f="usd" type="number" inputmode="decimal" min="0" step="0.01" value="' + esc(f.usd || '') + '" placeholder="0"></label><label class="pl-field">CUP<input data-f="cupo" type="number" inputmode="decimal" min="0" step="1" value="' + esc(f.cupo || '') + '" placeholder="0"></label>'
 						+ (m.currency === 'EUR' ? '<label class="pl-field">EUR<input data-f="eur" type="number" inputmode="decimal" min="0" step="0.01" value="' + esc(f.eur || '') + '" placeholder="0"></label>' : '') + '</div>'
 						+ '<div class="pl-pills" role="radiogroup" aria-label="Cómo pagó"><label class="pl-pill"><input type="radio" name="como" value="efectivo" data-act="como"' + (f.como !== 'transferencia' ? ' checked' : '') + '> Efectivo</label><label class="pl-pill"><input type="radio" name="como" value="transferencia" data-act="como"' + (f.como === 'transferencia' ? ' checked' : '') + '> Transferencia</label></div>'
-						+ '<div class="pl-muted">Solo lo de los productos, sin tu mensajería.</div>';
+						+ '<div class="pl-muted">Sin tu mensajería.</div>';
 				}
 			});
 			html += '</fieldset>';
 		}
 		html += '<div class="pl-note">' + icon('dinero') + '<div id="pl-bring">' + bringNote(c) + '</div></div>';
 		if (f.err) { html += '<div class="pl-err" role="alert">' + esc(f.err) + '</div>'; }
-		html += '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + (state.busy === 'entregado-' + c.id ? ' pl-btn--busy' : '') + '" data-act="entregado" data-id="' + c.id + '">' + icon('bien') + 'Confirmar entregado</button>'
-			+ '<div class="pl-hint">¿Sin conexión? Escribe <span class="pl-strong">' + esc(wordFor(c).entregado) + '</span></div>';
+		html += '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + (state.busy === 'entregado-' + c.id ? ' pl-btn--busy' : '') + '" data-act="entregado" data-id="' + c.id + '">' + icon('bien') + 'Confirmar entregado</button>';
 		return html;
 	}
 
 	var MOTIVOS = [['no_estaba', 'El cliente no estaba'], ['parte', 'Solo quiso una parte'], ['devuelve', 'Lo devuelve'], ['vale_mal', 'El vale está mal'], ['otro', 'Otro problema']];
 	function sheetProblema(c) {
 		var f = state.form;
-		var html = '<div class="pl-sheet-head"><h1 class="pl-h1" id="pl-sheet-t">¿Qué pasó?</h1><a class="pl-x" href="#carrera/' + c.id + '" aria-label="Cerrar">' + icon('cerrar') + '</a></div><div class="pl-muted" style="font-size:16px">Pedido #' + esc(c.number) + ' · la tienda lo ve al momento.</div><fieldset class="pl-fs"><legend>Motivo</legend>';
+		var html = '<div class="pl-sheet-head"><h1 class="pl-h1" id="pl-sheet-t">¿Qué pasó?</h1><a class="pl-x" href="#carrera/' + c.id + '" aria-label="Cerrar">' + icon('cerrar') + '</a></div><div class="pl-muted" style="font-size:16px">#' + esc(c.number) + '</div><fieldset class="pl-fs"><legend>Motivo</legend>';
 		MOTIVOS.forEach(function (o) { html += '<label class="pl-opt' + (f.motivo === o[0] ? ' pl-opt--on' : '') + '"><span><input type="radio" name="motivo" value="' + o[0] + '" data-act="motivo"' + (f.motivo === o[0] ? ' checked' : '') + '> ' + o[1] + '</span></label>'; });
-		html += '</fieldset><label class="pl-field">Cuéntalo en una frase ' + (f.motivo === 'otro' ? '(hace falta)' : '(si quieres)') + '<textarea data-f="texto" maxlength="400" rows="2">' + esc(f.texto || '') + '</textarea></label>';
+		html += '</fieldset><label class="pl-field">Detalle' + (f.motivo === 'otro' ? '' : ' (opcional)') + '<textarea data-f="texto" maxlength="400" rows="2">' + esc(f.texto || '') + '</textarea></label>';
 		if (f.err) { html += '<div class="pl-err" role="alert">' + esc(f.err) + '</div>'; }
 		return html + '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + (state.busy === 'problema-' + c.id ? ' pl-btn--busy' : '') + '" data-act="problema" data-id="' + c.id + '">Avisar a la tienda</button>';
 	}
@@ -622,15 +628,14 @@
 		});
 		html += '</fieldset>';
 		if (f.err) { html += '<div class="pl-err" role="alert">' + esc(f.err) + '</div>'; }
-		return html + '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + (state.busy === 'hora-' + c.id ? ' pl-btn--busy' : '') + '" data-act="hora" data-id="' + c.id + '">🕒 Guardar la hora</button>'
-			+ '<div class="pl-hint">La gestora o el cliente reciben la hora al momento.</div>';
+		return html + '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + (state.busy === 'hora-' + c.id ? ' pl-btn--busy' : '') + '" data-act="hora" data-id="' + c.id + '">🕒 Guardar la hora</button>';
 	}
 
 	function sheetPasar(c) {
 		var list = (state.hoy && state.hoy.companeros) || [], f = state.form;
 		var html = '<div class="pl-sheet-head"><h1 class="pl-h1" id="pl-sheet-t">¿A quién se la pasas?</h1><a class="pl-x" href="#carrera/' + c.id + '" aria-label="Cerrar">' + icon('cerrar') + '</a></div>'
-			+ '<p style="margin:0">#' + esc(c.number) + ' sigue siendo tuya hasta que tu compañero la acepte en su Pa\'llá.' + (c.stage === 'route' ? ' Ya tienes el paquete: dáselo en mano.' : '') + '</p>';
-		if (!list.length) { return html + '<div class="pl-alert pl-alert--info">' + icon('pregunta', 20) + '<div><b>Todavía no hay compañeros con Pa\'llá</b>Pásala como siempre o toca «No puedo».</div></div>'; }
+			+ '<p style="margin:0">#' + esc(c.number) + ' sigue siendo tuya hasta que acepte.' + (c.stage === 'route' ? ' Dale el paquete en mano.' : '') + '</p>';
+		if (!list.length) { return html + '<p class="pl-empty">Nadie más usa Pa\'llá todavía.</p>'; }
 		html += '<fieldset class="pl-fs"><legend>Compañeros</legend>';
 		list.forEach(function (m) { html += '<label class="pl-opt' + (String(f.to) === String(m.id) ? ' pl-opt--on' : '') + '"><span><input type="radio" name="to" value="' + m.id + '" data-act="pasar-a"' + (String(f.to) === String(m.id) ? ' checked' : '') + '> ' + esc(m.name) + '</span></label>'; });
 		html += '</fieldset>';
@@ -640,54 +645,81 @@
 
 	function sheetSuelto(c) {
 		return '<div class="pl-sheet-head"><h1 class="pl-h1" id="pl-sheet-t">¿Sueltas la #' + esc(c.number) + '?</h1><a class="pl-x" href="#carrera/' + c.id + '" aria-label="Cerrar">' + icon('cerrar') + '</a></div>'
-			+ '<p style="margin:0">La carrera vuelve a estar libre para otro mensajero. Solo se puede antes de recoger el paquete.</p>'
+			+ '<p style="margin:0">Vuelve a quedar libre para otro.</p>'
 			+ '<button type="button" class="pl-btn pl-btn--danger pl-btn--lg pl-btn--block' + (state.busy === 'suelto-' + c.id ? ' pl-btn--busy' : '') + '" data-act="suelto" data-id="' + c.id + '">Sí, la suelto</button><a class="pl-btn pl-btn--secondary pl-btn--block" href="#carrera/' + c.id + '">No, sigo con ella</a>';
 	}
 
 	function screenDinero() {
-		var d = state.hoy.dinero || { rows: [] };
-		var html = '<header class="pl-top"><div><h1 class="pl-h1">Mi dinero de hoy</h1><span class="pl-sub">' + esc(d.label || '') + '</span></div></header>' + offlineBar() + '<main class="pl-main">';
-		html += '<div class="pl-tiles"><div class="pl-tile"><span class="pl-muted">Ganaste</span><span class="pl-amount">' + esc(d.earnedText || '0') + '</span><span class="pl-muted">CUP de mensajería</span></div>'
-			+ '<div class="pl-tile pl-tile--brand"><span style="font-size:14px">Para la tienda</span><span class="pl-amount' + ((d.pendingText || '').length > 9 ? ' pl-amount--sm' : '') + '">' + esc(d.pendingText || 'Nada') + '</span><span style="font-size:14px">' + esc(d.pendingText ? d.deadline : 'no debes nada') + '</span></div></div>';
-		if (d.pendingText) { html += '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>Te faltan ' + esc(d.pendingText) + ' por llevar</b>Pásalos por la tienda hoy. La dependienta marca «Dinero recibido» y aquí se pone en cero.</div></div>'; }
-		else if (d.delivered) { html += '<div class="pl-alert pl-alert--success">' + icon('bien', 20) + '<div><b>No debes dinero a la tienda</b>Todo lo de hoy ya está entregado.</div></div>'; }
-		else { html += '<div class="pl-alert pl-alert--info">' + icon('pedidos', 20) + '<div><b>Todavía no entregaste carreras hoy</b>Cuando entregues, aquí ves tu mensajería y lo que llevas a la tienda.</div></div>'; }
-		if (d.rows.length) {
-			html += '<div class="pl-list">' + d.rows.map(function (r) {
-				return '<div class="pl-li"><div><span class="pl-strong">#' + esc(r.number) + ' · ' + esc(r.zone) + '</span><span class="pl-muted">Mensajería ' + esc(r.feeText) + '</span></div><div class="pl-end"><span class="pl-strong pl-num">' + esc(r.cash) + '</span>' + (r.pending ? badge('warning', 'Por llevar') : badge('success', 'Entregado')) + '</div></div>';
-			}).join('') + '</div>';
-		}
-		html += '<a class="pl-btn pl-btn--secondary pl-btn--block" href="' + esc(C.storeMap || '#') + '" target="_blank" rel="noopener noreferrer">' + icon('tienda', 20) + 'Cómo llegar a la tienda</a>';
+		// 3.14.69.16 (Pedri 25-oct: historial y acumulado en vez de su Excel): pestañas Hoy · Historial.
+		var d = state.hoy.dinero || { rows: [] }, tab = state.dineroTab === 'hist' ? 'hist' : 'hoy';
+		var html = '<header class="pl-top"><h1 class="pl-h1">Mi dinero</h1></header>' + offlineBar() + '<main class="pl-main">';
+		html += '<div class="pl-tabs" role="tablist"><button type="button" role="tab" aria-selected="' + (tab === 'hoy') + '" data-act="dtab" data-tab="hoy">Hoy</button><button type="button" role="tab" aria-selected="' + (tab === 'hist') + '" data-act="dtab" data-tab="hist">Historial</button></div>';
+		if (tab === 'hist') { return html + historyHtml() + '</main>' + nav('dinero'); }
+		html += '<div class="pl-tiles"><div class="pl-tile"><span class="pl-muted">Ganaste</span><span class="pl-amount">' + esc(d.earnedText || '0') + '</span><span class="pl-muted">CUP</span></div>'
+			+ '<div class="pl-tile pl-tile--brand"><span style="font-size:14px">A la tienda</span><span class="pl-amount' + ((d.pendingText || '').length > 9 ? ' pl-amount--sm' : '') + '">' + esc(d.pendingText || 'Nada') + '</span><span style="font-size:14px">' + esc(d.pendingText ? d.deadline : '') + '</span></div></div>';
+		if (!d.rows.length) { html += '<p class="pl-empty">Hoy todavía no entregaste.</p>'; }
+		else { html += rowsHtml(d.rows); }
+		html += '<a class="pl-btn pl-btn--link" href="' + esc(C.storeMap || '#') + '" target="_blank" rel="noopener noreferrer">' + icon('tienda', 20) + 'Cómo llegar a la tienda</a>';
 		return html + '</main>' + nav('dinero');
+	}
+	function rowsHtml(rows) {
+		return '<div class="pl-list">' + rows.map(function (r) {
+			return '<div class="pl-li"><div><span class="pl-strong">#' + esc(r.number) + ' · ' + esc(r.zone) + '</span><span class="pl-muted">' + esc(r.feeText) + '</span></div><div class="pl-end">' + (r.cash ? '<span class="pl-strong pl-num">' + esc(r.cash) + '</span>' : '') + (r.pending ? badge('warning', 'Por llevar') : badge('success', '✓')) + '</div></div>';
+		}).join('') + '</div>';
+	}
+	function loadHistory() {
+		if (state.histLoading) { return; }
+		state.histLoading = true;
+		api('historial?dias=31').then(function (res) {
+			state.histLoading = false;
+			if (res.status === 200 && res.data.ok) { state.hist = res.data; store.set(PFX + 'hist', JSON.stringify(res.data)); }
+			else { throw new Error('hist'); }
+			render();
+		}).catch(function () {
+			state.histLoading = false;
+			try { state.hist = JSON.parse(store.get(PFX + 'hist') || 'null'); } catch (e) { state.hist = null; }
+			state.hist = state.hist ? Object.assign({ old: true }, state.hist) : { error: true };
+			render();
+		});
+	}
+	function historyHtml() {
+		var hs = state.hist;
+		if (!hs) { loadHistory(); return '<p class="pl-empty">Cargando…</p>'; }
+		if (hs.error) { return '<p class="pl-empty">Sin señal. <button type="button" class="pl-btn pl-btn--link" data-act="hist-retry">Probar otra vez</button></p>'; }
+		var tile = function (label, t) { return '<div class="pl-tile"><span class="pl-muted">' + label + '</span><span class="pl-amount pl-amount--sm">' + esc(t.earnedText) + '</span><span class="pl-muted">' + t.count + (t.count === 1 ? ' carrera' : ' carreras') + '</span></div>'; };
+		var html = (hs.old ? '<p class="pl-muted">Sin señal: es lo de la última vez.</p>' : '') + '<div class="pl-tiles">' + tile('Esta semana', hs.semana) + tile('Este mes', hs.mes) + '</div>';
+		if (!hs.days.length) { return html + '<p class="pl-empty">Todavía no hay carreras entregadas.</p>'; }
+		hs.days.forEach(function (day) {
+			html += '<div class="pl-row pl-day"><span class="pl-strong">' + esc(day.label) + '</span><span class="pl-muted">' + day.count + ' · ' + esc(day.earnedText) + '</span></div>' + rowsHtml(day.rows);
+		});
+		return html;
 	}
 
 	function screenAyuda(id) {
+		// 3.14.69.16 (Pedri 25-oct): se elige la carrera (no solo la última) y «sin señal» se explica en dos líneas.
+		var mine = (state.hoy && state.hoy.carreras) || [];
 		var offerId = /^oferta-/.test(id) ? id.slice(7) : '';
-		var c = offerId ? null : (findCarrera(id) || (state.hoy && state.hoy.carreras[0]) || null);
+		var c = offerId ? null : (findCarrera(id) || mine[0] || null);
 		var o = offerId ? findOffer(offerId) : null;
-		var n = c ? c.number : (o ? o.number : 'NÚMERO');
-		var back = c ? '<a class="pl-back" href="#carrera/' + c.id + '">‹ Mi carrera</a><span class="pl-strong">#' + esc(n) + '</span>' : '<a class="pl-back" href="#carreras">‹ Carreras</a>' + (o ? '<span class="pl-strong">#' + esc(n) + '</span>' : '');
-		var w = c ? wordFor(c) : { recogi: 'Recogí ' + n, entregado: 'Entregado ' + n + ' 44 usd', problema: 'Problema ' + n + ' no estaba', suelto: 'No puedo ' + n };
-		var cmds = [];
-		if (o) { cmds.push(['Yo', 'En el grupo de Mensajerías, debajo del anuncio de #' + n]); }
-		// 3.14.69.8: solo lo que el bot en vivo ya entiende («Recogí N» llega con feat/carrera-palabras; hasta entonces el
-		// «Recogí» sin señal se guarda en la app y se manda solo).
-		cmds.push([w.entregado, 'Lo entregaste y cobraste'], [w.problema, 'Algo salió mal'], [w.suelto, 'La suelta para otro']);
-		var html = '<header class="pl-top pl-top--bar">' + back + '</header>' + (state.offline ? '<div class="pl-offline" role="status">' + icon('senal') + '<span>' + (o ? 'Sin conexión. No se pudo coger la carrera.' : 'Sin conexión. Tu carrera sigue guardada.') + '</span></div>' : '');
-		html += '<main class="pl-main"><h1 class="pl-h1">Escríbelo por WhatsApp</h1><p style="margin:0;color:var(--ink-muted)">El bot de Casa Viva lo entiende. Manda una sola línea a su WhatsApp. «Recogí» no hace falta escribirlo: tócalo en la app y se manda solo cuando vuelva la señal.</p>';
-		if (o) { html += '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>«La cojo» necesita conexión</b>Otro mensajero puede cogerla antes. Escribe <b style="display:inline">Yo</b> en el grupo o prueba otra vez cuando tengas señal.</div></div>'; }
-		html += '<div class="pl-list">' + cmds.map(function (x, i) {
-			return '<div class="pl-li" style="min-height:64px"><div><span class="pl-num" style="font-weight:700">' + esc(x[0]) + '</span><span class="pl-muted">' + esc(x[1]) + '</span></div><button type="button" class="pl-btn pl-btn--link" data-act="copiar" data-text="' + esc(x[0]) + '" aria-label="Copiar ' + esc(x[0]) + '">Copiar</button></div>';
-		}).join('') + '</div>';
+		var n = c ? c.number : (o ? o.number : '');
+		var html = '<header class="pl-top"><h1 class="pl-h1">Ayuda</h1></header>' + offlineBar();
+		html += '<main class="pl-main"><section class="pl-card"><div class="pl-strong">Sin señal</div><div>Lo que ya cogiste sigue aquí, y lo que toques se manda solo al volver la señal.</div><div class="pl-muted">Para ver carreras nuevas hace falta señal.</div></section>';
+		if (state.queue.length) { html += '<div class="pl-note">' + icon('sincronizar', 20) + '<div>' + state.queue.length + (state.queue.length === 1 ? ' acción guardada' : ' acciones guardadas') + ', esperando la señal.</div></div>'; }
+		html += '<h2 class="pl-h2">Por WhatsApp</h2>';
+		if (mine.length > 1) { html += '<div class="pl-chips">' + mine.map(function (x) { return '<a class="pl-chip' + (c && String(x.id) === String(c.id) ? ' is-on' : '') + '" href="#ayuda/' + x.id + '">#' + esc(x.number) + '</a>'; }).join('') + '</div>'; }
+		if (!c && !o) { html += '<p class="pl-empty">Cuando tengas una carrera, aquí salen sus palabras.</p>'; }
+		else {
+			var w = c ? wordFor(c) : null;
+			var cmds = o ? [['Yo', 'En el grupo, debajo del anuncio de #' + n]] : [[w.entregado, 'Entregado y cobrado'], [w.problema, 'Algo salió mal'], [w.suelto, 'La sueltas']];
+			// 3.14.69.8: solo lo que el bot en vivo entiende («Recogí» se toca en la app y va en la cola).
+			html += '<div class="pl-list">' + cmds.map(function (x) {
+				return '<div class="pl-li"><div><span class="pl-num" style="font-weight:700">' + esc(x[0]) + '</span><span class="pl-muted">' + esc(x[1]) + '</span></div><button type="button" class="pl-btn pl-btn--link" data-act="copiar" data-text="' + esc(x[0]) + '" aria-label="Copiar ' + esc(x[0]) + '">Copiar</button></div>';
+			}).join('') + '</div>';
+		}
 		var ps = pushState();
-		if (ps === 'on') { html += '<div class="pl-note pl-note--info">🔔<div><b>Avisos activados</b> en este teléfono. <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="push-off">Desactivar</button></div></div>'
-			+ '<div class="pl-grid2"><button type="button" class="pl-btn pl-btn--secondary" data-act="push-local">Probar aquí</button><button type="button" class="pl-btn pl-btn--secondary' + (state.busy === 'push-test' ? ' pl-btn--busy' : '') + '" data-act="push-test">Probar desde la tienda</button></div>'
-			+ '<p class="pl-muted">«Probar aquí» enseña un aviso sin internet. Si no sale ninguno: Ajustes del teléfono → Apps → Pa\'llá (o Chrome) → Notificaciones → activar, con sonido.</p>'; }
-		else if (ps === 'off') { html += '<div class="pl-note">🔔<div><b>Avisos apagados.</b> <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="push-on">Activar avisos</button></div></div>'; }
-		else if (ps === 'denied') { html += '<div class="pl-note">🔕<div><b>Avisos bloqueados en Chrome.</b> Para activarlos: Chrome → ⋮ → Configuración → Notificaciones → casaviva.company → Permitir.</div></div>'; }
-		html += '<div class="pl-note pl-note--info">' + icon('sincronizar') + '<div>Cuando vuelva la señal, la app se pone al día sola. No tienes que repetir nada.' + (state.queue.length ? ' Tienes <b style="display:inline">' + state.queue.length + '</b> ' + (state.queue.length === 1 ? 'acción guardada' : 'acciones guardadas') + ' esperando la señal.' : '') + '</div></div>';
-		html += '</main><div class="pl-actions"><a class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block" href="https://wa.me/' + esc(C.whatsapp || '') + '" target="_blank" rel="noopener noreferrer">' + icon('mensaje') + 'Abrir WhatsApp</a></div>';
-		return html;
+		if (ps === 'on') { html += '<p class="pl-muted">🔔 Avisos activados · <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="push-off">Quitar</button></p>'; }
+		html += '<a class="pl-btn pl-btn--secondary pl-btn--block" href="https://wa.me/' + esc(C.whatsapp || '') + '" target="_blank" rel="noopener noreferrer">' + icon('mensaje') + 'WhatsApp de Casa Viva</a></main>';
+		return html + nav('ayuda');
 	}
 
 	function screenBlocked() {
@@ -741,7 +773,11 @@
 		if (!el) { return; }
 		var a = el.getAttribute('data-act'), r = route(), c = findCarrera(el.getAttribute('data-id') || r.id);
 		if (a === 'scrim') { if (e.target === el) { go('#carrera/' + r.id); } return; }
+		// 3.14.69.16: «Actualizar» ya no borra la pantalla: el botón gira y la lista se pone al día.
+		if (a === 'refresh' && state.hoy && !state.blocked) { if (state.busy) { return; } state.busy = 'refresh'; render(); flush().then(load).then(function () { state.busy = ''; render(); }); return; }
 		if (a === 'refresh' || a === 'retry') { state.blocked = null; state.loading = true; render(); start(); return; }
+		if (a === 'dtab') { state.dineroTab = el.getAttribute('data-tab'); if (state.dineroTab === 'hist') { state.hist = null; } render(); return; }
+		if (a === 'hist-retry') { state.hist = null; render(); return; }
 		if (a === 'cojo') { claim(el.getAttribute('data-id')); return; }
 		if (a === 'recogi' && c) { act(c, 'recogi'); return; }
 		if (a === 'push-on') { store.set(PFX + 'push-no', null); pushOn(); return; }

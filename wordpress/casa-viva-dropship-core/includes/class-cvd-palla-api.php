@@ -38,6 +38,8 @@ final class CVD_Palla_Api {
 		register_rest_route( self::NS, '/palla/cojo', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'claim' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/palla/carrera', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'action' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/palla/hora', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'eta' ), 'permission_callback' => $auth ) );
+		// 3.14.69.16 (Pedri 25-oct: «ya no puedo ver las carreras que hice ayer… lo llevo en un Excel»): historial y acumulado.
+		register_rest_route( self::NS, '/palla/historial', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'history' ), 'permission_callback' => $auth ) );
 		// 3.14.67.1: pasar la carrera a un compañero (él la acepta en su app; hasta entonces sigue siendo de quien la pasa).
 		register_rest_route( self::NS, '/palla/pasar', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'pass_request' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/palla/pase', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'pass_answer' ), 'permission_callback' => $auth ) );
@@ -472,6 +474,68 @@ final class CVD_Palla_Api {
 			'deadline'    => CVD_Messenger_Delivered_Link::deadline( time() ),
 			'rows'        => $rows,
 		);
+	}
+
+	/**
+	 * GET palla/historial?dias=31 (7–62): mis carreras entregadas por día (hora de Cuba), y lo ganado hoy, esta semana
+	 * (desde el lunes) y este mes. Mismas cuentas que money_today(); solo lectura.
+	 */
+	public static function history( WP_REST_Request $request ): WP_REST_Response {
+		$me = CVD_Palla::request_user( $request );
+		$days = min( 62, max( 7, absint( $request->get_param( 'dias' ) ?: 31 ) ) );
+		$tz = new DateTimeZone( 'America/Havana' );
+		$now = new DateTimeImmutable( 'now', $tz );
+		$from = $now->setTime( 0, 0 )->modify( '-' . ( $days - 1 ) . ' days' );
+		$week = $now->setTime( 0, 0 )->modify( '-' . ( ( (int) $now->format( 'N' ) ) - 1 ) . ' days' )->format( 'Y-m-d' );
+		$month = $now->format( 'Y-m-01' );
+		$today = $now->format( 'Y-m-d' );
+		$orders = wc_get_orders( array( 'limit' => 500, 'type' => 'shop_order', 'orderby' => 'date', 'order' => 'DESC', 'date_created' => '>=' . ( $from->getTimestamp() - 7 * DAY_IN_SECONDS ), 'meta_key' => '_cvd_messenger_user_id', 'meta_value' => $me->ID ) );
+		$by_day = array();
+		$totals = array( 'hoy' => array( 0, 0 ), 'semana' => array( 0, 0 ), 'mes' => array( 0, 0 ) );
+		foreach ( $orders as $order ) {
+			if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund || CVD_Tarjeta_Carrera::is_test( $order ) ) { continue; }
+			$at = (string) $order->get_meta( '_cvd_delivered_at', true );
+			if ( '' === $at || ! in_array( CVD_Tarjeta_Carrera::stage( $order, $me->ID ), array( 'delivered', 'closed' ), true ) ) { continue; }
+			$day = ( new DateTimeImmutable( $at, new DateTimeZone( 'UTC' ) ) )->setTimezone( $tz )->format( 'Y-m-d' );
+			if ( $day < $from->format( 'Y-m-d' ) ) { continue; }
+			$fee = self::fee( $order );
+			$bring = CVD_Tarjeta_Carrera::bring_after( $order )['bring'];
+			$received = '' !== CVD_Messenger_Cash::received_at( $order ) || in_array( (string) $order->get_meta( '_cvd_cash_status', true ), array( 'returned', 'verified' ), true );
+			$by_day[ $day ][] = array(
+				'id'      => $order->get_id(),
+				'number'  => (string) $order->get_order_number(),
+				'zone'    => CVD_Delivery::destination_zone( $order ),
+				'feeText' => $fee > 0 ? self::money( (float) $fee, 'CUP' ) : '—',
+				'fee'     => $fee,
+				'cash'    => CVD_Tarjeta_Carrera::money_text( $bring ),
+				'pending' => $bring && ! $received,
+				'at'      => $at,
+			);
+			foreach ( array( 'hoy' => $today, 'semana' => $week, 'mes' => $month ) as $k => $start ) {
+				if ( $day >= $start ) { $totals[ $k ][0]++; $totals[ $k ][1] += $fee; }
+			}
+		}
+		krsort( $by_day );
+		$week_days = array( 'Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb' );
+		$months = array( 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic' );
+		$list = array();
+		foreach ( $by_day as $day => $rows ) {
+			usort( $rows, static fn( array $a, array $b ): int => strcmp( $a['at'], $b['at'] ) );
+			$d = new DateTimeImmutable( $day, $tz );
+			$earned = array_sum( array_column( $rows, 'fee' ) );
+			$list[] = array(
+				'day'        => $day,
+				'label'      => $day === $today ? 'Hoy' : $week_days[ (int) $d->format( 'w' ) ] . ' ' . $d->format( 'j' ) . ' ' . $months[ (int) $d->format( 'n' ) - 1 ],
+				'count'      => count( $rows ),
+				'earnedText' => self::money( (float) $earned, 'CUP' ),
+				'rows'       => array_map( static function ( array $r ): array { unset( $r['fee'], $r['at'] ); return $r; }, $rows ),
+			);
+		}
+		$out = array( 'ok' => true, 'days' => $list );
+		foreach ( $totals as $k => $t ) { $out[ $k ] = array( 'count' => $t[0], 'earnedText' => self::money( (float) $t[1], 'CUP' ) ); }
+		$response = rest_ensure_response( $out );
+		$response->header( 'Cache-Control', 'no-store' );
+		return $response;
 	}
 
 	// ------------------------------------------------------------------ Idempotencia (cola sin conexión)

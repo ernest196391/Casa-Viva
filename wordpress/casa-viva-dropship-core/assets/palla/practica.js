@@ -115,6 +115,16 @@
 			dinero: { label: days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()] + ' · ' + rows.length + (rows.length === 1 ? ' carrera entregada' : ' carreras entregadas'), delivered: rows.length, earned: earned, earnedText: String(earned).replace(/\B(?=(\d{3})+(?!\d))/g, '.'), pending: pending, pendingText: moneyText(pending), deadline: deadline(hour()), rows: rows }
 		};
 	}
+	// 3.14.69.16: historial de práctica = lo entregado hoy en la práctica + dos días de ejemplo.
+	function historial() {
+		var today = hoy().dinero, fee = function (n) { return money(n, 'CUP'); };
+		var past = [
+			{ label: 'Ayer', count: 3, earnedText: fee(6300), rows: [{ id: 1, number: '8001', zone: 'Vedado', feeText: fee(1500), cash: '25 USD', pending: false }, { id: 2, number: '8002', zone: 'Playa', feeText: fee(2300), cash: '44 USD', pending: false }, { id: 3, number: '8003', zone: 'Cerro', feeText: fee(2500), cash: '', pending: false }] },
+			{ label: 'Hace 2 días', count: 1, earnedText: fee(2000), rows: [{ id: 4, number: '7990', zone: 'Lawton', feeText: fee(2000), cash: '20 USD', pending: false }] }
+		];
+		var days = (today.rows.length ? [{ label: 'Hoy', count: today.rows.length, earnedText: fee(today.earned), rows: today.rows }] : []).concat(past);
+		return { ok: true, days: days, hoy: { count: today.rows.length, earnedText: fee(today.earned) }, semana: { count: today.rows.length + 4, earnedText: fee(today.earned + 8300) }, mes: { count: today.rows.length + 21, earnedText: fee(today.earned + 41200) } };
+	}
 	var MSG = {
 		won: function (n) { return '✅ #' + n + ' es tuya. Ve a recogerla a la tienda.'; },
 		yours: function (n) { return '#' + n + ' ya era tuya.'; },
@@ -234,7 +244,7 @@
 					if (!W.online) { reject(new TypeError('Sin señal (práctica)')); return; }
 					var key = body && body.cid ? String(body.cid) : '';
 					if (key && W.cids[key]) { resolve({ status: 200, offline: false, data: Object.assign({ replay: true }, W.cids[key]) }); return; }
-					var data = path === 'hoy' ? hoy() : path === 'cojo' ? claim(body || {}) : path === 'carrera' ? action(body || {}) : path === 'hora' ? hora(body || {}) : path === 'pasar' ? pasar(body || {}) : path === 'pase' ? pase(body || {}) : { code: 'rest_no_route' };
+					var data = path === 'hoy' ? hoy() : path.indexOf('historial') === 0 ? historial() : path === 'cojo' ? claim(body || {}) : path === 'carrera' ? action(body || {}) : path === 'hora' ? hora(body || {}) : path === 'pasar' ? pasar(body || {}) : path === 'pase' ? pase(body || {}) : { code: 'rest_no_route' };
 					if (key) { W.cids[key] = data; }
 					save();
 					resolve({ status: data.code ? 404 : 200, offline: false, data: data });
