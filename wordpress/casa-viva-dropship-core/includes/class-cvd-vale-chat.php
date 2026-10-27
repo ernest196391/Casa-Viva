@@ -363,6 +363,10 @@ final class CVD_Vale_Chat {
 			'customer'    => array( 'phone' => preg_replace( '/\D+/', '', (string) $order->get_billing_phone() ), 'first' => trim( (string) $order->get_billing_first_name() ) ),
 			'trackingUrl' => $tracking,
 			'valeText'    => class_exists( 'CVD_WhatsApp_Receipt_Template' ) ? CVD_WhatsApp_Receipt_Template::render( $order ) : '',
+			// 3.14.70 (27-oct, Ernesto: #5582 Gretel): la venta es de quien arma el vale aunque el cliente ya tuviera otra
+			// gestora. El bot se lo dice con otherGestoraText; nunca con cuál (privacidad).
+			'otherGestora'     => 'yes' === (string) $order->get_meta( CVD_Attribution::OTHER_GESTORA_META, true ),
+			'otherGestoraText' => 'yes' === (string) $order->get_meta( CVD_Attribution::OTHER_GESTORA_META, true ) ? CVD_Attribution::OTHER_GESTORA_TEXT . ' La venta es tuya: la armaste tú.' : '',
 		);
 	}
 }

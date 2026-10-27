@@ -75,6 +75,21 @@ final class CVD_Cuban_Checkout {
 		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'flush_notes' ), 5 );
 		add_action( 'woocommerce_admin_order_data_after_billing_address', array( __CLASS__, 'admin_order_fields' ) );
 		add_action( 'woocommerce_order_details_after_customer_details', array( __CLASS__, 'customer_order_fields' ) );
+		add_action( 'woocommerce_before_thankyou', array( __CLASS__, 'other_gestora_notice' ), 5 );
+	}
+
+	/**
+	 * 3.14.70 (27-oct, Ernesto: #5582 Gretel): en la confirmación del pedido, a la gestora con sesión que lo hizo, si el
+	 * cliente ya compró con otra gestora: aviso que no impide nada (la venta es suya). Nunca dice con cuál (privacidad).
+	 * El cliente que compra solo no lo ve.
+	 */
+	public static function other_gestora_notice( $order_id ): void {
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof WC_Order || ! class_exists( 'CVD_Attribution' ) || 'yes' !== (string) $order->get_meta( CVD_Attribution::OTHER_GESTORA_META, true ) ) { return; }
+		$me = get_current_user_id();
+		if ( ! $me || absint( $order->get_meta( '_cvd_owner_user_id', true ) ) !== $me ) { return; }
+		echo '<p class="cvd-other-gestora" role="status" style="margin:0 0 12px;padding:10px 12px;border-radius:10px;background:#fff7e6;border:1px solid #f0c36d;color:#5c4000">'
+			. '<strong>' . esc_html( CVD_Attribution::OTHER_GESTORA_TEXT ) . '</strong> La venta es tuya: la hiciste tú.</p>';
 	}
 
 	public static function default_country(): string {

@@ -63,6 +63,12 @@ final class CVD_Attribution_Overrides {
 		if ( $order->get_meta( '_cvd_attribution_locked', true ) ) {
 			return;
 		}
+		// 3.14.70 (27-oct, Ernesto: #5582 Gretel): la reasignación cambia el CLIENTE FIJO, que solo cuenta en pedidos sin
+		// gestora. Si el pedido trae gestora (sesión de gestora, enlace/código, carrito de su tienda), la venta es de ella:
+		// lo decide CVD_Attribution::resolve_and_attach (prioridad 30), que también avisa «ya compró con otra gestora».
+		if ( class_exists( 'CVD_Attribution' ) && method_exists( 'CVD_Attribution', 'checkout_seller' ) && CVD_Attribution::checkout_seller( $order ) ) {
+			return;
+		}
 		$override = self::latest_override( $identities );
 		if ( ! $override ) {
 			return;

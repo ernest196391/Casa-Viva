@@ -119,7 +119,8 @@ final class CVD_Voucher_Intake {
 		return $users[0]->ID;
 	}
 
-	private static function created_projection( WC_Order $order, bool $replayed ): array { return array( 'orderId' => $order->get_id(), 'orderNumber' => $order->get_order_number(), 'status' => $order->get_status(), 'shippingFeeCup' => CVD_Shipping_Rates::order_fee( $order ), 'shippingStatus' => $order->get_meta( '_cvd_shipping_rate_status', true ), 'replayed' => $replayed, 'url' => $order->get_view_order_url() ); }
+	// 3.14.70 (27-oct, Ernesto: #5582 Gretel): otherGestora = el cliente ya compró con otra gestora (sin decir cuál).
+	private static function created_projection( WC_Order $order, bool $replayed ): array { return array( 'orderId' => $order->get_id(), 'orderNumber' => $order->get_order_number(), 'status' => $order->get_status(), 'shippingFeeCup' => CVD_Shipping_Rates::order_fee( $order ), 'shippingStatus' => $order->get_meta( '_cvd_shipping_rate_status', true ), 'replayed' => $replayed, 'url' => $order->get_view_order_url(), 'otherGestora' => 'yes' === (string) $order->get_meta( CVD_Attribution::OTHER_GESTORA_META, true ) ); }
 
 	public static function can_confirm(): bool {
 		if ( ! is_user_logged_in() ) { return false; }

@@ -22,6 +22,12 @@ final class CVD_Attribution {
 	 * cliente que ya compró (D97: eso va por su teléfono/correo, no por esta marca).
 	 */
 	public const LEAVE_CODES = array( 'salir', 'casaviva' );
+	/**
+	 * 3.14.70 (27-oct, Ernesto: #5582 Gretel): marca del pedido «el cliente ya compró con otra gestora» (o ya era de otra).
+	 * Solo sí/no: nunca se guarda ni se enseña cuál (privacidad). La leen la confirmación de la web y el vale por chat.
+	 */
+	public const OTHER_GESTORA_META = '_cvd_other_gestora';
+	public const OTHER_GESTORA_TEXT = 'Este cliente ya compró con otra gestora.';
 	private static bool $bypass_checked = false;
 
 	public static function register(): void {
@@ -59,8 +65,8 @@ final class CVD_Attribution {
 	 *
 	 * 3.13.79 (Ernesto, 13-oct): el último enlace manda. Antes mandaba el primero que se abrió en el
 	 * navegador (400 días): Thaly abría SU enlace y veía 30 en vez de su precio de 35 porque su teléfono
-	 * guardaba el de otra gestora, y la venta se le habría apuntado a la otra. El cliente que ya compró
-	 * sigue siendo de su gestora: eso lo decide resolve_and_attach() por su teléfono/correo (find_existing_owner).
+	 * guardaba el de otra gestora, y la venta se le habría apuntado a la otra. 3.14.70: la venta es de la gestora de
+	 * este enlace aunque el cliente ya tuviera otra; su cliente fijo solo cuenta sin enlace ni vale (resolve_and_attach).
 	 */
 	public static function current_referral_owner(): ?array {
 		$owner = self::owner_from_request();
@@ -84,6 +90,8 @@ final class CVD_Attribution {
 	 * 2. Si no, la PRIMERA gestora que lo trajo: su primer pedido con gestora que no esté cancelado, fallido ni devuelto
 	 *    (aunque aún no se haya entregado), o la que lo apuntó a mano en «Mis clientes» (sin plazo). Gana la más antigua.
 	 * El teléfono se compara normalizado (con o sin 53 delante). null = cliente sin gestora (venta directa, sin comisión).
+	 * 3.14.70 (27-oct, Ernesto: #5582 Gretel): en un pedido nuevo esta gestora solo se lleva la venta si el pedido NO
+	 * trae gestora (ni vale, ni sesión de gestora, ni enlace/código); si la trae, gana la que vende (resolve_and_attach).
 	 * → array( owner_user_id, owner_type, referral_code, source ) o null.
 	 */
 	public static function customer_owner( string $phone, string $email = '', int $customer_id = 0 ): ?array {
@@ -144,8 +152,8 @@ final class CVD_Attribution {
 		}
 
 		// 3.13.79: el último enlace manda (ver current_referral_owner). Si el navegador ya guarda este
-		// mismo enlace no se reescribe; si guarda el de otra gestora, se cambia por este. Los clientes
-		// que ya compraron siguen con su gestora por su identidad, no por esta marca del navegador.
+		// mismo enlace no se reescribe; si guarda el de otra gestora, se cambia por este. 3.14.70: la venta
+		// es de la gestora de este enlace; el cliente fijo (por identidad) solo cuenta sin enlace ni vale.
 		$saved_owner = self::owner_from_saved_referral();
 		if ( $saved_owner && hash_equals( (string) ( $saved_owner['referral_code'] ?? '' ), $code ) ) {
 			if ( ! defined( 'DONOTCACHEPAGE' ) ) {
@@ -278,9 +286,13 @@ final class CVD_Attribution {
 		self::resolve_and_attach( $order, $phone, $email, $order->get_customer_id() );
 	}
 
-	/** Adjunta un pedido creado por una operadora sin saltarse el ownership permanente del cliente. */
+	/**
+	 * Pedido creado por una operadora (vale por chat, vale de NEXO). 3.14.70 (27-oct, Ernesto: #5582 Gretel): si lo arma
+	 * una gestora ($preferred_owner_id), la venta es de ELLA aunque el cliente ya tenga otra gestora. Sin gestora, la del
+	 * cliente (cliente fijo). No mira el navegador de quien lo crea antes que al cliente fijo.
+	 */
 	public static function attach_operator_order( WC_Order $order, int $preferred_owner_id = 0 ): void {
-		self::resolve_and_attach( $order, $order->get_billing_phone(), $order->get_billing_email(), $order->get_customer_id(), $preferred_owner_id );
+		self::resolve_and_attach( $order, $order->get_billing_phone(), $order->get_billing_email(), $order->get_customer_id(), $preferred_owner_id, false, true );
 	}
 
 	public static function attach_store_api_order( WC_Order $order, WP_REST_Request $request ): void {
@@ -308,45 +320,42 @@ final class CVD_Attribution {
 		if ( class_exists( 'CVD_Clients' ) ) { CVD_Clients::from_order( $order ); }
 	}
 
-	private static function resolve_and_attach( WC_Order $order, string $phone, string $email, int $customer_id, int $preferred_owner_id = 0, bool $admin_order = false ): void {
+	private static function resolve_and_attach( WC_Order $order, string $phone, string $email, int $customer_id, int $preferred_owner_id = 0, bool $admin_order = false, bool $operator_order = false ): void {
 		if ( $order->get_meta( '_cvd_attribution_locked', true ) ) {
 			return;
 		}
 
 		$identities = self::identities( $phone, $email, $customer_id );
+		$order->delete_meta_data( self::OTHER_GESTORA_META );
 
-		// Permanent customer ownership always wins. This protects a gestora's client
-		// when the client later arrives organically, through another link, or when a
-		// gestora places the order on the client's behalf.
-		// 3.14.52 (D97): la primera gestora del cliente para siempre (pedido no cancelado aunque no esté entregado, o
-		// apuntado a mano sin plazo), con el teléfono con o sin 53; ver customer_owner().
-		$owner = self::customer_owner( $phone, $email, $customer_id );
+		// 3.14.52 (D97): cliente fijo = la primera gestora del cliente (pedido no cancelado aunque no esté entregado, o
+		// apuntado a mano sin plazo, o reasignación aprobada), con el teléfono con o sin 53; ver customer_owner().
+		$fixed = self::customer_owner( $phone, $email, $customer_id );
 		if ( $admin_order ) {
 			// Pedido hecho a mano en el admin: sin gestora del cliente, solo vale un cupón de gestora puesto en el pedido.
-			$owner = $owner ?: self::owner_from_coupon( $order );
-			$preferred_owner_id = 0;
-			if ( ! $owner ) {
-				$owner = array( 'owner_user_id' => 0, 'owner_type' => 'organic', 'referral_code' => '', 'source' => 'organic' );
+			$owner = $fixed ?: self::owner_from_coupon( $order );
+		} else {
+			// 3.14.70 (27-oct, Ernesto: #5582 Gretel). Orden de la atribución:
+			// 1. Quien ARMA el vale (gestora del vale por chat o de NEXO, gestora con sesión que hace el pedido en la web)
+			//    o TRAE al cliente con su enlace/código (?ref=, marca guardada, cupón, carrito de su tienda) cobra ESA venta,
+			//    aunque el teléfono ya fuera de otra gestora. Antes ganaba siempre el cliente fijo (#5582 salió a Neisy
+			//    aunque lo vendió Dany).
+			// 2. El cliente fijo solo cuando el pedido no trae gestora (el cliente compra solo en la web, sin enlace ni vale).
+			// 3. Si no, venta directa. A la que arma se le avisa «Este cliente ya compró con otra gestora» (sin decir cuál).
+			// Pedidos viejos no se tocan (la atribución queda bloqueada al crearse) y las reasignaciones siguen valiendo
+			// para el cliente fijo (CVD_Attribution_Overrides).
+			$owner = self::seller_owner( $order, $preferred_owner_id, ! $operator_order );
+			if ( $owner ) {
+				if ( self::sold_by_other_gestora( $phone, $email, $customer_id, absint( $owner['owner_user_id'] ), $fixed ) ) {
+					$order->update_meta_data( self::OTHER_GESTORA_META, 'yes' );
+				}
+			} else {
+				$owner = $fixed;
 			}
-		}
-		if ( ! $owner && $preferred_owner_id ) {
-			$user = get_userdata( $preferred_owner_id );
-			$code = self::sanitize_code( (string) get_user_meta( $preferred_owner_id, '_cvd_referral_code', true ) );
-			if ( $user && $code && 'approved' === get_user_meta( $preferred_owner_id, '_cvd_account_status', true ) && array_intersect( array( 'cvd_gestora', 'cvd_influencer' ), (array) $user->roles ) ) {
-				$owner = array( 'owner_user_id' => $preferred_owner_id, 'owner_type' => in_array( 'cvd_influencer', (array) $user->roles, true ) ? 'influencer' : 'gestora', 'referral_code' => $code, 'source' => 'operator_confirmed_voucher' );
+			// Vale de una operadora sin gestora y sin cliente fijo: como antes, el enlace o el carrito de ese navegador.
+			if ( ! $owner && $operator_order ) {
+				$owner = self::browser_owner( $order );
 			}
-		}
-		if ( ! $owner ) {
-			$owner = self::owner_from_saved_referral();
-		}
-		if ( ! $owner ) {
-			$owner = self::owner_from_request();
-		}
-		if ( ! $owner ) {
-			$owner = self::owner_from_coupon( $order );
-		}
-		if ( ! $owner ) {
-			$owner = self::owner_from_cart();
 		}
 		if ( ! $owner ) {
 			$owner = array( 'owner_user_id' => 0, 'owner_type' => 'organic', 'referral_code' => '', 'source' => 'organic' );
@@ -477,6 +486,59 @@ final class CVD_Attribution {
 			} while ( $page <= $max_pages );
 		}
 		return $best;
+	}
+
+	/**
+	 * 3.14.70: gestora que hace ESTA venta, o null si el pedido no trae gestora. En orden: la gestora del vale
+	 * ($preferred_owner_id); y, en el pago de la web ($use_browser), la gestora con sesión que hace el pedido, su enlace
+	 * (marca guardada o ?ref=), un cupón de gestora o el carrito de su tienda.
+	 */
+	private static function seller_owner( WC_Order $order, int $preferred_owner_id, bool $use_browser ): ?array {
+		$owner = $preferred_owner_id ? self::program_owner( $preferred_owner_id, 'operator_confirmed_voucher' ) : null;
+		if ( ! $owner && $use_browser ) {
+			$owner = self::program_owner( get_current_user_id(), 'seller_session' ) ?: self::browser_owner( $order );
+		}
+		return $owner ?: null;
+	}
+
+	/** 3.14.70: ¿este pedido del pago de la web trae gestora? (para que la reasignación del cliente fijo no se la quite). */
+	public static function checkout_seller( WC_Order $order ): ?array {
+		return self::seller_owner( $order, 0, true );
+	}
+
+	/** Enlace o carrito de este navegador (marca guardada, ?ref=, cupón de gestora, carrito de su tienda). */
+	private static function browser_owner( WC_Order $order ): ?array {
+		return self::owner_from_saved_referral() ?: self::owner_from_request() ?: self::owner_from_coupon( $order ) ?: self::owner_from_cart();
+	}
+
+	/** Cuenta de gestora/influencer aprobada y con código → owner; si no, null. */
+	private static function program_owner( int $user_id, string $source ): ?array {
+		$user = $user_id ? get_userdata( $user_id ) : false;
+		if ( ! $user || 'approved' !== get_user_meta( $user_id, '_cvd_account_status', true ) || ! array_intersect( array( 'cvd_gestora', 'cvd_influencer' ), (array) $user->roles ) ) { return null; }
+		$code = self::sanitize_code( (string) get_user_meta( $user_id, '_cvd_referral_code', true ) );
+		if ( ! $code ) { return null; }
+		return array( 'owner_user_id' => $user_id, 'owner_type' => in_array( 'cvd_influencer', (array) $user->roles, true ) ? 'influencer' : 'gestora', 'referral_code' => $code, 'source' => $source );
+	}
+
+	/**
+	 * 3.14.70: ¿el cliente ya es o ya compró con OTRA gestora distinta de $seller_id? Mira su cliente fijo (reasignación,
+	 * primer pedido, «Mis clientes») y cualquier pedido vivo suyo con otra gestora. Solo sí/no: nunca dice cuál.
+	 */
+	public static function sold_by_other_gestora( string $phone, string $email, int $customer_id, int $seller_id, ?array $fixed = null ): bool {
+		$fixed = $fixed ?? self::customer_owner( $phone, $email, $customer_id );
+		$fixed_id = $fixed ? absint( $fixed['owner_user_id'] ?? 0 ) : 0;
+		if ( $fixed_id && $fixed_id !== $seller_id ) { return true; }
+		foreach ( self::lookup_identities( $phone, $email, $customer_id ) as $identity ) {
+			$orders = wc_get_orders( array( 'limit' => 100, 'orderby' => 'date', 'order' => 'ASC', 'status' => array( 'processing', 'on-hold', 'completed' ), 'meta_key' => '_cvd_identity_' . $identity['type'], 'meta_value' => $identity['hash'] ) );
+			foreach ( (array) $orders as $past ) {
+				if ( ! $past instanceof WC_Order ) { continue; }
+				$stored_hash = (string) $past->get_meta( '_cvd_identity_' . $identity['type'], true );
+				if ( ! $stored_hash || ! hash_equals( $identity['hash'], $stored_hash ) ) { continue; }
+				$past_owner = absint( $past->get_meta( '_cvd_owner_user_id', true ) );
+				if ( $past_owner && $past_owner !== $seller_id && 'organic' !== sanitize_key( (string) $past->get_meta( '_cvd_owner_type', true ) ) ) { return true; }
+			}
+		}
+		return false;
 	}
 
 	private static function owner_from_saved_referral(): ?array {

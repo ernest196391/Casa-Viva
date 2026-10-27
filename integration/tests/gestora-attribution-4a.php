@@ -111,27 +111,49 @@ cvt_assert(
 cvt_assert( 'referral_link' === $order_one->get_meta( '_cvd_attribution_source', true ), 'La fuente inicial no quedó registrada como referral_link.' );
 cvt_assert( 'yes' === $order_one->get_meta( '_cvd_attribution_locked', true ), 'La atribución inicial no quedó bloqueada.' );
 
-// 2. Un enlace posterior B no roba el cliente ya vinculado a A. Desde 3.13.79 en el NAVEGADOR manda el último enlace
-//    (marca para clientes nuevos), pero quien ya compró sigue con su gestora por su identidad (D97: para siempre).
+// 2. 3.14.70 (27-oct, Ernesto: #5582 Gretel): un enlace posterior B se lleva ESA venta (quien trae al cliente con su
+//    enlace cobra), con el aviso «ya compró con otra gestora». El cliente fijo sigue siendo A (paso 3).
 $_GET['ref'] = 'CVB4A';
 CVD_Attribution::capture_referral();
 $current = CVD_Attribution::current_referral_owner();
 cvt_assert( $current && (int) $current['owner_user_id'] === $gestora_b->ID, 'El último enlace del navegador debe ser el de B (3.13.79). owner=' . cvt_owner_debug( $current ) );
 $order_two = cvt_attach( cvt_order( $customer->ID, '5355510001', $customer->user_email, 'Cliente Uno' ) );
-cvt_assert( (int) $order_two->get_meta( '_cvd_owner_user_id', true ) === $gestora_a->ID, 'Un segundo enlace reasignó un cliente permanente.' );
-cvt_assert( 'linked_customer' === $order_two->get_meta( '_cvd_attribution_source', true ), 'El cliente recurrente no se resolvió desde su vínculo permanente.' );
+cvt_assert( (int) $order_two->get_meta( '_cvd_owner_user_id', true ) === $gestora_b->ID, 'La venta con el enlace de B no fue para B (3.14.70).' );
+cvt_assert( 'referral_link' === $order_two->get_meta( '_cvd_attribution_source', true ), 'La venta con enlace no quedó como referral_link.' );
+cvt_assert( 'yes' === $order_two->get_meta( CVD_Attribution::OTHER_GESTORA_META, true ), 'Falta el aviso «ya compró con otra gestora».' );
 
-// 3. Navegación orgánica posterior mantiene la gestora original.
+// 3. Navegación orgánica posterior (sin enlace ni vale): el cliente fijo A, sin aviso.
 cvt_clear_referral();
-$order_three = cvt_attach( cvt_order( $customer->ID, '5355510001', $customer->user_email, 'Cliente Uno' ) );
-cvt_assert( (int) $order_three->get_meta( '_cvd_owner_user_id', true ) === $gestora_a->ID, 'La navegación orgánica hizo perder la gestora a un cliente vinculado.' );
+$order_fixed = cvt_attach( cvt_order( $customer->ID, '5355510001', $customer->user_email, 'Cliente Uno' ) );
+cvt_assert( (int) $order_fixed->get_meta( '_cvd_owner_user_id', true ) === $gestora_a->ID, 'Sin enlace ni vale, el pedido no fue para el cliente fijo A.' );
+cvt_assert( 'linked_customer' === $order_fixed->get_meta( '_cvd_attribution_source', true ), 'El cliente recurrente no se resolvió desde su vínculo permanente.' );
+cvt_assert( '' === (string) $order_fixed->get_meta( CVD_Attribution::OTHER_GESTORA_META, true ), 'Sin gestora en el pedido no hay aviso.' );
 
-// 4. Una gestora puede comprar por un cliente ya vinculado sin que su propia cuenta WordPress sea tratada como identidad del cliente.
+// 4. Una gestora con sesión compra por un cliente ya vinculado a A: 3.14.70, la venta es de quien la hace (B), con aviso;
+//    su propia cuenta WordPress no se trata como identidad del cliente.
 cvt_clear_referral();
-$_GET['ref'] = 'CVB4A';
+wp_set_current_user( $gestora_b->ID );
 $order_delegated_existing = cvt_attach( cvt_order( $gestora_b->ID, '5355510001', $customer->user_email, 'Cliente Uno' ) );
-cvt_assert( (int) $order_delegated_existing->get_meta( '_cvd_owner_user_id', true ) === $gestora_a->ID, 'La cuenta operadora B robó un cliente ya vinculado a A.' );
+cvt_assert( (int) $order_delegated_existing->get_meta( '_cvd_owner_user_id', true ) === $gestora_b->ID, 'La gestora B con sesión no se quedó la venta que hizo (3.14.70).' );
+cvt_assert( 'seller_session' === $order_delegated_existing->get_meta( '_cvd_attribution_source', true ), 'La venta de la gestora con sesión no quedó como seller_session.' );
+cvt_assert( 'yes' === $order_delegated_existing->get_meta( CVD_Attribution::OTHER_GESTORA_META, true ), 'Falta el aviso a B.' );
 cvt_assert( '' === (string) $order_delegated_existing->get_meta( '_cvd_identity_customer', true ), 'La cuenta de una gestora se guardó como identidad del cliente delegado.' );
+wp_set_current_user( 0 );
+
+// 4b. Vale de una operadora con gestora (vale por chat / NEXO): la de ese vale, aunque el cliente sea de A.
+cvt_clear_referral();
+$order_vale = cvt_order( 0, '5355510001', $customer->user_email, 'Cliente Uno' );
+CVD_Attribution::attach_operator_order( $order_vale, $gestora_b->ID );
+cvt_assert( (int) $order_vale->get_meta( '_cvd_owner_user_id', true ) === $gestora_b->ID, 'El vale de B se ató a la gestora anterior del teléfono.' );
+cvt_assert( 'operator_confirmed_voucher' === $order_vale->get_meta( '_cvd_attribution_source', true ), 'Fuente del vale incorrecta.' );
+cvt_assert( 'yes' === $order_vale->get_meta( CVD_Attribution::OTHER_GESTORA_META, true ), 'Falta el aviso en el vale.' );
+$order_vale->delete( true );
+
+// 4c. Vale de una operadora SIN gestora: el cliente fijo A (como antes).
+$order_vale_plain = cvt_order( 0, '5355510001', $customer->user_email, 'Cliente Uno' );
+CVD_Attribution::attach_operator_order( $order_vale_plain, 0 );
+cvt_assert( (int) $order_vale_plain->get_meta( '_cvd_owner_user_id', true ) === $gestora_a->ID, 'El vale sin gestora no fue al cliente fijo.' );
+$order_vale_plain->delete( true );
 
 // 5. Una gestora puede comprar por un cliente nuevo usando su enlace; el teléfono/email del cliente quedan vinculados.
 cvt_clear_referral();
