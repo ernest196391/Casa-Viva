@@ -328,6 +328,7 @@ final class CVD_Palla_Api {
 		$alt = 8 === strlen( $alt ) ? '53' . $alt : $alt;
 		$alt = strlen( $alt ) >= 8 && substr( $alt, -8 ) !== substr( $phone, -8 ) ? $alt : '';
 		$assembly = class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_assembly( $order ) : null;
+		$map = self::map_for( $order );
 		return array(
 			'id'       => $order->get_id(),
 			'number'   => (string) $order->get_order_number(),
@@ -348,7 +349,8 @@ final class CVD_Palla_Api {
 				'alt'        => $alt,
 				'altLabel'   => '' !== $alt ? self::phone_label( $alt ) : '',
 			),
-			'map'      => class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_map_url( $order ) : '',
+			'map'      => $map[0],
+			'mapFrom'  => $map[1], // 3.14.69.17: pedido | entrega | cliente (de otra entrega al mismo cliente) | ''
 			'items'    => CVD_Order_Lines::texts( $order ),
 			'pickup'   => array(
 				'place'     => self::STORE,
@@ -474,6 +476,53 @@ final class CVD_Palla_Api {
 			'deadline'    => CVD_Messenger_Delivered_Link::deadline( time() ),
 			'rows'        => $rows,
 		);
+	}
+
+	// ------------------------------------------------------------------ Ubicación del cliente (3.14.69.17)
+	// Ernesto 27-oct: «que la app lo lleve a la ubicación del cliente». Casi ningún pedido trae coordenadas (1 de 39), así
+	// que al tocar «Entregado» la app manda el GPS del mensajero (en la puerta del cliente) y se guarda en el pedido
+	// (_cvd_entrega_geo). La próxima carrera del mismo teléfono y la misma dirección ya trae el punto exacto para «Ir».
+	public const GEO_META = '_cvd_entrega_geo';
+
+	private static function save_geo( int $order_id, WP_REST_Request $request ): void {
+		$lat = (float) $request->get_param( 'lat' );
+		$lon = (float) $request->get_param( 'lon' );
+		$acc = absint( $request->get_param( 'acc' ) );
+		if ( ! $lat || ! $lon || $lat < 19.5 || $lat > 23.5 || $lon < -85.2 || $lon > -74 || ! $acc || $acc > 200 ) { return; } // solo Cuba y con buena precisión
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof WC_Order ) { return; }
+		$order->update_meta_data( self::GEO_META, wp_json_encode( array( 'lat' => round( $lat, 6 ), 'lon' => round( $lon, 6 ), 'acc' => $acc, 'at' => gmdate( 'c' ) ) ) );
+		$order->save_meta_data();
+	}
+
+	private static function geo_of( WC_Order $order ): ?array {
+		$geo = json_decode( (string) $order->get_meta( self::GEO_META, true ), true );
+		return is_array( $geo ) && isset( $geo['lat'], $geo['lon'] ) ? $geo : null;
+	}
+
+	private static function same_address( WC_Order $a, WC_Order $b ): bool {
+		$norm = static fn( WC_Order $o ): string => preg_replace( '/[^a-z0-9]/', '', strtolower( remove_accents( (string) ( $o->get_shipping_address_1() ?: $o->get_billing_address_1() ) ) ) );
+		return '' === $norm( $a ) || $norm( $a ) === $norm( $b );
+	}
+
+	/** El mapa de la carrera: el del pedido, o el GPS de su entrega, o el de otra entrega al mismo cliente y dirección. */
+	private static function map_for( WC_Order $order ): array {
+		$url = class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::order_map_url( $order ) : '';
+		if ( '' !== $url ) { return array( $url, 'pedido' ); }
+		$osm = static fn( array $g ): string => 'https://www.openstreetmap.org/?mlat=' . $g['lat'] . '&mlon=' . $g['lon'] . '#map=18/' . $g['lat'] . '/' . $g['lon'];
+		$own = self::geo_of( $order );
+		if ( $own ) { return array( $osm( $own ), 'entrega' ); }
+		$phone = substr( preg_replace( '/\D+/', '', (string) $order->get_billing_phone() ), -8 );
+		if ( 8 !== strlen( $phone ) ) { return array( '', '' ); }
+		global $wpdb;
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT order_id FROM {$wpdb->prefix}wc_order_addresses WHERE address_type='billing' AND phone LIKE %s AND order_id<>%d ORDER BY order_id DESC LIMIT 15", '%' . $wpdb->esc_like( $phone ), $order->get_id() ) );
+		foreach ( array_map( 'absint', (array) $ids ) as $id ) {
+			$other = wc_get_order( $id );
+			if ( ! $other instanceof WC_Order || substr( preg_replace( '/\D+/', '', (string) $other->get_billing_phone() ), -8 ) !== $phone ) { continue; }
+			$geo = self::geo_of( $other );
+			if ( $geo && self::same_address( $order, $other ) ) { return array( $osm( $geo ), 'cliente' ); }
+		}
+		return array( '', '' );
 	}
 
 	/**
@@ -673,6 +722,7 @@ final class CVD_Palla_Api {
 		);
 		$code = CVD_Tarjeta_Carrera::submit( $order, $me, $action, $post );
 		$out = array( 'result' => $code, 'action' => $action, 'number' => $number, 'message' => self::message( $code, $number ) );
+		if ( 'entregado' === $action && 'delivered' === $code ) { self::save_geo( $id, $request ); } // 3.14.69.17
 		$fresh = wc_get_order( $id );
 		if ( $fresh instanceof WC_Order ) {
 			if ( in_array( $code, array( 'delivered', 'already' ), true ) ) { $out['message'] .= ' ' . CVD_Tarjeta_Carrera::bring_sentence( CVD_Tarjeta_Carrera::bring_after( $fresh ), self::delivered_ts( $fresh ) ); }

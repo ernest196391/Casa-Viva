@@ -290,6 +290,15 @@
 		if (m) { return 'geo:' + m[1] + ',' + m[2] + '?q=' + m[1] + ',' + m[2] + '(' + encodeURIComponent('#' + c.number + ' ' + (cu.first || '')) + ')'; }
 		return 'geo:0,0?q=' + encodeURIComponent(where);
 	}
+	// 3.14.69.17: la ubicación del teléfono en 6 s como mucho (si no, se entrega igual, sin ubicación). Solo con buena precisión.
+	function withGeo(cb) {
+		if (P || !navigator.geolocation) { cb({}); return; }
+		var done = false, finish = function (g) { if (done) { return; } done = true; clearTimeout(t); cb(g); };
+		var t = setTimeout(function () { finish({}); }, 6000);
+		navigator.geolocation.getCurrentPosition(function (p) {
+			finish(p.coords.accuracy <= 200 ? { lat: +p.coords.latitude.toFixed(6), lon: +p.coords.longitude.toFixed(6), acc: Math.max(1, Math.round(p.coords.accuracy)) } : {});
+		}, function () { finish({}); }, { enableHighAccuracy: true, timeout: 5500, maximumAge: 60000 });
+	}
 	// 3.14.69.16 (Pedri 25-oct: «lo tocas y no se nota»): el botón gira mientras actualiza.
 	function refreshBtn() {
 		return '<button type="button" class="pl-btn pl-btn--icon' + (state.busy === 'refresh' ? ' pl-btn--busy pl-spin' : '') + '" data-act="refresh" aria-label="Actualizar">' + icon('sincronizar', 22) + '</button>';
@@ -505,7 +514,7 @@
 		else if (c.when) { html += '<div class="pl-muted">Pidió ' + esc(c.when) + '</div>'; }
 		if (cu.note) { html += '<div class="pl-muted">📝 ' + esc(cu.note) + '</div>'; }
 		html += '<div class="pl-grid2">' + (cu.phone ? '<a class="pl-btn pl-btn--secondary" href="tel:+' + esc(cu.phone) + '">' + icon('tel', 20) + 'Llamar</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin teléfono</span>')
-			+ (c.map || cu.address || cu.zone ? '<a class="pl-btn pl-btn--secondary" href="' + esc(goUrl(c)) + '" target="_blank" rel="noopener noreferrer">' + icon('mapa', 20) + 'Ir</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin mapa</span>') + '</div>';
+			+ (c.map || cu.address || cu.zone ? '<a class="pl-btn pl-btn--secondary" href="' + esc(goUrl(c)) + '" target="_blank" rel="noopener noreferrer">' + icon('mapa', 20) + (c.mapFrom ? 'Ir 📍' : 'Ir') + '</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin mapa</span>') + '</div>';
 		if (cu.alt) { html += '<div class="pl-muted">Otro: <a href="tel:+' + esc(cu.alt) + '">' + esc(cu.altLabel) + '</a></div>'; }
 		html += '</section>';
 		// Paquete: qué llevas (y de dónde, si aún no lo recogió).
@@ -810,7 +819,9 @@
 		if (a === 'entregado' && c) {
 			var plan = payPlan(c);
 			if (!plan.ok) { state.form.err = 'Escribe cuánto cobraste de los productos.'; render(); return; }
-			act(c, 'entregado', plan.payload); return;
+			// 3.14.69.17: con el «Entregado» va el GPS (la puerta del cliente) para que la próxima vez «Ir» llegue exacto.
+			state.busy = 'entregado-' + c.id; render();
+			withGeo(function (g) { state.busy = ''; act(c, 'entregado', Object.assign({}, plan.payload, g)); }); return;
 		}
 		if (a === 'problema' && c) {
 			var f = state.form;
