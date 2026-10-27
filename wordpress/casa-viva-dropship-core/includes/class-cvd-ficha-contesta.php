@@ -621,7 +621,8 @@ final class CVD_Ficha_Contesta {
 	private static function queue_answer_notices( array $r, WC_Product $product, string $line, int $photo_id ): int {
 		$product = self::parent_of( $product );
 		$name = wp_strip_all_tags( $product->get_name() );
-		$url = (string) get_permalink( $product->get_id() );
+		// 3.14.69.14 (error #112, 27-oct): sin el ?ref= de quien contesta (Lennys); cada gestora recibe el suyo.
+		$url = remove_query_arg( array( 'ref', 'cv_ref' ), (string) get_permalink( $product->get_id() ) );
 		$photo = $photo_id ? (string) wp_get_attachment_image_url( $photo_id, 'large' ) : '';
 		$n = 0;
 		$total = count( $r['askers'] );
@@ -637,9 +638,21 @@ final class CVD_Ficha_Contesta {
 			$phone = (string) ( $a['p'] ?? '' );
 			if ( '' === $phone && ! empty( $a['u'] ) ) { $phone = self::phone_of_user( (int) $a['u'] ); }
 			if ( '' === $phone ) { continue; }
-			$n += (int) self::queue( array( 'pregunta_id' => $r['id'], 'role' => 'gestora', 'phone' => '53' . substr( $phone, -8 ), 'name' => (string) ( $a['n'] ?? '' ), 'photo_url' => $photo, 'body' => self::answer_notice( $first, $name, $line, $url, max( 0, $total - 1 ) ), 'test' => $r['test'] ) );
+			$n += (int) self::queue( array( 'pregunta_id' => $r['id'], 'role' => 'gestora', 'phone' => '53' . substr( $phone, -8 ), 'name' => (string) ( $a['n'] ?? '' ), 'photo_url' => $photo, 'body' => self::answer_notice( $first, $name, $line, self::url_for_asker( $url, $a, $phone ), max( 0, $total - 1 ) ), 'test' => $r['test'] ) );
 		}
 		return $n;
+	}
+
+	/** El enlace del producto con el código de la gestora que preguntó (aprobada); si no se sabe quién es, sin código. */
+	private static function url_for_asker( string $url, array $a, string $phone ): string {
+		$uid = absint( $a['u'] ?? 0 );
+		if ( ! $uid && class_exists( 'CVD_Vale_Chat' ) ) {
+			$g = CVD_Vale_Chat::gestora_by_phone( $phone );
+			$uid = $g ? (int) $g->ID : 0;
+		}
+		if ( ! $uid || 'approved' !== get_user_meta( $uid, '_cvd_account_status', true ) ) { return $url; }
+		$code = strtoupper( (string) preg_replace( '/[^A-Z0-9_-]/i', '', (string) get_user_meta( $uid, '_cvd_referral_code', true ) ) );
+		return '' !== $code ? add_query_arg( 'ref', $code, $url ) : $url;
 	}
 
 	/* ================================================================ página del producto (gestoras) */
