@@ -438,9 +438,14 @@
 		if (!waiting()) { return ''; }
 		return '<div class="pl-wait" role="status"><span>🛵 <b>Esperando carreras</b> · ' + (soundReady() ? 'pantalla encendida, suena al salir una' : 'toca la pantalla una vez para activar el sonido') + '</span><button type="button" class="pl-btn pl-btn--link" data-act="wait-off">Parar</button></div>';
 	}
+	// 3.14.69.18: dentro de la app de Android (puente window.PallaApp) los avisos y el sonido los hace la app, aunque esté
+	// cerrada (ntfy del VPS, sin Google): aquí no hace falta «Activar sonido».
+	var NATIVE = !P && window.PallaApp && typeof window.PallaApp.setToken === 'function' ? window.PallaApp : null;
+	function nativeToken(token) { if (NATIVE && token) { try { NATIVE.setToken(token); } catch (e) {} } }
+	function nativeStatus() { try { return NATIVE && NATIVE.status ? String(NATIVE.status()) : ''; } catch (e) { return ''; } }
 	// 3.14.69.16 (Ernesto 27-oct: «quitar botones innecesarios y textos explicativos»): una sola línea, sin explicación.
 	function soundCard() {
-		if (waiting()) { return ''; }
+		if (waiting() || NATIVE) { return ''; }
 		return '<button type="button" class="pl-btn pl-btn--secondary pl-btn--block" data-act="' + (soundReady() ? 'wait-on' : 'snd-on') + '">' + (soundReady() ? '🛵 Esperando carreras' : '🔊 Activar sonido') + '</button>';
 	}
 	// Cualquier toque: deja sonar al teléfono y para la bocina (sin redibujar aquí, para no perder el toque).
@@ -726,7 +731,8 @@
 			}).join('') + '</div>';
 		}
 		var ps = pushState();
-		if (ps === 'on') { html += '<p class="pl-muted">🔔 Avisos activados · <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="push-off">Quitar</button></p>'; }
+		if (NATIVE) { html += '<p class="pl-muted">🔔 Avisos de la app: ' + esc(nativeStatus() || 'activos') + '</p>'; }
+		else if (ps === 'on') { html += '<p class="pl-muted">🔔 Avisos activados · <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="push-off">Quitar</button></p>'; }
 		html += '<a class="pl-btn pl-btn--secondary pl-btn--block" href="https://wa.me/' + esc(C.whatsapp || '') + '" target="_blank" rel="noopener noreferrer">' + icon('mensaje') + 'WhatsApp de Casa Viva</a></main>';
 		return html + nav('ayuda');
 	}
@@ -734,7 +740,9 @@
 	function screenBlocked() {
 		var b = state.blocked || {};
 		var title = { palla_token: 'Tu enlace ya no vale', palla_closed: 'Todavía no está abierta', palla_not_tester: 'Pa\'llá está en prueba', palla_not_messenger: 'Solo para mensajeros', palla_nolink: 'Abre tu enlace personal' }[b.code] || 'No puedes entrar ahora';
-		return '<main class="pl-closed"><div class="pl-logo" aria-hidden="true">P</div><h1>' + esc(title) + '</h1><p>' + esc(b.message || '') + '</p><button type="button" class="pl-btn pl-btn--secondary" data-act="retry">Probar otra vez</button></main>';
+		// 3.14.69.18: en la app de Android, si se abrió sin el enlace, se puede pegar aquí.
+		var paste = NATIVE && (b.code === 'palla_nolink' || b.code === 'palla_token') ? '<label class="pl-field" style="width:100%">Pega tu enlace de Pa\'llá<input id="pl-enlace" type="url" inputmode="url" autocomplete="off" placeholder="https://casaviva.company/palla/#k=…"></label><button type="button" class="pl-btn pl-btn--primary pl-btn--block" data-act="enlace">Entrar</button>' : '';
+		return '<main class="pl-closed"><div class="pl-logo" aria-hidden="true">P</div><h1>' + esc(title) + '</h1>' + (paste ? '' : '<p>' + esc(b.message || '') + '</p>') + paste + '<button type="button" class="pl-btn pl-btn--secondary" data-act="retry">Probar otra vez</button></main>';
 	}
 
 	function practiceBar() {
@@ -785,6 +793,11 @@
 		// 3.14.69.16: «Actualizar» ya no borra la pantalla: el botón gira y la lista se pone al día.
 		if (a === 'refresh' && state.hoy && !state.blocked) { if (state.busy) { return; } state.busy = 'refresh'; render(); flush().then(load).then(function () { state.busy = ''; render(); }); return; }
 		if (a === 'refresh' || a === 'retry') { state.blocked = null; state.loading = true; render(); start(); return; }
+		if (a === 'enlace') {
+			var km = /k=([0-9a-f.]+)/i.exec((document.getElementById('pl-enlace') || {}).value || '');
+			if (!km) { showToast('Ese no es un enlace de Pa\'llá.'); return; }
+			store.set(PFX + 'k', km[1]); state.blocked = null; state.loading = true; render(); start(); return;
+		}
 		if (a === 'dtab') { state.dineroTab = el.getAttribute('data-tab'); if (state.dineroTab === 'hist') { state.hist = null; } render(); return; }
 		if (a === 'hist-retry') { state.hist = null; render(); return; }
 		if (a === 'cojo') { claim(el.getAttribute('data-id')); return; }
@@ -897,6 +910,7 @@
 	function start() {
 		return getToken().then(function (token) {
 			state.token = token;
+			nativeToken(token); // 3.14.69.18: la app de Android se conecta a los avisos con este enlace
 			if (!token) {
 				if (!state.blocked) { state.blocked = { code: 'palla_nolink', message: 'Pídele a la tienda tu enlace de Pa\'llá y ábrelo en este teléfono. Es solo tuyo: no lo compartas.' }; }
 				state.loading = false; render(); return;

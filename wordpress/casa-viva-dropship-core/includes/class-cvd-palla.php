@@ -159,6 +159,7 @@ final class CVD_Palla {
 	}
 
 	public static function route(): void {
+		self::asset_links();
 		$kind = self::path_kind( (string) ( $_SERVER['REQUEST_URI'] ?? '' ) );
 		if ( '' === $kind ) { return; }
 		if ( ! defined( 'DONOTCACHEPAGE' ) ) { define( 'DONOTCACHEPAGE', true ); }
@@ -171,6 +172,25 @@ final class CVD_Palla {
 		if ( 'tienda' === $kind ) { self::store_page(); }
 		if ( 'guia' === $kind ) { self::guide(); }
 		self::page();
+	}
+
+	/**
+	 * 3.14.69.18: /.well-known/assetlinks.json — Android comprueba aquí que la app de Pa'llá es nuestra (huella de su firma,
+	 * opción cvd_palla_app_sha256) y entonces el enlace personal (casaviva.company/palla/#k=…) abre la app en vez de Chrome.
+	 */
+	private static function asset_links(): void {
+		$path = (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
+		if ( '/.well-known/assetlinks.json' !== $path ) { return; }
+		$sha = strtoupper( preg_replace( '/[^0-9A-Fa-f:]/', '', (string) get_option( 'cvd_palla_app_sha256', '' ) ) );
+		$list = '' === $sha ? array() : array( array(
+			'relation' => array( 'delegate_permission/common.handle_all_urls' ),
+			'target'   => array( 'namespace' => 'android_app', 'package_name' => 'company.casaviva.palla', 'sha256_cert_fingerprints' => array( $sha ) ),
+		) );
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) { define( 'DONOTCACHEPAGE', true ); }
+		header( 'Content-Type: application/json' );
+		header( 'Cache-Control: public, max-age=3600' );
+		echo wp_json_encode( $list, JSON_UNESCAPED_SLASHES );
+		exit;
 	}
 
 	/** GET /palla/sesion con sesión de WordPress abierta → {token}. Pide X-Palla: 1 (otro sitio no puede mandarla). */

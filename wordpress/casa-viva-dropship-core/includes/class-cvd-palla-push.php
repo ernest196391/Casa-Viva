@@ -39,8 +39,28 @@ final class CVD_Palla_Push {
 			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'subscribe' ), 'permission_callback' => $auth ),
 			array( 'methods' => 'DELETE', 'callback' => array( __CLASS__, 'unsubscribe' ), 'permission_callback' => $auth ),
 		) );
+		// 3.14.69.18: la app instalable de Pa'llá (Android) pide aquí su tema de avisos de ntfy (sin Google).
+		register_rest_route( self::NS, '/palla/app', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'app_config' ), 'permission_callback' => $auth ) );
 		// 3.14.69.4: botón «Probar desde la tienda» en Ayuda (una vez cada 30 s).
 		register_rest_route( self::NS, '/palla/push/prueba', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'self_test' ), 'permission_callback' => $auth ) );
+	}
+
+	/**
+	 * GET palla/app → { ok, url, topic } para la app de Android: se conecta a NUESTRO ntfy (VPS) y avisa con la app cerrada.
+	 * Mismo permiso que los avisos (cvd_palla_push: prueba = probadores). El tema se crea la primera vez (secreto; en ntfy
+	 * «palla-*» es de solo lectura para todos y solo publica Core).
+	 */
+	public static function app_config( WP_REST_Request $request ): WP_REST_Response {
+		$me = CVD_Palla::request_user( $request );
+		if ( ! self::allowed( $me ) ) { return self::out( array( 'ok' => false, 'result' => 'not_allowed' ) ); }
+		$url = (string) get_option( 'cvd_palla_ntfy_url', '' );
+		if ( 0 !== strpos( $url, 'https://' ) ) { return self::out( array( 'ok' => false, 'result' => 'no_server' ) ); }
+		$topic = (string) get_user_meta( $me->ID, self::NTFY_TOPIC, true );
+		if ( '' === $topic ) {
+			$topic = 'palla-' . $me->ID . '-' . bin2hex( random_bytes( 8 ) );
+			update_user_meta( $me->ID, self::NTFY_TOPIC, $topic );
+		}
+		return self::out( array( 'ok' => true, 'url' => untrailingslashit( $url ), 'topic' => $topic ) );
 	}
 
 	public static function self_test( WP_REST_Request $request ): WP_REST_Response {
