@@ -69,6 +69,8 @@ jobs:
           node artifacts/tests/test-catalog-presentation-7c3.mjs
           node artifacts/tests/test-launch-polish-001.mjs
           node artifacts/tests/test-market-bridge.mjs
+          node artifacts/tests/test-panel-bajo-pedido.mjs
+          php artifacts/tests/test-panel-bajo-pedido.php
 
       - name: Validar privacidad dependienta y administración
         run: node artifacts/tests/test-staff-privacy-5a.mjs

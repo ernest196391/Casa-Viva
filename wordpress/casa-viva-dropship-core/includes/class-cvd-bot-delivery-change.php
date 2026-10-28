@@ -150,15 +150,23 @@ final class CVD_Bot_Delivery_Change {
 	 * Tope de 40 por hora para que un error del bot no llene el buzón. → { sent: bool } | { sent: false, reason }.
 	 */
 	public static function owner_mail( WP_REST_Request $request ): WP_REST_Response {
+		return self::out( self::mail_owner( (string) $request->get_param( 'asunto' ), (string) $request->get_param( 'texto' ) ) );
+	}
+
+	/**
+	 * 3.14.71 (D121): el mismo correo a Ernesto, para usarlo también desde Core (p. ej. «Lennys publicó MK-…» desde el panel).
+	 * Mismo destino y mismo tope de 40 por hora. $footer = quién firma el aviso.
+	 */
+	public static function mail_owner( string $subject, string $body, string $footer = 'VivaBot' ): array {
 		$to = sanitize_email( (string) get_option( 'cvd_bot_aviso_correo', '' ) ) ?: sanitize_email( (string) get_option( 'admin_email' ) );
-		$subject = self::text( $request->get_param( 'asunto' ), 140 );
-		$body = trim( wp_strip_all_tags( (string) $request->get_param( 'texto' ) ) );
-		if ( '' === $to || '' === $body ) { return self::out( array( 'sent' => false, 'reason' => 'missing' ) ); }
+		$subject = self::text( $subject, 140 );
+		$body = trim( wp_strip_all_tags( $body ) );
+		if ( '' === $to || '' === $body ) { return array( 'sent' => false, 'reason' => 'missing' ); }
 		$count = (int) get_transient( 'cvd_bot_aviso_correo_hora' );
-		if ( $count >= 40 ) { return self::out( array( 'sent' => false, 'reason' => 'limit' ) ); }
+		if ( $count >= 40 ) { return array( 'sent' => false, 'reason' => 'limit' ); }
 		set_transient( 'cvd_bot_aviso_correo_hora', $count + 1, HOUR_IN_SECONDS );
-		$sent = wp_mail( $to, '[Casa Viva] ' . ( '' !== $subject ? $subject : 'Aviso del bot' ), mb_substr( $body, 0, 5000 ) . "\n\n— VivaBot (aviso automático, no hace falta responder)" );
-		return self::out( array( 'sent' => (bool) $sent ) );
+		$sent = wp_mail( $to, '[Casa Viva] ' . ( '' !== $subject ? $subject : 'Aviso del bot' ), mb_substr( $body, 0, 5000 ) . "\n\n— " . $footer . ' (aviso automático, no hace falta responder)' );
+		return array( 'sent' => (bool) $sent );
 	}
 
 	/** Mensajero elegido (CVD_Direct_Dispatch): dispatch_ready() se lo asigna directo en vez de publicarlo en el grupo. */
