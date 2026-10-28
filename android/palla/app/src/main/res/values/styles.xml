@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mismos colores que la web: tinta #121212 y amarillo #FFC21A. -->
+    <style name="Palla" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#121212</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:colorAccent">#FFC21A</item>
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+</resources>
