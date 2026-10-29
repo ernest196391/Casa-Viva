@@ -564,6 +564,7 @@ final class CVD_Plugin {
 		CVD_Pilot_Accounts::register();
 		CVD_Inventory::register();
 		CVD_Sales::register();
+		CVD_Cierre::register(); // Pilar 2: «Cerrar mi turno» en Ventas
 		CVD_Payouts::register();
 		CVD_Payout_Avisos::register(); // 3.14.23: avisos por WhatsApp de los pagos de comisiones (vía VivaBot).
 		CVD_Payout_Pay_Page::register(); // 3.14.23: página «Pagar a…» con enlace firmado y la captura privada.
