@@ -331,7 +331,8 @@ final class CVD_Tarjeta_Carrera {
 
 		if ( 'picked_up' === $kind ) {
 			$store( '🛵 ' . $n . ': ' . $m . ' ya tiene el paquete (tocó «Recogí» en su tarjeta). Quedó como «Entregado al mensajero»; no tienes que marcarlo.' );
-			$to_gestora( '🛵 Tu pedido *' . $n . '*' . $client_txt . ' ya salió de la tienda con ' . $m . '.' );
+			// 3.14.72.2 (Ernesto 28-oct, «como Mandao»): con el enlace del mapa para seguirlo (o pasárselo a su cliente).
+			$to_gestora( '🛵 Tu pedido *' . $n . '*' . $client_txt . ' ya salió de la tienda con ' . $m . '.' . ( class_exists( 'CVD_Delivery' ) ? "\nSíguelo en el mapa (puedes pasárselo a tu cliente): " . CVD_Delivery::tracking_url( $order ) : '' ) );
 		} elseif ( 'delivered' === $kind ) {
 			$after = self::bring_after( $order );
 			$owed = self::money_text( $after['products'] );

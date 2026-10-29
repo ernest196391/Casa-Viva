@@ -126,10 +126,33 @@
         if (link) link.href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(payload.location.latitude + ',' + payload.location.longitude);
       }
     }
+    drawRuta(payload.ruta);
     if (payload.customerConfirmed) {
       var form = tracking.querySelector('[data-delivery-rating]');
       if (form) form.outerHTML = '<div class="cvd-confirmed-delivery"><strong>Entrega confirmada</strong><span>Gracias por evaluar el servicio.</span></div>';
     }
+  }
+
+  // 3.14.72.2 (Ernesto 28-oct, «como Mandao»): el mapa del recorrido de Pa'llá. assets/palla/mapa.js (y Leaflet) solo se
+  // cargan si hay una carrera en curso; entregado o sin mensajero, el mapa se esconde.
+  var mapaCarga = null;
+  function drawRuta(r) {
+    var box = tracking.querySelector('[data-ruta]');
+    if (!box) return;
+    if (!r || !r.active) { box.hidden = true; return; }
+    box.hidden = false;
+    if (!mapaCarga) {
+      mapaCarga = window.PallaMapa ? Promise.resolve() : new Promise(function (ok, fail) {
+        var s = document.createElement('script');
+        s.src = window.cvdLiveTracking.mapaUrl;
+        s.onload = ok;
+        s.onerror = function () { mapaCarga = null; fail(new Error('mapa')); };
+        document.head.appendChild(s);
+      });
+    }
+    mapaCarga.then(function () { return window.PallaMapa.ruta(box.querySelector('[data-ruta-map]'), r); })
+      .then(function (txt) { var t = box.querySelector('[data-ruta-text]'); if (t) t.textContent = txt; })
+      .catch(function () { var t = box.querySelector('[data-ruta-text]'); if (t) t.textContent = 'El mapa no cargó ahora (¿señal?). Lo intento de nuevo.'; });
   }
 
   function pollTracking() {

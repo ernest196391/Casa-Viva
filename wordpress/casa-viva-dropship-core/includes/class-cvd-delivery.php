@@ -941,6 +941,8 @@ final class CVD_Delivery {
 		$courier = self::tracking_courier_text( $view );
 		$html .= '</ol><p class="cvd-tracking-courier" data-tracking-courier' . ( '' === $courier ? ' hidden' : '' ) . '>' . esc_html( $courier ) . '</p>';
 		$html .= '<div class="cvd-courier-location" data-courier-location hidden><strong>Ubicación del mensajero</strong><span data-location-time>Esperando actualización…</span><a class="cvd-secondary" data-location-link target="_blank" rel="noopener">Abrir en el mapa</a></div>';
+		// 3.14.72.2 (Ernesto 28-oct, «como Mandao»): el mapa del recorrido del mensajero; live-tracking.js lo pinta y lo pone al día.
+		$html .= '<div class="cvd-ruta" data-ruta hidden><div class="cvd-ruta-map" data-ruta-map></div><p class="cvd-ruta-text" data-ruta-text></p></div>';
 		if ( 'pickup' === $status ) {
 			// 3.14.9 (D67): pedido de una gestora visto por su cliente: sin la dirección de la tienda ni «Cómo llegar».
 			$gestora_name = class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::order_gestora_name( $order ) : '';

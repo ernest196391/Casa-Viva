@@ -550,6 +550,41 @@ final class CVD_Palla_Api {
 		return 2 * $r * asin( min( 1.0, sqrt( $a ) ) );
 	}
 
+	/**
+	 * 3.14.72.2 (fase 2 del mapa): lo que pinta el mapa del seguimiento (gestora y cliente) y el de la tienda. Solo con la
+	 * carrera en curso (va a la tienda o va al cliente): entregada o sin mensajero, no se enseña dónde está.
+	 * → null | { active, stage: tienda|cliente, name, pos: {lat, lon, ago}, trail: [[lat, lon]…], store, dest, arrived, eta }
+	 */
+	public static function route_view( WC_Order $order ): ?array {
+		$uid = absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
+		if ( ! $uid ) { return null; }
+		$stage = CVD_Tarjeta_Carrera::stage( $order, $uid );
+		if ( ! in_array( $stage, array( 'pickup', 'route' ), true ) ) { return array( 'active' => false, 'delivered' => in_array( $stage, array( 'delivered', 'closed' ), true ) ); }
+		$user = get_userdata( $uid );
+		$trail = json_decode( (string) $order->get_meta( self::TRAIL_META, true ), true );
+		$trail = is_array( $trail ) ? array_slice( $trail, -300 ) : array();
+		$last = $trail ? end( $trail ) : null;
+		$store = array_map( 'floatval', array_slice( explode( ',', (string) get_option( 'cvd_palla_tienda_geo', '23.11504,-82.39749' ) ), 0, 2 ) );
+		$dest = self::coords( self::map_for( $order )[0] );
+		$target = 'pickup' === $stage ? $store : $dest;
+		$eta = null;
+		if ( $last && $target && count( $target ) === 2 ) {
+			// En moto por La Habana: unos 300 m por minuto, y las calles alargan la línea recta un 35 %.
+			$eta = max( 1, (int) round( self::meters( (float) $last[0], (float) $last[1], $target[0], $target[1] ) * 1.35 / 300 ) );
+		}
+		return array(
+			'active'  => true,
+			'stage'   => 'pickup' === $stage ? 'tienda' : 'cliente',
+			'name'    => $user ? self::first( (string) $user->display_name ) : 'El mensajero',
+			'pos'     => $last ? array( 'lat' => (float) $last[0], 'lon' => (float) $last[1], 'ago' => max( 0, time() - (int) $last[2] ) ) : null,
+			'trail'   => array_map( static fn( $p ): array => array( (float) $p[0], (float) $p[1] ), $trail ),
+			'store'   => count( $store ) === 2 ? $store : null,
+			'dest'    => $dest,
+			'arrived' => '' !== (string) $order->get_meta( '_cvd_llegue_at', true ),
+			'eta'     => $eta,
+		);
+	}
+
 	/** POST palla/ubicacion {points: [{lat, lon, acc, t}]} → { ok, saved, arrived: [números] }. */
 	public static function track( WP_REST_Request $request ): WP_REST_Response {
 		$me = CVD_Palla::request_user( $request );

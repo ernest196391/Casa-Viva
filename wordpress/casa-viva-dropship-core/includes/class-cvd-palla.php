@@ -311,6 +311,7 @@ final class CVD_Palla {
 		};
 		$now = new DateTimeImmutable( 'now', new DateTimeZone( 'America/Havana' ) );
 		$body = '<header class="pl-top"><div><div class="pl-brand">Reparto en vivo</div><div class="pl-sub">Casa Viva · ' . esc_html( $now->format( 'g:i a' ) ) . ' · se pone al día sola cada minuto</div></div></header><main class="pl-main">';
+		$body .= self::store_map( $g ); // 3.14.72.2: mensajeros en camino, en el mapa
 		$body .= $section( 'Sin mensajero', 'Todas las carreras tienen mensajero.', $g['free'], static function ( array $r ) use ( $card ): string {
 			$late = $r['minutes'] >= 30;
 			return $card( $r, '<span class="pl-badge pl-badge--' . ( $late ? 'danger' : 'warning' ) . '">' . esc_html( $r['minutes'] < 60 ? $r['minutes'] . ' min' : floor( $r['minutes'] / 60 ) . ' h' ) . '</span>' );
@@ -323,6 +324,23 @@ final class CVD_Palla {
 			return '<article class="pl-card"><div class="pl-row" style="align-items:center"><span class="pl-strong">#' . esc_html( (string) $r['number'] ) . ' · ' . esc_html( (string) $r['messengerName'] ) . '</span><span class="pl-num pl-strong">' . esc_html( (string) $r['label'] ) . '</span></div><div class="pl-muted">Entregado ' . esc_html( (string) $r['sinceLocal'] ) . ( null !== $r['hours'] && $r['hours'] >= 24 ? ' · <b>hace más de un día</b>' : '' ) . '</div></article>';
 		} );
 		self::store_shell( $body . '</main>' );
+	}
+
+	/**
+	 * 3.14.72.2 (Ernesto 28-oct, «como Mandao»): el mapa de la tienda con los mensajeros que vienen a recoger o van de
+	 * camino (los que usan Pa'llá y mandan su recorrido). Sin ninguno con ubicación, no sale nada.
+	 */
+	private static function store_map( array $groups ): string {
+		$live = array();
+		foreach ( array_merge( $groups['pickup'], $groups['route'] ) as $r ) {
+			$ruta = $r['ruta'] ?? null;
+			if ( ! is_array( $ruta ) || empty( $ruta['active'] ) || empty( $ruta['pos'] ) || $ruta['pos']['ago'] > 30 * MINUTE_IN_SECONDS ) { continue; }
+			$live[] = array( 'name' => $ruta['name'], 'number' => $r['number'], 'zone' => $r['zone'], 'stage' => $ruta['stage'], 'pos' => $ruta['pos'], 'dest' => $ruta['dest'] );
+		}
+		if ( ! $live ) { return ''; }
+		return '<h2 class="pl-h2">En el mapa (' . count( $live ) . ')</h2><div id="pl-mapa-tienda" style="height:300px"></div>'
+			. '<script src="' . esc_url( self::asset( 'mapa.js' ) ) . '"></script>'
+			. '<script>PallaMapa.tienda(document.getElementById("pl-mapa-tienda"),' . wp_json_encode( $live ) . ').catch(function(){});</script>';
 	}
 
 	/** Las carreras abiertas por paso, sin datos que no hagan falta en la tienda. */
@@ -355,6 +373,8 @@ final class CVD_Palla {
 				'change'     => CVD_Tarjeta_Carrera::money_text( CVD_Tarjeta_Carrera::store_change( $order ) ),
 				'fee'        => $fee > 0 ? CVD_Messenger_Delivered_Link::money( (float) $fee, 'CUP' ) : '',
 				'minutes'    => '' !== $offered ? max( 0, (int) floor( ( time() - (int) strtotime( $offered . ' UTC' ) ) / 60 ) ) : 0,
+				// 3.14.72.2: el recorrido de Pa'llá para el mapa de la tienda (solo por recoger / en camino).
+				'ruta'       => in_array( $key, array( 'pickup', 'route' ), true ) && class_exists( 'CVD_Palla_Api' ) ? CVD_Palla_Api::route_view( $order ) : null,
 			);
 		}
 		usort( $groups['free'], static fn( array $x, array $y ): int => $y['minutes'] <=> $x['minutes'] );

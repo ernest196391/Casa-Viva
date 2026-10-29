@@ -35,6 +35,7 @@ final class CVD_Live_Tracking {
 			'baseUrl' => rest_url( 'casa-viva/v1/delivery/' ),
 			'restNonce' => is_user_logged_in() ? wp_create_nonce( 'wp_rest' ) : '',
 			'isMessenger' => is_user_logged_in() && 'mensajero' === CVD_Registration::context_type( wp_get_current_user() ),
+			'mapaUrl' => CVD_URL . 'assets/palla/mapa.js?v=' . rawurlencode( CVD_VERSION ), // 3.14.72.2: se carga solo si hay recorrido
 		) );
 	}
 
@@ -122,6 +123,8 @@ final class CVD_Live_Tracking {
 			'eta'=>$view['eta'],
 			'courierText'=>CVD_Delivery::tracking_courier_text( $view ),
 			'location'=>$location,
+			// 3.14.72.2: el recorrido de Pa'llá para el mapa (a la tienda y luego al cliente), solo con la carrera en curso.
+			'ruta'=>class_exists( 'CVD_Palla_Api' ) ? CVD_Palla_Api::route_view( $order ) : null,
 			'customerConfirmed'=>(bool)$order->get_meta( '_cvd_customer_confirmed_at', true ),
 			'rating'=>absint( $order->get_meta( '_cvd_customer_rating', true ) ),
 			'confirmationAllowed'=>in_array( $status, array( 'delivered','cash_returned','closed' ), true ) && ! $order->get_meta( '_cvd_customer_confirmed_at', true ),
