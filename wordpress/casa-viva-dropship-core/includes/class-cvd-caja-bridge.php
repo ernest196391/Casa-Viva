@@ -115,6 +115,8 @@ final class CVD_Caja_Bridge {
 			'products' => $products,
 			'supplier' => $supplier,
 			'test' => class_exists( 'CVD_Delivery' ) && CVD_Delivery::is_test_order( $order ),
+			// 3.14.72 (Pilar 3): reserva de la recogida; la caja la pinta en rojo para que nadie la cancele ni la entregue a otro.
+			'reserva' => class_exists( 'CVD_Reserva' ) && 'pickup' === $kind ? CVD_Reserva::get( $order ) : null,
 		);
 	}
 

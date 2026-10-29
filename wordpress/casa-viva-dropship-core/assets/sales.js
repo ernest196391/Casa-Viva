@@ -53,7 +53,7 @@
   async function api(url, options) {
     var response = await fetch(url, Object.assign({ credentials: "same-origin", headers: { "X-WP-Nonce": cvdSales.nonce, "Content-Type": "application/json" } }, options || {}));
     var data = await response.json();
-    if (!response.ok) throw new Error(data.message || "No se pudo completar la operación.");
+    if (!response.ok) { var failure = new Error(data.message || "No se pudo completar la operación."); failure.data = data; throw failure; }
     return data;
   }
   // 3.14.7 (Nana): cada producto con su precio, uno por renglón («2× Toalla — 15 USD c/u = 30 USD»).
@@ -101,8 +101,14 @@
     return ok ? out : null;
   }
   function changeText(list) { return (list || []).map(function (c) { return c.amount + " " + c.currency; }).join(" + "); }
+  // 3.14.72: «Reservar» / «Quitar reserva» en las recogidas abiertas (la dependienta apunta lo que prometió la gestora o el cliente).
+  function reservaButton(order) {
+    if (!order.isPickup || order.status === "delivered" || order.status === "cancelled") return "";
+    var has = order.reserva && order.reserva.active;
+    return '<button type="button" class="cvd-sale-extra" data-reserva-order="' + order.id + '" data-number="' + escapeText(order.number) + '" data-gestora="' + escapeText((order.people && order.people.gestora && order.people.gestora.name) || "") + '"' + (has ? ' data-clear="1"' : '') + '>' + (has ? 'Quitar reserva' : 'Reservar') + '</button>';
+  }
   function extraButtons(order) {
-    return changeButton(order) + (order.canEdit ? '<button type="button" class="cvd-sale-extra" data-edit-order="' + order.id + '">Cambiar pedido</button>' : "")
+    return reservaButton(order) + changeButton(order) + (order.canEdit ? '<button type="button" class="cvd-sale-extra" data-edit-order="' + order.id + '">Cambiar pedido</button>' : "")
       + (order.canCancel ? '<button type="button" class="cvd-sale-extra is-warning" data-cancel-order="' + order.id + '" data-number="' + escapeText(order.number) + '">Cancelar pedido</button>' : "");
   }
   // Mensajería: en qué punto va la entrega. Quién lo lleva sale arriba, en «Mensajero» (peopleRows).
@@ -156,6 +162,13 @@
     }
     return rows.join("");
   }
+  // 3.14.72 (Pilar 3, caso #5551): la reserva de una recogida («Kay pidió guardarlo hasta mañana») en rojo, arriba de la tarjeta.
+  function reservaBanner(order) {
+    var r = order.reserva;
+    if (!r || order.status === "delivered" || order.status === "cancelled") return "";
+    if (r.active) return '<p class="cvd-sale-reserva is-active" role="alert">⛔ ' + escapeText(r.text) + (r.note ? '<small>' + escapeText(r.note) + '</small>' : '') + '<small>No lo canceles ni lo des a otra persona' + (cvdSales.isAdmin ? '' : '. Si hace falta, habla con Lennys') + '.</small></p>';
+    return '<p class="cvd-sale-reserva is-expired" role="note">⏰ ' + escapeText(r.text) + '<small>Pregunta si el cliente viene.</small></p>';
+  }
   function paint(data) {
     var cards = [["new", "Nuevos"], ["preparing", "Preparando"], ["ready", "Listos"], ["with_courier", "En camino"]];
     summary.innerHTML = cards.map(function (x) { return '<button type="button" data-summary-status="' + x[0] + '"><span>' + x[1] + '</span><strong>' + (data.summary[x[0]] || 0) + "</strong></button>"; }).join("");
@@ -175,7 +188,7 @@
       var wa = order.phone ? '<a class="cvd-sale-wa" target="_blank" rel="noopener" href="https://wa.me/' + escapeText(order.phone.replace(/\D/g, "")) + '">WhatsApp</a>' : "";
       // Pedido de prueba (3.13.54): cartel grande arriba; el servidor no lo deja salir al reparto.
       var test = order.testOrder ? '<p class="cvd-sale-test" role="note" style="margin:0 0 10px;padding:10px 12px;border-radius:12px;background:#b3261e;color:#fff;font-weight:800;font-size:1.15em;letter-spacing:.02em;text-align:center">PRUEBA — no preparar<br><small style="font-weight:600;font-size:.75em">No sale al reparto ni a ningún mensajero</small></p>' : '';
-      return '<article class="cvd-sale-card' + (order.testOrder ? ' is-test' : '') + '">' + test + '<div class="cvd-sale-top"><div><span class="cvd-sale-status is-' + order.status + '">' + escapeText(order.statusLabel) + '</span><h2>Pedido #' + escapeText(order.number) + '</h2><small>' + escapeText(order.date) + '</small></div><div class="cvd-sale-code"><canvas data-order-code="' + escapeText(order.orderCode) + '"></canvas><small>' + escapeText(order.orderCode) + '</small></div><strong>' + escapeText(order.total) + (order.shippingCup && !/CUP/i.test(order.total) ? ' + ' + escapeText(order.shippingCup) + ' CUP' : '') + '</strong></div><div class="cvd-sale-data"><p><b>Cliente</b><span>' + escapeText(order.customer) + " · " + phone + '</span></p>' + peopleRows(order) + '<p><b>Entrega</b><span>' + escapeText(order.fulfillment + " · " + order.address) + '</span></p>' + paymentRow(order) + changeRow(order) + assemblyRow(order) + (order.deliveryWhen ? '<p><b>Día</b><span' + (order.deliveryFuture ? ' style="color:#a8641c;font-weight:700"' : '') + '>📅 ' + escapeText(order.deliveryWhen) + '</span></p>' : '') + '<p><b>Productos</b><span>' + productLinks(order.products) + '</span></p>' + messengerRow(order) + commercialData(order) + (order.cancelReason && order.status === "cancelled" ? '<p><b>Motivo</b><span>' + escapeText(order.cancelReason) + '</span></p>' : '') + '</div><div class="cvd-sale-actions">' + actionButtons(order) + extraButtons(order) + (order.canReturn ? '<button type="button" class="cvd-sale-return is-warning" data-return-order="' + order.id + '">Devolución</button>' : '') + (order.trackingUrl ? '<button type="button" data-copy-tracking="' + escapeText(order.trackingUrl) + '">Copiar seguimiento</button>' : '') + wa + (cvdSales.isAdmin && order.adminUrl ? '<a href="' + escapeText(order.adminUrl) + '" target="_blank" rel="noopener">Ver pedido</a>' : '') + '</div></article>';
+      return '<article class="cvd-sale-card' + (order.testOrder ? ' is-test' : '') + '">' + test + reservaBanner(order) + '<div class="cvd-sale-top"><div><span class="cvd-sale-status is-' + order.status + '">' + escapeText(order.statusLabel) + '</span><h2>Pedido #' + escapeText(order.number) + '</h2><small>' + escapeText(order.date) + '</small></div><div class="cvd-sale-code"><canvas data-order-code="' + escapeText(order.orderCode) + '"></canvas><small>' + escapeText(order.orderCode) + '</small></div><strong>' + escapeText(order.total) + (order.shippingCup && !/CUP/i.test(order.total) ? ' + ' + escapeText(order.shippingCup) + ' CUP' : '') + '</strong></div><div class="cvd-sale-data"><p><b>Cliente</b><span>' + escapeText(order.customer) + " · " + phone + '</span></p>' + peopleRows(order) + '<p><b>Entrega</b><span>' + escapeText(order.fulfillment + " · " + order.address) + '</span></p>' + paymentRow(order) + changeRow(order) + assemblyRow(order) + (order.deliveryWhen ? '<p><b>Día</b><span' + (order.deliveryFuture ? ' style="color:#a8641c;font-weight:700"' : '') + '>📅 ' + escapeText(order.deliveryWhen) + '</span></p>' : '') + '<p><b>Productos</b><span>' + productLinks(order.products) + '</span></p>' + messengerRow(order) + commercialData(order) + (order.cancelReason && order.status === "cancelled" ? '<p><b>Motivo</b><span>' + escapeText(order.cancelReason) + '</span></p>' : '') + '</div><div class="cvd-sale-actions">' + actionButtons(order) + extraButtons(order) + (order.canReturn ? '<button type="button" class="cvd-sale-return is-warning" data-return-order="' + order.id + '">Devolución</button>' : '') + (order.trackingUrl ? '<button type="button" data-copy-tracking="' + escapeText(order.trackingUrl) + '">Copiar seguimiento</button>' : '') + wa + (cvdSales.isAdmin && order.adminUrl ? '<a href="' + escapeText(order.adminUrl) + '" target="_blank" rel="noopener">Ver pedido</a>' : '') + '</div></article>';
     }).join("");
     if (window.CVQRCode) document.querySelectorAll("[data-order-code]").forEach(function (canvas) { window.CVQRCode.toCanvas(canvas, canvas.dataset.orderCode, { width: 84, margin: 1 }); });
   }
@@ -220,6 +233,23 @@
       catch (error) { message.textContent = error.message; message.className = "is-error"; ret.disabled = false; }
       return;
     }
+    var reservaBtn = event.target.closest("[data-reserva-order]");
+    if (reservaBtn) {
+      var rUrl = cvdSales.url + "/" + reservaBtn.dataset.reservaOrder + "/reserva", rBody;
+      if (reservaBtn.dataset.clear) {
+        if (!window.confirm("¿Quitar la reserva del pedido #" + reservaBtn.dataset.number + "?\n\nDespués se podrá cancelar si el cliente no pasa.")) return;
+        rBody = { clear: true };
+      } else {
+        var rUntil = window.prompt("Pedido #" + reservaBtn.dataset.number + "\n\n¿Hasta qué día se guarda? (mañana, viernes o 29/10)", "mañana"); if (!rUntil || !rUntil.trim()) return;
+        var rBy = window.prompt("¿Quién pidió guardarlo?", reservaBtn.dataset.gestora || ""); if (rBy === null) return;
+        var rNote = window.prompt("Nota para la tienda (opcional)", "");
+        rBody = { until: rUntil.trim(), by: (rBy || "").trim(), note: (rNote || "").trim() };
+      }
+      reservaBtn.disabled = true; message.className = ""; message.textContent = "Guardando…";
+      try { var rDone = await api(rUrl, { method: "POST", body: JSON.stringify(rBody) }); await load(); message.textContent = rDone.message || "Listo."; }
+      catch (error) { message.textContent = error.message; message.className = "is-error"; reservaBtn.disabled = false; }
+      return;
+    }
     var cancelBtn = event.target.closest("[data-cancel-order]");
     if (cancelBtn) {
       var why = window.prompt("Cancelar el pedido #" + cancelBtn.dataset.number + "\n\n¿Por qué se cancela? (obligatorio, una frase corta)");
@@ -227,7 +257,18 @@
       if (why.trim().length < 3) { message.className = "is-error"; message.textContent = "Para cancelar hay que escribir el motivo."; return; }
       if (!window.confirm("¿Seguro que cancelas el pedido #" + cancelBtn.dataset.number + "?\n\n• Las existencias vuelven a la tienda\n• La comisión de quien vendió queda anulada\n• No se puede deshacer\n\nMotivo: " + why.trim())) return;
       cancelBtn.disabled = true; message.className = ""; message.textContent = "Cancelando…";
-      try { var done = await api(cvdSales.url + "/" + cancelBtn.dataset.cancelOrder + "/cancel", { method: "POST", body: JSON.stringify({ reason: why.trim() }) }); await load(); message.className = done.messenger ? "is-error" : ""; message.textContent = done.message || "Pedido cancelado."; }
+      try {
+        var cancelUrl = cvdSales.url + "/" + cancelBtn.dataset.cancelOrder + "/cancel";
+        var done;
+        try { done = await api(cancelUrl, { method: "POST", body: JSON.stringify({ reason: why.trim() }) }); }
+        catch (first) {
+          // 3.14.72: con reserva vigente, administración confirma una segunda vez (la dependienta ni llega aquí: no ve el botón).
+          var info = first.data && first.data.data;
+          if (!(info && info.needsConfirm) || !window.confirm("⛔ " + first.message + "\n\nAceptar = cancelar igual\nCancelar = dejarlo como está")) throw first;
+          done = await api(cancelUrl, { method: "POST", body: JSON.stringify({ reason: why.trim(), confirmReserva: true }) });
+        }
+        await load(); message.className = done.messenger ? "is-error" : ""; message.textContent = done.message || "Pedido cancelado.";
+      }
       catch (error) { message.textContent = error.message; message.className = "is-error"; cancelBtn.disabled = false; }
       return;
     }

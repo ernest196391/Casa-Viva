@@ -78,6 +78,8 @@ final class CVD_Order_Edit {
 		if ( class_exists( 'CVD_Messenger_Accounting' ) && ! CVD_Messenger_Accounting::can_void_order( $order ) ) {
 			return 'La ganancia del mensajero de este pedido ya está liquidada: no se puede cancelar desde aquí.';
 		}
+		// 3.14.72 (Pilar 3): con reserva vigente la dependienta no cancela (administración sí, confirmando).
+		if ( class_exists( 'CVD_Reserva' ) ) { return CVD_Reserva::clerk_block( $order, $user_id ); }
 		return '';
 	}
 
@@ -116,7 +118,7 @@ final class CVD_Order_Edit {
 	 * Cancela un pedido con motivo. Devuelve array( ok, message, messenger ) o WP_Error.
 	 * $source: 'ventas' o 'panel' (solo para la nota).
 	 */
-	public static function cancel( int $order_id, string $reason, int $user_id, string $source = 'ventas' ) {
+	public static function cancel( int $order_id, string $reason, int $user_id, string $source = 'ventas', bool $confirm_reserva = false ) {
 		$order = wc_get_order( $order_id );
 		if ( ! $order instanceof WC_Order || 'shop_order' !== $order->get_type() ) { return new WP_Error( 'cvd_cancel_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
 		$reason = trim( preg_replace( '/\s+/', ' ', sanitize_text_field( $reason ) ) );
@@ -124,6 +126,11 @@ final class CVD_Order_Edit {
 		$reason = mb_substr( $reason, 0, 200 );
 		$block = self::cancel_block( $order, $user_id );
 		if ( '' !== $block ) { return new WP_Error( 'cvd_cancel_blocked', $block, array( 'status' => 409 ) ); }
+		// 3.14.72 (Pilar 3, caso #5551): reserva vigente → administración confirma; la dependienta ya quedó bloqueada arriba.
+		if ( class_exists( 'CVD_Reserva' ) ) {
+			$gate = CVD_Reserva::cancel_gate( $order, $user_id, $confirm_reserva );
+			if ( is_wp_error( $gate ) ) { return $gate; }
+		}
 		$messenger = self::messenger_to_warn( $order );
 		$stage = self::delivery_stage( $order );
 		$before = class_exists( 'CVD_Order_Avisos' ) ? CVD_Order_Avisos::snapshot( $order ) : array(); // 3.13.98: aviso por WhatsApp
@@ -159,7 +166,7 @@ final class CVD_Order_Edit {
 	}
 
 	public static function cancel_request( WP_REST_Request $request ) {
-		$result = self::cancel( absint( $request['id'] ), (string) $request->get_param( 'reason' ), get_current_user_id(), 'ventas' );
+		$result = self::cancel( absint( $request['id'] ), (string) $request->get_param( 'reason' ), get_current_user_id(), 'ventas', (bool) $request->get_param( 'confirmReserva' ) );
 		if ( is_wp_error( $result ) ) { return $result; }
 		return rest_ensure_response( $result );
 	}

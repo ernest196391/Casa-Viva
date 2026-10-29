@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.71.1
+ * Version: 3.14.72
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.71.1' );
+define( 'CVD_VERSION', '3.14.72' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -66,6 +66,7 @@ require_once CVD_DIR . 'includes/class-cvd-messenger-cash.php';
 require_once CVD_DIR . 'includes/class-cvd-fichas.php';
 require_once CVD_DIR . 'includes/class-cvd-aprende.php';
 require_once CVD_DIR . 'includes/class-cvd-order-edit.php';
+require_once CVD_DIR . 'includes/class-cvd-reserva.php'; // 3.14.72: reserva de una recogida («guardar hasta mañana») dentro del pedido (Pilar 3, Ernesto 28-oct).
 require_once CVD_DIR . 'includes/class-cvd-order-avisos.php';
 require_once CVD_DIR . 'includes/class-cvd-costs.php';
 require_once CVD_DIR . 'includes/class-cvd-ficha-estado.php'; // 3.14.40: ningún producto sin medidas ni características (Ernesto y Lennys, 18-oct)
@@ -131,6 +132,7 @@ add_action(
 			CVD_Fichas::register();
 			CVD_Aprende::register(); // 3.13.77: «Aprende» (tutoriales) en el área de la gestora y del mensajero.
 			CVD_Order_Edit::register(); // 3.13.97: cancelar con motivo y cambiar pedidos desde /ventas/ y el panel (Ernesto, 14-oct).
+			CVD_Reserva::register(); // 3.14.72: reserva visible para la tienda, frena la cancelación y avisa una vez al vencer.
 			CVD_Order_Avisos::register(); // 3.13.98: el bot avisa por WhatsApp al cancelar o cambiar un pedido (Ernesto, 14-oct).
 			CVD_Costs::register(); // 3.14.0: costo de cada producto y precio mínimo (Ernesto, 14-oct).
 			CVD_Ficha_Estado::register(); // 3.14.40: «Falta información» (medidas, material, datos técnicos) para gestoras y panel; /bot/fichas para el bot (Ernesto y Lennys, 18-oct).

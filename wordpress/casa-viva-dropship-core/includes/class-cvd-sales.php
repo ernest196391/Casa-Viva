@@ -358,7 +358,7 @@ final class CVD_Sales {
 		// 3.13.97 (Ernesto, 14-oct): cancelar con motivo, también las dependientas (reglas en CVD_Order_Edit::cancel_block).
 		if ( 'cancelled' === $next && class_exists( 'CVD_Order_Edit' ) ) {
 			$via_panel = class_exists( 'CVD_Panel_Bridge' ) && CVD_Panel_Bridge::via_panel();
-			$result = CVD_Order_Edit::cancel( $order->get_id(), (string) $request->get_param( 'reason' ), get_current_user_id(), $via_panel ? 'panel' : 'ventas' );
+			$result = CVD_Order_Edit::cancel( $order->get_id(), (string) $request->get_param( 'reason' ), get_current_user_id(), $via_panel ? 'panel' : 'ventas', (bool) $request->get_param( 'confirmReserva' ) );
 			if ( is_wp_error( $result ) ) { return $result; }
 			return rest_ensure_response( array( 'message' => $result['message'], 'messenger' => $result['messenger'], 'order' => self::payload( wc_get_order( $order->get_id() ) ) ) );
 		}
@@ -608,6 +608,8 @@ final class CVD_Sales {
 			'canCancel' => '' === $cancel_why,
 			'canEdit' => '' === $edit_why,
 			'cancelReason' => (string) $order->get_meta( '_cvd_cancel_reason', true ),
+			// 3.14.72 (Pilar 3): reserva de la recogida («Kay pidió guardarlo hasta mañana»); la tienda la ve en rojo y no cancela.
+			'reserva' => class_exists( 'CVD_Reserva' ) && 'pickup' === $fulfillment ? CVD_Reserva::get( $order ) : null,
 		);
 	}
 

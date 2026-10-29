@@ -288,3 +288,9 @@
 #cvd-edit-form .cvd-edit-buttons button { border: 0; border-radius: 999px; cursor: pointer; flex: 1; font-weight: 800; min-height: 45px; }
 #cvd-edit-submit { background: #177d54; color: #fff; }
 @media (max-width: 650px) { #cvd-edit-form .cvd-edit-two { grid-template-columns: 1fr; } }
+
+/* 3.14.72 (Pilar 3): reserva de una recogida — franja roja arriba de la tarjeta; ámbar si ya venció. */
+.cvd-sale-card .cvd-sale-reserva { border-radius: 12px; font-size: 1.05em; font-weight: 800; line-height: 1.35; margin: 0 0 10px; padding: 11px 13px; }
+.cvd-sale-card .cvd-sale-reserva small { display: block; font-size: .8em; font-weight: 600; margin-top: 3px; }
+.cvd-sale-card .cvd-sale-reserva.is-active { background: #b3261e; color: #fff; }
+.cvd-sale-card .cvd-sale-reserva.is-expired { background: #fff3d6; border: 1px solid #e0b24a; color: #6a4300; }

@@ -846,6 +846,7 @@ final class CVD_Bot_Bridge {
 			'eta' => (string) $order->get_meta( '_cvd_bot_eta', true ),
 			'tracking' => CVD_Delivery::tracking_url( $order ),
 			'seq' => class_exists( 'CVD_Order_Seq' ) ? CVD_Order_Seq::label( $order ) : '', // 3.14.69.11 (#581)
+			'reserva' => class_exists( 'CVD_Reserva' ) ? CVD_Reserva::get( $order ) : null, // 3.14.72: reserva de la recogida (o null)
 		) );
 	}
 
@@ -857,6 +858,11 @@ final class CVD_Bot_Bridge {
 	private static function phone_key( string $phone ): string {
 		$digits = preg_replace( '/\D+/', '', $phone );
 		return strlen( $digits ) >= 8 ? substr( $digits, -8 ) : '';
+	}
+
+	/** 3.14.72: la gestora (aprobada o pendiente) de ese WhatsApp, para comprobar que reserva un pedido suyo. */
+	public static function gestora_by_phone( string $phone ): ?WP_User {
+		return self::user_by_phone( $phone, 'cvd_gestora', false );
 	}
 
 	/** Mensajero aprobado cuyo WhatsApp (o teléfono de facturación) coincide en los últimos 8 dígitos. */
