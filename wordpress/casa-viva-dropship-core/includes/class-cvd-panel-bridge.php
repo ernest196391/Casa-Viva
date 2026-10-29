@@ -872,20 +872,22 @@ final class CVD_Panel_Bridge {
 		if ( 'trash' === $product->get_status() ) { return self::no_cache( $out + array( 'result' => 'trashed', 'already' => true ) ); }
 		if ( ! empty( $p['check'] ) ) { return self::no_cache( $out + array( 'result' => null ) ); }
 		$by = self::by( $p );
+		$pid = $product->get_id(); // WC_Data::delete() deja el objeto con id 0: se guarda antes
 		// Sin papelera (EMPTY_TRASH_DAYS = 0) WordPress borraría del todo: entonces solo se oculta.
 		$plan = self::delete_plan( $orders, ! empty( $p['cajaSold'] ), (bool) EMPTY_TRASH_DAYS );
+		$reason = null;
 		if ( 'hide' === $plan ) {
 			self::retire( $product, $by );
 			$reason = $orders > 0 ? 'orders' : ( ! empty( $p['cajaSold'] ) ? 'caja' : 'notrash' );
-			self::log_product( 'eliminar → oculto (' . array( 'orders' => 'tiene pedidos', 'caja' => 'vendido en la caja', 'notrash' => 'sin papelera' )[ $reason ] . ')', $product->get_id(), $name, $by );
+			self::log_product( 'eliminar → oculto (' . array( 'orders' => 'tiene pedidos', 'caja' => 'vendido en la caja', 'notrash' => 'sin papelera' )[ $reason ] . ')', $pid, $name, $by );
 		} else {
 			$product->delete( false ); // false = a la papelera, nunca borrado del todo
-			if ( 'trash' !== get_post_status( $product->get_id() ) ) { return new WP_Error( 'cvd_panel_product', 'La web no lo pudo mandar a la papelera. Prueba otra vez.', array( 'status' => 500 ) ); }
-			self::log_product( 'eliminado (papelera)', $product->get_id(), $name, $by );
+			if ( 'trash' !== get_post_status( $pid ) ) { return new WP_Error( 'cvd_panel_product', 'La web no lo pudo mandar a la papelera. Prueba otra vez.', array( 'status' => 500 ) ); }
+			self::log_product( 'eliminado (papelera)', $pid, $name, $by );
 		}
 		if ( $variation && $parent ) { WC_Product_Variable::sync( $parent->get_id() ); wc_delete_product_transients( $parent->get_id() ); }
-		else { wc_delete_product_transients( $product->get_id() ); }
-		return self::no_cache( $out + array( 'result' => 'hide' === $plan ? 'hidden' : 'trashed', 'reason' => 'hide' === $plan ? $reason : null, 'status' => get_post_status( $product->get_id() ) ) );
+		else { wc_delete_product_transients( $pid ); }
+		return self::no_cache( $out + array( 'result' => 'hide' === $plan ? 'hidden' : 'trashed', 'reason' => $reason, 'status' => get_post_status( $pid ) ) );
 	}
 
 	// ---------- 3.14.41 (Lennys 20-oct): descripción para todos, foto principal y «Duplicar» ----------
