@@ -1094,7 +1094,7 @@ final class CVD_Panel_Bridge {
 	/** Cambiar el estado (Listo para salir, entregado al mensajero, dinero recibido, cancelar…) o registrar devolución. */
 	public static function sales_action( WP_REST_Request $request ) {
 		$params = (array) $request->get_json_params();
-		$allowed = array( 'status', 'collectionMethod', 'collectionAccount', 'collectionReference', 'collectionCardLabel', 'collectionCardLast4', 'collectionSaveCard', 'collectedUsd', 'collectedCup', 'collectionNote', 'moneyConfirmed', 'handoverConfirmed', 'idempotencyKey', 'reason', 'refundUsd', 'refundCup', 'voidMessenger' );
+		$allowed = array( 'status', 'collectionMethod', 'collectionAccount', 'collectionReference', 'collectionCardLabel', 'collectionCardLast4', 'collectionSaveCard', 'collectedUsd', 'collectedCup', 'collectionNote', 'moneyConfirmed', 'handoverConfirmed', 'cashReceivedToday', 'cashReceivedDay', 'idempotencyKey', 'reason', 'refundUsd', 'refundCup', 'voidMessenger' );
 		$params = array_intersect_key( $params, array_flip( $allowed ) );
 		self::enter( (array) $request->get_json_params() ); // 3.13.97: la nota de cancelación dice quién lo pulsó en el panel
 		return self::as_owner( 'POST', '/sales/' . absint( $request['id'] ) . '/' . ( 'return' === $request['what'] ? 'return' : 'status' ), $params );
