@@ -124,9 +124,13 @@ final class CVD_Cierre {
 		[ $from, $to ] = CVD_Cierre_Math::window( $day );
 		[ $clerks, $admins ] = self::people();
 		$keys = array( '_cvd_cash_returned_at', '_cvd_cash_verified_at', '_cvd_collection_received_at' );
-		$meta_query = array( 'relation' => 'OR' );
-		foreach ( $keys as $key ) { $meta_query[] = array( 'key' => $key, 'value' => array( $from, $to ), 'compare' => 'BETWEEN', 'type' => 'CHAR' ); }
-		$orders = wc_get_orders( array( 'type' => 'shop_order', 'limit' => 400, 'status' => array_keys( wc_get_order_statuses() ), 'meta_query' => $meta_query, 'orderby' => 'date', 'order' => 'ASC' ) );
+		// Una consulta por marca (en esta web pedir las tres con «O» no devuelve nada) y se juntan los pedidos sin repetir.
+		$ids = array();
+		foreach ( $keys as $key ) {
+			$found = wc_get_orders( array( 'type' => 'shop_order', 'limit' => 400, 'return' => 'ids', 'status' => array_keys( wc_get_order_statuses() ), 'meta_query' => array( array( 'key' => $key, 'value' => array( $from, $to ), 'compare' => 'BETWEEN', 'type' => 'CHAR' ) ) ) );
+			$ids = array_merge( $ids, array_map( 'intval', (array) $found ) );
+		}
+		$orders = array_filter( array_map( 'wc_get_order', array_values( array_unique( $ids ) ) ) );
 		$rows = array();
 		foreach ( $orders as $order ) {
 			if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund ) { continue; }

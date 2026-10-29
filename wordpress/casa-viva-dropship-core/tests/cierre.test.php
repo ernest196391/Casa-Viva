@@ -24,7 +24,8 @@ function wp_json_encode( $v ) { return json_encode( $v, JSON_UNESCAPED_UNICODE )
 function current_time( $t, $gmt = 0 ) { return gmdate( 'Y-m-d H:i:s' ); }
 function wc_get_order_statuses() { return array( 'wc-completed' => 'x' ); }
 $ORDERS = array();
-function wc_get_orders( $args ) { global $ORDERS; return $ORDERS; }
+function wc_get_orders( $args ) { global $ORDERS; return ( $args['return'] ?? '' ) === 'ids' ? array_map( fn( $o ) => $o->id, $ORDERS ) : $ORDERS; }
+function wc_get_order( $id ) { global $ORDERS; foreach ( $ORDERS as $o ) { if ( $o->id === (int) $id ) { return $o; } } return false; }
 function get_option( $k, $d = false ) { return $d; }
 function update_option() {}
 function current_user_can() { return true; }
