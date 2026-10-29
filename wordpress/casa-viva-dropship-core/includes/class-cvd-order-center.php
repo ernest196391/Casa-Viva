@@ -39,10 +39,17 @@ final class CVD_Order_Center {
 		$action = null;
 		foreach ( $projection['available_actions'] as $candidate ) { if ( $candidate['id'] === $action_id && ! $candidate['blocked'] ) { $action = $candidate; break; } }
 		if ( ! $action ) { return new WP_Error( 'cvd_action_unavailable', 'Esta acción ya no está disponible.', array( 'status' => 409 ) ); }
+		// 3.14.75 (Ernesto 28-oct): «Confirmar efectivo recibido» de una entrega de otro día → «¿Lo recibiste hoy?».
+		$cash_day = null;
+		if ( 'delivery' === $action['domain'] && 'cash_returned' === $action['target'] && class_exists( 'CVD_Cash_Day' ) ) {
+			$cash_day = CVD_Cash_Day::check( $order, $request, get_current_user_id() );
+			if ( is_wp_error( $cash_day ) ) { return $cash_day; }
+		}
 		$result = CVD_Order_Transition_Service::transition( $order->get_id(), $action['domain'], $action['target'], array(
 			'actor_user_id' => get_current_user_id(), 'idempotency_key' => sanitize_text_field( (string) ( $request->get_header( 'X-CVD-Idempotency-Key' ) ?: $request->get_param( 'idempotency_key' ) ) ), 'source' => 'cvd_order_center',
 		) );
 		if ( empty( $result['success'] ) ) { return new WP_Error( 'cvd_action_rejected', 'No se pudo actualizar el pedido.', array( 'status' => 409, 'transition' => $result ) ); }
+		if ( null !== $cash_day ) { $saved = wc_get_order( $order->get_id() ); CVD_Cash_Day::record( $saved, $cash_day, get_current_user_id() ); $saved->save(); }
 		return rest_ensure_response( array( 'transition' => $result, 'projection' => self::project( wc_get_order( $order->get_id() ), get_current_user_id() ) ) );
 	}
 
@@ -108,7 +115,8 @@ final class CVD_Order_Center {
 	public static function assets(): void {
 		if ( ! is_page( 'centro-pedido' ) ) { return; }
 		wp_enqueue_style( 'cvd-order-center', CVD_URL . 'assets/order-center.css', array(), CVD_VERSION );
-		wp_enqueue_script( 'cvd-order-center', CVD_URL . 'assets/order-center.js', array(), CVD_VERSION, true );
+		wp_enqueue_script( 'cvd-cash-day', CVD_URL . 'assets/cash-day.js', array(), CVD_VERSION, true );
+		wp_enqueue_script( 'cvd-order-center', CVD_URL . 'assets/order-center.js', array( 'cvd-cash-day' ), CVD_VERSION, true );
 		wp_localize_script( 'cvd-order-center', 'cvdOrderCenter', array( 'url' => rest_url( 'casa-viva/v1/order-center/' ), 'nonce' => wp_create_nonce( 'wp_rest' ) ) );
 	}
 

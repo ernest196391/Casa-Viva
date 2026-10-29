@@ -53,7 +53,7 @@
   async function api(url, options) {
     var response = await fetch(url, Object.assign({ credentials: "same-origin", headers: { "X-WP-Nonce": cvdSales.nonce, "Content-Type": "application/json" } }, options || {}));
     var data = await response.json();
-    if (!response.ok) { var failure = new Error(data.message || "No se pudo completar la operación."); failure.data = data; throw failure; }
+    if (!response.ok) { var failure = new Error(data.message || "No se pudo completar la operación."); failure.code = data.code; failure.data = data; throw failure; }
     return data;
   }
   // 3.14.7 (Nana): cada producto con su precio, uno por renglón («2× Toalla — 15 USD c/u = 30 USD»).
@@ -417,7 +417,18 @@
     if (event.submitter && event.submitter.value === "cancel") return;
     event.preventDefault(); var submit = document.getElementById("cvd-money-submit"); submit.disabled = true;
     var pickup = document.getElementById("cvd-money-pickup").value === "1";
-    try { await api(cvdSales.url + "/" + document.getElementById("cvd-money-order").value + "/status", { method: "POST", body: JSON.stringify({ status: "delivered", collectionMethod: document.getElementById("cvd-money-method").value, collectedUsd: document.getElementById("cvd-money-usd").value, collectedCup: document.getElementById("cvd-money-cup").value, collectionNote: document.getElementById("cvd-money-note").value, collectionAccount: moneyAccount ? moneyAccount.value : "", collectionReference: moneyReference ? moneyReference.value : "", collectionCardLabel: document.getElementById("cvd-money-card-label").value, collectionCardLast4: document.getElementById("cvd-money-card-last4").value, collectionSaveCard: document.getElementById("cvd-money-save-card").checked, moneyConfirmed: document.getElementById("cvd-money-confirmed").checked, handoverConfirmed: pickup ? document.getElementById("cvd-handover-confirmed").checked : false }) }); moneyDialog.close(); event.target.reset(); syncMoneyAccount(); document.getElementById("cvd-money-pickup").value = "0"; await load(); message.className = ""; message.textContent = "Pedido cerrado: ahora está en «Cerrados»."; }
+    var moneyUrl = cvdSales.url + "/" + document.getElementById("cvd-money-order").value + "/status";
+    var moneyBody = { status: "delivered", collectionMethod: document.getElementById("cvd-money-method").value, collectedUsd: document.getElementById("cvd-money-usd").value, collectedCup: document.getElementById("cvd-money-cup").value, collectionNote: document.getElementById("cvd-money-note").value, collectionAccount: moneyAccount ? moneyAccount.value : "", collectionReference: moneyReference ? moneyReference.value : "", collectionCardLabel: document.getElementById("cvd-money-card-label").value, collectionCardLast4: document.getElementById("cvd-money-card-last4").value, collectionSaveCard: document.getElementById("cvd-money-save-card").checked, moneyConfirmed: document.getElementById("cvd-money-confirmed").checked, handoverConfirmed: pickup ? document.getElementById("cvd-handover-confirmed").checked : false };
+    // 3.14.75 (Ernesto 28-oct): si Core pregunta «¿Lo recibiste hoy?» (entrega de otro día), se contesta y se reenvía.
+    try {
+      try { await api(moneyUrl, { method: "POST", body: JSON.stringify(moneyBody) }); }
+      catch (asked) {
+        if (!window.cvdCashDay || asked.code !== window.cvdCashDay.code) throw asked;
+        var reply = await window.cvdCashDay.ask(asked.data && asked.data.data);
+        if (!reply) { message.className = ""; message.textContent = "No se guardó: falta decir si el dinero entró hoy."; return; }
+        await api(moneyUrl, { method: "POST", body: JSON.stringify(Object.assign({}, moneyBody, reply)) });
+      }
+      moneyDialog.close(); event.target.reset(); syncMoneyAccount(); document.getElementById("cvd-money-pickup").value = "0"; await load(); message.className = ""; message.textContent = "Pedido cerrado: ahora está en «Cerrados»."; }
     catch (error) { message.textContent = error.message; message.className = "is-error"; }
     finally { submit.disabled = false; }
   });

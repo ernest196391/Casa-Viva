@@ -239,6 +239,7 @@ final class CVD_Caja_Bridge {
 			'collectionNote' => trim( 'Cobrado en la caja' . ( '' !== $device ? ' (' . $device . ')' : '' ) . ( '' !== $name ? ' por ' . $name : '' ) . '. ' . sanitize_textarea_field( (string) ( $p['collectionNote'] ?? '' ) ) ),
 			'moneyConfirmed' => true,
 			'handoverConfirmed' => true,
+			'cashReceivedToday' => 'yes', // 3.14.75: la caja cobra con el dinero en la mano (CVD_Cash_Day)
 			'idempotencyKey' => 'caja:' . $charge_id,
 		);
 		foreach ( $params as $key => $value ) { $inner->set_param( $key, $value ); }
