@@ -278,6 +278,16 @@ final class CVD_Vale_Chat {
 			if ( '' === $phone && ! $pickup ) { delete_option( $lock ); return new WP_Error( 'cvd_vale_phone', 'Falta el teléfono del cliente (8 cifras).', array( 'status' => 400 ) ); }
 			$own = CVD_Cuban_Checkout::own_phone_match( $phone, array( $gestora->ID ) );
 			if ( $own && empty( $p['selfPurchase'] ) ) { delete_option( $lock ); return new WP_Error( 'cvd_vale_own_phone', 'Ese teléfono es el tuyo. Si la compra es para ti, dilo («es para mí»); si es de un cliente, pon el teléfono del cliente.', array( 'status' => 422 ) ); }
+			// 3.14.75 (Pilar 4, 28-oct, #5604): teléfono plausible y aviso «ya salió con otro cliente» / «dirección del cliente anterior».
+			// Sin canConfirmCheck (bot viejo) solo se rechaza el teléfono imposible; con él, Core exige la respuesta «es el mismo» (phoneChecked).
+			$check_warnings = array();
+			if ( ! $own ) {
+				list( $check_error, $check_warnings ) = CVD_Vale_Check::gate( array(
+					'gestora_id' => $gestora->ID, 'phone' => $phone, 'name' => sanitize_text_field( (string) ( $customer['name'] ?? '' ) ),
+					'address' => 'delivery' === $delivery['type'] ? sanitize_text_field( (string) ( $p['address'] ?? '' ) ) : '', 'require_phone' => ! $pickup,
+				), empty( $p['canConfirmCheck'] ) || ! empty( $p['phoneChecked'] ) );
+				if ( $check_error ) { delete_option( $lock ); return $check_error; }
+			}
 			$kind = sanitize_key( (string) ( $p['paymentKind'] ?? '' ) );
 			if ( '' !== $kind && ! isset( CVD_Cuban_Checkout::PAYMENT_KINDS[ $kind ] ) ) { $kind = ''; }
 
@@ -328,6 +338,7 @@ final class CVD_Vale_Chat {
 			CVD_Cuban_Checkout::apply_payment( $order, $kind, 'pickup' === $delivery['type'] );
 			if ( $own ) { CVD_Cuban_Checkout::mark_self_declared( $order, $own, 'vale por chat' ); }
 			$order->add_order_note( 'Vale por chat (VivaBot): lo hizo ' . $gestora->display_name . ' desde WhatsApp.' . ( '' === $kind ? ' Forma de pago: por confirmar con el cliente.' : '' ) );
+			if ( ! empty( $p['phoneChecked'] ) ) { CVD_Vale_Check::note_confirmed( $order, $check_warnings, 'vale por chat' ); } // 3.14.75
 			$order->save();
 			do_action( 'woocommerce_checkout_order_created', $order );
 			$order->update_status( 'on-hold', 'Vale por chat: pendiente de confirmación por WhatsApp (como los pedidos de la web).' );

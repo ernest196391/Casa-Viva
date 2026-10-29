@@ -556,6 +556,28 @@
 	  ownPhoneServer = true; syncOwnPhone();
 	  showOwnPhone(msg.split(' Si ')[0], function () { $('#place_order').trigger('click'); });
 	});
+	// 3.14.75 (Pilar 4, #5604): el servidor avisa «este teléfono ya salió con otro cliente / esta dirección se parece a la del cliente
+	// anterior» solo a quien vende. «Sí, es el mismo» manda cvd_vale_check_ok y vuelve a finalizar; «No, corregir» deja editar.
+	$(document.body).on('checkout_error', function () {
+	  var msg = '';
+	  $('.woocommerce-error li, .woocommerce-NoticeGroup-checkout li').each(function () { var t = $.trim($(this).text()); if (!msg && t.indexOf('Sí, es el mismo') >= 0) msg = t; });
+	  if (!msg) return;
+	  $('#cvd-vale-check').remove();
+	  var box = $('<div id="cvd-vale-check" role="alertdialog" aria-modal="true" style="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px">' +
+	    '<div style="background:#fff;color:#222;max-width:440px;width:100%;border-radius:16px;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.3)">' +
+	    '<h3 style="margin:0 0 .6em">Revisa los datos del cliente</h3><p data-vale-text style="margin:0 0 1em"></p>' +
+	    '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="button alt" data-vale="fix" style="flex:1">No, corregir</button>' +
+	    '<button type="button" class="button" data-vale="same" style="flex:1">Sí, es el mismo</button></div></div></div>');
+	  box.find('[data-vale-text]').text(msg.replace(/\s*Confirma «Sí, es el mismo» para seguir\.?$/, ''));
+	  $('body').append(box);
+	  box.on('click', '[data-vale]', function () {
+	    var same = $(this).data('vale') === 'same';
+	    box.remove();
+	    if (same) { if (!$('#cvd_vale_check_ok').length) $('form.checkout').append('<input type="hidden" id="cvd_vale_check_ok" name="cvd_vale_check_ok" value="1">'); $('#place_order').trigger('click'); }
+	    else { $('#cvd_vale_check_ok').remove(); $('#billing_phone').trigger('focus').trigger('select'); }
+	  });
+	});
+	$(document.body).on('input change', '#billing_phone, #billing_first_name, #billing_address_1', function () { $('#cvd_vale_check_ok').remove(); });
 	$(syncOwnPhone);
 
 	$('form.checkout').on('checkout_place_order', function () {

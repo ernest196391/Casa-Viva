@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.74.2
+ * Version: 3.14.75
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.74.2' );
+define( 'CVD_VERSION', '3.14.75' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -52,6 +52,7 @@ require_once CVD_DIR . 'includes/class-cvd-gestora-busca.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-confianza.php';
 require_once CVD_DIR . 'includes/class-cvd-datos-a-mano.php'; // 3.14.63: bajo pedido 24 h, quedan X, vuelve el día, tabla de mensajería (maratón 24-oct)
 require_once CVD_DIR . 'includes/class-cvd-vale-chat.php'; // 3.14.67: «VALE» por chat, el bot hace el pedido por la gestora sin conexión (Ernesto 24-oct)
+require_once CVD_DIR . 'includes/class-cvd-vale-check.php'; // 3.14.75: Pilar 4, validar teléfono y dirección al crear el vale (Ernesto 28-oct, #5604)
 require_once CVD_DIR . 'includes/class-cvd-nexo-busca.php'; // 3.14.28: NEXO Busca (búsquedas guardadas, vender por Casa Viva)
 require_once CVD_DIR . 'includes/class-cvd-gestora-fotos.php';
 require_once CVD_DIR . 'includes/class-cvd-estudio-core.php';
@@ -127,6 +128,7 @@ add_action(
 			CVD_Gestora_Stock::register();
 			CVD_Datos_A_Mano::register(); // 3.14.63: «Datos a mano» (maratón de ideas, Ernesto 24-oct).
 			CVD_Vale_Chat::register(); // 3.14.67: /bot/vale/* para el «VALE» por chat de VivaBot.
+			CVD_Vale_Check::register(); // 3.14.75: /bot/vale/revisar y /vale/revisar (Pilar 4).
 			CVD_Direct_Dispatch::register();
 			CVD_Messenger_Cash::register();
 			CVD_Fichas::register();

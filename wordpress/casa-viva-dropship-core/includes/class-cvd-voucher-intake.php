@@ -63,6 +63,14 @@ final class CVD_Voucher_Intake {
 			$text = ! empty( $own['self'] ) ? CVD_Cuban_Checkout::OWN_PHONE_TEXT . ' Si de verdad es para ti, confirma «Es para mí».' : 'Ese es el número de la gestora del vale. Pon el teléfono del cliente para que el mensajero lo pueda llamar. Si de verdad es para ella, confirma «Es para mí».';
 			return new WP_Error( 'cvd_own_phone', $text, array( 'status' => 422 ) );
 		}
+		// 3.14.75 (Pilar 4, 28-oct, #5604): teléfono plausible y aviso «ya salió con otro cliente» / «dirección del cliente anterior»; la gestora contesta «sí, es el mismo» (draft.phoneChecked).
+		$check_warnings = array();
+		if ( ! $own ) {
+			list( $check_error, $check_warnings ) = CVD_Vale_Check::gate( array(
+				'gestora_id' => $owner_id ?: get_current_user_id(), 'phone' => $phones[0], 'name' => $customer, 'address' => $address, 'require_phone' => true,
+			), ! empty( $draft['phoneChecked'] ) );
+			if ( $check_error ) { delete_option( $lock ); return $check_error; }
+		}
 		$order = null;
 		try {
 			$order = wc_create_order( array( 'status' => 'pending', 'created_via' => 'casa-viva-voucher' ) );
@@ -85,6 +93,7 @@ final class CVD_Voucher_Intake {
 			$notes = array_map( 'sanitize_text_field', (array) ( $draft['notes'] ?? array() ) ); if ( $notes ) { $order->set_customer_note( implode( "\n", array_filter( $notes ) ) ); }
 			CVD_Attribution::attach_operator_order( $order, $owner_id ); $order->calculate_totals();
 			if ( $own ) { CVD_Cuban_Checkout::mark_self_declared( $order, $own, 'vale de NEXO' ); } // 3.14.53: confirmó «Es para mí»
+			if ( ! empty( $draft['phoneChecked'] ) ) { CVD_Vale_Check::note_confirmed( $order, $check_warnings, 'vale de NEXO' ); } // 3.14.75
 			$obligations = self::payment_obligations( $draft, $owner_id, absint( $quote['fee'] ?? 0 ) );
 			if ( is_wp_error( $obligations ) ) { throw new RuntimeException( $obligations->get_error_message() ); }
 			if ( $obligations ) { $configured = CVD_Payment_Obligations::configure( $order, $obligations, get_current_user_id() ); if ( is_wp_error( $configured ) ) { throw new RuntimeException( $configured->get_error_message() ); } }

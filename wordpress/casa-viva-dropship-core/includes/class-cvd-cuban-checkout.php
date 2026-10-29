@@ -542,6 +542,16 @@ final class CVD_Cuban_Checkout {
 		// 3.14.53 («Vender seguro», #10 y #51): el teléfono de quien vende no pasa sin «Es para mí».
 		$own = self::own_phone_match( $phone );
 		if ( $own && empty( $_POST[ self::OWN_PHONE_FIELD ] ) ) { $errors->add( 'billing_phone', self::own_phone_error( $own ) ); }
+		// 3.14.75 (Pilar 4, 28-oct, #5604): quien vende (gestora o equipo con sesión) no guarda un vale con un teléfono imposible, ni con un
+		// teléfono/dirección que parecen del cliente anterior, sin contestar «Sí, es el mismo». Los clientes normales no ven nada de esto.
+		if ( ! $own && '' !== $phone && is_user_logged_in() && self::is_seller( get_current_user_id() ) && class_exists( 'CVD_Vale_Check' ) && CVD_Vale_Check::enabled() ) {
+			$check = CVD_Vale_Check::review( array(
+				'gestora_id' => get_current_user_id(), 'phone' => $phone, 'require_phone' => 'delivery' === $type,
+				'name' => sanitize_text_field( wp_unslash( $_POST['billing_first_name'] ?? '' ) ), 'address' => 'delivery' === $type ? sanitize_text_field( wp_unslash( $_POST['billing_address_1'] ?? '' ) ) : '',
+			) );
+			if ( ! $check['ok'] ) { $errors->add( 'billing_phone', $check['error'] ); }
+			elseif ( $check['warnings'] && empty( $_POST[ CVD_Vale_Check::CONFIRM_FIELD ] ) ) { $errors->add( 'billing_phone', implode( ' ', wp_list_pluck( $check['warnings'], 'text' ) ) . ' Confirma «Sí, es el mismo» para seguir.' ); }
+		}
 		if ( 'delivery' !== $type ) {
 			// Recogida, 3.14.69.12 (Dany, Ernesto 26-oct): el teléfono es opcional, pero si lo escriben va completo; sin
 			// teléfono hace falta el nombre de quien recoge.
@@ -609,6 +619,14 @@ final class CVD_Cuban_Checkout {
 		// 3.14.53: «Es para mí» (validate() ya no deja pasar el teléfono propio sin marcarlo).
 		$own = ! empty( $_POST[ self::OWN_PHONE_FIELD ] ) ? self::own_phone_match( (string) ( $data['billing_phone'] ?? $order->get_billing_phone() ) ) : null;
 		if ( $own ) { self::mark_self_declared( $order, $own, 'web' ); }
+		// 3.14.75: dejó constancia de lo que la gestora confirmó («Sí, es el mismo»).
+		if ( ! empty( $_POST[ CVD_Vale_Check::CONFIRM_FIELD ] ) && ! $own && is_user_logged_in() && self::is_seller( get_current_user_id() ) && class_exists( 'CVD_Vale_Check' ) && CVD_Vale_Check::enabled() ) {
+			$seen = CVD_Vale_Check::review( array(
+				'gestora_id' => get_current_user_id(), 'phone' => (string) ( $data['billing_phone'] ?? $order->get_billing_phone() ), 'require_phone' => false, 'exclude_order' => $order->get_id(),
+				'name' => (string) ( $data['billing_first_name'] ?? $order->get_billing_first_name() ), 'address' => 'pickup' === $type ? '' : (string) ( $data['billing_address_1'] ?? $order->get_billing_address_1() ),
+			) );
+			if ( ! empty( $seen['warnings'] ) ) { CVD_Vale_Check::note_confirmed( $order, $seen['warnings'], 'web' ); }
+		}
 		// Pedido de prueba automático (3.13.54): «PRUEBA» en el nombre o la nota → nunca sale al reparto (ver CVD_Delivery::is_test_order).
 		if ( class_exists( 'CVD_Delivery' ) && ! CVD_Delivery::is_test_order( $order ) && CVD_Delivery::looks_like_test(
 			(string) ( $data['billing_first_name'] ?? '' ), (string) ( $data['billing_last_name'] ?? '' ), (string) ( $data['order_comments'] ?? '' ),
