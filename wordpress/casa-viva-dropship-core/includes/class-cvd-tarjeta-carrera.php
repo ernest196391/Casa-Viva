@@ -315,6 +315,9 @@ final class CVD_Tarjeta_Carrera {
 
 	/** Los mensajes de cada botón, ya escritos. role: tienda (la de turno) | gestora. */
 	public static function messages( WC_Order $order, string $kind, WP_User $messenger, array $extra = array() ): array {
+		// 3.14.81: carrera de ensayo (Ernesto 29-oct: «asegurarnos que todo está bien antes de obligar a los mensajeros»):
+		// funciona como una de verdad en Pa'llá, pero no avisa a la tienda ni a la gestora. Se borra al terminar.
+		if ( '' !== (string) $order->get_meta( '_cvd_ensayo', true ) ) { return array(); }
 		$n = '#' . $order->get_order_number();
 		$m = (string) $messenger->display_name;
 		$m_phone = class_exists( 'CVD_Sales' ) ? CVD_Sales::user_phone( $messenger->ID ) : '';
