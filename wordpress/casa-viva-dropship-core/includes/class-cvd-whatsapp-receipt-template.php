@@ -259,7 +259,7 @@ final class CVD_WhatsApp_Receipt_Template {
 			$items[] = array(
 				'name'       => self::clean( $item->get_name() ),
 				'quantity'   => max( 1, (int) $item->get_quantity() ),
-				'variations' => self::visible_variations( $product ),
+				'variations' => self::visible_variations( $product, $item ),
 				'price'      => self::money( $order, $item->get_total() ),
 				'unit_price' => self::money( $order, (float) $item->get_total() / max( 1, (int) $item->get_quantity() ) ),
 				'action_url' => $product && class_exists( 'CVD_Receipt_Links' ) ? CVD_Receipt_Links::url( $order, 'product', (int) $item_id ) : '',
@@ -268,15 +268,28 @@ final class CVD_WhatsApp_Receipt_Template {
 		return $items;
 	}
 
-	private static function visible_variations( $product ): array {
-		if ( ! $product instanceof WC_Product_Variation ) {
-			return array();
+	/**
+	 * «Color: Verde» de cada línea. 3.14.74 (Lennys 28-oct: estampados parecidos): si el diseño admite «cualquier»
+	 * valor, o la variación ya no existe, el valor elegido se lee de la línea del pedido (WooCommerce lo guarda ahí).
+	 */
+	private static function visible_variations( $product, ?WC_Order_Item_Product $item = null ): array {
+		$attributes = $product instanceof WC_Product_Variation ? $product->get_variation_attributes() : array();
+		if ( ! $attributes && $item && $item->get_variation_id() ) {
+			foreach ( $item->get_meta_data() as $meta ) {
+				$key = (string) $meta->key;
+				if ( '' !== $key && '_' !== $key[0] && is_scalar( $meta->value ) && ( 0 === strpos( $key, 'pa_' ) || taxonomy_exists( wc_attribute_taxonomy_name( $key ) ) ) ) {
+					$attributes[ 'attribute_' . $key ] = (string) $meta->value;
+				}
+			}
 		}
 
 		$visible = array();
-		foreach ( $product->get_variation_attributes() as $attribute => $value ) {
+		foreach ( $attributes as $attribute => $value ) {
 			$attribute = str_replace( 'attribute_', '', (string) $attribute );
-			$label = self::clean( wc_attribute_label( $attribute, $product ) );
+			if ( '' === (string) $value && $item ) {
+				$value = (string) $item->get_meta( $attribute, true );
+			}
+			$label = self::clean( wc_attribute_label( $attribute, $product instanceof WC_Product ? $product : '' ) );
 			$value = self::variation_value( $attribute, $value );
 			if ( $label && $value ) {
 				$visible[] = $label . ': ' . $value;

@@ -43,7 +43,7 @@ const app = read('includes/class-cvd-gestora-app.php');
 assert.doesNotMatch(app, /24–48/);
 
 const fotos = read('includes/class-cvd-gestora-fotos.php');
-assert.match(fotos, /cvd_fotos_catalog_v2/);
+assert.match(fotos, /cvd_fotos_catalog_v[2-9]/); // 3.14.74: v3 (diseño de cada foto)
 assert.match(fotos, /CVD_Datos_A_Mano::BAJO_PEDIDO/);
 
 const stock = read('includes/class-cvd-gestora-stock.php');

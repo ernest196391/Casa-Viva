@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
  * y solo se rehace si cambia un producto o una foto.
  */
 final class CVD_Gestora_Fotos {
-	private const CACHE = 'cvd_fotos_catalog_v2'; // 3.14.63: + 'market' (bajo pedido) en cada producto
+	private const CACHE = 'cvd_fotos_catalog_v3'; // 3.14.63: + 'market' (bajo pedido); 3.14.74: + diseño de cada foto ('v', 'a')
 	private const DIR = 'cvd-fotos';
 	private const MAX_IMAGES = 6;
 
@@ -62,12 +62,19 @@ final class CVD_Gestora_Fotos {
 			}
 			if ( ! $terms ) { continue; }
 			$images = array_values( array_unique( array_filter( array_merge( array( (int) $product->get_image_id() ), array_map( 'intval', $product->get_gallery_image_ids() ) ) ) ) );
+			$designs = array(); // 3.14.74 (Lennys 28-oct): id de foto → diseños que la usan (nombre y atributos)
 			if ( $product->is_type( 'variable' ) ) {
+				$own = array();
 				foreach ( $product->get_children() as $child_id ) {
 					$child = wc_get_product( $child_id );
-					if ( $child && 'publish' === $child->get_status() && $child->is_in_stock() && $child->get_image_id() ) { $images[] = (int) $child->get_image_id(); } // 3.14.41: un diseño oculto no se descarga
+					if ( ! $child || 'publish' !== $child->get_status() || ! $child->is_in_stock() ) { continue; } // 3.14.41: un diseño oculto no se descarga
+					$image_id = (int) $child->get_image_id( 'edit' ); // solo su foto propia: la del producto no lleva el nombre del diseño
+					if ( ! $image_id ) { continue; }
+					$own[] = $image_id;
+					$designs[ $image_id ][] = array( 'name' => self::design_name( $child ), 'attrs' => array_filter( array_map( 'strval', $child->get_variation_attributes() ), 'strlen' ) );
 				}
-				$images = array_values( array_unique( $images ) );
+				// Primero la foto principal y la de cada diseño; después la galería (con el tope de 6 se quedaban fuera).
+				$images = array_values( array_unique( array_filter( array_merge( array( (int) $product->get_image_id() ), $own, $images ) ) ) );
 			}
 			$images = array_slice( $images, 0, self::MAX_IMAGES );
 			if ( ! $images ) { continue; } // sin foto no sirve para publicar
@@ -80,7 +87,7 @@ final class CVD_Gestora_Fotos {
 				'qty'   => null === $qty ? null : (int) $qty,
 				'market' => class_exists( 'CVD_Datos_A_Mano' ) && CVD_Datos_A_Mano::is_bajo_pedido( $product ), // 3.14.63
 				'line'  => self::selling_line( $product ),
-				'imgs'  => array_map( static fn( int $id ): array => array( 'id' => $id, 'src' => (string) wp_get_attachment_image_url( $id, 'medium' ) ), $images ),
+				'imgs'  => array_map( static fn( int $id ): array => self::image_entry( $id, $designs[ $id ] ?? array() ), $images ),
 				'sig'   => $product->get_date_modified() ? $product->get_date_modified()->getTimestamp() : 0,
 			);
 		}
@@ -124,6 +131,31 @@ final class CVD_Gestora_Fotos {
 		return '';
 	}
 
+	/**
+	 * 3.14.74 (Lennys 28-oct: las cortinas con alfombra en varios estampados se confundían): cada foto sabe de qué
+	 * diseño es. 'v' = «Verde» (o «Verde / Azul» si la comparten varios); 'a' = atributos para que el enlace abra la
+	 * ficha con ese diseño ya elegido (solo si la foto es de un único diseño).
+	 */
+	private static function image_entry( int $id, array $designs ): array {
+		$entry = array( 'id' => $id, 'src' => (string) wp_get_attachment_image_url( $id, 'medium' ) );
+		$names = array_values( array_unique( array_filter( array_column( $designs, 'name' ) ) ) );
+		if ( $names ) { $entry['v'] = implode( ' / ', $names ); }
+		if ( 1 === count( $designs ) && ! empty( $designs[0]['attrs'] ) ) { $entry['a'] = $designs[0]['attrs']; }
+		return $entry;
+	}
+
+	/** «Verde» o «Verde, Grande»: solo los valores del diseño, como se ven en la ficha («azul-claro» → «Azul claro»). */
+	public static function design_name( WC_Product $variation ): string {
+		if ( ! $variation instanceof WC_Product_Variation || ! function_exists( 'wc_get_formatted_variation' ) ) { return ''; }
+		$text = html_entity_decode( wp_strip_all_tags( (string) wc_get_formatted_variation( $variation, true, false, false ) ), ENT_QUOTES, 'UTF-8' );
+		$text = trim( (string) preg_replace( '/\s+/u', ' ', $text ), ' ,' );
+		if ( '' !== $text && preg_match( '/^[a-z0-9áéíóúñü-]+(?:, [a-z0-9áéíóúñü-]+)*$/u', $text ) ) {
+			$text = str_replace( '-', ' ', $text );
+			$text = mb_strtoupper( mb_substr( $text, 0, 1 ) ) . mb_substr( $text, 1 );
+		}
+		return $text;
+	}
+
 	/** Lo de cada gestora: su precio, CUP del día, su enlace y el texto para copiar. */
 	public static function for_gestora( WP_User $user, string $code ): array {
 		$data = self::catalog();
@@ -149,7 +181,8 @@ final class CVD_Gestora_Fotos {
 				. "\nPídelo aquí y te lo llevamos 🛵 " . $link;
 			$out[] = array(
 				'id' => $item['id'], 'n' => $item['name'], 'c' => $item['cats'], 'p' => $usd, 'cup' => $cup, 's' => $stock,
-				't' => $text, 'i' => array_map( static fn( array $img ): array => array( $img['src'], self::jpg_url( $img['id'], $item['name'] ) ), $item['imgs'] ),
+				// 3.14.74: cada foto = [foto, JPG] o, si es de un diseño, [foto, JPG, «Verde», atributos para el enlace].
+				't' => $text, 'i' => array_map( static fn( array $img ): array => self::image_row( $img, $item['name'] ), $item['imgs'] ),
 			);
 		}
 		$cats = array();
@@ -159,6 +192,16 @@ final class CVD_Gestora_Fotos {
 			$cats[] = array( 'id' => $cat['id'], 'n' => $cat['name'], 'k' => $count, 'z' => self::zip_url( $cat['id'] ), 'zs' => self::zip_size_label( $cat['id'] ) );
 		}
 		return array( 'items' => $out, 'cats' => $cats );
+	}
+
+	private static function image_row( array $img, string $name ): array {
+		$design = (string) ( $img['v'] ?? '' );
+		$row = array( $img['src'], self::jpg_url( $img['id'], $name . ( '' !== $design ? ' ' . $design : '' ) ) );
+		if ( '' !== $design ) {
+			$row[] = $design;
+			$row[] = ! empty( $img['a'] ) ? http_build_query( $img['a'], '', '&', PHP_QUERY_RFC3986 ) : '';
+		}
+		return $row;
 	}
 
 	private static function usd( float $price ): string {

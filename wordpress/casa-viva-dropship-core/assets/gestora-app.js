@@ -121,11 +121,24 @@
     var fq = fotos.querySelector('[data-cvgf-q]'), fres = fotos.querySelector('[data-cvgf-results]'), fcats = fotos.querySelector('[data-cvgf-cats]'), fcount = fotos.querySelector('[data-cvgf-count]');
     var fesc = function (v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]; }); };
     var fnorm = function (v) { return String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); };
+    // 3.14.74 (Lennys 28-oct): cada foto de un diseño trae su nombre (im[2]) y, si es de uno solo, sus atributos (im[3]).
+    // Al tocar la miniatura sale «Elegiste: Verde» sobre la foto; el texto copiado lleva el diseño y el enlace lo abre ya elegido.
+    var fdesign = function (p, k, picked) { var d = p.i[k] && p.i[k][2]; return d ? (picked ? 'Elegiste: ' : 'Diseño: ') + '<b>' + fesc(d) + '</b>' : ''; };
     var card = function (p) {
-      var thumbs = p.i.length > 1 ? '<div class="cvgf-thumbs">' + p.i.map(function (im, k) { return '<button type="button" class="cvgf-thumb' + (k ? '' : ' is-on') + '" data-k="' + k + '" aria-label="Foto ' + (k + 1) + '"><img src="' + fesc(im[0]) + '" alt="" loading="lazy" width="48" height="48"></button>'; }).join('') + '</div>' : '';
-      return '<article class="cvgf-item" data-id="' + p.id + '"><div class="cvgf-photo"><img src="' + fesc(p.i[0][0]) + '" alt="' + fesc(p.n) + '" loading="lazy" width="300" height="300"></div>' + thumbs +
+      var thumbs = p.i.length > 1 ? '<div class="cvgf-thumbs">' + p.i.map(function (im, k) { return '<button type="button" class="cvgf-thumb' + (k ? '' : ' is-on') + '" data-k="' + k + '" aria-label="' + fesc(im[2] ? 'Diseño ' + im[2] : 'Foto ' + (k + 1)) + '"' + (im[2] ? ' title="' + fesc(im[2]) + '"' : '') + '><img src="' + fesc(im[0]) + '" alt="" loading="lazy" width="48" height="48"></button>'; }).join('') + '</div>' : '';
+      var first = fdesign(p, 0, false);
+      return '<article class="cvgf-item" data-id="' + p.id + '"><div class="cvgf-photo"><img src="' + fesc(p.i[0][0]) + '" alt="' + fesc(p.n + (p.i[0][2] ? ' — ' + p.i[0][2] : '')) + '" loading="lazy" width="300" height="300"><span class="cvgf-design" data-cvgf-design' + (first ? '' : ' hidden') + '>' + first + '</span></div>' + thumbs +
         '<div class="cvgf-body"><b class="cvgf-name">' + fesc(p.n) + '</b><span class="cvgf-price">' + fesc(p.p) + (p.cup ? ' <small>' + fesc(p.cup) + '</small>' : '') + '</span><small class="cvgf-stock">' + fesc(p.s) + '</small>' +
-        '<p class="cvgf-text">' + fesc(p.t) + '</p><div class="cvga-actions"><a class="cvga-btn cvga-btn-sm" href="' + fesc(p.i[0][1]) + '" data-cvgf-dl>Descargar foto' + (p.i.length > 1 ? ' 1' : '') + '</a><button class="cvga-btn cvga-btn-soft cvga-btn-sm" type="button" data-cvgf-copy>Copiar texto</button></div><small class="cvgf-done" role="status"></small></div></article>';
+        '<p class="cvgf-text">' + fesc(ftext(p, 0)) + '</p><div class="cvga-actions"><a class="cvga-btn cvga-btn-sm" href="' + fesc(p.i[0][1]) + '" data-cvgf-dl>Descargar foto' + (p.i.length > 1 ? ' 1' : '') + '</a><button class="cvga-btn cvga-btn-soft cvga-btn-sm" type="button" data-cvgf-copy>Copiar texto</button></div><small class="cvgf-done" role="status"></small></div></article>';
+    };
+    // Texto para copiar de la foto k: si es de un diseño, «*Nombre* — Verde» y el enlace abre la ficha con ese diseño.
+    var ftext = function (p, k) {
+      var im = p.i[k] || [], t = p.t;
+      if (!im[2]) return t;
+      var nl = t.indexOf('\n'), head = nl > -1 ? t.slice(0, nl) : t, rest = nl > -1 ? t.slice(nl) : '';
+      t = head + ' — ' + im[2] + rest;
+      if (im[3]) t = t.replace(/(https?:\/\/\S+)\s*$/, function (all, link) { return link + (link.indexOf('?') > -1 ? '&' : '?') + im[3]; });
+      return t;
     };
     var byId = {};
     fdata.items.forEach(function (p) { byId[p.id] = p; p.q = fnorm(p.n + ' ' + p.t.split('\n')[1]); });
@@ -159,21 +172,27 @@
       var th = e.target.closest('.cvgf-thumb');
       if (th) {
         var k = Number(th.getAttribute('data-k'));
-        item.querySelector('.cvgf-photo img').src = p.i[k][0];
+        var big = item.querySelector('.cvgf-photo img'); big.src = p.i[k][0]; big.alt = p.n + (p.i[k][2] ? ' — ' + p.i[k][2] : '');
         var dl = item.querySelector('[data-cvgf-dl]'); dl.href = p.i[k][1]; dl.textContent = 'Descargar foto ' + (k + 1);
         item.querySelectorAll('.cvgf-thumb').forEach(function (b) { b.classList.toggle('is-on', b === th); });
+        var tag = item.querySelector('[data-cvgf-design]'), shown = fdesign(p, k, true);
+        if (tag) { tag.innerHTML = shown; tag.hidden = !shown; }
+        item.setAttribute('data-k', String(k));
+        var tx = item.querySelector('.cvgf-text'); if (tx) tx.textContent = ftext(p, k);
+        item.querySelector('.cvgf-done').textContent = '';
         return;
       }
       var done = item.querySelector('.cvgf-done');
       if (e.target.closest('[data-cvgf-dl]')) { done.textContent = 'Descargando… mírala en tu galería o en Descargas.'; return; }
       if (e.target.closest('[data-cvgf-copy]')) {
-        var ok = function () { done.textContent = 'Texto copiado. Pégalo junto a la foto.'; };
+        var k = Number(item.getAttribute('data-k') || 0), d = p.i[k] && p.i[k][2], txt = ftext(p, k);
+        var ok = function () { done.textContent = d ? 'Texto copiado con el diseño «' + d + '». Pégalo junto a la foto.' : 'Texto copiado. Pégalo junto a la foto.'; };
         var fallback = function () {
-          var ta = document.createElement('textarea'); ta.value = p.t; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
+          var ta = document.createElement('textarea'); ta.value = txt; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
           var copied = false; try { copied = document.execCommand('copy'); } catch (ignore) {}
-          document.body.removeChild(ta); if (copied) ok(); else window.prompt('Copia el texto:', p.t);
+          document.body.removeChild(ta); if (copied) ok(); else window.prompt('Copia el texto:', txt);
         };
-        if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(p.t).then(ok, fallback); else fallback();
+        if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(txt).then(ok, fallback); else fallback();
       }
     });
     fotos.addEventListener('click', function (e) { var z = e.target.closest('[data-cvgf-zip]'); if (z) { var n = z.parentNode.querySelector('.cvga-note'); if (n) n.textContent = 'Preparando el ZIP… la primera vez puede tardar un minuto.'; } });

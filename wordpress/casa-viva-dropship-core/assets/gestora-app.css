@@ -318,3 +318,8 @@ body.cvga-body .cvd-customer-nav{display:none!important}
 .cvga-avail-row .cvga-actions{margin-top:2px}
 .cvga-avail-tag{display:inline-block;margin:2px 6px 2px 0;padding:1px 8px;border:1px solid #cfe0cc;border-radius:99px;background:#eef4ea;color:#2f5b36;font-size:11.5px;font-weight:600;line-height:1.5;white-space:nowrap}
 .cvga-avail-tag--pedido{border-color:#e8d9bf;background:#fbf1e4;color:#8a4b19}
+/* 3.14.74 (Lennys 28-oct): el diseño de la foto (cortinas con estampados parecidos) se lee encima de la foto. */
+.cvgf-photo{position:relative}
+.cvgf-design{position:absolute;left:6px;right:6px;bottom:6px;padding:4px 8px;border-radius:8px;background:rgba(255,253,249,.94);color:var(--ga-ink);font-size:12.5px;line-height:1.3;box-shadow:0 1px 4px rgba(0,0,0,.12);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cvgf-design[hidden]{display:none}
+.cvgf-design b{color:#a35a1f}

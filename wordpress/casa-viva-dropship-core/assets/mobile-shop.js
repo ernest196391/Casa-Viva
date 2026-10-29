@@ -56,6 +56,71 @@
     window.addEventListener("load", label);
   }
 
+  // 6) 3.14.74 (Lennys 28-oct: cortinas con alfombra en estampados parecidos): al elegir un diseño sale junto al botón
+  //    «Elegiste: Verde» con SU foto (sin foto propia, la del producto) y la foto grande pasa a ese diseño.
+  //    Tocar el recuadro sube a la foto grande. Solo presentación: no toca precio, stock ni pedido.
+  if ($) {
+    var gallery = document.querySelector("div.product .woocommerce-product-gallery") || document.querySelector("div.product .images");
+    var mainImg = function () { return gallery && (gallery.querySelector(".woocommerce-product-gallery__image img") || gallery.querySelector("img")); };
+    var file = function (url) { return String(url || "").split("?")[0].split("/").pop().replace(/(\.(webp|jpe?g|png|gif|avif))+$/i, "").replace(/-\d+x\d+$/, "").replace(/-scaled$/, ""); };
+    var box = document.createElement("div");
+    box.className = "cvd-chosen";
+    box.hidden = true;
+    box.setAttribute("role", "status");
+    box.setAttribute("aria-live", "polite");
+    box.innerHTML = '<img class="cvd-chosen__img" alt="" width="64" height="64" decoding="async"><span class="cvd-chosen__text"><small>Elegiste</small><b></b><em>Mira la foto antes de comprar</em></span>';
+    var wrap = form.querySelector(".single_variation_wrap");
+    if (wrap) wrap.insertBefore(box, wrap.firstChild); else form.appendChild(box);
+    var chosenName = function () {
+      var parts = [];
+      form.querySelectorAll("table.variations select").forEach(function (one) {
+        var option = one.options[one.selectedIndex];
+        if (one.value && option) parts.push(option.textContent.trim());
+      });
+      return parts.join(" · ");
+    };
+    var saved = null;
+    var restore = function () {
+      var img = mainImg();
+      if (!saved || !img) return;
+      Object.keys(saved).forEach(function (attr) { if (saved[attr] === null) img.removeAttribute(attr); else img.setAttribute(attr, saved[attr]); });
+      saved = null;
+    };
+    // WooCommerce ya cambia la foto si el tema usa su galería; esto es por si no lo hizo (galería propia, foto perezosa).
+    var ensureMain = function (image) {
+      var img = mainImg();
+      if (!img || !image || !image.src || gallery.querySelector(".flex-control-nav")) return; // con miniaturas, Woo pasa a la del diseño
+      var want = file(image.full_src || image.src), have = [img.currentSrc, img.getAttribute("src"), img.getAttribute("data-src"), img.getAttribute("data-large_image")].map(file);
+      if (have.indexOf(want) > -1 || have.indexOf(file(image.src)) > -1) return;
+      if (!saved) {
+        saved = {};
+        ["src", "srcset", "sizes", "data-src", "data-srcset", "data-large_image", "alt"].forEach(function (attr) { saved[attr] = img.getAttribute(attr); });
+      }
+      img.setAttribute("src", image.src);
+      if (image.srcset) img.setAttribute("srcset", image.srcset); else img.removeAttribute("srcset");
+      if (image.sizes) img.setAttribute("sizes", image.sizes);
+      img.removeAttribute("data-src");
+      img.removeAttribute("data-srcset");
+      if (image.full_src) img.setAttribute("data-large_image", image.full_src);
+      if (image.alt) img.setAttribute("alt", image.alt);
+    };
+    $(form).on("found_variation", function (event, variation) {
+      var name = chosenName();
+      var image = variation && variation.image ? variation.image : null;
+      var thumb = image && (image.gallery_thumbnail_src || image.thumb_src || image.src);
+      if (!name) { box.hidden = true; return; }
+      box.querySelector("b").textContent = name;
+      var pic = box.querySelector("img");
+      if (thumb) { pic.src = thumb; pic.alt = name; pic.hidden = false; } else { pic.hidden = true; }
+      box.hidden = false;
+      window.setTimeout(function () { ensureMain(image); }, 150);
+    });
+    $(form).on("reset_data hide_variation", function () { box.hidden = true; restore(); });
+    box.addEventListener("click", function () {
+      if (gallery) gallery.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   // 5) Si solo queda una opción (las agotadas ya no salen en la lista), se elige sola.
   if ($) {
     $(function () {
