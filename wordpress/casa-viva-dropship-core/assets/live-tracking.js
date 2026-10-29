@@ -155,6 +155,52 @@
       .catch(function () { var t = box.querySelector('[data-ruta-text]'); if (t) t.textContent = 'El mapa no cargó ahora (¿señal?). Lo intento de nuevo.'; });
   }
 
+  // 3.14.74.3 (fase 3 del mapa): el cliente marca su casa. Se abre el mapa centrado donde está el teléfono (si lo deja),
+  // toca su casa y la guarda (POST /delivery/{id}/casa con la clave del seguimiento).
+  function loadMapa() {
+    if (!mapaCarga) {
+      mapaCarga = window.PallaMapa ? Promise.resolve() : new Promise(function (ok, fail) {
+        var s = document.createElement('script');
+        s.src = window.cvdLiveTracking.mapaUrl;
+        s.onload = ok;
+        s.onerror = function () { mapaCarga = null; fail(new Error('mapa')); };
+        document.head.appendChild(s);
+      });
+    }
+    return mapaCarga;
+  }
+  var casa = tracking && tracking.querySelector('[data-casa]'), casaPicker = null;
+  if (casa) {
+    var casaMsg = casa.querySelector('[data-casa-msg]');
+    casa.querySelector('[data-casa-abrir]').addEventListener('click', function (event) {
+      event.currentTarget.hidden = true;
+      var mapEl = casa.querySelector('[data-casa-map]');
+      mapEl.hidden = false; mapEl.style.height = '300px';
+      casa.querySelector('[data-casa-help]').hidden = false;
+      casa.querySelector('[data-casa-guardar]').hidden = false;
+      var start = (casa.getAttribute('data-start') || '23.115,-82.397').split(',').map(Number);
+      loadMapa().then(function () { return window.PallaMapa.marcar(mapEl, start); }).then(function (picker) {
+        casaPicker = picker;
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(function (p) {
+            if (p.coords.accuracy <= 300 && !picker.get()) picker.put([p.coords.latitude, p.coords.longitude]);
+          }, function () {}, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+        }
+      }).catch(function () { if (casaMsg) casaMsg.textContent = 'El mapa no cargó ahora (¿señal?). Prueba otra vez.'; });
+    });
+    casa.querySelector('[data-casa-guardar]').addEventListener('click', function (event) {
+      var ll = casaPicker && casaPicker.get();
+      if (!ll) { if (casaMsg) casaMsg.textContent = 'Toca tu casa en el mapa primero.'; return; }
+      var btn = event.currentTarget;
+      btn.disabled = true;
+      if (casaMsg) casaMsg.textContent = 'Guardando…';
+      fetch(window.cvdLiveTracking.baseUrl + orderId + '/casa', { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: orderKey, lat: ll[0], lon: ll[1] }) })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (casaMsg) casaMsg.textContent = (d && d.message) || 'Listo.'; if (d && d.ok) { btn.hidden = true; } else { btn.disabled = false; } })
+        .catch(function () { btn.disabled = false; if (casaMsg) casaMsg.textContent = 'Sin señal: prueba otra vez.'; });
+    });
+  }
+
   function pollTracking() {
     fetch(window.cvdLiveTracking.baseUrl + orderId + '/tracking?key=' + encodeURIComponent(orderKey), { credentials:'omit' })
       .then(function (response) { if (!response.ok) throw new Error('tracking'); return response.json(); })

@@ -40,6 +40,10 @@ final class CVD_Palla_Api {
 		register_rest_route( self::NS, '/palla/hora', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'eta' ), 'permission_callback' => $auth ) );
 		// 3.14.69.16 (Pedri 25-oct: «ya no puedo ver las carreras que hice ayer… lo llevo en un Excel»): historial y acumulado.
 		register_rest_route( self::NS, '/palla/historial', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'history' ), 'permission_callback' => $auth ) );
+		// 3.14.74.3 (fase 3 del mapa): el punto exacto del cliente antes de salir. La gestora lo manda por WhatsApp (el bot
+		// lo trae aquí) o el cliente marca su casa en el seguimiento.
+		register_rest_route( self::NS, '/bot/gestora/ubicacion', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'gestora_point' ), 'permission_callback' => array( 'CVD_Bot_Bridge', 'authorized' ) ) );
+		register_rest_route( self::NS, '/delivery/(?P<id>\d+)/casa', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'client_point' ), 'permission_callback' => '__return_true' ) );
 		// 3.14.71.2 (Ernesto 28-oct, «como Mandao»): el recorrido del mensajero durante sus carreras.
 		register_rest_route( self::NS, '/palla/ubicacion', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'track' ), 'permission_callback' => $auth ) );
 		// 3.14.67.1: pasar la carrera a un compañero (él la acepta en su app; hasta entonces sigue siendo de quien la pasa).
@@ -548,6 +552,74 @@ final class CVD_Palla_Api {
 		$dlon = deg2rad( $lon2 - $lon1 );
 		$a = sin( $dlat / 2 ) ** 2 + cos( deg2rad( $lat1 ) ) * cos( deg2rad( $lat2 ) ) * sin( $dlon / 2 ) ** 2;
 		return 2 * $r * asin( min( 1.0, sqrt( $a ) ) );
+	}
+
+	// ------------------------------------------------------------------ Punto exacto del cliente (3.14.74.3, fase 3)
+
+	/** ¿Se puede (aún) guardar el punto de este pedido? A domicilio y sin entregar ni cancelar. */
+	private static function point_open( WC_Order $order ): bool {
+		if ( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return false; }
+		if ( in_array( $order->get_status(), array( 'completed', 'cancelled', 'refunded', 'failed', 'trash' ), true ) ) { return false; }
+		return ! in_array( CVD_Delivery::status( $order ), array( 'delivered', 'cash_returned', 'closed', 'cancelled' ), true );
+	}
+
+	/** Guarda el punto en _cvd_map_url (lo leen el vale, el mensajero, «Ir 📍» y el mapa). $from: gestora | cliente. */
+	public static function set_client_point( WC_Order $order, float $lat, float $lon, string $from ): bool {
+		if ( $lat < 19.5 || $lat > 23.5 || $lon < -85.2 || $lon > -74 || ! self::point_open( $order ) ) { return false; }
+		$lat = round( $lat, 6 ); $lon = round( $lon, 6 );
+		$order->update_meta_data( '_cvd_map_url', 'https://www.openstreetmap.org/?mlat=' . $lat . '&mlon=' . $lon . '#map=18/' . $lat . '/' . $lon );
+		$order->update_meta_data( '_cvd_map_from', 'cliente' === $from ? 'cliente' : 'gestora' );
+		$order->add_order_note( '📍 Ubicación exacta del cliente guardada (' . ( 'cliente' === $from ? 'la marcó el cliente en el seguimiento' : 'la mandó la gestora por WhatsApp' ) . ').' );
+		$order->save();
+		return true;
+	}
+
+	/**
+	 * POST /bot/gestora/ubicacion {phone, lat, lon, order?} → la gestora reenvió la ubicación de su cliente.
+	 * Sin order: su único pedido abierto a domicilio (de los últimos 3 días). Con varios: { result: choose, orders: [...] }.
+	 * → { result: saved | choose | none | not_gestora | not_yours | closed, number?, orders? }
+	 */
+	public static function gestora_point( WP_REST_Request $request ): WP_REST_Response {
+		$gestora = class_exists( 'CVD_Vale_Chat' ) ? CVD_Vale_Chat::gestora_by_phone( (string) $request->get_param( 'phone' ) ) : null;
+		if ( ! $gestora ) { return self::out( array( 'result' => 'not_gestora' ) ); }
+		$lat = (float) $request->get_param( 'lat' );
+		$lon = (float) $request->get_param( 'lon' );
+		$mine = static fn( WC_Order $o ): bool => 'gestora' === sanitize_key( (string) $o->get_meta( '_cvd_owner_type', true ) ) && absint( $o->get_meta( '_cvd_owner_user_id', true ) ) === $gestora->ID;
+		$wanted = absint( $request->get_param( 'order' ) );
+		if ( $wanted ) {
+			$order = wc_get_order( $wanted );
+			if ( ! $order instanceof WC_Order || ! $mine( $order ) ) { return self::out( array( 'result' => 'not_yours', 'number' => (string) $wanted ) ); }
+			if ( ! self::set_client_point( $order, $lat, $lon, 'gestora' ) ) { return self::out( array( 'result' => 'closed', 'number' => (string) $order->get_order_number() ) ); }
+			return self::out( array( 'result' => 'saved', 'number' => (string) $order->get_order_number() ) );
+		}
+		$open = array();
+		foreach ( wc_get_orders( array( 'limit' => 30, 'type' => 'shop_order', 'orderby' => 'date', 'order' => 'DESC', 'date_created' => '>=' . ( time() - 3 * DAY_IN_SECONDS ), 'meta_key' => '_cvd_owner_user_id', 'meta_value' => $gestora->ID ) ) as $o ) {
+			if ( $o instanceof WC_Order && ! $o instanceof WC_Order_Refund && $mine( $o ) && ! CVD_Tarjeta_Carrera::is_test( $o ) && self::point_open( $o ) ) { $open[] = $o; }
+		}
+		if ( ! $open ) { return self::out( array( 'result' => 'none' ) ); }
+		if ( count( $open ) > 1 ) {
+			return self::out( array( 'result' => 'choose', 'orders' => array_map( static fn( WC_Order $o ): array => array( 'id' => $o->get_id(), 'number' => (string) $o->get_order_number(), 'client' => self::first( (string) $o->get_billing_first_name() ), 'zone' => CVD_Delivery::destination_zone( $o ) ), array_slice( $open, 0, 6 ) ) ) );
+		}
+		if ( ! self::set_client_point( $open[0], $lat, $lon, 'gestora' ) ) { return self::out( array( 'result' => 'closed', 'number' => (string) $open[0]->get_order_number() ) ); }
+		return self::out( array( 'result' => 'saved', 'number' => (string) $open[0]->get_order_number() ) );
+	}
+
+	/** POST /delivery/{id}/casa {key, lat, lon}: el cliente marca su casa desde su enlace de seguimiento (con la clave). */
+	public static function client_point( WP_REST_Request $request ): WP_REST_Response {
+		$order = wc_get_order( absint( $request['id'] ) );
+		$key = sanitize_text_field( (string) $request->get_param( 'key' ) );
+		if ( ! $order instanceof WC_Order || '' === $key || ! hash_equals( $order->get_order_key(), $key ) ) {
+			$r = self::out( array( 'ok' => false, 'message' => 'Enlace no válido.' ) );
+			$r->set_status( 403 );
+			return $r;
+		}
+		$ok = self::set_client_point( $order, (float) $request->get_param( 'lat' ), (float) $request->get_param( 'lon' ), 'cliente' );
+		return self::out( array( 'ok' => $ok, 'message' => $ok ? '¡Gracias! El mensajero irá directo a ese punto.' : 'Ya no se puede cambiar (el pedido está entregado) o el punto no está en Cuba.' ) );
+	}
+
+	/** Para el seguimiento: ¿enseñar «Marca tu casa»? (a domicilio, abierto y todavía sin punto de la gestora o del cliente). */
+	public static function needs_client_point( WC_Order $order ): bool {
+		return self::point_open( $order ) && ! in_array( (string) $order->get_meta( '_cvd_map_from', true ), array( 'gestora', 'cliente' ), true );
 	}
 
 	/**

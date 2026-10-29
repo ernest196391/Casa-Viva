@@ -92,5 +92,22 @@
 		});
 	}
 
-	window.PallaMapa = { ruta: ruta, tienda: tienda };
+	/** 3.14.74.3: el cliente marca su casa (toca el mapa o arrastra la 🏠). → { put([lat, lon]), get() → [lat, lon] | null } */
+	function marcar(el, start) {
+		return load().then(function (L) {
+			var map = base(L, el), mk = null;
+			map.setView(start, 15);
+			setTimeout(function () { map.invalidateSize(); }, 50);
+			function put(ll) {
+				if (mk) { mk.setLatLng(ll); } else { mk = L.marker(ll, { icon: pin(L, '🏠', 'Tu casa'), draggable: true }).addTo(map._layer); }
+			}
+			map.on('click', function (e) { put(e.latlng); });
+			return {
+				put: function (ll) { put(ll); map.setView(ll, 17); },
+				get: function () { if (!mk) { return null; } var p = mk.getLatLng(); return [p.lat, p.lng]; }
+			};
+		});
+	}
+
+	window.PallaMapa = { ruta: ruta, tienda: tienda, marcar: marcar };
 })();

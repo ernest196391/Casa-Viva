@@ -943,6 +943,12 @@ final class CVD_Delivery {
 		$html .= '<div class="cvd-courier-location" data-courier-location hidden><strong>Ubicación del mensajero</strong><span data-location-time>Esperando actualización…</span><a class="cvd-secondary" data-location-link target="_blank" rel="noopener">Abrir en el mapa</a></div>';
 		// 3.14.72.2 (Ernesto 28-oct, «como Mandao»): el mapa del recorrido del mensajero; live-tracking.js lo pinta y lo pone al día.
 		$html .= '<div class="cvd-ruta" data-ruta hidden><div class="cvd-ruta-map" data-ruta-map></div><p class="cvd-ruta-text" data-ruta-text></p></div>';
+		// 3.14.74.3 (fase 3): «Marca tu casa» mientras el pedido no tenga el punto exacto (de la gestora o del cliente).
+		if ( class_exists( 'CVD_Palla_Api' ) && CVD_Palla_Api::needs_client_point( $order ) ) {
+			$html .= '<div class="cvd-casa" data-casa data-start="' . esc_attr( (string) get_option( 'cvd_palla_tienda_geo', '23.11504,-82.39749' ) ) . '"><button type="button" class="cvd-secondary" data-casa-abrir>📍 Marca tu casa en el mapa</button>'
+				. '<p class="cvd-casa-help" data-casa-help hidden>Toca tu casa en el mapa (o arrastra la 🏠). Así el mensajero llega directo.</p><div class="cvd-casa-map" data-casa-map hidden></div>'
+				. '<button type="button" class="cvd-primary" data-casa-guardar hidden>Guardar mi casa</button><p class="cvd-casa-msg" data-casa-msg></p></div>';
+		}
 		if ( 'pickup' === $status ) {
 			// 3.14.9 (D67): pedido de una gestora visto por su cliente: sin la dirección de la tienda ni «Cómo llegar».
 			$gestora_name = class_exists( 'CVD_Gestora_Store' ) ? CVD_Gestora_Store::order_gestora_name( $order ) : '';
