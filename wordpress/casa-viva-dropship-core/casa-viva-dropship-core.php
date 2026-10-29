@@ -64,6 +64,7 @@ require_once CVD_DIR . 'includes/class-cvd-delivery-when.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-stock.php';
 require_once CVD_DIR . 'includes/class-cvd-direct-dispatch.php';
 require_once CVD_DIR . 'includes/class-cvd-messenger-cash.php';
+require_once CVD_DIR . 'includes/class-cvd-cash-day.php'; // 3.14.75: «¿Lo recibiste hoy?» con el dinero de entregas viejas (Ernesto 28-oct)
 require_once CVD_DIR . 'includes/class-cvd-fichas.php';
 require_once CVD_DIR . 'includes/class-cvd-aprende.php';
 require_once CVD_DIR . 'includes/class-cvd-order-edit.php';

@@ -422,6 +422,12 @@ final class CVD_Sales {
 			return new WP_Error( 'cvd_invalid_transition', 'Ese cambio de estado no está permitido.', array( 'status' => 409 ) );
 		}
 		if ( 'cancelled' === $next ) { return new WP_Error( 'cvd_cancellation_failed', 'No se pudo cancelar el pedido.', array( 'status' => 409 ) ); } // se cancela arriba (CVD_Order_Edit)
+		// 3.14.75 (Ernesto 28-oct): dinero de una entrega de otro día → «¿Lo recibiste hoy?» antes de guardar nada.
+		$cash_day = array();
+		if ( 'delivered' === $next && class_exists( 'CVD_Cash_Day' ) ) {
+			$cash_day = CVD_Cash_Day::check( $order, $request, get_current_user_id() );
+			if ( is_wp_error( $cash_day ) ) { return $cash_day; }
+		}
 		if ( 'delivered' === $next ) {
 			// Zelle / USDT llegan como su propio método y se guardan como 'transfer' + cuenta (ver normalize_collection).
 			$collection = self::collection_from_request( $request );
@@ -442,6 +448,7 @@ final class CVD_Sales {
 			$order->update_meta_data( '_cvd_collection_note', sanitize_textarea_field( (string) $request->get_param( 'collectionNote' ) ) );
 			$order->update_meta_data( '_cvd_collection_received_by', get_current_user_id() );
 			$order->update_meta_data( '_cvd_collection_received_at', current_time( 'mysql', true ) );
+			if ( class_exists( 'CVD_Cash_Day' ) ) { CVD_Cash_Day::record( $order, $cash_day, get_current_user_id() ); }
 			// ¿Cuadra con lo que declaró el mensajero por WhatsApp? Si no, queda escrito en el pedido.
 			$declared_usd = (string) $order->get_meta( '_cvd_declared_usd', true );
 			$declared_cup = (string) $order->get_meta( '_cvd_declared_cup', true );
@@ -706,7 +713,8 @@ final class CVD_Sales {
 		if ( ! is_page( 'ventas' ) ) { return; }
 		wp_enqueue_style( 'cvd-sales', CVD_URL . 'assets/sales.css', array(), CVD_VERSION );
 		wp_enqueue_script( 'cvd-qr-code', CVD_URL . 'assets/qr-code.js', array(), CVD_VERSION, true );
-		wp_enqueue_script( 'cvd-sales', CVD_URL . 'assets/sales.js', array( 'cvd-qr-code' ), CVD_VERSION, true );
+		wp_enqueue_script( 'cvd-cash-day', CVD_URL . 'assets/cash-day.js', array(), CVD_VERSION, true );
+		wp_enqueue_script( 'cvd-sales', CVD_URL . 'assets/sales.js', array( 'cvd-qr-code', 'cvd-cash-day' ), CVD_VERSION, true );
 		wp_localize_script( 'cvd-sales', 'cvdSales', array(
 			'url' => rest_url( 'casa-viva/v1/sales' ),
 			'nonce' => wp_create_nonce( 'wp_rest' ),
