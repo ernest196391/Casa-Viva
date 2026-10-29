@@ -90,6 +90,16 @@ public class MainActivity extends Activity {
         return super.dispatchTouchEvent(ev);
     }
 
+    /** 1.2: con la app delante, el botón de volumen calla la bocina (y esa pulsación no cambia el volumen). */
+    @Override
+    public boolean onKeyDown(int keyCode, android.view.KeyEvent event) {
+        if ((keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP) && AvisosService.ringing()) {
+            AvisosService.stopSiren(this);
+            return true;
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
     @Override
     protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);

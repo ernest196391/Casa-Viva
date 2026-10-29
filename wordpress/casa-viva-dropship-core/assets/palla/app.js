@@ -567,11 +567,11 @@
 		if (cu.alt) { html += '<div class="pl-muted">Otro: <a href="tel:+' + esc(cu.alt) + '">' + esc(cu.altLabel) + '</a></div>'; }
 		html += '</section>';
 		// Paquete: qué llevas (y de dónde, si aún no lo recogió).
-		html += '<section class="pl-card"><ul class="pl-items">' + c.items.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
-		if (c.stage === 'pickup') { html += '<div class="pl-muted">' + esc(c.pickup.place + ' · ' + c.pickup.hours) + '</div>'; }
-		if (c.pickup.suppliers && c.pickup.suppliers.length && c.stage === 'pickup') { html += '<div class="pl-muted">Bajo pedido: pregunta en la tienda dónde se recoge.</div>'; }
-		if (c.assembly) { html += '<div class="pl-muted">🔧 Armado: <span class="pl-strong">' + esc(c.assembly) + '</span> (tuyo)</div>'; }
-		html += '</section>';
+		var pack = c.items.length ? '<ul class="pl-items">' + c.items.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' : '';
+		if (c.stage === 'pickup') { pack += '<div class="pl-muted">' + esc(c.pickup.place + ' · ' + c.pickup.hours) + '</div>'; }
+		if (c.pickup.suppliers && c.pickup.suppliers.length && c.stage === 'pickup') { pack += '<div class="pl-muted">Bajo pedido: pregunta en la tienda dónde se recoge.</div>'; }
+		if (c.assembly) { pack += '<div class="pl-muted">🔧 Armado: <span class="pl-strong">' + esc(c.assembly) + '</span> (tuyo)</div>'; }
+		if (pack) { html += '<section class="pl-card">' + pack + '</section>'; } // 29-oct: sin nada que decir, sin tarjeta vacía
 		if (!m.after) {
 			var small = function (t) { return String(t).length > 11 ? ' pl-amount--sm' : ''; };
 			html += '<section class="pl-card"><div class="pl-money"><div><span class="pl-muted">Cobras</span><span class="pl-amount' + small(m.chargeShort) + '">' + esc(m.chargeShort) + '</span></div><div><span class="pl-muted">A la tienda</span><span class="pl-amount' + small(m.bring) + '">' + esc(m.bring) + '</span></div></div>'
@@ -603,8 +603,14 @@
 	function payOptions(m) {
 		var o = [];
 		if (m.prepaid) { return o; }
-		// Primera opción: SIEMPRE cómo dice el pedido que paga (sin tasa, con el campo para escribir los CUP).
-		o.push({ k: 'vale', label: KIND[m.kind] || m.label || 'Lo del vale', amount: m.unknown ? '' : m.productsText });
+		// Primera opción: cómo dice el pedido que paga (sin tasa). 29-oct (Ernesto: «no se entiende»): si el vale no dice
+		// cuánto, no sale «Lo del vale» con un campo vacío: empieza por «Efectivo CUP» y escribe lo que cobró.
+		if (m.unknown) {
+			var tr = { k: 'transfer', label: m.transfer ? (KIND[m.kind] || 'Transferencia') : 'Transferencia' }, cash = { k: 'cup', label: 'Efectivo CUP' };
+			o.push(m.transfer ? tr : cash, m.transfer ? cash : tr, { k: 'otra', label: 'Otra moneda' });
+			return o;
+		}
+		o.push({ k: 'vale', label: KIND[m.kind] || m.label || 'Lo del vale', amount: m.productsText });
 		if (m.kind !== 'cash_cup' && m.currency !== 'CUP') { o.push({ k: 'cup', label: 'Efectivo CUP' }); }
 		if (!m.transfer) { o.push({ k: 'transfer', label: 'Transferencia', amount: m.unknown ? '' : m.productsText }); }
 		o.push({ k: 'otra', label: 'Otra cantidad' });
@@ -628,7 +634,9 @@
 		return { payload: { otra: 1, usd: by.USD, cup: by.CUP, eur: by.EUR, como: trans ? 'transferencia' : 'efectivo' }, bring: addMoney(trans ? {} : by, m.change), ok: by.USD + by.CUP + by.EUR > 0 };
 	}
 	function bringNote(c) {
-		var t = moneyText(payPlan(c).bring);
+		var plan = payPlan(c);
+		if (!plan.ok) { return 'Escribe lo que cobraste y aquí sale lo que llevas a la tienda.'; } // antes decía «No llevas dinero» con el campo vacío
+		var t = moneyText(plan.bring);
 		return t ? 'A la tienda: <span style="font-weight:700">' + esc(t) + '</span> antes de las 4 p. m.' : 'No llevas dinero a la tienda.'; // 3.14.69.16: más corto
 	}
 
@@ -765,12 +773,13 @@
 		var o = offerId ? findOffer(offerId) : null;
 		var n = c ? c.number : (o ? o.number : '');
 		var html = '<header class="pl-top"><h1 class="pl-h1">Ayuda</h1></header>' + offlineBar();
-		html += '<main class="pl-main"><section class="pl-card"><div class="pl-strong">Sin señal</div><div>Lo que ya cogiste sigue aquí, y lo que toques se manda solo al volver la señal.</div><div class="pl-muted">Para ver carreras nuevas hace falta señal.</div></section>';
+		html += '<main class="pl-main">';
+		// 29-oct (Ernesto: «no se entiende»): «Sin señal» solo cuando de verdad no hay señal.
+		if (state.offline) { html += '<section class="pl-card"><div class="pl-strong">Sin señal</div><div>Lo que ya cogiste sigue aquí, y lo que toques se manda solo al volver la señal.</div></section>'; }
 		if (state.queue.length) { html += '<div class="pl-note">' + icon('sincronizar', 20) + '<div>' + state.queue.length + (state.queue.length === 1 ? ' acción guardada' : ' acciones guardadas') + ', esperando la señal.</div></div>'; }
-		html += '<h2 class="pl-h2">Por WhatsApp</h2>';
-		if (mine.length > 1) { html += '<div class="pl-chips">' + mine.map(function (x) { return '<a class="pl-chip' + (c && String(x.id) === String(c.id) ? ' is-on' : '') + '" href="#ayuda/' + x.id + '">#' + esc(x.number) + '</a>'; }).join('') + '</div>'; }
-		if (!c && !o) { html += '<p class="pl-empty">Cuando tengas una carrera, aquí salen sus palabras.</p>'; }
-		else {
+		if (c || o) {
+			html += '<h2 class="pl-h2">Si la app falla, escribe en WhatsApp</h2>';
+			if (mine.length > 1) { html += '<div class="pl-chips">' + mine.map(function (x) { return '<a class="pl-chip' + (c && String(x.id) === String(c.id) ? ' is-on' : '') + '" href="#ayuda/' + x.id + '">#' + esc(x.number) + '</a>'; }).join('') + '</div>'; }
 			var w = c ? wordFor(c) : null;
 			var cmds = o ? [['Yo', 'En el grupo, debajo del anuncio de #' + n]] : [[w.entregado, 'Entregado y cobrado'], [w.problema, 'Algo salió mal'], [w.suelto, 'La sueltas']];
 			// 3.14.69.8: solo lo que el bot en vivo entiende («Recogí» se toca en la app y va en la cola).

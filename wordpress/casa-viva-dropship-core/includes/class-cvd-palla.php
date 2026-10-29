@@ -233,7 +233,8 @@ final class CVD_Palla {
 			'version'  => CVD_VERSION,
 			'mode'     => self::mode(),
 			'whatsapp' => self::whatsapp(),
-			'storeMap' => (string) get_option( 'cvd_palla_tienda_mapa', 'https://www.google.com/maps/search/?api=1&query=Calle+Conill+esquina+45%2C+Nuevo+Vedado%2C+La+Habana' ),
+			// 29-oct (Ernesto): buscar «Conill esquina 45» en Google llevaba a otro sitio a 3,9 km. Ahora el punto exacto.
+			'storeMap' => (string) get_option( 'cvd_palla_tienda_mapa', 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode( (string) get_option( 'cvd_palla_tienda_geo', '23.1143,-82.39774' ) ) ),
 		);
 	}
 

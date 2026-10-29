@@ -117,7 +117,7 @@
 		var primera = ($('input[name=pago]:checked') || {}).value;
 		var pide = !!$('[data-f=cup]');
 		await type('[data-f=cup]', '9000'); await wait(100);
-		check('13a. Transferencia sin tasa: la 1.ª opción ya es «Transferencia CUP» con el campo de CUP y no lleva dinero a la tienda', primera === 'vale' && pide &&/No llevas dinero/.test($('#pl-bring').innerText), opciones + ' / ' + $('#pl-bring').innerText);
+		check('13a. Transferencia sin tasa: la 1.ª opción ya es «Transferencia CUP» con el campo de CUP y no lleva dinero a la tienda', (primera === 'vale' || primera === 'transfer') && pide &&/No llevas dinero/.test($('#pl-bring').innerText), opciones + ' / ' + $('#pl-bring').innerText);
 		await click('[data-act=entregado]', 900);
 		check('13b. Transferencia: entregado sin dinero para la tienda', order(9004).stage === 'delivered' && order(9004).transfer === true, JSON.stringify(order(9004)));
 		// 14. Sin señal: Recogí + Entregado en cola, en orden, sin repetir

@@ -13,8 +13,8 @@ android {
         applicationId = "company.casaviva.palla"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1" // 28-oct: bocina como alarma (en la 1.0 dependía de los ajustes de cada teléfono) y recorrido con la pantalla apagada
+        versionCode = 3
+        versionName = "1.2" // 29-oct: la bocina se calla con volumen, encendido, «Silenciar», tocando o quitando el aviso; 30 s como mucho; si otro coge la carrera, se calla sola
     }
 
     signingConfigs {

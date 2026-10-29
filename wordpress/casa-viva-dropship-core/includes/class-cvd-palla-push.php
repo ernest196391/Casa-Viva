@@ -156,7 +156,18 @@ final class CVD_Palla_Push {
 		$user = get_userdata( $user_id );
 		if ( ! $user || ! self::allowed( $user ) ) { return; }
 		CVD_Web_Push::notify_palla( $user_id, $order->get_id(), $type, $title, $message, home_url( '/palla/' ) . $hash );
-		self::ntfy( $user_id, $title, $message, home_url( '/palla/' ) . $hash );
+		self::ntfy( $user_id, $title, $message, home_url( '/palla/' ) . $hash, array( $type, 'o' . $order->get_id() ) );
+	}
+
+	/**
+	 * 3.14.82 (Ernesto 29-oct): alguien cogió una carrera libre → a los demás teléfonos les llega «cerrada» (sin aviso a la
+	 * vista) y la app 1.2 calla la bocina de esa carrera si todavía está sonando.
+	 */
+	private static function closed_for_others( WC_Order $order, int $owner ): void {
+		if ( ! in_array( 'offer', self::types(), true ) ) { return; }
+		foreach ( self::subscribers() as $user ) {
+			if ( $user->ID !== $owner ) { self::ntfy( $user->ID, '#' . $order->get_order_number() . ' ya tiene mensajero', 'La cogió otro compañero.', home_url( '/palla/#carreras' ), array( 'cerrada', 'o' . $order->get_id() ) ); }
+		}
 	}
 
 	/**
@@ -164,7 +175,7 @@ final class CVD_Palla_Push {
 	 * pasa por Google. Solo a quien tiene tema (user meta `_cvd_palla_ntfy_topic`, secreto y de solo lectura en ntfy);
 	 * publica el usuario `core` con su token (`cvd_palla_ntfy_token`). Sin esperar respuesta: no frena el guardado.
 	 */
-	private static function ntfy( int $user_id, string $title, string $message, string $click ): bool {
+	private static function ntfy( int $user_id, string $title, string $message, string $click, array $tags = array() ): bool {
 		$topic = (string) get_user_meta( $user_id, self::NTFY_TOPIC, true );
 		$url = (string) get_option( 'cvd_palla_ntfy_url', '' );
 		$token = (string) get_option( 'cvd_palla_ntfy_token', '' );
@@ -173,7 +184,7 @@ final class CVD_Palla_Push {
 			'timeout'  => 5,
 			'blocking' => false,
 			'headers'  => array( 'Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json' ),
-			'body'     => wp_json_encode( array( 'topic' => $topic, 'title' => $title, 'message' => $message, 'click' => $click, 'priority' => 5, 'tags' => array( 'motor_scooter' ) ) ),
+			'body'     => wp_json_encode( array( 'topic' => $topic, 'title' => $title, 'message' => $message, 'click' => $click, 'priority' => 5, 'tags' => array_merge( array( 'motor_scooter' ), $tags ) ) ), // 3.14.82: la app 1.2 lee el tipo y la carrera («o<id>»)
 		) );
 		return true;
 	}
@@ -188,6 +199,7 @@ final class CVD_Palla_Push {
 	public static function on_save( $order ): void {
 		if ( self::$busy || 'no' === self::mode() || ! $order instanceof WC_Order || $order instanceof WC_Order_Refund || 'shop_order' !== $order->get_type() ) { return; }
 		if ( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) || CVD_Tarjeta_Carrera::is_test( $order ) ) { return; }
+		if ( '' !== (string) $order->get_meta( '_cvd_ensayo', true ) ) { return; } // 3.14.82: la carrera de ensayo nunca avisa a nadie (29-oct salió como libre)
 		self::$busy = true;
 		try { self::check( $order ); } catch ( Throwable $e ) { error_log( 'Pa\'llá avisos: ' . $e->getMessage() ); } finally { self::$busy = false; } // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 	}
@@ -243,6 +255,7 @@ final class CVD_Palla_Push {
 		}
 		$prev = absint( $prev );
 		if ( $owner !== $prev ) {
+			if ( $owner && ! $prev && false !== get_transient( 'cvd_palla_offer_' . $id ) ) { self::closed_for_others( $order, $owner ); } // estaba libre y se ofertó
 			set_transient( 'cvd_palla_owner_' . $id, $owner, self::TTL );
 			delete_transient( 'cvd_palla_h_' . $id );
 			$paso = json_decode( (string) $order->get_meta( '_cvd_palla_paso', true ), true );
@@ -277,7 +290,7 @@ final class CVD_Palla_Push {
 		$user = get_userdata( $user_id );
 		if ( ! $user || ! self::allowed( $user ) ) { return 'no puede recibir avisos (cvd_palla_push o cvd_palla)'; }
 		CVD_Web_Push::notify_palla( $user_id, 0, 'test', '🔔 Prueba de Pa\'llá', 'Si ves esto, los avisos funcionan. Toca para abrir la app.', home_url( '/palla/#carreras' ) );
-		self::ntfy( $user_id, '🔔 Prueba de Pa\'llá', 'Si ves esto, los avisos funcionan sin Google. Toca para abrir la app.', home_url( '/palla/#carreras' ) );
+		self::ntfy( $user_id, '🔔 Prueba de Pa\'llá', 'Si ves esto, los avisos funcionan sin Google. Toca para abrir la app.', home_url( '/palla/#carreras' ), array( 'prueba' ) );
 		return 'enviado';
 	}
 

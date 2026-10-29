@@ -40,10 +40,17 @@ public class AvisosService extends Service {
     // teléfono silencia las apps nuevas. Canal nuevo porque Android no deja cambiar el sonido de un canal ya creado.
     private static final String CH_NEW = "palla_carreras_2";
     private static final String ACTION_STOP = "company.casaviva.palla.PARAR";
+    private static final String ACTION_SILENCE = "company.casaviva.palla.SILENCIAR"; // 1.2: calla, pero el aviso se queda
     private static android.media.MediaPlayer siren;
+    // 1.2 (29-oct, Ernesto: «se quedó más de 1 min vibrando y no sabía cómo apagarlo»): la vibración se para con el MISMO
+    // Vibrator que la empezó (en algunos teléfonos cancel() desde otra pantalla de la app no la paraba).
+    private static android.os.Vibrator vib;
+    private static android.content.BroadcastReceiver keys;
+    private static long sirenAt;
+    private static String alarmOrder = "";              // la carrera que está sonando (tag «o<id>»), para callarla si otro la coge
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final int ID_RUN = 1, ID_NEW = 2;
-    private static final long ALARM_MS = 3 * 60_000L;   // la bocina se repite como mucho 3 min
+    private static final long ALARM_MS = 30_000L;       // 1.2 (Ernesto): la bocina suena como mucho 30 s
     private static final long FRESH_S = 10 * 60L;       // al reconectar, solo suenan los avisos de los últimos 10 min
 
     private volatile boolean running;
@@ -116,37 +123,73 @@ public class AvisosService extends Service {
         if (nm != null) { nm.cancel(ID_NEW); }
     }
 
-    /** La bocina en bucle (cada 3 s, el archivo ya trae el silencio) por el volumen de ALARMA, y vibración a la vez. */
+    /**
+     * La bocina en bucle (cada 3 s, el archivo ya trae el silencio) por el volumen de ALARMA, y vibración a la vez.
+     * 1.2 (Ernesto 29-oct): se calla sola a los 30 s, y antes con el botón de volumen, el de encendido, tocando la app,
+     * con «Silenciar» o quitando el aviso.
+     */
     static synchronized void startSiren(Context c) {
-        stopSiren(c);
+        final Context app = c.getApplicationContext();
+        stopSiren(app);
         try {
             android.media.MediaPlayer mp = new android.media.MediaPlayer();
             mp.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
-            mp.setDataSource(c, Uri.parse("android.resource://" + c.getPackageName() + "/" + R.raw.bocina));
+            mp.setDataSource(app, Uri.parse("android.resource://" + app.getPackageName() + "/" + R.raw.bocina));
             mp.setLooping(true);
             mp.prepare();
             mp.start();
             siren = mp;
         } catch (Exception ignored) { }
-        android.os.Vibrator v = (android.os.Vibrator) c.getSystemService(VIBRATOR_SERVICE);
+        vib = (android.os.Vibrator) app.getSystemService(VIBRATOR_SERVICE);
         long[] pattern = {0, 400, 150, 400, 2050}; // dos vibraciones cada 3 s, como la bocina
-        if (v != null) {
-            if (Build.VERSION.SDK_INT >= 26) { v.vibrate(android.os.VibrationEffect.createWaveform(pattern, 0)); } else { v.vibrate(pattern, 0); }
+        if (vib != null) {
+            if (Build.VERSION.SDK_INT >= 26) { vib.vibrate(android.os.VibrationEffect.createWaveform(pattern, 0)); } else { vib.vibrate(pattern, 0); }
         }
-        final Context app = c.getApplicationContext();
+        sirenAt = android.os.SystemClock.elapsedRealtime();
+        listenKeys(app);
         MAIN.removeCallbacksAndMessages(null);
         MAIN.postDelayed(() -> stopSiren(app), ALARM_MS);
     }
 
+    static synchronized boolean ringing() { return siren != null || sirenAt > 0; }
+
     static synchronized void stopSiren(Context c) {
+        final Context app = c.getApplicationContext();
         MAIN.removeCallbacksAndMessages(null);
+        sirenAt = 0;
         if (siren != null) {
             try { siren.stop(); } catch (Exception ignored) { }
             siren.release();
             siren = null;
         }
-        android.os.Vibrator v = (android.os.Vibrator) c.getSystemService(VIBRATOR_SERVICE);
+        if (vib != null) { vib.cancel(); vib = null; }
+        android.os.Vibrator v = (android.os.Vibrator) app.getSystemService(VIBRATOR_SERVICE);
         if (v != null) { v.cancel(); }
+        if (keys != null) {
+            try { app.unregisterReceiver(keys); } catch (Exception ignored) { }
+            keys = null;
+        }
+    }
+
+    /**
+     * Mientras suena: el botón de volumen (cambia el volumen → VOLUME_CHANGED) o el de encendido (la pantalla se apaga,
+     * o se enciende pasados 2 s: la que enciende el propio aviso no cuenta) la callan. El aviso se queda arriba.
+     */
+    private static void listenKeys(Context app) {
+        keys = new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context ctx, Intent i) {
+                String a = i.getAction();
+                if (Intent.ACTION_SCREEN_ON.equals(a) && android.os.SystemClock.elapsedRealtime() - sirenAt < 2_000) { return; }
+                stopSiren(ctx);
+            }
+        };
+        android.content.IntentFilter f = new android.content.IntentFilter();
+        f.addAction(Intent.ACTION_SCREEN_OFF);
+        f.addAction(Intent.ACTION_SCREEN_ON);
+        f.addAction("android.media.VOLUME_CHANGED_ACTION");
+        try {
+            if (Build.VERSION.SDK_INT >= 33) { app.registerReceiver(keys, f, Context.RECEIVER_EXPORTED); } else { app.registerReceiver(keys, f); }
+        } catch (Exception e) { keys = null; }
     }
 
     // ------------------------------------------------------------------ Servicio
@@ -272,7 +315,7 @@ public class AvisosService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && ACTION_STOP.equals(intent.getAction())) { stopSiren(this); } // quitó el aviso: se calla
+        if (intent != null && (ACTION_STOP.equals(intent.getAction()) || ACTION_SILENCE.equals(intent.getAction()))) { stopSiren(this); } // quitó el aviso o tocó «Silenciar»
         if (!Prefs.ready(this)) { stopSelf(); return START_NOT_STICKY; }
         if (intent != null && ACTION_TRACK.equals(intent.getAction())) {
             if (intent.getBooleanExtra("on", false)) { startTracking(); } else { stopTracking(); }
@@ -341,12 +384,26 @@ public class AvisosService extends Service {
             if (!"message".equals(e.optString("event"))) { return; }
             Prefs.setLastId(this, e.optString("id"));
             if (System.currentTimeMillis() / 1000 - e.optLong("time") > FRESH_S) { return; } // viejo (estaba sin señal): no suena
-            alarm(e.optString("title", "Pa'llá"), e.optString("message", ""), e.optString("click", ""));
+            // 1.2: Core dice qué es en los tags (offer, assigned, lost, cancelled, changed, prueba; «o<id>» = la carrera).
+            java.util.Set<String> tags = new java.util.HashSet<>();
+            org.json.JSONArray t = e.optJSONArray("tags");
+            for (int i = 0; t != null && i < t.length(); i++) { tags.add(t.optString(i)); }
+            String order = "";
+            for (String s : tags) { if (s.matches("o\\d+")) { order = s; } }
+            if (tags.contains("cerrada")) { // otro la cogió: si es la que suena, se calla y se quita
+                if (!order.isEmpty() && order.equals(alarmOrder)) { stopAlarm(this); alarmOrder = ""; }
+                return;
+            }
+            boolean loud = !(tags.contains("lost") || tags.contains("cancelled") || tags.contains("changed"));
+            alarm(e.optString("title", "Pa'llá"), e.optString("message", ""), e.optString("click", ""), loud, order);
         } catch (Exception ignored) { }
     }
 
-    /** El aviso: se ve arriba (sin sonido del canal) y la bocina suena aparte hasta que lo toque, lo quite o abra la app. */
-    private void alarm(String title, String text, String click) {
+    /**
+     * El aviso: se ve arriba (sin sonido del canal) con «Silenciar», y la bocina suena aparte (carrera libre, asignada o
+     * prueba) hasta 30 s. Lo demás (ya no es tuya, se canceló, cambió) solo vibra una vez.
+     */
+    private void alarm(String title, String text, String click, boolean loud, String order) {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm == null) { return; }
         Intent stop = new Intent(this, AvisosService.class).setAction(ACTION_STOP);
@@ -360,8 +417,20 @@ public class AvisosService extends Service {
             .setCategory(Notification.CATEGORY_ALARM)
             .setContentIntent(openApp(click, 1))
             .setDeleteIntent(onDismiss);
+        if (loud) {
+            Intent silence = new Intent(this, AvisosService.class).setAction(ACTION_SILENCE);
+            PendingIntent onSilence = Build.VERSION.SDK_INT >= 26 ? PendingIntent.getForegroundService(this, 3, silence, flags) : PendingIntent.getService(this, 3, silence, flags);
+            b.addAction(new Notification.Action.Builder(null, "🔇 Silenciar", onSilence).build());
+            b.addAction(new Notification.Action.Builder(null, "Ver carrera", openApp(click, 4)).build());
+        }
         if (Build.VERSION.SDK_INT < 26) { b.setPriority(Notification.PRIORITY_MAX); }
         nm.notify(ID_NEW, b.build());
+        if (!loud) {
+            android.os.Vibrator v = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
+            if (v != null) { if (Build.VERSION.SDK_INT >= 26) { v.vibrate(android.os.VibrationEffect.createOneShot(300, android.os.VibrationEffect.DEFAULT_AMPLITUDE)); } else { v.vibrate(300); } }
+            return;
+        }
+        alarmOrder = order;
         // De 22:00 a 7:00 (hora del teléfono) el aviso sale, pero sin bocina: como alarma sonaría aunque esté en silencio.
         int h = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
         if (h >= 7 && h < 22) { startSiren(this); }
