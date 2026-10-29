@@ -149,6 +149,7 @@
 			applyQueue();
 			state.loading = false;
 			render();
+			trackSync(); // 3.14.71.2: con carreras abiertas, el recorrido
 		}).catch(function () {
 			state.offline = true;
 			if (!state.hoy) { try { state.hoy = JSON.parse(store.get(PFX + 'hoy') || 'null'); } catch (e) { state.hoy = null; } applyQueue(); }
@@ -298,6 +299,48 @@
 		navigator.geolocation.getCurrentPosition(function (p) {
 			finish(p.coords.accuracy <= 200 ? { lat: +p.coords.latitude.toFixed(6), lon: +p.coords.longitude.toFixed(6), acc: Math.max(1, Math.round(p.coords.accuracy)) } : {});
 		}, function () { finish({}); }, { enableHighAccuracy: true, timeout: 5500, maximumAge: 60000 });
+	}
+	// ------------------------------------------------------------ Recorrido (3.14.71.2, Ernesto 28-oct: «como Mandao»)
+	// Con carreras abiertas: la posición cada 30 s si se mueve (o 50 m), en lotes cada minuto; sin señal se guardan y se
+	// mandan al volver. En la app de Android lo hace la app (también con la pantalla apagada): aquí solo se le avisa.
+	var trk = { watch: null, buf: null, last: null, timer: 0, sending: false };
+	function trackSync() {
+		var active = !P && !!(state.hoy && state.hoy.carreras && state.hoy.carreras.length);
+		if (NATIVE) { try { if (NATIVE.setActive) { NATIVE.setActive(active); } } catch (e) {} return; }
+		if (!navigator.geolocation) { return; }
+		if (trk.buf === null) { try { trk.buf = JSON.parse(store.get(PFX + 'trk') || '[]') || []; } catch (e) { trk.buf = []; } }
+		if (active && trk.watch === null) {
+			trk.watch = navigator.geolocation.watchPosition(onPos, function () {}, { enableHighAccuracy: true, maximumAge: 15000, timeout: 30000 });
+			trk.timer = setInterval(trackFlush, 60000);
+		} else if (!active && trk.watch !== null) {
+			navigator.geolocation.clearWatch(trk.watch); trk.watch = null; clearInterval(trk.timer); trackFlush();
+		}
+	}
+	function meters(a, b) {
+		var r = Math.PI / 180, x = Math.pow(Math.sin((b.lat - a.lat) * r / 2), 2) + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.pow(Math.sin((b.lon - a.lon) * r / 2), 2);
+		return 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(x)));
+	}
+	function onPos(p) {
+		var c = p.coords;
+		if (c.accuracy > 150) { return; }
+		var pt = { lat: +c.latitude.toFixed(5), lon: +c.longitude.toFixed(5), acc: Math.round(c.accuracy), t: Math.round((p.timestamp || Date.now()) / 1000) };
+		if (trk.last && pt.t - trk.last.t < 30 && meters(trk.last, pt) < 50) { return; }
+		trk.last = pt;
+		trk.buf.push(pt);
+		trk.buf = trk.buf.slice(-240);
+		store.set(PFX + 'trk', JSON.stringify(trk.buf));
+	}
+	function trackFlush() {
+		if (!trk.buf || !trk.buf.length || trk.sending) { return; }
+		var batch = trk.buf.slice();
+		trk.sending = true;
+		api('ubicacion', { points: batch }).then(function (res) {
+			trk.sending = false;
+			if (res.status !== 200 || !res.data.ok) { return; }
+			trk.buf = trk.buf.slice(batch.length);
+			store.set(PFX + 'trk', JSON.stringify(trk.buf));
+			if (res.data.arrived && res.data.arrived.length) { showToast('📍 ' + res.data.arrived.map(function (n) { return '#' + n; }).join(', ') + ': avisamos de que llegaste.'); load(); }
+		}).catch(function () { trk.sending = false; }); // sin señal: se queda guardado para el próximo minuto
 	}
 	// 3.14.69.16 (Pedri 25-oct: «lo tocas y no se nota»): el botón gira mientras actualiza.
 	function refreshBtn() {
@@ -515,7 +558,8 @@
 		if (c.stage === 'delivered' && m.after) { html += '<div class="pl-alert pl-alert--success">' + icon('bien', 20) + '<div><b>Entregado</b>' + esc(m.sentence || '') + '</div></div>'; }
 		// Cliente: dónde, cuándo y los dos botones que importan (Llamar · Ir).
 		html += '<section class="pl-card"><div class="pl-strong">' + esc(cu.name) + '</div><div>' + esc(cu.address || cu.zone) + '</div><div class="pl-muted">' + esc([cu.address ? cu.zone : '', cu.reference].filter(Boolean).join(' · ')) + '</div>';
-		if (c.eta) { html += '<div class="pl-row" style="align-items:center"><span>🕒 <span class="pl-strong">' + esc(c.eta) + '</span></span><a class="pl-btn pl-btn--link" href="#hora/' + c.id + '">Cambiar</a></div>'; }
+		if (c.arrived) { html += '<div class="pl-strong">📍 Llegaste · avisamos a quien lo vendió</div>'; }
+		else if (c.eta) { html += '<div class="pl-row" style="align-items:center"><span>🕒 <span class="pl-strong">' + esc(c.eta) + '</span></span><a class="pl-btn pl-btn--link" href="#hora/' + c.id + '">Cambiar</a></div>'; }
 		else if (c.when) { html += '<div class="pl-muted">Pidió ' + esc(c.when) + '</div>'; }
 		if (cu.note) { html += '<div class="pl-muted">📝 ' + esc(cu.note) + '</div>'; }
 		html += '<div class="pl-grid2">' + (cu.phone ? '<a class="pl-btn pl-btn--secondary" href="tel:+' + esc(cu.phone) + '">' + icon('tel', 20) + 'Llamar</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin teléfono</span>')
@@ -542,7 +586,11 @@
 		var acts = '<div class="pl-actions">';
 		if (c.stage === 'pickup' && !c.eta) { acts += '<a class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block" href="#hora/' + c.id + '">🕒 Poner la hora</a>'; }
 		else if (c.stage === 'pickup') { acts += '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + b('recogi') + '" data-act="recogi" data-id="' + c.id + '">' + icon('bien') + 'Recogí</button>'; }
-		else if (c.stage === 'route') { acts += '<a class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block" href="#entregado/' + c.id + '">' + icon('bien') + 'Entregado</a>'; }
+		else if (c.stage === 'route') {
+			// 3.14.71.2: «Llegué» avisa a la gestora (también se marca solo a 120 m si hay punto exacto del cliente).
+			if (!c.arrived) { acts += '<button type="button" class="pl-btn pl-btn--secondary pl-btn--block' + b('llegue') + '" data-act="llegue" data-id="' + c.id + '">📍 Llegué</button>'; }
+			acts += '<a class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block" href="#entregado/' + c.id + '">' + icon('bien') + 'Entregado</a>';
+		}
 		else if (c.stage === 'delivered') { acts += '<a class="pl-btn pl-btn--secondary pl-btn--lg pl-btn--block" href="#dinero">💵 Mi dinero</a>'; }
 		if (['pickup', 'route', 'delivered'].indexOf(c.stage) !== -1) { links.push('<a href="#problema/' + c.id + '">Problema</a>'); }
 		if (c.stage === 'pickup') { links.push('<a href="#suelto/' + c.id + '">No puedo</a>'); }
@@ -802,6 +850,7 @@
 		if (a === 'hist-retry') { state.hist = null; render(); return; }
 		if (a === 'cojo') { claim(el.getAttribute('data-id')); return; }
 		if (a === 'recogi' && c) { act(c, 'recogi'); return; }
+		if (a === 'llegue' && c) { act(c, 'llegue'); return; } // 3.14.71.2
 		if (a === 'push-on') { store.set(PFX + 'push-no', null); pushOn(); return; }
 		if (a === 'push-no') { store.set(PFX + 'push-no', '1'); render(); return; }
 		if (a === 'push-off') { pushOff(); return; }

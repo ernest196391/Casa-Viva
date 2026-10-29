@@ -81,6 +81,9 @@
 		var botones = $$('.pl-actions a, .pl-actions button').map(function (x) { return x.innerText; }).join('|');
 		var r3 = await P.request('carrera', { order: 9001, action: 'suelto', cid: newCid() });
 		check('8. Con el paquete ya no se puede soltar: sin «No puedo» y Core dice too_late', !/No puedo/.test(botones) && ['not_now', 'too_late'].indexOf(r3.data.result) !== -1, botones + ' / ' + r3.data.result);
+		// 8b. 3.14.71.2: «Llegué» en camino: avisa a la gestora, se marca y el botón desaparece.
+		await go('#carrera/9001'); await click('[data-act=llegue]', 900);
+		check('8b. «Llegué» en camino: queda «Llegaste» y ya no sale el botón', !!order(9001).arrived && /Llegaste/.test(text()) && !$('[data-act=llegue]'), text().slice(0, 200));
 		// 9. Entregado con lo del vale (efectivo USD)
 		await go('#entregado/9001');
 		check('9a. Hoja «¿Cuánto cobraste?» dice que llevas 44 USD', /A la tienda: 44 USD/.test($('#pl-bring').innerText), $('#pl-bring').innerText);

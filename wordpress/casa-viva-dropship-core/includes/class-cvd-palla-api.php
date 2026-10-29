@@ -40,6 +40,8 @@ final class CVD_Palla_Api {
 		register_rest_route( self::NS, '/palla/hora', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'eta' ), 'permission_callback' => $auth ) );
 		// 3.14.69.16 (Pedri 25-oct: «ya no puedo ver las carreras que hice ayer… lo llevo en un Excel»): historial y acumulado.
 		register_rest_route( self::NS, '/palla/historial', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'history' ), 'permission_callback' => $auth ) );
+		// 3.14.71.2 (Ernesto 28-oct, «como Mandao»): el recorrido del mensajero durante sus carreras.
+		register_rest_route( self::NS, '/palla/ubicacion', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'track' ), 'permission_callback' => $auth ) );
 		// 3.14.67.1: pasar la carrera a un compañero (él la acepta en su app; hasta entonces sigue siendo de quien la pasa).
 		register_rest_route( self::NS, '/palla/pasar', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'pass_request' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/palla/pase', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'pass_answer' ), 'permission_callback' => $auth ) );
@@ -351,6 +353,8 @@ final class CVD_Palla_Api {
 			),
 			'map'      => $map[0],
 			'mapFrom'  => $map[1], // 3.14.69.17: pedido | entrega | cliente (de otra entrega al mismo cliente) | ''
+			'dest'     => self::coords( $map[0] ),                                     // 3.14.71.2: [lat, lon] o null
+			'arrived'  => (string) $order->get_meta( '_cvd_llegue_at', true ),           // 3.14.71.2: «Llegué» (UTC) o ''
 			'items'    => CVD_Order_Lines::texts( $order ),
 			'pickup'   => array(
 				'place'     => self::STORE,
@@ -525,6 +529,65 @@ final class CVD_Palla_Api {
 		return array( '', '' );
 	}
 
+	// ------------------------------------------------------------------ Recorrido y «Llegué» (3.14.71.2)
+	// Ernesto 28-oct: «como Mandao»: desde que coge la carrera se ve por dónde va (a la tienda y luego al cliente). La app
+	// manda puntos (cada 30 s si se mueve; sin señal los guarda y los manda al volver) y se guardan en cada carrera abierta
+	// suya (_cvd_trail, [[lat, lon, t], …], máx. 720). Si está a 120 m o menos del punto exacto del cliente con la carrera en
+	// camino, «Llegué» se marca solo y la gestora recibe el aviso. Solo durante sus carreras: fuera, la app no manda nada.
+	public const TRAIL_META = '_cvd_trail';
+
+	/** «…?mlat=23.1&mlon=-82.3…» → [23.1, -82.3] o null. */
+	public static function coords( string $url ): ?array {
+		return preg_match( '/mlat=(-?\d+(?:\.\d+)?)&mlon=(-?\d+(?:\.\d+)?)/', $url, $m ) ? array( (float) $m[1], (float) $m[2] ) : null;
+	}
+
+	/** Distancia en metros (haversine). */
+	public static function meters( float $lat1, float $lon1, float $lat2, float $lon2 ): float {
+		$r = 6371000.0;
+		$dlat = deg2rad( $lat2 - $lat1 );
+		$dlon = deg2rad( $lon2 - $lon1 );
+		$a = sin( $dlat / 2 ) ** 2 + cos( deg2rad( $lat1 ) ) * cos( deg2rad( $lat2 ) ) * sin( $dlon / 2 ) ** 2;
+		return 2 * $r * asin( min( 1.0, sqrt( $a ) ) );
+	}
+
+	/** POST palla/ubicacion {points: [{lat, lon, acc, t}]} → { ok, saved, arrived: [números] }. */
+	public static function track( WP_REST_Request $request ): WP_REST_Response {
+		$me = CVD_Palla::request_user( $request );
+		$now = time();
+		$pts = array();
+		foreach ( (array) $request->get_param( 'points' ) as $p ) {
+			if ( ! is_array( $p ) ) { continue; }
+			$lat = (float) ( $p['lat'] ?? 0 );
+			$lon = (float) ( $p['lon'] ?? 0 );
+			$t = absint( $p['t'] ?? 0 );
+			$acc = absint( $p['acc'] ?? 0 );
+			if ( $lat < 19.5 || $lat > 23.5 || $lon < -85.2 || $lon > -74 || $acc > 150 || $t > $now + 120 || $t < $now - 12 * HOUR_IN_SECONDS ) { continue; }
+			$pts[] = array( round( $lat, 5 ), round( $lon, 5 ), $t );
+		}
+		usort( $pts, static fn( array $a, array $b ): int => $a[2] <=> $b[2] );
+		$pts = array_slice( $pts, -240 );
+		if ( ! $pts ) { return self::out( array( 'ok' => true, 'saved' => 0, 'arrived' => array() ) ); }
+		$last = end( $pts );
+		update_user_meta( $me->ID, '_cvd_palla_pos', wp_json_encode( array( 'lat' => $last[0], 'lon' => $last[1], 't' => $last[2] ) ) );
+		$arrived = array();
+		$saved = 0;
+		foreach ( self::my_open_orders( $me ) as $order ) {
+			$trail = json_decode( (string) $order->get_meta( self::TRAIL_META, true ), true );
+			$trail = is_array( $trail ) ? $trail : array();
+			$known = $trail ? (int) ( end( $trail )[2] ?? 0 ) : 0;
+			foreach ( $pts as $p ) { if ( $p[2] > $known ) { $trail[] = $p; $saved++; } }
+			$order->update_meta_data( self::TRAIL_META, wp_json_encode( array_slice( $trail, -720 ) ) );
+			$order->save_meta_data(); // solo el dato: sin los avisos de «pedido guardado»
+			if ( 'route' === CVD_Tarjeta_Carrera::stage( $order, $me->ID ) && '' === (string) $order->get_meta( '_cvd_llegue_at', true ) ) {
+				$dest = self::coords( self::map_for( $order )[0] );
+				if ( $dest && self::meters( $last[0], $last[1], $dest[0], $dest[1] ) <= 120 && CVD_Tarjeta_Carrera::arrived( $order, $me, 'auto' ) ) {
+					$arrived[] = (string) $order->get_order_number();
+				}
+			}
+		}
+		return self::out( array( 'ok' => true, 'saved' => $saved, 'arrived' => $arrived ) );
+	}
+
 	/**
 	 * GET palla/historial?dias=31 (7–62): mis carreras entregadas por día (hora de Cuba), y lo ganado hoy, esta semana
 	 * (desde el lunes) y este mes. Mismas cuentas que money_today(); solo lectura.
@@ -693,6 +756,8 @@ final class CVD_Palla_Api {
 			'not_now'         => '#' . $number . ': eso ya no se puede en este paso del pedido.',
 			'not_found'       => 'No encuentro ese pedido.',
 			'error'           => '#' . $number . ': no se pudo guardar ahora. Toca otra vez en un momento.',
+			'arrived'         => '📍 #' . $number . ': avisamos a quien lo vendió de que ya estás allí.', // 3.14.71.2
+			'already_arrived' => '#' . $number . ': ya constaba que llegaste.',
 		)[ $code ] ?? '#' . $number . ': no se pudo guardar ahora.';
 	}
 
@@ -703,11 +768,20 @@ final class CVD_Palla_Api {
 		if ( $replay ) { return self::out( $replay ); }
 		$order = self::order_param( $request );
 		$action = sanitize_key( (string) $request->get_param( 'action' ) );
-		if ( ! $order || ! in_array( $action, array( 'recogi', 'entregado', 'problema', 'suelto' ), true ) ) {
+		if ( ! $order || ! in_array( $action, array( 'recogi', 'entregado', 'problema', 'suelto', 'llegue' ), true ) ) {
 			return self::out( array( 'result' => 'not_found', 'message' => self::message( 'not_found', '' ) ) );
 		}
 		$id = $order->get_id();
 		$number = (string) $order->get_order_number();
+		// 3.14.71.2: «Llegué» (botón de la app; el automático llega por palla/ubicacion).
+		if ( 'llegue' === $action ) {
+			$code = CVD_Tarjeta_Carrera::is_test( $order ) ? 'test' : ( CVD_Tarjeta_Carrera::arrived( $order, $me, 'boton' ) ? 'arrived' : ( '' !== (string) $order->get_meta( '_cvd_llegue_at', true ) ? 'already_arrived' : 'not_now' ) );
+			$out = array( 'result' => $code, 'action' => $action, 'number' => $number, 'message' => self::message( $code, $number ) );
+			$fresh = wc_get_order( $id );
+			if ( $fresh instanceof WC_Order ) { $out['carrera'] = self::card( $fresh, $me ); }
+			self::remember( $me->ID, $cid, $out );
+			return self::out( $out );
+		}
 		// Lo mismo que manda el formulario de la tarjeta (CVD_Tarjeta_Carrera::actions), con 4 argumentos: vale con y sin 3.14.59.
 		$post = array(
 			'cvd_otra'   => rest_sanitize_boolean( $request->get_param( 'otra' ) ) ? '1' : '',

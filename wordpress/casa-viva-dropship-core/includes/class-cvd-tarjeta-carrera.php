@@ -354,8 +354,23 @@ final class CVD_Tarjeta_Carrera {
 		} elseif ( 'released' === $kind ) {
 			$store( '🔁 ' . $n . ': ' . $m . ' ya no puede llevarlo (tocó «Ya no puedo» en su tarjeta). Vuelve a salir en el grupo de Mensajerías para otro mensajero.' );
 			$to_gestora( '🔁 Tu pedido *' . $n . '*' . $client_txt . ': ' . $m . ' ya no puede llevarlo. Lo estamos pasando a otro mensajero.' );
+		} elseif ( 'arrived' === $kind ) {
+			// 3.14.71.2 (Ernesto 28-oct, «Llegué» de Pa'llá): solo a la gestora, para que llame a su cliente si no abre
+			// (Pedri estuvo una hora sin localizar a un cliente). A la tienda no le hace falta.
+			$to_gestora( '📍 Tu pedido *' . $n . '*' . $client_txt . ': ' . $m . ' ya está en casa de tu cliente. Si no le abre, llámalo.' );
 		}
 		return $out;
+	}
+
+	/** 3.14.71.2: «Llegué» (botón o automático a 120 m del cliente en Pa'llá). Una sola vez por carrera. → true si se apuntó. */
+	public static function arrived( WC_Order $order, WP_User $messenger, string $how ): bool {
+		if ( self::is_test( $order ) || '' !== (string) $order->get_meta( '_cvd_llegue_at', true ) ) { return false; }
+		if ( 'route' !== self::stage( $order, $messenger->ID ) ) { return false; }
+		$order->update_meta_data( '_cvd_llegue_at', current_time( 'mysql', true ) );
+		$order->update_meta_data( '_cvd_llegue_how', 'auto' === $how ? 'auto' : 'boton' );
+		$order->add_order_note( '📍 ' . $messenger->display_name . ' llegó a casa del cliente (' . ( 'auto' === $how ? 'su GPS, a menos de 120 m' : 'tocó «Llegué»' ) . ').' );
+		self::queue( $order, 'arrived', $messenger );
+		return true;
 	}
 
 	/** Apunta el aviso del botón en el pedido (pendiente hasta el «done» del bot). */

@@ -87,7 +87,7 @@
 	function card(o) {
 		var st = stage(o);
 		return {
-			id: o.id, number: String(o.id), stage: st, test: false, when: o.when, eta: o.eta || '', pase: o.pase && o.pase.from === W.me ? { to: o.pase.to, toName: compaName(o.pase.to) } : null,
+			id: o.id, number: String(o.id), stage: st, test: false, when: o.when, eta: o.eta || '', arrived: o.arrived || '', dest: null, pase: o.pase && o.pase.from === W.me ? { to: o.pase.to, toName: compaName(o.pase.to) } : null,
 			customer: { name: o.cust.name, first: o.cust.name.split(' ')[0], address: o.cust.address, zone: o.zone, reference: o.cust.ref, note: '', phone: o.cust.phone, phoneLabel: '+53 ' + o.cust.phone.slice(2, 6) + ' ' + o.cust.phone.slice(6), alt: '', altLabel: '' },
 			map: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(o.cust.address + ', ' + o.zone + ', La Habana'), items: o.items, pickup: { place: STORE, zone: 'Nuevo Vedado', hours: 'de 10:00 a. m. a 4:00 p. m.', suppliers: [] }, assembly: '',
 			money: st === 'delivered' ? { after: true, prepaid: defaults(o).prepaid, bring: moneyText(bringAfter(o)) || 'Nada', sentence: sentence(o), deadline: deadline(o.atHour || hour()), fee: o.fee, feeText: money(o.fee, 'CUP') } : moneyBefore(o)
@@ -156,6 +156,12 @@
 		var o = find(b.order), n = String(b.order), act = b.action;
 		if (!o) { return { result: 'not_found', message: MSG.not_found() }; }
 		var st = stage(o), code;
+		// 3.14.71.2: «Llegué» (en camino, una vez): en la de verdad avisa a la gestora.
+		if (act === 'llegue') {
+			code = st !== 'route' ? 'not_now' : (o.arrived ? 'already_arrived' : 'arrived');
+			if (code === 'arrived') { o.arrived = new Date().toISOString(); note('#' + n + ': Llegué (la gestora recibiría «ya está en casa de tu cliente»).'); }
+			return { result: code, action: act, number: n, message: code === 'arrived' ? '📍 #' + n + ': avisamos a quien lo vendió de que ya estás allí.' : '#' + n + ': ' + (code === 'already_arrived' ? 'ya constaba que llegaste.' : 'eso ya no se puede en este paso.'), carrera: card(o) };
+		}
 		if (act === 'entregado' && st === 'delivered') { code = 'already'; }
 		else if (act === 'recogi' && st === 'route') { code = 'already_picked'; }
 		else if (act === 'problema' && st === 'incident') { code = 'problem_already'; }
