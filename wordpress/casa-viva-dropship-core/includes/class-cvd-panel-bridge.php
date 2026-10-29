@@ -53,6 +53,8 @@ final class CVD_Panel_Bridge {
 		register_rest_route( self::NS, '/panel/products/(?P<id>\d+)/variations', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'add_variation' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/variable', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'create_variable' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/visibility', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'set_visibility' ), 'permission_callback' => $auth ) );
+		// Lennys 29-oct: «Eliminar producto» / «Eliminar este diseño» (a la papelera; con pedidos, se oculta).
+		register_rest_route( self::NS, '/panel/products/delete', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'delete_product' ), 'permission_callback' => $auth ) );
 		// 3.14.41 (Lennys 20-oct): descripción de un producto con diseños, foto principal (la misma de la web) y «Duplicar».
 		register_rest_route( self::NS, '/panel/products/(?P<id>\d+)/description', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'save_description' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/(?P<id>\d+)/photo', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'set_main_photo' ), 'permission_callback' => $auth ) );
@@ -360,7 +362,9 @@ final class CVD_Panel_Bridge {
 				$rows[] = array( 'wooId' => $p->get_id(), 'stock' => $p->managing_stock() ? (int) $p->get_stock_quantity() : null, 'price' => (float) $p->get_regular_price(), 'status' => $product->get_status(), 'itemStatus' => $p->get_status(), 'ficha' => $ficha, 'mainImage' => $main, 'image' => $own ?? $main );
 			}
 		}
-		return self::no_cache( array( 'products' => $rows ) );
+		// Lennys 29-oct: lo que está en la papelera (eliminado desde el panel o desde wp-admin) no sale en las listas del panel.
+		$trashed = array_map( 'intval', get_posts( array( 'post_type' => array( 'product', 'product_variation' ), 'post_status' => 'trash', 'numberposts' => 3000, 'fields' => 'ids', 'suppress_filters' => true ) ) );
+		return self::no_cache( array( 'products' => $rows, 'trashed' => $trashed ) );
 	}
 
 	/** Cambiar el precio normal de un producto o variante desde el panel. */
@@ -387,6 +391,8 @@ final class CVD_Panel_Bridge {
 		if ( $woo_id ) {
 			$product = wc_get_product( $woo_id );
 			if ( ! $product ) { return new WP_Error( 'cvd_panel_product', 'Ese producto ya no está en la web.', array( 'status' => 404 ) ); }
+			// 29-oct: guardar no saca de la papelera un producto eliminado (eso se hace a mano en wp-admin).
+			if ( 'trash' === $product->get_status() ) { return new WP_Error( 'cvd_panel_product', 'Ese producto está en la papelera de la web (se eliminó).', array( 'status' => 409 ) ); }
 		} else {
 			$nexo_id = sanitize_text_field( (string) ( $p['nexoId'] ?? '' ) );
 			// Si ya se creó antes (reintento), no duplicar.
@@ -792,6 +798,94 @@ final class CVD_Panel_Bridge {
 		$product->delete_meta_data( '_cvd_retired' );
 		$product->delete_meta_data( '_cvd_sync_hidden_from' );
 		$product->save();
+	}
+
+	// ---------- Lennys 29-oct: «Eliminar producto» / «Eliminar este diseño» ----------
+	// «Una vez creado el producto no me deja eliminarlo si lo hice mal.» Nunca se toca un pedido:
+	// - Si el producto (o alguno de sus diseños) o el diseño ya sale en algún pedido de la web (cualquier estado,
+	//   también en la papelera) o la caja ya lo vendió (lo dice nexo-panel-web: cajaSold), NO se borra: se oculta
+	//   como «Ocultar» (producto privado y retenido; diseño desactivado), para no romper esos pedidos.
+	// - Si no, va a la PAPELERA de WordPress (se recupera en wp-admin → Productos → Papelera). Nunca se borra del todo.
+	// Con check = true solo dice qué haría (ids, pedidos), sin cambiar nada.
+
+	/** Ids que cuentan para «ya tiene pedidos»: el producto y, si tiene diseños, todos (también ocultos o en la papelera). */
+	private static function delete_ids( WC_Product $product ): array {
+		$ids = array( $product->get_id() );
+		if ( $product->is_type( 'variable' ) ) {
+			$ids = array_merge( $ids, array_map( 'intval', get_posts( array(
+				'post_type' => 'product_variation', 'post_parent' => $product->get_id(), 'numberposts' => -1, 'fields' => 'ids', 'suppress_filters' => true,
+				'post_status' => array( 'publish', 'private', 'draft', 'pending', 'future', 'trash' ),
+			) ) ) );
+		}
+		return array_values( array_unique( array_filter( array_map( 'absint', $ids ) ) ) );
+	}
+
+	/**
+	 * Cuántos pedidos (de cualquier estado) tienen una línea con alguno de estos productos o diseños. Lee las líneas de
+	 * pedido (woocommerce_order_items / itemmeta), que son las mismas con HPOS y sin él.
+	 */
+	public static function orders_with( array $ids ): int {
+		global $wpdb;
+		$ids = array_values( array_filter( array_map( 'absint', $ids ) ) );
+		if ( ! $ids ) { return 0; }
+		$in = implode( ',', array_map( static fn( int $id ): string => "'" . $id . "'", $ids ) );
+		return (int) $wpdb->get_var(
+			"SELECT COUNT(DISTINCT oi.order_id) FROM {$wpdb->prefix}woocommerce_order_itemmeta im"
+			. " INNER JOIN {$wpdb->prefix}woocommerce_order_items oi ON oi.order_item_id = im.order_item_id"
+			. " WHERE oi.order_item_type = 'line_item' AND im.meta_key IN ('_product_id','_variation_id') AND im.meta_value IN ({$in})"
+		);
+	}
+
+	/** El artículo de la bolsa (crm_market_items) de un producto «bajo pedido» publicado desde el mercado (D121), o 0. */
+	private static function market_item_of( WC_Product $product ): int {
+		$item = absint( $product->get_meta( '_cvd_market_item_id', true ) );
+		if ( ! $item && preg_match( '/^MK-(\d+)$/i', (string) $product->get_sku( 'edit' ), $m ) ) { $item = absint( $m[1] ); }
+		return $item;
+	}
+
+	/** Ocultar en vez de borrar (tiene pedidos o ventas en la caja) o papelera. Puro, para las pruebas. */
+	public static function delete_plan( int $orders, bool $caja_sold, bool $trash_on ): string {
+		return ( $orders > 0 || $caja_sold || ! $trash_on ) ? 'hide' : 'trash';
+	}
+
+	/**
+	 * POST /panel/products/delete { wooId? | marketItem?, check?, cajaSold?, by } → { result: hidden|trashed, reason?,
+	 * name, type, ids, orders, marketItem, parentId }. wooId = producto (simple o con diseños) o un diseño (variación).
+	 */
+	public static function delete_product( WP_REST_Request $request ) {
+		$p = (array) $request->get_json_params();
+		$id = absint( $p['wooId'] ?? 0 );
+		$item = absint( $p['marketItem'] ?? 0 );
+		if ( ! $id && $item ) { $id = (int) wc_get_product_id_by_sku( CVD_Market_Bridge::SKU_PREFIX . $item ); }
+		$product = $id ? wc_get_product( $id ) : null;
+		if ( ! $product instanceof WC_Product ) { return new WP_Error( 'cvd_panel_product', 'Ese producto ya no está en la web.', array( 'status' => 404 ) ); }
+		$variation = $product->is_type( 'variation' );
+		$parent = $variation ? wc_get_product( $product->get_parent_id() ) : null;
+		$name = $variation ? ( $parent ? $parent->get_name() . ' · ' : '' ) . self::variation_label( $product ) : $product->get_name();
+		$ids = self::delete_ids( $product );
+		$orders = self::orders_with( $ids );
+		$market = self::market_item_of( $variation && $parent ? $parent : $product );
+		$out = array(
+			'ok' => true, 'wooId' => $product->get_id(), 'type' => $variation ? 'variation' : $product->get_type(), 'name' => $name,
+			'parentId' => $variation ? $product->get_parent_id() : null, 'ids' => $ids, 'orders' => $orders, 'marketItem' => $market ?: null,
+		);
+		if ( 'trash' === $product->get_status() ) { return self::no_cache( $out + array( 'result' => 'trashed', 'already' => true ) ); }
+		if ( ! empty( $p['check'] ) ) { return self::no_cache( $out + array( 'result' => null ) ); }
+		$by = self::by( $p );
+		// Sin papelera (EMPTY_TRASH_DAYS = 0) WordPress borraría del todo: entonces solo se oculta.
+		$plan = self::delete_plan( $orders, ! empty( $p['cajaSold'] ), (bool) EMPTY_TRASH_DAYS );
+		if ( 'hide' === $plan ) {
+			self::retire( $product, $by );
+			$reason = $orders > 0 ? 'orders' : ( ! empty( $p['cajaSold'] ) ? 'caja' : 'notrash' );
+			self::log_product( 'eliminar → oculto (' . array( 'orders' => 'tiene pedidos', 'caja' => 'vendido en la caja', 'notrash' => 'sin papelera' )[ $reason ] . ')', $product->get_id(), $name, $by );
+		} else {
+			$product->delete( false ); // false = a la papelera, nunca borrado del todo
+			if ( 'trash' !== get_post_status( $product->get_id() ) ) { return new WP_Error( 'cvd_panel_product', 'La web no lo pudo mandar a la papelera. Prueba otra vez.', array( 'status' => 500 ) ); }
+			self::log_product( 'eliminado (papelera)', $product->get_id(), $name, $by );
+		}
+		if ( $variation && $parent ) { WC_Product_Variable::sync( $parent->get_id() ); wc_delete_product_transients( $parent->get_id() ); }
+		else { wc_delete_product_transients( $product->get_id() ); }
+		return self::no_cache( $out + array( 'result' => 'hide' === $plan ? 'hidden' : 'trashed', 'reason' => 'hide' === $plan ? $reason : null, 'status' => get_post_status( $product->get_id() ) ) );
 	}
 
 	// ---------- 3.14.41 (Lennys 20-oct): descripción para todos, foto principal y «Duplicar» ----------
