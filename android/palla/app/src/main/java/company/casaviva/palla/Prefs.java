@@ -25,6 +25,14 @@ final class Prefs {
     static String status(Context c) { return p(c).getString("status", ""); }
     static void setStatus(Context c, String s) { p(c).edit().putString("status", s).apply(); }
 
+    /** 1.1: ¿tiene carreras abiertas? (lo dice la web); con carreras, la app manda el recorrido. */
+    static boolean active(Context c) { return p(c).getBoolean("active", false); }
+    static void setActive(Context c, boolean a) { p(c).edit().putBoolean("active", a).apply(); }
+
+    /** 1.1: puntos del recorrido sin mandar (JSON), para cuando vuelva la señal. */
+    static String trail(Context c) { return p(c).getString("trail", "[]"); }
+    static void setTrail(Context c, String json) { p(c).edit().putString("trail", json).apply(); }
+
     static boolean batteryAsked(Context c) { return p(c).getBoolean("battery", false); }
     static void setBatteryAsked(Context c) { p(c).edit().putBoolean("battery", true).apply(); }
 }

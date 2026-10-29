@@ -13,6 +13,7 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -34,7 +35,13 @@ import java.nio.charset.StandardCharsets;
 public class AvisosService extends Service {
     private static final String CONFIG_URL = "https://casaviva.company/wp-json/casa-viva/v1/palla/app";
     private static final String CH_RUN = "palla_conexion";
-    private static final String CH_NEW = "palla_carreras_1";
+    // 1.1 (28-oct, Ernesto: «salió con la P pero no sonó»): el canal ya no lleva sonido; la bocina la toca la propia app
+    // como ALARMA (MediaPlayer, volumen de alarma), así no depende del volumen de notificaciones ni de cómo cada marca de
+    // teléfono silencia las apps nuevas. Canal nuevo porque Android no deja cambiar el sonido de un canal ya creado.
+    private static final String CH_NEW = "palla_carreras_2";
+    private static final String ACTION_STOP = "company.casaviva.palla.PARAR";
+    private static android.media.MediaPlayer siren;
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final int ID_RUN = 1, ID_NEW = 2;
     private static final long ALARM_MS = 3 * 60_000L;   // la bocina se repite como mucho 3 min
     private static final long FRESH_S = 10 * 60L;       // al reconectar, solo suenan los avisos de los últimos 10 min
@@ -43,6 +50,15 @@ public class AvisosService extends Service {
     private volatile HttpURLConnection conn;
     private Thread worker;
     private ConnectivityManager.NetworkCallback netCallback;
+
+    // 1.1 Recorrido (Ernesto 28-oct, «como Mandao»): con carreras abiertas, un punto cada 30 s si se mueve (o 50 m), y
+    // cada minuto se mandan juntos a Core (POST palla/ubicacion). Sin señal se guardan y salen al volver.
+    private static final String TRACK_URL = "https://casaviva.company/wp-json/casa-viva/v1/palla/ubicacion";
+    private static final String ACTION_TRACK = "company.casaviva.palla.RECORRIDO";
+    private Notification runNotif;
+    private android.location.LocationListener locListener;
+    private java.util.concurrent.ScheduledExecutorService uploader;
+    private android.location.Location lastLoc;
 
     // ------------------------------------------------------------------ Desde fuera
 
@@ -76,6 +92,15 @@ public class AvisosService extends Service {
         }
     }
 
+    /** 1.1: empezar o parar el recorrido (lo pide la web por PallaApp.setActive). */
+    static void track(Context c, boolean on) {
+        if (!Prefs.ready(c)) { return; }
+        Intent i = new Intent(c, AvisosService.class).setAction(ACTION_TRACK).putExtra("on", on);
+        try {
+            if (Build.VERSION.SDK_INT >= 26) { c.startForegroundService(i); } else { c.startService(i); }
+        } catch (Exception ignored) { }
+    }
+
     static void start(Context c) {
         if (!Prefs.ready(c)) { return; }
         Intent i = new Intent(c, AvisosService.class);
@@ -86,8 +111,42 @@ public class AvisosService extends Service {
 
     /** Calla la bocina y quita el aviso (al abrir la app). */
     static void stopAlarm(Context c) {
+        stopSiren(c);
         NotificationManager nm = (NotificationManager) c.getSystemService(NOTIFICATION_SERVICE);
         if (nm != null) { nm.cancel(ID_NEW); }
+    }
+
+    /** La bocina en bucle (cada 3 s, el archivo ya trae el silencio) por el volumen de ALARMA, y vibración a la vez. */
+    static synchronized void startSiren(Context c) {
+        stopSiren(c);
+        try {
+            android.media.MediaPlayer mp = new android.media.MediaPlayer();
+            mp.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+            mp.setDataSource(c, Uri.parse("android.resource://" + c.getPackageName() + "/" + R.raw.bocina));
+            mp.setLooping(true);
+            mp.prepare();
+            mp.start();
+            siren = mp;
+        } catch (Exception ignored) { }
+        android.os.Vibrator v = (android.os.Vibrator) c.getSystemService(VIBRATOR_SERVICE);
+        long[] pattern = {0, 400, 150, 400, 2050}; // dos vibraciones cada 3 s, como la bocina
+        if (v != null) {
+            if (Build.VERSION.SDK_INT >= 26) { v.vibrate(android.os.VibrationEffect.createWaveform(pattern, 0)); } else { v.vibrate(pattern, 0); }
+        }
+        final Context app = c.getApplicationContext();
+        MAIN.removeCallbacksAndMessages(null);
+        MAIN.postDelayed(() -> stopSiren(app), ALARM_MS);
+    }
+
+    static synchronized void stopSiren(Context c) {
+        MAIN.removeCallbacksAndMessages(null);
+        if (siren != null) {
+            try { siren.stop(); } catch (Exception ignored) { }
+            siren.release();
+            siren = null;
+        }
+        android.os.Vibrator v = (android.os.Vibrator) c.getSystemService(VIBRATOR_SERVICE);
+        if (v != null) { v.cancel(); }
     }
 
     // ------------------------------------------------------------------ Servicio
@@ -96,23 +155,130 @@ public class AvisosService extends Service {
     public void onCreate() {
         super.onCreate();
         channels();
-        Notification n = builder(CH_RUN)
+        runNotif = builder(CH_RUN)
             .setContentTitle("Pa'llá")
             .setContentText("Esperando carreras")
             .setOngoing(true)
             .setContentIntent(openApp(null, 0))
             .build();
-        if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(ID_RUN, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
-        } else {
-            startForeground(ID_RUN, n);
-        }
+        foreground(false);
         listenNetwork();
+    }
+
+    /** En primer plano: avisos (specialUse) y, si hay recorrido y permiso, también ubicación. */
+    private void foreground(boolean location) {
+        try {
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(ID_RUN, runNotif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE | (location ? ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION : 0));
+            } else if (Build.VERSION.SDK_INT >= 29 && location) {
+                startForeground(ID_RUN, runNotif, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+            } else {
+                startForeground(ID_RUN, runNotif);
+            }
+        } catch (Exception e) {
+            if (location) { foreground(false); } // Android no dejó añadir la ubicación (p. ej. desde el fondo): solo avisos
+        }
+    }
+
+    private boolean hasLocation() {
+        return Build.VERSION.SDK_INT < 23 || checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            || checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
+
+    @SuppressWarnings("MissingPermission")
+    private synchronized void startTracking() {
+        if (locListener != null || !hasLocation()) { return; }
+        android.location.LocationManager lm = (android.location.LocationManager) getSystemService(LOCATION_SERVICE);
+        if (lm == null) { return; }
+        foreground(true);
+        // Clase completa, no lambda: en Android 10 o menos estos métodos no tienen versión por defecto y una lambda fallaría.
+        locListener = new android.location.LocationListener() {
+            @Override public void onLocationChanged(android.location.Location l) { onLocation(l); }
+            @Override public void onStatusChanged(String provider, int status, Bundle extras) { }
+            @Override public void onProviderEnabled(String provider) { }
+            @Override public void onProviderDisabled(String provider) { }
+        };
+        for (String provider : new String[]{android.location.LocationManager.GPS_PROVIDER, android.location.LocationManager.NETWORK_PROVIDER}) {
+            try { if (lm.isProviderEnabled(provider)) { lm.requestLocationUpdates(provider, 30_000L, 50f, locListener, Looper.getMainLooper()); } } catch (Exception ignored) { }
+        }
+        uploader = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+        uploader.scheduleWithFixedDelay(this::upload, 60, 60, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    private synchronized void stopTracking() {
+        if (locListener != null) {
+            android.location.LocationManager lm = (android.location.LocationManager) getSystemService(LOCATION_SERVICE);
+            try { if (lm != null) { lm.removeUpdates(locListener); } } catch (Exception ignored) { }
+            locListener = null;
+        }
+        if (uploader != null) {
+            uploader.shutdown();
+            new Thread(this::upload, "palla-recorrido-fin").start(); // lo último que quedó
+            uploader = null;
+        }
+        foreground(false);
+    }
+
+    private void onLocation(android.location.Location l) {
+        if (l == null || !l.hasAccuracy() || l.getAccuracy() > 150) { return; }
+        // 30 s o 50 m desde el último (GPS y red pueden mandar a la vez)
+        if (lastLoc != null && l.getTime() - lastLoc.getTime() < 30_000 && l.distanceTo(lastLoc) < 50) { return; }
+        lastLoc = l;
+        synchronized (AvisosService.class) {
+            try {
+                org.json.JSONArray a = new org.json.JSONArray(Prefs.trail(this));
+                a.put(new JSONObject().put("lat", Math.round(l.getLatitude() * 1e5) / 1e5).put("lon", Math.round(l.getLongitude() * 1e5) / 1e5)
+                    .put("acc", Math.round(l.getAccuracy())).put("t", l.getTime() / 1000));
+                while (a.length() > 240) { a.remove(0); }
+                Prefs.setTrail(this, a.toString());
+            } catch (Exception ignored) { }
+        }
+    }
+
+    /** Manda los puntos guardados; si no hay señal, se quedan para la próxima vez. */
+    private void upload() {
+        String json;
+        int count;
+        synchronized (AvisosService.class) {
+            json = Prefs.trail(this);
+            try { count = new org.json.JSONArray(json).length(); } catch (Exception e) { return; }
+        }
+        if (count == 0 || Prefs.token(this).isEmpty()) { return; }
+        HttpURLConnection h = null;
+        try {
+            h = (HttpURLConnection) new URL(TRACK_URL).openConnection();
+            h.setConnectTimeout(20_000);
+            h.setReadTimeout(20_000);
+            h.setDoOutput(true);
+            h.setRequestMethod("POST");
+            h.setRequestProperty("Content-Type", "application/json");
+            h.setRequestProperty("Accept", "application/json");
+            h.setRequestProperty("X-Palla-Token", Prefs.token(this));
+            byte[] body = ("{\"points\":" + json + "}").getBytes(StandardCharsets.UTF_8);
+            h.getOutputStream().write(body);
+            if (h.getResponseCode() == 200) {
+                synchronized (AvisosService.class) {
+                    // quitar solo los que se mandaron (pueden haber llegado otros mientras)
+                    org.json.JSONArray now = new org.json.JSONArray(Prefs.trail(this)), rest = new org.json.JSONArray();
+                    for (int i = count; i < now.length(); i++) { rest.put(now.get(i)); }
+                    Prefs.setTrail(this, rest.toString());
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (h != null) { h.disconnect(); }
+        }
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent != null && ACTION_STOP.equals(intent.getAction())) { stopSiren(this); } // quitó el aviso: se calla
         if (!Prefs.ready(this)) { stopSelf(); return START_NOT_STICKY; }
+        if (intent != null && ACTION_TRACK.equals(intent.getAction())) {
+            if (intent.getBooleanExtra("on", false)) { startTracking(); } else { stopTracking(); }
+        } else if (Prefs.active(this)) {
+            startTracking(); // p. ej. tras reiniciar el teléfono con una carrera abierta (si Android lo deja)
+        }
         if (worker == null || !worker.isAlive()) {
             running = true;
             worker = new Thread(this::loop, "palla-avisos");
@@ -123,6 +289,7 @@ public class AvisosService extends Service {
 
     @Override
     public void onDestroy() {
+        stopTracking();
         running = false;
         HttpURLConnection c = conn;
         if (c != null) { c.disconnect(); }
@@ -178,29 +345,26 @@ public class AvisosService extends Service {
         } catch (Exception ignored) { }
     }
 
-    /** El aviso que suena: bocina repetida (FLAG_INSISTENT) hasta que lo toque o abra la app; a los 3 min, se calla solo. */
+    /** El aviso: se ve arriba (sin sonido del canal) y la bocina suena aparte hasta que lo toque, lo quite o abra la app. */
     private void alarm(String title, String text, String click) {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm == null) { return; }
+        Intent stop = new Intent(this, AvisosService.class).setAction(ACTION_STOP);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
+        PendingIntent onDismiss = Build.VERSION.SDK_INT >= 26 ? PendingIntent.getForegroundService(this, 2, stop, flags) : PendingIntent.getService(this, 2, stop, flags);
         Notification.Builder b = builder(CH_NEW)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(new Notification.BigTextStyle().bigText(text))
             .setAutoCancel(true)
-            .setCategory(Notification.CATEGORY_MESSAGE)
-            .setContentIntent(openApp(click, 1));
-        if (Build.VERSION.SDK_INT < 26) {
-            b.setSound(sound()).setVibrate(new long[]{0, 400, 150, 400, 150, 400}).setPriority(Notification.PRIORITY_MAX);
-        }
-        Notification n = b.build();
-        n.flags |= Notification.FLAG_INSISTENT;
-        nm.notify(ID_NEW, n);
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            // Pasados 3 min: el mismo aviso, ya sin sonar (si sigue ahí).
-            for (android.service.notification.StatusBarNotification s : nm.getActiveNotifications()) {
-                if (s.getId() == ID_NEW) { nm.notify(ID_NEW, b.setOnlyAlertOnce(true).build()); break; }
-            }
-        }, ALARM_MS);
+            .setCategory(Notification.CATEGORY_ALARM)
+            .setContentIntent(openApp(click, 1))
+            .setDeleteIntent(onDismiss);
+        if (Build.VERSION.SDK_INT < 26) { b.setPriority(Notification.PRIORITY_MAX); }
+        nm.notify(ID_NEW, b.build());
+        // De 22:00 a 7:00 (hora del teléfono) el aviso sale, pero sin bocina: como alarma sonaría aunque esté en silencio.
+        int h = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
+        if (h >= 7 && h < 22) { startSiren(this); }
     }
 
     // ------------------------------------------------------------------ Ayudas
@@ -225,11 +389,11 @@ public class AvisosService extends Service {
         run.setShowBadge(false);
         nm.createNotificationChannel(run);
         NotificationChannel nueva = new NotificationChannel(CH_NEW, "Carreras libres", NotificationManager.IMPORTANCE_HIGH);
-        nueva.setSound(sound(), new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
-        nueva.enableVibration(true);
-        nueva.setVibrationPattern(new long[]{0, 400, 150, 400, 150, 400});
+        nueva.setSound(null, null);       // la bocina la toca startSiren(), no el canal
+        nueva.enableVibration(false);     // y la vibración también
         nueva.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
         nm.createNotificationChannel(nueva);
+        nm.deleteNotificationChannel("palla_carreras_1"); // el de la 1.0
     }
 
     /** Si vuelve la red, no esperar al próximo reintento. */

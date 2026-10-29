@@ -83,6 +83,13 @@ public class MainActivity extends Activity {
         if (Prefs.ready(this)) { AvisosService.start(this); }
     }
 
+    /** Tocar la pantalla de la app calla la bocina (como en la web: suena hasta que la mira). */
+    @Override
+    public boolean dispatchTouchEvent(android.view.MotionEvent ev) {
+        if (ev.getAction() == android.view.MotionEvent.ACTION_DOWN) { AvisosService.stopSiren(this); }
+        return super.dispatchTouchEvent(ev);
+    }
+
     @Override
     protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
@@ -101,6 +108,7 @@ public class MainActivity extends Activity {
             geoCallback.invoke(geoOrigin, hasGeo(), false);
             geoCallback = null;
         }
+        if (code == REQ_GEO && hasGeo() && Prefs.active(this)) { AvisosService.track(this, true); } // 1.1: ya puede seguir el recorrido
     }
 
     private boolean hasGeo() {
@@ -138,10 +146,28 @@ public class MainActivity extends Activity {
             runOnUiThread(MainActivity.this::askBattery);
         }
 
+        /** 1.1: la web dice si hay carreras abiertas → la app manda (o deja de mandar) el recorrido. */
+        @JavascriptInterface
+        public void setActive(boolean active) {
+            if (active == Prefs.active(ctx)) { return; }
+            Prefs.setActive(ctx, active);
+            runOnUiThread(() -> {
+                if (active) { askLocation(); }
+                AvisosService.track(ctx, active);
+            });
+        }
+
         @JavascriptInterface
         public String status() {
             String s = Prefs.status(ctx);
             return s.isEmpty() ? "conectando…" : s;
+        }
+    }
+
+    /** 1.1: el permiso de ubicación para el recorrido (si aún no lo tiene). */
+    private void askLocation() {
+        if (Build.VERSION.SDK_INT >= 23 && !hasGeo()) {
+            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_GEO);
         }
     }
 
