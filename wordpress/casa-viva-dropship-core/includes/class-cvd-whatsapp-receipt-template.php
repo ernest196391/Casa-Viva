@@ -292,10 +292,16 @@ final class CVD_WhatsApp_Receipt_Template {
 			$label = self::clean( wc_attribute_label( $attribute, $product instanceof WC_Product ? $product : '' ) );
 			$value = self::variation_value( $attribute, $value );
 			if ( $label && $value ) {
-				$visible[] = $label . ': ' . $value;
+				$visible[] = self::nice( $label ) . ': ' . self::nice( $value ); // «color: gris» → «Color: Gris»
 			}
 		}
 		return $visible;
+	}
+
+	/** 3.14.74: valores guardados como «azul-claro» o en minúscula se leen como en la ficha: «Azul claro». */
+	private static function nice( string $text ): string {
+		if ( preg_match( '/^[a-z0-9áéíóúñü]+(?:-[a-z0-9áéíóúñü]+)*$/u', $text ) ) { $text = str_replace( '-', ' ', $text ); }
+		return mb_strtoupper( mb_substr( $text, 0, 1 ) ) . mb_substr( $text, 1 );
 	}
 
 	private static function variation_value( string $attribute, $value ): string {
