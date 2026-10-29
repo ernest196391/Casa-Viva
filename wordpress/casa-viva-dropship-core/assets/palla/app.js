@@ -563,7 +563,7 @@
 		else if (c.when) { html += '<div class="pl-muted">Pidió ' + esc(c.when) + '</div>'; }
 		if (cu.note) { html += '<div class="pl-muted">📝 ' + esc(cu.note) + '</div>'; }
 		html += '<div class="pl-grid2">' + (cu.phone ? '<a class="pl-btn pl-btn--secondary" href="tel:+' + esc(cu.phone) + '">' + icon('tel', 20) + 'Llamar</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin teléfono</span>')
-			+ (c.map || cu.address || cu.zone ? '<a class="pl-btn pl-btn--secondary" href="' + esc(goUrl(c)) + '" target="_blank" rel="noopener noreferrer">' + icon('mapa', 20) + (c.mapFrom ? 'Ir 📍' : 'Ir') + '</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin mapa</span>') + '</div>';
+			+ (c.map || cu.address || cu.zone ? '<a class="pl-btn pl-btn--secondary" href="' + esc(goUrl(c)) + '" target="_blank" rel="noopener noreferrer">' + icon('mapa', 20) + (c.mapFrom === 'auto' ? 'Ir 📍 aprox.' : c.mapFrom ? 'Ir 📍' : 'Ir') + '</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin mapa</span>') + '</div>';
 		if (cu.alt) { html += '<div class="pl-muted">Otro: <a href="tel:+' + esc(cu.alt) + '">' + esc(cu.altLabel) + '</a></div>'; }
 		html += '</section>';
 		// Paquete: qué llevas (y de dónde, si aún no lo recogió).

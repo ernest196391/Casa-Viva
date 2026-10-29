@@ -945,9 +945,12 @@ final class CVD_Delivery {
 		$html .= '<div class="cvd-ruta" data-ruta hidden><div class="cvd-ruta-map" data-ruta-map></div><p class="cvd-ruta-text" data-ruta-text></p></div>';
 		// 3.14.74.3 (fase 3): «Marca tu casa» mientras el pedido no tenga el punto exacto (de la gestora o del cliente).
 		if ( class_exists( 'CVD_Palla_Api' ) && CVD_Palla_Api::needs_client_point( $order ) ) {
-			$html .= '<div class="cvd-casa" data-casa data-start="' . esc_attr( (string) get_option( 'cvd_palla_tienda_geo', '23.11504,-82.39749' ) ) . '"><button type="button" class="cvd-secondary" data-casa-abrir>📍 Marca tu casa en el mapa</button>'
-				. '<p class="cvd-casa-help" data-casa-help hidden>Toca tu casa en el mapa (o arrastra la 🏠). Así el mensajero llega directo.</p><div class="cvd-casa-map" data-casa-map hidden></div>'
-				. '<button type="button" class="cvd-primary" data-casa-guardar hidden>Guardar mi casa</button><p class="cvd-casa-msg" data-casa-msg></p></div>';
+			// 3.14.78: si la casa ya salió de la dirección (entrecalles), se enseña allí y solo se corrige si no está bien.
+			$auto = CVD_Palla_Api::auto_point( $order );
+			$start = $auto ? $auto[0] . ',' . $auto[1] : (string) get_option( 'cvd_palla_tienda_geo', '23.11504,-82.39749' );
+			$html .= '<div class="cvd-casa" data-casa data-start="' . esc_attr( $start ) . '"' . ( $auto ? ' data-auto' : '' ) . '><button type="button" class="cvd-secondary" data-casa-abrir>' . ( $auto ? '📍 ¿Está bien la casa en el mapa?' : '📍 Marca tu casa en el mapa' ) . '</button>'
+				. '<p class="cvd-casa-help" data-casa-help hidden>' . ( $auto ? 'La sacamos de la dirección. Si la 🏠 no está en su sitio, arrástrala o toca la casa.' : 'Toca tu casa en el mapa (o arrastra la 🏠). Así el mensajero llega directo.' ) . '</p><div class="cvd-casa-map" data-casa-map hidden></div>'
+				. '<button type="button" class="cvd-primary" data-casa-guardar hidden>' . ( $auto ? 'Guardar' : 'Guardar mi casa' ) . '</button><p class="cvd-casa-msg" data-casa-msg></p></div>';
 		}
 		if ( 'pickup' === $status ) {
 			// 3.14.9 (D67): pedido de una gestora visto por su cliente: sin la dirección de la tienda ni «Cómo llegar».

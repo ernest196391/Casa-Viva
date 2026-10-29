@@ -2,6 +2,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
+require_once __DIR__ . '/class-cvd-geo-direccion.php'; // 3.14.78: la ubicación sale de la dirección (sin tocar el archivo principal)
+
 /**
  * 3.14.61: la API de Pa'llá (casa-viva/v1/palla/…). Clase aparte de CVD_Palla para llevarla a NEXO en la fase 2.
  * Entra con X-Palla-Token (CVD_Palla::request_user). Todo no-store. Ningún camino nuevo: cada botón usa lo de siempre.
@@ -356,7 +358,7 @@ final class CVD_Palla_Api {
 				'altLabel'   => '' !== $alt ? self::phone_label( $alt ) : '',
 			),
 			'map'      => $map[0],
-			'mapFrom'  => $map[1], // 3.14.69.17: pedido | entrega | cliente (de otra entrega al mismo cliente) | ''
+			'mapFrom'  => $map[1], // 3.14.69.17: pedido | entrega | cliente (de otra entrega al mismo cliente) | auto (3.14.78: de la dirección) | ''
 			'dest'     => self::coords( $map[0] ),                                     // 3.14.71.2: [lat, lon] o null
 			'arrived'  => (string) $order->get_meta( '_cvd_llegue_at', true ),           // 3.14.71.2: «Llegué» (UTC) o ''
 			'items'    => CVD_Order_Lines::texts( $order ),
@@ -521,16 +523,24 @@ final class CVD_Palla_Api {
 		$own = self::geo_of( $order );
 		if ( $own ) { return array( $osm( $own ), 'entrega' ); }
 		$phone = substr( preg_replace( '/\D+/', '', (string) $order->get_billing_phone() ), -8 );
-		if ( 8 !== strlen( $phone ) ) { return array( '', '' ); }
-		global $wpdb;
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT order_id FROM {$wpdb->prefix}wc_order_addresses WHERE address_type='billing' AND phone LIKE %s AND order_id<>%d ORDER BY order_id DESC LIMIT 15", '%' . $wpdb->esc_like( $phone ), $order->get_id() ) );
-		foreach ( array_map( 'absint', (array) $ids ) as $id ) {
-			$other = wc_get_order( $id );
-			if ( ! $other instanceof WC_Order || substr( preg_replace( '/\D+/', '', (string) $other->get_billing_phone() ), -8 ) !== $phone ) { continue; }
-			$geo = self::geo_of( $other );
-			if ( $geo && self::same_address( $order, $other ) ) { return array( $osm( $geo ), 'cliente' ); }
+		if ( 8 === strlen( $phone ) ) {
+			global $wpdb;
+			$ids = $wpdb->get_col( $wpdb->prepare( "SELECT order_id FROM {$wpdb->prefix}wc_order_addresses WHERE address_type='billing' AND phone LIKE %s AND order_id<>%d ORDER BY order_id DESC LIMIT 15", '%' . $wpdb->esc_like( $phone ), $order->get_id() ) );
+			foreach ( array_map( 'absint', (array) $ids ) as $id ) {
+				$other = wc_get_order( $id );
+				if ( ! $other instanceof WC_Order || substr( preg_replace( '/\D+/', '', (string) $other->get_billing_phone() ), -8 ) !== $phone ) { continue; }
+				$geo = self::geo_of( $other );
+				if ( $geo && self::same_address( $order, $other ) ) { return array( $osm( $geo ), 'cliente' ); }
+			}
 		}
-		return array( '', '' );
+		// 3.14.78: si nadie mandó el punto, sale de la dirección (las entrecalles en el mapa libre). Aproximado: la cuadra.
+		$auto = 'pickup' !== $order->get_meta( '_cvd_fulfillment_type', true ) ? CVD_Geo_Direccion::for_order( $order ) : null;
+		return $auto ? array( $osm( $auto ), 'auto' ) : array( '', '' );
+	}
+
+	/** El punto aproximado sacado de la dirección (para el seguimiento: la gestora o el cliente lo corrigen). */
+	public static function auto_point( WC_Order $order ): ?array {
+		return 'auto' === self::map_for( $order )[1] ? self::coords( self::map_for( $order )[0] ) : null;
 	}
 
 	// ------------------------------------------------------------------ Recorrido y «Llegué» (3.14.71.2)
@@ -686,7 +696,8 @@ final class CVD_Palla_Api {
 			$order->update_meta_data( self::TRAIL_META, wp_json_encode( array_slice( $trail, -720 ) ) );
 			$order->save_meta_data(); // solo el dato: sin los avisos de «pedido guardado»
 			if ( 'route' === CVD_Tarjeta_Carrera::stage( $order, $me->ID ) && '' === (string) $order->get_meta( '_cvd_llegue_at', true ) ) {
-				$dest = self::coords( self::map_for( $order )[0] );
+				$map = self::map_for( $order );
+				$dest = 'auto' !== $map[1] ? self::coords( $map[0] ) : null; // con el punto aproximado, «Llegué» lo toca él
 				if ( $dest && self::meters( $last[0], $last[1], $dest[0], $dest[1] ) <= 120 && CVD_Tarjeta_Carrera::arrived( $order, $me, 'auto' ) ) {
 					$arrived[] = (string) $order->get_order_number();
 				}

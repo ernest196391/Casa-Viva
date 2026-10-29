@@ -181,6 +181,7 @@
       var start = (casa.getAttribute('data-start') || '23.115,-82.397').split(',').map(Number);
       loadMapa().then(function () { return window.PallaMapa.marcar(mapEl, start); }).then(function (picker) {
         casaPicker = picker;
+        if (casa.hasAttribute('data-auto')) { picker.put(start); return; } // 3.14.78: la casa sacada de la dirección
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(function (p) {
             if (p.coords.accuracy <= 300 && !picker.get()) picker.put([p.coords.latitude, p.coords.longitude]);

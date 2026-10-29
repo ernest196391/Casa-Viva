@@ -1,0 +1,10 @@
+[out:json][timeout:300];
+area["name"="La Habana"]["admin_level"="4"]->.h;
+(way(area.h)["highway"]["name"];way(area.h)["highway"]["alt_name"];way(area.h)["highway"]["old_name"];)->.w;
+.w out body;
+.w >;
+out skel qt;
+node(area.h)["place"~"^(suburb|neighbourhood|quarter|town|village|hamlet|locality)$"];
+out;
+rel(area.h)["boundary"="administrative"]["admin_level"~"^(6|7|8|9|10)$"];
+out center tags;
