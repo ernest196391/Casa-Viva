@@ -139,7 +139,7 @@
   function drawRuta(r) {
     var box = tracking.querySelector('[data-ruta]');
     if (!box) return;
-    if (!r || !r.active) { box.hidden = true; return; }
+    if (!r || !r.active || !r.pos) { box.hidden = true; return; } // sin ubicación del mensajero (sin la app), no hay mapa
     box.hidden = false;
     if (!mapaCarga) {
       mapaCarga = window.PallaMapa ? Promise.resolve() : new Promise(function (ok, fail) {
