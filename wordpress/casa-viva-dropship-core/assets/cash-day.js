@@ -1,4 +1,4 @@
-/* 3.14.75 (Ernesto 28-oct): «¿Lo recibiste hoy?» antes de contar el dinero de una entrega de otro día
+/* 3.14.76 (Ernesto 28-oct): «¿Lo recibiste hoy?» antes de contar el dinero de una entrega de otro día
    (CVD_Cash_Day). La usan Ventas y el centro del pedido: cvdCashDay.ask(data) → Promise con
    { cashReceivedToday: "yes"|"no", cashReceivedDay: "AAAA-MM-DD" } o null si se cancela. */
 (function () {

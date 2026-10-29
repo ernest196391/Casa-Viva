@@ -422,7 +422,7 @@ final class CVD_Sales {
 			return new WP_Error( 'cvd_invalid_transition', 'Ese cambio de estado no está permitido.', array( 'status' => 409 ) );
 		}
 		if ( 'cancelled' === $next ) { return new WP_Error( 'cvd_cancellation_failed', 'No se pudo cancelar el pedido.', array( 'status' => 409 ) ); } // se cancela arriba (CVD_Order_Edit)
-		// 3.14.75 (Ernesto 28-oct): dinero de una entrega de otro día → «¿Lo recibiste hoy?» antes de guardar nada.
+		// 3.14.76 (Ernesto 28-oct): dinero de una entrega de otro día → «¿Lo recibiste hoy?» antes de guardar nada.
 		$cash_day = array();
 		if ( 'delivered' === $next && class_exists( 'CVD_Cash_Day' ) ) {
 			$cash_day = CVD_Cash_Day::check( $order, $request, get_current_user_id() );

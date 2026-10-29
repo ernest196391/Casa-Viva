@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * 3.14.75 (Ernesto 28-oct): «¿Lo recibiste hoy?» antes de contar el dinero de una entrega vieja.
+ * 3.14.76 (Ernesto 28-oct): «¿Lo recibiste hoy?» antes de contar el dinero de una entrega vieja.
  *
  * El 27-oct Nana marcó en 2 minutos el dinero de 8 entregas de días anteriores y el cuadre de VivaBot sumó al cajón de
  * ese día dinero que no estaba en su papel. Ahora, al registrar el dinero de una entrega a domicilio, la web pregunta si

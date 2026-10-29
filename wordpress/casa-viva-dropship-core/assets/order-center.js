@@ -53,7 +53,7 @@
       (action?'<div class="cvd-oc-primary"><button data-action="'+esc(action.id)+'">'+esc(action.label)+'</button></div>':'');
   }
   function load(force) { if(!orderId){status.textContent="Falta el pedido.";return;} api("GET").then(function(p){var next=JSON.stringify([p.canonical_stage,p.consistency.level,p.timeline.total,p.available_actions]);if(force||next!==fingerprint){fingerprint=next;render(p);}status.textContent="";}).catch(function(e){status.textContent=e.message;}); }
-  // 3.14.75 (Ernesto 28-oct): «Confirmar efectivo recibido» de una entrega de otro día pregunta «¿Lo recibiste hoy?» y reenvía con la respuesta.
+  // 3.14.76 (Ernesto 28-oct): «Confirmar efectivo recibido» de una entrega de otro día pregunta «¿Lo recibiste hoy?» y reenvía con la respuesta.
   root.addEventListener("click",function(e){var b=e.target.closest("[data-action]");if(!b)return;var label=b.textContent;if(!window.confirm("¿Confirmar: "+label+"?"))return;b.disabled=true;var body={action_id:b.dataset.action};api("POST",body).catch(function(err){if(!window.cvdCashDay||err.code!==window.cvdCashDay.code)throw err;return window.cvdCashDay.ask(err.data).then(function(reply){if(!reply)throw new Error("No se guardó: falta decir si el dinero entró hoy.");return api("POST",Object.assign({},body,reply));});}).then(function(r){render(r.projection);}).catch(function(err){status.textContent=err.message;}).finally(function(){b.disabled=false;});});
   document.addEventListener("visibilitychange",function(){if(!document.hidden)load(true);});
   load(true); timer=window.setInterval(function(){if(!document.hidden)load(false);},8000);

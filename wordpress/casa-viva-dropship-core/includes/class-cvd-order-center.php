@@ -39,7 +39,7 @@ final class CVD_Order_Center {
 		$action = null;
 		foreach ( $projection['available_actions'] as $candidate ) { if ( $candidate['id'] === $action_id && ! $candidate['blocked'] ) { $action = $candidate; break; } }
 		if ( ! $action ) { return new WP_Error( 'cvd_action_unavailable', 'Esta acción ya no está disponible.', array( 'status' => 409 ) ); }
-		// 3.14.75 (Ernesto 28-oct): «Confirmar efectivo recibido» de una entrega de otro día → «¿Lo recibiste hoy?».
+		// 3.14.76 (Ernesto 28-oct): «Confirmar efectivo recibido» de una entrega de otro día → «¿Lo recibiste hoy?».
 		$cash_day = null;
 		if ( 'delivery' === $action['domain'] && 'cash_returned' === $action['target'] && class_exists( 'CVD_Cash_Day' ) ) {
 			$cash_day = CVD_Cash_Day::check( $order, $request, get_current_user_id() );
