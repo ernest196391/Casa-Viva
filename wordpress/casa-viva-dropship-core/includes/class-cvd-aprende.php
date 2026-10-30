@@ -49,6 +49,8 @@ final class CVD_Aprende {
 			array( 'card' => 'tutorial-fotos-para-publicar', 'title' => 'Fotos para publicar', 'kind' => 'Vídeo', 'type' => 'video', 'media' => array( 'tutorial-fotos-para-publicar' ), 'ids' => array( 'tutorial-fotos-para-publicar' ) ),
 			// 3.14.36 (Ernesto 17-oct): las herramientas nuevas, para que la bienvenida pueda mandar aquí.
 			array( 'card' => 'tutorial-estudio-fotos', 'title' => 'Estudio de fotos: fotos bonitas gratis', 'kind' => 'Vídeo · Herramientas', 'type' => 'video', 'media' => array( 'tutorial-estudio-fotos' ), 'ids' => array( 'tutorial-estudio-fotos' ) ),
+			// 3.14.93 (Ernesto, 30-oct): la guía del «Taller de fotos» queda aquí para consultarla cuando quieran.
+			array( 'card' => 'guia-taller-fotos', 'title' => 'Taller de fotos: tu foto y tu texto listos', 'kind' => '5 imágenes para guardar · Herramientas', 'type' => 'images', 'media' => array( 'guia-taller-1', 'guia-taller-2', 'guia-taller-3', 'guia-taller-4', 'guia-taller-5' ), 'ids' => array( 'guia-taller-fotos' ) ),
 			array( 'card' => 'tutorial-nexo-busca', 'title' => 'NEXO Busca: vende lo que no tenemos', 'kind' => 'Vídeo · Herramientas', 'type' => 'video', 'media' => array( 'tutorial-nexo-busca' ), 'ids' => array( 'tutorial-nexo-busca' ) ),
 			array( 'card' => 'tutorial-dudas-gestoras', 'title' => 'Tus dudas del primer día', 'kind' => 'Vídeo', 'type' => 'video', 'media' => array( 'tutorial-dudas-gestoras' ), 'ids' => array( 'tutorial-dudas-gestoras' ) ),
 			array( 'card' => 'audio-como-funciona-pedidos', 'title' => 'Cómo funcionan los pedidos', 'kind' => 'Nota de voz de Ernesto', 'type' => 'audio', 'media' => array( 'audio-como-funciona-pedidos-ogg', 'audio-como-funciona-pedidos-mp3' ), 'ids' => array( 'audio-como-funciona-pedidos' ) ),

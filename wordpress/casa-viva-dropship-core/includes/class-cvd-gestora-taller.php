@@ -246,7 +246,7 @@ final class CVD_Gestora_Taller {
 			<div class="cvga-card cvtl-card">
 				<h2>3. Tu texto</h2>
 				<div class="cvtl-seg cvtl-kinds" role="group" aria-label="Qué texto" data-cvtl-kinds></div>
-				<label class="cvga-field" for="cvtl-extra"><span>Lo que sabes del producto <small>(opcional: medidas, para qué moto o para qué sirve)</small></span><textarea id="cvtl-extra" rows="3" maxlength="<?php echo esc_attr( (string) CVD_Taller_Text::MAX_EXTRA ); ?>" data-cvtl-extra placeholder="Ej.: para Suzuki GN 125, original usado en buen estado"></textarea></label>
+				<label class="cvga-field" for="cvtl-extra"><span>Lo que sabes del producto <small>(opcional: medidas, para qué sirve)</small></span><textarea id="cvtl-extra" rows="3" maxlength="<?php echo esc_attr( (string) CVD_Taller_Text::MAX_EXTRA ); ?>" data-cvtl-extra placeholder="Ej.: mide 40x60 cm, base antideslizante"></textarea></label>
 				<div class="cvga-actions"><button type="button" class="cvga-btn" data-cvtl-write>Escribir mi texto</button><small class="cvga-note" data-cvtl-left></small></div>
 				<p class="cvtl-msg" data-cvtl-text-msg role="status" hidden></p>
 				<div class="cvtl-result" data-cvtl-result hidden>
