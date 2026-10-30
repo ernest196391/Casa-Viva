@@ -980,20 +980,26 @@ final class CVD_Delivery {
 		if ( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return self::pickup_view( $order ); }
 		$status = self::status( $order );
 		$operation = sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) );
-		$labels = array( 'Pedido confirmado', 'Preparando', 'Listo para salir', 'Mensajero asignado', 'Recogido', 'En camino', 'Entregado' );
-		$delivery_rank = array( 'unassigned'=>0, 'offered'=>2, 'assigned'=>3, 'accepted'=>3, 'to_store'=>3, 'picked_up'=>4, 'handed_over'=>5, 'delivered'=>6, 'cash_returned'=>6, 'closed'=>6 );
-		$operation_rank = array( 'preparing'=>1, 'ready'=>2, 'with_courier'=>4, 'delivered'=>6 );
+		// 3.14.97 (Ernesto 30-oct, «que el cliente vea dónde está su pedido»): paso «Llegó a tu puerta» cuando el mensajero
+		// toca «Llegué» (o llega solo por GPS), y la hora prevista sale del recorrido real (ya no hay hora puesta a mano).
+		$labels = array( 'Pedido confirmado', 'Preparando', 'Listo para salir', 'Mensajero asignado', 'Recogido', 'En camino', 'Llegó a tu puerta', 'Entregado' );
+		$delivery_rank = array( 'unassigned'=>0, 'offered'=>2, 'assigned'=>3, 'accepted'=>3, 'to_store'=>3, 'picked_up'=>4, 'handed_over'=>5, 'delivered'=>7, 'cash_returned'=>7, 'closed'=>7 );
+		$operation_rank = array( 'preparing'=>1, 'ready'=>2, 'with_courier'=>4, 'delivered'=>7 );
 		$rank = isset( $delivery_rank[ $status ] ) ? max( $delivery_rank[ $status ], $operation_rank[ $operation ] ?? 0 ) : -1;
+		$arrived = $rank >= 4 && $rank < 7 && '' !== (string) $order->get_meta( '_cvd_llegue_at', true );
+		if ( $arrived ) { $rank = 6; }
 		$steps = array();
 		foreach ( $labels as $index => $label ) { $steps[] = array( 'label' => $label, 'done' => $index <= $rank ); }
-		$title = self::customer_status_label( $status );
+		$title = $arrived ? 'Tu mensajero llegó' : self::customer_status_label( $status );
 		if ( in_array( $status, array( 'unassigned', 'offered' ), true ) && $rank >= 2 ) { $title = 'Tu pedido está listo para salir'; }
 		$messenger = '';
 		$eta = '';
 		if ( $rank >= 3 ) {
 			$user = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
 			$messenger = $user ? (string) explode( ' ', trim( (string) $user->display_name ) )[0] : '';
-			if ( $rank < 6 ) { $eta = trim( (string) $order->get_meta( '_cvd_bot_eta', true ) ); }
+			$ruta = in_array( $rank, array( 4, 5 ), true ) && class_exists( 'CVD_Palla_Api' ) ? CVD_Palla_Api::route_view( $order ) : null;
+			if ( is_array( $ruta ) && ! empty( $ruta['eta'] ) && 'cliente' === ( $ruta['stage'] ?? '' ) ) { $eta = 'en unos ' . absint( $ruta['eta'] ) . ' min'; }
+			elseif ( $rank < 6 ) { $eta = trim( (string) $order->get_meta( '_cvd_bot_eta', true ) ); }
 		}
 		return array( 'status' => $status, 'title' => $title, 'rank' => $rank, 'steps' => $steps, 'messenger' => $messenger, 'eta' => $eta );
 	}

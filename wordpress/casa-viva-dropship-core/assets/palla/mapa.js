@@ -109,5 +109,33 @@
 		});
 	}
 
-	window.PallaMapa = { ruta: ruta, tienda: tienda, marcar: marcar };
+	/**
+	 * 3.14.97 (Ernesto 30-oct, «como Mandao: un mapa en la app con tu motor y adónde vas»): el mapa de la carrera en la app
+	 * del mensajero. me = [lat, lon] del GPS del propio teléfono (no se manda a ningún sitio) o null; to = [lat, lon] de la
+	 * tienda o del cliente; kind = tienda | casa. → «A 1,2 km · unos 6 min». La navegación paso a paso la hace «Ir».
+	 */
+	function mensajero(el, me, to, kind) {
+		return load().then(function (L) {
+			var map = base(L, el), g = map._layer, pts = [];
+			g.clearLayers();
+			if (to) { L.marker(to, { icon: pin(L, 'tienda' === kind ? '🏪' : '🏠', 'tienda' === kind ? 'Casa Viva' : 'Cliente') }).addTo(g); pts.push(to); }
+			if (me) {
+				if (to) { L.polyline([me, to], { color: '#121212', weight: 3, dashArray: '6 8', opacity: .7 }).addTo(g); }
+				L.marker(me, { icon: pin(L, '🛵', 'Tú'), zIndexOffset: 1000 }).addTo(g); pts.push(me);
+			}
+			if (pts.length && (!map._fitted || me && !map._withMe)) {
+				if (pts.length === 1) { map.setView(pts[0], 16); } else { map.fitBounds(pts, { padding: [28, 28], maxZoom: 17 }); }
+				map._fitted = true; map._withMe = !!me;
+			}
+			setTimeout(function () { map.invalidateSize(); }, 50);
+			if (!to) { return me ? 'Sin punto en el mapa: usa la dirección.' : ''; }
+			if (!me) { return 'Buscando tu ubicación…'; }
+			var a = L.latLng(me[0], me[1]).distanceTo(L.latLng(to[0], to[1]));
+			var km = a < 950 ? Math.round(a / 10) * 10 + ' m' : (a / 1000).toFixed(1).replace('.', ',') + ' km';
+			var min = Math.max(1, Math.round(a * 1.35 / 300)); // en moto: ~300 m/min y las calles alargan la recta un 35 %
+			return 'A ' + km + ' · unos ' + min + ' min ' + ('tienda' === kind ? 'de la tienda' : 'del cliente');
+		});
+	}
+
+	window.PallaMapa = { ruta: ruta, tienda: tienda, marcar: marcar, mensajero: mensajero };
 })();

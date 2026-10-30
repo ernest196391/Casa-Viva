@@ -595,6 +595,35 @@
 		return { recogi: 'Recogí ' + c.number, entregado: 'Entregado ' + c.number + amount, problema: 'Problema ' + c.number + ' no estaba', suelto: 'No puedo ' + c.number };
 	}
 
+	// 3.14.97: el mapa vive en un div propio que se vuelve a colocar tras cada redibujo (no parpadea ni se recarga), y el
+	// GPS solo se usa mientras está abierta la carrera.
+	var cmap = { box: null, watch: null, me: null, id: null, text: '', loading: null };
+	function mapaJs() {
+		if (window.PallaMapa) { return Promise.resolve(); }
+		if (cmap.loading) { return cmap.loading; }
+		var src = C.mapaUrl || ((document.querySelector('script[src*="palla/app.js"]') || {}).src || '').replace(/app.js.*$/, 'mapa.js');
+		cmap.loading = new Promise(function (ok, fail) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { cmap.loading = null; fail(new Error('mapa')); }; document.head.appendChild(s); });
+		return cmap.loading;
+	}
+	function mountCarreraMap() {
+		var ph = app.querySelector('[data-mapa-carrera]'), r = route(), c = ph ? findCarrera(r.id) : null;
+		if (!ph || !c) { if (cmap.watch !== null && navigator.geolocation) { navigator.geolocation.clearWatch(cmap.watch); } cmap.watch = null; return; }
+		if (!cmap.box || cmap.id !== c.id) { cmap.box = document.createElement('div'); cmap.box.style.height = '190px'; cmap.id = c.id; cmap.text = ''; }
+		ph.appendChild(cmap.box);
+		if (cmap.watch === null && navigator.geolocation && !P) {
+			cmap.watch = navigator.geolocation.watchPosition(function (p) { cmap.me = [p.coords.latitude, p.coords.longitude]; drawCarreraMap(); }, function () {}, { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 });
+		}
+		drawCarreraMap();
+	}
+	function drawCarreraMap() {
+		var c = findCarrera(cmap.id); if (!c || !cmap.box) { return; }
+		var kind = c.stage === 'pickup' ? 'tienda' : 'casa';
+		var to = kind === 'tienda' ? (C.storeGeo && C.storeGeo.length === 2 ? C.storeGeo : [23.1143, -82.39774]) : (c.dest || null);
+		mapaJs().then(function () { return window.PallaMapa.mensajero(cmap.box, cmap.me, to, kind); }).then(function (txt) {
+			cmap.text = txt || ''; var el = app.querySelector('[data-mapa-texto]'); if (el) { el.textContent = cmap.text; }
+		}).catch(function () { var el = app.querySelector('[data-mapa-texto]'); if (el) { el.textContent = 'El mapa no cargó ahora (¿señal?). Usa «Ir».'; } });
+	}
+
 	function screenCarrera(c) {
 		var m = c.money || {}, cu = c.customer || {};
 		var html = '<header class="pl-top pl-top--bar"><a class="pl-back" href="#carreras">‹ Carreras</a>' + stageBadge(c) + '</header>' + offlineBar('Sin conexión. Tu carrera sigue guardada.');
@@ -606,6 +635,8 @@
 		var steps = [['recogi', 'Recogí'], ['entregado', 'Entregado'], ['dinero', 'Dinero']];
 		var now = steps.filter(function (s) { return !done[s[0]]; })[0];
 		html += '<ol class="pl-track">' + steps.map(function (s) { return '<li class="' + (done[s[0]] ? 'is-done' : (now && now[0] === s[0] ? 'is-now' : '')) + '">' + (done[s[0]] ? '✓ ' : '') + s[1] + '</li>'; }).join('') + '</ol>';
+		// 3.14.97 (Ernesto 30-oct, «como Mandao»): el mapa de la carrera — tu 🛵 (GPS del teléfono, no se manda) y la tienda o el cliente.
+		if (['pickup', 'route'].indexOf(c.stage) !== -1) { html += '<section class="pl-card" style="padding:0;overflow:hidden;gap:0"><div data-mapa-carrera style="height:190px"></div><div class="pl-strong" data-mapa-texto style="padding:12px 16px">' + esc(cmap.text || 'Buscando tu ubicación…') + '</div></section>'; }
 		if (c.queued) { html += '<div class="pl-note">' + icon('sincronizar', 20) + '<div>Guardado. Se manda al volver la señal.</div></div>'; }
 		if (c.pase) { html += '<div class="pl-note">🔁<div>Esperando que ' + esc(c.pase.toName) + ' la acepte. <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="pase-cancelar" data-id="' + c.id + '">Cancelar</button></div></div>'; }
 		if (c.stage === 'incident' && !c.queued) { html += '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>Problema avisado</b>Espera lo que diga la tienda.</div></div>'; }
@@ -901,6 +932,7 @@
 			+ (state.toast ? '<div class="pl-toast" role="status">' + esc(state.toast) + '</div>' : '');
 		window.scrollTo(0, scroll);
 		lastView = view;
+		mountCarreraMap();
 	}
 
 	// ------------------------------------------------------------ Eventos (un solo oyente para toda la app)
