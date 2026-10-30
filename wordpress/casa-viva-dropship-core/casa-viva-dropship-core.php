@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.97
+ * Version: 3.14.98
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.97' );
+define( 'CVD_VERSION', '3.14.98' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -67,8 +67,10 @@ require_once CVD_DIR . 'includes/class-cvd-delivery-when.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-stock.php';
 require_once CVD_DIR . 'includes/class-cvd-direct-dispatch.php';
 require_once CVD_DIR . 'includes/class-cvd-messenger-cash.php';
-require_once CVD_DIR . 'includes/class-cvd-cierre-math.php';
-require_once CVD_DIR . 'includes/class-cvd-cierre.php'; // Pilar 2: cierre de turno (29-oct)
+require_once CVD_DIR . 'includes/class-cvd-cash-day.php'; // 3.14.76: «¿Lo recibiste hoy?» con el dinero de entregas viejas (Ernesto 28-oct)
+require_once CVD_DIR . "includes/class-cvd-cierre-math.php";
+require_once CVD_DIR . "includes/class-cvd-cierre.php"; // Pilar 2: cierre de turno (29-oct)
+require_once CVD_DIR . 'includes/class-cvd-tablero.php'; // 3.14.98: tablero único del móvil (D127)
 require_once CVD_DIR . 'includes/class-cvd-fichas.php';
 require_once CVD_DIR . 'includes/class-cvd-aprende.php';
 require_once CVD_DIR . 'includes/class-cvd-order-edit.php';
@@ -129,7 +131,7 @@ add_action(
 			CVD_Gestora_Confianza::register(); // 3.14.42: «¿Es de confianza este número?» (lista de sospechosos, Ernesto 20-oct).
 			CVD_Nexo_Busca::register(); // 3.14.28: NEXO Busca — precio, proveedor, cliente, foto bonita y «Vender por Casa Viva» (Ernesto, 16-oct).
 			CVD_Gestora_Fotos::register();
-			CVD_Seller_Store::register(); // 3.14.87: la tienda propia de un vendedor (Daykel, Ernesto 29-oct): «Mis artículos», /vendedor/<nombre>/, pedir por WhatsApp.
+			CVD_Seller_Store::register(); // 3.14.87: la tienda propia de un vendedor (Daykel, Ernesto 29-oct)
 			CVD_Gestora_Taller::register(); // 3.14.91: «Taller de fotos» (foto lista en el móvil + texto para publicar, Ernesto 29-oct).
 			CVD_Gestora_Estudio::register(); // 3.14.1: «Mi estudio de fotos» con la clave de Google de cada gestora (Ernesto, 14-oct).
 			CVD_Program_Login::register();
@@ -148,6 +150,7 @@ add_action(
 			CVD_Ficha_Estado::register(); // 3.14.40: «Falta información» (medidas, material, datos técnicos) para gestoras y panel; /bot/fichas para el bot (Ernesto y Lennys, 18-oct).
 			CVD_Supplier_Split::register(); // 3.14.14: reparto de la venta de proveedor apuntado en el pedido y sellado al cerrar (Ernesto, 14-oct, D69).
 			CVD_Programa::register(); // 3.14.29: Programa de gestoras en modo sombra: piedras por ganancia, fondo 15 % (D53–D58). 3.14.30: red 1 % + 0,5 %, fondo sobre la ganancia neta y arrastre de devoluciones (D77). 3.14.32: alerta «cuenta_compartida», «revisar» agrupadas y el cierre espera a las alertas sin revisar (D79). 3.14.33: «Tus vales del mes» en Mi piedra (Dany).
+			CVD_Tablero::register(); // 3.14.98: /tablero/ (solo lectura, enlace firmado; interruptor cvd_tablero; D127).
 			CVD_Catalog_Version::register(); // 3.14.41: marca de cambios del catálogo para VivaBot (/bot/catalogo/cambios), Lennys 20-oct.
 			CVD_Caja_Bridge::register(); // 3.14.42: /panel/caja/* (pedidos web en la caja, efectivo de Ventas para el cierre).
 			CVD_Encuesta::register(); // 3.14.35: encuesta anónima en /encuesta/ (nace cerrada; Ernesto 16-oct).
