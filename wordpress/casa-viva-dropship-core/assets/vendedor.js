@@ -81,7 +81,7 @@
       '<label class="cvga-field"><span>Nombre del artículo</span><input name="title" maxlength="90" required value="' + esc(i.title) + '" placeholder="Ej.: Pastillas de freno Suzuki GN125"></label>' +
       '<label class="cvga-field"><span>Sirve para (marca y modelo de moto)</span><input name="compat" maxlength="120" value="' + esc(i.compat) + '" placeholder="Ej.: Suzuki GN125, Honda CG150"></label>' +
       '<label class="cvga-field"><span>Descripción</span><textarea name="description" rows="4" maxlength="1500" placeholder="Para qué moto sirve, estado, medidas…">' + esc(i.description) + '</textarea></label>' +
-      '<div class="cvsl-two"><label class="cvga-field"><span>Precio (USD)</span><input name="price" inputmode="decimal" required value="' + esc(i.price) + '" placeholder="0,00"></label>' +
+      '<div class="cvsl-two"><label class="cvga-field"><span>Precio (USD)</span><input name="price" inputmode="decimal" required value="' + (Number(i.price) >= 0.5 ? esc(i.price) : '') + '" placeholder="0,00"></label>' +
       '<label class="cvga-field"><span>Cuántos tienes</span><input name="stock" inputmode="numeric" value="' + (i.stock == null ? '' : esc(i.stock)) + '" placeholder="vacío = no cuento"></label></div>' +
       '<label class="cvga-field"><span>Categoría</span><select name="category"><option value="">Elige una</option>' + cats + '</select></label>' +
       '<fieldset class="cvsl-set"><legend>¿Dónde se ve?</legend><label class="cvsl-check"><input type="radio" checked disabled> Solo en mi tienda</label>' +
