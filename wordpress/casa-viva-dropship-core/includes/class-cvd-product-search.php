@@ -9,7 +9,7 @@ defined( 'ABSPATH' ) || exit;
  * Solo lee productos publicados y visibles; los precios salen siempre de WooCommerce.
  */
 final class CVD_Product_Search {
-	private const CACHE_KEY = 'cvd_product_search_index_v1';
+	private const CACHE_KEY = 'cvd_product_search_index_v2'; // v2 (3.14.97): SKU, más descripción y palabra del tipo
 	private const MAX_RESULTS = 12;
 	private const MAX_SHOP_RESULTS = 200;
 
@@ -46,6 +46,49 @@ final class CVD_Product_Search {
 		'jarra'       => array( 'pomo' ),
 		'bocina'      => array( 'parlante', 'altavoz' ),
 		'celular'     => array( 'movil', 'telefono' ),
+		// 3.14.97 (auditoría del catálogo, 30-oct): cómo lo dicen en Cuba. Valen en los dos sentidos (ver aliases()).
+		'nevera'      => array( 'refrigerador', 'frigorifico', 'refri', 'frigidaire' ),
+		'refrigerador' => array( 'nevera' ),
+		'congelador'  => array( 'freezer', 'congeladora', 'nevera' ),
+		'paraguas'    => array( 'sombrilla', 'paragua' ),
+		'reina'       => array( 'presion' ),
+		'split'       => array( 'aire', 'acondicionado' ),
+		'planta'      => array( 'generador' ),
+		'colchoneta'  => array( 'colchon', 'topper' ),
+		'cubrecama'   => array( 'sobrecama', 'colcha', 'edredon' ),
+		'fogon'       => array( 'cocina', 'hornilla', 'fogonero' ),
+		'hornilla'    => array( 'cocina', 'fogon' ),
+		'bombillo'    => array( 'bombilla', 'foco', 'lampara', 'led' ),
+		'jaba'        => array( 'bolsa', 'bolso', 'mochila' ),
+		'pomo'        => array( 'botella', 'frasco', 'jarra', 'termo' ),
+		'televisor'   => array( 'tv', 'television', 'smart' ),
+		'tele'        => array( 'tv', 'televisor' ),
+		'ducha'       => array( 'calentador' ),
+		'termo'       => array( 'calentador' ),
+		'olla'        => array( 'cazuela' ),
+		'bateria'     => array( 'pila' ),
+		'goma'        => array( 'neumatico', 'llanta', 'caucho' ),
+		'audifono'    => array( 'auricular', 'cascos' ),
+		'escaparate'  => array( 'closet', 'armario', 'perchero' ),
+		'perchero'    => array( 'colgador', 'percha' ),
+		'escoba'      => array( 'escobillon' ),
+		'trapeador'   => array( 'frazada', 'mopa' ),
+		'pozuelo'     => array( 'bol', 'tazon' ),
+		'fregadero'   => array( 'vertedero' ),
+		'lampara'     => array( 'farol', 'linterna', 'bombillo' ),
+		'farol'       => array( 'lampara' ),
+		'secador'     => array( 'secadora' ),
+		'moto'        => array( 'motor', 'scooter' ),
+		'bici'        => array( 'bicicleta' ),
+		'compu'       => array( 'computadora', 'laptop', 'pc' ),
+		'laptop'      => array( 'computadora', 'portatil' ),
+		'cargador'    => array( 'carga' ),
+		'nailon'      => array( 'nylon' ),
+		'tanque'      => array( 'cubeta', 'cubo' ),
+		'funda'       => array( 'forro', 'capa' ),
+		'capa'        => array( 'funda', 'cubierta' ),
+		'pesa'        => array( 'bascula', 'balanza' ),
+		'bascula'     => array( 'pesa', 'balanza' ),
 	);
 
 	public static function register(): void {
@@ -184,7 +227,22 @@ final class CVD_Product_Search {
 	}
 
 	private static function aliases(): array {
-		return (array) apply_filters( 'cvd_product_search_aliases', self::ALIASES );
+		static $done = null;
+		if ( null !== $done ) { return $done; }
+		$list = (array) apply_filters( 'cvd_product_search_aliases', self::ALIASES );
+		// 3.14.97: cada sinónimo vale en los dos sentidos (si «nevera» lleva a «refrigerador», «refrigerador» lleva a «nevera»).
+		foreach ( $list as $word => $others ) {
+			foreach ( (array) $others as $other ) {
+				$list[ $other ] = array_values( array_unique( array_merge( (array) ( $list[ $other ] ?? array() ), array( $word ) ) ) );
+			}
+		}
+		return $done = $list;
+	}
+
+	/** 3.14.97: cómo suena (b/v, s/z/ce/ci, ll/y, h muda): «nebera» = «nevera», «telebisor» = «televisor». */
+	public static function sound( string $word ): string {
+		$w = str_replace( array( 'v', 'z', 'll', 'qu', 'ce', 'ci' ), array( 'b', 's', 'y', 'k', 'se', 'si' ), $word );
+		return (string) preg_replace( '/(?<!c)h/', '', $w );
 	}
 
 	/** @return array<int, array{id:int, name:string, words:string[], extra:string[]}> */
@@ -200,13 +258,14 @@ final class CVD_Product_Search {
 				continue;
 			}
 			$cats = wp_get_post_terms( $product->get_id(), 'product_cat', array( 'fields' => 'names' ) );
-			$extra = self::normalize( implode( ' ', is_wp_error( $cats ) ? array() : $cats ) . ' ' . $product->get_short_description() . ' ' . wp_trim_words( $product->get_description(), 40, '' ) );
+			$extra = self::normalize( implode( ' ', is_wp_error( $cats ) ? array() : $cats ) . ' ' . $product->get_sku() . ' ' . $product->get_short_description() . ' ' . wp_trim_words( $product->get_description(), 120, '' ) );
 			$index[] = array(
 				'id'    => $product->get_id(),
 				'name'  => self::normalize( $product->get_name() ),
 				'words' => array_values( array_unique( array_map( array( __CLASS__, 'stem' ), explode( ' ', self::normalize( $product->get_name() ) ) ) ) ),
 				'extra' => array_values( array_unique( array_map( array( __CLASS__, 'stem' ), array_filter( explode( ' ', $extra ) ) ) ) ),
 				'stock' => $product->is_in_stock() ? 1 : 0,
+				'first' => self::stem( (string) strtok( self::normalize( $product->get_name() ), ' ' ) ), // tipo de producto (primera palabra)
 			);
 		}
 		set_transient( self::CACHE_KEY, $index, HOUR_IN_SECONDS );
@@ -234,6 +293,7 @@ final class CVD_Product_Search {
 		$best = 0;
 		foreach ( $variants as $index => $variant ) {
 			$penalty = $index ? 1 : 0;
+			if ( $variant === ( $row['first'] ?? '' ) ) { $best = max( $best, 11 - $penalty ); continue; } // 3.14.97: es el tipo de producto
 			$name = self::word_score( $variant, $row['words'] );
 			if ( $name ) {
 				$best = max( $best, $name * 3 - $penalty );
@@ -243,6 +303,10 @@ final class CVD_Product_Search {
 			if ( $extra ) {
 				$best = max( $best, $extra - $penalty );
 			}
+		}
+		if ( ! $best && mb_strlen( $term ) >= 4 ) { // 3.14.97: escrito como suena («nebera», «telebisor»)
+			$s = self::sound( $term );
+			foreach ( $row['words'] as $word ) { if ( self::sound( $word ) === $s ) { return 5; } }
 		}
 		return $best;
 	}
