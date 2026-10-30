@@ -59,6 +59,9 @@ final class CVD_Catalogo_Auto {
 	 */
 	public static function como_comprar(): void {
 		global $product;
+		// 3.14.92 (audio de Lennys 30-oct 13:04: «una parte… al inicio, en la portada»): apagado en cada ficha.
+		// Se enciende con la opción cvd_como_comprar_ficha = si, si ella lo pide también en los productos.
+		if ( 'si' !== get_option( 'cvd_como_comprar_ficha', 'no' ) ) { return; }
 		if ( ! $product instanceof WC_Product ) { return; }
 		$dir = class_exists( 'CVD_Contextual_Assistant' ) ? CVD_Contextual_Assistant::PICKUP_ADDRESS : 'Nuevo Vedado, La Habana';
 		$bajo = self::is_market( $product );
@@ -71,11 +74,30 @@ final class CVD_Catalogo_Auto {
 			. '<p style="margin:0">❓ ¿Dudas? <a href="' . $u( self::PAGINA_COMPRAR ) . '">Así se compra en Casa Viva</a></p></div>';
 	}
 
-	/** Aviso corto arriba de la portada que lleva a la página de cómo comprar («que llame la atención», Lennys). */
+	/**
+	 * 3.14.92 (audio de Lennys, 30-oct 13:04): UNA sola sección «¿Cómo comprar en Casa Viva?», al inicio de la portada y
+	 * que llame la atención, con flechita roja: dirección, horario de recogida, mensajería con sus precios y el video.
+	 * Franja roja que se abre al tocarla (sin JavaScript: <details>), así no empuja la portada si no se abre.
+	 */
 	public static function como_comprar_portada(): void {
-		if ( is_admin() || ! is_front_page() || ! get_page_by_path( self::PAGINA_COMPRAR ) ) { return; }
-		echo '<a href="' . esc_url( home_url( '/' . self::PAGINA_COMPRAR . '/' ) ) . '" class="cvd-como-comprar-portada" style="display:block;background:#B5482F;color:#fff;text-align:center;padding:9px 16px;font:600 15px/1.35 system-ui,sans-serif;text-decoration:none">'
-			. '➜ ¿Primera vez? Así se compra en Casa Viva: recogida, mensajería y precios</a>';
+		if ( is_admin() || ! is_front_page() ) { return; }
+		$dir = class_exists( 'CVD_Contextual_Assistant' ) ? CVD_Contextual_Assistant::PICKUP_ADDRESS : 'Nuevo Vedado, La Habana';
+		$h = self::recogida_horas();
+		$u = static fn( string $p ) => esc_url( home_url( '/' . $p ) );
+		$li = 'margin:0 0 10px;padding:0 0 0 26px;position:relative';
+		$ic = 'position:absolute;left:0;top:0';
+		echo '<style>.cvd-cc-flecha{display:inline-block;animation:cvdcc 1.2s ease-in-out infinite}@keyframes cvdcc{50%{transform:translateX(5px)}}@media (prefers-reduced-motion:reduce){.cvd-cc-flecha{animation:none}}'
+			. '.cvd-cc summary{list-style:none;cursor:pointer}.cvd-cc summary::-webkit-details-marker{display:none}.cvd-cc a{color:#B5482F;font-weight:600}</style>'
+			. '<details class="cvd-cc" style="background:#FFF8F3;border-bottom:2px solid #B5482F;font:15px/1.45 system-ui,sans-serif;color:#2B2420">'
+			. '<summary style="background:#B5482F;color:#fff;text-align:center;padding:10px 16px;font-weight:700;font-size:16px">'
+			. '<span class="cvd-cc-flecha" aria-hidden="true">➜</span> ¿Cómo comprar en Casa Viva? <span style="font-weight:500;font-size:14px;opacity:.9">Toca aquí</span></summary>'
+			. '<div style="max-width:620px;margin:0 auto;padding:14px 16px 6px"><ul style="list-style:none;margin:0;padding:0">'
+			. '<li style="' . $li . '"><span style="' . $ic . '">🛒</span><strong>Elige</strong> tu producto en la web y pídelo con el botón de comprar o por WhatsApp.</li>'
+			. '<li style="' . $li . '"><span style="' . $ic . '">📍</span><strong>Recógelo en la tienda:</strong> ' . esc_html( $dir ) . ', ' . esc_html( $h ) . ' (de 1:00 a 1:30 es el almuerzo). <a href="' . $u( 'como-llegar/' ) . '">Cómo llegar</a></li>'
+			. '<li style="' . $li . '"><span style="' . $ic . '">🛵</span><strong>O te lo llevamos</strong> con mensajería a toda La Habana; se paga aparte, en CUP, al mensajero. <a href="' . $u( 'tarifas-mensajeria/' ) . '">Aquí están los precios de la mensajería</a></li>'
+			. '<li style="' . $li . '"><span style="' . $ic . '">📦</span><strong>Bajo pedido:</strong> lo pedimos al proveedor, te confirmamos en 1 hora antes de cobrar y llega en unas 24 horas.</li>'
+			. '<li style="' . $li . '"><span style="' . $ic . '">▶️</span><strong>¿Dudas?</strong> <a href="' . $u( self::PAGINA_COMPRAR . '/#video' ) . '">Mira el video de cómo comprar (1 minuto)</a></li>'
+			. '</ul></div></details>';
 	}
 
 	public const TERM_TEXTO = '_cvd_texto_categoria';
