@@ -1,4 +1,4 @@
-// Pruebas de las funciones puras del Taller de fotos (Core 3.14.89): node artifacts/tests/test-taller-layout.mjs
+// Pruebas de las funciones puras del Taller de fotos (Core 3.14.91): node artifacts/tests/test-taller-layout.mjs
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 const require = createRequire(import.meta.url);

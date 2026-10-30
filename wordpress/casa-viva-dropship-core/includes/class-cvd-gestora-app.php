@@ -100,7 +100,7 @@ final class CVD_Gestora_App {
 			array_splice( $nav, (int) array_search( 'fotos', array_column( $nav, 0 ), true ) + 1, 0, array( array( 'estudio', 'Mi estudio de fotos', 'camera', '' ) ) );
 			array_splice( $nav, (int) array_search( 'cobrar', array_column( $nav, 0 ), true ) + 1, 0, array( array( 'contabilidad', 'Mi contabilidad', 'doc', '' ) ) );
 		}
-		// 3.14.89 (Ernesto, 29-oct): «Taller de fotos» (foto lista en el móvil y texto para publicar), debajo de «Fotos para publicar».
+		// 3.14.91 (Ernesto, 29-oct): «Taller de fotos» (foto lista en el móvil y texto para publicar), debajo de «Fotos para publicar».
 		$taller = class_exists( 'CVD_Gestora_Taller' ) && CVD_Gestora_Taller::enabled_for( $user );
 		if ( $taller ) {
 			array_splice( $nav, (int) array_search( 'fotos', array_column( $nav, 0 ), true ) + 1, 0, array( array( 'taller', 'Taller de fotos', 'camera', '' ) ) );

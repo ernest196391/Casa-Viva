@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * «Taller de fotos» (3.14.89, Ernesto 29-oct): piezas puras, sin WordPress, para probarlas solas
+ * «Taller de fotos» (3.14.91, Ernesto 29-oct): piezas puras, sin WordPress, para probarlas solas
  * (artifacts/tests/test-taller-core.php).
  *
  *   - CVD_Taller_Text: del dato real del producto saca (1) un texto de plantilla que no puede inventar nada y
@@ -21,7 +21,7 @@ final class CVD_Taller_Text {
 	public const MAX_EXTRA = 400;
 
 	/** Promesas que solo se aceptan si ya venían en los datos. */
-	private const CLAIMS = '/garant|gratis|descuent|ofert|promoci|rebaj|100\s?%|original|importad|certific|impermeab|resistente al agua|duradero|de por vida|el mejor|n[uú]mero 1|sin igual/iu';
+	private const CLAIMS = '/garant|gratis|descuent|ofert|promoci|rebaj|100\s?%|original|importad|certific|impermeab|resistente al agua|durader|durable|de por vida|el mejor|n[uú]mero 1|sin igual|\bnuev[oa]s?\b|\blleg[oó]\b|novedad|exclusiv/iu';
 
 	/** Quita emojis y espacios raros. */
 	public static function tidy( string $s ): string {
@@ -47,6 +47,7 @@ final class CVD_Taller_Text {
 			$line = ltrim( (string) $line, "-–—*·• " );
 			$len = mb_strlen( $line );
 			if ( $len < 25 || $len > 180 ) { continue; }
+			if ( preg_match( '/bajo pedido|confirmamos|antes de cobrar|disponibilidad|inventario|\bstock\b|existencia|quedan|mensajer[ií]a|\bentrega|env[ií]o|proveedor|comisi[oó]n/iu', $line ) ) { continue; } // notas de operación: no son ventajas del producto
 			if ( preg_match( '/^(consulta|medida|medidas|contenido|colores?|mensajer[ií]a)\b/iu', $line ) || preg_match( '/\bUSD\b|\$\s?\d|\*|\bmerma\b|\bCUP\b|\bMLC\b/iu', $line ) ) { continue; }
 			if ( 0 === strpos( self::norm( $line ), $norm_name ) && mb_strlen( $line ) < mb_strlen( $name ) + 25 ) { continue; }
 			if ( ! in_array( $line, $out, true ) ) { $out[] = $line; }
@@ -112,6 +113,7 @@ final class CVD_Taller_Text {
 			. "- No inventes medidas, colores, materiales, marcas, stock, plazos, garantías, descuentos ni ofertas.\n"
 			. "- No escribas el precio ni ningún enlace ni número de teléfono: los pone el sistema.\n"
 			. "- No uses cifras que no estén en los datos.\n"
+			. "- No digas que es nuevo, que acaba de llegar, que es original ni que es exclusivo si los datos no lo dicen.\n"
 			. "- Español sencillo y cálido, como se habla en Cuba, sin palabras raras. No uses la palabra «gratis».\n"
 			. '- Devuelve solo el texto final, sin comillas ni explicaciones.';
 	}

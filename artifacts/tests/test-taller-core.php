@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Pruebas del texto del «Taller de fotos» (Core 3.14.89): plantilla, guarda contra lo inventado y precio/enlace puestos por código.
+ * Pruebas del texto del «Taller de fotos» (Core 3.14.91): plantilla, guarda contra lo inventado y precio/enlace puestos por código.
  * php artifacts/tests/test-taller-core.php
  */
 
@@ -47,6 +47,8 @@ check( 'cifra inventada se rechaza', CVD_Taller_Text::guard( 'Filtro de aceite S
 check( 'precio inventado se rechaza', CVD_Taller_Text::guard( 'Filtro de aceite Suzuki GN 125 por solo 5 USD, para tu moto de siempre.', $f, 'facebook' ), '' );
 check( 'garantía inventada se rechaza', CVD_Taller_Text::guard( 'Filtro de aceite Suzuki GN 125 con garantía, listo para poner en tu moto.', $f, 'facebook' ), '' );
 check( 'descuento inventado se rechaza', CVD_Taller_Text::guard( 'Filtro de aceite Suzuki GN 125 con descuento, listo para poner en tu moto.', $f, 'facebook' ), '' );
+check( 'nuevo inventado se rechaza (la pieza es usada)', CVD_Taller_Text::guard( 'Nuevo filtro de aceite Suzuki GN 125 con rosca de 20 mm, listo para poner en tu moto.', $f, 'facebook' ), '' );
+check( 'llegó inventado se rechaza', CVD_Taller_Text::guard( 'Llegó el filtro de aceite Suzuki GN 125 con rosca de 20 mm para tu moto de siempre.', $f, 'facebook' ), '' );
 check( 'enlace de la IA se rechaza', CVD_Taller_Text::guard( 'Filtro de aceite Suzuki GN 125, compra en https://example.com ahora mismo.', $f, 'facebook' ), '' );
 check( 'teléfono de la IA se rechaza', CVD_Taller_Text::guard( 'Filtro de aceite Suzuki GN 125, escríbeme al 53 5405 6173 para pedirlo ya.', $f, 'facebook' ), '' );
 check( 'muy corto se rechaza', CVD_Taller_Text::guard( 'Filtro', $f, 'facebook' ), '' );
@@ -65,6 +67,9 @@ has( 'descripción no lleva precio', CVD_Taller_Text::finish( $ok, $f, 'descripc
 $html = '<ul><li>Cepillo que alisa y peina sin tirones.</li><li>Colores: rosado</li><li>Cepillo alisador – 35 USD precio</li></ul><p>Sale en 24 horas con empaque de regalo.</p>';
 $lines = CVD_Taller_Text::description_lines( $html, 'Cepillo alisador' );
 check( 'toma frases reales', $lines, array( 'Cepillo que alisa y peina sin tirones.', 'Sale en 24 horas con empaque de regalo.' ) );
+
+$ops = CVD_Taller_Text::description_lines( '<p>Producto bajo pedido: confirmamos disponibilidad en 1 hora antes de cobrar.</p><p>Sorbetes flexibles para el hogar, fiestas y cualquier ocasión.</p>', 'Absorbente' );
+check( 'notas de operación no salen', $ops, array( 'Sorbetes flexibles para el hogar, fiestas y cualquier ocasión.' ) );
 
 /* ---------- instrucción ---------- */
 has( 'instrucción prohíbe inventar', CVD_Taller_Text::system_instruction( 'facebook' ), 'No inventes' );

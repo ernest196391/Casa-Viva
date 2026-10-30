@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * «Taller de fotos» (3.14.89, Ernesto 29-oct; caso Daykel, piezas de moto): en la oficina de la gestora, Herramientas.
+ * «Taller de fotos» (3.14.91, Ernesto 29-oct; caso Daykel, piezas de moto): en la oficina de la gestora, Herramientas.
  *   1. Foto lista en el móvil, sin IA y sin costo: recorte cuadrado 1080 (o vertical para estado), fondo liso y banda
  *      con el nombre (y el precio si ella quiere). Todo se hace en el teléfono (assets/gestora-taller.js).
  *   2. Texto para Facebook / estado / descripción del producto: sale de los datos REALES del producto y de lo que ella

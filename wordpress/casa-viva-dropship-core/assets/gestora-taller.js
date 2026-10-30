@@ -1,4 +1,4 @@
-/* «Taller de fotos» (Core 3.14.89): la foto se arregla en el teléfono (canvas), el texto lo pide al servidor.
+/* «Taller de fotos» (Core 3.14.91): la foto se arregla en el teléfono (canvas), el texto lo pide al servidor.
    Las funciones puras (layout, wrapLines) se prueban solas: artifacts/tests/test-taller-layout.mjs */
 (function () {
 'use strict';

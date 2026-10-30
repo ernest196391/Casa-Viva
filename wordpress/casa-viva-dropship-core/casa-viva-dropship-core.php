@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.89
+ * Version: 3.14.91
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.89' );
+define( 'CVD_VERSION', '3.14.91' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -57,7 +57,7 @@ require_once CVD_DIR . 'includes/class-cvd-nexo-busca.php'; // 3.14.28: NEXO Bus
 require_once CVD_DIR . 'includes/class-cvd-gestora-fotos.php';
 require_once CVD_DIR . 'includes/class-cvd-estudio-core.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-estudio.php';
-require_once CVD_DIR . 'includes/class-cvd-taller-core.php'; // 3.14.89: «Taller de fotos» (texto sin inventar)
+require_once CVD_DIR . 'includes/class-cvd-taller-core.php'; // 3.14.91: «Taller de fotos» (texto sin inventar)
 require_once CVD_DIR . 'includes/class-cvd-gestora-taller.php';
 require_once CVD_DIR . 'includes/class-cvd-seller-store.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-contabilidad.php';
@@ -128,7 +128,7 @@ add_action(
 			CVD_Nexo_Busca::register(); // 3.14.28: NEXO Busca — precio, proveedor, cliente, foto bonita y «Vender por Casa Viva» (Ernesto, 16-oct).
 			CVD_Gestora_Fotos::register();
 			CVD_Seller_Store::register(); // 3.14.87: la tienda propia de un vendedor (Daykel, Ernesto 29-oct): «Mis artículos», /vendedor/<nombre>/, pedir por WhatsApp.
-			CVD_Gestora_Taller::register(); // 3.14.89: «Taller de fotos» (foto lista en el móvil + texto para publicar, Ernesto 29-oct).
+			CVD_Gestora_Taller::register(); // 3.14.91: «Taller de fotos» (foto lista en el móvil + texto para publicar, Ernesto 29-oct).
 			CVD_Gestora_Estudio::register(); // 3.14.1: «Mi estudio de fotos» con la clave de Google de cada gestora (Ernesto, 14-oct).
 			CVD_Program_Login::register();
 			CVD_Gestora_Stock::register();

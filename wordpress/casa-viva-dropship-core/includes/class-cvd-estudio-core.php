@@ -195,7 +195,7 @@ final class CVD_Estudio_Prompt {
 		'ambiente' => 'En una sala, baño o cuarto bonito',
 		'color'    => 'En otro color',
 		'persona'  => 'Con una persona usándolo',
-		'dia'      => 'Al aire libre, con luz de día', // 3.14.89 (Daykel, piezas de moto): la pieza sobre asfalto o calle con luz de día
+		'dia'      => 'Al aire libre, con luz de día', // 3.14.91 (Daykel, piezas de moto): la pieza sobre asfalto o calle con luz de día
 		'taller'   => 'Sobre una mesa de taller',
 		'estado'   => 'Para mi estado de WhatsApp (vertical)',
 	);
