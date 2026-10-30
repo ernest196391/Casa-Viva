@@ -41,6 +41,41 @@ final class CVD_Catalogo_Auto {
 		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'review_page' ), 1 );
 		add_action( 'woocommerce_after_shop_loop', array( __CLASS__, 'category_text' ), 30 );
+		add_action( 'woocommerce_single_product_summary', array( __CLASS__, 'como_comprar' ), 36 );
+		add_action( 'wp_body_open', array( __CLASS__, 'como_comprar_portada' ), 30 );
+	}
+
+	/** 3.14.91 (Lennys, 30-oct): página con todo lo de comprar; el recuadro de cada producto y la portada enlazan aquí. */
+	public const PAGINA_COMPRAR = 'como-comprar';
+
+	private static function recogida_horas(): string {
+		return (string) get_option( 'cvd_tarjeta_recogida_horas', 'de 10:00 a. m. a 4:00 p. m.' );
+	}
+
+	/**
+	 * 3.14.91 (Lennys, 30-oct): «la descripción es del producto; cómo comprar en otra parte, con una flechita en rojo».
+	 * Recuadro debajo del botón de comprar: dónde se recoge y a qué hora, mensajería y sus precios, y más ayuda.
+	 * Dirección y horario salen de las mismas opciones que usa el resto del Core (no se copian a mano).
+	 */
+	public static function como_comprar(): void {
+		global $product;
+		if ( ! $product instanceof WC_Product ) { return; }
+		$dir = class_exists( 'CVD_Contextual_Assistant' ) ? CVD_Contextual_Assistant::PICKUP_ADDRESS : 'Nuevo Vedado, La Habana';
+		$bajo = self::is_market( $product );
+		$u = static fn( string $slug ) => esc_url( home_url( '/' . $slug . '/' ) );
+		echo '<div class="cvd-como-comprar" style="margin:16px 0;padding:12px 14px;border:2px solid #B5482F;border-radius:14px;background:#FFF8F3;font-size:15px;line-height:1.5;color:#2B2420">'
+			. '<p style="margin:0 0 6px;font-weight:700;font-size:16px"><span aria-hidden="true" style="color:#B5482F;font-size:20px">➜</span> ¿Cómo comprar en Casa Viva?</p>'
+			. ( $bajo ? '<p style="margin:0 0 6px">📦 <strong>Bajo pedido:</strong> lo pedimos al proveedor, te confirmamos en 1 hora antes de cobrar y llega en unas 24 horas.</p>' : '' )
+			. '<p style="margin:0 0 6px">📍 <strong>Recógelo</strong> en ' . esc_html( $dir ) . ', ' . esc_html( self::recogida_horas() ) . '. <a href="' . $u( 'como-llegar' ) . '">Cómo llegar</a></p>'
+			. '<p style="margin:0 0 6px">🛵 <strong>Mensajería</strong> a toda La Habana; se paga en CUP al mensajero. <a href="' . $u( 'tarifas-mensajeria' ) . '">Ver precios por zona</a></p>'
+			. '<p style="margin:0">❓ ¿Dudas? <a href="' . $u( self::PAGINA_COMPRAR ) . '">Así se compra en Casa Viva</a></p></div>';
+	}
+
+	/** Aviso corto arriba de la portada que lleva a la página de cómo comprar («que llame la atención», Lennys). */
+	public static function como_comprar_portada(): void {
+		if ( is_admin() || ! is_front_page() || ! get_page_by_path( self::PAGINA_COMPRAR ) ) { return; }
+		echo '<a href="' . esc_url( home_url( '/' . self::PAGINA_COMPRAR . '/' ) ) . '" class="cvd-como-comprar-portada" style="display:block;background:#B5482F;color:#fff;text-align:center;padding:9px 16px;font:600 15px/1.35 system-ui,sans-serif;text-decoration:none">'
+			. '➜ ¿Primera vez? Así se compra en Casa Viva: recogida, mensajería y precios</a>';
 	}
 
 	public const TERM_TEXTO = '_cvd_texto_categoria';
