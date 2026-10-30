@@ -123,9 +123,11 @@
 				if (to) { L.polyline([me, to], { color: '#121212', weight: 3, dashArray: '6 8', opacity: .7 }).addTo(g); }
 				L.marker(me, { icon: pin(L, '🛵', 'Tú'), zIndexOffset: 1000 }).addTo(g); pts.push(me);
 			}
-			if (pts.length && (!map._fitted || me && !map._withMe)) {
-				if (pts.length === 1) { map.setView(pts[0], 16); } else { map.fitBounds(pts, { padding: [28, 28], maxZoom: 17 }); }
-				map._fitted = true; map._withMe = !!me;
+			// Se encuadra al empezar, cuando llega tu ubicación y cuando cambia el destino (de la tienda al cliente): así se acerca.
+			var key = to ? to.join(',') : '';
+			if (pts.length && (!map._fitted || me && !map._withMe || map._toKey !== key)) {
+				if (pts.length === 1) { map.setView(pts[0], 16); } else { map.fitBounds(pts, { padding: [36, 36], maxZoom: 17 }); }
+				map._fitted = true; map._withMe = !!me; map._toKey = key;
 			}
 			setTimeout(function () { map.invalidateSize(); }, 50);
 			if (!to) { return me ? 'Sin punto en el mapa: usa la dirección.' : ''; }
