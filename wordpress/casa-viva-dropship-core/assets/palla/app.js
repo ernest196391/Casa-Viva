@@ -133,6 +133,7 @@
 			state.blocked = null;
 			var before = (state.hoy && !state.offline ? state.hoy.carreras : []).filter(function (c) { return !c.queued && !state.done[c.id]; });
 			state.hoy = res.data;
+			if (!res.offline) { nativeDisp(res.data.disp); } // 3.14.83: la app de Android se apaga/enciende con el botón (y a su hora)
 			if (!res.offline) { newOffers(res.data.ofertas || []); } // 3.14.69.15: bocina si sale una carrera nueva
 			var gone = before.filter(function (c) { return !findCarrera(c.id); });
 			var passed = gone.filter(function (c) { return c.pase; });
@@ -435,6 +436,7 @@
 		// 29-oct (prueba con Ernesto: «se quedó más de 1 min vibrando»): dentro de la app de Android suena SOLO la bocina de
 		// Android (30 s, se calla con volumen o encendido); aquí queda el cartel. En el navegador, 30 s como mucho (antes 5 min).
 		if (NATIVE) { return; }
+		if (state.hoy && state.hoy.disp && !state.hoy.disp.on) { return; } // 3.14.83: desconectado, no suena
 		snd.until = Date.now() + 30000;
 		clearInterval(snd.timer);
 		alarmTick();
@@ -504,13 +506,61 @@
 	// línea en Ayuda para quien ya los tiene). Los avisos de verdad llegarán con la app instalable.
 	function pushCard() { return ''; }
 
+	// 3.14.83 (Ernesto 29-oct, «como La Nave»): 🟢 Disponible (le suenan las carreras) / ⚪ No disponible (no le llega nada
+	// y la app de Android se apaga). Sus zonas y su hora de fin en Ajustes. El GPS no se usa para esto.
+	function dispCard() {
+		var dp = state.hoy && state.hoy.disp;
+		if (!dp) { return ''; }
+		var zonas = (dp.zonas || []).length ? dp.zonas.join(', ') : 'todas las zonas';
+		var dot = function (c) { return '<span aria-hidden="true" style="display:inline-block;width:14px;height:14px;border-radius:50%;background:' + c + ';margin-right:8px;vertical-align:-1px"></span>'; };
+		if (dp.on) {
+			return '<section class="pl-card" style="border-left:6px solid #2E7D32"><div class="pl-row" style="align-items:center"><span class="pl-strong">' + dot('#2E7D32') + 'Disponible</span><a href="#ajustes" class="pl-btn pl-btn--link">Ajustes</a></div>'
+				+ '<div class="pl-muted">' + esc((dp.solo ? 'Solo ' : 'Te suenan todas · tus zonas: ') + zonas + (dp.untilText ? ' · hasta las ' + dp.untilText : '')) + '</div>'
+				+ '<button type="button" class="pl-btn pl-btn--secondary pl-btn--block' + (state.busy === 'disp' ? ' pl-btn--busy' : '') + '" data-act="disp-off">Desconectarme</button></section>';
+		}
+		return '<section class="pl-card" style="border-left:6px solid #9E9E9E"><div class="pl-row" style="align-items:center"><span class="pl-strong">' + dot('#BDBDBD') + 'No disponible</span><a href="#ajustes" class="pl-btn pl-btn--link">Ajustes</a></div>'
+			+ '<div class="pl-muted">No te llegan carreras.</div>'
+			+ '<button type="button" class="pl-btn pl-btn--primary pl-btn--block' + (state.busy === 'disp' ? ' pl-btn--busy' : '') + '" data-act="disp-on">Conectarme</button></section>';
+	}
+	function screenAjustes() {
+		var dp = (state.hoy && state.hoy.disp) || { zonas: [], todas: [], solo: false, hasta: '' };
+		var horas = ['', '12:00', '14:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'];
+		var html = '<header class="pl-top"><a href="#carreras" class="pl-btn pl-btn--link">‹ Carreras</a><h1 class="pl-h1">Ajustes</h1></header><main class="pl-main">';
+		// Fichas pequeñas en dos columnas (15 tarjetas grandes eran demasiado largas).
+		html += '<h2 class="pl-h2">Mis zonas</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' + (dp.todas || []).map(function (z) {
+			return '<label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #D0D0D0;border-radius:12px;background:#fff;font-size:15px;line-height:20px"><input type="checkbox" data-zona value="' + esc(z) + '"' + ((dp.zonas || []).indexOf(z) !== -1 ? ' checked' : '') + '> ' + esc(z) + '</label>';
+		}).join('') + '</div>';
+		html += '<label class="pl-opt"><span><input type="checkbox" id="pl-solo"' + (dp.solo ? ' checked' : '') + '> Solo carreras de mis zonas</span></label>';
+		html += '<h2 class="pl-h2">Me desconecto solo a las</h2><select id="pl-hasta" class="pl-field">' + horas.map(function (h) {
+			return '<option value="' + h + '"' + (h === (dp.hasta || '') ? ' selected' : '') + '>' + (h ? h : 'Nunca (me desconecto yo)') + '</option>';
+		}).join('') + '</select>';
+		html += '<button type="button" class="pl-btn pl-btn--primary pl-btn--block' + (state.busy === 'disp' ? ' pl-btn--busy' : '') + '" data-act="ajustes-guardar">Guardar</button></main>';
+		return html + nav('carreras');
+	}
+	function nativeDisp(dp) {
+		if (!NATIVE || !dp || !NATIVE.setAvailable) { return; }
+		try { NATIVE.setAvailable(!!dp.on, Number(dp.until || 0)); } catch (e) {}
+	}
+	function dispSave(body, done) {
+		if (state.busy) { return; }
+		state.busy = 'disp'; render();
+		api('disponible', body).then(function (res) {
+			state.busy = '';
+			if (res.status !== 200 || !res.data.ok) { throw new Error('disp'); }
+			state.hoy.disp = res.data.disp;
+			nativeDisp(res.data.disp);
+			if (done) { done(res.data.disp); }
+			render();
+		}).catch(function () { state.busy = ''; render(); showToast('Sin señal: prueba otra vez.'); });
+	}
+
 	function screenCarreras() {
 		var h = state.hoy, yo = h.yo || {};
 		// 3.14.69.16 (Ernesto 27-oct): minimalista. Sin tarjetas de explicación, sin «Ver mi carrera» (toda la tarjeta se
 		// toca), «Cobras 44 USD» en vez de frases, y «Por llevar» arriba si debe dinero a la tienda.
 		var d = h.dinero || {};
 		var html = '<header class="pl-top"><div><div class="pl-brand">Pa\'llá</div><div class="pl-sub">' + esc('Hola, ' + (yo.first || 'mensajero')) + '</div></div>' + refreshBtn() + '</header>' + offlineBar();
-		html += '<main class="pl-main">' + soundCard();
+		html += '<main class="pl-main">' + dispCard() + soundCard();
 		if (d.pendingText) { html += '<a class="pl-card pl-card--tap pl-card--brand pl-row" style="text-decoration:none;color:inherit;align-items:center" href="#dinero"><span>💵 Por llevar a la tienda</span><span class="pl-strong pl-num">' + esc(d.pendingText) + '</span></a>'; }
 		(h.pases || []).forEach(function (x) {
 			html += '<article class="pl-card pl-card--brand"><div class="pl-row" style="align-items:center"><span class="pl-strong">🔁 ' + esc(x.from) + ' te pasa #' + esc(x.number) + '</span>' + (x.picked ? badge('info', 'Recogida') : '') + '</div>'
@@ -529,7 +579,8 @@
 		h.ofertas.forEach(function (o, i) {
 			var busy = state.busy === 'cojo-' + o.id;
 			var items = o.items.length > 1 ? o.items[0] + ' y ' + (o.items.length - 1) + ' más' : (o.items[0] || '');
-			html += '<article class="pl-card"><div class="pl-row" style="align-items:center"><span class="pl-strong">#' + esc(o.number) + ' · ' + esc(o.zone) + '</span><span class="pl-num" style="font-weight:800;white-space:nowrap">' + esc(o.feeText) + '</span></div>'
+			var mine = h.disp && o.muni && (h.disp.zonas || []).indexOf(o.muni) !== -1; // 3.14.83
+			html += '<article class="pl-card"><div class="pl-row" style="align-items:center"><span class="pl-strong">#' + esc(o.number) + ' · ' + esc(o.zone) + '</span>' + (mine ? badge('success', 'Tu zona') : '') + '<span class="pl-num" style="font-weight:800;white-space:nowrap">' + esc(o.feeText) + '</span></div>'
 				+ '<div class="pl-muted">' + esc(o.when || 'lo antes posible') + ' · ' + esc(items) + '</div>'
 				+ '<div class="pl-muted">Cobras <span class="pl-strong">' + esc(o.collect) + '</span>' + (o.change ? ' · vuelto ' + esc(o.change) : '') + (o.assembly ? ' · 🔧 armar' : '') + (o.supplier ? ' · bajo pedido' : '') + '</div>'
 				+ '<button type="button" class="pl-btn pl-btn--block ' + (i === 0 ? 'pl-btn--primary' : 'pl-btn--secondary') + (busy ? ' pl-btn--busy' : '') + '" data-act="cojo" data-id="' + o.id + '">' + (busy ? 'Cogiéndola…' : 'La cojo') + '</button></article>';
@@ -832,6 +883,7 @@
 				if (r.view === 'pasar' && ['pickup', 'route'].indexOf(c.stage) !== -1) { sheet = sheetPasar(c); }
 			} else if (r.view === 'dinero') { html = screenDinero(); }
 			else if (r.view === 'ayuda') { html = screenAyuda(r.id); }
+			else if (r.view === 'ajustes') { html = screenAjustes(); } // 3.14.83
 			else { html = screenCarreras(); }
 		}
 		var view = r.view + '/' + r.id;
@@ -861,6 +913,13 @@
 		if (a === 'dtab') { state.dineroTab = el.getAttribute('data-tab'); if (state.dineroTab === 'hist') { state.hist = null; } render(); return; }
 		if (a === 'hist-retry') { state.hist = null; render(); return; }
 		if (a === 'cojo') { claim(el.getAttribute('data-id')); return; }
+		if (a === 'disp-on') { dispSave({ on: true }, function () { showToast('Disponible: te sonarán las carreras.'); }); return; } // 3.14.83
+		if (a === 'disp-off') { dispSave({ on: false }, function () { showToast('Desconectado: no te llegan carreras.'); }); return; }
+		if (a === 'ajustes-guardar') {
+			var zs = Array.prototype.map.call(app.querySelectorAll('[data-zona]:checked'), function (x) { return x.value; });
+			dispSave({ zonas: zs, solo: !!(document.getElementById('pl-solo') || {}).checked, hasta: (document.getElementById('pl-hasta') || {}).value || '' }, function () { showToast('Guardado.'); go('#carreras'); });
+			return;
+		}
 		if (a === 'recogi' && c) { act(c, 'recogi'); return; }
 		if (a === 'llegue' && c) { act(c, 'llegue'); return; } // 3.14.71.2
 		if (a === 'push-on') { store.set(PFX + 'push-no', null); pushOn(); return; }

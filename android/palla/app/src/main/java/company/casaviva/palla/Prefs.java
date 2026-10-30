@@ -33,6 +33,20 @@ final class Prefs {
     static String trail(Context c) { return p(c).getString("trail", "[]"); }
     static void setTrail(Context c, String json) { p(c).edit().putString("trail", json).apply(); }
 
+    /**
+     * 1.3 (Ernesto 29-oct, «como La Nave»): 🟢 Disponible / ⚪ No disponible (lo dice la web con el botón). Sin decir nada
+     * aún (app vieja o nunca tocó el botón) cuenta como disponible, como antes. «until» = a esta hora se apaga sola (ms, 0 = no).
+     */
+    static boolean available(Context c) {
+        SharedPreferences s = p(c);
+        long until = s.getLong("until", 0);
+        return s.getBoolean("available", true) && (until == 0 || System.currentTimeMillis() < until);
+    }
+    static long availableUntil(Context c) { return p(c).getLong("until", 0); }
+    static void setAvailable(Context c, boolean on, long until) { p(c).edit().putBoolean("available", on).putLong("until", on ? until : 0).apply(); }
+    /** ¿Tiene que estar encendido el servicio? Disponible, o con una carrera abierta (el recorrido sigue aunque se desconecte). */
+    static boolean needsService(Context c) { return ready(c) && (available(c) || active(c)); }
+
     static boolean batteryAsked(Context c) { return p(c).getBoolean("battery", false); }
     static void setBatteryAsked(Context c) { p(c).edit().putBoolean("battery", true).apply(); }
 }

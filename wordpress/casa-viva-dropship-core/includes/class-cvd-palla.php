@@ -312,6 +312,13 @@ final class CVD_Palla {
 		};
 		$now = new DateTimeImmutable( 'now', new DateTimeZone( 'America/Havana' ) );
 		$body = '<header class="pl-top"><div><div class="pl-brand">Reparto en vivo</div><div class="pl-sub">Casa Viva · ' . esc_html( $now->format( 'g:i a' ) ) . ' · se pone al día sola cada minuto</div></div></header><main class="pl-main">';
+		// 3.14.83 (Ernesto 29-oct, «como La Nave»): quién tiene Pa'llá en 🟢 Disponible ahora. Solo nombre y zonas, nunca dónde está.
+		if ( class_exists( 'CVD_Palla_Disponible' ) ) {
+			$disp = CVD_Palla_Disponible::available_now();
+			$body .= $section( '🟢 Disponibles en Pa\'llá', 'Nadie ha tocado «Disponible» en la app ahora.', $disp, static function ( array $r ): string {
+				return '<article class="pl-card"><div class="pl-row" style="align-items:center"><span class="pl-strong">' . esc_html( $r['name'] ) . '</span>' . ( '' !== $r['until'] ? '<span class="pl-muted">hasta las ' . esc_html( $r['until'] ) . '</span>' : '' ) . '</div><div class="pl-muted">' . esc_html( $r['zonas'] ? implode( ' · ', $r['zonas'] ) : 'Todas las zonas' ) . '</div></article>';
+			} );
+		}
 		$body .= self::store_map( $g ); // 3.14.72.2: mensajeros en camino, en el mapa
 		$body .= $section( 'Sin mensajero', 'Todas las carreras tienen mensajero.', $g['free'], static function ( array $r ) use ( $card ): string {
 			$late = $r['minutes'] >= 30;

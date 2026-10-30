@@ -82,7 +82,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         AvisosService.stopAlarm(this); // al abrir la app, la bocina se calla
-        if (Prefs.ready(this)) { AvisosService.start(this); }
+        if (Prefs.needsService(this)) { AvisosService.start(this); } // 1.3: solo si está disponible o en una carrera
     }
 
     /** Tocar la pantalla de la app calla la bocina (como en la web: suena hasta que la mira). */
@@ -171,6 +171,15 @@ public class MainActivity extends Activity {
                 if (active) { askLocation(); }
                 AvisosService.track(ctx, active);
             });
+        }
+
+        /** 1.3: el botón 🟢 Disponible / ⚪ No disponible de la web. Desconectado (y sin carrera) la app se apaga del todo. */
+        @JavascriptInterface
+        public void setAvailable(boolean on, double until) {
+            long u = (long) until;
+            if (on == Prefs.available(ctx) && u == Prefs.availableUntil(ctx)) { return; }
+            Prefs.setAvailable(ctx, on, u);
+            runOnUiThread(() -> AvisosService.availability(ctx));
         }
 
         @JavascriptInterface

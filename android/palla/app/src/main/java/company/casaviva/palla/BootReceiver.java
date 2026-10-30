@@ -8,6 +8,6 @@ import android.content.Intent;
 public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (Prefs.ready(context)) { AvisosService.start(context); }
+        if (Prefs.needsService(context)) { AvisosService.start(context); } // 1.3: desconectado, no arranca al encender
     }
 }

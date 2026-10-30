@@ -3,6 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-cvd-geo-direccion.php'; // 3.14.78: la ubicación sale de la dirección (sin tocar el archivo principal)
+require_once __DIR__ . '/class-cvd-palla-disponible.php'; // 3.14.83: 🟢 Disponible / ⚪ No disponible
 
 /**
  * 3.14.61: la API de Pa'llá (casa-viva/v1/palla/…). Clase aparte de CVD_Palla para llevarla a NEXO en la fase 2.
@@ -42,6 +43,7 @@ final class CVD_Palla_Api {
 		register_rest_route( self::NS, '/palla/hora', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'eta' ), 'permission_callback' => $auth ) );
 		// 3.14.69.16 (Pedri 25-oct: «ya no puedo ver las carreras que hice ayer… lo llevo en un Excel»): historial y acumulado.
 		register_rest_route( self::NS, '/palla/historial', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'history' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/palla/disponible', array( 'methods' => 'POST', 'callback' => array( 'CVD_Palla_Disponible', 'rest' ), 'permission_callback' => $auth ) ); // 3.14.83
 		// 3.14.74.3 (fase 3 del mapa): el punto exacto del cliente antes de salir. La gestora lo manda por WhatsApp (el bot
 		// lo trae aquí) o el cliente marca su casa en el seguimiento.
 		register_rest_route( self::NS, '/bot/gestora/ubicacion', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'gestora_point' ), 'permission_callback' => array( 'CVD_Bot_Bridge', 'authorized' ) ) );
@@ -89,6 +91,7 @@ final class CVD_Palla_Api {
 			'pases'    => self::passes_for( $me ),     // 3.14.67.1: carreras que un compañero me quiere pasar
 			'companeros' => self::companions( $me ), // a quién puedo pasar una carrera (solo nombre)
 			'push'     => class_exists( 'CVD_Palla_Push' ) ? CVD_Palla_Push::status_for( $me ) : array( 'allowed' => false, 'key' => '' ), // 3.14.69.1
+			'disp'     => CVD_Palla_Disponible::view( $me->ID ), // 3.14.83: 🟢 Disponible / ⚪ No disponible
 		) );
 	}
 
@@ -297,6 +300,7 @@ final class CVD_Palla_Api {
 				'number'   => (string) $order->get_order_number(),
 				'when'     => self::when( $order ),
 				'zone'     => CVD_Delivery::destination_zone( $order ),
+				'muni'     => CVD_Palla_Disponible::zone_of( $order ), // 3.14.83: para marcar «de tu zona»
 				'from'     => 'Casa Viva · ' . self::STORE_ZONE,
 				'items'    => CVD_Order_Lines::texts( $order ),
 				'fee'      => $fee,

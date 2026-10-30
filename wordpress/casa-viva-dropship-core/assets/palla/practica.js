@@ -97,6 +97,18 @@
 		var a = defaults(o);
 		return { id: o.id, number: String(o.id), when: o.when, zone: o.zone, from: 'Casa Viva · Nuevo Vedado', items: o.items, fee: o.fee, feeText: money(o.fee, 'CUP'), collect: a.prepaid ? 'Nada, ya pagó' : (moneyText(productsOf(o)) || 'Lo que diga la tienda'), change: moneyText(o.change), assembly: '', supplier: false };
 	}
+	// 3.14.83: en la práctica, el botón Disponible y sus ajustes se guardan solo en memoria.
+	var DISP = { on: true, legacy: true, zonas: [], solo: false, hasta: '' };
+	var ZONAS = ['Playa', 'Plaza de la Revolución', 'Centro Habana', 'La Habana Vieja', 'Cerro', 'Diez de Octubre', 'Arroyo Naranjo', 'Boyeros', 'Marianao', 'La Lisa', 'Regla', 'Guanabacoa', 'San Miguel del Padrón', 'La Habana del Este', 'Cotorro'];
+	function dispView() { return { on: DISP.on, legacy: DISP.legacy, zonas: DISP.zonas.slice(), solo: DISP.solo, hasta: DISP.hasta, until: 0, untilText: DISP.on && DISP.hasta ? DISP.hasta : '', todas: ZONAS }; }
+	function disponible(b) {
+		if (b.on !== undefined) { DISP.on = !!b.on; }
+		if (b.zonas) { DISP.zonas = b.zonas.filter(function (z) { return ZONAS.indexOf(z) !== -1; }); }
+		if (b.solo !== undefined) { DISP.solo = !!b.solo; }
+		if (b.hasta !== undefined) { DISP.hasta = /^\d\d:\d\d$/.test(b.hasta) ? b.hasta : ''; }
+		DISP.legacy = false;
+		return dispView();
+	}
 	function hoy() {
 		var rows = [], earned = 0, pending = {};
 		W.orders.forEach(function (o) {
@@ -111,6 +123,7 @@
 			yo: { id: W.me, name: 'Mensajero de práctica', first: (window.PALLA_PRACTICA_NOMBRE || 'tú'), vehicle: 'Moto', available: true },
 			ofertas: W.orders.filter(function (o) { return o.stage === 'offered' && !o.owner; }).map(offer),
 			pases: pasesParaMi(), companeros: COMPAS,
+			disp: dispView(), // 3.14.83: 🟢 Disponible / ⚪ No disponible
 			carreras: W.orders.filter(function (o) { return ['pickup', 'route', 'incident'].indexOf(stage(o)) !== -1; }).map(card),
 			dinero: { label: days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()] + ' · ' + rows.length + (rows.length === 1 ? ' carrera entregada' : ' carreras entregadas'), delivered: rows.length, earned: earned, earnedText: String(earned).replace(/\B(?=(\d{3})+(?!\d))/g, '.'), pending: pending, pendingText: moneyText(pending), deadline: deadline(hour()), rows: rows }
 		};
@@ -250,7 +263,7 @@
 					if (!W.online) { reject(new TypeError('Sin señal (práctica)')); return; }
 					var key = body && body.cid ? String(body.cid) : '';
 					if (key && W.cids[key]) { resolve({ status: 200, offline: false, data: Object.assign({ replay: true }, W.cids[key]) }); return; }
-					var data = path === 'hoy' ? hoy() : path.indexOf('historial') === 0 ? historial() : path === 'cojo' ? claim(body || {}) : path === 'carrera' ? action(body || {}) : path === 'hora' ? hora(body || {}) : path === 'pasar' ? pasar(body || {}) : path === 'pase' ? pase(body || {}) : { code: 'rest_no_route' };
+					var data = path === 'hoy' ? hoy() : path.indexOf('historial') === 0 ? historial() : path === 'cojo' ? claim(body || {}) : path === 'carrera' ? action(body || {}) : path === 'hora' ? hora(body || {}) : path === 'pasar' ? pasar(body || {}) : path === 'pase' ? pase(body || {}) : path === 'disponible' ? { ok: true, disp: disponible(body || {}) } : { code: 'rest_no_route' };
 					if (key) { W.cids[key] = data; }
 					save();
 					resolve({ status: data.code ? 404 : 200, offline: false, data: data });

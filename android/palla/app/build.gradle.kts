@@ -13,8 +13,8 @@ android {
         applicationId = "company.casaviva.palla"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2" // 29-oct: la bocina se calla con volumen, encendido, «Silenciar», tocando o quitando el aviso; 30 s como mucho; si otro coge la carrera, se calla sola
+        versionCode = 4
+        versionName = "1.3" // 29-oct noche: 🟢 Disponible / ⚪ No disponible (desconectado se apaga del todo; se apaga sola a su hora). Antes, 1.2: la bocina se calla con volumen, encendido, «Silenciar», tocando o quitando el aviso; 30 s como mucho; si otro coge la carrera, se calla sola
     }
 
     signingConfigs {

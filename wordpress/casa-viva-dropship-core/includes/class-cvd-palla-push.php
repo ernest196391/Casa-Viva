@@ -229,6 +229,7 @@ final class CVD_Palla_Push {
 				$fee = absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) ) ?: (int) round( CVD_Delivery::courier_amount( $order ) );
 				foreach ( self::subscribers() as $user ) {
 					if ( in_array( $user->ID, $skip, true ) ) { continue; }
+					if ( class_exists( 'CVD_Palla_Disponible' ) && ! CVD_Palla_Disponible::wants_offer( $user->ID, $order ) ) { continue; } // 3.14.83: solo a los disponibles
 					self::send( $user->ID, $order, 'offer', '🛵 Carrera libre #' . $n, $zone . ( $fee > 0 ? ' · ' . CVD_Messenger_Delivered_Link::money( (float) $fee, 'CUP' ) : '' ) . ' · toca para verla y cogerla', '#carreras' );
 				}
 			}

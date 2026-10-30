@@ -109,6 +109,28 @@ public class AvisosService extends Service {
         } catch (Exception ignored) { }
     }
 
+    private static final Handler AUTO = new Handler(Looper.getMainLooper()); // 1.3: la hora de fin (aparte de la bocina)
+
+    /** 1.3: tras el botón Disponible (o su hora de fin): encender, o apagar del todo si no está disponible ni en carrera. */
+    static void availability(Context c) {
+        if (Prefs.needsService(c)) { start(c); return; }
+        stopAlarm(c);
+        c.stopService(new Intent(c, AvisosService.class));
+    }
+
+    /** El aviso fijo dice en qué está: esperando carreras o con una carrera (mandando el recorrido). */
+    private void refreshRunNotice() {
+        boolean avail = Prefs.available(this);
+        runNotif = builder(CH_RUN)
+            .setContentTitle("Pa'llá")
+            .setContentText(avail ? "🟢 Disponible · esperando carreras" : "En carrera · ⚪ no te llegan carreras nuevas")
+            .setOngoing(true)
+            .setContentIntent(openApp(null, 0))
+            .build();
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (nm != null) { nm.notify(ID_RUN, runNotif); }
+    }
+
     static void start(Context c) {
         if (!Prefs.ready(c)) { return; }
         Intent i = new Intent(c, AvisosService.class);
@@ -339,6 +361,12 @@ public class AvisosService extends Service {
         } else if (Prefs.active(this)) {
             startTracking(); // p. ej. tras reiniciar el teléfono con una carrera abierta (si Android lo deja)
         }
+        // 1.3: ⚪ No disponible y sin carrera → la app se apaga del todo (sin aviso fijo, sin conexión, sin batería).
+        if (!Prefs.needsService(this)) { stopSelf(); return START_NOT_STICKY; }
+        refreshRunNotice();
+        AUTO.removeCallbacksAndMessages(null);
+        long until = Prefs.availableUntil(this);
+        if (until > 0) { AUTO.postDelayed(() -> availability(getApplicationContext()), Math.max(1_000, until - System.currentTimeMillis())); } // su hora de fin
         if (worker == null || !worker.isAlive()) {
             running = true;
             worker = new Thread(this::loop, "palla-avisos");
@@ -412,6 +440,7 @@ public class AvisosService extends Service {
                 return;
             }
             boolean loud = !(tags.contains("lost") || tags.contains("cancelled") || tags.contains("changed"));
+            if (tags.contains("offer") && !Prefs.available(this)) { return; } // 1.3: desconectado, las carreras libres no suenan
             alarm(e.optString("title", "Pa'llá"), e.optString("message", ""), e.optString("click", ""), loud, order);
         } catch (Exception ignored) { }
     }
