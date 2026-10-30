@@ -980,7 +980,7 @@ final class CVD_Delivery {
 		if ( 'pickup' === $order->get_meta( '_cvd_fulfillment_type', true ) ) { return self::pickup_view( $order ); }
 		$status = self::status( $order );
 		$operation = sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) );
-		// 3.14.97 (Ernesto 30-oct, «que el cliente vea dónde está su pedido»): paso «Llegó a tu puerta» cuando el mensajero
+		// 3.14.98 (Ernesto 30-oct, «que el cliente vea dónde está su pedido»): paso «Llegó a tu puerta» cuando el mensajero
 		// toca «Llegué» (o llega solo por GPS), y la hora prevista sale del recorrido real (ya no hay hora puesta a mano).
 		$labels = array( 'Pedido confirmado', 'Preparando', 'Listo para salir', 'Mensajero asignado', 'Recogido', 'En camino', 'Llegó a tu puerta', 'Entregado' );
 		$delivery_rank = array( 'unassigned'=>0, 'offered'=>2, 'assigned'=>3, 'accepted'=>3, 'to_store'=>3, 'picked_up'=>4, 'handed_over'=>5, 'delivered'=>7, 'cash_returned'=>7, 'closed'=>7 );

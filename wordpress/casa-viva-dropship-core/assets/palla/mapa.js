@@ -110,7 +110,7 @@
 	}
 
 	/**
-	 * 3.14.97 (Ernesto 30-oct, «como Mandao: un mapa en la app con tu motor y adónde vas»): el mapa de la carrera en la app
+	 * 3.14.98 (Ernesto 30-oct, «como Mandao: un mapa en la app con tu motor y adónde vas»): el mapa de la carrera en la app
 	 * del mensajero. me = [lat, lon] del GPS del propio teléfono (no se manda a ningún sitio) o null; to = [lat, lon] de la
 	 * tienda o del cliente; kind = tienda | casa. → «A 1,2 km · unos 6 min». La navegación paso a paso la hace «Ir».
 	 */
