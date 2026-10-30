@@ -66,7 +66,7 @@ final class CVD_Catalogo_Auto {
 		echo '<div class="cvd-como-comprar" style="margin:16px 0;padding:12px 14px;border:2px solid #B5482F;border-radius:14px;background:#FFF8F3;font-size:15px;line-height:1.5;color:#2B2420">'
 			. '<p style="margin:0 0 6px;font-weight:700;font-size:16px"><span aria-hidden="true" style="color:#B5482F;font-size:20px">➜</span> ¿Cómo comprar en Casa Viva?</p>'
 			. ( $bajo ? '<p style="margin:0 0 6px">📦 <strong>Bajo pedido:</strong> lo pedimos al proveedor, te confirmamos en 1 hora antes de cobrar y llega en unas 24 horas.</p>' : '' )
-			. '<p style="margin:0 0 6px">📍 <strong>Recógelo</strong> en ' . esc_html( $dir ) . ', ' . esc_html( self::recogida_horas() ) . '. <a href="' . $u( 'como-llegar' ) . '">Cómo llegar</a></p>'
+			. '<p style="margin:0 0 6px">📍 <strong>Recógelo</strong> en ' . esc_html( $dir ) . ', ' . esc_html( self::recogida_horas() ) . ( str_ends_with( self::recogida_horas(), '.' ) ? ' ' : '. ' ) . '<a href="' . $u( 'como-llegar' ) . '">Cómo llegar</a></p>'
 			. '<p style="margin:0 0 6px">🛵 <strong>Mensajería</strong> a toda La Habana; se paga en CUP al mensajero. <a href="' . $u( 'tarifas-mensajeria' ) . '">Ver precios por zona</a></p>'
 			. '<p style="margin:0">❓ ¿Dudas? <a href="' . $u( self::PAGINA_COMPRAR ) . '">Así se compra en Casa Viva</a></p></div>';
 	}
