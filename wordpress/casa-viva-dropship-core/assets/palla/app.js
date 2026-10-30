@@ -595,7 +595,7 @@
 		return { recogi: 'Recogí ' + c.number, entregado: 'Entregado ' + c.number + amount, problema: 'Problema ' + c.number + ' no estaba', suelto: 'No puedo ' + c.number };
 	}
 
-	// 3.14.98: el mapa vive en un div propio que se vuelve a colocar tras cada redibujo (no parpadea ni se recarga), y el
+	// 3.14.99: el mapa vive en un div propio que se vuelve a colocar tras cada redibujo (no parpadea ni se recarga), y el
 	// GPS solo se usa mientras está abierta la carrera.
 	var cmap = { box: null, watch: null, me: null, id: null, text: '', loading: null };
 	function mapaJs() {
@@ -635,7 +635,7 @@
 		var steps = [['recogi', 'Recogí'], ['entregado', 'Entregado'], ['dinero', 'Dinero']];
 		var now = steps.filter(function (s) { return !done[s[0]]; })[0];
 		html += '<ol class="pl-track">' + steps.map(function (s) { return '<li class="' + (done[s[0]] ? 'is-done' : (now && now[0] === s[0] ? 'is-now' : '')) + '">' + (done[s[0]] ? '✓ ' : '') + s[1] + '</li>'; }).join('') + '</ol>';
-		// 3.14.98 (Ernesto 30-oct, «como Mandao»): el mapa de la carrera — tu 🛵 (GPS del teléfono, no se manda) y la tienda o el cliente.
+		// 3.14.99 (Ernesto 30-oct, «como Mandao»): el mapa de la carrera — tu 🛵 (GPS del teléfono, no se manda) y la tienda o el cliente.
 		if (['pickup', 'route'].indexOf(c.stage) !== -1) { html += '<section class="pl-card" style="padding:0;overflow:hidden;gap:0"><div data-mapa-carrera style="height:190px"></div><div class="pl-strong" data-mapa-texto style="padding:12px 16px">' + esc(cmap.text || 'Buscando tu ubicación…') + '</div></section>'; }
 		if (c.queued) { html += '<div class="pl-note">' + icon('sincronizar', 20) + '<div>Guardado. Se manda al volver la señal.</div></div>'; }
 		if (c.pase) { html += '<div class="pl-note">🔁<div>Esperando que ' + esc(c.pase.toName) + ' la acepte. <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="pase-cancelar" data-id="' + c.id + '">Cancelar</button></div></div>'; }

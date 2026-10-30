@@ -235,7 +235,7 @@ final class CVD_Palla {
 			'whatsapp' => self::whatsapp(),
 			// 29-oct (Ernesto): buscar «Conill esquina 45» en Google llevaba a otro sitio a 3,9 km. Ahora el punto exacto.
 			'storeMap' => (string) get_option( 'cvd_palla_tienda_mapa', 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode( (string) get_option( 'cvd_palla_tienda_geo', '23.1143,-82.39774' ) ) ),
-			// 3.14.98: el mapa de la carrera en la app (dónde está la tienda y la pieza del mapa).
+			// 3.14.99: el mapa de la carrera en la app (dónde está la tienda y la pieza del mapa).
 			'storeGeo' => array_map( 'floatval', array_slice( explode( ',', (string) get_option( 'cvd_palla_tienda_geo', '23.1143,-82.39774' ) ), 0, 2 ) ),
 			'mapaUrl'  => CVD_URL . 'assets/palla/mapa.js?v=' . CVD_VERSION,
 		);
