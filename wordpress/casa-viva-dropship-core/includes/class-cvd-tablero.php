@@ -641,6 +641,9 @@ final class CVD_Tablero {
 					if ( ! empty( $c['grave'] ) ) { $red[] = (string) $c['nombre'] . ': ' . (string) $c['detalle']; }
 					elseif ( empty( $c['ok'] ) ) { $yellow[] = (string) $c['nombre'] . ': ' . (string) $c['detalle']; }
 				}
+				foreach ( (array) ( $v['modos'] ?? array() ) as $mo ) { // interruptores del bot (D126: modo tranquilo)
+					$rows[] = array( 't' => ( ! empty( $mo['encendido'] ) ? '🔵 ' : '⚪ ' ) . (string) $mo['nombre'], 'r' => ! empty( $mo['encendido'] ) ? 'encendido' : 'apagado' );
+				}
 				$cards[] = array( 'id' => 'salud', 'titulo' => 'Salud del sistema', 'nota' => isset( $s['min'] ) ? 'revisado hace ' . (int) $s['min'] . ' min' : '', 'filas' => $rows, 'aviso' => $stale_txt );
 			}
 			// Mensajes del bot por persona
