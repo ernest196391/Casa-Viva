@@ -172,6 +172,7 @@ final class CVD_Seller_Store {
 			'price' => (float) get_post_meta( $post->ID, '_cvd_si_price', true ),
 			'stock' => '' === (string) $stock ? null : (int) $stock,
 			'category' => (string) get_post_meta( $post->ID, '_cvd_si_cat', true ),
+			'compat' => (string) get_post_meta( $post->ID, '_cvd_si_compat', true ),
 			'photos' => array_map( static fn( int $id ): array => array( 'id' => $id, 'url' => self::photo_url( $id, 'medium' ) ), $ids ),
 			'paused' => 'draft' === $post->post_status,
 			'adminHidden' => '1' === (string) get_post_meta( $post->ID, '_cvd_si_admin_hidden', true ),
@@ -195,6 +196,7 @@ final class CVD_Seller_Store {
 		$stock_in = $p['stock'] ?? '';
 		$stock = ( '' === $stock_in || null === $stock_in ) ? '' : max( 0, min( 9999, (int) $stock_in ) );
 		$cat = mb_substr( sanitize_text_field( (string) ( $p['category'] ?? '' ) ), 0, 40 );
+		$compat = mb_substr( sanitize_text_field( (string) ( $p['compat'] ?? '' ) ), 0, 120 );
 		$offer = ! empty( $p['offer'] );
 		$gest = round( (float) str_replace( ',', '.', (string) ( $p['gestoraUsd'] ?? 0 ) ), 2 );
 		if ( $offer && ( $gest <= 0 || $gest > $price * 0.5 ) ) { return new WP_Error( 'cvd_seller', 'Para ofrecerlo a las gestoras, pon cuánto gana cada una (más de 0 y menos de la mitad del precio).', array( 'status' => 422 ) ); }
@@ -219,6 +221,7 @@ final class CVD_Seller_Store {
 		update_post_meta( $id, '_cvd_si_price', wc_format_decimal( $price, 2 ) );
 		update_post_meta( $id, '_cvd_si_stock', $stock );
 		update_post_meta( $id, '_cvd_si_cat', $cat );
+		update_post_meta( $id, '_cvd_si_compat', $compat );
 		update_post_meta( $id, '_cvd_si_photos', $photos );
 		update_post_meta( $id, '_cvd_si_offer', $offer ? '1' : '0' );
 		update_post_meta( $id, '_cvd_si_gestora_usd', $offer ? wc_format_decimal( $gest, 2 ) : '0' );
@@ -557,6 +560,7 @@ final class CVD_Seller_Store {
 				<article class="cvga-card cvsl-card">
 					<?php if ( $d['photos'] ) : ?><img src="<?php echo esc_url( $d['photos'][0]['url'] ); ?>" alt="" loading="lazy"><?php endif; ?>
 					<h2><?php echo esc_html( $d['title'] ); ?></h2>
+					<?php if ( $d['compat'] ) : ?><p class="cvga-note"><?php echo esc_html( 'Sirve para: ' . $d['compat'] ); ?></p><?php endif; ?>
 					<p class="cvga-note"><?php echo esc_html( 'Vendedor: ' . self::store_name( $it['seller'] ) ); ?> · <b><?php echo esc_html( number_format( $d['price'], 2 ) ); ?> USD</b> · ganas <b><?php echo esc_html( number_format( $d['gestoraUsd'], 2 ) ); ?> USD</b> c/u</p>
 					<div class="cvga-actions"><a class="cvga-btn cvga-btn-sm" href="<?php echo esc_url( 'https://wa.me/?text=' . rawurlencode( $share ) ); ?>" target="_blank" rel="noopener">Mandar por WhatsApp</a><a class="cvga-btn cvga-btn-soft cvga-btn-sm" href="<?php echo esc_url( $url ); ?>" target="_blank" rel="noopener">Ver</a></div>
 				</article>
@@ -642,6 +646,7 @@ final class CVD_Seller_Store {
 		<p class="t"><?php echo esc_html( $d['title'] ); ?></p>
 		<div class="p"><?php echo esc_html( number_format( $d['price'], 2 ) ); ?> USD</div>
 		<div class="m"><?php echo $d['category'] ? '<span class="tag">' . esc_html( $d['category'] ) . '</span>' : ''; ?><span class="tag"><?php echo esc_html( $sold ? 'Agotado' : ( null === $d['stock'] ? 'Consulta disponibilidad' : 'Quedan ' . $d['stock'] ) ); ?></span><span class="tag"><?php echo esc_html( self::DELIVERY[ $d['delivery'] ] ?? '' ); ?></span></div>
+		<?php if ( $d['compat'] ) : ?><div class="m"><b>Sirve para:</b> <?php echo esc_html( $d['compat'] ); ?></div><?php endif; ?>
 		<?php if ( $d['description'] ) : ?><div class="d"><?php echo esc_html( $d['description'] ); ?></div><?php endif; ?>
 		<div class="m">Pago: <?php echo esc_html( implode( ' · ', array_map( static fn( string $k ): string => self::PAY[ $k ], $d['pay'] ) ) ); ?></div>
 		<?php if ( $phone && ! $sold ) : ?><a class="btn" data-id="<?php echo (int) $post->ID; ?>" href="<?php echo esc_url( 'https://wa.me/' . $phone . '?text=' . rawurlencode( $text ) ); ?>" target="_blank" rel="noopener">Pedir por WhatsApp</a><?php endif; ?>

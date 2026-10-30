@@ -67,7 +67,7 @@
   var photos = [];
 
   function openForm(item) {
-    var i = item || { id: 0, title: '', description: '', price: '', stock: null, category: '', photos: [], paused: false, offer: false, gestoraUsd: '', delivery: 'yo', pay: ['coordinar'], wantGeneral: false };
+    var i = item || { id: 0, title: '', description: '', compat: '', price: '', stock: null, category: '', photos: [], paused: false, offer: false, gestoraUsd: '', delivery: 'yo', pay: ['coordinar'], wantGeneral: false };
     photos = (i.photos || []).slice();
     var cats = (cfg.cats || []).map(function (c) { return '<option' + (c === i.category ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
     var del = Object.keys(cfg.delivery || {}).map(function (k) { return '<option value="' + k + '"' + (k === i.delivery ? ' selected' : '') + '>' + esc(cfg.delivery[k]) + '</option>'; }).join('');
@@ -79,6 +79,7 @@
       '<input type="file" accept="image/*" capture="environment" hidden data-cvsl-file-cam><input type="file" accept="image/*" multiple hidden data-cvsl-file-gal>' +
       '<p class="cvga-note">Hasta 5 fotos. La primera es la principal. Con buena luz y fondo liso se vende más.</p>' +
       '<label class="cvga-field"><span>Nombre del artículo</span><input name="title" maxlength="90" required value="' + esc(i.title) + '" placeholder="Ej.: Pastillas de freno Suzuki GN125"></label>' +
+      '<label class="cvga-field"><span>Sirve para (marca y modelo de moto)</span><input name="compat" maxlength="120" value="' + esc(i.compat) + '" placeholder="Ej.: Suzuki GN125, Honda CG150"></label>' +
       '<label class="cvga-field"><span>Descripción</span><textarea name="description" rows="4" maxlength="1500" placeholder="Para qué moto sirve, estado, medidas…">' + esc(i.description) + '</textarea></label>' +
       '<div class="cvsl-two"><label class="cvga-field"><span>Precio (USD)</span><input name="price" inputmode="decimal" required value="' + esc(i.price) + '" placeholder="0,00"></label>' +
       '<label class="cvga-field"><span>Cuántos tienes</span><input name="stock" inputmode="numeric" value="' + (i.stock == null ? '' : esc(i.stock)) + '" placeholder="vacío = no cuento"></label></div>' +
@@ -144,7 +145,7 @@
     var fd = new FormData(form);
     var body = {
       id: Number(fd.get('id')) || 0, title: fd.get('title'), description: fd.get('description'), price: fd.get('price'), stock: fd.get('stock'),
-      category: fd.get('category'), photos: photos.map(function (p) { return p.id; }), offer: !!fd.get('offer'), gestoraUsd: fd.get('gestoraUsd'),
+      category: fd.get('category'), compat: fd.get('compat'), photos: photos.map(function (p) { return p.id; }), offer: !!fd.get('offer'), gestoraUsd: fd.get('gestoraUsd'),
       delivery: fd.get('delivery'), pay: fd.getAll('pay'), paused: !!fd.get('paused'), wantGeneral: !!fd.get('wantGeneral')
     };
     err.hidden = true; btn.disabled = true; btn.textContent = 'Guardando…';
