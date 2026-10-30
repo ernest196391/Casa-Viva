@@ -322,7 +322,7 @@ final class CVD_Tablero {
 			$open[ $order->get_id() ] = $order;
 		}
 		$ready_at = self::state_times( array_keys( $open ), 'operation', 'ready' );
-		$counts = array( 'nuevos' => 0, 'preparando' => 0, 'listos' => 0, 'con_mensajero' => 0, 'incidencia' => 0 );
+		$counts = array( 'nuevos' => 0, 'preparando' => 0, 'listos' => 0, 'con_mensajero' => 0, 'entregados' => 0, 'incidencia' => 0 );
 		$runs = array(); $atrasos = array(); $manana = array( 'entregas' => array(), 'reservas' => array() );
 		foreach ( $open as $id => $order ) {
 			$op = sanitize_key( (string) $order->get_meta( '_cvd_operation_status', true ) ) ?: 'new';
@@ -332,8 +332,9 @@ final class CVD_Tablero {
 			if ( 'incident' === $op || 'incident' === $del ) { $counts['incidencia']++; }
 			elseif ( in_array( $op, array( 'new', 'confirmed' ), true ) ) { $counts['nuevos']++; }
 			elseif ( 'preparing' === $op ) { $counts['preparando']++; }
-			elseif ( 'ready' === $op ) { $counts['listos']++; }
-			else { $counts['con_mensajero']++; }
+			elseif ( in_array( $del, array( 'delivered', 'cash_returned' ), true ) ) { $counts['entregados']++; } // entregado, falta cerrar (dinero o cierre)
+			elseif ( in_array( $del, array( 'picked_up', 'handed_over' ), true ) || 'with_courier' === $op ) { $counts['con_mensajero']++; }
+			else { $counts['listos']++; } // listo en la tienda (aunque ya tenga mensajero asignado)
 			$messenger_id = absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
 			$messenger = $messenger_id ? get_userdata( $messenger_id ) : false;
 			$messenger_name = $messenger ? (string) $messenger->display_name : '';
@@ -516,6 +517,17 @@ final class CVD_Tablero {
 
 	/** Lo que ve cada rol. Cada tarjeta: titulo, nota, nums[], filas[], enlace, aviso. */
 	public static function view( string $role, int $user_id ): array {
+		// La vista hecha se guarda 60 s (y se rehace al llegar otro resumen del VPS): con internet lento cada segundo cuenta.
+		$saved = get_option( self::VPS, array() );
+		$key = 'cvd_tb_view_' . md5( $role . '|' . $user_id . '|' . (int) ( is_array( $saved ) ? ( $saved['at'] ?? 0 ) : 0 ) );
+		$cached = get_transient( $key );
+		if ( is_array( $cached ) ) { return $cached; }
+		$out = self::build_view( $role, $user_id );
+		set_transient( $key, $out, MINUTE_IN_SECONDS );
+		return $out;
+	}
+
+	private static function build_view( string $role, int $user_id ): array {
 		$cfg = self::config();
 		$core = self::core_data();
 		$links = $cfg['enlaces'];
@@ -528,8 +540,8 @@ final class CVD_Tablero {
 		$lennys_cards = array(); $l_red = array(); $l_yellow = array();
 		$p = $core['pedidos'];
 		$lennys_cards[] = array( 'id' => 'pedidos', 'titulo' => 'Pedidos abiertos', 'nota' => (string) $core['abiertos'],
-			'nums' => array( array( 'n' => $p['nuevos'] + $p['preparando'], 'label' => 'por preparar' ), array( 'n' => $p['listos'], 'label' => 'listos' ), array( 'n' => $p['con_mensajero'], 'label' => 'con mensajero' ) ),
-			'filas' => $p['incidencia'] ? array( array( 't' => 'Con incidencia', 'r' => (string) $p['incidencia'], 'tag' => 'rojo' ) ) : array(),
+			'nums' => array( array( 'n' => $p['nuevos'] + $p['preparando'], 'label' => 'por preparar' ), array( 'n' => $p['listos'], 'label' => 'listos' ), array( 'n' => $p['con_mensajero'], 'label' => 'en camino' ) ),
+			'filas' => array_values( array_filter( array( $p['entregados'] ? array( 't' => 'Entregados, falta cerrar', 'r' => (string) $p['entregados'] ) : null, $p['incidencia'] ? array( 't' => 'Con incidencia', 'r' => (string) $p['incidencia'], 'tag' => 'rojo' ) : null ) ) ),
 			'enlace' => array( 'txt' => 'Abrir Ventas', 'url' => $links['ventas'] ) );
 		$rows = array();
 		foreach ( array_slice( $core['atrasos'], 0, 8 ) as $a ) {
@@ -597,11 +609,11 @@ final class CVD_Tablero {
 				$g = (array) ( $e['abiertos_por_gravedad'] ?? array() );
 				$rows = array();
 				foreach ( array_slice( (array) ( $e['ultimos'] ?? array() ), 0, 4 ) as $it ) {
-					$rows[] = array( 't' => '#' . (int) $it['id'] . ' ' . str_replace( '_', ' ', (string) $it['tipo'] ) . ' · ' . (string) $it['texto'], 'r' => (string) $it['cuando'], 'tag' => 'alta' === ( $it['gravedad'] ?? '' ) && 'decidir' === ( $it['estado'] ?? '' ) ? 'rojo' : '', 'tag_txt' => 'alta' === ( $it['gravedad'] ?? '' ) ? 'alta' : '' );
+					$rows[] = array( 't' => '#' . (int) $it['id'] . ' ' . self::tipo_label( (string) $it['tipo'] ) . ' · ' . (string) $it['texto'], 'r' => (string) $it['cuando'], 'tag' => 'alta' === ( $it['gravedad'] ?? '' ) && 'decidir' === ( $it['estado'] ?? '' ) ? 'rojo' : '', 'tag_txt' => 'alta' === ( $it['gravedad'] ?? '' ) ? 'alta' : '' );
 				}
 				$types = (array) ( $e['por_tipo'] ?? array() );
 				arsort( $types );
-				$top = array(); foreach ( array_slice( $types, 0, 3, true ) as $k => $n ) { $top[] = str_replace( '_', ' ', (string) $k ) . ' ' . (int) $n; }
+				$top = array(); foreach ( array_slice( $types, 0, 3, true ) as $k => $n ) { $top[] = self::tipo_label( (string) $k ) . ' ' . (int) $n; }
 				$cards[] = array( 'id' => 'errores', 'titulo' => 'Errores del bot', 'nota' => 'últimos ' . (int) ( $e['dias'] ?? 7 ) . ' días',
 					'nums' => array( array( 'n' => (int) ( $g['alta'] ?? 0 ), 'label' => 'alta' ), array( 'n' => (int) ( $g['media'] ?? 0 ), 'label' => 'media' ), array( 'n' => (int) ( $g['baja'] ?? 0 ), 'label' => 'baja' ) ),
 					'texto' => 'Para decidir: ' . (int) ( $e['para_decidir'] ?? 0 ) . ' · corregidos: ' . (int) ( $e['corregidos'] ?? 0 ) . ( $top ? '. Más repetidos: ' . implode( ' · ', $top ) . '.' : '' ),
@@ -650,12 +662,12 @@ final class CVD_Tablero {
 			}
 			// Mañana
 			$rows = array();
-			if ( $core['manana']['entregas'] ) { $rows[] = array( 't' => count( $core['manana']['entregas'] ) . ' entregas con fecha de mañana', 'r' => implode( ', ', array_slice( $core['manana']['entregas'], 0, 4 ) ) ); }
-			if ( $core['manana']['reservas'] ) { $rows[] = array( 't' => count( $core['manana']['reservas'] ) . ' reservas vencen mañana', 'r' => implode( ', ', array_slice( $core['manana']['reservas'], 0, 4 ) ) ); }
-			if ( $pay['aprobadas']['n'] ) { $rows[] = array( 't' => $pay['aprobadas']['n'] . ' comisiones aprobadas sin pagar', 'r' => self::money( $pay['aprobadas']['importe'] ) ); }
+			if ( $core['manana']['entregas'] ) { $rows[] = array( 't' => self::plural( count( $core['manana']['entregas'] ), 'entrega', 'entregas' ) . ' con fecha de mañana', 'r' => implode( ', ', array_slice( $core['manana']['entregas'], 0, 4 ) ) ); }
+			if ( $core['manana']['reservas'] ) { $rows[] = array( 't' => self::plural( count( $core['manana']['reservas'] ), 'reserva vence', 'reservas vencen' ) . ' mañana', 'r' => implode( ', ', array_slice( $core['manana']['reservas'], 0, 4 ) ) ); }
+			if ( $pay['aprobadas']['n'] ) { $rows[] = array( 't' => self::plural( $pay['aprobadas']['n'], 'comisión aprobada', 'comisiones aprobadas' ) . ' sin pagar', 'r' => self::money( $pay['aprobadas']['importe'] ) ); }
 			$sup = (array) ( $v['supervisor'] ?? array() );
-			if ( ! empty( $sup['pendientes'] ) ) { $rows[] = array( 't' => (int) $sup['pendientes'] . ' tareas del supervisor pendientes', 'r' => 'servidor' ); }
-			if ( ! empty( $v['escalaciones']['abiertas'] ) ) { $rows[] = array( 't' => (int) $v['escalaciones']['abiertas'] . ' escalaciones abiertas del bot', 'r' => 'centro' ); }
+			if ( ! empty( $sup['pendientes'] ) ) { $rows[] = array( 't' => self::plural( (int) $sup['pendientes'], 'tarea', 'tareas' ) . ' del supervisor pendientes', 'r' => 'servidor' ); }
+			if ( ! empty( $v['escalaciones']['abiertas'] ) ) { $rows[] = array( 't' => self::plural( (int) $v['escalaciones']['abiertas'], 'escalación abierta', 'escalaciones abiertas' ) . ' del bot', 'r' => 'centro' ); }
 			$cards[] = array( 'id' => 'manana', 'titulo' => 'Para mañana', 'nota' => self::local( (int) ( new DateTimeImmutable( $core['manana_dia'] . ' 12:00', self::tz() ) )->getTimestamp(), 'l j' ), 'filas' => $rows ?: array( array( 't' => 'Nada apuntado para mañana', 'r' => '' ) ) );
 			// Resumen de la parte de administración
 			$red = array_merge( $red, $l_red );
@@ -684,24 +696,33 @@ final class CVD_Tablero {
 
 	/** Rol de una persona según la web (manda sobre el del CRM: 8 mensajeros tienen rol «gestora» allí). */
 	private static function person_role( string $tel8, string $crm_role ): string {
-		static $cache = array();
-		$tel8 = preg_replace( '/\D+/', '', $tel8 );
-		if ( strlen( $tel8 ) >= 8 ) {
+		$tel8 = substr( preg_replace( '/\D+/', '', $tel8 ), -8 );
+		if ( 8 === strlen( $tel8 ) ) {
+			$cache = get_transient( 'cvd_tb_roles' );
+			$cache = is_array( $cache ) ? $cache : array();
 			if ( ! isset( $cache[ $tel8 ] ) ) {
-				$cache[ $tel8 ] = '';
-				$ids = get_users( array( 'number' => 3, 'fields' => 'ID', 'meta_query' => array( array( 'key' => '_cvd_whatsapp', 'value' => substr( $tel8, -8 ), 'compare' => 'LIKE' ) ) ) );
-				foreach ( $ids as $id ) {
+				// Una persona puede tener varios roles (Lennys: admin, gestora y mensajera): manda el de más arriba.
+				$labels = array( 'administrator' => 'admin', 'cvd_clerk' => 'dependienta', 'cvd_messenger' => 'mensajero', 'cvd_gestora' => 'gestora' );
+				$found = array();
+				foreach ( get_users( array( 'number' => 3, 'fields' => 'ID', 'meta_query' => array( array( 'key' => '_cvd_whatsapp', 'value' => $tel8, 'compare' => 'LIKE' ) ) ) ) as $id ) {
 					$user = get_userdata( (int) $id );
-					if ( ! $user ) { continue; }
-					$roles = (array) $user->roles;
-					if ( in_array( 'cvd_messenger', $roles, true ) ) { $cache[ $tel8 ] = 'mensajero'; break; }
-					if ( in_array( 'cvd_clerk', $roles, true ) ) { $cache[ $tel8 ] = 'dependienta'; break; }
-					if ( in_array( 'administrator', $roles, true ) ) { $cache[ $tel8 ] = 'admin'; break; }
-					if ( in_array( 'cvd_gestora', $roles, true ) ) { $cache[ $tel8 ] = 'gestora'; }
+					$people = (array) self::config()['personas'];
+					if ( $user && isset( $people[ (int) $id ] ) ) { $found['administrator'] = true; }
+					foreach ( $user ? (array) $user->roles : array() as $r ) { $found[ $r ] = true; }
 				}
+				$cache[ $tel8 ] = '';
+				foreach ( $labels as $r => $label ) { if ( isset( $found[ $r ] ) ) { $cache[ $tel8 ] = $label; break; } }
+				set_transient( 'cvd_tb_roles', $cache, 6 * HOUR_IN_SECONDS );
 			}
 			if ( '' !== $cache[ $tel8 ] ) { return $cache[ $tel8 ]; }
 		}
 		return '' !== $crm_role ? $crm_role : 'sin rol';
 	}
+
+	private static function tipo_label( string $tipo ): string {
+		$labels = array( 'invento' => 'invento', 'entendio_mal' => 'entendió mal', 'destino_equivocado' => 'destino equivocado', 'no_ayudo' => 'no ayudó', 'promesa' => 'promesa', 'tecnico' => 'técnico', 'regla' => 'regla' );
+		return $labels[ $tipo ] ?? str_replace( '_', ' ', $tipo );
+	}
+
+	private static function plural( int $n, string $one, string $many ): string { return $n . ' ' . ( 1 === $n ? $one : $many ); }
 }
