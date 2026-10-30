@@ -40,6 +40,20 @@ final class CVD_Catalogo_Auto {
 	public static function register(): void {
 		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'review_page' ), 1 );
+		add_action( 'woocommerce_after_shop_loop', array( __CLASS__, 'category_text' ), 30 );
+	}
+
+	public const TERM_TEXTO = '_cvd_texto_categoria';
+	public const TERM_META  = '_cvd_meta_categoria';
+
+	/** 3.14.86: texto útil de la categoría (80–150 palabras) DEBAJO de los productos, solo en la página 1: no empuja la cuadrícula en el móvil. */
+	public static function category_text(): void {
+		if ( ! function_exists( 'is_product_category' ) || ! is_product_category() || is_paged() ) { return; }
+		$term = get_queried_object();
+		$html = $term ? (string) get_term_meta( $term->term_id, self::TERM_TEXTO, true ) : '';
+		if ( '' === trim( $html ) ) { return; }
+		echo '<section class="cvd-cat-texto" style="max-width:760px;margin:28px auto 8px;padding:0 16px;font-size:15px;line-height:1.55;color:#2B2420">'
+			. '<h2 style="font-size:18px;margin:0 0 8px">' . esc_html( $term->name ) . ' en Casa Viva</h2>' . wp_kses_post( $html ) . '</section>';
 	}
 
 	public static function routes(): void {
@@ -49,6 +63,62 @@ final class CVD_Catalogo_Auto {
 		register_rest_route( self::NS, '/bot/catalogo/deshacer', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'deshacer' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/catalogo/foto-real', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'foto_real' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/catalogo/revision-enlace', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'revision_enlace' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/catalogo/informe', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'informe' ), 'permission_callback' => $auth ) );
+	}
+
+	/**
+	 * 3.14.86 (Fase 4, D125): ¿está el producto «listo» según el estándar? 3 fotos o más (y al menos 1 real si es propio),
+	 * descripción propia de 400 letras o más, título de 25 a 75, título SEO y meta propios, alt en todas las fotos.
+	 */
+	public static function listo( WC_Product $p ): array {
+		$imgs = self::images( $p );
+		list( $main ) = self::split( (string) $p->get_description() );
+		$market = self::is_market( $p );
+		$reales = count( array_filter( $imgs, static fn( $i ) => $i['real'] ) );
+		$falta = array();
+		if ( count( $imgs ) < 3 ) { $falta[] = 'fotos'; }
+		if ( ! $market && ! $reales ) { $falta[] = 'foto real'; }
+		if ( mb_strlen( self::plain( $main ) ) < 400 ) { $falta[] = 'descripción'; }
+		$len = mb_strlen( $p->get_name() );
+		if ( $len < 25 || $len > 75 ) { $falta[] = 'título'; }
+		if ( '' === (string) $p->get_meta( '_cvd_seo_title', true ) || '' === (string) $p->get_meta( '_cvd_meta_description', true ) ) { $falta[] = 'Google'; }
+		if ( array_filter( $imgs, static fn( $i ) => '' === trim( $i['alt'] ) ) ) { $falta[] = 'alt'; }
+		return array( 'listo' => ! $falta, 'falta' => $falta, 'propio' => ! $market, 'reales' => $reales );
+	}
+
+	/** Informe del catálogo en 5 líneas; ?enviar=1 lo manda al correo de Ernesto (como los avisos de pedidos, D112). */
+	public static function informe( WP_REST_Request $request ): WP_REST_Response {
+		$ids = get_posts( array( 'post_type' => 'product', 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids' ) );
+		$n = count( $ids ); $listos = 0; $propios = 0; $propios_sin_real = 0; $falta = array(); $rev = array( 'pendiente' => 0, 'ok' => 0, 'corregir' => 0 ); $auto = 0; $titulos = array(); $preguntas = 0;
+		foreach ( $ids as $id ) {
+			$p = wc_get_product( $id );
+			if ( ! $p ) { continue; }
+			$l = self::listo( $p );
+			if ( $l['listo'] ) { $listos++; }
+			foreach ( $l['falta'] as $f ) { $falta[ $f ] = ( $falta[ $f ] ?? 0 ) + 1; }
+			if ( $l['propio'] ) { $propios++; if ( ! $l['reales'] ) { $propios_sin_real++; } }
+			$r = (string) $p->get_meta( self::META_REV, true );
+			if ( isset( $rev[ $r ] ) ) { $rev[ $r ]++; }
+			if ( (int) $p->get_meta( self::META_V, true ) >= self::VERSION ) { $auto++; }
+			if ( 'hidden' !== $p->get_catalog_visibility() ) { $k = remove_accents( mb_strtolower( trim( $p->get_name() ) ) ); $titulos[ $k ] = ( $titulos[ $k ] ?? 0 ) + 1; }
+			$c = json_decode( (string) $p->get_meta( self::META_CAMPOS, true ), true );
+			foreach ( (array) ( $c['faltan'] ?? array() ) as $x ) { if ( false !== mb_stripos( (string) $x, 'pregunta' ) ) { $preguntas++; } }
+		}
+		$dups = count( array_filter( $titulos, static fn( $v ) => $v > 1 ) );
+		arsort( $falta );
+		$lineas = array(
+			sprintf( 'Productos listos: %d de %d (%d %%). Con ficha nueva del bot: %d.', $listos, $n, $n ? round( 100 * $listos / $n ) : 0, $auto ),
+			sprintf( 'Propios sin ninguna foto real: %d de %d.', $propios_sin_real, $propios ),
+			sprintf( 'Títulos repetidos a la vista: %d.', $dups ),
+			sprintf( 'Preguntas de gestoras sin respuesta en las fichas: %d.', $preguntas ),
+			sprintf( 'Revisión de Lennys: %d por revisar, %d bien, %d a corregir. Lo que más falta: %s.', $rev['pendiente'], $rev['ok'], $rev['corregir'], implode( ', ', array_map( static fn( $k, $v ) => "$k $v", array_keys( array_slice( $falta, 0, 3, true ) ), array_slice( $falta, 0, 3, true ) ) ) ),
+		);
+		$sent = false;
+		if ( $request->get_param( 'enviar' ) && class_exists( 'CVD_Bot_Delivery_Change' ) && method_exists( 'CVD_Bot_Delivery_Change', 'mail_owner' ) ) {
+			$r = CVD_Bot_Delivery_Change::mail_owner( 'Catálogo de Casa Viva: ' . $listos . ' de ' . $n . ' productos listos', implode( "\n", $lineas ), 'Catálogo de Casa Viva' );
+			$sent = ! empty( $r['sent'] );
+		}
+		return self::json( array( 'ok' => true, 'lineas' => $lineas, 'listos' => $listos, 'total' => $n, 'falta' => $falta, 'revision' => $rev, 'enviado' => $sent ) );
 	}
 
 	private static function json( array $data, int $status = 200 ): WP_REST_Response {

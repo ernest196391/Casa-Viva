@@ -97,7 +97,8 @@ final class CVD_Site_Privacy {
 			if ( $p ) { $text = self::product_text( $p ); }
 		} elseif ( function_exists( 'is_product_category' ) && is_product_category() ) {
 			$term = get_queried_object();
-			$text = $term && $term->description ? wp_strip_all_tags( $term->description ) : ( $term ? $term->name . ' para tu hogar en Casa Viva, La Habana. Entrega a domicilio o recogida en tienda.' : '' );
+			$own = $term ? trim( (string) get_term_meta( $term->term_id, '_cvd_meta_categoria', true ) ) : ''; // 3.14.86: meta propia de la categoría (D125)
+			$text = '' !== $own ? $own : ( $term && $term->description ? wp_strip_all_tags( $term->description ) : ( $term ? $term->name . ' para tu hogar en Casa Viva, La Habana. Entrega a domicilio o recogida en tienda.' : '' ) );
 		} elseif ( function_exists( 'is_shop' ) && is_shop() ) {
 			$text = 'Tienda online de Casa Viva: artículos para el hogar, baño, cocina y decoración en La Habana. Entrega a domicilio o recogida en tienda.';
 		}
