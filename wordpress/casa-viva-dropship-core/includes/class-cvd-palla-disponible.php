@@ -123,7 +123,8 @@ final class CVD_Palla_Disponible {
 		}
 		$was = self::is_on( $me->ID ) && ! $d['legacy'];
 		$since = $on ? ( $was ? $d['since'] : time() ) : 0;
-		update_user_meta( $me->ID, self::META, wp_json_encode( array( 'on' => $on, 'since' => $since, 'zonas' => $d['zonas'], 'solo' => $d['solo'], 'hasta' => $d['hasta'] ) ) );
+		// wp_slash + sin \u: update_user_meta quita las barras y «Revolución» quedaba «Revoluciu00f3n» (prueba 29-oct).
+		update_user_meta( $me->ID, self::META, wp_slash( wp_json_encode( array( 'on' => $on, 'since' => $since, 'zonas' => $d['zonas'], 'solo' => $d['solo'], 'hasta' => $d['hasta'] ), JSON_UNESCAPED_UNICODE ) ) );
 		$response = rest_ensure_response( array( 'ok' => true, 'disp' => self::view( $me->ID ) ) );
 		$response->header( 'Cache-Control', 'no-store' );
 		return $response;
