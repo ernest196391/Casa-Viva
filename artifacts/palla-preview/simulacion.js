@@ -39,7 +39,7 @@
 		// 1. Coger con señal → se abre la carrera (3.14.86: sin paso de hora)
 		await click('[data-act=cojo][data-id="9001"]', 900);
 		var hash1 = location.hash;
-		var acciones1 = $$('.pl-actions a, .pl-actions button').map(function (x) { return x.innerText; }).join('|');
+		var acciones1 = $$('.pl-actions a, .pl-actions button, .pl-fm-sheet > button, .pl-fm-sheet > div > button, .pl-fm-sheet > a').map(function (x) { return x.innerText; }).join('|');
 		check('1. «La cojo» con señal: es mía y se abre la carrera', hash1 === '#carrera/9001' && order(9001).owner === 1, hash1 + ' owner=' + order(9001).owner);
 		check('1b. Sin hora: el botón grande ya es «Recogí»', /Recogí/.test(acciones1) && !/hora/i.test(acciones1), acciones1);
 		// 2. Doble toque en «La cojo»
@@ -71,7 +71,7 @@
 		var r2 = await P.request('carrera', { order: 9001, action: 'recogi', cid: newCid() });
 		check('7. «Recogí» dos veces: la 2.ª dice «ya constaba»', order(9001).stage === 'picked' && r2.data.result === 'already_picked', r2.data.result);
 		// 8. Soltar después de recoger
-		var botones = $$('.pl-actions a, .pl-actions button').map(function (x) { return x.innerText; }).join('|');
+		var botones = $$('.pl-actions a, .pl-actions button, .pl-fm-sheet > button, .pl-fm-sheet > div > button, .pl-fm-sheet > a').map(function (x) { return x.innerText; }).join('|');
 		var r3 = await P.request('carrera', { order: 9001, action: 'suelto', cid: newCid() });
 		check('8. Con el paquete ya no se puede soltar: sin «No puedo» y Core dice too_late', !/No puedo/.test(botones) && ['not_now', 'too_late'].indexOf(r3.data.result) !== -1, botones + ' / ' + r3.data.result);
 		// 8b. 3.14.71.2: «Llegué» en camino: avisa a la gestora, se marca y el botón desaparece.
@@ -132,7 +132,7 @@
 		var sinTexto = /Escribe en una frase/.test(text());
 		r = $('input[name=motivo][value=no_estaba]'); r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); await wait(150);
 		await click('[data-act=problema]', 900);
-		var acciones = $$('.pl-actions a, .pl-actions button').map(function (x) { return x.innerText; }).join('|');
+		var acciones = $$('.pl-actions a, .pl-actions button, .pl-fm-sheet > button, .pl-fm-sheet > div > button, .pl-fm-sheet > a').map(function (x) { return x.innerText; }).join('|');
 		check('16. Problema: pide motivo, pide frase si es «Otro», y luego ya no deja marcar Entregado', sinMotivo && sinTexto && order(n4).incident === 'no_estaba' && !/Entregado/.test(acciones), [sinMotivo, sinTexto, order(n4).incident, acciones].join(' / '));
 		// 17. La tienda cancela una mía / me la quita (#65, #4223)
 		P.event('nueva'); await refresh(); var n5 = world().orders[world().orders.length - 1].id;

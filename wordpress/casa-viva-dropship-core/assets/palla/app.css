@@ -205,3 +205,32 @@ body,.pl-shell{background:var(--surface-sunken)}
 .pl-sheet{border-radius:var(--r-lg) var(--r-lg) 0 0}
 .pl-back{color:#121212;font-weight:700}
 .pl-row .pl-muted{align-self:center}
+/* 3.14.102 · La carrera a pantalla completa, como Uber (Ernesto 30-oct: «el mapa debería ser el protagonista»). */
+.pl-fm{position:fixed;inset:0;z-index:6;background:#E9E6DF;overflow:hidden}
+.pl-fm-map{position:absolute;inset:0}
+.pl-fm .leaflet-control-zoom{display:none}
+.pl-fm .leaflet-control-attribution{font-size:10px;opacity:.7}
+.pl-fm-top{position:absolute;z-index:700;top:calc(12px + env(safe-area-inset-top));left:12px;right:12px;display:flex;align-items:center;gap:8px}
+.pl-fm-back{flex:none;width:48px;height:48px;border-radius:50%;background:#fff;color:#121212;text-decoration:none;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;box-shadow:0 4px 14px rgba(18,18,18,.18)}
+.pl-fm-chip{flex:1;min-width:0;height:48px;display:flex;align-items:center;padding:0 16px;border-radius:999px;background:#fff;box-shadow:0 4px 14px rgba(18,18,18,.18);font-weight:800;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl-fm-nav{flex:none;height:48px;display:flex;align-items:center;gap:6px;padding:0 16px;border-radius:999px;background:#121212;color:#fff;text-decoration:none;font-weight:700;box-shadow:0 6px 16px rgba(18,18,18,.3)}
+.pl-fm-nav svg{color:var(--brand)}
+.pl-fm-sheet{position:absolute;z-index:800;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:#fff;border-radius:26px 26px 0 0;box-shadow:0 -12px 34px rgba(18,18,18,.18);padding:0 16px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px;max-height:46dvh;overflow:visible;transition:max-height .25s ease}
+.pl-fm-sheet.is-open{max-height:88dvh;overflow-y:auto}
+.pl-fm-more{display:none;flex-direction:column;gap:12px;padding-top:4px}
+.pl-fm-sheet.is-open .pl-fm-more{display:flex}
+.pl-fm-handle{display:block;width:100%;height:26px;border:0;background:transparent;cursor:pointer;position:relative;margin-bottom:-6px}
+.pl-fm-handle::before{content:"";position:absolute;left:50%;top:10px;transform:translateX(-50%);width:46px;height:5px;border-radius:3px;background:#D6D4CE}
+.pl-fm-center{position:absolute;right:14px;top:-66px;width:52px;height:52px;border-radius:50%;border:0;background:#fff;box-shadow:0 6px 16px rgba(18,18,18,.22);font-size:22px;cursor:pointer}
+.pl-fm-sheet.is-open .pl-fm-center{display:none}
+.pl-fm-eta{font-size:22px;line-height:28px;font-weight:800;letter-spacing:-.02em}
+.pl-fm-who{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pl-fm-where{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl-fm-sheet.is-open .pl-fm-where{white-space:normal}
+.pl-fm-round{flex:none;width:52px;height:52px;border-radius:50%;background:var(--brand-surface);color:#121212;display:flex;align-items:center;justify-content:center;text-decoration:none}
+.pl-fm-money{display:flex;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:14px;background:var(--surface-sunken);font-size:15px}
+.pl-fm-money b{font-size:18px;font-weight:800;margin-left:4px}
+.pl-fm-more .pl-card{box-shadow:none;border:1.5px solid var(--line)}
+.pl-fm-sheet{max-height:none}
+.pl-fm-sheet.is-open{max-height:88dvh}
+.pl-fm-more > .pl-note,.pl-fm-more > .pl-alert{display:none}

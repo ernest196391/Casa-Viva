@@ -608,7 +608,7 @@
 	function mountCarreraMap() {
 		var ph = app.querySelector('[data-mapa-carrera]'), r = route(), c = ph ? findCarrera(r.id) : null;
 		if (!ph || !c) { if (cmap.watch !== null && navigator.geolocation) { navigator.geolocation.clearWatch(cmap.watch); } cmap.watch = null; return; }
-		if (!cmap.box || cmap.id !== c.id) { cmap.box = document.createElement('div'); cmap.box.style.height = '190px'; cmap.id = c.id; cmap.text = ''; }
+		if (!cmap.box || cmap.id !== c.id) { cmap.box = document.createElement('div'); cmap.box.style.cssText = 'position:absolute;inset:0;width:100%;height:100%'; cmap.id = c.id; cmap.text = ''; state.hoja = false; }
 		ph.appendChild(cmap.box);
 		if (cmap.watch === null && navigator.geolocation && !P) {
 			cmap.watch = navigator.geolocation.watchPosition(function (p) { cmap.me = [p.coords.latitude, p.coords.longitude]; drawCarreraMap(); }, function () {}, { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 });
@@ -635,41 +635,40 @@
 		var steps = [['recogi', 'Recogí'], ['entregado', 'Entregado'], ['dinero', 'Dinero']];
 		var now = steps.filter(function (s) { return !done[s[0]]; })[0];
 		html += '<ol class="pl-track">' + steps.map(function (s) { return '<li class="' + (done[s[0]] ? 'is-done' : (now && now[0] === s[0] ? 'is-now' : '')) + '">' + (done[s[0]] ? '✓ ' : '') + s[1] + '</li>'; }).join('') + '</ol>';
-		// 3.14.99 (Ernesto 30-oct, «como Mandao»): el mapa de la carrera — tu 🛵 (GPS del teléfono, no se manda) y la tienda o el cliente.
-		if (['pickup', 'route'].indexOf(c.stage) !== -1) { html += '<section class="pl-card" style="padding:0;overflow:hidden;gap:0"><div data-mapa-carrera style="height:190px"></div><div class="pl-strong" data-mapa-texto style="padding:12px 16px">' + esc(cmap.text || 'Buscando tu ubicación…') + '</div></section>'; }
-		if (c.queued) { html += '<div class="pl-note">' + icon('sincronizar', 20) + '<div>Guardado. Se manda al volver la señal.</div></div>'; }
-		if (c.pase) { html += '<div class="pl-note">🔁<div>Esperando que ' + esc(c.pase.toName) + ' la acepte. <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="pase-cancelar" data-id="' + c.id + '">Cancelar</button></div></div>'; }
-		if (c.stage === 'incident' && !c.queued) { html += '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>Problema avisado</b>Espera lo que diga la tienda.</div></div>'; }
-		if (c.stage === 'delivered' && m.after) { html += '<div class="pl-alert pl-alert--success">' + icon('bien', 20) + '<div><b>Entregado</b>' + esc(m.sentence || '') + '</div></div>'; }
+		var body = '';
+		if (c.queued) { body += '<div class="pl-note">' + icon('sincronizar', 20) + '<div>Guardado. Se manda al volver la señal.</div></div>'; }
+		if (c.pase) { body += '<div class="pl-note">🔁<div>Esperando que ' + esc(c.pase.toName) + ' la acepte. <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="pase-cancelar" data-id="' + c.id + '">Cancelar</button></div></div>'; }
+		if (c.stage === 'incident' && !c.queued) { body += '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>Problema avisado</b>Espera lo que diga la tienda.</div></div>'; }
+		if (c.stage === 'delivered' && m.after) { body += '<div class="pl-alert pl-alert--success">' + icon('bien', 20) + '<div><b>Entregado</b>' + esc(m.sentence || '') + '</div></div>'; }
 		// Cliente: dónde, cuándo y los dos botones que importan (Llamar · Ir).
-		html += '<section class="pl-card"><div class="pl-strong">' + esc(cu.name) + '</div><div>' + esc(cu.address || cu.zone) + '</div><div class="pl-muted">' + esc([cu.address ? cu.zone : '', cu.reference].filter(Boolean).join(' · ')) + '</div>';
-		if (c.arrived) { html += '<div class="pl-strong">📍 Llegaste · ya lo saben</div>'; }
-		else if (c.when) { html += '<div class="pl-muted">Pidió ' + esc(c.when) + '</div>'; }
-		if (cu.note) { html += '<div class="pl-muted">📝 ' + esc(cu.note) + '</div>'; }
-		html += '<div class="pl-grid2">' + (cu.phone ? '<a class="pl-btn pl-btn--secondary" href="tel:+' + esc(cu.phone) + '">' + icon('tel', 20) + 'Llamar</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin teléfono</span>')
+		body += '<section class="pl-card"><div class="pl-strong">' + esc(cu.name) + '</div><div>' + esc(cu.address || cu.zone) + '</div><div class="pl-muted">' + esc([cu.address ? cu.zone : '', cu.reference].filter(Boolean).join(' · ')) + '</div>';
+		if (c.arrived) { body += '<div class="pl-strong">📍 Llegaste · ya lo saben</div>'; }
+		else if (c.when) { body += '<div class="pl-muted">Pidió ' + esc(c.when) + '</div>'; }
+		if (cu.note) { body += '<div class="pl-muted">📝 ' + esc(cu.note) + '</div>'; }
+		body += '<div class="pl-grid2">' + (cu.phone ? '<a class="pl-btn pl-btn--secondary" href="tel:+' + esc(cu.phone) + '">' + icon('tel', 20) + 'Llamar</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin teléfono</span>')
 			+ (c.map || cu.address || cu.zone ? '<a class="pl-btn pl-btn--secondary" href="' + esc(goUrl(c)) + '" target="_blank" rel="noopener noreferrer">' + icon('mapa', 20) + (c.mapFrom === 'auto' ? 'Ir 📍 aprox.' : c.mapFrom ? 'Ir 📍' : 'Ir') + '</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin mapa</span>') + '</div>';
-		if (cu.alt) { html += '<div class="pl-muted">Otro: <a href="tel:+' + esc(cu.alt) + '">' + esc(cu.altLabel) + '</a></div>'; }
-		html += '</section>';
+		if (cu.alt) { body += '<div class="pl-muted">Otro: <a href="tel:+' + esc(cu.alt) + '">' + esc(cu.altLabel) + '</a></div>'; }
+		body += '</section>';
 		// Paquete: qué llevas (y de dónde, si aún no lo recogió).
 		var pack = c.items.length ? '<ul class="pl-items">' + c.items.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' : '';
 		if (c.stage === 'pickup') { pack += '<div class="pl-muted">' + esc(c.pickup.place + ' · ' + c.pickup.hours) + '</div>'; }
 		if (c.pickup.suppliers && c.pickup.suppliers.length && c.stage === 'pickup') { pack += '<div class="pl-muted">Bajo pedido: pregunta en la tienda dónde se recoge.</div>'; }
 		if (c.assembly) { pack += '<div class="pl-muted">🔧 Armado: <span class="pl-strong">' + esc(c.assembly) + '</span> (tuyo)</div>'; }
-		if (pack) { html += '<section class="pl-card">' + pack + '</section>'; } // 29-oct: sin nada que decir, sin tarjeta vacía
+		if (pack) { body += '<section class="pl-card">' + pack + '</section>'; } // 29-oct: sin nada que decir, sin tarjeta vacía
 		// 3.14.86 (Ernesto: «cobra lo que dice el vale; las averiguaciones las hace antes la gestora»): sin cifra, se avisa aquí.
-		if (!m.after && m.unknown && !m.prepaid && ['pickup', 'route'].indexOf(c.stage) !== -1) { html += '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>El vale no dice cuánto cobrar</b>Pregunta a la tienda antes de entregarlo.</div></div>'; }
+		if (!m.after && m.unknown && !m.prepaid && ['pickup', 'route'].indexOf(c.stage) !== -1) { body += '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>El vale no dice cuánto cobrar</b>Pregunta a la tienda antes de entregarlo.</div></div>'; }
 		if (!m.after) {
 			var small = function (t) { return String(t).length > 11 ? ' pl-amount--sm' : ''; };
-			html += '<section class="pl-card"><div class="pl-money"><div><span class="pl-muted">Cobras</span><span class="pl-amount' + small(m.chargeShort) + '">' + esc(m.chargeShort) + '</span></div><div><span class="pl-muted">A la tienda</span><span class="pl-amount' + small(m.bring) + '">' + esc(m.bring) + '</span></div></div>'
+			body += '<section class="pl-card"><div class="pl-money"><div><span class="pl-muted">Cobras</span><span class="pl-amount' + small(m.chargeShort) + '">' + esc(m.chargeShort) + '</span></div><div><span class="pl-muted">A la tienda</span><span class="pl-amount' + small(m.bring) + '">' + esc(m.bring) + '</span></div></div>'
 				+ '<div class="pl-muted">Mensajería <span class="pl-strong">' + esc(m.feeText) + '</span>' + (m.changeText ? ' · vuelto <span class="pl-strong">' + esc(m.changeText) + '</span>' + (m.payWith ? ' (paga con ' + esc(m.payWith) + ')' : '') : '') + '</div></section>';
 		} else if (m.feeText) {
-			html += '<section class="pl-card"><div class="pl-muted">Mensajería <span class="pl-strong">' + esc(m.feeText) + '</span></div></section>';
+			body += '<section class="pl-card"><div class="pl-muted">Mensajería <span class="pl-strong">' + esc(m.feeText) + '</span></div></section>';
 		}
-		html += '</main>';
+		html += body + '</main>';
 		// Abajo: UN botón grande según el paso; lo demás, en una línea de enlaces.
 		var b = function (a) { return state.busy === a + '-' + c.id ? ' pl-btn--busy' : ''; };
 		var links = [];
-		var acts = '<div class="pl-actions">';
+		var acts = '';
 		if (c.stage === 'pickup') { acts += '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + b('recogi') + '" data-act="recogi" data-id="' + c.id + '">' + icon('bien') + 'Recogí</button>'; }
 		else if (c.stage === 'route') {
 			// 3.14.71.2 / 3.14.86: «Llegué» pequeño y opcional: al cliente le suena «Tu mensajero llegó» en su seguimiento y
@@ -686,8 +685,38 @@
 		if (['pickup', 'route', 'delivered'].indexOf(c.stage) !== -1) { links.push('<a href="#problema/' + c.id + '">Problema</a>'); }
 		if (c.stage === 'pickup') { links.push('<a href="#suelto/' + c.id + '">No puedo</a>'); }
 		if (['pickup', 'route'].indexOf(c.stage) !== -1 && !c.pase && !c.queued) { links.push('<a href="#pasar/' + c.id + '">Pasar</a>'); }
-		if (links.length) { acts += '<div class="pl-links">' + links.join('') + '</div>'; }
-		return html + acts + '</div>';
+		var linksHtml = links.length ? '<div class="pl-links">' + links.join('') + '</div>' : '';
+		// 3.14.102 (Ernesto 30-oct, «el mapa protagonista, como Uber»): con la carrera abierta, mapa a pantalla completa.
+		if (['pickup', 'route'].indexOf(c.stage) !== -1) { return fullMap(c, body, acts, linksHtml); }
+		return html + '<div class="pl-actions">' + acts + linksHtml + '</div>';
+	}
+
+	// Mapa a pantalla completa con la tarjeta flotante abajo (sube al deslizarla): lo justo + el botón grande; el resto, arriba.
+	function fullMap(c, body, acts, linksHtml) {
+		var cu = c.customer || {}, m = c.money || {}, pickup = c.stage === 'pickup';
+		var nav = pickup ? (C.storeMap || '#') : goUrl(c);
+		var who = pickup ? 'Recoge en la tienda' : (cu.name || 'Cliente');
+		var where = pickup ? ((c.pickup && c.pickup.place) || 'Casa Viva') : [cu.address || cu.zone, cu.reference].filter(Boolean).join(' · ');
+		// Lo que no puede quedar escondido en la tarjeta cerrada: sin señal, pase, problema, vale sin cifra, «Llegaste».
+		var alerts = '';
+		if (c.queued) { alerts += '<div class="pl-note">' + icon('sincronizar', 20) + '<div>Guardado. Se manda al volver la señal.</div></div>'; }
+		if (c.pase) { alerts += '<div class="pl-note">🔁<div>Esperando que ' + esc(c.pase.toName) + ' la acepte. <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="pase-cancelar" data-id="' + c.id + '">Cancelar</button></div></div>'; }
+		if (!m.after && m.unknown && !m.prepaid) { alerts += '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>El vale no dice cuánto cobrar</b>Pregunta a la tienda antes de entregarlo.</div></div>'; }
+		if (c.arrived) { alerts += '<div class="pl-strong">📍 Llegaste · ya lo saben</div>'; }
+		var html = '<div class="pl-fm"><div class="pl-fm-map" data-mapa-carrera></div>'
+			+ '<div class="pl-fm-top"><a class="pl-fm-back" href="#carreras" aria-label="Volver a Carreras">‹</a><div class="pl-fm-chip">#' + esc(c.number) + ' · ' + esc(cu.zone) + '</div><a class="pl-fm-nav" href="' + esc(nav) + '" target="_blank" rel="noopener noreferrer">' + icon('mapa', 18) + 'Navegar</a></div>'
+			+ '<section class="pl-fm-sheet' + (state.hoja ? ' is-open' : '') + '" data-hoja>'
+			+ '<button type="button" class="pl-fm-center" data-act="centrar" aria-label="Centrar en mí">🎯</button>'
+			+ '<button type="button" class="pl-fm-handle" data-act="hoja" aria-label="' + (state.hoja ? 'Ver menos' : 'Ver más') + '"></button>'
+			+ offlineBar('Sin conexión. Tu carrera sigue guardada.')
+			+ '<div class="pl-row" style="align-items:center"><span class="pl-fm-eta" data-mapa-texto>' + esc(cmap.text || 'Buscando tu ubicación…') + '</span>' + stageBadge(c) + '</div>'
+			+ '<div class="pl-fm-who"><div style="min-width:0"><div class="pl-strong">' + esc(who) + '</div><div class="pl-muted pl-fm-where">' + esc(where) + '</div></div>'
+			+ (cu.phone ? '<a class="pl-fm-round" href="tel:+' + esc(cu.phone) + '" aria-label="Llamar al cliente">' + icon('tel', 22) + '</a>' : '') + '</div>'
+			+ alerts
+			+ (!m.after && m.chargeShort ? '<div class="pl-fm-money"><span>Cobras <b>' + esc(m.chargeShort) + '</b></span><span>A la tienda <b>' + esc(m.bring || 'Nada') + '</b></span></div>' + (m.changeText ? '<div class="pl-strong">Lleva vuelto ' + esc(m.changeText) + (m.payWith ? ' (paga con ' + esc(m.payWith) + ')' : '') + '</div>' : '') : '')
+			+ acts
+			+ '<div class="pl-fm-more">' + body + linksHtml + '</div></section></div>';
+		return html;
 	}
 
 	var KIND = { cash_usd: 'Efectivo USD', cash_cup: 'Efectivo CUP', transfer_cup: 'Transferencia CUP', clasica: 'Tarjeta Clásica', eur: 'Efectivo EUR' };
@@ -1001,6 +1030,8 @@
 			}, window.PALLA_UNDO_MS || 5000) }; // el simulador lo acorta
 			render(); return;
 		}
+		if (a === 'hoja') { state.hoja = !state.hoja; render(); return; } // 3.14.102: sube o baja la tarjeta
+		if (a === 'centrar') { if (window.PallaMapa && cmap.box) { window.PallaMapa.centrar(cmap.box, cmap.me); } if (!cmap.me) { showToast('Buscando tu ubicación…'); } return; }
 		if (a === 'deshacer') { if (state.pend) { clearTimeout(state.pend.t); state.pend = null; } showToast('No se marcó. Sigue en camino.'); return; }
 		if (a === 'entregado' && c) {
 			var plan = payPlan(c);
@@ -1032,6 +1063,15 @@
 			if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(done, function () { showToast(t); }); } else { showToast(t); }
 		}
 	});
+	// 3.14.102: deslizar la tarjeta hacia arriba la abre y hacia abajo la cierra (como Uber). Tocar la rayita también.
+	var swipe = null;
+	app.addEventListener('touchstart', function (e) { var s = e.target.closest('[data-hoja]'); swipe = s ? { y: e.touches[0].clientY, top: s.scrollTop } : null; }, { passive: true });
+	app.addEventListener('touchend', function (e) {
+		if (!swipe || !e.changedTouches.length) { return; }
+		var dy = e.changedTouches[0].clientY - swipe.y, top = swipe.top; swipe = null;
+		if (dy < -45 && !state.hoja) { state.hoja = true; render(); }
+		else if (dy > 45 && state.hoja && top <= 0) { state.hoja = false; render(); }
+	}, { passive: true });
 	app.addEventListener('change', function (e) {
 		var el = e.target, a = el.getAttribute('data-act');
 		if (a === 'pay') { state.form = { pay: el.value }; render(); }

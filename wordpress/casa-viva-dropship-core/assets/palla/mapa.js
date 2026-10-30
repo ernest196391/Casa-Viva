@@ -117,6 +117,8 @@
 	function mensajero(el, me, to, kind) {
 		return load().then(function (L) {
 			var map = base(L, el), g = map._layer, pts = [];
+			// Pantalla completa (Ernesto 30-oct, «como Uber»): el mapa te sigue; si lo mueves con el dedo deja de seguirte hasta 🎯.
+			if (!map._fmInit) { map._fmInit = true; map._follow = true; map.on('dragstart', function () { map._follow = false; }); }
 			g.clearLayers();
 			if (to) { L.marker(to, { icon: pin(L, 'tienda' === kind ? '🏪' : '🏠', 'tienda' === kind ? 'Casa Viva' : 'Cliente') }).addTo(g); pts.push(to); }
 			if (me) {
@@ -125,9 +127,13 @@
 			}
 			// Se encuadra al empezar, cuando llega tu ubicación y cuando cambia el destino (de la tienda al cliente): así se acerca.
 			var key = to ? to.join(',') : '';
+			var big = el.offsetHeight > 400; // a pantalla completa, la tarjeta de abajo tapa ~300 px: que no queden debajo
+			var pad = big ? { paddingTopLeft: [40, 96], paddingBottomRight: [40, 330], maxZoom: 17 } : { padding: [36, 36], maxZoom: 17 };
 			if (pts.length && (!map._fitted || me && !map._withMe || map._toKey !== key)) {
-				if (pts.length === 1) { map.setView(pts[0], 16); } else { map.fitBounds(pts, { padding: [36, 36], maxZoom: 17 }); }
+				if (pts.length === 1) { map.setView(pts[0], 16); } else { map.fitBounds(pts, pad); }
 				map._fitted = true; map._withMe = !!me; map._toKey = key;
+			} else if (me && map._follow) {
+				map.panTo(big ? map.unproject(map.project(me).add([0, 110])) : me, { animate: true }); // tu 🛵 un poco por encima de la tarjeta
 			}
 			setTimeout(function () { map.invalidateSize(); }, 50);
 			if (!to) { return me ? 'Sin punto en el mapa: usa la dirección.' : ''; }
@@ -139,5 +145,12 @@
 		});
 	}
 
-	window.PallaMapa = { ruta: ruta, tienda: tienda, marcar: marcar, mensajero: mensajero };
+	/** 🎯: vuelve a seguirte y te centra. */
+	function centrar(el, me) {
+		var map = el && el._pallaMap; if (!map) { return; }
+		map._follow = true;
+		if (me) { var z = Math.max(map.getZoom(), 16); map.setView(el.offsetHeight > 400 ? map.unproject(map.project(me, z).add([0, 110]), z) : me, z, { animate: true }); }
+	}
+
+	window.PallaMapa = { ruta: ruta, tienda: tienda, marcar: marcar, mensajero: mensajero, centrar: centrar };
 })();
