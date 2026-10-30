@@ -92,7 +92,7 @@
       '<p class="cvga-note">Tú pagas esa ganancia a la gestora; aquí solo se apunta.</p></fieldset>' +
       '<fieldset class="cvsl-set"><legend>Entrega</legend><select name="delivery">' + del + '</select></fieldset>' +
       '<fieldset class="cvsl-set"><legend>Cómo se cobra</legend>' + pay + '</fieldset>' +
-      '<label class="cvsl-check"><input type="checkbox" name="paused"' + (i.paused ? ' checked' : '') + '> Guardarlo pausado (que nadie lo vea todavía)</label>' +
+      '<label class="cvsl-check"><input type="checkbox" name="paused"' + (i.paused && Number(i.price) >= 0.5 ? ' checked' : '') + '> Guardarlo pausado (que nadie lo vea todavía)</label>' +
       '<p class="cvsl-error" data-cvsl-error role="alert" hidden></p>' +
       '<div class="cvga-actions"><button class="cvga-btn" type="submit" data-cvsl-save>Publicar</button><button class="cvga-btn cvga-btn-soft" type="button" data-cvsl-cancel>Cancelar</button></div></form>';
     sheet.hidden = false; document.body.classList.add('cvsl-open');
