@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class CVD_Cierre_Math {
 	public const USD_BILLS = array( 100, 50, 20, 10, 5, 3, 1 );
-	public const MN_BILLS = array( 5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 1 );
+	public const MN_BILLS = array( 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 1 );
 	public const CLOSE_HOUR = 20;
 	public const TZ = 'America/Havana';
 	private const NO_COUNT = array( 'cancelled', 'failed', 'refunded', 'trash', 'checkout-draft' );

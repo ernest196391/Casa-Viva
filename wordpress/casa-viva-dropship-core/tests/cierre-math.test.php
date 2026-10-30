@@ -75,6 +75,8 @@ check( 'billete que no existe se ignora', $M::bills_total( array( '7' => 3, '5' 
 check( 'cantidad negativa se ignora', $M::bills_total( array( '5' => -3 ), $M::USD_BILLS ), 0 );
 check( 'billetes MN', $M::bills_total( array( '5000' => 1, '1000' => 2, '10' => 5 ), $M::MN_BILLS ), 7050 );
 
+check( 'billetes MN de 20.000 y 10.000', $M::bills_total( array( '20000' => 1, '10000' => 2, '5000' => 1 ), $M::MN_BILLS ), 45000 );
+
 // Salidas.
 check( 'salidas', $M::outs_total( array( array( 'usd' => '5', 'mn' => 0 ), array( 'usd' => 0, 'mn' => '1000' ), 'basura' ) ), array( 500, 1000 ) );
 
