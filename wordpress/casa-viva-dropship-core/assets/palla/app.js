@@ -432,7 +432,10 @@
 	function alarmStart(fresh) {
 		var o = fresh[0];
 		state.alarm = { id: o.id, number: o.number, zone: o.zone || '', more: fresh.length - 1 };
-		snd.until = Date.now() + 5 * 60000;
+		// 29-oct (prueba con Ernesto: «se quedó más de 1 min vibrando»): dentro de la app de Android suena SOLO la bocina de
+		// Android (30 s, se calla con volumen o encendido); aquí queda el cartel. En el navegador, 30 s como mucho (antes 5 min).
+		if (NATIVE) { return; }
+		snd.until = Date.now() + 30000;
 		clearInterval(snd.timer);
 		alarmTick();
 		snd.timer = setInterval(alarmTick, 3000);

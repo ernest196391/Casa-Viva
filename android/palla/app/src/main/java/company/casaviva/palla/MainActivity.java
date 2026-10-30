@@ -35,6 +35,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        // Solo la copia de pruebas (debug, la del teléfono simulado): la pantalla se puede manejar desde el ordenador.
+        if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) { WebView.setWebContentsDebuggingEnabled(true); }
         web = new WebView(this);
         setContentView(web);
         WebSettings s = web.getSettings();
@@ -90,14 +92,18 @@ public class MainActivity extends Activity {
         return super.dispatchTouchEvent(ev);
     }
 
-    /** 1.2: con la app delante, el botón de volumen calla la bocina (y esa pulsación no cambia el volumen). */
+    /**
+     * 1.2: con la app delante, el botón de volumen calla la bocina (y esa pulsación no cambia el volumen). En
+     * dispatchKeyEvent, antes que la página: en el Redmi de Ernesto onKeyDown no llegaba a recibirlo.
+     */
     @Override
-    public boolean onKeyDown(int keyCode, android.view.KeyEvent event) {
-        if ((keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP) && AvisosService.ringing()) {
-            AvisosService.stopSiren(this);
+    public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        int k = event.getKeyCode();
+        if ((k == android.view.KeyEvent.KEYCODE_VOLUME_DOWN || k == android.view.KeyEvent.KEYCODE_VOLUME_UP) && AvisosService.ringing()) {
+            if (event.getAction() == android.view.KeyEvent.ACTION_DOWN) { AvisosService.stopSiren(this); }
             return true;
         }
-        return super.onKeyDown(keyCode, event);
+        return super.dispatchKeyEvent(event);
     }
 
     @Override

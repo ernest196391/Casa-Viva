@@ -46,6 +46,7 @@ public class AvisosService extends Service {
     // Vibrator que la empezó (en algunos teléfonos cancel() desde otra pantalla de la app no la paraba).
     private static android.os.Vibrator vib;
     private static android.content.BroadcastReceiver keys;
+    private static android.media.session.MediaSession volSession; // 1.2: los botones de volumen llegan aquí mientras suena
     private static long sirenAt;
     private static String alarmOrder = "";              // la carrera que está sonando (tag «o<id>»), para callarla si otro la coge
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -169,6 +170,10 @@ public class AvisosService extends Service {
             try { app.unregisterReceiver(keys); } catch (Exception ignored) { }
             keys = null;
         }
+        if (volSession != null) {
+            try { volSession.setActive(false); volSession.release(); } catch (Exception ignored) { }
+            volSession = null;
+        }
     }
 
     /**
@@ -190,6 +195,18 @@ public class AvisosService extends Service {
         try {
             if (Build.VERSION.SDK_INT >= 33) { app.registerReceiver(keys, f, Context.RECEIVER_EXPORTED); } else { app.registerReceiver(keys, f); }
         } catch (Exception e) { keys = null; }
+        // Prueba en el Redmi de Ernesto (MIUI, 29-oct): VOLUME_CHANGED no llega y el 1.er toque solo abre la barra. Como las
+        // apps de música: una sesión «sonando» con volumen propio recibe cada toque de volumen (también el 1.º) y calla.
+        try {
+            volSession = new android.media.session.MediaSession(app, "palla-bocina");
+            // Sin un Callback con su Handler, Android no entrega el toque al VolumeProvider (lo vimos en el registro).
+            volSession.setCallback(new android.media.session.MediaSession.Callback() { }, MAIN);
+            volSession.setPlaybackToRemote(new android.media.VolumeProvider(android.media.VolumeProvider.VOLUME_CONTROL_RELATIVE, 10, 5) {
+                @Override public void onAdjustVolume(int direction) { stopSiren(app); }
+            });
+            volSession.setPlaybackState(new android.media.session.PlaybackState.Builder().setState(android.media.session.PlaybackState.STATE_PLAYING, 0, 1f).build());
+            volSession.setActive(true);
+        } catch (Exception e) { volSession = null; }
     }
 
     // ------------------------------------------------------------------ Servicio
