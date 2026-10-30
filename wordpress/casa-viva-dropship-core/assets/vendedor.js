@@ -54,7 +54,7 @@
       if (i.adminHidden) tags.push('<span class="cvga-chip is-bad">Oculto por Casa Viva</span>');
       if (i.stock === 0) tags.push('<span class="cvga-chip">Agotado</span>');
       if (i.offer) tags.push('<span class="cvga-chip is-good">Gestoras ganan ' + money(i.gestoraUsd) + '</span>');
-      return '<article class="cvga-card cvsl-card" data-id="' + i.id + '">' + photo + '<h2>' + esc(i.title) + '</h2><p class="cvsl-price">' + money(i.price) + '</p>' +
+      return '<article class="cvga-card cvsl-card" data-id="' + i.id + '">' + photo + '<h2>' + esc(i.title) + '</h2><p class="cvsl-price">' + (i.price >= 0.5 ? money(i.price) : '⚠️ Ponle precio') + '</p>' +
         '<p class="cvga-note">' + (i.stock == null ? 'Sin contar existencias' : 'Quedan ' + i.stock) + ' · ' + i.consultas + ' consultas</p><div class="cvsl-tags">' + tags.join('') + '</div>' +
         '<div class="cvga-actions"><button class="cvga-btn cvga-btn-sm" type="button" data-cvsl-edit="' + i.id + '">Editar</button>' +
         '<button class="cvga-btn cvga-btn-soft cvga-btn-sm" type="button" data-cvsl-pause="' + i.id + '">' + (i.paused ? 'Activar' : 'Pausar') + '</button>' +
