@@ -233,16 +233,19 @@ final class CVD_Market_Bridge {
 		$is_new = ! $product->get_id();
 		// Idempotente: un reintento viejo nunca pisa una versión más nueva (la versión la pone VivaBot o el panel).
 		if ( $stale = self::stale_data( $product, $version ) ) { return array( 200, $stale ); }
-		$product->set_name( $title );
+		// 3.14.84 (D124): ficha ya mejorada al estándar (CVD_Catalogo_Auto) → no se pisan nombre ni descripción larga.
+		$fijo = ! $is_new && '' !== (string) $product->get_meta( '_cvd_texto_fijo', true );
+		if ( ! $fijo ) { $product->set_name( $title ); }
 		$product->set_sku( self::SKU_PREFIX . $item );
 		$product->set_regular_price( wc_format_decimal( $price, 2 ) );
 		$product->set_sale_price( '' );
 		$product->set_manage_stock( false );
 		$product->set_stock_status( 'instock' );
 		$product->set_status( 'publish' );
-		$product->set_catalog_visibility( 'visible' );
+		// 3.14.84: el repetido de otro producto (_cvd_duplicado_de) sigue oculto del catálogo aunque se vuelva a publicar.
+		$product->set_catalog_visibility( '' !== (string) $product->get_meta( '_cvd_duplicado_de', true ) ? 'hidden' : 'visible' );
 		$product->set_short_description( esc_html( self::NOTICE ) );
-		$product->set_description( $description ? '<p>' . nl2br( esc_html( $description ) ) . '</p>' : '' );
+		if ( ! $fijo ) { $product->set_description( $description ? '<p>' . nl2br( esc_html( $description ) ) . '</p>' : '' ); }
 		// 3.13.72: «Bajo pedido» MÁS su departamento. Al volver a publicar se conserva el que ya tenía, salvo que el bot
 		// (o el panel) mande otro (department, departments o category). Antes se le dejaba solo «Bajo pedido» cada vez.
 		$cat = self::category_id();
@@ -269,8 +272,10 @@ final class CVD_Market_Bridge {
 				if ( $att ) { $ids[] = $att; }
 			}
 			if ( $ids ) {
+				// 3.14.84: las fotos reales de la tienda (_cvd_foto_real) se quedan, detrás de la principal nueva.
+				$reales = $is_new ? array() : array_values( array_filter( array_merge( array( (int) $product->get_image_id() ), array_map( 'intval', $product->get_gallery_image_ids() ) ), static fn( $a ) => $a && '' !== (string) get_post_meta( $a, '_cvd_foto_real', true ) ) );
 				$product->set_image_id( array_shift( $ids ) );
-				$product->set_gallery_image_ids( $ids );
+				$product->set_gallery_image_ids( array_values( array_unique( array_merge( $ids, $reales ) ) ) );
 				$product->save();
 			}
 		}

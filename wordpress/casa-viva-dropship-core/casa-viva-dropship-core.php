@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.83
+ * Version: 3.14.84
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.83' );
+define( 'CVD_VERSION', '3.14.84' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -83,6 +83,7 @@ require_once CVD_DIR . 'includes/class-cvd-palla-api.php'; // 3.14.61: su API (c
 require_once CVD_DIR . 'includes/class-cvd-palla-push.php'; // 3.14.69.1: avisos push de Pa'llá (cvd_palla_push: no | prueba | si).
 require_once CVD_DIR . 'includes/class-cvd-order-seq.php'; // 3.14.69.11: Nº propio del pedido que nunca salta (Lennys #581).
 require_once CVD_DIR . 'includes/class-cvd-ficha-contesta.php'; // 3.14.65: «Ficha que contesta» — datos de la tienda y preguntas atadas al producto (D107, mejora 7 del diagnóstico)
+require_once CVD_DIR . 'includes/class-cvd-catalogo-auto.php'; // 3.14.84: catálogo al estándar (D124): fichas del bot, candado de bajo pedido, fotos reales y revisión ✓/✗ de Lennys
 
 register_activation_hook( __FILE__, array( 'CVD_Plugin', 'activate' ) );
 
@@ -149,6 +150,7 @@ add_action(
 			CVD_Palla_Push::register(); // 3.14.69.3: avisos al teléfono; encendido solo «🛵 Carrera libre» (cvd_palla_push_tipos).
 			CVD_Order_Seq::register(); // 3.14.69.11: «Nº 292 · 8.º de hoy» (el #número no cambia).
 			CVD_Ficha_Contesta::register(); // 3.14.65: «Datos de la tienda» y «Preguntar a la tienda» en la ficha; la tienda contesta con enlace firmado (opción cvd_ficha_contesta = no|datos|si).
+			CVD_Catalogo_Auto::register(); // 3.14.84 (D124)
 		}
 	}
 );
