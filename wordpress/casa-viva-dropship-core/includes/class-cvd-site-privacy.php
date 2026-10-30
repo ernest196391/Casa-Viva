@@ -20,6 +20,52 @@ final class CVD_Site_Privacy {
 		add_action( 'wp_head', array( __CLASS__, 'meta_description' ), 2 );
 		add_action( 'wp', array( __CLASS__, 'swap_social_meta' ), 20 );
 		add_filter( 'woocommerce_structured_data_product', array( __CLASS__, 'structured_data' ), 20, 2 );
+		add_action( 'wp_head', array( __CLASS__, 'schema_extra' ), 30 );
+		add_filter( 'get_canonical_url', array( __CLASS__, 'duplicate_canonical' ), 20, 2 );
+	}
+
+	/**
+	 * 3.14.98 (auditoría del catálogo, D125): datos para Google que el cliente no ve.
+	 * - Portada, «Cómo llegar» y «Cómo comprar»: la tienda (Store) con su dirección y el punto exacto del mapa
+	 *   (la misma opción cvd_palla_tienda_geo que usa Pa'llá). Sin horario por días ni teléfono: no están confirmados.
+	 * - Ficha de producto: migas (BreadcrumbList) Inicio › categoría › producto, para que Google las enseñe.
+	 */
+	public static function schema_extra(): void {
+		$data = null;
+		if ( is_front_page() || is_page( array( 'como-llegar', 'como-comprar' ) ) ) {
+			$geo = array_map( 'floatval', array_slice( explode( ',', (string) get_option( 'cvd_palla_tienda_geo', '23.1143,-82.39774' ) ), 0, 2 ) );
+			$data = array(
+				'@context' => 'https://schema.org', '@type' => 'Store', 'name' => 'Casa Viva', 'url' => home_url( '/' ),
+				'description' => 'Tienda de artículos para el hogar en La Habana: recogida en Nuevo Vedado y mensajería a toda la ciudad.',
+				'address' => array( '@type' => 'PostalAddress', 'streetAddress' => 'Calle Conill A esquina 45 #864', 'addressLocality' => 'Nuevo Vedado, La Habana', 'addressRegion' => 'La Habana', 'addressCountry' => 'CU' ),
+				'currenciesAccepted' => 'USD, CUP',
+			);
+			if ( 2 === count( $geo ) && $geo[0] && $geo[1] ) { $data['geo'] = array( '@type' => 'GeoCoordinates', 'latitude' => $geo[0], 'longitude' => $geo[1] ); }
+			$logo = get_site_icon_url( 512 );
+			if ( $logo ) { $data['image'] = $logo; }
+		} elseif ( function_exists( 'is_product' ) && is_product() ) {
+			$id = get_queried_object_id();
+			$items = array( array( 'Inicio', home_url( '/' ) ) );
+			foreach ( wp_get_post_terms( $id, 'product_cat' ) as $term ) {
+				if ( 'bajo-pedido' === $term->slug || 'sin-categorizar' === $term->slug ) { continue; }
+				$link = get_term_link( $term );
+				if ( ! is_wp_error( $link ) ) { $items[] = array( $term->name, $link ); break; }
+			}
+			$items[] = array( get_the_title( $id ), get_permalink( $id ) );
+			$list = array();
+			foreach ( $items as $n => $it ) { $list[] = array( '@type' => 'ListItem', 'position' => $n + 1, 'name' => wp_strip_all_tags( html_entity_decode( $it[0], ENT_QUOTES, 'UTF-8' ) ), 'item' => $it[1] ); }
+			$data = array( '@context' => 'https://schema.org', '@type' => 'BreadcrumbList', 'itemListElement' => $list );
+		}
+		if ( $data ) { echo '<script type="application/ld+json">' . wp_json_encode( $data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) . '</script>' . "\n"; }
+	}
+
+	/** 3.14.98: el producto repetido (oculto, _cvd_duplicado_de) le dice a Google que el bueno es el otro. */
+	public static function duplicate_canonical( $url, $post ) {
+		if ( $post instanceof WP_Post && 'product' === $post->post_type ) {
+			$keep = absint( get_post_meta( $post->ID, '_cvd_duplicado_de', true ) );
+			if ( $keep && 'publish' === get_post_status( $keep ) ) { return get_permalink( $keep ); }
+		}
+		return $url;
 	}
 
 	/**
@@ -126,6 +172,8 @@ final class CVD_Site_Privacy {
 
 	public static function noindex( array $robots ): array {
 		if ( is_page( self::INTERNAL ) ) { $robots['noindex'] = true; $robots['nofollow'] = true; }
+		// 3.14.98: el repetido oculto no se indexa (sigue abriendo por su enlace de WhatsApp).
+		if ( function_exists( 'is_product' ) && is_product() && get_post_meta( get_queried_object_id(), '_cvd_duplicado_de', true ) ) { $robots['noindex'] = true; }
 		return $robots;
 	}
 
