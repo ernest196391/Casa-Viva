@@ -100,6 +100,11 @@ final class CVD_Gestora_App {
 			array_splice( $nav, (int) array_search( 'fotos', array_column( $nav, 0 ), true ) + 1, 0, array( array( 'estudio', 'Mi estudio de fotos', 'camera', '' ) ) );
 			array_splice( $nav, (int) array_search( 'cobrar', array_column( $nav, 0 ), true ) + 1, 0, array( array( 'contabilidad', 'Mi contabilidad', 'doc', '' ) ) );
 		}
+		// 3.14.89 (Ernesto, 29-oct): «Taller de fotos» (foto lista en el móvil y texto para publicar), debajo de «Fotos para publicar».
+		$taller = class_exists( 'CVD_Gestora_Taller' ) && CVD_Gestora_Taller::enabled_for( $user );
+		if ( $taller ) {
+			array_splice( $nav, (int) array_search( 'fotos', array_column( $nav, 0 ), true ) + 1, 0, array( array( 'taller', 'Taller de fotos', 'camera', '' ) ) );
+		}
 		// 3.14.29: Programa de gestoras (D53–D58): «Mi equipo» y «Mi piedra», en sombra solo para quien lo prueba.
 		$programa = class_exists( 'CVD_Programa' ) && CVD_Programa::visible_for( $user );
 		if ( $programa ) {
@@ -173,7 +178,7 @@ final class CVD_Gestora_App {
 					<?php echo $vendedor ? CVD_Seller_Store::render_seller_view( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo $articulos ? CVD_Seller_Store::render_gestora_section( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo class_exists( 'CVD_Ficha_Contesta' ) ? CVD_Ficha_Contesta::render_app_section( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
-					<?php echo self::herramientas( $estudio ); // phpcs:ignore ?>
+					<?php echo self::herramientas( $estudio, $taller ); // phpcs:ignore ?>
 					<?php echo self::calculadora(); // phpcs:ignore ?>
 					<?php echo self::buscar( $zone ); // phpcs:ignore ?>
 				<?php echo class_exists( 'CVD_Gestora_Confianza' ) ? CVD_Gestora_Confianza::render( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
@@ -181,6 +186,7 @@ final class CVD_Gestora_App {
 					<?php echo $proveedor ? CVD_Supplier_Split::render_owner_sales( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo class_exists( 'CVD_Gestora_Fotos' ) ? CVD_Gestora_Fotos::render( $user, $code ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo $estudio ? CVD_Gestora_Estudio::render( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
+					<?php echo $taller ? CVD_Gestora_Taller::render( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo $estudio && class_exists( 'CVD_Gestora_Contabilidad' ) ? CVD_Gestora_Contabilidad::render( $user, $orders ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php if ( $box ) : // 3.13.68: el mismo recuadro arriba de «Tus ventas». ?><div class="cvga-view" data-view="ventas"><?php echo $box; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?></div><?php endif; ?>
 					<div class="cvga-legacy"><?php echo $legacy; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- salida del shortcode, ya escapada allí. ?></div>
@@ -300,7 +306,7 @@ final class CVD_Gestora_App {
 		return (string) ob_get_clean();
 	}
 
-	private static function herramientas( bool $estudio = false ): string {
+	private static function herramientas( bool $estudio = false, bool $taller = false ): string {
 		// 3.13.99: precios de mensajería (decisión de Ernesto, 14-oct). PDF con nombre fijo en uploads/casa-viva/,
 		// generado con las tarifas vivas (docs/nexo-business/bienvenida-2026-10-14/generar-pdf.mjs en ernesto-rondon-nexo).
 		$uploads  = wp_get_upload_dir();
@@ -316,6 +322,7 @@ final class CVD_Gestora_App {
 			array( 'calc', 'Calculadora', 'Pon el precio en USD y mira cuánto es en CUP, euros, tarjeta clásica, Zelle o PayPal con la tasa de hoy.', 'ready', 'calculadora' ),
 			array( 'chat', 'Pregúntale a Curru', 'Precios, medidas y si hay en almacén. Responde al momento.', 'ready', 'curru' ),
 			array( 'image', 'Fotos para publicar', 'Todo lo que hay en existencia, con tu precio y tu enlace: descarga la foto y copia el texto.', 'ready', 'fotos' ),
+			...( $taller ? array( array( 'camera', 'Taller de fotos', 'Sube una foto de tu móvil y te la dejo lista: cuadrada, con fondo limpio y el nombre del producto. Y te escribo el texto para Facebook.', 'ready', 'taller' ) ) : array() ),
 			array( 'target', 'Cazadora de clientes', 'Encuentra gente que está pidiendo lo que vendes, para escribirle primero.', 'soon', '' ),
 			array( 'camera', $estudio ? 'Mi estudio de fotos' : 'Fotos de producto', 'Convierte una foto normal en una foto bonita para vender: fondo blanco, en una sala bonita, para tu estado…', $estudio ? 'ready' : 'soon', 'estudio' ),
 		);

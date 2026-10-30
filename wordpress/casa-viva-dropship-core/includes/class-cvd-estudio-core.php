@@ -195,6 +195,8 @@ final class CVD_Estudio_Prompt {
 		'ambiente' => 'En una sala, baño o cuarto bonito',
 		'color'    => 'En otro color',
 		'persona'  => 'Con una persona usándolo',
+		'dia'      => 'Al aire libre, con luz de día', // 3.14.89 (Daykel, piezas de moto): la pieza sobre asfalto o calle con luz de día
+		'taller'   => 'Sobre una mesa de taller',
 		'estado'   => 'Para mi estado de WhatsApp (vertical)',
 	);
 
@@ -391,6 +393,10 @@ final class CVD_Estudio_Prompt {
 			$scene = 'Pure white seamless studio background (#FFFFFF), soft natural shadow under the product, nothing else in the frame.';
 		} elseif ( 'persona' === $preset ) {
 			$scene = 'A real person naturally using the product at home' . ( '' !== $room ? ', in ' . $room : '' ) . '. The product is the clear hero: fully visible, in sharp focus and at its real size next to the person. Friendly, everyday, natural look.';
+		} elseif ( 'dia' === $preset ) {
+			$scene = 'The product placed outdoors in natural daylight, resting on a clean, slightly textured surface such as dry asphalt or a concrete pavement, with a softly blurred street or yard behind it. Bright but not harsh sunlight, soft realistic shadow under the product, nothing else competing for attention.';
+		} elseif ( 'taller' === $preset ) {
+			$scene = 'The product on a clean, sturdy workshop bench or worktable (dark wood or steel), with bright even daylight from a window and a softly blurred workshop behind it. Only the product is in focus; no loose tools or clutter in front of it.';
 		} elseif ( 'ambiente' === $preset || '' !== $room ) {
 			$scene = 'Place the product in ' . ( '' !== $room ? $room : 'a bright, tidy, modern home interior where this product naturally belongs' ) . ', styled like a home-decor magazine, uncluttered, the product as the main subject.';
 		} else {
@@ -489,6 +495,10 @@ final class CVD_Estudio_Prompt {
 			$scene = 'fondo blanco puro de estudio (#FFFFFF), sin nada más alrededor, con una sombra suave y natural debajo del producto.';
 		} elseif ( 'persona' === $preset ) {
 			$scene = 'una persona real usando el producto con naturalidad en casa' . ( '' !== $room ? ', en ' . $room : '' ) . '. El producto es el protagonista: se ve entero, nítido y a su tamaño real junto a la persona. Aspecto cotidiano y natural.';
+		} elseif ( 'dia' === $preset ) {
+			$scene = 'el producto al aire libre, con luz natural de día, apoyado sobre una superficie limpia y con algo de textura, como asfalto seco o una acera de cemento, con la calle o el patio muy desenfocados detrás. Luz de sol clara pero no dura, sombra suave y realista debajo, sin nada más que le quite protagonismo.';
+		} elseif ( 'taller' === $preset ) {
+			$scene = 'el producto sobre una mesa de taller limpia y firme (madera oscura o metal), con luz de día pareja que entra por una ventana y el taller muy desenfocado detrás. Solo el producto está nítido; sin herramientas sueltas ni desorden delante.';
 		} elseif ( 'ambiente' === $preset || '' !== $room ) {
 			$scene = 'pon el producto en ' . ( '' !== $room ? $room : 'una casa luminosa, ordenada y moderna, en el lugar donde se usa ese producto' ) . ', como en una revista de decoración, sin cosas de más, con el producto como protagonista.';
 		} else {

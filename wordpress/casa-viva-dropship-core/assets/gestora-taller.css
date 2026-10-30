@@ -1,0 +1,36 @@
+/* «Taller de fotos» (3.14.89). Usa los colores de .cvga (gestora-app.css). */
+.cvtl-card{margin-bottom:14px}
+.cvtl-card h2{margin:0 0 10px}
+.cvtl .cvtl-msg{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:var(--ga-soft);font-size:14px}
+.cvtl .cvtl-msg.is-bad{background:#f8e1dc;color:#7a2416}
+.cvtl-hits{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.cvtl-hit{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid var(--ga-line);background:var(--ga-surface);border-radius:10px;padding:6px 10px;font:inherit;color:var(--ga-ink);cursor:pointer}
+.cvtl-hit img{width:40px;height:40px;border-radius:8px;object-fit:cover;background:var(--ga-soft)}
+.cvtl-hit span{display:flex;flex-direction:column;min-width:0}
+.cvtl-hit small{color:var(--ga-muted)}
+.cvtl-own{border-style:dashed}
+.cvtl-pick{display:flex;align-items:center;gap:12px;padding:8px;border:1px solid var(--ga-line);border-radius:12px;background:var(--ga-bg)}
+.cvtl-pick img{width:56px;height:56px;border-radius:10px;object-fit:cover;background:var(--ga-soft)}
+.cvtl-pick div{flex:1;min-width:0}
+.cvtl-pick .cvga-note{display:block;margin:2px 0 0}
+.cvtl-file{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.cvtl-src{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.cvtl-src label.cvga-btn{cursor:pointer}
+.cvtl-thumbs{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.cvtl-thumbs .cvga-note{width:100%;margin:0}
+.cvtl-thumb{border:2px solid var(--ga-line);background:var(--ga-surface);border-radius:10px;padding:0;cursor:pointer;line-height:0}
+.cvtl-thumb img{width:56px;height:56px;border-radius:8px;object-fit:cover}
+.cvtl-stage{margin-top:14px}
+.cvtl-canvas{display:block;width:100%;max-width:420px;height:auto;margin:0 auto 6px;border:1px solid var(--ga-line);border-radius:12px;background:#fff;touch-action:none;cursor:grab}
+.cvtl-stage>.cvga-note{display:block;text-align:center}
+.cvtl-opts{display:flex;flex-direction:column;gap:12px;margin:14px 0}
+.cvtl-opt{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:600}
+.cvtl-opt[hidden],.cvga-field[hidden]{display:none}
+.cvtl-opt input[type=range]{width:100%}
+.cvtl-seg{display:flex;flex-wrap:wrap;gap:8px}
+.cvtl-seg button{border:1px solid var(--ga-line);background:var(--ga-surface);color:var(--ga-ink);border-radius:99px;padding:8px 14px;font:inherit;font-size:14px;font-weight:500;cursor:pointer}
+.cvtl-seg button[aria-pressed=true]{background:var(--ga-brand);border-color:var(--ga-brand);color:#fff}
+.cvtl .cvga-field input[type=text],.cvtl textarea{border:1px solid var(--ga-line);background:var(--ga-bg);border-radius:10px;padding:10px 12px;font:inherit;font-weight:400;font-size:16px;width:100%;color:var(--ga-ink)}
+.cvtl textarea{resize:vertical;min-height:64px}
+.cvtl-kinds{margin-bottom:12px}
+.cvtl-result{margin-top:14px;display:flex;flex-direction:column;gap:8px}

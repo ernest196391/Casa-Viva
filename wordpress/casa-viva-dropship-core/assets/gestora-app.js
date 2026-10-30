@@ -13,7 +13,7 @@
 
   // Enlaces viejos (redirecciones tras guardar) que apuntan a otra palabra.
   var alias = { dashboard: 'inicio', catalogo: 'tienda', clientes: 'clientes', 'mis-clientes': 'clientes', comisiones: 'ventas', mensajeria: 'ventas', pagos: 'cobrar', materiales: 'fotos', busca: 'buscar', 'nexo-busca': 'buscar' };
-  var titles = { inicio: 'Inicio', aprende: 'Aprende', tienda: 'Mi tienda', precios: 'Mis precios', clientes: 'Clientes', herramientas: 'Herramientas', calculadora: 'Calculadora', buscar: 'NEXO Busca', confianza: '¿Es de confianza?', fotos: 'Fotos para publicar', estudio: 'Mi estudio de fotos', contabilidad: 'Mi contabilidad', ventas: 'Ventas', cobrar: 'Cobrar', invitar: 'Invitar gestores', equipo: 'Mi equipo', piedra: 'Mi piedra', proveedor: 'Mis ventas de proveedor', vendedor: 'Mis artículos', articulos: 'Artículos de vendedores', perfil: 'Mi perfil' };
+  var titles = { inicio: 'Inicio', aprende: 'Aprende', tienda: 'Mi tienda', precios: 'Mis precios', clientes: 'Clientes', herramientas: 'Herramientas', calculadora: 'Calculadora', buscar: 'NEXO Busca', confianza: '¿Es de confianza?', fotos: 'Fotos para publicar', estudio: 'Mi estudio de fotos', taller: 'Taller de fotos',contabilidad: 'Mi contabilidad', ventas: 'Ventas', cobrar: 'Cobrar', invitar: 'Invitar gestores', equipo: 'Mi equipo', piedra: 'Mi piedra', proveedor: 'Mis ventas de proveedor', vendedor: 'Mis artículos', articulos: 'Artículos de vendedores', perfil: 'Mi perfil' };
   var views = Array.prototype.slice.call(document.querySelectorAll('[data-view]'));
   var titleEl = app.querySelector('[data-cvga-title]');
 
