@@ -111,6 +111,15 @@ final class CVD_Gestora_App {
 		if ( $proveedor ) {
 			array_splice( $nav, (int) array_search( 'cobrar', array_column( $nav, 0 ), true ) + 1, 0, array( array( 'proveedor', 'Mis ventas de proveedor', 'truck', '' ) ) );
 		}
+		// 3.14.87 (Ernesto 29-oct): «Mis artículos» (la tienda propia del vendedor) y «Artículos de vendedores» (lo que ofrecen a las gestoras).
+		$vendedor = class_exists( 'CVD_Seller_Store' ) && CVD_Seller_Store::is_seller( $user );
+		$articulos = class_exists( 'CVD_Seller_Store' ) && CVD_Seller_Store::has_offered();
+		if ( $vendedor || $articulos ) {
+			$add = array();
+			if ( $vendedor ) { $add[] = array( 'vendedor', 'Mis artículos', 'bag', '' ); }
+			if ( $articulos ) { $add[] = array( 'articulos', 'Artículos de vendedores', 'bag', '' ); }
+			array_splice( $nav, (int) array_search( 'tienda', array_column( $nav, 0 ), true ) + 1, 0, $add );
+		}
 		// 3.13.77: «Aprende» (tutoriales). Mientras le falte algo, justo debajo de Inicio y con lo que lleva (2/6);
 		// cuando lo vio todo, baja al final de Herramientas.
 		$learn = class_exists( 'CVD_Aprende' ) ? CVD_Aprende::progress( $user->ID, 'gestora' ) : null;
@@ -161,6 +170,8 @@ final class CVD_Gestora_App {
 					<?php echo self::inicio( $user, $first, $link, $code, $orders, $box, $learn ); // phpcs:ignore ?>
 					<?php echo $learn ? CVD_Aprende::render( $user, 'gestora' ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo self::tienda( $link ); // phpcs:ignore ?>
+					<?php echo $vendedor ? CVD_Seller_Store::render_seller_view( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
+					<?php echo $articulos ? CVD_Seller_Store::render_gestora_section( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo class_exists( 'CVD_Ficha_Contesta' ) ? CVD_Ficha_Contesta::render_app_section( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo self::herramientas( $estudio ); // phpcs:ignore ?>
 					<?php echo self::calculadora(); // phpcs:ignore ?>

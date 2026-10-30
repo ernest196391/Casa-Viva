@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.86
+ * Version: 3.14.87
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.86' );
+define( 'CVD_VERSION', '3.14.87' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -57,6 +57,7 @@ require_once CVD_DIR . 'includes/class-cvd-nexo-busca.php'; // 3.14.28: NEXO Bus
 require_once CVD_DIR . 'includes/class-cvd-gestora-fotos.php';
 require_once CVD_DIR . 'includes/class-cvd-estudio-core.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-estudio.php';
+require_once CVD_DIR . 'includes/class-cvd-seller-store.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-contabilidad.php';
 require_once CVD_DIR . 'includes/class-cvd-program-login.php';
 require_once CVD_DIR . 'includes/class-cvd-daily-rates.php';
@@ -124,6 +125,7 @@ add_action(
 			CVD_Gestora_Confianza::register(); // 3.14.42: «¿Es de confianza este número?» (lista de sospechosos, Ernesto 20-oct).
 			CVD_Nexo_Busca::register(); // 3.14.28: NEXO Busca — precio, proveedor, cliente, foto bonita y «Vender por Casa Viva» (Ernesto, 16-oct).
 			CVD_Gestora_Fotos::register();
+			CVD_Seller_Store::register(); // 3.14.87: la tienda propia de un vendedor (Daykel, Ernesto 29-oct): «Mis artículos», /vendedor/<nombre>/, pedir por WhatsApp.
 			CVD_Gestora_Estudio::register(); // 3.14.1: «Mi estudio de fotos» con la clave de Google de cada gestora (Ernesto, 14-oct).
 			CVD_Program_Login::register();
 			CVD_Gestora_Stock::register();
