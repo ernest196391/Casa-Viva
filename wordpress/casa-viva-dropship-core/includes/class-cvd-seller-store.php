@@ -282,6 +282,8 @@ final class CVD_Seller_Store {
 	public static function rest_pause( WP_REST_Request $request ) {
 		$post = self::own_item( $request );
 		if ( is_wp_error( $post ) ) { return $post; }
+		// Un artículo que llega sin precio (lo preparó Casa Viva con tus fotos) no se activa hasta que le pongas precio.
+		if ( 'draft' === $post->post_status && (float) get_post_meta( $post->ID, '_cvd_si_price', true ) < 0.5 ) { return new WP_Error( 'cvd_seller', 'Ponle el precio (toca Editar) antes de activarlo.', array( 'status' => 422 ) ); }
 		wp_update_post( array( 'ID' => $post->ID, 'post_status' => 'draft' === $post->post_status ? 'publish' : 'draft' ) );
 		return self::ok( array( 'item' => self::item_data( get_post( $post->ID ) ) ) );
 	}
@@ -621,7 +623,7 @@ final class CVD_Seller_Store {
 		if ( '' !== $ref && ( strlen( $ref ) > 40 || ! get_users( array( 'number' => 1, 'fields' => 'ids', 'meta_key' => '_cvd_referral_code', 'meta_value' => $ref ) ) ) ) { $ref = ''; }
 		$name = self::store_name( $seller );
 		$phone = self::client_phone( $seller );
-		$posts = array_filter( self::items_of( $seller->ID, array( 'publish' ) ), array( __CLASS__, 'visible_to_public' ) );
+		$posts = array_filter( self::items_of( $seller->ID, array( 'publish' ) ), static fn( WP_Post $p ): bool => self::visible_to_public( $p ) && (float) get_post_meta( $p->ID, '_cvd_si_price', true ) >= 0.5 );
 		nocache_headers();
 		header( 'Content-Type: text/html; charset=utf-8' );
 		header( 'X-Robots-Tag: noindex' );
