@@ -322,14 +322,10 @@ final class CVD_Catalogo_Auto {
 		update_post_meta( $aid, '_wp_attachment_image_alt', $alt );
 		update_post_meta( $aid, self::META_REAL, 1 );
 		update_post_meta( $aid, self::META_REALID, $foto );
-		if ( ! self::is_market( $p ) ) {
-			// Propio: la foto real primero, pero detrás de otras reales que ya estén delante.
-			$reales = array_values( array_filter( $gallery, static fn( $a ) => '' !== (string) get_post_meta( $a, self::META_REAL, true ) ) );
-			$otras = array_values( array_diff( $gallery, $reales ) );
-			$orden = array_merge( $reales, array( $aid ), $otras );
-		} else {
-			$orden = array_merge( $gallery, array( $aid ) );
-		}
+		// 3.14.89 (Lennys, 30-oct): la foto COMERCIAL es siempre la principal; la real va detrás, al final de la galería.
+		// (3.14.84 la ponía primera en productos propios y cambió la portada de 88 productos y el panel de Lennys.)
+		// Si el producto no tenía ninguna foto, la real queda de principal porque no hay otra.
+		$orden = array_merge( $gallery, array( $aid ) );
 		$p->set_image_id( array_shift( $orden ) );
 		$p->set_gallery_image_ids( $orden );
 		$p->save();
