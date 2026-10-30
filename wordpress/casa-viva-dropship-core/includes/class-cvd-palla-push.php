@@ -262,7 +262,7 @@ final class CVD_Palla_Push {
 			$paso = json_decode( (string) $order->get_meta( '_cvd_palla_paso', true ), true );
 			$passed = is_array( $paso ) && absint( $paso['to'] ?? 0 ) === $owner && absint( $paso['from'] ?? 0 ) === $prev;
 			if ( $owner && $actor !== $owner && 'assigned' === $status ) {
-				self::send( $owner, $order, 'assigned', '📦 Te asignaron #' . $n, $zone . ' · pon la hora y ve a recogerla', '#hora/' . $id );
+				self::send( $owner, $order, 'assigned', '📦 Te asignaron #' . $n, $zone . ' · ve a recogerla a la tienda', '#carrera/' . $id ); // 3.14.86: sin paso de hora
 			}
 			if ( $prev && $actor !== $prev ) {
 				$released = in_array( $prev, array_map( 'absint', (array) $order->get_meta( '_cvd_delivery_rejected_by', true ) ), true );

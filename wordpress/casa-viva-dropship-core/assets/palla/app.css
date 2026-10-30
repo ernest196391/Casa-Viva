@@ -164,3 +164,44 @@ a{color:var(--accent)}
 .pl-chip{min-height:40px;display:inline-flex;align-items:center;padding:0 14px;border-radius:999px;border:1.5px solid var(--line-strong);color:var(--ink);text-decoration:none;font-weight:600}
 .pl-chip.is-on{background:var(--ink);border-color:var(--ink);color:var(--brand)}
 @media (prefers-reduced-motion:reduce){.pl-btn,.pl-spin svg{transition:none;animation:none}}
+/* 3.14.86 · Diseño premium (Ernesto 30-oct: «botones premium con aspecto caro, textos mejor pensados y alineados»).
+   Negro y amarillo Casa Viva: el botón principal negro con letra blanca, el amarillo para lo importante, tarjetas
+   blancas sin borde con sombra suave, esquinas más redondas, márgenes amplios. Se lee bien al sol. */
+:root{--r-sm:12px;--r-md:18px;--r-lg:24px;--surface-sunken:#F4F3EF;--line:#ECEBE6;--shadow-card:0 1px 2px rgba(18,18,18,.05),0 8px 24px rgba(18,18,18,.06);--shadow-btn:0 10px 22px rgba(18,18,18,.22)}
+body,.pl-shell{background:var(--surface-sunken)}
+.pl-top{border-bottom:0;box-shadow:0 1px 0 var(--line),0 6px 18px rgba(18,18,18,.04);padding:18px 20px 14px}
+.pl-top--bar{padding:6px 20px}
+.pl-brand{font-size:30px;line-height:34px;letter-spacing:-.03em}
+.pl-main{padding:18px 16px 24px;gap:14px}
+.pl-h1{font-size:28px;line-height:32px;font-weight:800;letter-spacing:-.02em}
+.pl-h2{margin-top:8px;letter-spacing:.06em}
+.pl-card{border:0;border-radius:var(--r-md);box-shadow:var(--shadow-card);padding:18px;gap:12px}
+.pl-card--brand{background:var(--brand-surface);box-shadow:none}
+.pl-btn{min-height:48px;padding:0 18px;border-radius:14px;font:700 16px/20px var(--font);letter-spacing:-.005em;transition:transform .08s ease,box-shadow .12s ease,filter .08s ease}
+.pl-btn:active{transform:scale(.98)}
+.pl-btn--primary{background:#121212;color:#fff;box-shadow:var(--shadow-btn)}
+.pl-btn--primary svg{color:var(--brand)}
+.pl-btn--primary:active{box-shadow:0 4px 10px rgba(18,18,18,.25)}
+.pl-btn--secondary{background:#fff;border:1.5px solid #121212;color:#121212}
+.pl-btn--lg{min-height:60px;font-size:19px;line-height:22px;border-radius:16px;padding:0 24px}
+.pl-btn--link{color:#121212;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(18,18,18,.3);min-height:44px}
+.pl-btn--pill{min-height:42px;padding:0 18px;border-radius:999px;background:var(--brand-surface);color:#121212;border:0;font-weight:700;box-shadow:none}
+.pl-btn--busy{opacity:.55}
+.pl-btn[aria-disabled=true]{opacity:.5;box-shadow:none}
+.pl-actions{border-top:0;background:rgba(255,255,255,.97);box-shadow:0 -10px 28px rgba(18,18,18,.07);padding:14px 16px calc(16px + env(safe-area-inset-bottom));gap:10px;border-radius:var(--r-lg) var(--r-lg) 0 0}
+.pl-links a{color:var(--ink-muted);font-weight:600}
+.pl-track{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px}
+.pl-track li{border-radius:999px;padding:10px 4px;font-size:14px;font-weight:700;background:#fff;box-shadow:inset 0 0 0 1.5px var(--line)}
+.pl-track li.is-done{background:#121212;color:var(--brand);box-shadow:none}
+.pl-track li.is-now{background:var(--brand);color:#121212;box-shadow:none}
+.pl-amount{font-size:30px;line-height:34px;letter-spacing:-.02em}
+.pl-badge{border-radius:999px;height:26px;padding:0 12px;letter-spacing:.03em}
+.pl-alert{border:0;border-radius:var(--r-md)}
+.pl-note{border-radius:var(--r-md)}
+.pl-toast{border-radius:16px;box-shadow:0 12px 30px rgba(18,18,18,.25);padding:14px 18px;font-weight:600}
+.pl-nav{border-top:0;box-shadow:0 -8px 24px rgba(18,18,18,.06)}
+.pl-nav a[aria-current=page]{color:#121212;font-weight:700;border-top-color:var(--brand)}
+.pl-opt{border-radius:14px}
+.pl-sheet{border-radius:var(--r-lg) var(--r-lg) 0 0}
+.pl-back{color:#121212;font-weight:700}
+.pl-row .pl-muted{align-self:center}

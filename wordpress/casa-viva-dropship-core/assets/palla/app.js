@@ -199,7 +199,7 @@
 			if (blockedFrom(res)) { render(); return; }
 			state.offline = false;
 			var d = res.data;
-			if (d.carrera) { putCarrera(d.carrera); showToast(d.message); go(d.carrera.eta ? '#carrera/' + d.carrera.id : '#hora/' + d.carrera.id); return; }
+			if (d.carrera) { putCarrera(d.carrera); showToast(d.message); go('#carrera/' + d.carrera.id); return; }
 			state.hoy.ofertas = state.hoy.ofertas.filter(function (o) { return String(o.id) !== String(id); });
 			showToast(d.message || 'Ya la cogió otro.');
 		}).catch(function () {
@@ -246,7 +246,7 @@
 			if (d.carrera) { putCarrera(d.carrera); } else if (d.stage) { state.hoy.carreras = state.hoy.carreras.filter(function (x) { return String(x.id) !== String(c.id); }); }
 			if (d.result === 'needs_amount') { state.form.err = d.message; render(); return; }
 			if (d.result === 'problem_empty' || d.result === 'eta_empty') { state.form.err = d.message; render(); return; }
-			state.form = {};
+			state.form = {}; draftClear();
 			if (endsCarrera(action, d.result)) { state.done[c.id] = 1; }
 			showToast(d.message);
 			go(d.result === 'released' ? '#carreras' : '#carrera/' + c.id, true);
@@ -515,7 +515,7 @@
 		var dot = function (c) { return '<span aria-hidden="true" style="display:inline-block;width:14px;height:14px;border-radius:50%;background:' + c + ';margin-right:8px;vertical-align:-1px"></span>'; };
 		if (dp.on) {
 			return '<section class="pl-card" style="border-left:6px solid #2E7D32"><div class="pl-row" style="align-items:center"><span class="pl-strong">' + dot('#2E7D32') + 'Disponible</span><a href="#ajustes" class="pl-btn pl-btn--link">Ajustes</a></div>'
-				+ '<div class="pl-muted">' + esc((dp.solo ? 'Solo ' : 'Te suenan todas · tus zonas: ') + zonas + (dp.untilText ? ' · hasta las ' + dp.untilText : '')) + '</div>'
+				+ '<div class="pl-muted">' + esc(((dp.zonas || []).length ? (dp.solo ? 'Solo ' : 'Te suenan todas · tus zonas: ') + zonas : 'Te suenan todas las carreras') + (dp.untilText ? ' · hasta las ' + dp.untilText : '')) + '</div>'
 				+ '<button type="button" class="pl-btn pl-btn--secondary pl-btn--block' + (state.busy === 'disp' ? ' pl-btn--busy' : '') + '" data-act="disp-off">Desconectarme</button></section>';
 		}
 		return '<section class="pl-card" style="border-left:6px solid #9E9E9E"><div class="pl-row" style="align-items:center"><span class="pl-strong">' + dot('#BDBDBD') + 'No disponible</span><a href="#ajustes" class="pl-btn pl-btn--link">Ajustes</a></div>'
@@ -600,10 +600,10 @@
 		var html = '<header class="pl-top pl-top--bar"><a class="pl-back" href="#carreras">‹ Carreras</a>' + stageBadge(c) + '</header>' + offlineBar('Sin conexión. Tu carrera sigue guardada.');
 		html += '<main class="pl-main pl-main--pad-actions"><h1 class="pl-h1">#' + esc(c.number) + ' · ' + esc(cu.zone) + '</h1>';
 		if (c.test) { html += '<div class="pl-test">PRUEBA · nada es real</div>'; }
-		// 3.14.69.16 (Ernesto 27-oct): 4 pasos que se van marcando solos — hora · recogí · entregado · dinero en la tienda —
-		// y la carrera se cierra cuando la tienda recibe el dinero (Mi dinero). Sin cuadros de explicación.
-		var done = { hora: !!c.eta || c.stage !== 'pickup', recogi: c.stage !== 'pickup', entregado: c.stage === 'delivered' };
-		var steps = [['hora', 'Hora'], ['recogi', 'Recogí'], ['entregado', 'Entregado'], ['dinero', 'Dinero']];
+		// 3.14.86 (Ernesto 30-oct: «quitar la hora del todo»): 3 pasos que se marcan solos — recogí · entregado · dinero en
+		// la tienda — y la carrera se cierra cuando la tienda recibe el dinero (Mi dinero).
+		var done = { recogi: c.stage !== 'pickup', entregado: c.stage === 'delivered' };
+		var steps = [['recogi', 'Recogí'], ['entregado', 'Entregado'], ['dinero', 'Dinero']];
 		var now = steps.filter(function (s) { return !done[s[0]]; })[0];
 		html += '<ol class="pl-track">' + steps.map(function (s) { return '<li class="' + (done[s[0]] ? 'is-done' : (now && now[0] === s[0] ? 'is-now' : '')) + '">' + (done[s[0]] ? '✓ ' : '') + s[1] + '</li>'; }).join('') + '</ol>';
 		if (c.queued) { html += '<div class="pl-note">' + icon('sincronizar', 20) + '<div>Guardado. Se manda al volver la señal.</div></div>'; }
@@ -612,8 +612,7 @@
 		if (c.stage === 'delivered' && m.after) { html += '<div class="pl-alert pl-alert--success">' + icon('bien', 20) + '<div><b>Entregado</b>' + esc(m.sentence || '') + '</div></div>'; }
 		// Cliente: dónde, cuándo y los dos botones que importan (Llamar · Ir).
 		html += '<section class="pl-card"><div class="pl-strong">' + esc(cu.name) + '</div><div>' + esc(cu.address || cu.zone) + '</div><div class="pl-muted">' + esc([cu.address ? cu.zone : '', cu.reference].filter(Boolean).join(' · ')) + '</div>';
-		if (c.arrived) { html += '<div class="pl-strong">📍 Llegaste · avisamos a quien lo vendió</div>'; }
-		else if (c.eta) { html += '<div class="pl-row" style="align-items:center"><span>🕒 <span class="pl-strong">' + esc(c.eta) + '</span></span><a class="pl-btn pl-btn--link" href="#hora/' + c.id + '">Cambiar</a></div>'; }
+		if (c.arrived) { html += '<div class="pl-strong">📍 Llegaste · ya lo saben</div>'; }
 		else if (c.when) { html += '<div class="pl-muted">Pidió ' + esc(c.when) + '</div>'; }
 		if (cu.note) { html += '<div class="pl-muted">📝 ' + esc(cu.note) + '</div>'; }
 		html += '<div class="pl-grid2">' + (cu.phone ? '<a class="pl-btn pl-btn--secondary" href="tel:+' + esc(cu.phone) + '">' + icon('tel', 20) + 'Llamar</a>' : '<span class="pl-btn pl-btn--secondary" aria-disabled="true">Sin teléfono</span>')
@@ -626,6 +625,8 @@
 		if (c.pickup.suppliers && c.pickup.suppliers.length && c.stage === 'pickup') { pack += '<div class="pl-muted">Bajo pedido: pregunta en la tienda dónde se recoge.</div>'; }
 		if (c.assembly) { pack += '<div class="pl-muted">🔧 Armado: <span class="pl-strong">' + esc(c.assembly) + '</span> (tuyo)</div>'; }
 		if (pack) { html += '<section class="pl-card">' + pack + '</section>'; } // 29-oct: sin nada que decir, sin tarjeta vacía
+		// 3.14.86 (Ernesto: «cobra lo que dice el vale; las averiguaciones las hace antes la gestora»): sin cifra, se avisa aquí.
+		if (!m.after && m.unknown && !m.prepaid && ['pickup', 'route'].indexOf(c.stage) !== -1) { html += '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>El vale no dice cuánto cobrar</b>Pregunta a la tienda antes de entregarlo.</div></div>'; }
 		if (!m.after) {
 			var small = function (t) { return String(t).length > 11 ? ' pl-amount--sm' : ''; };
 			html += '<section class="pl-card"><div class="pl-money"><div><span class="pl-muted">Cobras</span><span class="pl-amount' + small(m.chargeShort) + '">' + esc(m.chargeShort) + '</span></div><div><span class="pl-muted">A la tienda</span><span class="pl-amount' + small(m.bring) + '">' + esc(m.bring) + '</span></div></div>'
@@ -638,12 +639,17 @@
 		var b = function (a) { return state.busy === a + '-' + c.id ? ' pl-btn--busy' : ''; };
 		var links = [];
 		var acts = '<div class="pl-actions">';
-		if (c.stage === 'pickup' && !c.eta) { acts += '<a class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block" href="#hora/' + c.id + '">🕒 Poner la hora</a>'; }
-		else if (c.stage === 'pickup') { acts += '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + b('recogi') + '" data-act="recogi" data-id="' + c.id + '">' + icon('bien') + 'Recogí</button>'; }
+		if (c.stage === 'pickup') { acts += '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + b('recogi') + '" data-act="recogi" data-id="' + c.id + '">' + icon('bien') + 'Recogí</button>'; }
 		else if (c.stage === 'route') {
-			// 3.14.71.2: «Llegué» avisa a la gestora (también se marca solo a 120 m si hay punto exacto del cliente).
-			if (!c.arrived) { acts += '<button type="button" class="pl-btn pl-btn--secondary pl-btn--block' + b('llegue') + '" data-act="llegue" data-id="' + c.id + '">📍 Llegué</button>'; }
-			acts += '<a class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block" href="#entregado/' + c.id + '">' + icon('bien') + 'Entregado</a>';
+			// 3.14.71.2 / 3.14.86: «Llegué» pequeño y opcional: al cliente le suena «Tu mensajero llegó» en su seguimiento y
+			// la gestora recibe el aviso (con el punto exacto del cliente se marca solo a 120 m).
+			if (!c.arrived) { acts += '<div style="display:flex;justify-content:center"><button type="button" class="pl-btn pl-btn--pill' + b('llegue') + '" data-act="llegue" data-id="' + c.id + '">📍 Llegué</button></div>'; }
+			// 3.14.86 (Ernesto: «quitar esa pantalla»): un toque cobra lo del vale; 5 s para deshacer por si fue sin querer.
+			if (state.pend && String(state.pend.id) === String(c.id)) {
+				acts += '<button type="button" class="pl-btn pl-btn--secondary pl-btn--lg pl-btn--block" data-act="deshacer" data-id="' + c.id + '">Entregando… · Deshacer</button>';
+			} else {
+				acts += '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + b('entregado') + '" data-act="entregar" data-id="' + c.id + '">' + icon('bien') + 'Entregado' + (m.chargeShort && !m.unknown && !m.prepaid ? ' · cobré ' + esc(m.chargeShort) : '') + '</button>';
+			}
 		}
 		else if (c.stage === 'delivered') { acts += '<a class="pl-btn pl-btn--secondary pl-btn--lg pl-btn--block" href="#dinero">💵 Mi dinero</a>'; }
 		if (['pickup', 'route', 'delivered'].indexOf(c.stage) !== -1) { links.push('<a href="#problema/' + c.id + '">Problema</a>'); }
@@ -874,6 +880,7 @@
 		} else {
 			var c = r.id ? findCarrera(r.id) : null;
 			if (['carrera', 'entregado', 'problema', 'suelto', 'hora', 'pasar'].indexOf(r.view) !== -1 && !c) { r.view = 'carreras'; }
+			if (r.view === 'hora' || r.view === 'entregado') { r.view = 'carrera'; } // 3.14.86: ya no hay hoja de hora ni de cobro
 			if (['carrera', 'entregado', 'problema', 'suelto', 'hora', 'pasar'].indexOf(r.view) !== -1) {
 				html = screenCarrera(c);
 				if (r.view === 'entregado' && c.stage !== 'delivered') { sheet = sheetEntregado(c); }
@@ -941,7 +948,7 @@
 			var pid = el.getAttribute('data-id');
 			passCall('pase', { order: pid, decision: a === 'pase-si' ? 'acepto' : 'no' }, 'pase-' + pid, function (d) {
 				if (state.hoy) { state.hoy.pases = (state.hoy.pases || []).filter(function (x) { return String(x.id) !== String(pid); }); }
-				if (d.result === 'pass_accepted') { go('#hora/' + pid); }
+				if (d.result === 'pass_accepted') { go('#carrera/' + pid); }
 			}); return;
 		}
 		if (a === 'hora' && c) {
@@ -949,6 +956,20 @@
 			if (!t) { state.form.err = state.form.hora === 'otra' ? 'Pon la hora.' : 'Elige a qué hora lo entregas.'; render(); return; }
 			act(c, 'hora', { texto: t }, 'hora'); return;
 		}
+		// 3.14.86: «Entregado» de un toque (cobra lo del vale). Se manda a los 5 s; antes, «Deshacer» lo para.
+		if (a === 'entregar' && c) {
+			var mm = c.money || {};
+			if (mm.unknown && !mm.prepaid) { showToast('El vale no dice cuánto cobrar. Llama a la tienda antes de entregarlo.'); return; }
+			if (state.pend) { return; }
+			state.pend = { id: c.id, t: setTimeout(function () {
+				var cc = findCarrera(c.id); state.pend = null;
+				if (!cc) { render(); return; }
+				state.busy = 'entregado-' + cc.id; render();
+				withGeo(function (g) { state.busy = ''; act(cc, 'entregado', g); }); // con el GPS de la puerta del cliente
+			}, window.PALLA_UNDO_MS || 5000) }; // el simulador lo acorta
+			render(); return;
+		}
+		if (a === 'deshacer') { if (state.pend) { clearTimeout(state.pend.t); state.pend = null; } showToast('No se marcó. Sigue en camino.'); return; }
 		if (a === 'entregado' && c) {
 			var plan = payPlan(c);
 			if (!plan.ok) { state.form.err = 'Escribe cuánto cobraste de los productos.'; render(); return; }
@@ -987,19 +1008,29 @@
 		if (a === 'pasar-a') { state.form = { to: el.value }; render(); return; }
 		if (a === 'hora-op') { state.form = { hora: el.value, dia: state.form.dia, hhmm: state.form.hhmm }; render(); return; }
 		if (el.getAttribute('data-f') === 'dia') { state.form.dia = el.value; return; }
-		if (a === 'motivo') { state.form.motivo = el.value; state.form.err = ''; render(); }
+		if (a === 'motivo') { state.form.motivo = el.value; state.form.err = ''; draftSave(); render(); }
 	});
 	app.addEventListener('input', function (e) {
 		var k = e.target.getAttribute('data-f');
 		if (!k) { return; }
 		state.form[k] = e.target.value; state.form.err = '';
+		draftSave();
 		updateBring();
 	});
+	// 3.14.86 (Ernesto: «que no se pierda información si necesita escribir algo»): lo escrito en una hoja (problema, pasar…)
+	// queda guardado en el teléfono al momento y vuelve si se cierra la app o se va a otra pantalla. Se borra al mandarlo.
+	function draftKey() { var r = route(); return r.view + '/' + r.id; }
+	function draftSave() { try { store.set(PFX + 'borrador', JSON.stringify({ k: draftKey(), f: state.form })); } catch (e) {} }
+	function draftLoad() {
+		var d = null; try { d = JSON.parse(store.get(PFX + 'borrador') || 'null'); } catch (e) {}
+		if (d && d.k === draftKey() && d.f && !Object.keys(state.form).length) { state.form = d.f; state.form.err = ''; }
+	}
+	function draftClear() { store.set(PFX + 'borrador', null); }
 	function updateBring() {
 		var r = route(), c = findCarrera(r.id), box = document.getElementById('pl-bring');
 		if (c && box && r.view === 'entregado') { box.innerHTML = bringNote(c); }
 	}
-	window.addEventListener('hashchange', function () { var v = route().view; if (['entregado', 'problema', 'suelto', 'hora', 'pasar'].indexOf(v) === -1) { state.form = {}; } render(); });
+	window.addEventListener('hashchange', function () { var v = route().view; if (['entregado', 'problema', 'suelto', 'hora', 'pasar'].indexOf(v) === -1) { state.form = {}; } else { draftLoad(); } render(); });
 	window.addEventListener('online', function () { flush().then(load); });
 	document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && state.token) { lockScreen(); flush().then(load); } });
 	setInterval(function () {

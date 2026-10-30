@@ -13,7 +13,7 @@
 	var world = function () { return JSON.parse(localStorage.getItem('palla.p.mundo')); };
 	var order = function (id) { return world().orders.filter(function (o) { return o.id === id; })[0]; };
 	var go = async function (h) { location.hash = h; await wait(150); };
-	var autoHora = true; // tras «La cojo» sale la hoja de la hora: el simulador elige «en 1 hora» (salvo donde se prueba eso)
+	var autoHora = false; // 3.14.86: ya no hay paso de hora
 	var ponerHora = async function (valor) {
 		var r = $('input[name=hora][value="' + (valor || 'en 1 hora') + '"]'); if (!r) { return false; }
 		r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); await wait(150);
@@ -28,27 +28,20 @@
 	var check = function (caso, cond, detalle) { out.push({ caso: caso, ok: !!cond, detalle: cond ? '' : detalle || '' }); };
 	var setPay = async function (v) { var r = $('input[name=pago][value=' + v + ']'); r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); await wait(150); };
 	var type = async function (sel, v) { var i = $(sel); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait(100); };
+	// 3.14.86: «Entregado» de un toque; se manda al acabar la cuenta atrás (en el simulador, 300 ms).
+	var entregar = async function (id) { await go('#carrera/' + id); await click('[data-act=entregar]', 150); await wait(1100); };
 	var newCid = function () { return 'sim' + Math.random().toString(36).slice(2); };
 
 	async function run() {
-		P.reset(); P.setOnline(true);
+		P.reset(); P.setOnline(true); window.PALLA_UNDO_MS = 300;
 		await go('#carreras'); await refresh();
 
-		// 1. Coger con señal → primero la hora (obligatoria)
-		autoHora = false;
+		// 1. Coger con señal → se abre la carrera (3.14.86: sin paso de hora)
 		await click('[data-act=cojo][data-id="9001"]', 900);
-		var hashHora = location.hash;
-		await go('#carrera/9001');
-		var sinHora = $$('.pl-actions a, .pl-actions button').map(function (x) { return x.innerText; }).join('|');
-		check('1. «La cojo» con señal: es mía y se abre «¿A qué hora lo entregas?»', hashHora === '#hora/9001' && order(9001).owner === 1, hashHora + ' owner=' + order(9001).owner);
-		check('1b. Sin hora no sale «Recogí»: sale «Poner la hora»', /Poner la hora/.test(sinHora) && !/Recogí/.test(sinHora), sinHora);
-		await go('#hora/9001'); await click('[data-act=hora]', 400);
-		var pideHora = /Elige a qué hora/.test(text());
-		await ponerHora('otra'); // «Otra hora» sin escribir la hora → la pide
-		var pideHH = /Pon la hora/.test(text());
-		await type('[data-f=hhmm]', '15:30'); await click('[data-act=hora]', 700);
-		check('1c. La hora: pide elegir, «Otra hora» pide la hora, y guarda «hoy a las 3:30 p. m.»', pideHora && pideHH && order(9001).eta === 'hoy a las 3:30 p. m.' && /🕒 hoy a las 3:30 p\. m\./.test(text()), [pideHora, pideHH, order(9001).eta].join(' / '));
-		autoHora = true;
+		var hash1 = location.hash;
+		var acciones1 = $$('.pl-actions a, .pl-actions button').map(function (x) { return x.innerText; }).join('|');
+		check('1. «La cojo» con señal: es mía y se abre la carrera', hash1 === '#carrera/9001' && order(9001).owner === 1, hash1 + ' owner=' + order(9001).owner);
+		check('1b. Sin hora: el botón grande ya es «Recogí»', /Recogí/.test(acciones1) && !/hora/i.test(acciones1), acciones1);
 		// 2. Doble toque en «La cojo»
 		await go('#carreras');
 		var b = $('[data-act=cojo][data-id="9002"]'); b.click(); b.click(); await wait(900);
@@ -72,7 +65,7 @@
 		await go('#carrera/9001');
 		var ent = $$('.pl-actions button').filter(function (x) { return /Entregado/.test(x.innerText); })[0];
 		// 3.14.69.16: ya no hay botón «Entregado» apagado; antes de «Recogí» simplemente no se puede ir a «Entregado».
-		check('6. «Entregado» no se puede mientras no tocas «Recogí»', !$('a[href^="#entregado/"]') && !!$('[data-act=recogi]'), 'entregado=' + !!$('a[href^="#entregado/"]'));
+		check('6. «Entregado» no se puede mientras no tocas «Recogí»', !$('[data-act=entregar]') && !!$('[data-act=recogi]'), 'entregar=' + !!$('[data-act=entregar]'));
 		// 7. Recogí y Recogí otra vez
 		await click('[data-act=recogi]', 900);
 		var r2 = await P.request('carrera', { order: 9001, action: 'recogi', cid: newCid() });
@@ -84,58 +77,46 @@
 		// 8b. 3.14.71.2: «Llegué» en camino: avisa a la gestora, se marca y el botón desaparece.
 		await go('#carrera/9001'); await click('[data-act=llegue]', 900);
 		check('8b. «Llegué» en camino: queda «Llegaste» y ya no sale el botón', !!order(9001).arrived && /Llegaste/.test(text()) && !$('[data-act=llegue]'), text().slice(0, 200));
-		// 9. Entregado con lo del vale (efectivo USD)
-		await go('#entregado/9001');
-		check('9a. Hoja «¿Cuánto cobraste?» dice que llevas 44 USD', /A la tienda: 44 USD/.test($('#pl-bring').innerText), $('#pl-bring').innerText);
-		await click('[data-act=entregado]', 900);
+		// 9. Entregado de un toque con lo del vale (efectivo USD); antes, «Deshacer» lo para
+		await go('#carrera/9001');
+		var boton9 = ($('[data-act=entregar]') || {}).innerText || '';
+		window.PALLA_UNDO_MS = 2000; await click('[data-act=entregar]', 200);
+		var hayDeshacer = !!$('[data-act=deshacer]'); await click('[data-act=deshacer]', 300); await wait(2200);
+		check('9a. El botón dice «Entregado · cobré 44 USD» y «Deshacer» lo para (sigue en camino)', /cobré 44 USD/.test(boton9) && hayDeshacer && order(9001).stage === 'picked', boton9 + ' / deshacer=' + hayDeshacer + ' / ' + order(9001).stage);
+		window.PALLA_UNDO_MS = 300; await entregar(9001);
 		check('9b. Entregado: queda en «Mi dinero» con 44 USD por llevar', order(9001).stage === 'delivered' && /44 USD/.test(toast()), toast());
 		await go('#dinero'); await wait(300);
 		check('9c. «Mi dinero de hoy»: 2.300 CUP ganados y 44 USD para la tienda', /2\.300/.test(text()) && /A la tienda\s*44 USD/.test(text()), text().slice(0, 200));
-		// 10. Otra moneda sin escribir la cantidad
-		P.event('nueva'); await refresh(); var n2 = world().orders[world().orders.length - 1].id;
-		await go('#carreras'); await click('[data-act=cojo][data-id="' + n2 + '"]', 900); await click('[data-act=recogi]', 900);
-		await go('#entregado/' + n2); await setPay('cup'); await click('[data-act=entregado]', 500);
-		check('10. Efectivo CUP sin escribir cuánto: no se manda y lo pide', order(n2).stage === 'picked' && /Escribe cuánto/.test(text()), text().slice(-200));
-		await type('[data-f=cup]', '3000'); await click('[data-act=entregado]', 900);
-		check('10b. Con la cifra escrita: entregado con 3.000 CUP', order(n2).stage === 'delivered' && order(n2).collected.CUP === 3000, JSON.stringify(order(n2).collected));
+		// 10. (3.14.86) Ya no hay hoja de cobro: el mensajero cobra lo que dice el vale.
 		// 11. Vuelto de la tienda (#56)
 		await go('#carreras'); await click('[data-act=cojo][data-id="9002"]', 900);
 		await go('#carrera/9002');
 		check('11a. Con vuelto: la tarjeta dice que traes productos + 10 USD de vuelto', /10 USD \+ 12\.250 CUP/.test(text()) && /vuelto 10 USD/.test(text()), text().slice(0, 400));
-		await click('[data-act=recogi]', 900); await go('#entregado/9002'); await click('[data-act=entregado]', 900);
+		await click('[data-act=recogi]', 900); await entregar(9002);
 		check('11b. Entregado con vuelto: el aviso suma el vuelto (#56)', /Lleva 10 USD \+ 12\.250 CUP/.test(toast()) && /10 USD del vuelto/.test(toast()), toast());
 		// 12. Ya pagado (Zelle)
 		await go('#carreras'); await click('[data-act=cojo][data-id="9003"]', 900); await click('[data-act=recogi]', 900);
-		await go('#entregado/9003');
-		check('12a. Ya pagado: la hoja dice que no cobras nada', /Ya pagado/.test(text()) && /No llevas dinero/.test($('#pl-bring').innerText), $('#pl-bring').innerText);
-		await click('[data-act=entregado]', 900);
+		await go('#carrera/9003');
+		check('12a. Ya pagado: la tarjeta dice que no cobras nada y el botón es «Entregado» a secas', /Nada/.test(text()) && !/cobré/.test(($('[data-act=entregar]') || {}).innerText || 'x'), text().slice(0, 300));
+		await entregar(9003);
 		check('12b. Ya pagado: entregado sin dinero que llevar', order(9003).stage === 'delivered' && /no llevas dinero/i.test(toast()), toast());
-		// 13. Transferencia CUP sin tasa (hay que escribir la cifra)
+		// 13. Vale sin cifra (transferencia sin tasa): avisa en la tarjeta y no deja marcar Entregado (lo resuelve la gestora antes)
 		await go('#carreras'); await click('[data-act=cojo][data-id="9004"]', 900); await click('[data-act=recogi]', 900);
-		await go('#entregado/9004');
-		var opciones = $$('input[name=pago]').map(function (x) { return x.value; }).join(',');
-		var primera = ($('input[name=pago]:checked') || {}).value;
-		var pide = !!$('[data-f=cup]');
-		await type('[data-f=cup]', '9000'); await wait(100);
-		check('13a. Transferencia sin tasa: la 1.ª opción ya es «Transferencia CUP» con el campo de CUP y no lleva dinero a la tienda', (primera === 'vale' || primera === 'transfer') && pide &&/No llevas dinero/.test($('#pl-bring').innerText), opciones + ' / ' + $('#pl-bring').innerText);
-		await click('[data-act=entregado]', 900);
-		check('13b. Transferencia: entregado sin dinero para la tienda', order(9004).stage === 'delivered' && order(9004).transfer === true, JSON.stringify(order(9004)));
+		await go('#carrera/9004'); var aviso13 = /no dice cuánto cobrar/.test(text());
+		await click('[data-act=entregar]', 300); await wait(700);
+		check('13. Vale sin cifra: avisa y no se marca Entregado', aviso13 && order(9004).stage === 'picked' && /no dice cuánto/.test(toast()), aviso13 + ' / ' + order(9004).stage + ' / ' + toast());
 		// 14. Sin señal: Recogí + Entregado en cola, en orden, sin repetir
 		P.event('nueva'); await refresh(); var n3 = world().orders[world().orders.length - 1].id;
-		autoHora = false;
 		await go('#carreras'); await click('[data-act=cojo][data-id="' + n3 + '"]', 900);
-		autoHora = true;
+		await go('#carrera/' + n3); var sinCifra = /no dice cuánto cobrar/.test(text());
 		P.setOnline(false);
-		await ponerHora('en 2 horas'); // la hora también se guarda sin señal
-		var conHora = /Lo entregas/.test(text()) || /en 2 horas/.test(text());
 		await go('#carrera/' + n3); await click('[data-act=recogi]', 900);
 		var trasRecogi = text();
-		await go('#entregado/' + n3); await click('[data-act=entregado]', 900);
-		var enCola = 0;
-		check('14a. Sin señal se puede seguir: hora, «Recogí» y «Entregado» guardados', conHora && /Guardado/.test(trasRecogi) && order(n3).stage === 'assigned' && !order(n3).eta, 'hora=' + conHora + ' etapa=' + order(n3).stage);
+		if (!sinCifra) { await entregar(n3); }
+		check('14a. Sin señal se puede seguir: «Recogí» y «Entregado» guardados', /Guardado/.test(trasRecogi) && order(n3).stage === 'assigned', 'etapa=' + order(n3).stage);
 		P.setOnline(true); await wait(3000);
 		var logs = world().log.filter(function (l) { return l.indexOf('#' + n3 + ':') !== -1; });
-		check('14b. Al volver la señal se mandan solas y en orden (hora → Recogí → Entregado), una vez cada una', order(n3).stage === 'delivered' && logs.length === 3 && /hora/.test(logs[0]) && /Recogí/.test(logs[1]) && /Entregado/.test(logs[2]), JSON.stringify(logs));
+		check('14b. Al volver la señal se mandan solas y en orden (Recogí → Entregado), una vez cada una', sinCifra ? (logs.length === 1 && /Recogí/.test(logs[0])) : (order(n3).stage === 'delivered' && logs.length === 2 && /Recogí/.test(logs[0]) && /Entregado/.test(logs[1])), JSON.stringify(logs) + ' sinCifra=' + sinCifra);
 		// 15. Reenvío de la misma acción (respuesta perdida): no se repite
 		var cid = newCid();
 		var a1 = await P.request('carrera', { order: n3, action: 'problema', motivo: 'parte', cid: cid });
@@ -201,8 +182,7 @@
 		P.event('mepasan'); await refresh(); var n8 = world().orders[world().orders.length - 1].id;
 		var veo = /te pasa #/.test(text());
 		autoHora = false; await click('[data-act=pase-si][data-id="' + n8 + '"]', 900); autoHora = true;
-		check('23. Me pasan una: la veo arriba, «La acepto» → es mía y pide la hora', veo && order(n8).owner === 1 && location.hash === '#hora/' + n8, [veo, order(n8).owner, location.hash].join(' / '));
-		await ponerHora();
+		check('23. Me pasan una: la veo arriba, «La acepto» → es mía y se abre la carrera', veo && order(n8).owner === 1 && location.hash === '#carrera/' + n8, [veo, order(n8).owner, location.hash].join(' / '));
 		// 24. Me pasan otra y digo que no
 		P.event('mepasan'); await refresh(); var n9 = world().orders[world().orders.length - 1].id;
 		await go('#carreras'); await click('[data-act=pase-no][data-id="' + n9 + '"]', 900);

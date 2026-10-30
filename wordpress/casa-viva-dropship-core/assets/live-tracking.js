@@ -136,9 +136,37 @@
   // 3.14.72.2 (Ernesto 28-oct, «como Mandao»): el mapa del recorrido de Pa'llá. assets/palla/mapa.js (y Leaflet) solo se
   // cargan si hay una carrera en curso; entregado o sin mensajero, el mapa se esconde.
   var mapaCarga = null;
+  // 3.14.86 (Ernesto 30-oct: «que el cliente sepa cómo va el mensajero y le avise con un sonido cuando llegó»): cuando el
+  // mensajero toca «Llegué» (o llega solo por GPS), aquí sale un aviso grande con sonido y vibración, una sola vez.
+  function avisoLlego(r) {
+    if (!r || !r.arrived) return;
+    var key = 'cvd-llego-' + (tracking.getAttribute('data-order') || location.search);
+    try { if (window.localStorage.getItem(key)) return; window.localStorage.setItem(key, '1'); } catch (e) {}
+    var who = r.name || 'El mensajero';
+    var div = document.createElement('div');
+    div.setAttribute('role', 'alert');
+    div.style.cssText = 'position:fixed;left:16px;right:16px;top:16px;z-index:9999;background:#121212;color:#fff;border-radius:18px;padding:18px 20px;box-shadow:0 14px 34px rgba(0,0,0,.3);font:700 18px/24px system-ui,sans-serif';
+    div.innerHTML = '📍 ' + who.replace(/[<>&]/g, '') + ' ya llegó<br><span style="font-weight:400;font-size:15px;color:#FFC21A">Sal a recibir tu pedido.</span>';
+    div.addEventListener('click', function () { div.remove(); });
+    document.body.appendChild(div);
+    setTimeout(function () { if (div.parentNode) div.remove(); }, 20000);
+    if (navigator.vibrate) { try { navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {} }
+    try {
+      var A = window.AudioContext || window.webkitAudioContext, ctx = new A();
+      [0, 0.35, 0.7].forEach(function (t) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.value = 880; o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.0001, ctx.currentTime + t); g.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.28);
+        o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.3);
+      });
+    } catch (e) {}
+    document.title = '📍 ' + who + ' ya llegó';
+  }
+
   function drawRuta(r) {
     var box = tracking.querySelector('[data-ruta]');
     if (!box) return;
+    avisoLlego(r);
     if (!r || !r.active || !r.pos) { box.hidden = true; return; } // sin ubicación del mensajero (sin la app), no hay mapa
     box.hidden = false;
     if (!mapaCarga) {
