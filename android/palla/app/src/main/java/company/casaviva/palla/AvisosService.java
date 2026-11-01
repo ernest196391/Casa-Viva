@@ -41,6 +41,8 @@ public class AvisosService extends Service {
     private static final String CH_NEW = "palla_carreras_2";
     private static final String ACTION_STOP = "company.casaviva.palla.PARAR";
     private static final String ACTION_SILENCE = "company.casaviva.palla.SILENCIAR"; // 1.2: calla, pero el aviso se queda
+    private static final String ACTION_OFF = "company.casaviva.palla.DESCONECTAR";   // 1.4: «Desconectarme» desde el aviso fijo
+    private static final String DISP_URL = "https://casaviva.company/wp-json/casa-viva/v1/palla/disponible";
     private static android.media.MediaPlayer siren;
     // 1.2 (29-oct, Ernesto: «se quedó más de 1 min vibrando y no sabía cómo apagarlo»): la vibración se para con el MISMO
     // Vibrator que la empezó (en algunos teléfonos cancel() desde otra pantalla de la app no la paraba).
@@ -120,13 +122,22 @@ public class AvisosService extends Service {
 
     /** El aviso fijo dice en qué está: esperando carreras o con una carrera (mandando el recorrido). */
     private void refreshRunNotice() {
+        // 1.4 (Ernesto 1-nov: «no se iba de la barra de arriba»): una sola línea silenciosa y, si está disponible, el botón
+        // «Desconectarme», que apaga todo de un toque (y el aviso desaparece). Sin carrera ni disponible, no hay aviso.
         boolean avail = Prefs.available(this);
-        runNotif = builder(CH_RUN)
-            .setContentTitle("Pa'llá")
-            .setContentText(avail ? "🟢 Disponible · esperando carreras" : "En carrera · ⚪ no te llegan carreras nuevas")
+        Notification.Builder b = builder(CH_RUN)
+            .setContentTitle(avail ? "Pa'llá · disponible" : "Pa'llá · en carrera")
+            .setShowWhen(false)
             .setOngoing(true)
-            .setContentIntent(openApp(null, 0))
-            .build();
+            .setContentIntent(openApp(null, 0));
+        if (Build.VERSION.SDK_INT < 26) { b.setPriority(Notification.PRIORITY_MIN); }
+        if (avail) {
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
+            Intent off = new Intent(this, AvisosService.class).setAction(ACTION_OFF);
+            PendingIntent pi = Build.VERSION.SDK_INT >= 26 ? PendingIntent.getForegroundService(this, 5, off, flags) : PendingIntent.getService(this, 5, off, flags);
+            b.addAction(new Notification.Action.Builder(null, "Desconectarme", pi).build());
+        }
+        runNotif = b.build();
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm != null) { nm.notify(ID_RUN, runNotif); }
     }
@@ -317,6 +328,26 @@ public class AvisosService extends Service {
         }
     }
 
+    /** 1.4: «Desconectarme» desde el aviso: el servidor deja de mandarle carreras (si no hay señal, la app ya no suena igual). */
+    private static void postOff(String token) {
+        if (token == null || token.isEmpty()) { return; }
+        HttpURLConnection h = null;
+        try {
+            h = (HttpURLConnection) new URL(DISP_URL).openConnection();
+            h.setConnectTimeout(15_000);
+            h.setReadTimeout(15_000);
+            h.setDoOutput(true);
+            h.setRequestMethod("POST");
+            h.setRequestProperty("Content-Type", "application/json");
+            h.setRequestProperty("X-Palla-Token", token);
+            h.getOutputStream().write("{\"on\":false}".getBytes(StandardCharsets.UTF_8));
+            h.getResponseCode();
+        } catch (Exception ignored) {
+        } finally {
+            if (h != null) { h.disconnect(); }
+        }
+    }
+
     /** Manda los puntos guardados; si no hay señal, se quedan para la próxima vez. */
     private void upload() {
         String json;
@@ -355,6 +386,12 @@ public class AvisosService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && (ACTION_STOP.equals(intent.getAction()) || ACTION_SILENCE.equals(intent.getAction()))) { stopSiren(this); } // quitó el aviso o tocó «Silenciar»
+        if (intent != null && ACTION_OFF.equals(intent.getAction())) { // 1.4: «Desconectarme» desde la barra de arriba
+            stopAlarm(this);
+            Prefs.setAvailable(this, false, 0);
+            final String token = Prefs.token(this);
+            new Thread(() -> postOff(token), "palla-desconectar").start(); // que el servidor tampoco le mande carreras
+        }
         if (!Prefs.ready(this)) { stopSelf(); return START_NOT_STICKY; }
         if (intent != null && ACTION_TRACK.equals(intent.getAction())) {
             if (intent.getBooleanExtra("on", false)) { startTracking(); } else { stopTracking(); }
