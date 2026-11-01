@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pa'llá · mapa propio (local)</title>
+<!-- Prueba del mapa propio (assets/palla/mapa.js) sin la app: ?modo=mensajero | ruta | tienda | marcar.
+     Servir por http://localhost (el VPS solo da el mapa a casaviva.company y a localhost). -->
+<style>body{margin:0;font:14px system-ui,sans-serif;background:#f6f3ec}#txt{padding:10px 14px;font-weight:600}
+.pl-fm{position:fixed;inset:0}.card{position:fixed;left:0;right:0;bottom:0;height:300px;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -4px 18px rgba(0,0,0,.12);padding:14px}</style></head>
+<body>
+<script src="../../wordpress/casa-viva-dropship-core/assets/palla/mapa.js"></script>
+<script>
+(function () {
+	var modo = (location.search.match(/modo=(\w+)/) || [])[1] || 'mensajero';
+	var tienda = [23.1143, -82.39774], casa = [23.1305, -82.3695];
+	var txt = document.createElement('div'); txt.id = 'txt';
+	window.PRUEBA = { ok: false };
+	function done(t) { txt.textContent = t; window.PRUEBA = { ok: true, texto: t }; }
+	function fail(e) { txt.textContent = 'ERROR ' + e; window.PRUEBA = { ok: false, error: String(e) }; }
+	if (modo === 'mensajero') {
+		var fm = document.createElement('div'); fm.className = 'pl-fm';
+		var box = document.createElement('div'); box.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
+		fm.appendChild(box); document.body.appendChild(fm);
+		var card = document.createElement('div'); card.className = 'card'; card.appendChild(txt); document.body.appendChild(card);
+		var paso = [[23.1180, -82.3920], [23.1195, -82.3895], [23.1212, -82.3868]], i = 0;
+		var dest = /recoger/.test(location.search) ? tienda : casa, kind = /recoger/.test(location.search) ? 'tienda' : 'casa';
+		window.PallaMapa.mensajero(box, null, dest, kind).then(function () {
+			(function next() { window.PallaMapa.mensajero(box, paso[i], dest, kind).then(function (t) { done(t); if (++i < paso.length) { setTimeout(next, 900); } }, fail); })();
+		}, fail);
+	} else if (modo === 'ruta') {
+		document.body.appendChild(txt);
+		var el = document.createElement('div'); el.style.cssText = 'margin:0 12px;height:300px'; document.body.appendChild(el);
+		window.PallaMapa.ruta(el, { name: 'Daiquel', stage: 'cliente', store: tienda, dest: casa, eta: 8,
+			trail: [tienda, [23.1160, -82.3950], [23.1180, -82.3920], [23.1195, -82.3895], [23.1212, -82.3868]],
+			pos: { lat: 23.1212, lon: -82.3868, ago: 30 } }).then(done, fail);
+	} else if (modo === 'tienda') {
+		document.body.appendChild(txt);
+		var el2 = document.createElement('div'); el2.style.cssText = 'margin:0 12px;height:420px'; document.body.appendChild(el2);
+		window.PallaMapa.tienda(el2, [
+			{ name: 'Daiquel', number: 1201, zone: 'Vedado', stage: 'cliente', pos: { lat: 23.1212, lon: -82.3868, ago: 40 }, dest: casa },
+			{ name: 'Yoan', number: 1202, zone: 'Centro Habana', stage: 'tienda', pos: { lat: 23.1090, lon: -82.4060, ago: 200 } },
+			{ name: 'Rafa', number: 1203, zone: 'Playa', stage: 'cliente', pos: { lat: 23.1050, lon: -82.4180, ago: 20 }, dest: [23.0985, -82.4380] }
+		]).then(function (n) { done(n + ' puntos'); }, fail);
+	} else {
+		document.body.appendChild(txt);
+		var el3 = document.createElement('div'); el3.style.cssText = 'margin:0 12px;height:300px'; document.body.appendChild(el3);
+		window.PallaMapa.marcar(el3, [23.115, -82.397]).then(function (p) { p.put([23.1305, -82.3695]); done('casa: ' + p.get().map(function (n) { return n.toFixed(4); }).join(', ')); }, fail);
+	}
+})();
+</script>
+</body></html>
