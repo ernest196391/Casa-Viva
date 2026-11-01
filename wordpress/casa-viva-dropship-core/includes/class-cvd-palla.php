@@ -238,6 +238,8 @@ final class CVD_Palla {
 			// 3.14.99: el mapa de la carrera en la app (dónde está la tienda y la pieza del mapa).
 			'storeGeo' => array_map( 'floatval', array_slice( explode( ',', (string) get_option( 'cvd_palla_tienda_geo', '23.1143,-82.39774' ) ), 0, 2 ) ),
 			'mapaUrl'  => CVD_URL . 'assets/palla/mapa.js?v=' . CVD_VERSION,
+			// 3.14.108: ruta por calles y minutos reales (assets/palla/ruta.js → nuestro OSRM del VPS). Se carga cuando haga falta.
+			'rutaUrl'  => CVD_URL . 'assets/palla/ruta.js?v=' . CVD_VERSION,
 		);
 	}
 
