@@ -53,7 +53,7 @@
   async function api(url, options) {
     var response = await fetch(url, Object.assign({ credentials: "same-origin", headers: { "X-WP-Nonce": cvdSales.nonce, "Content-Type": "application/json" } }, options || {}));
     var data = await response.json();
-    if (!response.ok) { var failure = new Error(data.message || "No se pudo completar la operación."); failure.data = data; throw failure; }
+    if (!response.ok) { var failure = new Error(data.message || "No se pudo completar la operación."); failure.code = data.code; failure.data = data; throw failure; }
     return data;
   }
   // 3.14.7 (Nana): cada producto con su precio, uno por renglón («2× Toalla — 15 USD c/u = 30 USD»).
@@ -109,7 +109,9 @@
   }
   function extraButtons(order) {
     return reservaButton(order) + changeButton(order) + (order.canEdit ? '<button type="button" class="cvd-sale-extra" data-edit-order="' + order.id + '">Cambiar pedido</button>' : "")
-      + (order.canCancel ? '<button type="button" class="cvd-sale-extra is-warning" data-cancel-order="' + order.id + '" data-number="' + escapeText(order.number) + '">Cancelar pedido</button>' : "");
+      + (order.canCancel ? '<button type="button" class="cvd-sale-extra is-warning" data-cancel-order="' + order.id + '" data-number="' + escapeText(order.number) + '"' + (order.cancelNeedsReturn ? ' data-needs-return="1"' : "") + '>Cancelar pedido</button>' : "")
+      // 3.14.104 (Ernesto 1-nov): un pedido cancelado por error (hasta 7 días) se puede reactivar.
+      + (order.canReactivate ? '<button type="button" class="cvd-sale-extra" data-reactivate-order="' + order.id + '" data-number="' + escapeText(order.number) + '">Reactivar pedido</button>' : "");
   }
   // Mensajería: en qué punto va la entrega. Quién lo lleva sale arriba, en «Mensajero» (peopleRows).
   function messengerRow(order) {
@@ -255,21 +257,38 @@
       var why = window.prompt("Cancelar el pedido #" + cancelBtn.dataset.number + "\n\n¿Por qué se cancela? (obligatorio, una frase corta)");
       if (why === null) return;
       if (why.trim().length < 3) { message.className = "is-error"; message.textContent = "Para cancelar hay que escribir el motivo."; return; }
+      // 3.14.104: el mensajero tenía el paquete; solo se cancela si ya lo devolvió a la tienda.
+      var returned = cancelBtn.dataset.needsReturn === "1";
+      if (returned && !window.confirm("El mensajero tenía el paquete del pedido #" + cancelBtn.dataset.number + ".\n\n¿Ya lo devolvió y está aquí en la tienda?\n\nAceptar = sí, está en la tienda\nCancelar = todavía no")) return;
       if (!window.confirm("¿Seguro que cancelas el pedido #" + cancelBtn.dataset.number + "?\n\n• Las existencias vuelven a la tienda\n• La comisión de quien vendió queda anulada\n• No se puede deshacer\n\nMotivo: " + why.trim())) return;
       cancelBtn.disabled = true; message.className = ""; message.textContent = "Cancelando…";
       try {
         var cancelUrl = cvdSales.url + "/" + cancelBtn.dataset.cancelOrder + "/cancel";
         var done;
-        try { done = await api(cancelUrl, { method: "POST", body: JSON.stringify({ reason: why.trim() }) }); }
+        try { done = await api(cancelUrl, { method: "POST", body: JSON.stringify({ reason: why.trim(), returnedToStore: returned }) }); }
         catch (first) {
           // 3.14.72: con reserva vigente, administración confirma una segunda vez (la dependienta ni llega aquí: no ve el botón).
           var info = first.data && first.data.data;
           if (!(info && info.needsConfirm) || !window.confirm("⛔ " + first.message + "\n\nAceptar = cancelar igual\nCancelar = dejarlo como está")) throw first;
-          done = await api(cancelUrl, { method: "POST", body: JSON.stringify({ reason: why.trim(), confirmReserva: true }) });
+          done = await api(cancelUrl, { method: "POST", body: JSON.stringify({ reason: why.trim(), confirmReserva: true, returnedToStore: returned }) });
         }
         await load(); message.className = done.messenger ? "is-error" : ""; message.textContent = done.message || "Pedido cancelado.";
       }
       catch (error) { message.textContent = error.message; message.className = "is-error"; cancelBtn.disabled = false; }
+      return;
+    }
+    var reactivateBtn = event.target.closest("[data-reactivate-order]");
+    if (reactivateBtn) {
+      var whyBack = window.prompt("Reactivar el pedido #" + reactivateBtn.dataset.number + "\n\n¿Por qué se reactiva? (obligatorio, una frase corta)");
+      if (whyBack === null) return;
+      if (whyBack.trim().length < 3) { message.className = "is-error"; message.textContent = "Para reactivar hay que escribir el motivo."; return; }
+      if (!window.confirm("¿Reactivas el pedido #" + reactivateBtn.dataset.number + "?\n\n• Vuelve a «En espera»\n• Las existencias se descuentan otra vez\n• La comisión de quien vendió vuelve a pendiente\n\nMotivo: " + whyBack.trim())) return;
+      reactivateBtn.disabled = true; message.className = ""; message.textContent = "Reactivando…";
+      try {
+        var back = await api(cvdSales.url + "/" + reactivateBtn.dataset.reactivateOrder + "/reactivate", { method: "POST", body: JSON.stringify({ reason: whyBack.trim() }) });
+        await load(); message.className = ""; message.textContent = back.message || "Pedido reactivado.";
+      }
+      catch (error) { message.textContent = error.message; message.className = "is-error"; reactivateBtn.disabled = false; }
       return;
     }
     var changeBtn = event.target.closest("[data-change-order]");
@@ -417,7 +436,18 @@
     if (event.submitter && event.submitter.value === "cancel") return;
     event.preventDefault(); var submit = document.getElementById("cvd-money-submit"); submit.disabled = true;
     var pickup = document.getElementById("cvd-money-pickup").value === "1";
-    try { await api(cvdSales.url + "/" + document.getElementById("cvd-money-order").value + "/status", { method: "POST", body: JSON.stringify({ status: "delivered", collectionMethod: document.getElementById("cvd-money-method").value, collectedUsd: document.getElementById("cvd-money-usd").value, collectedCup: document.getElementById("cvd-money-cup").value, collectionNote: document.getElementById("cvd-money-note").value, collectionAccount: moneyAccount ? moneyAccount.value : "", collectionReference: moneyReference ? moneyReference.value : "", collectionCardLabel: document.getElementById("cvd-money-card-label").value, collectionCardLast4: document.getElementById("cvd-money-card-last4").value, collectionSaveCard: document.getElementById("cvd-money-save-card").checked, moneyConfirmed: document.getElementById("cvd-money-confirmed").checked, handoverConfirmed: pickup ? document.getElementById("cvd-handover-confirmed").checked : false }) }); moneyDialog.close(); event.target.reset(); syncMoneyAccount(); document.getElementById("cvd-money-pickup").value = "0"; await load(); message.className = ""; message.textContent = "Pedido cerrado: ahora está en «Cerrados»."; }
+    var moneyUrl = cvdSales.url + "/" + document.getElementById("cvd-money-order").value + "/status";
+    var moneyBody = { status: "delivered", collectionMethod: document.getElementById("cvd-money-method").value, collectedUsd: document.getElementById("cvd-money-usd").value, collectedCup: document.getElementById("cvd-money-cup").value, collectionNote: document.getElementById("cvd-money-note").value, collectionAccount: moneyAccount ? moneyAccount.value : "", collectionReference: moneyReference ? moneyReference.value : "", collectionCardLabel: document.getElementById("cvd-money-card-label").value, collectionCardLast4: document.getElementById("cvd-money-card-last4").value, collectionSaveCard: document.getElementById("cvd-money-save-card").checked, moneyConfirmed: document.getElementById("cvd-money-confirmed").checked, handoverConfirmed: pickup ? document.getElementById("cvd-handover-confirmed").checked : false };
+    // 3.14.76 (Ernesto 28-oct): si Core pregunta «¿Lo recibiste hoy?» (entrega de otro día), se contesta y se reenvía.
+    try {
+      try { await api(moneyUrl, { method: "POST", body: JSON.stringify(moneyBody) }); }
+      catch (asked) {
+        if (!window.cvdCashDay || asked.code !== window.cvdCashDay.code) throw asked;
+        var reply = await window.cvdCashDay.ask(asked.data && asked.data.data);
+        if (!reply) { message.className = ""; message.textContent = "No se guardó: falta decir si el dinero entró hoy."; return; }
+        await api(moneyUrl, { method: "POST", body: JSON.stringify(Object.assign({}, moneyBody, reply)) });
+      }
+      moneyDialog.close(); event.target.reset(); syncMoneyAccount(); document.getElementById("cvd-money-pickup").value = "0"; await load(); message.className = ""; message.textContent = "Pedido cerrado: ahora está en «Cerrados»."; }
     catch (error) { message.textContent = error.message; message.className = "is-error"; }
     finally { submit.disabled = false; }
   });

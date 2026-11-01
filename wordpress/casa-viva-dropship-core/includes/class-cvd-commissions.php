@@ -139,6 +139,12 @@ final class CVD_Commissions {
 		self::store( $order->get_id(), 'pending', false );
 	}
 
+	/** 3.14.104: pedido cancelado que se reactiva → la comisión vuelve a pendiente (solo si estaba cancelada). */
+	public static function reopen( int $order_id ): void {
+		$order = wc_get_order( $order_id );
+		if ( $order && 'cancelled' === sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ) { self::store( $order_id, 'pending', true ); }
+	}
+
 	public static function mark_approved( int $order_id ): void {
 		self::store( $order_id, 'approved', true );
 	}

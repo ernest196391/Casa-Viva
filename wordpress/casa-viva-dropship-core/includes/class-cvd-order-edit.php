@@ -34,6 +34,8 @@ final class CVD_Order_Edit {
 	public static function routes(): void {
 		$can = array( __CLASS__, 'can_manage' );
 		register_rest_route( 'casa-viva/v1', '/sales/(?P<id>\d+)/cancel', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'cancel_request' ), 'permission_callback' => $can ) );
+		// 3.14.104 (Ernesto 1-nov, #5976): reactivar un pedido cancelado por error.
+		register_rest_route( 'casa-viva/v1', '/sales/(?P<id>\d+)/reactivate', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'reactivate_request' ), 'permission_callback' => $can ) );
 		register_rest_route( 'casa-viva/v1', '/sales/(?P<id>\d+)/edit', array(
 			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'detail_request' ), 'permission_callback' => $can ),
 			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'edit_request' ), 'permission_callback' => $can ),
@@ -62,8 +64,14 @@ final class CVD_Order_Edit {
 		return 'pickup' === sanitize_key( (string) $order->get_meta( '_cvd_fulfillment_type', true ) );
 	}
 
-	/** '' = se puede cancelar; si no, el motivo en palabras de la tienda. */
-	public static function cancel_block( WC_Order $order, int $user_id ): string {
+	/** 3.14.104: el paquete está con el mensajero; la dependienta cancela solo si confirma que ya volvió a la tienda. */
+	public const RETURN_BLOCK = 'El mensajero tiene el paquete. Cuando lo devuelva a la tienda, cancélalo marcando que ya está en la tienda.';
+
+	/**
+	 * '' = se puede cancelar; si no, el motivo en palabras de la tienda.
+	 * $returned = quien cancela confirma que el paquete ya volvió a la tienda (Ernesto 1-nov: las dependientas cancelan).
+	 */
+	public static function cancel_block( WC_Order $order, int $user_id, bool $returned = false ): string {
 		if ( ! self::user_can_manage( $user_id ) ) { return 'Esta cuenta no puede cancelar pedidos.'; }
 		if ( $order->has_status( array( 'cancelled', 'refunded', 'failed' ) ) ) { return 'Este pedido ya está cancelado.'; }
 		$stage = self::delivery_stage( $order );
@@ -72,8 +80,8 @@ final class CVD_Order_Edit {
 			return 'Este pedido ya se entregó: no se cancela. Cuando esté cerrado, usa «Devolución».';
 		}
 		if ( ! $order->has_status( self::OPEN_WC ) ) { return 'Este pedido no está abierto.'; }
-		if ( ! user_can( $user_id, 'manage_woocommerce' ) && ! self::is_pickup( $order ) && in_array( $stage, array( 'picked_up', 'handed_over' ), true ) ) {
-			return 'El mensajero ya tiene el paquete. Que lo devuelva a la tienda y lo cancela Lennys.';
+		if ( ! $returned && ! user_can( $user_id, 'manage_woocommerce' ) && ! self::is_pickup( $order ) && in_array( $stage, array( 'picked_up', 'handed_over' ), true ) ) {
+			return self::RETURN_BLOCK;
 		}
 		if ( class_exists( 'CVD_Messenger_Accounting' ) && ! CVD_Messenger_Accounting::can_void_order( $order ) ) {
 			return 'La ganancia del mensajero de este pedido ya está liquidada: no se puede cancelar desde aquí.';
@@ -118,14 +126,15 @@ final class CVD_Order_Edit {
 	 * Cancela un pedido con motivo. Devuelve array( ok, message, messenger ) o WP_Error.
 	 * $source: 'ventas' o 'panel' (solo para la nota).
 	 */
-	public static function cancel( int $order_id, string $reason, int $user_id, string $source = 'ventas', bool $confirm_reserva = false ) {
+	public static function cancel( int $order_id, string $reason, int $user_id, string $source = 'ventas', bool $confirm_reserva = false, bool $returned = false ) {
 		$order = wc_get_order( $order_id );
 		if ( ! $order instanceof WC_Order || 'shop_order' !== $order->get_type() ) { return new WP_Error( 'cvd_cancel_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
 		$reason = trim( preg_replace( '/\s+/', ' ', sanitize_text_field( $reason ) ) );
 		if ( mb_strlen( $reason ) < 3 ) { return new WP_Error( 'cvd_cancel_reason', 'Escribe por qué se cancela (una frase corta).', array( 'status' => 422 ) ); }
 		$reason = mb_substr( $reason, 0, 200 );
-		$block = self::cancel_block( $order, $user_id );
-		if ( '' !== $block ) { return new WP_Error( 'cvd_cancel_blocked', $block, array( 'status' => 409 ) ); }
+		$block = self::cancel_block( $order, $user_id, $returned );
+		if ( '' !== $block ) { return new WP_Error( 'cvd_cancel_blocked', $block, array( 'status' => 409, 'needsReturn' => self::RETURN_BLOCK === $block ) ); }
+		$returned = $returned && self::RETURN_BLOCK === self::cancel_block( $order, $user_id ); // solo cuenta si hacía falta
 		// 3.14.72 (Pilar 3, caso #5551): reserva vigente → administración confirma; la dependienta ya quedó bloqueada arriba.
 		if ( class_exists( 'CVD_Reserva' ) ) {
 			$gate = CVD_Reserva::cancel_gate( $order, $user_id, $confirm_reserva );
@@ -156,6 +165,7 @@ final class CVD_Order_Edit {
 		$fresh->update_meta_data( '_cvd_cancelled_by', $user_id );
 		$fresh->update_meta_data( '_cvd_cancelled_at', $at );
 		$fresh->update_meta_data( '_cvd_cancel_source', sanitize_key( $source ) );
+		if ( $returned ) { $fresh->update_meta_data( '_cvd_cancel_returned_to_store', $at ); $fresh->add_order_note( self::who( $user_id ) . ' confirma que el mensajero ya devolvió el paquete a la tienda.' ); }
 		$fresh->add_order_note( sprintf( 'Pedido CANCELADO por %s. Motivo: %s. Las existencias vuelven a la tienda%s.%s', self::who( $user_id ), $reason, absint( $fresh->get_meta( '_cvd_owner_user_id', true ) ) ? ' y la comisión de quien vendió queda anulada' : '', $messenger ? ' Lo tenía el mensajero ' . $messenger['name'] . ' (' . CVD_Delivery::label( $stage ) . '): hay que avisarle.' : '' ) );
 		$fresh->save();
 		// 3.13.98: VivaBot avisa solo al mensajero, a la gestora y (venta directa) al cliente (CVD_Order_Avisos).
@@ -166,7 +176,66 @@ final class CVD_Order_Edit {
 	}
 
 	public static function cancel_request( WP_REST_Request $request ) {
-		$result = self::cancel( absint( $request['id'] ), (string) $request->get_param( 'reason' ), get_current_user_id(), 'ventas', (bool) $request->get_param( 'confirmReserva' ) );
+		$result = self::cancel( absint( $request['id'] ), (string) $request->get_param( 'reason' ), get_current_user_id(), 'ventas', (bool) $request->get_param( 'confirmReserva' ), (bool) $request->get_param( 'returnedToStore' ) );
+		if ( is_wp_error( $result ) ) { return $result; }
+		return rest_ensure_response( $result );
+	}
+
+	// ---------- Reactivar (3.14.104, Ernesto 1-nov: #5976 se canceló solo y no había cómo deshacerlo) ----------
+	public const REACTIVATE_DAYS = 7;
+
+	/** '' = se puede reactivar; si no, el motivo en palabras de la tienda. */
+	public static function reactivate_block( WC_Order $order, int $user_id ): string {
+		if ( ! self::user_can_manage( $user_id ) ) { return 'Esta cuenta no puede reactivar pedidos.'; }
+		if ( ! $order->has_status( 'cancelled' ) ) { return 'Solo se reactivan pedidos cancelados.'; }
+		if ( (float) $order->get_total_refunded() > 0 || $order->get_meta( '_cvd_return', true ) ) { return 'Este pedido tiene una devolución o un reembolso: haz un pedido nuevo.'; }
+		if ( 'paid' === sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ) { return 'La comisión de este pedido ya se pagó: haz un pedido nuevo.'; }
+		$at = (string) $order->get_meta( '_cvd_cancelled_at', true );
+		$when = '' !== $at ? strtotime( $at . ' UTC' ) : ( $order->get_date_modified() ? $order->get_date_modified()->getTimestamp() : 0 );
+		if ( $when && time() - $when > self::REACTIVATE_DAYS * DAY_IN_SECONDS ) { return 'Lleva más de ' . self::REACTIVATE_DAYS . ' días cancelado: haz un pedido nuevo.'; }
+		foreach ( $order->get_items( 'line_item' ) as $item ) {
+			$product = $item->get_product();
+			if ( ! $product ) { return 'Un producto de este pedido ya no existe: haz un pedido nuevo.'; }
+			if ( $product->managing_stock() && (int) $product->get_stock_quantity() < (int) $item->get_quantity() ) { return 'No queda existencia de «' . $product->get_name() . '»: no se puede reactivar.'; }
+		}
+		return '';
+	}
+
+	/** Vuelve a «En espera» con las existencias descontadas, la comisión pendiente y el reparto sin asignar. */
+	public static function reactivate( int $order_id, string $reason, int $user_id ) {
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof WC_Order || 'shop_order' !== $order->get_type() ) { return new WP_Error( 'cvd_reactivate_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
+		$reason = mb_substr( trim( preg_replace( '/\s+/', ' ', sanitize_text_field( $reason ) ) ), 0, 200 );
+		if ( mb_strlen( $reason ) < 3 ) { return new WP_Error( 'cvd_reactivate_reason', 'Escribe por qué se reactiva (una frase corta).', array( 'status' => 422 ) ); }
+		$block = self::reactivate_block( $order, $user_id );
+		if ( '' !== $block ) { return new WP_Error( 'cvd_reactivate_blocked', $block, array( 'status' => 409 ) ); }
+		if ( ! class_exists( 'CVD_Order_Transition_Service' ) || ! method_exists( 'CVD_Order_Transition_Service', 'reopen_after_cancel' ) ) { return new WP_Error( 'cvd_reactivate_service', 'No se pudo reactivar ahora.', array( 'status' => 500 ) ); }
+		// La operación vuelve a como estaba antes de cancelar («Listo», «Preparando»…).
+		$operation = 'new';
+		$history = $order->get_meta( '_cvd_operation_history', true );
+		foreach ( array_reverse( is_array( $history ) ? $history : array() ) as $step ) {
+			if ( 'cancelled' === ( $step['to'] ?? '' ) && ! in_array( (string) ( $step['from'] ?? '' ), array( '', 'cancelled', 'delivered' ), true ) ) { $operation = sanitize_key( (string) $step['from'] ); break; }
+		}
+		$who = self::who( $user_id );
+		// WooCommerce descuenta otra vez las existencias al pasar a «En espera» (al cancelar las devolvió).
+		$order->update_status( 'on-hold', sprintf( 'Pedido REACTIVADO por %s. Motivo: %s.', $who, $reason ) );
+		$fresh = wc_get_order( $order_id );
+		CVD_Order_Transition_Service::reopen_after_cancel( $fresh, $operation, $user_id );
+		foreach ( array( '_cvd_messenger_user_id', '_cvd_messenger_earning_status', '_cvd_delivery_accepted_at', '_cvd_to_store_at', '_cvd_bot_eta', '_cvd_bot_eta_at', '_cvd_direct_assignment' ) as $key ) { $fresh->delete_meta_data( $key ); }
+		$fresh->update_meta_data( '_cvd_reactivated_at', current_time( 'mysql', true ) );
+		$fresh->update_meta_data( '_cvd_reactivated_by', $user_id );
+		$fresh->save();
+		if ( class_exists( 'CVD_Commissions' ) && method_exists( 'CVD_Commissions', 'reopen' ) ) { CVD_Commissions::reopen( $order_id ); }
+		$fresh = wc_get_order( $order_id );
+		$delivery = ! self::is_pickup( $fresh );
+		if ( $delivery && 'ready' === $operation && class_exists( 'CVD_Delivery' ) ) { CVD_Delivery::dispatch_new_order( $order_id ); }
+		$message = 'Pedido #' . $fresh->get_order_number() . ' reactivado: está «En espera», las existencias se descontaron otra vez y la comisión vuelve a pendiente.';
+		$message .= $delivery ? ( 'ready' === $operation ? ' Sale otra vez al grupo de mensajeros.' : ' Cuando esté listo, sale al grupo de mensajeros.' ) : ' Sigue de recogida en tienda.';
+		return array( 'ok' => true, 'message' => $message );
+	}
+
+	public static function reactivate_request( WP_REST_Request $request ) {
+		$result = self::reactivate( absint( $request['id'] ), (string) $request->get_param( 'reason' ), get_current_user_id() );
 		if ( is_wp_error( $result ) ) { return $result; }
 		return rest_ensure_response( $result );
 	}
