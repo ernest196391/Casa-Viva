@@ -169,6 +169,8 @@ final class CVD_Web_Push {
 	}
 
 	private static function notify_user( int $user_id, int $order_id, string $type, string $title, string $message, string $action_url, bool $palla = false ): void {
+		// 3.14.109 (#5581): «Ya se entregó» y «Cambiar mensajero» no avisan a nadie (ni luego, al cerrar ese pedido).
+		if ( class_exists( 'CVD_Order_Edit' ) && method_exists( 'CVD_Order_Edit', 'quiet_for' ) && CVD_Order_Edit::quiet_for( $order_id ) ) { return; }
 		global $wpdb;
 		$wpdb->insert( self::notifications_table(), array('user_id'=>$user_id,'order_id'=>$order_id,'type'=>$type,'title'=>$title,'message'=>$message,'action_url'=>$action_url,'created_at'=>current_time('mysql',true)), array('%d','%d','%s','%s','%s','%s','%s') );
 		// Los teléfonos de Pa'llá no reciben los avisos de siempre (llevan al área vieja y repetirían los de Pa'llá), y al revés.

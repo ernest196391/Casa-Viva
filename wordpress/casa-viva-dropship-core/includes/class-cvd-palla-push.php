@@ -151,8 +151,14 @@ final class CVD_Palla_Push {
 		return $out;
 	}
 
+	/** 3.14.109: CVD_Order_Edit registra algo ya hecho (sin avisos) o el pedido se registró después. */
+	private static function quiet( WC_Order $order ): bool {
+		return class_exists( 'CVD_Order_Edit' ) && method_exists( 'CVD_Order_Edit', 'quiet_for' ) && CVD_Order_Edit::quiet_for( $order->get_id() );
+	}
+
 	private static function send( int $user_id, WC_Order $order, string $type, string $title, string $message, string $hash ): void {
 		if ( ! in_array( $type, self::types(), true ) ) { return; }
+		if ( self::quiet( $order ) ) { return; } // 3.14.109: registro sin avisos («Ya se entregó», «Cambiar mensajero»)
 		$user = get_userdata( $user_id );
 		if ( ! $user || ! self::allowed( $user ) ) { return; }
 		CVD_Web_Push::notify_palla( $user_id, $order->get_id(), $type, $title, $message, home_url( '/palla/' ) . $hash );
@@ -164,7 +170,7 @@ final class CVD_Palla_Push {
 	 * vista) y la app 1.2 calla la bocina de esa carrera si todavía está sonando.
 	 */
 	private static function closed_for_others( WC_Order $order, int $owner ): void {
-		if ( ! in_array( 'offer', self::types(), true ) ) { return; }
+		if ( ! in_array( 'offer', self::types(), true ) || self::quiet( $order ) ) { return; }
 		foreach ( self::subscribers() as $user ) {
 			if ( $user->ID !== $owner ) { self::ntfy( $user->ID, '#' . $order->get_order_number() . ' ya tiene mensajero', 'La cogió otro compañero.', home_url( '/palla/#carreras' ), array( 'cerrada', 'o' . $order->get_id() ) ); }
 		}

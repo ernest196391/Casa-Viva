@@ -558,6 +558,9 @@ final class CVD_Sales {
 		if ( $needs_return && '' === CVD_Order_Edit::cancel_block( $order, $user_id, true ) ) { $cancel_why = ''; } else { $needs_return = false; }
 		$reactivate_why = class_exists( 'CVD_Order_Edit' ) && method_exists( 'CVD_Order_Edit', 'reactivate_block' ) ? CVD_Order_Edit::reactivate_block( $order, $user_id ) : 'No disponible.';
 		$edit_why = class_exists( 'CVD_Order_Edit' ) ? CVD_Order_Edit::edit_block( $order, $user_id ) : 'No disponible.';
+		// 3.14.109 (#5581): «Ya se entregó» (cancelado o reactivado que ya llegó al cliente) y «Cambiar mensajero», sin avisos.
+		$after_why = class_exists( 'CVD_Order_Edit' ) && method_exists( 'CVD_Order_Edit', 'delivered_block' ) ? CVD_Order_Edit::delivered_block( $order, $user_id ) : 'No disponible.';
+		$messenger_why = class_exists( 'CVD_Order_Edit' ) && method_exists( 'CVD_Order_Edit', 'messenger_block' ) ? CVD_Order_Edit::messenger_block( $order, $user_id ) : 'No disponible.';
 		if ( '' !== $cancel_why || $needs_return ) { $actions = array_values( array_diff( $actions, array( 'cancelled' ) ) ); } // devuelto: solo por «Cancelar pedido», confirmándolo
 		$phone = preg_replace( '/[^0-9+]/', '', $order->get_billing_phone() );
 		$messenger = 'pickup' === $fulfillment ? false : get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
@@ -620,6 +623,9 @@ final class CVD_Sales {
 			'cancelNeedsReturn' => $needs_return,
 			'canReactivate' => '' === $reactivate_why,
 			'canEdit' => '' === $edit_why,
+			'canRecordDelivered' => '' === $after_why,
+			'canChangeMessenger' => '' === $messenger_why,
+			'messengerId' => $messenger ? (int) $messenger->ID : 0,
 			'cancelReason' => (string) $order->get_meta( '_cvd_cancel_reason', true ),
 			// 3.14.72 (Pilar 3): reserva de la recogida («Kay pidió guardarlo hasta mañana»); la tienda la ve en rojo y no cancela.
 			'reserva' => class_exists( 'CVD_Reserva' ) && 'pickup' === $fulfillment ? CVD_Reserva::get( $order ) : null,
@@ -728,6 +734,8 @@ final class CVD_Sales {
 			'logoutUrl' => wp_logout_url( home_url( '/casa-viva-app/' ) ),
 			'notificationsUrl' => rest_url( 'casa-viva/v1/notifications' ),
 			'accounts' => self::account_choices(), // «¿A qué tarjeta entró?» (tarjetas activas + Zelle, USDT, Otra)
+			// 3.14.109: «¿Quién lo entregó?» y «Cambiar mensajero» (mensajeros aprobados).
+			'messengers' => class_exists( 'CVD_Order_Edit' ) && method_exists( 'CVD_Order_Edit', 'messenger_choices' ) ? CVD_Order_Edit::messenger_choices() : array(),
 		) );
 	}
 

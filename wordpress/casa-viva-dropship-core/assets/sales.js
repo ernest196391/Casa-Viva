@@ -111,7 +111,10 @@
     return reservaButton(order) + changeButton(order) + (order.canEdit ? '<button type="button" class="cvd-sale-extra" data-edit-order="' + order.id + '">Cambiar pedido</button>' : "")
       + (order.canCancel ? '<button type="button" class="cvd-sale-extra is-warning" data-cancel-order="' + order.id + '" data-number="' + escapeText(order.number) + '"' + (order.cancelNeedsReturn ? ' data-needs-return="1"' : "") + '>Cancelar pedido</button>' : "")
       // 3.14.104 (Ernesto 1-nov): un pedido cancelado por error (hasta 7 días) se puede reactivar.
-      + (order.canReactivate ? '<button type="button" class="cvd-sale-extra" data-reactivate-order="' + order.id + '" data-number="' + escapeText(order.number) + '">Reactivar pedido</button>' : "");
+      + (order.canReactivate ? '<button type="button" class="cvd-sale-extra" data-reactivate-order="' + order.id + '" data-number="' + escapeText(order.number) + '">Reactivar pedido</button>' : "")
+      // 3.14.109 (#5581): el pedido ya llegó al cliente → quién lo entregó y cómo se cobró; y cambiar el mensajero. Sin avisos.
+      + (order.canRecordDelivered ? '<button type="button" class="cvd-sale-extra is-success" data-after-order="' + order.id + '" data-number="' + escapeText(order.number) + '" data-cancelled="' + (order.status === "cancelled" ? "1" : "0") + '">Ya se entregó</button>' : "")
+      + (order.canChangeMessenger ? '<button type="button" class="cvd-sale-extra" data-messenger-order="' + order.id + '" data-number="' + escapeText(order.number) + '" data-current="' + (order.messengerId || 0) + '">Cambiar mensajero</button>' : "");
   }
   // Mensajería: en qué punto va la entrega. Quién lo lleva sale arriba, en «Mensajero» (peopleRows).
   function messengerRow(order) {
@@ -302,6 +305,10 @@
       catch (error) { message.textContent = error.message; message.className = "is-error"; changeBtn.disabled = false; }
       return;
     }
+    var afterBtn = event.target.closest("[data-after-order]");
+    if (afterBtn) { openAfter(afterBtn); return; }
+    var messengerBtn = event.target.closest("[data-messenger-order]");
+    if (messengerBtn) { openMessenger(messengerBtn); return; }
     var editBtn = event.target.closest("[data-edit-order]");
     if (editBtn) { openEdit(editBtn.dataset.editOrder); return; }
     var button = event.target.closest(".cvd-sale-action"); if (!button) return;
@@ -428,6 +435,96 @@
       var r = await api(cvdSales.url + "/" + editState.id + "/edit", { method: "POST", body: JSON.stringify(body) });
       editDialog.close(); await load();
       message.className = r.messenger ? "is-error" : ""; message.textContent = r.message || "Pedido cambiado.";
+    } catch (error) { msg.textContent = error.message; }
+    finally { submit.disabled = false; }
+  });
+
+  // ---------- «Ya se entregó» y «Cambiar mensajero» (3.14.109, Ernesto 1-nov: #5581) ----------
+  // Para lo que YA pasó: un pedido cancelado o reactivado que el cliente ya tiene. Se apunta quién lo entregó, qué día y
+  // cómo se cobró; queda «Entregada · dinero pendiente» y el dinero se cierra con «Registrar dinero recibido» (camino normal).
+  // Nadie recibe avisos (ni el mensajero, ni la gestora, ni el cliente).
+  function messengerOptions(selected) {
+    return '<option value="">Elige el mensajero</option>' + (cvdSales.messengers || []).map(function (m) { return '<option value="' + m.id + '"' + (String(m.id) === String(selected) ? " selected" : "") + ">" + escapeText(m.name) + "</option>"; }).join("");
+  }
+  function havanaDay(offset) {
+    var d = new Date(Date.now() + (offset || 0) * 86400000);
+    try { return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Havana", year: "numeric", month: "2-digit", day: "2-digit" }).format(d); }
+    catch (e) { return d.toISOString().slice(0, 10); }
+  }
+  var afterDialog = document.createElement("dialog");
+  afterDialog.id = "cvd-after-dialog";
+  list.parentNode.appendChild(afterDialog);
+  function openAfter(btn) {
+    var accounts = '<option value="">Elige la tarjeta</option>' + (cvdSales.accounts || []).map(function (a) { return '<option value="' + escapeText(a.id) + '">' + escapeText(a.name) + "</option>"; }).join("");
+    afterDialog.dataset.order = btn.dataset.afterOrder;
+    afterDialog.dataset.number = btn.dataset.number;
+    afterDialog.innerHTML = '<form method="dialog"><h2>Ya se entregó · #' + escapeText(btn.dataset.number) + '</h2>'
+      + '<p class="cvd-edit-hint">' + (btn.dataset.cancelled === "1" ? "Se reactiva y queda entregado. " : "") + 'Apunta lo que ya pasó. No se avisa a nadie.</p>'
+      + '<label>¿Quién lo entregó?<select name="messengerId" required>' + messengerOptions("") + '</select></label>'
+      + '<label>¿Qué día se entregó?<input type="date" name="deliveredDay" required value="' + havanaDay(0) + '" min="' + havanaDay(-14) + '" max="' + havanaDay(0) + '"></label>'
+      + '<label>¿Cómo se cobró?<select name="collectionMethod" required><option value="">Elige</option><option value="cash_usd">Efectivo USD</option><option value="cash_cup">Efectivo CUP</option><option value="transfer">Transferencia a tarjeta (CUP)</option><option value="zelle">Zelle</option><option value="usdt">USDT</option><option value="mixed">Mixto (efectivo + transferencia)</option><option value="other">Otro</option></select></label>'
+      + '<label data-row="account" hidden>¿A qué tarjeta entró?<select name="collectionAccount">' + accounts + '</select></label>'
+      + '<div data-row="typed" hidden><label>Nombre de la tarjeta<input name="collectionCardLabel" maxlength="40" autocomplete="off" placeholder="Ej.: MN BPA"></label><label>Últimos 4 números<input name="collectionCardLast4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" autocomplete="off"></label></div>'
+      + '<label data-row="reference" hidden>Nº de transferencia / referencia<input name="collectionReference" maxlength="60" autocomplete="off"></label>'
+      + '<div class="cvd-edit-two"><label>Cobrado en USD<input name="collectedUsd" type="number" min="0" step="0.01" inputmode="decimal"></label><label>Cobrado en CUP<input name="collectedCup" type="number" min="0" step="1" inputmode="numeric"></label></div>'
+      + '<label>Nota (vuelto, quién tiene el dinero…)<textarea name="collectionNote" rows="2" maxlength="300" placeholder="Ej.: pagó con 50 USD y el mensajero le dio 17 USD de vuelto"></textarea></label>'
+      + '<label>Motivo<input name="reason" maxlength="200" value="Se entregó al cliente"></label>'
+      + '<label class="cvd-money-check"><input type="checkbox" name="sure" required> Confirmo que el cliente ya recibió el pedido.</label>'
+      + '<p data-after-msg role="status" class="is-error"></p>'
+      + '<div class="cvd-edit-buttons"><button value="cancel" formnovalidate>Volver</button><button data-after-submit value="default">Guardar entrega</button></div></form>';
+    syncAfter();
+    afterDialog.showModal();
+  }
+  function syncAfter() {
+    var f = afterDialog.querySelector("form"); if (!f) return;
+    var m = f.elements.collectionMethod.value, card = m === "transfer" || m === "mixed", ref = card || m === "zelle" || m === "usdt" || m === "other";
+    afterDialog.querySelector('[data-row="account"]').hidden = !card;
+    f.elements.collectionAccount.required = m === "transfer";
+    if (!card) f.elements.collectionAccount.value = "";
+    afterDialog.querySelector('[data-row="reference"]').hidden = !ref;
+    if (!ref) f.elements.collectionReference.value = "";
+    var typed = card && f.elements.collectionAccount.value === "typed";
+    afterDialog.querySelector('[data-row="typed"]').hidden = !typed;
+    f.elements.collectionCardLabel.required = typed; f.elements.collectionCardLast4.required = typed;
+  }
+  afterDialog.addEventListener("change", syncAfter);
+  afterDialog.addEventListener("submit", async function (event) {
+    if (event.submitter && event.submitter.value === "cancel") return;
+    event.preventDefault();
+    var f = event.target, msg = afterDialog.querySelector("[data-after-msg]"), submit = afterDialog.querySelector("[data-after-submit]");
+    var who = f.elements.messengerId.options[f.elements.messengerId.selectedIndex];
+    var body = { messengerId: Number(f.elements.messengerId.value), deliveredDay: f.elements.deliveredDay.value, collectionMethod: f.elements.collectionMethod.value, collectionAccount: f.elements.collectionAccount.value, collectionReference: f.elements.collectionReference.value, collectionCardLabel: f.elements.collectionCardLabel.value, collectionCardLast4: f.elements.collectionCardLast4.value, collectedUsd: f.elements.collectedUsd.value, collectedCup: f.elements.collectedCup.value, collectionNote: f.elements.collectionNote.value, reason: f.elements.reason.value };
+    var usd = Number(body.collectedUsd) || 0, cup = Number(body.collectedCup) || 0;
+    if (!(usd > 0 || cup > 0) && !window.confirm("No pusiste dinero cobrado. ¿Seguro? (solo si el cliente pagó antes por Zelle o PayPal)")) return;
+    if (!window.confirm("Pedido #" + afterDialog.dataset.number + "\n\n• Lo entregó: " + (who ? who.text : "") + "\n• Día: " + body.deliveredDay + "\n• Cobro: " + usd + " USD + " + cup + " CUP\n\nQueda entregado, sin avisar a nadie. ¿Guardar?")) return;
+    submit.disabled = true; msg.textContent = "";
+    try {
+      var r = await api(cvdSales.url + "/" + afterDialog.dataset.order + "/delivered-after", { method: "POST", body: JSON.stringify(body) });
+      afterDialog.close(); await load(); message.className = ""; message.textContent = r.message || "Entrega registrada.";
+    } catch (error) { msg.textContent = error.message; }
+    finally { submit.disabled = false; }
+  });
+  var messengerDialog = document.createElement("dialog");
+  messengerDialog.id = "cvd-messenger-dialog";
+  list.parentNode.appendChild(messengerDialog);
+  function openMessenger(btn) {
+    messengerDialog.dataset.order = btn.dataset.messengerOrder;
+    messengerDialog.innerHTML = '<form method="dialog"><h2>Cambiar mensajero · #' + escapeText(btn.dataset.number) + '</h2>'
+      + '<p class="cvd-edit-hint">Para corregir quién lo lleva o quién lo entregó. Su ganancia pasa al nuevo. No se avisa a nadie: si hace falta, avísales tú.</p>'
+      + '<label>Mensajero<select name="messengerId" required>' + messengerOptions(btn.dataset.current) + '</select></label>'
+      + '<label>Motivo (opcional)<input name="reason" maxlength="200" placeholder="Ej.: lo entregó Melany, no Damián"></label>'
+      + '<p data-messenger-msg role="status" class="is-error"></p>'
+      + '<div class="cvd-edit-buttons"><button value="cancel" formnovalidate>Volver</button><button data-messenger-submit value="default">Cambiar</button></div></form>';
+    messengerDialog.showModal();
+  }
+  messengerDialog.addEventListener("submit", async function (event) {
+    if (event.submitter && event.submitter.value === "cancel") return;
+    event.preventDefault();
+    var f = event.target, msg = messengerDialog.querySelector("[data-messenger-msg]"), submit = messengerDialog.querySelector("[data-messenger-submit]");
+    submit.disabled = true; msg.textContent = "";
+    try {
+      var r = await api(cvdSales.url + "/" + messengerDialog.dataset.order + "/messenger", { method: "POST", body: JSON.stringify({ messengerId: Number(f.elements.messengerId.value), reason: f.elements.reason.value }) });
+      messengerDialog.close(); await load(); message.className = ""; message.textContent = r.message || "Mensajero cambiado.";
     } catch (error) { msg.textContent = error.message; }
     finally { submit.disabled = false; }
   });

@@ -29,6 +29,10 @@ final class CVD_Order_Edit {
 
 	public static function register(): void {
 		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
+		// 3.14.109: un pedido registrado después («Ya se entregó») no manda correos al cliente, ni ahora ni al cerrarlo.
+		foreach ( array( 'customer_completed_order', 'customer_on_hold_order', 'customer_processing_order', 'customer_note' ) as $email ) {
+			add_filter( 'woocommerce_email_enabled_' . $email, array( __CLASS__, 'quiet_email' ), 99, 2 );
+		}
 	}
 
 	public static function routes(): void {
@@ -36,6 +40,9 @@ final class CVD_Order_Edit {
 		register_rest_route( 'casa-viva/v1', '/sales/(?P<id>\d+)/cancel', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'cancel_request' ), 'permission_callback' => $can ) );
 		// 3.14.104 (Ernesto 1-nov, #5976): reactivar un pedido cancelado por error.
 		register_rest_route( 'casa-viva/v1', '/sales/(?P<id>\d+)/reactivate', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'reactivate_request' ), 'permission_callback' => $can ) );
+		// 3.14.109 (Ernesto 1-nov, #5581): «Ya se entregó» (quién lo entregó y cómo se cobró) y «Cambiar mensajero», sin avisos.
+		register_rest_route( 'casa-viva/v1', '/sales/(?P<id>\d+)/delivered-after', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'record_delivered_request' ), 'permission_callback' => $can ) );
+		register_rest_route( 'casa-viva/v1', '/sales/(?P<id>\d+)/messenger', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'change_messenger_request' ), 'permission_callback' => $can ) );
 		register_rest_route( 'casa-viva/v1', '/sales/(?P<id>\d+)/edit', array(
 			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'detail_request' ), 'permission_callback' => $can ),
 			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'edit_request' ), 'permission_callback' => $can ),
@@ -202,7 +209,7 @@ final class CVD_Order_Edit {
 	}
 
 	/** Vuelve a «En espera» con las existencias descontadas, la comisión pendiente y el reparto sin asignar. */
-	public static function reactivate( int $order_id, string $reason, int $user_id ) {
+	public static function reactivate( int $order_id, string $reason, int $user_id, bool $dispatch = true ) {
 		$order = wc_get_order( $order_id );
 		if ( ! $order instanceof WC_Order || 'shop_order' !== $order->get_type() ) { return new WP_Error( 'cvd_reactivate_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
 		$reason = mb_substr( trim( preg_replace( '/\s+/', ' ', sanitize_text_field( $reason ) ) ), 0, 200 );
@@ -228,7 +235,8 @@ final class CVD_Order_Edit {
 		if ( class_exists( 'CVD_Commissions' ) && method_exists( 'CVD_Commissions', 'reopen' ) ) { CVD_Commissions::reopen( $order_id ); }
 		$fresh = wc_get_order( $order_id );
 		$delivery = ! self::is_pickup( $fresh );
-		if ( $delivery && 'ready' === $operation && class_exists( 'CVD_Delivery' ) ) { CVD_Delivery::dispatch_new_order( $order_id ); }
+		// 3.14.109: si se reactiva porque ya se entregó, no sale al grupo de mensajeros.
+		if ( $dispatch && $delivery && 'ready' === $operation && class_exists( 'CVD_Delivery' ) ) { CVD_Delivery::dispatch_new_order( $order_id ); }
 		$message = 'Pedido #' . $fresh->get_order_number() . ' reactivado: está «En espera», las existencias se descontaron otra vez y la comisión vuelve a pendiente.';
 		$message .= $delivery ? ( 'ready' === $operation ? ' Sale otra vez al grupo de mensajeros.' : ' Cuando esté listo, sale al grupo de mensajeros.' ) : ' Sigue de recogida en tienda.';
 		return array( 'ok' => true, 'message' => $message );
@@ -236,6 +244,294 @@ final class CVD_Order_Edit {
 
 	public static function reactivate_request( WP_REST_Request $request ) {
 		$result = self::reactivate( absint( $request['id'] ), (string) $request->get_param( 'reason' ), get_current_user_id() );
+		if ( is_wp_error( $result ) ) { return $result; }
+		return rest_ensure_response( $result );
+	}
+
+	// ---------- «Ya se entregó» y «Cambiar mensajero» (3.14.109, Ernesto 1-nov: caso #5581) ----------
+	// #5581 se canceló, luego Zaymi lo reactivó porque «se entregó el producto»: quedó «Por ofertar», con el mensajero que
+	// pidió la gestora (no el que lo llevó) y sin forma de apuntar el cobro. Ahora la tienda registra lo que YA pasó:
+	// quién lo entregó, qué día y cómo se cobró. El reparto avanza por el servicio central (CVD_Order_Transition_Service,
+	// con su historial y sus eventos) hasta «Entregada · dinero pendiente», como si el mensajero lo hubiera marcado; el
+	// dinero se cierra luego con «Registrar dinero recibido» (el camino normal: «¿Lo recibiste hoy?», comisión, ganancia).
+	// Nadie recibe avisos: ni el mensajero, ni la gestora, ni el cliente (sin correo, web push, Pa'llá ni bot).
+
+	/** Marca del pedido registrado después: tampoco avisa al cerrarlo (web push, correo al cliente, «terminado» del bot). */
+	public const AFTER_FACT_META = '_cvd_after_the_fact';
+	/** Días hacia atrás que se aceptan en «¿Qué día se entregó?». */
+	public const AFTER_FACT_DAYS = 14;
+	private static int $silent = 0;
+
+	public static function is_silent(): bool { return self::$silent > 0; }
+
+	/** Sin avisos para este pedido: durante un registro silencioso o si se registró después («Ya se entregó»). */
+	public static function quiet_for( int $order_id ): bool {
+		if ( self::$silent > 0 ) { return true; }
+		$order = $order_id ? wc_get_order( $order_id ) : null;
+		return $order instanceof WC_Order && 'yes' === $order->get_meta( self::AFTER_FACT_META, true );
+	}
+
+	public static function quiet_email( $enabled, $object = null ) {
+		if ( self::$silent > 0 ) { return false; }
+		return $object instanceof WC_Order && 'yes' === $object->get_meta( self::AFTER_FACT_META, true ) ? false : $enabled;
+	}
+
+	/**
+	 * Ejecuta $work sin avisar a nadie: ningún correo (pre_wp_mail), ninguna llamada HTTP (web push, ntfy de Pa'llá)
+	 * y CVD_Web_Push / CVD_Palla_Push no apuntan avisos (miran is_silent()). Se puede anidar.
+	 */
+	public static function silently( callable $work ) {
+		$no_mail = static fn() => false;
+		$no_http = static fn() => new WP_Error( 'cvd_silent', 'Registro sin avisos.' );
+		self::$silent++;
+		add_filter( 'pre_wp_mail', $no_mail, 999 );
+		add_filter( 'pre_http_request', $no_http, 999 );
+		try { return $work(); }
+		finally {
+			remove_filter( 'pre_wp_mail', $no_mail, 999 );
+			remove_filter( 'pre_http_request', $no_http, 999 );
+			self::$silent--;
+		}
+	}
+
+	/** Mensajeros aprobados (para «¿Quién lo entregó?» y «Cambiar mensajero»): [{id, name}]. */
+	public static function messenger_choices(): array {
+		$out = array();
+		foreach ( get_users( array( 'role' => 'cvd_messenger', 'orderby' => 'display_name' ) ) as $user ) {
+			if ( class_exists( 'CVD_Registration' ) && ! CVD_Registration::is_approved_messenger( $user ) ) { continue; }
+			$out[] = array( 'id' => (int) $user->ID, 'name' => (string) $user->display_name );
+		}
+		return $out;
+	}
+
+	private static function messenger_user( int $user_id ): ?WP_User {
+		$user = $user_id ? get_userdata( $user_id ) : false;
+		if ( ! $user instanceof WP_User || ! in_array( 'cvd_messenger', (array) $user->roles, true ) ) { return null; }
+		if ( class_exists( 'CVD_Registration' ) && ! CVD_Registration::is_approved_messenger( $user ) ) { return null; }
+		return $user;
+	}
+
+	/** Pasos del reparto que faltan desde $stage hasta «Entregada» (todos gobernados por el servicio central); [] si no hay camino. */
+	public static function delivered_path( string $stage ): array {
+		$chain = array( 'unassigned', 'assigned', 'accepted', 'picked_up', 'handed_over', 'delivered' );
+		$start = array( 'offered' => 'unassigned', 'to_store' => 'accepted' )[ $stage ] ?? $stage; // offered→assigned y to_store→picked_up existen
+		$at = array_search( $start, $chain, true );
+		return false === $at || 'delivered' === $start ? array() : array_slice( $chain, $at + 1 );
+	}
+
+	/**
+	 * Hora (UTC 'Y-m-d H:i:s') de una entrega del día $day (AAAA-MM-DD de Cuba): hoy = ahora; otro día = ese día a mediodía.
+	 * '' si el día no vale (futuro, más de AFTER_FACT_DAYS atrás o mal escrito). Vacío = hoy.
+	 */
+	public static function delivered_at( string $day, int $now ): string {
+		$tz = new DateTimeZone( 'America/Havana' );
+		$today = ( new DateTimeImmutable( '@' . $now ) )->setTimezone( $tz );
+		$day = trim( $day );
+		if ( '' === $day || $day === $today->format( 'Y-m-d' ) ) { return gmdate( 'Y-m-d H:i:s', $now ); }
+		if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $day ) || $day > $today->format( 'Y-m-d' ) ) { return ''; }
+		$oldest = $today->modify( '-' . self::AFTER_FACT_DAYS . ' days' )->format( 'Y-m-d' );
+		if ( $day < $oldest ) { return ''; }
+		$noon = DateTimeImmutable::createFromFormat( '!Y-m-d H:i', $day . ' 12:00', $tz );
+		return $noon ? $noon->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' ) : '';
+	}
+
+	/** «33 USD en efectivo», «500 CUP + 10 USD (mixto)»… para la nota. */
+	public static function collection_text( string $method, float $usd, float $cup ): string {
+		$parts = array();
+		if ( $usd > 0 ) { $parts[] = wc_format_decimal( $usd, 2, true ) . ' USD'; }
+		if ( $cup > 0 ) { $parts[] = wc_format_decimal( $cup, 2, true ) . ' CUP'; }
+		$how = array( 'cash_usd' => 'en efectivo', 'cash_cup' => 'en efectivo', 'transfer' => 'por transferencia', 'mixed' => '(mixto)', 'other' => '(otro medio)' )[ $method ] ?? '';
+		return trim( ( $parts ? implode( ' + ', $parts ) : 'sin dinero de productos' ) . ' ' . $how );
+	}
+
+	/** '' = se puede usar «Ya se entregó»; si no, el motivo. Solo pedidos a domicilio cancelados (que se pueden reactivar) o ya reactivados. */
+	public static function delivered_block( WC_Order $order, int $user_id ): string {
+		if ( ! self::user_can_manage( $user_id ) ) { return 'Esta cuenta no puede registrar entregas.'; }
+		if ( self::is_pickup( $order ) ) { return 'Es una recogida en tienda: usa «Entregar al cliente».'; }
+		if ( class_exists( 'CVD_Delivery' ) && CVD_Delivery::is_test_order( $order ) ) { return 'Es un pedido de prueba.'; }
+		if ( $order->has_status( 'cancelled' ) ) { return self::reactivate_block( $order, $user_id ); }
+		if ( ! $order->has_status( self::OPEN_WC ) ) { return 'Este pedido ya está cerrado.'; }
+		if ( '' === (string) $order->get_meta( '_cvd_reactivated_at', true ) ) { return 'Solo para pedidos cancelados o reactivados.'; }
+		if ( 'yes' === $order->get_meta( '_cvd_delivery_incident_active', true ) ) { return 'Tiene una incidencia abierta: resuélvela primero.'; }
+		if ( ! self::delivered_path( self::delivery_stage( $order ) ) ) { return 'Ya consta como entregado: usa «Registrar dinero recibido».'; }
+		return '';
+	}
+
+	/**
+	 * Registra una entrega ya hecha. $data: messengerId, deliveredDay (AAAA-MM-DD, vacío = hoy), collectionMethod,
+	 * collectionAccount, collectionReference, collectionCardLabel/Last4/SaveCard, collectedUsd, collectedCup,
+	 * collectionNote, reason. Devuelve array( ok, message ) o WP_Error. No avisa a nadie.
+	 */
+	public static function record_delivered( int $order_id, array $data, int $user_id ) {
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof WC_Order || 'shop_order' !== $order->get_type() ) { return new WP_Error( 'cvd_after_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
+		$block = self::delivered_block( $order, $user_id );
+		if ( '' !== $block ) { return new WP_Error( 'cvd_after_blocked', $block, array( 'status' => 409 ) ); }
+		$messenger = self::messenger_user( absint( $data['messengerId'] ?? 0 ) );
+		if ( ! $messenger ) { return new WP_Error( 'cvd_after_messenger', 'Elige el mensajero que lo entregó.', array( 'status' => 422 ) ); }
+		$delivered_at = self::delivered_at( (string) ( $data['deliveredDay'] ?? '' ), time() );
+		if ( '' === $delivered_at ) { return new WP_Error( 'cvd_after_day', 'El día de la entrega va de hoy hasta ' . self::AFTER_FACT_DAYS . ' días atrás.', array( 'status' => 422 ) ); }
+		if ( ! class_exists( 'CVD_Sales' ) ) { return new WP_Error( 'cvd_after_service', 'No se pudo registrar ahora.', array( 'status' => 500 ) ); }
+		$collection = CVD_Sales::normalize_collection( (string) ( $data['collectionMethod'] ?? '' ), (string) ( $data['collectionAccount'] ?? '' ), (string) ( $data['collectionReference'] ?? '' ),
+			array( 'label' => (string) ( $data['collectionCardLabel'] ?? '' ), 'last4' => (string) ( $data['collectionCardLast4'] ?? '' ), 'save' => ! empty( $data['collectionSaveCard'] ) ) );
+		if ( is_wp_error( $collection ) ) { return $collection; }
+		if ( ! in_array( $collection['method'], array( 'cash_usd', 'cash_cup', 'transfer', 'mixed', 'other' ), true ) ) { return new WP_Error( 'cvd_after_method', 'Di cómo se cobró.', array( 'status' => 422 ) ); }
+		$usd = max( 0.0, (float) wc_format_decimal( $data['collectedUsd'] ?? 0, 2 ) );
+		$cup = max( 0.0, (float) wc_format_decimal( $data['collectedCup'] ?? 0, 2 ) );
+		$prepaid = class_exists( 'CVD_Cuban_Checkout' ) && CVD_Cuban_Checkout::is_prepaid( $order );
+		if ( $usd <= 0 && $cup <= 0 && ! $prepaid ) { return new WP_Error( 'cvd_after_amount', 'Pon cuánto se cobró (USD o CUP).', array( 'status' => 422 ) ); }
+		$note = mb_substr( trim( sanitize_textarea_field( (string) ( $data['collectionNote'] ?? '' ) ) ), 0, 300 );
+		$reason = mb_substr( trim( preg_replace( '/\s+/', ' ', sanitize_text_field( (string) ( $data['reason'] ?? '' ) ) ) ), 0, 200 );
+		if ( mb_strlen( $reason ) < 3 ) { $reason = 'se entregó al cliente'; }
+		return self::silently( static fn() => self::apply_delivered( $order_id, $messenger, $delivered_at, $collection, $usd, $cup, $note, $reason, $user_id ) );
+	}
+
+	private static function apply_delivered( int $order_id, WP_User $messenger, string $delivered_at, array $collection, float $usd, float $cup, string $note, string $reason, int $user_id ) {
+		$who = self::who( $user_id );
+		$was_cancelled = wc_get_order( $order_id )->has_status( 'cancelled' );
+		if ( $was_cancelled ) {
+			$back = self::reactivate( $order_id, 'ya se entregó: ' . $reason, $user_id, false );
+			if ( is_wp_error( $back ) ) { return $back; }
+		}
+		$order = wc_get_order( $order_id );
+		$current = absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
+		if ( $current && $current !== $messenger->ID ) {
+			$changed = self::apply_messenger_change( $order_id, $messenger, $user_id, 'lo entregó ' . $messenger->display_name );
+			if ( is_wp_error( $changed ) ) { return $changed; }
+			$order = wc_get_order( $order_id );
+		}
+		$method = $collection['method'];
+		$what = self::collection_text( $method, $usd, $cup );
+		$collection_note = 'Registrado después por ' . $who . ' (entregó ' . $messenger->display_name . ')' . ( '' !== $note ? ' · ' . $note : '' );
+		$run = wp_generate_uuid4();
+		foreach ( self::delivered_path( self::delivery_stage( $order ) ) as $step ) {
+			$context = array(
+				'actor_user_id' => $user_id, 'idempotency_key' => 'after-fact:' . $order_id . ':' . $run . ':' . $step, 'source' => 'cvd_sales_after_the_fact',
+				'store_records_delivery' => true, // CVD_Order_Transition_Service::authorized: la tienda registra lo ya hecho
+				'metadata' => array( 'after_the_fact' => true, 'messenger' => $messenger->ID ),
+				'atomic_mutation' => static function ( WC_Order $locked, $from, $to, $actor, string $now ) use ( $messenger, $delivered_at, $collection, $method, $usd, $cup, $collection_note ): void {
+					if ( 'assigned' === $to ) { $locked->update_meta_data( '_cvd_messenger_user_id', $messenger->ID ); $locked->delete_meta_data( '_cvd_direct_assignment' ); }
+					if ( 'accepted' === $to ) { $locked->update_meta_data( '_cvd_delivery_accepted_at', $now ); }
+					if ( 'picked_up' === $to ) { $locked->update_meta_data( '_cvd_handed_over_by', $actor->ID ); $locked->update_meta_data( '_cvd_handed_over_at', $now ); }
+					if ( 'handed_over' === $to ) { $locked->update_meta_data( '_cvd_to_customer_at', $delivered_at ); }
+					if ( 'delivered' !== $to ) { return; }
+					// Lo mismo que deja el «Entregado» del mensajero (CVD_Bot_Bridge::mark_delivered_by_messenger), con su día real.
+					$locked->update_meta_data( '_cvd_delivered_by', $messenger->ID );
+					$locked->update_meta_data( '_cvd_delivered_at', $delivered_at );
+					$locked->update_meta_data( '_cvd_delivered_marked_by_store', 'yes' );
+					$locked->update_meta_data( '_cvd_collection_method', $method );
+					$locked->update_meta_data( '_cvd_collection_account', $collection['account'] );
+					$locked->update_meta_data( '_cvd_collection_account_name', $collection['account_name'] );
+					$locked->update_meta_data( '_cvd_collection_reference', $collection['reference'] );
+					$locked->update_meta_data( '_cvd_collection_amount_usd', wc_format_decimal( $usd, 2 ) );
+					$locked->update_meta_data( '_cvd_collection_amount_cup', wc_format_decimal( $cup, 2 ) );
+					$locked->update_meta_data( '_cvd_collection_note', $collection_note );
+					$locked->update_meta_data( '_cvd_declared_usd', wc_format_decimal( $usd, 2 ) );
+					$locked->update_meta_data( '_cvd_declared_cup', wc_format_decimal( $cup, 2 ) );
+					$locked->update_meta_data( '_cvd_collection_received_by', $messenger->ID );
+					$locked->update_meta_data( '_cvd_collection_received_at', $delivered_at );
+					$locked->update_meta_data( self::AFTER_FACT_META, 'yes' );
+					// VivaBot no le manda a la gestora el «pedido terminado» (/bot/gestora/finished) cuando se cierre.
+					$locked->update_meta_data( '_cvd_bot_gestora_done_notified_at', $now );
+					$locked->update_meta_data( '_cvd_bot_gestora_done_suppressed', 'after_the_fact' );
+				},
+				// Sin after_commit: ni web push, ni correo, ni nota al cliente.
+			);
+			if ( 'picked_up' === $step ) { $context['coupled_operation_state'] = 'with_courier'; }
+			if ( 'delivered' === $step ) { $context['coupled_payment_state'] = 'pending_return'; $context['metadata'] += array( 'collection_method' => $method, 'collected_usd' => $usd, 'collected_cup' => $cup ); }
+			$result = CVD_Order_Transition_Service::transition( $order_id, 'delivery', $step, $context );
+			if ( empty( $result['success'] ) ) {
+				return new WP_Error( 'cvd_after_failed', 'No se pudo pasar a «' . CVD_Delivery::label( $step ) . '». Actualiza y vuelve a probar (lo hecho hasta ahí queda).', array( 'status' => 409, 'transition' => $result ) );
+			}
+		}
+		$fresh = wc_get_order( $order_id );
+		$day = get_date_from_gmt( $delivered_at, 'd/m/Y' );
+		$account = CVD_Sales::collection_note( $collection );
+		$fresh->add_order_note( sprintf( '%s por %s. Motivo: %s. Entregó %s el %s; cobro %s.%s%s Queda «Entregada · dinero pendiente»: falta «Registrar dinero recibido» cuando el dinero esté en la tienda. Sin avisos a nadie (mensajero, gestora ni cliente).',
+			$was_cancelled ? 'Reactivado como ENTREGADO' : 'Registrado como ENTREGADO', $who, $reason, $messenger->display_name, $day, $what,
+			'' !== $account ? ' ' . $account : '', '' !== $note ? ' Nota: ' . $note . '.' : '' ) );
+		$fresh->save();
+		if ( class_exists( 'CVD_Messenger_Reputation' ) ) { CVD_Messenger_Reputation::invalidate( $messenger->ID ); }
+		return array( 'ok' => true, 'message' => 'Pedido #' . $fresh->get_order_number() . ': entregado por ' . $messenger->display_name . ' (' . $what . '). Cuando el dinero esté en la tienda, pulsa «Registrar dinero recibido». No se avisó a nadie.' );
+	}
+
+	public static function record_delivered_request( WP_REST_Request $request ) {
+		$result = self::record_delivered( absint( $request['id'] ), (array) $request->get_json_params(), get_current_user_id() );
+		if ( is_wp_error( $result ) ) { return $result; }
+		return rest_ensure_response( $result );
+	}
+
+	/** '' = se puede cambiar el mensajero; si no, el motivo. Con mensajero puesto y el reparto aún sin cerrar (también ya entregado). */
+	public static function messenger_block( WC_Order $order, int $user_id ): string {
+		if ( ! self::user_can_manage( $user_id ) ) { return 'Esta cuenta no puede cambiar el mensajero.'; }
+		if ( self::is_pickup( $order ) ) { return 'Es una recogida en tienda: no lleva mensajero.'; }
+		if ( ! $order->has_status( self::OPEN_WC ) ) { return 'Este pedido ya está cerrado o cancelado.'; }
+		if ( in_array( self::delivery_stage( $order ), array( 'closed', 'cancelled' ), true ) ) { return 'El reparto ya está cerrado: el mensajero ya no se cambia.'; }
+		if ( ! absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { return 'Todavía no tiene mensajero.'; }
+		if ( class_exists( 'CVD_Messenger_Accounting' ) && ! CVD_Messenger_Accounting::can_void_order( $order ) ) { return 'La ganancia de este reparto ya está liquidada.'; }
+		return '';
+	}
+
+	/** «Cambiar mensajero»: pone otro mensajero (y su ganancia al cerrar) sin avisar a nadie. Array( ok, message ) o WP_Error. */
+	public static function change_messenger( int $order_id, int $messenger_id, int $user_id, string $reason = '' ) {
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof WC_Order || 'shop_order' !== $order->get_type() ) { return new WP_Error( 'cvd_messenger_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
+		$block = self::messenger_block( $order, $user_id );
+		if ( '' !== $block ) { return new WP_Error( 'cvd_messenger_blocked', $block, array( 'status' => 409 ) ); }
+		$messenger = self::messenger_user( $messenger_id );
+		if ( ! $messenger ) { return new WP_Error( 'cvd_messenger_invalid', 'Elige un mensajero de la lista.', array( 'status' => 422 ) ); }
+		if ( $messenger->ID === absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { return array( 'ok' => true, 'message' => 'Ya lo tenía ' . $messenger->display_name . '.' ); }
+		$reason = mb_substr( trim( preg_replace( '/\s+/', ' ', sanitize_text_field( $reason ) ) ), 0, 200 );
+		$result = self::silently( static fn() => self::apply_messenger_change( $order_id, $messenger, $user_id, $reason ) );
+		if ( is_wp_error( $result ) ) { return $result; }
+		return array( 'ok' => true, 'message' => 'Pedido #' . $order->get_order_number() . ': ahora el mensajero es ' . $messenger->display_name . '. No se avisó a nadie.' );
+	}
+
+	/** Cambia _cvd_messenger_user_id con el mismo cerrojo del servicio central; deja historial, evento y nota. */
+	private static function apply_messenger_change( int $order_id, WP_User $messenger, int $user_id, string $reason ) {
+		global $wpdb;
+		$lock = 'cvd_transition_' . $order_id;
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s,5)', $lock ) ) ) { return new WP_Error( 'cvd_messenger_busy', 'Otra persona está cambiando este pedido. Vuelve a probar.', array( 'status' => 409 ) ); }
+		try {
+			$order = wc_get_order( $order_id );
+			if ( method_exists( $order, 'read_meta_data' ) ) { $order->read_meta_data( true ); }
+			$old_id = absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
+			$old = $old_id ? get_userdata( $old_id ) : false;
+			$stage = self::delivery_stage( $order );
+			$at = current_time( 'mysql', true );
+			$order->update_meta_data( '_cvd_messenger_user_id', $messenger->ID );
+			// Lo que hizo el mensajero equivocado pasa al correcto (entregó / cobró al cliente).
+			foreach ( array( '_cvd_delivered_by', '_cvd_collection_received_by' ) as $key ) {
+				if ( $old_id && absint( $order->get_meta( $key, true ) ) === $old_id ) { $order->update_meta_data( $key, $messenger->ID ); }
+			}
+			// El bot no le anuncia al nuevo la «asignación directa» (ya está hecha).
+			if ( '1' === (string) $order->get_meta( '_cvd_direct_assignment', true ) ) { $order->update_meta_data( '_cvd_bot_direct_announced_at', $at ); }
+			$changes = $order->get_meta( '_cvd_messenger_changes', true );
+			$changes = is_array( $changes ) ? $changes : array();
+			$changes[] = array( 'from' => $old_id, 'to' => $messenger->ID, 'by' => $user_id, 'at' => $at, 'stage' => $stage, 'reason' => $reason );
+			$order->update_meta_data( '_cvd_messenger_changes', array_slice( $changes, -20 ) );
+			$order->add_order_note( sprintf( 'Mensajero cambiado por %s el %s: de %s a %s (reparto: %s).%s La ganancia de la mensajería será de %s. Sin avisos a nadie.',
+				self::who( $user_id ), get_date_from_gmt( $at, 'd/m/Y H:i' ), $old ? $old->display_name : ( $old_id ? 'usuario #' . $old_id : 'nadie' ), $messenger->display_name,
+				class_exists( 'CVD_Delivery' ) ? CVD_Delivery::label( $stage ) : $stage, '' !== $reason ? ' Motivo: ' . $reason . '.' : '', $messenger->display_name ) );
+			$order->save();
+			// Pa'llá: que su vigilante no lo lea luego como «ya no está a tu nombre» para el anterior.
+			if ( false !== get_transient( 'cvd_palla_owner_' . $order_id ) ) { set_transient( 'cvd_palla_owner_' . $order_id, $messenger->ID, WEEK_IN_SECONDS ); }
+			if ( class_exists( 'CVD_Order_Events' ) ) {
+				try {
+					CVD_Order_Events::record( array( 'order_id' => $order_id, 'event_type' => 'delivery.messenger_changed', 'domain' => 'delivery', 'from_state' => $stage, 'to_state' => $stage,
+						'actor_user_id' => $user_id, 'timestamp' => $at, 'source' => 'cvd_sales_change_messenger', 'metadata' => array( 'from_messenger' => $old_id, 'to_messenger' => $messenger->ID, 'reason' => $reason ),
+						'idempotency_key' => 'messenger-change:' . $order_id . ':' . wp_generate_uuid4() ) );
+				} catch ( Throwable $e ) { /* el historial del pedido ya lo tiene */ }
+			}
+			if ( class_exists( 'CVD_Messenger_Reputation' ) ) { foreach ( array_filter( array( $old_id, $messenger->ID ) ) as $id ) { CVD_Messenger_Reputation::invalidate( $id ); } }
+			return true;
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) );
+		}
+	}
+
+	public static function change_messenger_request( WP_REST_Request $request ) {
+		$result = self::change_messenger( absint( $request['id'] ), absint( $request->get_param( 'messengerId' ) ), get_current_user_id(), (string) $request->get_param( 'reason' ) );
 		if ( is_wp_error( $result ) ) { return $result; }
 		return rest_ensure_response( $result );
 	}

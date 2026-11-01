@@ -235,6 +235,8 @@ final class CVD_Order_Transition_Service {
 		if('picked_up'===$to&&!empty($context['messenger_pickup'])){return in_array($from,array('accepted','to_store'),true)&&in_array('cvd_messenger',(array)$actor->roles,true)&&$actor->ID===absint($order->get_meta('_cvd_messenger_user_id',true))&&!(class_exists('CVD_Delivery')&&CVD_Delivery::is_test_order($order));}
 		// 3.14.38: la tienda recibió el dinero y el mensajero no marcó «entregado»: solo por CVD_Delivery::store_marks_delivered.
 		if(!empty($context['store_money_received'])&&in_array($to,array('handed_over','delivered'),true)){return ($is_admin||$is_staff)&&in_array($from,array('picked_up','handed_over'),true);}
+		// 3.14.109 (#5581): la tienda registra después una entrega ya hecha («Ya se entregó»), solo por CVD_Order_Edit::record_delivered.
+		if(!empty($context['store_records_delivery'])&&in_array($to,array('assigned','accepted','picked_up','handed_over','delivered'),true)){return $is_admin||$is_staff;}
 		if(in_array($to,array('offered','assigned','picked_up','cash_returned'),true)){return $is_admin||$is_staff;}
 		if('closed'===$to){return $is_admin||($is_staff&&!empty($context['allow_staff_closeout']));}
 		$is_assigned=$actor->ID===absint($order->get_meta('_cvd_messenger_user_id',true)); $is_messenger=in_array('cvd_messenger',(array)$actor->roles,true);

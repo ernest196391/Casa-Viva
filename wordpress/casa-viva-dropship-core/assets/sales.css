@@ -294,3 +294,22 @@
 .cvd-sale-card .cvd-sale-reserva small { display: block; font-size: .8em; font-weight: 600; margin-top: 3px; }
 .cvd-sale-card .cvd-sale-reserva.is-active { background: #b3261e; color: #fff; }
 .cvd-sale-card .cvd-sale-reserva.is-expired { background: #fff3d6; border: 1px solid #e0b24a; color: #6a4300; }
+
+/* 3.14.109 (#5581): «Ya se entregó» y «Cambiar mensajero» (mismo aspecto que «Cambiar pedido»). */
+.cvd-sale-extra.is-success { background: #eaf6ef; border-color: #b9dcc8; color: #177d54; }
+#cvd-after-dialog, #cvd-messenger-dialog { border: 0; border-radius: 24px; box-shadow: 0 24px 80px rgba(30,20,20,.3); max-height: calc(100dvh - 28px); max-width: 560px; overflow: auto; width: calc(100% - 28px); }
+#cvd-after-dialog::backdrop, #cvd-messenger-dialog::backdrop { background: rgba(30,20,20,.55); }
+#cvd-after-dialog form, #cvd-messenger-dialog form { display: grid; gap: 12px; }
+#cvd-after-dialog h2, #cvd-messenger-dialog h2 { margin: 0; text-align: center; }
+#cvd-after-dialog label, #cvd-messenger-dialog label { display: grid; font-size: 12px; font-weight: 800; gap: 5px; }
+#cvd-after-dialog label[hidden], #cvd-after-dialog div[hidden] { display: none; }
+#cvd-after-dialog label.cvd-money-check { align-items: center; display: flex; font-size: 14px; gap: 8px; }
+#cvd-after-dialog input, #cvd-after-dialog select, #cvd-after-dialog textarea, #cvd-messenger-dialog input, #cvd-messenger-dialog select { border: 1px solid #cdb8ad; border-radius: 11px; font: inherit; min-height: 44px; padding: 8px 11px; }
+#cvd-after-dialog input[type="checkbox"] { min-height: 0; }
+#cvd-after-dialog .cvd-edit-two { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+#cvd-after-dialog .cvd-edit-hint, #cvd-messenger-dialog .cvd-edit-hint { color: #68524e; font-size: 12px; margin: 0; }
+#cvd-after-dialog [data-after-msg]:empty, #cvd-messenger-dialog [data-messenger-msg]:empty { display: none; }
+#cvd-after-dialog .cvd-edit-buttons, #cvd-messenger-dialog .cvd-edit-buttons { display: flex; gap: 9px; }
+#cvd-after-dialog .cvd-edit-buttons button, #cvd-messenger-dialog .cvd-edit-buttons button { border: 0; border-radius: 999px; cursor: pointer; flex: 1; font-weight: 800; min-height: 45px; }
+[data-after-submit], [data-messenger-submit] { background: #177d54; color: #fff; }
+@media (max-width: 650px) { #cvd-after-dialog .cvd-edit-two { grid-template-columns: 1fr; } }
