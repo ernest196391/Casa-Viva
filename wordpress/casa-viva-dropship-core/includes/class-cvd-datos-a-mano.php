@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
  * Solo presentación: no cambia precios, existencias, tarifas ni pedidos.
  */
 final class CVD_Datos_A_Mano {
-	public const BAJO_PEDIDO = 'Bajo pedido · llega en 24 h';
+	public const BAJO_PEDIDO = 'Encargo 24 h · casi siempre el mismo día';
 	/** Fecha (Y-m-d) en que vuelve un producto agotado. En el producto padre (sirve para todos sus colores). */
 	public const META_BACK = '_cvd_vuelve';
 	private const RATES_PAGE = 'tarifas-mensajeria';

@@ -140,7 +140,7 @@ final class CVD_WhatsApp_Receipt_Template {
 				$lines,
 				'PARA CONFIRMAR EL PEDIDO',
 				array(
-					$market ? '1. Disponibilidad con el proveedor (bajo pedido · llega en 24 h)' : '1. Disponibilidad de los productos',
+					$market ? '1. Disponibilidad en el otro almacén (encargo 24 h)' : '1. Disponibilidad de los productos',
 					'2. Total final y forma de pago',
 					'3. Horario estimado de ' . ( $is_pickup ? 'recogida' : 'entrega' ),
 				)

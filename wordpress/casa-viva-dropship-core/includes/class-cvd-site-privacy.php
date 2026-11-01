@@ -83,14 +83,14 @@ final class CVD_Site_Privacy {
 		elseif ( mb_strlen( $text ) < 40 && false === mb_stripos( $text, $p->get_name() ) ) { $text = $p->get_name() . '. ' . $text; }
 		if ( mb_strlen( $text ) <= 100 ) {
 			$market = class_exists( 'CVD_Market_Bridge' ) && CVD_Market_Bridge::is_market_sku( (string) $p->get_sku() );
-			$text = preg_replace( '/[\s.…]+$/u', '', $text ) . '. ' . ( $market ? 'Bajo pedido en Casa Viva: confirmamos disponibilidad en 1 hora. Entrega en La Habana.' : 'En Casa Viva, La Habana: entrega a domicilio o recogida en Nuevo Vedado.' );
+			$text = preg_replace( '/[\s.…]+$/u', '', $text ) . '. ' . ( $market ? 'Encargo 24 h en Casa Viva: confirmamos en menos de 1 hora y casi siempre llega el mismo día. Entrega en La Habana.' : 'En Casa Viva, La Habana: entrega a domicilio o recogida en Nuevo Vedado.' );
 		}
 		return $text;
 	}
 
 	/** Avisos genéricos que no dicen qué es el producto (bajo pedido y «consulta disponibilidad…»). */
 	private static function is_notice( string $text ): bool {
-		return '' === $text || (bool) preg_match( '/^(producto )?bajo pedido\b|^consulta disponibilidad, variantes/iu', $text );
+		return '' === $text || (bool) preg_match( '/^(producto )?(bajo pedido|encargo 24 h)\b|^consulta disponibilidad, variantes/iu', $text );
 	}
 
 	private static function plain( $html ): string {

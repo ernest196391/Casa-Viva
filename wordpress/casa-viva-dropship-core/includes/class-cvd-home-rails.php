@@ -396,7 +396,7 @@ final class CVD_Home_Rails {
 			$html .= '<span class="cvd-card__cup">' . esc_html( $cup ) . '</span>';
 		}
 		if ( $market ) {
-			$html .= '<span class="cvd-card__market"><strong>Bajo pedido</strong> <span>llega en 24 h</span></span>';
+			$html .= '<span class="cvd-card__market"><strong>Encargo 24 h</strong> <span>casi siempre el mismo día</span></span>';
 		}
 		$html .= '</a>';
 		if ( $can_add ) {

@@ -68,7 +68,7 @@ final class CVD_Catalogo_Auto {
 		$u = static fn( string $slug ) => esc_url( home_url( '/' . $slug . '/' ) );
 		echo '<div class="cvd-como-comprar" style="margin:16px 0;padding:12px 14px;border:2px solid #B5482F;border-radius:14px;background:#FFF8F3;font-size:15px;line-height:1.5;color:#2B2420">'
 			. '<p style="margin:0 0 6px;font-weight:700;font-size:16px"><span aria-hidden="true" style="color:#B5482F;font-size:20px">➜</span> ¿Cómo comprar en Casa Viva?</p>'
-			. ( $bajo ? '<p style="margin:0 0 6px">📦 <strong>Bajo pedido:</strong> lo pedimos al proveedor, te confirmamos en 1 hora antes de cobrar y llega en unas 24 horas.</p>' : '' )
+			. ( $bajo ? '<p style="margin:0 0 6px">📦 <strong>Encargo 24 h:</strong> no está en la tienda, está en otro almacén. Te confirmamos en menos de 1 hora (de 9:00 a 17:00) antes de cobrar; casi siempre llega el mismo día y como máximo en 24 h.</p>' : '' )
 			. '<p style="margin:0 0 6px">📍 <strong>Recógelo</strong> en ' . esc_html( $dir ) . ', ' . esc_html( self::recogida_horas() ) . ( str_ends_with( self::recogida_horas(), '.' ) ? ' ' : '. ' ) . '<a href="' . $u( 'como-llegar' ) . '">Cómo llegar</a></p>'
 			. '<p style="margin:0 0 6px">🛵 <strong>Mensajería</strong> a toda La Habana; se paga en CUP al mensajero. <a href="' . $u( 'tarifas-mensajeria' ) . '">Ver precios por zona</a></p>'
 			. '<p style="margin:0">❓ ¿Dudas? <a href="' . $u( self::PAGINA_COMPRAR ) . '">Así se compra en Casa Viva</a></p></div>';
@@ -95,7 +95,7 @@ final class CVD_Catalogo_Auto {
 			. '<li style="' . $li . '"><span style="' . $ic . '">🛒</span><strong>Elige</strong> tu producto en la web y pídelo con el botón de comprar o por WhatsApp.</li>'
 			. '<li style="' . $li . '"><span style="' . $ic . '">📍</span><strong>Recógelo en la tienda:</strong> ' . esc_html( $dir ) . ', ' . esc_html( $h ) . ' (de 1:00 a 1:30 es el almuerzo). <a href="' . $u( 'como-llegar/' ) . '">Cómo llegar</a></li>'
 			. '<li style="' . $li . '"><span style="' . $ic . '">🛵</span><strong>O te lo llevamos</strong> con mensajería a toda La Habana; se paga aparte, en CUP, al mensajero. <a href="' . $u( 'tarifas-mensajeria/' ) . '">Aquí están los precios de la mensajería</a></li>'
-			. '<li style="' . $li . '"><span style="' . $ic . '">📦</span><strong>Bajo pedido:</strong> lo pedimos al proveedor, te confirmamos en 1 hora antes de cobrar y llega en unas 24 horas.</li>'
+			. '<li style="' . $li . '"><span style="' . $ic . '">📦</span><strong>Encargo 24 h:</strong> no está en la tienda, está en otro almacén. Te confirmamos en menos de 1 hora (de 9:00 a 17:00) antes de cobrar; casi siempre llega el mismo día y como máximo en 24 h.</li>'
 			. '<li style="' . $li . '"><span style="' . $ic . '">▶️</span><strong>¿Dudas?</strong> <a href="' . $u( self::PAGINA_COMPRAR . '/#video' ) . '">Mira el video de cómo comprar (1 minuto)</a></li>'
 			. '</ul></div></details>';
 	}

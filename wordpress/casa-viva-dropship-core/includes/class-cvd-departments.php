@@ -126,7 +126,7 @@ final class CVD_Departments {
 		$chips = array(
 			''       => array( 'Todo', '', '' ),
 			'tienda' => array( 'En tienda', 'listo para hoy', '🏪' ),
-			'pedido' => array( 'Bajo pedido', 'llega en 24 h', '📦' ),
+			'pedido' => array( 'Encargo 24 h', 'casi siempre el mismo día', '📦' ),
 		);
 		$html = '<nav class="cvd-avail" aria-label="Disponibilidad"><div class="cvd-avail__rail">';
 		foreach ( $chips as $key => $chip ) {
@@ -307,7 +307,7 @@ final class CVD_Departments {
 			}
 		}
 		if ( $market && true !== self::$last_market ) {
-			echo '<li class="cvd-dept-sub" role="presentation"><span>Bajo pedido · llega en 24 h</span> No están en la tienda: los pedimos al proveedor cuando reservas y te confirmamos en 1 hora antes de cobrar.</li>';
+			echo '<li class="cvd-dept-sub" role="presentation"><span>Encargo 24 h</span> No están en la tienda: los pedimos al proveedor cuando reservas y te confirmamos en 1 hora antes de cobrar.</li>';
 		}
 		self::$last_market = $market;
 	}
@@ -317,7 +317,7 @@ final class CVD_Departments {
 		$id = (int) get_the_ID();
 		if ( ! $id ) { return; }
 		if ( self::is_market( $id ) ) {
-			echo '<span class="cvd-market-badge"><span><span aria-hidden="true">📦</span> Bajo pedido</span> <span>· llega en 24&nbsp;h</span></span>';
+			echo '<span class="cvd-market-badge"><span><span aria-hidden="true">📦</span> Encargo 24&nbsp;h</span> <span>· otro almacén</span></span>';
 			return;
 		}
 		$product = wc_get_product( $id );

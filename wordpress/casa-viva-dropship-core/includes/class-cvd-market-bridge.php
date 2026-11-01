@@ -20,8 +20,8 @@ defined( 'ABSPATH' ) || exit;
 final class CVD_Market_Bridge {
 	private const NS = 'casa-viva/v1';
 	public const SKU_PREFIX = 'MK-';
-	public const CATEGORY = 'Bajo pedido';
-	public const NOTICE = 'Bajo pedido · llega en 24 h. No está en la tienda: lo pedimos al proveedor y te confirmamos en 1 hora antes de cobrar.'; // 3.14.63 (maratón 24-oct)
+	public const CATEGORY = 'Encargo 24 h'; // 3.14.105 (Ernesto 1-nov): antes «Bajo pedido»; el slug sigue siendo bajo-pedido
+	public const NOTICE = 'Encargo 24 h: no está en la tienda, está en otro almacén. Te confirmamos en menos de 1 hora (de 9:00 a 17:00) antes de cobrar; casi siempre llega el mismo día y como máximo en 24 h.'; // 3.14.63 (maratón 24-oct)
 	/** 3.13.72: en la Tienda, primero lo que hay en la tienda (menu_order 0) y después lo bajo pedido. */
 	public const MENU_ORDER = 10;
 
@@ -121,7 +121,7 @@ final class CVD_Market_Bridge {
 	}
 
 	private static function category_id(): int {
-		$term = get_term_by( 'name', self::CATEGORY, 'product_cat' );
+		$term = get_term_by( 'slug', 'bajo-pedido', 'product_cat' ) ?: get_term_by( 'name', self::CATEGORY, 'product_cat' ); // 3.14.105: por el slug, que no cambia con el nombre
 		if ( $term ) { return (int) $term->term_id; }
 		$new = wp_insert_term( self::CATEGORY, 'product_cat', array( 'slug' => 'bajo-pedido' ) );
 		return is_wp_error( $new ) ? 0 : (int) $new['term_id'];
