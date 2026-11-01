@@ -675,11 +675,8 @@
 			// la gestora recibe el aviso (con el punto exacto del cliente se marca solo a 120 m).
 			if (!c.arrived) { acts += '<div style="display:flex;justify-content:center"><button type="button" class="pl-btn pl-btn--pill' + b('llegue') + '" data-act="llegue" data-id="' + c.id + '">📍 Llegué</button></div>'; }
 			// 3.14.86 (Ernesto: «quitar esa pantalla»): un toque cobra lo del vale; 5 s para deshacer por si fue sin querer.
-			if (state.pend && String(state.pend.id) === String(c.id)) {
-				acts += '<button type="button" class="pl-btn pl-btn--secondary pl-btn--lg pl-btn--block" data-act="deshacer" data-id="' + c.id + '">Entregando… · Deshacer</button>';
-			} else {
-				acts += '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + b('entregado') + '" data-act="entregar" data-id="' + c.id + '">' + icon('bien') + 'Entregado' + (m.chargeShort && !m.unknown && !m.prepaid ? ' · ' + esc(m.chargeShort) : '') + '</button>';
-			}
+			// 3.14.107 (Ernesto 1-nov, «como Uber»): DESLIZA para entregar (imposible sin querer; ya no hace falta deshacer).
+			acts += '<div class="pl-swipe' + b('entregado') + '" data-swipe data-id="' + c.id + '" role="button" aria-label="Desliza para entregar"><span class="pl-swipe-label">Desliza para entregar' + (m.chargeShort && !m.unknown && !m.prepaid ? ' · ' + esc(m.chargeShort) : '') + '</span><span class="pl-swipe-knob">' + icon('bien', 22) + '</span></div>';
 		}
 		else if (c.stage === 'delivered') { acts += '<a class="pl-btn pl-btn--secondary pl-btn--lg pl-btn--block" href="#dinero">💵 Mi dinero</a>'; }
 		if (['pickup', 'route', 'delivered'].indexOf(c.stage) !== -1) { links.push('<a href="#problema/' + c.id + '">Problema</a>'); }
@@ -1027,14 +1024,7 @@
 		if (a === 'entregar' && c) {
 			var mm = c.money || {};
 			if (mm.unknown && !mm.prepaid) { showToast('El vale no dice cuánto cobrar. Llama a la tienda antes de entregarlo.'); return; }
-			if (state.pend) { return; }
-			state.pend = { id: c.id, t: setTimeout(function () {
-				var cc = findCarrera(c.id); state.pend = null;
-				if (!cc) { render(); return; }
-				state.busy = 'entregado-' + cc.id; render();
-				withGeo(function (g) { state.busy = ''; act(cc, 'entregado', g); }); // con el GPS de la puerta del cliente
-			}, window.PALLA_UNDO_MS || 5000) }; // el simulador lo acorta
-			render(); return;
+			entregarYa(c); return;
 		}
 		if (a === 'hoja') { state.hoja = !state.hoja; render(); return; } // 3.14.102: sube o baja la tarjeta
 		if (a === 'centrar') { if (window.PallaMapa && cmap.box) { window.PallaMapa.centrar(cmap.box, cmap.me); } if (!cmap.me) { showToast('Buscando tu ubicación…'); } return; }
@@ -1069,6 +1059,37 @@
 			if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(done, function () { showToast(t); }); } else { showToast(t); }
 		}
 	});
+	// 3.14.107: «Desliza para entregar». Al llegar al final se marca (con el GPS de la puerta); si suelta antes, vuelve.
+	function entregarYa(c) {
+		var mm = c.money || {};
+		if (mm.unknown && !mm.prepaid) { showToast('El vale no dice cuánto cobrar. Llama a la tienda antes de entregarlo.'); render(); return; }
+		if (state.busy) { return; }
+		if (navigator.vibrate) { try { navigator.vibrate(30); } catch (e) {} }
+		state.busy = 'entregado-' + c.id; render();
+		withGeo(function (g) { state.busy = ''; act(c, 'entregado', g); });
+	}
+	var drag = null;
+	app.addEventListener('pointerdown', function (e) {
+		var s = e.target.closest('[data-swipe]'); if (!s) { return; }
+		var k = s.querySelector('.pl-swipe-knob'); drag = { s: s, k: k, x0: e.clientX, max: s.offsetWidth - k.offsetWidth - 8 };
+		try { s.setPointerCapture(e.pointerId); } catch (er) {}
+	});
+	app.addEventListener('pointermove', function (e) {
+		if (!drag) { return; }
+		var dx = Math.max(0, Math.min(drag.max, e.clientX - drag.x0));
+		drag.k.style.transform = 'translateX(' + dx + 'px)'; drag.s.style.setProperty('--p', (dx / drag.max).toFixed(2));
+	});
+	function dragEnd(e) {
+		if (!drag) { return; }
+		var d = drag, dx = Math.max(0, Math.min(d.max, e.clientX - d.x0)); drag = null;
+		if (dx >= d.max * 0.85) { var c = findCarrera(d.s.getAttribute('data-id')); if (c) { entregarYa(c); return; } }
+		d.k.style.transform = ''; d.s.style.setProperty('--p', '0');
+	}
+	app.addEventListener('pointerup', dragEnd);
+	app.addEventListener('pointercancel', dragEnd);
+	// Pequeña vibración al tocar los botones principales (sensación de app cuidada).
+	app.addEventListener('click', function (e) { if (e.target.closest('.pl-btn--primary, .pl-fm-round') && navigator.vibrate) { try { navigator.vibrate(12); } catch (er) {} } }, true);
+	window.PALLA_SWIPE = function (id) { var c = findCarrera(id); if (c) { entregarYa(c); } }; // para el simulador
 	// 3.14.102: deslizar la tarjeta hacia arriba la abre y hacia abajo la cierra (como Uber). Tocar la rayita también.
 	var swipe = null;
 	app.addEventListener('touchstart', function (e) { var s = e.target.closest('[data-hoja]'); swipe = s ? { y: e.touches[0].clientY, top: s.scrollTop } : null; }, { passive: true });

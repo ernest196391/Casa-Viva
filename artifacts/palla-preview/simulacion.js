@@ -29,7 +29,7 @@
 	var setPay = async function (v) { var r = $('input[name=pago][value=' + v + ']'); r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); await wait(150); };
 	var type = async function (sel, v) { var i = $(sel); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); await wait(100); };
 	// 3.14.86: «Entregado» de un toque; se manda al acabar la cuenta atrás (en el simulador, 300 ms).
-	var entregar = async function (id) { await go('#carrera/' + id); await click('[data-act=entregar]', 150); await wait(1100); };
+	var entregar = async function (id) { await go('#carrera/' + id); window.PALLA_SWIPE(id); await wait(1100); }; // 3.14.107: desliza para entregar
 	var newCid = function () { return 'sim' + Math.random().toString(36).slice(2); };
 
 	async function run() {
@@ -65,7 +65,7 @@
 		await go('#carrera/9001');
 		var ent = $$('.pl-actions button').filter(function (x) { return /Entregado/.test(x.innerText); })[0];
 		// 3.14.69.16: ya no hay botón «Entregado» apagado; antes de «Recogí» simplemente no se puede ir a «Entregado».
-		check('6. «Entregado» no se puede mientras no tocas «Recogí»', !$('[data-act=entregar]') && !!$('[data-act=recogi]'), 'entregar=' + !!$('[data-act=entregar]'));
+		check('6. «Entregado» no se puede mientras no tocas «Recogí»', !$('[data-swipe]') && !!$('[data-act=recogi]'), 'deslizar=' + !!$('[data-swipe]'));
 		// 7. Recogí y Recogí otra vez
 		await click('[data-act=recogi]', 900);
 		var r2 = await P.request('carrera', { order: 9001, action: 'recogi', cid: newCid() });
@@ -79,10 +79,10 @@
 		check('8b. «Llegué» en camino: el 📍 queda marcado (negro) y ya no se puede tocar otra vez', !!order(9001).arrived && !!$('.pl-fm-round--on, [aria-label=Llegaste]') && !$('[data-act=llegue]'), text().slice(0, 200));
 		// 9. Entregado de un toque con lo del vale (efectivo USD); antes, «Deshacer» lo para
 		await go('#carrera/9001');
-		var boton9 = ($('[data-act=entregar]') || {}).innerText || '';
-		window.PALLA_UNDO_MS = 2000; await click('[data-act=entregar]', 200);
-		var hayDeshacer = !!$('[data-act=deshacer]'); await click('[data-act=deshacer]', 300); await wait(2200);
-		check('9a. El botón dice «Entregado · 44 USD» y «Deshacer» lo para (sigue en camino)', /Entregado · 44 USD/.test(boton9) && hayDeshacer && order(9001).stage === 'picked', boton9 + ' / deshacer=' + hayDeshacer + ' / ' + order(9001).stage);
+		var boton9 = ($('[data-swipe]') || {}).innerText || '';
+		await click('[data-swipe]', 400); // un toque sin deslizar no entrega
+		var hayDeshacer = true;
+		check('9a. «Desliza para entregar · 44 USD» y un toque sin deslizar no entrega', /Desliza para entregar · 44 USD/.test(boton9) && hayDeshacer && order(9001).stage === 'picked', boton9 + ' / deshacer=' + hayDeshacer + ' / ' + order(9001).stage);
 		window.PALLA_UNDO_MS = 300; await entregar(9001);
 		check('9b. Entregado: queda en «Mi dinero» con 44 USD por llevar', order(9001).stage === 'delivered' && /44 USD/.test(toast()), toast());
 		await go('#dinero'); await wait(300);
@@ -97,13 +97,13 @@
 		// 12. Ya pagado (Zelle)
 		await go('#carreras'); await click('[data-act=cojo][data-id="9003"]', 900); await click('[data-act=recogi]', 900);
 		await go('#carrera/9003');
-		check('12a. Ya pagado: la tarjeta dice que no cobras nada y el botón es «Entregado» a secas', /Nada/.test(text()) && !/cobré/.test(($('[data-act=entregar]') || {}).innerText || 'x'), text().slice(0, 300));
+		check('12a. Ya pagado: la tarjeta dice que no cobras nada y el botón es «Entregado» a secas', /Nada/.test(text()) && !/cobré/.test(($('[data-swipe]') || {}).innerText || 'x'), text().slice(0, 300));
 		await entregar(9003);
 		check('12b. Ya pagado: entregado sin dinero que llevar', order(9003).stage === 'delivered' && /no llevas dinero/i.test(toast()), toast());
 		// 13. Vale sin cifra (transferencia sin tasa): avisa en la tarjeta y no deja marcar Entregado (lo resuelve la gestora antes)
 		await go('#carreras'); await click('[data-act=cojo][data-id="9004"]', 900); await click('[data-act=recogi]', 900);
 		await go('#carrera/9004'); var aviso13 = /no dice cuánto cobrar/.test(text());
-		await click('[data-act=entregar]', 300); await wait(700);
+		window.PALLA_SWIPE(9004); await wait(700);
 		check('13. Vale sin cifra: avisa y no se marca Entregado', aviso13 && order(9004).stage === 'picked' && /no dice cuánto/.test(toast()), aviso13 + ' / ' + order(9004).stage + ' / ' + toast());
 		// 14. Sin señal: Recogí + Entregado en cola, en orden, sin repetir
 		P.event('nueva'); await refresh(); var n3 = world().orders[world().orders.length - 1].id;

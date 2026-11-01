@@ -260,3 +260,9 @@ body,.pl-shell{background:var(--surface-sunken)}
 .pl-fm-round--on{background:#121212;color:var(--brand)}
 .pl-fm .pl-btn--lg{min-height:52px;font-size:17px;border-radius:14px}
 .pl-fm .leaflet-control-attribution{font-size:9px;opacity:.55}
+/* 3.14.107 · Desliza para entregar (Ernesto 1-nov, «como Uber»). */
+.pl-swipe{--p:0;position:relative;height:56px;border-radius:16px;background:#121212;overflow:hidden;touch-action:none;user-select:none;box-shadow:0 10px 22px rgba(18,18,18,.22)}
+.pl-swipe::before{content:"";position:absolute;inset:0;background:var(--brand);opacity:calc(var(--p) * .9);transition:opacity .1s}
+.pl-swipe-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding-left:56px;color:#fff;font:700 16px/20px var(--font);opacity:calc(1 - var(--p))}
+.pl-swipe-knob{position:absolute;left:4px;top:4px;width:48px;height:48px;border-radius:12px;background:var(--brand);color:#121212;display:flex;align-items:center;justify-content:center;transition:transform .2s ease;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.pl-swipe.pl-btn--busy{opacity:.6;pointer-events:none}
