@@ -19,6 +19,16 @@ CUENTAS DE PRUEBA: gestora de prueba creada con `test-accounts.yml` (secretos JO
 FOTOS: 44 fotos reales ampliadas a 2K con Higgsfield (118 créditos) aplicadas con `catalog-photos-apply.yml` (revert disponible); 15 descartadas porque la IA deformaba etiquetas o texto
 ```
 
+## Cambios de pedido por la gestora, sin Lennys ni Ernesto (3.14.103, 2026-10-31) — EN RAMA, SIN DESPLEGAR
+
+- Encargo de Ernesto (31-oct, caso Niurka #5976): la gestora pasa SU pedido de recogida a mensajería y al revés, y lo cancela, desde el chat (VivaBot) o desde su oficina. Rama Core `gestora-cambios-pedido`; VivaBot rama `gestora-cambios-pedido` (sale de `ccr-6c9b866c-3t05dq`, con «#cambio N» de c9311b2).
+- Core `CVD_Gestora_Order_Actions` (un servicio para bot y web): `POST /bot/orders/{id}/to-pickup`, `POST /bot/orders/{id}/gestora-cancel` (motivo obligatorio), `GET /bot/gestora/open-orders`, `GET /bot/gestora-changes?day=`; web `POST /gestora/orders/{id}/to-delivery|to-pickup|cancel` (sesión de la gestora, solo sus pedidos).
+- A mensajería: `CVD_Bot_Delivery_Change::change_to_delivery` (sacado de `to_delivery`, misma lógica y tarifa oficial; dry=1 cotiza). A recogida: solo con el paquete en la tienda (por ofertar, oferta abierta, asignado, aceptado, va a recoger); quita mensajería, tarifa, reparto y mensajero, quita la tarea de reparto y deja nota; mismo candado que las transiciones. Cancelar: `CVD_Order_Edit::cancel` con `$as_owner` (mismos frenos que la dependienta: entregado, reserva, ganancia liquidada) + propio: solo la dueña; con el mensajero en la calle responde «que lo devuelva a la tienda y lo cancela Lennys». Por el bot también administración (su WhatsApp en su usuario).
+- Avisos: evento nuevo `to_pickup` en `CVD_Order_Avisos` (+ `stage`, `wasOffered`); VivaBot avisa al mensajero que lo tenía y a la tienda (cola de la de turno), no a la gestora que lo hizo, y si estaba en el grupo escribe «ya no sale». Registro corto `cvd_gestora_changes_log` (300) → «Cambios hechos por gestoras hoy» en el resumen de Lennys.
+- Oficina: «Pedidos abiertos» arriba de «Tus ventas» con Pasar a mensajería (dirección, municipio y reparto; costo oficial antes de confirmar), Pasar a recogida y Cancelar (motivo obligatorio). Verificado en Chromium 390 px con la web simulada: sin scroll horizontal.
+- Pruebas: `php artifacts/tests/test-gestora-cambios.php` (33 comprobaciones, en `validate.yml`) y en VivaBot `test/cambio-gestora-1031.test.js` (19, con el caso de Niurka) dentro de `npm run check` (1.237 en verde). Ya fallaban en `main` antes de esto (versión fijada a mano): `test-panel-bajo-pedido.mjs`, `test-cliente-fijo-3.14.70.mjs`, `test-maraton-3.14.63.mjs`, `test-variacion-foto-3.14.74.mjs`.
+- Instalación (con el OK de Ernesto): primero Core 3.14.103, luego VivaBot. Sin Core nuevo, el bot contesta «no pude… no he cambiado nada».
+
 ## Foto de cada producto en la tarjeta de la tienda (3.14.37, 2026-10-18)
 
 - Lennys (16 y 17-oct): «Al dependiente hay que mandarle foto con el vale. Ayer se le mandó al cliente un cortinero que no era.»

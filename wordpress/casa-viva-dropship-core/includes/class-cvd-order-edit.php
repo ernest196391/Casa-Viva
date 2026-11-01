@@ -62,9 +62,13 @@ final class CVD_Order_Edit {
 		return 'pickup' === sanitize_key( (string) $order->get_meta( '_cvd_fulfillment_type', true ) );
 	}
 
-	/** '' = se puede cancelar; si no, el motivo en palabras de la tienda. */
-	public static function cancel_block( WC_Order $order, int $user_id ): string {
-		if ( ! self::user_can_manage( $user_id ) ) { return 'Esta cuenta no puede cancelar pedidos.'; }
+	/**
+	 * '' = se puede cancelar; si no, el motivo en palabras de la tienda.
+	 * 3.14.103 (Ernesto 31-oct): $as_owner = la gestora DUEÑA del pedido (ya comprobada por CVD_Gestora_Order_Actions). No tiene
+	 * permiso de tienda, pero cancela lo suyo con los mismos frenos que la dependienta (entregado, mensajero con el paquete, reserva).
+	 */
+	public static function cancel_block( WC_Order $order, int $user_id, bool $as_owner = false ): string {
+		if ( ! $as_owner && ! self::user_can_manage( $user_id ) ) { return 'Esta cuenta no puede cancelar pedidos.'; }
 		if ( $order->has_status( array( 'cancelled', 'refunded', 'failed' ) ) ) { return 'Este pedido ya está cancelado.'; }
 		$stage = self::delivery_stage( $order );
 		$verified = 'verified' === sanitize_key( (string) $order->get_meta( '_cvd_cash_status', true ) );
@@ -96,9 +100,11 @@ final class CVD_Order_Edit {
 	}
 
 	/** «Lennys Rondon (administración)», «Nana (dependienta)»; desde el panel, el nombre de quien lo pulsó. */
-	private static function who( int $user_id ): string {
+	private static function who( int $user_id, string $source = '' ): string {
 		$user = get_userdata( $user_id );
 		$name = $user ? $user->display_name : 'usuario #' . $user_id;
+		// 3.14.103: la gestora dueña, por WhatsApp (VivaBot) o desde su oficina.
+		if ( 0 === strpos( $source, 'gestora_' ) ) { return $name . ' (gestora, ' . ( 'gestora_web' === $source ? 'desde su oficina' : 'por WhatsApp' ) . ')'; }
 		if ( class_exists( 'CVD_Panel_Bridge' ) && CVD_Panel_Bridge::via_panel() ) { $by = CVD_Panel_Bridge::current_by(); return $name . ' (panel' . ( '' !== $by ? ' · ' . $by : '' ) . ')'; }
 		$role = $user && user_can( $user, 'manage_woocommerce' ) ? 'administración' : ( $user && in_array( 'cvd_operator', (array) $user->roles, true ) ? 'operador' : 'dependienta' );
 		return $name . ' (' . $role . ')';
@@ -118,13 +124,13 @@ final class CVD_Order_Edit {
 	 * Cancela un pedido con motivo. Devuelve array( ok, message, messenger ) o WP_Error.
 	 * $source: 'ventas' o 'panel' (solo para la nota).
 	 */
-	public static function cancel( int $order_id, string $reason, int $user_id, string $source = 'ventas', bool $confirm_reserva = false ) {
+	public static function cancel( int $order_id, string $reason, int $user_id, string $source = 'ventas', bool $confirm_reserva = false, bool $as_owner = false ) {
 		$order = wc_get_order( $order_id );
 		if ( ! $order instanceof WC_Order || 'shop_order' !== $order->get_type() ) { return new WP_Error( 'cvd_cancel_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
 		$reason = trim( preg_replace( '/\s+/', ' ', sanitize_text_field( $reason ) ) );
 		if ( mb_strlen( $reason ) < 3 ) { return new WP_Error( 'cvd_cancel_reason', 'Escribe por qué se cancela (una frase corta).', array( 'status' => 422 ) ); }
 		$reason = mb_substr( $reason, 0, 200 );
-		$block = self::cancel_block( $order, $user_id );
+		$block = self::cancel_block( $order, $user_id, $as_owner );
 		if ( '' !== $block ) { return new WP_Error( 'cvd_cancel_blocked', $block, array( 'status' => 409 ) ); }
 		// 3.14.72 (Pilar 3, caso #5551): reserva vigente → administración confirma; la dependienta ya quedó bloqueada arriba.
 		if ( class_exists( 'CVD_Reserva' ) ) {
@@ -156,7 +162,7 @@ final class CVD_Order_Edit {
 		$fresh->update_meta_data( '_cvd_cancelled_by', $user_id );
 		$fresh->update_meta_data( '_cvd_cancelled_at', $at );
 		$fresh->update_meta_data( '_cvd_cancel_source', sanitize_key( $source ) );
-		$fresh->add_order_note( sprintf( 'Pedido CANCELADO por %s. Motivo: %s. Las existencias vuelven a la tienda%s.%s', self::who( $user_id ), $reason, absint( $fresh->get_meta( '_cvd_owner_user_id', true ) ) ? ' y la comisión de quien vendió queda anulada' : '', $messenger ? ' Lo tenía el mensajero ' . $messenger['name'] . ' (' . CVD_Delivery::label( $stage ) . '): hay que avisarle.' : '' ) );
+		$fresh->add_order_note( sprintf( 'Pedido CANCELADO por %s. Motivo: %s. Las existencias vuelven a la tienda%s.%s', self::who( $user_id, sanitize_key( $source ) ), $reason, absint( $fresh->get_meta( '_cvd_owner_user_id', true ) ) ? ' y la comisión de quien vendió queda anulada' : '', $messenger ? ' Lo tenía el mensajero ' . $messenger['name'] . ' (' . CVD_Delivery::label( $stage ) . '): hay que avisarle.' : '' ) );
 		$fresh->save();
 		// 3.13.98: VivaBot avisa solo al mensajero, a la gestora y (venta directa) al cliente (CVD_Order_Avisos).
 		if ( class_exists( 'CVD_Order_Avisos' ) ) { CVD_Order_Avisos::record_cancel( $fresh, $before, $reason, $user_id, sanitize_key( $source ), $messenger, $stage ); }

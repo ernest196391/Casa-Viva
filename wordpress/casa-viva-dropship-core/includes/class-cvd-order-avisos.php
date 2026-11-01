@@ -66,6 +66,18 @@ final class CVD_Order_Avisos {
 		) );
 	}
 
+	/**
+	 * 3.14.103 (Ernesto 31-oct): la gestora pasó su pedido de mensajería a recogida (CVD_Gestora_Order_Actions::to_pickup).
+	 * El bot avisa al mensajero que lo tenía (ya no lo lleva), a la tienda, y lo retira del grupo si estaba ofertado.
+	 */
+	public static function record_to_pickup( WC_Order $order, array $before, int $user_id, string $source, ?array $messenger, string $stage ): void {
+		self::add_event( $order, array(
+			'type' => 'to_pickup', 'by' => $user_id, 'source' => $source, 'stage' => $stage,
+			'messenger' => $messenger ? $messenger + array( 'hasPackage' => false ) : null,
+			'before' => $before,
+		) );
+	}
+
 	/** Cambio (CVD_Order_Edit::edit): solo lo que de verdad cambió. Nada que avisar → no se apunta. */
 	public static function record_edit( WC_Order $order, array $before, int $user_id, string $source, ?array $messenger ): void {
 		$after = self::snapshot( $order );
@@ -160,6 +172,10 @@ final class CVD_Order_Avisos {
 			'forToday'  => $for_today,
 			'when'      => (string) ( $when['label'] ?? '' ),
 			'reason'    => (string) ( $event['reason'] ?? '' ),
+			// 3.14.103: etapa del reparto ANTES del cambio (offered = estaba en el grupo de mensajeros) y dirección que tenía.
+			'stage'     => (string) ( $event['stage'] ?? '' ),
+			'wasOffered' => 'offered' === (string) ( $event['stage'] ?? '' ),
+			'oldAddress' => (string) ( $event['before']['address'] ?? '' ),
 			'by'        => $by ? $by->display_name : '',
 			'source'    => (string) ( $event['source'] ?? '' ),
 			'customer'  => array( 'first' => trim( (string) $order->get_billing_first_name() ), 'phone' => preg_replace( '/\D+/', '', (string) $customer_phone ) ),
@@ -204,7 +220,7 @@ final class CVD_Order_Avisos {
 		if ( ! $already ) {
 			$order->update_meta_data( self::META, $list );
 			if ( $pending ) { $order->update_meta_data( self::PENDING_META, '1' ); } else { $order->delete_meta_data( self::PENDING_META ); }
-			$what = 'c' === substr( $id, 0, 1 ) ? 'de la cancelación' : 'del cambio';
+			$what = 'c' === substr( $id, 0, 1 ) ? 'de la cancelación' : ( 't' === substr( $id, 0, 1 ) ? 'del paso a recogida' : 'del cambio' );
 			$order->add_order_note( 'sent' === $result
 				? 'VivaBot avisó por WhatsApp ' . $what . ( $to ? ' a: ' . implode( ', ', $to ) : '' ) . '.'
 				: 'VivaBot no avisó ' . $what . ( $to ? ' (' . implode( ', ', $to ) . ')' : '' ) . '.' );

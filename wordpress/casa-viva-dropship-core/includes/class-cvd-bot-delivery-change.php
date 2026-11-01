@@ -44,32 +44,45 @@ final class CVD_Bot_Delivery_Change {
 		if ( ! $order ) { return self::out( array( 'result' => 'not_found' ) ); }
 		$gestora = self::owner_gestora( $order, (string) $request->get_param( 'phone' ) );
 		if ( ! $gestora ) { return self::out( array( 'result' => 'not_owner' ) ); }
-		$block = self::block( $order );
-		if ( '' !== $block ) { return self::out( array( 'result' => $block, 'status' => $order->get_status(), 'operation' => self::operation( $order ) ) ); }
-		if ( 'pickup' !== self::fulfillment( $order ) ) { $holder = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ); return self::out( array( 'result' => 'already_delivery', 'delivery' => CVD_Delivery::status( $order ), 'address' => $order->get_billing_address_1(), 'zone' => (string) $order->get_meta( '_cvd_locality', true ), 'fee' => absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) ), 'holder' => $holder ? $holder->display_name : '' ) ); }
+		return self::out( self::change_to_delivery( $order, $gestora, array(
+			'address' => $request->get_param( 'address' ), 'municipality' => $request->get_param( 'municipality' ), 'zone' => $request->get_param( 'zone' ),
+			'fee' => $request->get_param( 'fee' ), 'when' => $request->get_param( 'when' ), 'dry' => $request->get_param( 'dry' ),
+			'messenger' => self::messenger_param( $request ),
+		), 'whatsapp' ) );
+	}
 
-		$address = self::text( $request->get_param( 'address' ), 200 );
-		$municipality = self::text( $request->get_param( 'municipality' ), 80 );
-		$zone = self::text( $request->get_param( 'zone' ), 80 );
+	/**
+	 * 3.14.103 (Ernesto 31-oct): la misma lógica para el bot (WhatsApp) y para la oficina de la gestora (web, CVD_Gestora_Order_Actions).
+	 * $gestora = la dueña ya comprobada. $in: address, municipality, zone, fee (lo que dijo; si no cuadra con la tarifa oficial no se
+	 * cambia nada), when, dry (solo cotiza), messenger (WP_User elegido o null). $channel: whatsapp | web (solo para la nota y el registro).
+	 */
+	public static function change_to_delivery( WC_Order $order, WP_User $gestora, array $in, string $channel = 'whatsapp' ): array {
+		$block = self::block( $order );
+		if ( '' !== $block ) { return array( 'result' => $block, 'status' => $order->get_status(), 'operation' => self::operation( $order ) ); }
+		if ( 'pickup' !== self::fulfillment( $order ) ) { $holder = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ); return array( 'result' => 'already_delivery', 'delivery' => CVD_Delivery::status( $order ), 'address' => $order->get_billing_address_1(), 'zone' => (string) $order->get_meta( '_cvd_locality', true ), 'fee' => absint( $order->get_meta( '_cvd_shipping_fee_cup', true ) ), 'holder' => $holder ? $holder->display_name : '' ); }
+
+		$address = self::text( $in['address'] ?? '', 200 );
+		$municipality = self::text( $in['municipality'] ?? '', 80 );
+		$zone = self::text( $in['zone'] ?? '', 80 );
 		$missing = array_values( array_filter( array( '' === $address ? 'address' : '', '' === $municipality ? 'municipality' : '' ) ) );
-		if ( $missing ) { return self::out( array( 'result' => 'missing', 'fields' => $missing ) ); }
+		if ( $missing ) { return array( 'result' => 'missing', 'fields' => $missing ); }
 		$official = self::official_municipality( $municipality );
-		if ( '' === $official ) { return self::out( array( 'result' => 'zone_unknown', 'municipality' => $municipality, 'municipalities' => array_keys( CVD_Shipping_Rates::localities() ) ) ); }
+		if ( '' === $official ) { return array( 'result' => 'zone_unknown', 'municipality' => $municipality, 'municipalities' => array_keys( CVD_Shipping_Rates::localities() ) ); }
 		// Sin reparto escrito aparte, se busca dentro de la dirección («… Tulipán y La Rosa. Nuevo Vedado.»).
 		$quote = CVD_Shipping_Rates::quote( $official, '' !== $zone ? $zone : $address );
 		if ( 'zone' !== ( $quote['status'] ?? '' ) || empty( $quote['fee'] ) ) {
-			return self::out( array( 'result' => 'zone_unknown', 'municipality' => $official, 'zone' => $zone, 'zones' => CVD_Shipping_Rates::localities()[ $official ] ?? array() ) );
+			return array( 'result' => 'zone_unknown', 'municipality' => $official, 'zone' => $zone, 'zones' => CVD_Shipping_Rates::localities()[ $official ] ?? array() );
 		}
 		$fee = absint( $quote['fee'] );
-		$said = $request->get_param( 'fee' );
+		$said = $in['fee'] ?? null;
 		if ( null !== $said && '' !== $said && absint( $said ) !== $fee ) {
-			return self::out( array( 'result' => 'fee_mismatch', 'fee' => $fee, 'said' => absint( $said ), 'zone' => (string) $quote['label'], 'municipality' => $official ) );
+			return array( 'result' => 'fee_mismatch', 'fee' => $fee, 'said' => absint( $said ), 'zone' => (string) $quote['label'], 'municipality' => $official );
 		}
-		if ( rest_sanitize_boolean( $request->get_param( 'dry' ) ) ) {
-			return self::out( array( 'result' => 'quote', 'fee' => $fee, 'zone' => (string) $quote['label'], 'municipality' => $official ) );
+		if ( rest_sanitize_boolean( $in['dry'] ?? false ) ) {
+			return array( 'result' => 'quote', 'fee' => $fee, 'zone' => (string) $quote['label'], 'municipality' => $official );
 		}
 
-		$when = self::text( $request->get_param( 'when' ), 80 );
+		$when = self::text( $in['when'] ?? '', 80 );
 		$order->update_meta_data( '_cvd_fulfillment_type', 'delivery' );
 		$order->update_meta_data( '_billing_cvd_fulfillment_type', 'delivery' );
 		$order->set_billing_address_1( $address );
@@ -83,16 +96,20 @@ final class CVD_Bot_Delivery_Change {
 		$order->update_meta_data( '_cvd_shipping_rate_version', CVD_Shipping_Rates::VERSION );
 		$order->delete_meta_data( '_cvd_delivery_status' ); // reparto desde cero: «por ofertar»
 		$order->add_order_note( sprintf(
-			'VivaBot: pasado de recogida a mensajería a petición de %s (gestor/a dueño/a del pedido) por WhatsApp: %s, %s (%s). Mensajería %s CUP según la tarifa oficial.%s',
-			$gestora->display_name, $address, (string) $quote['label'], $official, number_format_i18n( $fee, 0 ), '' !== $when ? ' Cuándo: ' . $when . '.' : ''
+			'%s: pasado de recogida a mensajería a petición de %s (gestor/a dueño/a del pedido) %s: %s, %s (%s). Mensajería %s CUP según la tarifa oficial.%s',
+			'web' === $channel ? 'Oficina de la gestora' : 'VivaBot', $gestora->display_name, 'web' === $channel ? 'desde su oficina' : 'por WhatsApp',
+			$address, (string) $quote['label'], $official, number_format_i18n( $fee, 0 ), '' !== $when ? ' Cuándo: ' . $when . '.' : ''
 		) );
 		$order->save();
 
-		$messenger = self::messenger_param( $request );
+		$messenger = ( $in['messenger'] ?? null ) instanceof WP_User ? $in['messenger'] : null;
 		if ( $messenger ) { self::prefer( $order, $messenger, 'gestora', $gestora->display_name ); }
 		CVD_Delivery::dispatch_new_order( $order->get_id() );
 		$fresh = wc_get_order( $order->get_id() );
-		return self::out( array( 'result' => 'changed', 'fee' => $fee, 'zone' => (string) $quote['label'], 'municipality' => $official ) + self::dispatch_state( $fresh ) );
+		if ( class_exists( 'CVD_Gestora_Order_Actions' ) ) {
+			CVD_Gestora_Order_Actions::log( $order, $gestora, 'gestora', 'to_delivery', $channel, $address . ', ' . (string) $quote['label'] . ' · ' . number_format_i18n( $fee, 0 ) . ' CUP' );
+		}
+		return array( 'result' => 'changed', 'fee' => $fee, 'zone' => (string) $quote['label'], 'municipality' => $official ) + self::dispatch_state( $fresh );
 	}
 
 	/**
@@ -198,7 +215,7 @@ final class CVD_Bot_Delivery_Change {
 	}
 
 	/** '' = se puede tocar; si no, por qué no. */
-	private static function block( WC_Order $order ): string {
+	public static function block( WC_Order $order ): string {
 		if ( CVD_Delivery::is_test_order( $order ) ) { return 'test_order'; }
 		if ( ! $order->has_status( self::OPEN ) ) { return 'not_open'; }
 		if ( in_array( self::operation( $order ), self::CLOSED_OPERATION, true ) ) { return 'too_late'; }
@@ -208,7 +225,7 @@ final class CVD_Bot_Delivery_Change {
 	}
 
 	/** Nombre del municipio tal como está en la lista de tarifas («Plaza» → «Plaza de la Revolución»), o ''. */
-	private static function official_municipality( string $typed ): string {
+	public static function official_municipality( string $typed ): string {
 		$key = self::loose( $typed );
 		if ( '' === $key ) { return ''; }
 		$names = array();
@@ -224,14 +241,14 @@ final class CVD_Bot_Delivery_Change {
 		return trim( preg_replace( '/[^a-z0-9]+/', ' ', $text ) );
 	}
 
-	private static function owner( WC_Order $order ): ?WP_User {
+	public static function owner( WC_Order $order ): ?WP_User {
 		if ( 'gestora' !== sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) ) ) { return null; }
 		$user = get_userdata( absint( $order->get_meta( '_cvd_owner_user_id', true ) ) );
 		return $user instanceof WP_User ? $user : null;
 	}
 
 	/** La gestora dueña del pedido, solo si es quien escribe (mismos 8 últimos dígitos de su WhatsApp). */
-	private static function owner_gestora( WC_Order $order, string $phone ): ?WP_User {
+	public static function owner_gestora( WC_Order $order, string $phone ): ?WP_User {
 		$owner = self::owner( $order );
 		$key = self::key( $phone );
 		return $owner && '' !== $key && $key === self::key( self::whatsapp( $owner ) ) ? $owner : null;
@@ -242,11 +259,11 @@ final class CVD_Bot_Delivery_Change {
 		return '' !== self::key( $phone ) ? CVD_Bot_Bridge::messenger_by_phone( $phone ) : null;
 	}
 
-	private static function whatsapp( WP_User $user ): string {
+	public static function whatsapp( WP_User $user ): string {
 		return preg_replace( '/\D+/', '', (string) ( get_user_meta( $user->ID, '_cvd_whatsapp', true ) ?: get_user_meta( $user->ID, 'billing_phone', true ) ) );
 	}
 
-	private static function key( string $phone ): string {
+	public static function key( string $phone ): string {
 		$digits = preg_replace( '/\D+/', '', $phone );
 		return strlen( $digits ) >= 8 ? substr( $digits, -8 ) : '';
 	}

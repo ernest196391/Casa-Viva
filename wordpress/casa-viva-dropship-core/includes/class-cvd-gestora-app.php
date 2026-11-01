@@ -52,6 +52,7 @@ final class CVD_Gestora_App {
 		wp_enqueue_style( 'cvd-gestora-app', CVD_URL . 'assets/gestora-app.css', array( 'cvd-portal' ), CVD_VERSION );
 		wp_enqueue_script( 'cvd-gestora-app', CVD_URL . 'assets/gestora-app.js', array( 'cvd-portal' ), CVD_VERSION, true );
 		wp_enqueue_script( 'cvd-gestora-confianza', CVD_URL . 'assets/gestora-confianza.js', array( 'cvd-gestora-app' ), CVD_VERSION, true ); // 3.14.42
+		wp_enqueue_script( 'cvd-gestora-cambios', CVD_URL . 'assets/gestora-cambios.js', array( 'cvd-gestora-app' ), CVD_VERSION, true ); // 3.14.103
 	}
 
 	/** Todo el cuerpo de la app: menú + vistas nuevas + secciones del portal clásico. */
@@ -188,7 +189,9 @@ final class CVD_Gestora_App {
 					<?php echo $estudio ? CVD_Gestora_Estudio::render( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo $taller ? CVD_Gestora_Taller::render( $user ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
 					<?php echo $estudio && class_exists( 'CVD_Gestora_Contabilidad' ) ? CVD_Gestora_Contabilidad::render( $user, $orders ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?>
-					<?php if ( $box ) : // 3.13.68: el mismo recuadro arriba de «Tus ventas». ?><div class="cvga-view" data-view="ventas"><?php echo $box; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?></div><?php endif; ?>
+					<?php // 3.14.103 (Ernesto 31-oct): «Pedidos abiertos» con Pasar a mensajería / a recogida / Cancelar, arriba de «Tus ventas». ?>
+					<?php $cambios = class_exists( 'CVD_Gestora_Order_Actions' ) ? CVD_Gestora_Order_Actions::render( $user ) : ''; ?>
+					<?php if ( $box || $cambios ) : // 3.13.68: el mismo recuadro arriba de «Tus ventas». ?><div class="cvga-view" data-view="ventas"><?php echo $cambios . $box; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escapado dentro. ?></div><?php endif; ?>
 					<div class="cvga-legacy"><?php echo $legacy; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- salida del shortcode, ya escapada allí. ?></div>
 				</div>
 			</main>

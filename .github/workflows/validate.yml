@@ -72,6 +72,8 @@ jobs:
           node artifacts/tests/test-panel-bajo-pedido.mjs
           php artifacts/tests/test-panel-bajo-pedido.php
           php artifacts/tests/test-reserva.php
+          php artifacts/tests/test-gestora-cambios.php
+          node --check wordpress/casa-viva-dropship-core/assets/gestora-cambios.js
 
       - name: Validar privacidad dependienta y administración
         run: node artifacts/tests/test-staff-privacy-5a.mjs
