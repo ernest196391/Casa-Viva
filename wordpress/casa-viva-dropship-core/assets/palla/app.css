@@ -234,3 +234,10 @@ body,.pl-shell{background:var(--surface-sunken)}
 .pl-fm-sheet{max-height:none}
 .pl-fm-sheet.is-open{max-height:88dvh}
 .pl-fm-more > .pl-note,.pl-fm-more > .pl-alert{display:none}
+.pl-fm-line{display:flex;align-items:center;gap:8px;font-size:16px;line-height:22px}
+.pl-fm-line b{font-weight:800;margin:0 4px}
+.pl-fm-warn{color:var(--warning);font-weight:700}
+.pl-fm-where{font-size:15px;color:var(--ink-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.pl-fm-eta{font-size:26px;line-height:30px}
+.pl-fm-line{display:block}
+.pl-fm-line svg{vertical-align:-4px;margin-right:6px}

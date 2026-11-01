@@ -678,7 +678,7 @@
 			if (state.pend && String(state.pend.id) === String(c.id)) {
 				acts += '<button type="button" class="pl-btn pl-btn--secondary pl-btn--lg pl-btn--block" data-act="deshacer" data-id="' + c.id + '">Entregando… · Deshacer</button>';
 			} else {
-				acts += '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + b('entregado') + '" data-act="entregar" data-id="' + c.id + '">' + icon('bien') + 'Entregado' + (m.chargeShort && !m.unknown && !m.prepaid ? ' · cobré ' + esc(m.chargeShort) : '') + '</button>';
+				acts += '<button type="button" class="pl-btn pl-btn--primary pl-btn--lg pl-btn--block' + b('entregado') + '" data-act="entregar" data-id="' + c.id + '">' + icon('bien') + 'Entregado' + (m.chargeShort && !m.unknown && !m.prepaid ? ' · ' + esc(m.chargeShort) : '') + '</button>';
 			}
 		}
 		else if (c.stage === 'delivered') { acts += '<a class="pl-btn pl-btn--secondary pl-btn--lg pl-btn--block" href="#dinero">💵 Mi dinero</a>'; }
@@ -693,31 +693,29 @@
 
 	// Mapa a pantalla completa con la tarjeta flotante abajo (sube al deslizarla): lo justo + el botón grande; el resto, arriba.
 	function fullMap(c, body, acts, linksHtml) {
+		// 3.14.103 (Ernesto 30-oct: «todo lo que no aporte valor se va»): en la tarjeta cerrada, solo minutos, adónde y el botón.
 		var cu = c.customer || {}, m = c.money || {}, pickup = c.stage === 'pickup';
 		var nav = pickup ? (C.storeMap || '#') : goUrl(c);
-		var who = pickup ? 'Recoge en la tienda' : (cu.name || 'Cliente');
-		var where = pickup ? ((c.pickup && c.pickup.place) || 'Casa Viva') : [cu.address || cu.zone, cu.reference].filter(Boolean).join(' · ');
-		// Lo que no puede quedar escondido en la tarjeta cerrada: sin señal, pase, problema, vale sin cifra, «Llegaste».
-		var alerts = '';
-		if (c.queued) { alerts += '<div class="pl-note">' + icon('sincronizar', 20) + '<div>Guardado. Se manda al volver la señal.</div></div>'; }
-		if (c.pase) { alerts += '<div class="pl-note">🔁<div>Esperando que ' + esc(c.pase.toName) + ' la acepte. <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="pase-cancelar" data-id="' + c.id + '">Cancelar</button></div></div>'; }
-		if (!m.after && m.unknown && !m.prepaid) { alerts += '<div class="pl-alert pl-alert--warning">' + icon('aviso', 20) + '<div><b>El vale no dice cuánto cobrar</b>Pregunta a la tienda antes de entregarlo.</div></div>'; }
-		if (c.arrived) { alerts += '<div class="pl-strong">📍 Llegaste · ya lo saben</div>'; }
-		var html = '<div class="pl-fm"><div class="pl-fm-map" data-mapa-carrera></div>'
+		var dest = pickup ? '🏪 ' + (((c.pickup && c.pickup.place) || 'Casa Viva').split(' · de ')[0]) : '🏠 ' + [cu.first || cu.name, cu.address || cu.zone].filter(Boolean).join(' · ');
+		var info = ''; // lo que no puede quedar escondido
+		if (c.queued) { info += '<div class="pl-fm-line">' + icon('sincronizar', 18) + 'Guardado: se manda al volver la señal</div>'; }
+		if (c.pase) { info += '<div class="pl-fm-line">🔁 Esperando a ' + esc(c.pase.toName) + ' · <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="pase-cancelar" data-id="' + c.id + '">Cancelar</button></div>'; }
+		if (!m.after && m.unknown && !m.prepaid) { info += '<div class="pl-fm-line pl-fm-warn">⚠️ El vale no dice cuánto cobrar</div>'; }
+		else if (!pickup && !m.after && m.chargeShort) { info += '<div class="pl-fm-line">Cobras <b>' + esc(m.chargeShort) + '</b></div>'; }
+		if (m.changeText && !m.after) { info += '<div class="pl-fm-line">' + (pickup ? 'Coge ' : 'Da ') + '<b>' + esc(m.changeText) + '</b> de vuelto</div>'; }
+		if (c.arrived) { info += '<div class="pl-fm-line">📍 Llegaste</div>'; }
+		return '<div class="pl-fm"><div class="pl-fm-map" data-mapa-carrera></div>'
 			+ '<div class="pl-fm-top"><a class="pl-fm-back" href="#carreras" aria-label="Volver a Carreras">‹</a><div class="pl-fm-chip">#' + esc(c.number) + ' · ' + esc(cu.zone) + '</div><a class="pl-fm-nav" href="' + esc(nav) + '" target="_blank" rel="noopener noreferrer">' + icon('mapa', 18) + 'Navegar</a></div>'
 			+ '<section class="pl-fm-sheet' + (state.hoja ? ' is-open' : '') + '" data-hoja>'
 			+ '<button type="button" class="pl-fm-center" data-act="centrar" aria-label="Centrar en mí">🎯</button>'
 			+ '<button type="button" class="pl-fm-handle" data-act="hoja" aria-label="' + (state.hoja ? 'Ver menos' : 'Ver más') + '"></button>'
-			+ offlineBar('Sin conexión. Tu carrera sigue guardada.')
-			+ '<div class="pl-row" style="align-items:center"><span class="pl-fm-eta" data-mapa-texto>' + esc(cmap.text || 'Buscando tu ubicación…') + '</span>' + stageBadge(c) + '</div>'
-			+ '<div class="pl-fm-who"><div style="min-width:0"><div class="pl-strong">' + esc(who) + '</div><div class="pl-muted pl-fm-where">' + esc(where) + '</div></div>'
-			+ (cu.phone ? '<a class="pl-fm-round" href="tel:+' + esc(cu.phone) + '" aria-label="Llamar al cliente">' + icon('tel', 22) + '</a>' : '') + '</div>'
-			+ alerts
-			+ (!m.after && m.chargeShort ? '<div class="pl-fm-money"><span>Cobras <b>' + esc(m.chargeShort) + '</b></span><span>A la tienda <b>' + esc(m.bring || 'Nada') + '</b></span></div>' + (m.changeText ? '<div class="pl-strong">Lleva vuelto ' + esc(m.changeText) + (m.payWith ? ' (paga con ' + esc(m.payWith) + ')' : '') + '</div>' : '') : '')
-			+ acts
+			+ offlineBar('Sin señal: tu carrera sigue guardada.')
+			+ '<div class="pl-fm-who"><div style="min-width:0"><div class="pl-fm-eta" data-mapa-texto>' + esc(cmap.text || 'Buscando tu ubicación…') + '</div><div class="pl-fm-where">' + esc(dest) + '</div></div>'
+			+ (!pickup && cu.phone ? '<a class="pl-fm-round" href="tel:+' + esc(cu.phone) + '" aria-label="Llamar al cliente">' + icon('tel', 22) + '</a>' : '') + '</div>'
+			+ info + acts
 			+ '<div class="pl-fm-more">' + body + linksHtml + '</div></section></div>';
-		return html;
 	}
+
 
 	var KIND = { cash_usd: 'Efectivo USD', cash_cup: 'Efectivo CUP', transfer_cup: 'Transferencia CUP', clasica: 'Tarjeta Clásica', eur: 'Efectivo EUR' };
 	function payOptions(m) {

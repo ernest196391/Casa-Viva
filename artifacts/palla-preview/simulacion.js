@@ -82,7 +82,7 @@
 		var boton9 = ($('[data-act=entregar]') || {}).innerText || '';
 		window.PALLA_UNDO_MS = 2000; await click('[data-act=entregar]', 200);
 		var hayDeshacer = !!$('[data-act=deshacer]'); await click('[data-act=deshacer]', 300); await wait(2200);
-		check('9a. El botón dice «Entregado · cobré 44 USD» y «Deshacer» lo para (sigue en camino)', /cobré 44 USD/.test(boton9) && hayDeshacer && order(9001).stage === 'picked', boton9 + ' / deshacer=' + hayDeshacer + ' / ' + order(9001).stage);
+		check('9a. El botón dice «Entregado · 44 USD» y «Deshacer» lo para (sigue en camino)', /Entregado · 44 USD/.test(boton9) && hayDeshacer && order(9001).stage === 'picked', boton9 + ' / deshacer=' + hayDeshacer + ' / ' + order(9001).stage);
 		window.PALLA_UNDO_MS = 300; await entregar(9001);
 		check('9b. Entregado: queda en «Mi dinero» con 44 USD por llevar', order(9001).stage === 'delivered' && /44 USD/.test(toast()), toast());
 		await go('#dinero'); await wait(300);
@@ -91,7 +91,7 @@
 		// 11. Vuelto de la tienda (#56)
 		await go('#carreras'); await click('[data-act=cojo][data-id="9002"]', 900);
 		await go('#carrera/9002');
-		check('11a. Con vuelto: la tarjeta dice que traes productos + 10 USD de vuelto', /10 USD \+ 12\.250 CUP/.test(text()) && /vuelto 10 USD/.test(text()), text().slice(0, 400));
+		check('11a. Con vuelto: la tarjeta dice que coges 10 USD de vuelto en la tienda', /Coge\s*10\s*USD\s*de vuelto/.test(text()), (text().match(/.{0,40}vuelto.{0,20}/g) || ['sin vuelto: ' + location.hash]).join(' | '));
 		await click('[data-act=recogi]', 900); await entregar(9002);
 		check('11b. Entregado con vuelto: el aviso suma el vuelto (#56)', /Lleva 10 USD \+ 12\.250 CUP/.test(toast()) && /10 USD del vuelto/.test(toast()), toast());
 		// 12. Ya pagado (Zelle)
@@ -170,7 +170,7 @@
 		var pideA = /Elige a quién/.test(text());
 		var ra = $('input[name=to][value="2"]'); ra.checked = true; ra.dispatchEvent(new Event('change', { bubbles: true })); await wait(150);
 		await click('[data-act=pasar]', 900);
-		var esperando = /Esperando que Pedri/.test(text()) && !/Pasar a otro mensajero/.test(text()) && order(n7).owner === 1;
+		var esperando = /Esperando (que|a) Pedri/.test(text()) && !/Pasar a otro mensajero/.test(text()) && order(n7).owner === 1;
 		await click('[data-act=pase-cancelar]', 900);
 		check('21. Pasar: pide a quién, queda «esperando» (sigue siendo mía) y se puede cancelar', pideA && esperando && !order(n7).pase && /cancelaste el pase/.test(toast()), [pideA, esperando, JSON.stringify(order(n7).pase), toast()].join(' / '));
 		// 22. El compañero acepta: la app me avisa y ya no es mía

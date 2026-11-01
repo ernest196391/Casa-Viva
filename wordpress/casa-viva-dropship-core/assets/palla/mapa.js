@@ -136,12 +136,12 @@
 				map.panTo(big ? map.unproject(map.project(me).add([0, 110])) : me, { animate: true }); // tu 🛵 un poco por encima de la tarjeta
 			}
 			setTimeout(function () { map.invalidateSize(); }, 50);
-			if (!to) { return me ? 'Sin punto en el mapa: usa la dirección.' : ''; }
+			if (!to) { return me ? 'Sin punto en el mapa' : ''; }
 			if (!me) { return 'Buscando tu ubicación…'; }
 			var a = L.latLng(me[0], me[1]).distanceTo(L.latLng(to[0], to[1]));
 			var km = a < 950 ? Math.round(a / 10) * 10 + ' m' : (a / 1000).toFixed(1).replace('.', ',') + ' km';
 			var min = Math.max(1, Math.round(a * 1.35 / 300)); // en moto: ~300 m/min y las calles alargan la recta un 35 %
-			return 'A ' + km + ' · unos ' + min + ' min ' + ('tienda' === kind ? 'de la tienda' : 'del cliente');
+			return min + ' min · ' + km; // 3.14.103: corto (el destino va debajo)
 		});
 	}
 
