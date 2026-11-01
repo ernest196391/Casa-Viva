@@ -210,7 +210,8 @@ final class CVD_Sales {
 		register_rest_route( 'casa-viva/v1', '/sales/(?P<id>\d+)/return', array(
 			'methods' => 'POST',
 			'callback' => array( __CLASS__, 'register_return' ),
-			'permission_callback' => static fn(): bool => current_user_can( 'manage_woocommerce' ),
+			// 3.14.103 (Ernesto 31-oct): las dependientas también, con el mismo permiso que «Cancelar».
+			'permission_callback' => array( 'CVD_Order_Edit', 'can_manage' ),
 		) );
 	}
 
@@ -218,41 +219,149 @@ final class CVD_Sales {
 	 * Devolución de un pedido ya cerrado (D30, opción A). Regla: vuelve el stock, se anula la
 	 * comisión de la gestora (el cliente no se quedó el producto) y la ganancia del mensajero se
 	 * mantiene salvo que administración marque lo contrario. Queda escrito el dinero devuelto.
+	 * 3.14.103 (Ernesto 31-oct, caso de la olla): también las dependientas (mismo permiso que «Cancelar»),
+	 * desde /ventas/ y desde la caja (CVD_Caja_Bridge::return_order). La lógica vive en do_return().
 	 */
 	public static function register_return( WP_REST_Request $request ) {
-		$order = wc_get_order( absint( $request['id'] ) );
-		if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund ) { return new WP_Error( 'cvd_return_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
-		if ( ! $order->has_status( 'completed' ) ) { return new WP_Error( 'cvd_return_state', 'Solo se registran devoluciones de pedidos completados.', array( 'status' => 409 ) ); }
-		if ( $order->get_meta( '_cvd_return', true ) ) { return new WP_Error( 'cvd_return_done', 'Este pedido ya tiene una devolución registrada.', array( 'status' => 409 ) ); }
-		$reason = sanitize_textarea_field( (string) $request->get_param( 'reason' ) );
-		if ( '' === trim( $reason ) ) { return new WP_Error( 'cvd_return_reason', 'Escribe el motivo de la devolución.', array( 'status' => 422 ) ); }
-		$usd = (float) wc_format_decimal( $request->get_param( 'refundUsd' ) ?: 0, 2 );
-		$cup = (float) wc_format_decimal( $request->get_param( 'refundCup' ) ?: 0, 2 );
-		$void_messenger = rest_sanitize_boolean( $request->get_param( 'voidMessenger' ) );
-		$actor = wp_get_current_user();
+		$via_panel = class_exists( 'CVD_Panel_Bridge' ) && CVD_Panel_Bridge::via_panel();
+		$result = self::do_return( absint( $request['id'] ), array(
+			'reason' => (string) $request->get_param( 'reason' ),
+			'refundUsd' => $request->get_param( 'refundUsd' ),
+			'refundCup' => $request->get_param( 'refundCup' ),
+			'refundMethod' => (string) $request->get_param( 'refundMethod' ),
+			'voidMessenger' => rest_sanitize_boolean( $request->get_param( 'voidMessenger' ) ),
+			'lines' => (array) ( $request->get_param( 'lines' ) ?: array() ),
+			'returnId' => (string) $request->get_param( 'returnId' ),
+		), get_current_user_id(), $via_panel ? 'el panel' : '' );
+		if ( is_wp_error( $result ) ) { return $result; }
+		return rest_ensure_response( array( 'message' => $result['message'], 'order' => self::payload( wc_get_order( absint( $request['id'] ) ) ) ) );
+	}
+
+	/** «Zaymi (dependienta)», «Lennys Rondon (administración)». */
+	public static function who_label( int $user_id ): string {
+		$user = get_userdata( $user_id );
+		$name = $user ? $user->display_name : 'usuario #' . $user_id;
+		$role = $user && user_can( $user, 'manage_woocommerce' ) ? 'administración' : ( $user && in_array( 'cvd_operator', (array) $user->roles, true ) ? 'operador' : 'dependienta' );
+		return $name . ' (' . $role . ')';
+	}
+
+	/** '' = se puede registrar la devolución; si no, el motivo en palabras de la tienda. */
+	public static function return_block( WC_Order $order, int $user_id ): string {
+		if ( $user_id <= 0 || ( ! user_can( $user_id, 'manage_woocommerce' ) && ! user_can( $user_id, 'cvd_manage_sales' ) ) ) { return 'Esta cuenta no puede registrar devoluciones.'; }
+		if ( $order->get_meta( '_cvd_return', true ) ) { return 'Este pedido ya tiene una devolución registrada.'; }
+		if ( $order->has_status( array( 'cancelled', 'failed' ) ) ) { return 'Este pedido está cancelado: no hay nada que devolver.'; }
+		if ( $order->has_status( 'refunded' ) ) { return 'Este pedido ya está devuelto.'; }
+		if ( ! $order->has_status( 'completed' ) ) { return 'Este pedido todavía no está cobrado. Cóbralo primero (o cancélalo si sigue abierto) y después registra la devolución.'; }
+		return '';
+	}
+
+	/**
+	 * Registra la devolución. $a: reason, refundUsd, refundCup, refundMethod (cash|transfer|mixed), voidMessenger,
+	 * lines [{itemId, qty}] (vacío = todo), returnId (idempotencia: el mismo id repetido no hace nada dos veces).
+	 * $where: desde dónde («la caja (Teléfono 2)», «el panel» o '' = Ventas). Devuelve array( ok, message, repeated, return ) o WP_Error.
+	 */
+	public static function do_return( int $order_id, array $a, int $user_id, string $where = '' ) {
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof WC_Order || $order instanceof WC_Order_Refund || 'shop_order' !== $order->get_type() ) { return new WP_Error( 'cvd_return_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
+		$return_id = substr( sanitize_text_field( (string) ( $a['returnId'] ?? '' ) ), 0, 80 );
+		$previous = $order->get_meta( '_cvd_return', true );
+		if ( '' !== $return_id && is_array( $previous ) && ( $previous['id'] ?? '' ) === $return_id ) {
+			return array( 'ok' => true, 'repeated' => true, 'message' => 'Esta devolución ya estaba registrada.', 'return' => $previous );
+		}
+		$block = self::return_block( $order, $user_id );
+		if ( '' !== $block ) {
+			$code = $previous ? 'cvd_return_done' : ( $order->has_status( 'completed' ) ? 'cvd_return_blocked' : 'cvd_return_state' );
+			return new WP_Error( $code, $block, array( 'status' => 409 ) );
+		}
+		$reason = CVD_Return_Plan::reason( sanitize_textarea_field( (string) ( $a['reason'] ?? '' ) ) );
+		if ( '' === $reason ) { return new WP_Error( 'cvd_return_reason', 'Escribe la causa de la devolución (una frase corta).', array( 'status' => 422 ) ); }
+		$money = CVD_Return_Plan::money( $a['refundUsd'] ?? 0, $a['refundCup'] ?? 0, (string) ( $a['refundMethod'] ?? '' ) );
+		// /ventas/ y el panel de antes no mandan la forma: si devuelven dinero sin decirla, cuenta como efectivo (lo de siempre).
+		if ( ! $money['ok'] && '' === trim( (string) ( $a['refundMethod'] ?? '' ) ) && ( $money['usd'] > 0 || $money['cup'] > 0 ) ) {
+			$money = CVD_Return_Plan::money( $a['refundUsd'] ?? 0, $a['refundCup'] ?? 0, 'cash' );
+		}
+		if ( ! $money['ok'] ) { return new WP_Error( 'cvd_return_money', $money['error'], array( 'status' => 422 ) ); }
+		$items = array();
+		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) { $items[ (int) $item_id ] = array( 'name' => $item->get_name(), 'qty' => (int) $item->get_quantity() ); }
+		$plan = CVD_Return_Plan::lines( $items, array_values( (array) ( $a['lines'] ?? array() ) ) );
+		if ( ! $plan['ok'] ) { return new WP_Error( 'cvd_return_lines', $plan['error'], array( 'status' => 422 ) ); }
+		$admin = user_can( $user_id, 'manage_woocommerce' );
 		$messenger_note = 'se mantiene';
-		if ( $void_messenger && class_exists( 'CVD_Messenger_Accounting' ) ) {
-			if ( ! CVD_Messenger_Accounting::can_void_order( $order ) ) { return new WP_Error( 'cvd_return_paid', 'La ganancia del mensajero ya está liquidada; no se puede anular desde aquí.', array( 'status' => 409 ) ); }
-			try { CVD_Messenger_Accounting::void_order_atomic( $order ); } catch ( Throwable $e ) { return new WP_Error( 'cvd_return_ledger', 'No se pudo anular la ganancia del mensajero.', array( 'status' => 409 ) ); }
-			$order->update_meta_data( '_cvd_messenger_earning_status', 'cancelled' );
-			$messenger_note = 'anulada';
+		if ( ! empty( $a['voidMessenger'] ) ) {
+			// D30: la ganancia del mensajero solo la anula administración, y nunca una ya liquidada.
+			if ( ! $admin ) { return new WP_Error( 'cvd_return_messenger', 'La ganancia del mensajero solo la puede anular Lennys.', array( 'status' => 403 ) ); }
+			if ( class_exists( 'CVD_Messenger_Accounting' ) ) {
+				if ( ! CVD_Messenger_Accounting::can_void_order( $order ) ) { return new WP_Error( 'cvd_return_paid', 'La ganancia del mensajero ya está liquidada; no se puede anular desde aquí.', array( 'status' => 409 ) ); }
+				try { CVD_Messenger_Accounting::void_order_atomic( $order ); } catch ( Throwable $e ) { return new WP_Error( 'cvd_return_ledger', 'No se pudo anular la ganancia del mensajero.', array( 'status' => 409 ) ); }
+				$order->update_meta_data( '_cvd_messenger_earning_status', 'cancelled' );
+				$messenger_note = 'anulada';
+			}
 		}
-		if ( function_exists( 'wc_increase_stock_levels' ) ) { wc_increase_stock_levels( $order ); }
-		// La comisión se anula aquí mismo: el paso a "reembolsado" no la toca en un pedido ya cerrado.
-		if ( 'paid' === sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ) {
-			$order->add_order_note( 'Devolución: la comisión de quien vendió ya estaba pagada; descontarla en su próximo pago.' );
-		} elseif ( class_exists( 'CVD_Commissions' ) ) {
-			CVD_Commissions::cancel_for_order( $order, $actor->ID, current_time( 'mysql', true ), 'return:' . $order->get_id() );
+		// Stock: el pedido entero como siempre; una devolución parcial, solo esas unidades.
+		if ( $plan['full'] ) {
+			if ( function_exists( 'wc_increase_stock_levels' ) ) { wc_increase_stock_levels( $order ); }
+		} else {
+			foreach ( $plan['lines'] as $line ) {
+				$item = $order->get_item( $line['itemId'] );
+				$product = $item instanceof WC_Order_Item_Product ? $item->get_product() : null;
+				if ( $product && $product->managing_stock() && function_exists( 'wc_update_product_stock' ) ) {
+					wc_update_product_stock( $product, (int) $line['qty'], 'increase' );
+					$reduced = (int) $item->get_meta( '_reduced_stock', true );
+					if ( $reduced > 0 ) { $item->update_meta_data( '_reduced_stock', max( 0, $reduced - (int) $line['qty'] ) ); $item->save(); }
+				}
+			}
 		}
-		$order->update_meta_data( '_cvd_return', array( 'at' => current_time( 'mysql', true ), 'by' => $actor->ID, 'refund_usd' => $usd, 'refund_cup' => $cup, 'reason' => $reason, 'messenger_earning' => $messenger_note ) );
+		// Comisión: entera se anula aquí mismo (el paso a «reembolsado» no la toca en un pedido ya cerrado).
+		// Parcial: no se toca; lo decide Lennys (no hay regla aprobada para repartirla).
+		if ( ! $plan['full'] ) {
+			$commission = 'sin tocar';
+		} elseif ( 'paid' === sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) ) ) {
+			$commission = 'ya pagada';
+		} else {
+			$voided = class_exists( 'CVD_Commissions' ) ? CVD_Commissions::cancel_for_order( $order, $user_id, current_time( 'mysql', true ), 'return:' . $order->get_id() ) : null;
+			$commission = $voided ? 'anulada' : 'sin comisión';
+		}
+		$by = self::who_label( $user_id );
+		$record = array(
+			'id' => '' !== $return_id ? $return_id : 'ventas-' . wp_generate_uuid4(),
+			'at' => current_time( 'mysql', true ), 'by' => $user_id, 'byName' => $by, 'where' => $where,
+			'refund_usd' => $money['usd'], 'refund_cup' => $money['cup'], 'refund_method' => $money['method'],
+			'reason' => $reason, 'full' => $plan['full'], 'lines' => $plan['lines'],
+			'commission' => $commission, 'messenger_earning' => $messenger_note,
+		);
+		$order->update_meta_data( '_cvd_return', $record );
+		// Con dinero devuelto, el pedido queda marcado para que Lennys lo revise (panel: «Devoluciones con dinero»).
+		if ( $money['usd'] > 0 || $money['cup'] > 0 ) { $order->update_meta_data( '_cvd_refund_review', 'pending' ); }
+		$order->add_order_note( CVD_Return_Plan::note( array(
+			'who' => $by, 'where' => $where, 'lines' => $plan['lines'], 'full' => $plan['full'],
+			'usd' => $money['usd'], 'cup' => $money['cup'], 'method' => $money['method'], 'reason' => $reason,
+			'commission' => $commission, 'messenger' => $messenger_note,
+		) ) );
+		if ( ! $plan['full'] ) {
+			$order->save(); // parcial: el pedido sigue «completado» (el cliente se quedó lo demás)
+			return array( 'ok' => true, 'repeated' => false, 'message' => 'Devolución parcial registrada.', 'return' => $record );
+		}
 		$order->update_meta_data( '_cvd_return_in_progress', 'yes' ); // deja pasar el freno de D30 solo para esta devolución
-		$order->add_order_note( sprintf( 'Devolución registrada por %s: se devolvió al cliente %s USD + %s CUP. Motivo: %s. Stock repuesto; comisión de quien vendió anulada; ganancia del mensajero %s.', $actor->display_name, $usd, $cup, $reason, $messenger_note ) );
 		$order->save();
-		$order->update_status( 'refunded', 'Devolución registrada en el Centro de ventas.' );
+		$order->update_status( 'refunded', 'Devolución registrada' . ( '' !== $where ? ' desde ' . $where : ' en el Centro de ventas' ) . '.' );
 		$order = wc_get_order( $order->get_id() );
 		$order->delete_meta_data( '_cvd_return_in_progress' );
 		$order->save();
-		return rest_ensure_response( array( 'message' => 'Devolución registrada.', 'order' => self::payload( $order ) ) );
+		return array( 'ok' => true, 'repeated' => false, 'message' => 'Devolución registrada.', 'return' => $record );
+	}
+
+	/** Lo que se ve de la devolución (ventas, panel y caja); null si no tiene. */
+	public static function return_info( WC_Order $order ): ?array {
+		$r = $order->get_meta( '_cvd_return', true );
+		if ( ! is_array( $r ) ) { return null; }
+		$user = get_userdata( absint( $r['by'] ?? 0 ) );
+		return array(
+			'at' => (string) ( $r['at'] ?? '' ), 'by' => (string) ( $r['byName'] ?? ( $user ? $user->display_name : '' ) ), 'where' => (string) ( $r['where'] ?? '' ),
+			'reason' => (string) ( $r['reason'] ?? '' ), 'refundUsd' => (float) ( $r['refund_usd'] ?? 0 ), 'refundCup' => (float) ( $r['refund_cup'] ?? 0 ),
+			'refundMethod' => (string) ( $r['refund_method'] ?? '' ), 'full' => ! isset( $r['full'] ) || ! empty( $r['full'] ),
+			'products' => isset( $r['lines'] ) && is_array( $r['lines'] ) ? CVD_Return_Plan::products_text( $r['lines'] ) : '',
+			'review' => (string) $order->get_meta( '_cvd_refund_review', true ),
+		);
 	}
 
 	public static function orders( WP_REST_Request $request ) {
@@ -571,7 +680,9 @@ final class CVD_Sales {
 			'orderCode' => 'CV-PEDIDO-' . $order->get_id(),
 			// 3.13.54: pedido de prueba → cartel grande «PRUEBA — no preparar»; nunca sale al reparto.
 			'testOrder' => class_exists( 'CVD_Delivery' ) && CVD_Delivery::is_test_order( $order ),
-			'canReturn' => current_user_can( 'manage_woocommerce' ) && $order->has_status( 'completed' ) && ! $order->get_meta( '_cvd_return', true ),
+			// 3.14.103: también las dependientas (Zaymi, Nana), con el mismo permiso que «Cancelar».
+			'canReturn' => '' === self::return_block( $order, get_current_user_id() ),
+			'returnInfo' => self::return_info( $order ),
 			'declaredUsd' => (string) $order->get_meta( '_cvd_declared_usd', true ),
 			'declaredCup' => (string) $order->get_meta( '_cvd_declared_cup', true ),
 			'declaredEur' => (string) $order->get_meta( '_cvd_declared_eur', true ),

@@ -19,6 +19,13 @@ defined( 'ABSPATH' ) || exit;
  *  GET  /panel/caja/cash-collections?from=ISO  → efectivo recibido en Ventas desde esa hora que NO pasó por la
  *                                                 caja (para el «debería haber» del cajón al cerrar).
  *
+ *  GET  /panel/caja/web-orders/find?number=N   → 3.14.103: un pedido por su #número (cualquier estado): estado, productos,
+ *                                                 lo cobrado y qué se puede hacer desde la caja («cancel», «return» o nada y por qué).
+ *  POST /panel/caja/web-orders/{id}/cancel     → 3.14.103: cancelar con causa (CVD_Order_Edit::cancel, reglas de la dependienta).
+ *  POST /panel/caja/web-orders/{id}/return     → 3.14.103: devolución con causa, unidades por línea y dinero devuelto
+ *                                                 (CVD_Sales::do_return). Idempotente por actionId: repetirlo no hace nada dos veces.
+ *  Cancelar y devolver los firma SIEMPRE la usuaria de la dependienta (nunca el panel), para que valgan sus frenos.
+ *
  * Contra cobrar dos veces: un pedido completado (ya cobrado en Ventas) se rechaza con 409
  * cvd_already_charged; un reintento del mismo cobro de la caja (chargeId) devuelve «hecho» sin repetir.
  * Fuente única del efectivo de los mensajeros: el cierre «Dinero recibido» de Core (CVD_Messenger_Cash::held);
@@ -37,6 +44,9 @@ final class CVD_Caja_Bridge {
 		register_rest_route( self::NS, '/panel/caja/web-orders', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'web_orders' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/caja/web-orders/(?P<id>\d+)/charge', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'charge' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/caja/web-orders/(?P<id>\d+)/change', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'change' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/caja/web-orders/find', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'find' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/caja/web-orders/(?P<id>\d+)/cancel', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'cancel_order' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/caja/web-orders/(?P<id>\d+)/return', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'return_order' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/caja/cash-collections', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'cash_collections' ), 'permission_callback' => $auth ) );
 	}
 
@@ -315,5 +325,157 @@ final class CVD_Caja_Bridge {
 		$web = array();
 		foreach ( $totals as $currency => $minor ) { $web[] = array( 'currency' => $currency, 'amountMinor' => $minor ); }
 		return self::no_cache( array( 'from' => gmdate( 'c', $from ), 'web' => $web, 'orders' => $orders ) );
+	}
+
+	// ---------- 3.14.103: cancelar o devolver un pedido web desde la caja (Ernesto 31-oct, caso de la olla) ----------
+
+	public const ACTION_META = '_cvd_caja_action';
+
+	private static function web_order( int $id ): ?WC_Order {
+		$order = $id > 0 ? wc_get_order( $id ) : null;
+		return $order instanceof WC_Order && ! $order instanceof WC_Order_Refund && 'shop_order' === $order->get_type() ? $order : null;
+	}
+
+	/** «2963», «#2963» o «CV-PEDIDO-2963» → 2963 (0 si no es un número). */
+	public static function parse_number( string $raw ): int {
+		return preg_match( '/^\s*(?:#|cv-pedido-)?\s*(\d{1,9})\s*$/i', $raw, $m ) ? (int) $m[1] : 0;
+	}
+
+	/** Estado del pedido en palabras de la tienda. */
+	private static function state_label( WC_Order $order ): string {
+		if ( $order->has_status( 'cancelled' ) ) { return 'Cancelado'; }
+		if ( $order->has_status( 'refunded' ) ) { return 'Devuelto'; }
+		if ( $order->has_status( 'failed' ) ) { return 'Fallido'; }
+		if ( $order->has_status( 'completed' ) ) { return $order->get_meta( '_cvd_return', true ) ? 'Cobrado · con devolución parcial' : 'Entregado y cobrado'; }
+		$stage = class_exists( 'CVD_Delivery' ) ? CVD_Delivery::status( $order ) : '';
+		if ( 'pickup' === sanitize_key( (string) $order->get_meta( '_cvd_fulfillment_type', true ) ) ) { return 'Recogida abierta'; }
+		if ( 'delivered' === $stage ) { return 'Entregado · sin cobrar'; }
+		if ( in_array( $stage, array( 'picked_up', 'handed_over' ), true ) ) { return 'Con el mensajero'; }
+		return 'Abierto';
+	}
+
+	/** Usuaria que firma una cancelación o devolución desde la caja: la dependienta de «Atiende», nunca el panel. */
+	private static function signer( array $p ) {
+		$clerk = self::clerk( absint( $p['clerkWooId'] ?? 0 ), (string) ( $p['clerkPhone'] ?? '' ) );
+		if ( ! $clerk ) {
+			return new WP_Error( 'cvd_caja_clerk', 'No encontré tu usuaria en la web (la de quien atiende). Pide a Lennys que la enlace en el panel; mientras, hazlo en Ventas.', array( 'status' => 403 ) );
+		}
+		return $clerk;
+	}
+
+	private static function where( array $p ): string {
+		$device = substr( sanitize_text_field( (string) ( $p['device'] ?? '' ) ), 0, 60 );
+		return 'la caja' . ( '' !== $device ? ' (' . $device . ')' : '' );
+	}
+
+	/** Lo que la caja ve de un pedido para cancelar o devolver. $user_id: la dependienta (0 = sin saber, se usan sus reglas). */
+	public static function action_row( WC_Order $order, int $user_id ): array {
+		$lines = array();
+		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
+			$product = $item instanceof WC_Order_Item_Product ? $item->get_product() : null;
+			$lines[] = array( 'itemId' => (int) $item_id, 'name' => $item->get_name(), 'qty' => (int) $item->get_quantity(), 'totalUsd' => round( (float) $item->get_total(), 2 ), 'sku' => $product ? (string) $product->get_sku() : '', 'image' => self::thumb( $product ) );
+		}
+		$can = '';
+		$why = '';
+		if ( $order->has_status( array( 'pending', 'processing', 'on-hold' ) ) ) {
+			$why = class_exists( 'CVD_Order_Edit' ) ? ( $user_id ? CVD_Order_Edit::cancel_block( $order, $user_id ) : '' ) : 'No disponible.';
+			$delivered = class_exists( 'CVD_Delivery' ) && 'delivered' === CVD_Delivery::status( $order );
+			if ( $delivered ) {
+				$why = 'Este pedido ya se entregó pero no está cobrado. Cóbralo primero en «Pedidos web» y después registra la devolución.';
+			} elseif ( '' === $why ) {
+				$can = 'cancel';
+			}
+		} else {
+			$why = $user_id ? CVD_Sales::return_block( $order, $user_id ) : ( $order->has_status( 'completed' ) && ! $order->get_meta( '_cvd_return', true ) ? '' : 'Este pedido no se puede devolver.' );
+			if ( '' === $why ) { $can = 'return'; }
+		}
+		$charged = '' !== (string) $order->get_meta( '_cvd_collection_method', true ) ? array(
+			'method' => sanitize_key( (string) $order->get_meta( '_cvd_collection_method', true ) ),
+			'usd' => (float) $order->get_meta( '_cvd_collection_amount_usd', true ),
+			'cup' => (float) $order->get_meta( '_cvd_collection_amount_cup', true ),
+			'at' => (string) $order->get_meta( '_cvd_collection_received_at', true ),
+		) : null;
+		return array(
+			'id' => $order->get_id(),
+			'number' => $order->get_order_number(),
+			'date' => $order->get_date_created() ? $order->get_date_created()->date( 'c' ) : '',
+			'status' => $order->get_status(),
+			'statusLabel' => self::state_label( $order ),
+			'customer' => $order->get_formatted_billing_full_name(),
+			'gestora' => (string) $order->get_meta( 'gestora_nombre', true ),
+			'totalUsd' => round( (float) $order->get_total(), 2 ),
+			'charged' => $charged,
+			'products' => $lines,
+			'can' => $can,
+			'why' => $why,
+			'cancelReason' => (string) $order->get_meta( '_cvd_cancel_reason', true ),
+			'returnInfo' => CVD_Sales::return_info( $order ),
+			'test' => class_exists( 'CVD_Delivery' ) && CVD_Delivery::is_test_order( $order ),
+		);
+	}
+
+	public static function find( WP_REST_Request $request ) {
+		$id = self::parse_number( (string) $request->get_param( 'number' ) );
+		$order = self::web_order( $id );
+		if ( ! $order ) { return new WP_Error( 'cvd_caja_order', 'No encuentro el pedido #' . ( $id ?: (string) $request->get_param( 'number' ) ) . ' en la web. Revisa el número del vale.', array( 'status' => 404 ) ); }
+		$clerk = self::clerk( absint( $request->get_param( 'clerkWooId' ) ), (string) $request->get_param( 'clerkPhone' ) );
+		return self::no_cache( array( 'order' => self::action_row( $order, $clerk ? $clerk->ID : 0 ), 'clerkFound' => (bool) $clerk ) );
+	}
+
+	/** Cancelar desde la caja: {actionId, reason, clerkWooId, clerkPhone, clerkName, device}. */
+	public static function cancel_order( WP_REST_Request $request ) {
+		$p = (array) $request->get_json_params();
+		$order = self::web_order( absint( $request['id'] ) );
+		if ( ! $order ) { return new WP_Error( 'cvd_caja_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
+		$action_id = substr( sanitize_text_field( (string) ( $p['actionId'] ?? '' ) ), 0, 80 );
+		if ( '' === $action_id ) { return new WP_Error( 'cvd_caja_action_id', 'Falta el identificador de la acción.', array( 'status' => 422 ) ); }
+		$previous = $order->get_meta( self::ACTION_META, true );
+		if ( is_array( $previous ) && ( $previous['id'] ?? '' ) === $action_id && $order->has_status( 'cancelled' ) ) {
+			return self::no_cache( array( 'ok' => true, 'repeated' => true, 'message' => 'Este pedido ya estaba cancelado con esta misma acción de la caja.', 'order' => self::action_row( $order, 0 ) ) );
+		}
+		$clerk = self::signer( $p );
+		if ( is_wp_error( $clerk ) ) { return $clerk; }
+		wp_set_current_user( $clerk->ID );
+		$result = CVD_Order_Edit::cancel( $order->get_id(), (string) ( $p['reason'] ?? '' ), $clerk->ID, 'caja' );
+		if ( is_wp_error( $result ) ) { return $result; }
+		$fresh = wc_get_order( $order->get_id() );
+		$fresh->update_meta_data( self::ACTION_META, array( 'id' => $action_id, 'kind' => 'cancel', 'clerk' => $clerk->ID, 'at' => current_time( 'mysql', true ) ) );
+		$fresh->add_order_note( 'Cancelado desde ' . self::where( $p ) . ' por ' . $clerk->display_name . '.' );
+		$fresh->save();
+		return self::no_cache( array( 'ok' => true, 'message' => (string) $result['message'], 'order' => self::action_row( $fresh, $clerk->ID ) ) );
+	}
+
+	/** Devolución desde la caja: {actionId, reason, lines:[{itemId, qty}], refundUsd, refundCup, refundMethod, clerk…, device}. */
+	public static function return_order( WP_REST_Request $request ) {
+		$p = (array) $request->get_json_params();
+		$order = self::web_order( absint( $request['id'] ) );
+		if ( ! $order ) { return new WP_Error( 'cvd_caja_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
+		$action_id = substr( sanitize_text_field( (string) ( $p['actionId'] ?? '' ) ), 0, 80 );
+		if ( '' === $action_id ) { return new WP_Error( 'cvd_caja_action_id', 'Falta el identificador de la acción.', array( 'status' => 422 ) ); }
+		$previous = $order->get_meta( '_cvd_return', true );
+		if ( is_array( $previous ) && ( $previous['id'] ?? '' ) === $action_id ) {
+			return self::no_cache( array( 'ok' => true, 'repeated' => true, 'message' => 'Esta devolución ya estaba registrada.', 'order' => self::action_row( $order, 0 ) ) );
+		}
+		$clerk = self::signer( $p );
+		if ( is_wp_error( $clerk ) ) { return $clerk; }
+		wp_set_current_user( $clerk->ID );
+		$lines = array();
+		foreach ( (array) ( $p['lines'] ?? array() ) as $line ) {
+			if ( is_array( $line ) ) { $lines[] = array( 'itemId' => absint( $line['itemId'] ?? 0 ), 'qty' => absint( $line['qty'] ?? 0 ) ); }
+		}
+		$result = CVD_Sales::do_return( $order->get_id(), array(
+			'reason' => (string) ( $p['reason'] ?? '' ),
+			'refundUsd' => $p['refundUsd'] ?? 0,
+			'refundCup' => $p['refundCup'] ?? 0,
+			'refundMethod' => (string) ( $p['refundMethod'] ?? '' ),
+			'voidMessenger' => false, // D30: la ganancia del mensajero solo la anula Lennys
+			'lines' => $lines,
+			'returnId' => $action_id,
+		), $clerk->ID, self::where( $p ) );
+		if ( is_wp_error( $result ) ) { return $result; }
+		$fresh = wc_get_order( $order->get_id() );
+		$fresh->update_meta_data( self::ACTION_META, array( 'id' => $action_id, 'kind' => 'return', 'clerk' => $clerk->ID, 'at' => current_time( 'mysql', true ) ) );
+		$fresh->save();
+		return self::no_cache( array( 'ok' => true, 'repeated' => ! empty( $result['repeated'] ), 'message' => (string) $result['message'], 'order' => self::action_row( $fresh, $clerk->ID ) ) );
 	}
 }

@@ -19,6 +19,18 @@ CUENTAS DE PRUEBA: gestora de prueba creada con `test-accounts.yml` (secretos JO
 FOTOS: 44 fotos reales ampliadas a 2K con Higgsfield (118 créditos) aplicadas con `catalog-photos-apply.yml` (revert disponible); 15 descartadas porque la IA deformaba etiquetas o texto
 ```
 
+## Devolución y cancelación de pedidos web por las dependientas y desde la caja (3.14.103, 2026-10-31)
+
+- Ernesto (31-oct): «que ellas [Zaymi, Nana] puedan cancelar pedidos de este tipo desde su panel, desde la caja, poniendo la causa». Caso real: olla de presión Ariete (pedido web de 62 USD, entregado y cobrado) devuelta; Zaymi solo pudo sacar los 62 USD como «Salida del cajón · Otro»: el pedido no quedó devuelto, el stock no volvió y la comisión siguió viva.
+- `POST /sales/{id}/return` ya no es solo de administración: mismo permiso que «Cancelar» (`CVD_Order_Edit::can_manage`). Causa obligatoria (mínimo 3 letras). La lógica vive en `CVD_Sales::do_return()` (una sola para Ventas, panel y caja); las cuentas puras en `CVD_Return_Plan`.
+- Botón «Devolución» en `/ventas/` también para las dependientas en pedidos completados (`canReturn` = `return_block()` vacío). La tarjeta enseña la devolución (`returnInfo`).
+- Nota del pedido: quién (y desde dónde), qué productos, cuánto USD y CUP, en efectivo o transferencia, causa, comisión y ganancia del mensajero. Con dinero devuelto queda `_cvd_refund_review = pending` (para Lennys) y `returnInfo` sale en `panel/collections` y en la lista de Ventas del panel.
+- Devolución parcial (unidades por línea): repone solo esas unidades, el pedido sigue «completado» y la comisión NO se toca (no hay regla aprobada: lo decide Lennys). Entera: como antes (stock, comisión anulada o nota si ya estaba pagada, pedido «reembolsado»).
+- La ganancia del mensajero solo la anula administración, y nunca una ya liquidada (`CVD_Messenger_Accounting::can_void_order`).
+- Puente de la caja (`CVD_Caja_Bridge`, clave del panel): `GET /panel/caja/web-orders/find?number=N`, `POST /panel/caja/web-orders/{id}/cancel` y `/return`. Los firma siempre la usuaria de la dependienta de «Atiende» (si no se encuentra, 403 `cvd_caja_clerk`; nunca firma el panel). Idempotentes por `actionId`: un reintento sin red no repone stock dos veces.
+- Pruebas: `php wordpress/casa-viva-dropship-core/tests/return-olla.test.php` (42, en `validate.yml`). `artifacts/tests/test-panel-bajo-pedido.mjs` ya fallaba antes (espera la versión 3.14.71).
+- Sin desplegar: espera el OK de Ernesto. La caja que lo usa sale en NEXO (rama `claude/pedido-web-cancelar-devolver`).
+
 ## Foto de cada producto en la tarjeta de la tienda (3.14.37, 2026-10-18)
 
 - Lennys (16 y 17-oct): «Al dependiente hay que mandarle foto con el vale. Ayer se le mandó al cliente un cortinero que no era.»

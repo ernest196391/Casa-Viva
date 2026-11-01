@@ -73,6 +73,9 @@ jobs:
           php artifacts/tests/test-panel-bajo-pedido.php
           php artifacts/tests/test-reserva.php
 
+      - name: Validar devolución y cancelación de pedidos web desde la caja (3.14.103, olla Ariete)
+        run: php wordpress/casa-viva-dropship-core/tests/return-olla.test.php
+
       - name: Validar privacidad dependienta y administración
         run: node artifacts/tests/test-staff-privacy-5a.mjs
 

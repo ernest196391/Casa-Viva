@@ -143,7 +143,7 @@ final class CVD_Panel_Bridge {
 				'account' => $account, 'accountName' => (string) $order->get_meta( '_cvd_collection_account_name', true ),
 				'reference' => (string) $order->get_meta( '_cvd_collection_reference', true ),
 				'usd' => (float) $order->get_meta( '_cvd_collection_amount_usd', true ), 'cup' => (float) $order->get_meta( '_cvd_collection_amount_cup', true ),
-				'customer' => $order->get_formatted_billing_full_name(), 'refunded' => $order->has_status( 'refunded' ),
+				'customer' => $order->get_formatted_billing_full_name(), 'refunded' => $order->has_status( 'refunded' ), 'returnInfo' => class_exists( 'CVD_Sales' ) ? CVD_Sales::return_info( $order ) : null, // 3.14.103
 			);
 		}
 		usort( $rows, static fn( array $a, array $b ): int => strcmp( $b['at'], $a['at'] ) );
@@ -1190,7 +1190,7 @@ final class CVD_Panel_Bridge {
 	/** Cambiar el estado (Listo para salir, entregado al mensajero, dinero recibido, cancelar…) o registrar devolución. */
 	public static function sales_action( WP_REST_Request $request ) {
 		$params = (array) $request->get_json_params();
-		$allowed = array( 'status', 'collectionMethod', 'collectionAccount', 'collectionReference', 'collectionCardLabel', 'collectionCardLast4', 'collectionSaveCard', 'collectedUsd', 'collectedCup', 'collectionNote', 'moneyConfirmed', 'handoverConfirmed', 'idempotencyKey', 'reason', 'refundUsd', 'refundCup', 'voidMessenger', 'confirmReserva' );
+		$allowed = array( 'status', 'collectionMethod', 'collectionAccount', 'collectionReference', 'collectionCardLabel', 'collectionCardLast4', 'collectionSaveCard', 'collectedUsd', 'collectedCup', 'collectionNote', 'moneyConfirmed', 'handoverConfirmed', 'idempotencyKey', 'reason', 'refundUsd', 'refundCup', 'refundMethod', 'lines', 'returnId', 'voidMessenger', 'confirmReserva' );
 		$params = array_intersect_key( $params, array_flip( $allowed ) );
 		self::enter( (array) $request->get_json_params() ); // 3.13.97: la nota de cancelación dice quién lo pulsó en el panel
 		return self::as_owner( 'POST', '/sales/' . absint( $request['id'] ) . '/' . ( 'return' === $request['what'] ? 'return' : 'status' ), $params );
