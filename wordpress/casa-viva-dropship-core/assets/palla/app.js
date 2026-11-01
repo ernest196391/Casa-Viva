@@ -701,9 +701,17 @@
 		if (c.queued) { info += '<div class="pl-fm-line">' + icon('sincronizar', 18) + 'Guardado: se manda al volver la señal</div>'; }
 		if (c.pase) { info += '<div class="pl-fm-line">🔁 Esperando a ' + esc(c.pase.toName) + ' · <button type="button" class="pl-btn pl-btn--link" style="padding:0;min-height:0" data-act="pase-cancelar" data-id="' + c.id + '">Cancelar</button></div>'; }
 		if (!m.after && m.unknown && !m.prepaid) { info += '<div class="pl-fm-line pl-fm-warn">⚠️ El vale no dice cuánto cobrar</div>'; }
-		else if (!pickup && !m.after && m.chargeShort) { info += '<div class="pl-fm-line">Cobras <b>' + esc(m.chargeShort) + '</b></div>'; }
-		if (m.changeText && !m.after) { info += '<div class="pl-fm-line">' + (pickup ? 'Coge ' : 'Da ') + '<b>' + esc(m.changeText) + '</b> de vuelto</div>'; }
-		if (c.arrived) { info += '<div class="pl-fm-line">📍 Llegaste</div>'; }
+		else {
+			// una sola línea pequeña: cobro (al entregar) y vuelto
+			var money = [];
+			if (!pickup && !m.after && m.chargeShort) { money.push('Cobras <b>' + esc(m.chargeShort) + '</b>'); }
+			if (m.changeText && !m.after) { money.push((pickup ? 'Coge ' : 'da ') + '<b>' + esc(m.changeText) + '</b> de vuelto'); }
+			if (money.length) { info += '<div class="pl-fm-line">' + money.join(' · ') + '</div>'; }
+		}
+		// «Llegué»: botón redondo pequeño junto a «Llamar» (ya no ocupa una fila)
+		var li = acts.indexOf('data-act="llegue"');
+		if (li !== -1) { var ls = acts.lastIndexOf('<div', li), le = acts.indexOf('</div>', li) + 6; acts = acts.slice(0, ls) + acts.slice(le); }
+		var llegue = !pickup ? (c.arrived ? '<span class="pl-fm-round pl-fm-round--on" aria-label="Llegaste">📍</span>' : '<button type="button" class="pl-fm-round" data-act="llegue" data-id="' + c.id + '" aria-label="Llegué">📍</button>') : '';
 		return '<div class="pl-fm"><div class="pl-fm-map" data-mapa-carrera></div>'
 			+ '<div class="pl-fm-top"><a class="pl-fm-back" href="#carreras" aria-label="Volver a Carreras">‹</a><div class="pl-fm-chip">#' + esc(c.number) + ' · ' + esc(cu.zone) + '</div><a class="pl-fm-nav" href="' + esc(nav) + '" target="_blank" rel="noopener noreferrer">' + icon('mapa', 18) + 'Navegar</a></div>'
 			+ '<section class="pl-fm-sheet' + (state.hoja ? ' is-open' : '') + '" data-hoja>'
@@ -711,7 +719,7 @@
 			+ '<button type="button" class="pl-fm-handle" data-act="hoja" aria-label="' + (state.hoja ? 'Ver menos' : 'Ver más') + '"></button>'
 			+ offlineBar('Sin señal: tu carrera sigue guardada.')
 			+ '<div class="pl-fm-who"><div style="min-width:0"><div class="pl-fm-eta" data-mapa-texto>' + esc(cmap.text || 'Buscando tu ubicación…') + '</div><div class="pl-fm-where">' + esc(dest) + '</div></div>'
-			+ (!pickup && cu.phone ? '<a class="pl-fm-round" href="tel:+' + esc(cu.phone) + '" aria-label="Llamar al cliente">' + icon('tel', 22) + '</a>' : '') + '</div>'
+			+ '<div class="pl-fm-icons">' + llegue + (!pickup && cu.phone ? '<a class="pl-fm-round" href="tel:+' + esc(cu.phone) + '" aria-label="Llamar al cliente">' + icon('tel', 20) + '</a>' : '') + '</div></div>'
 			+ info + acts
 			+ '<div class="pl-fm-more">' + body + linksHtml + '</div></section></div>';
 	}

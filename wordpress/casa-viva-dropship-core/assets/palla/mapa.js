@@ -135,6 +135,7 @@
 			} else if (me && map._follow) {
 				map.panTo(big ? map.unproject(map.project(me).add([0, 110])) : me, { animate: true }); // tu 🛵 un poco por encima de la tarjeta
 			}
+			if (!pts.length && !map._fitted) { map.setView([23.125, -82.38], 13); } // sin GPS ni punto: La Habana (no un mapa gris)
 			setTimeout(function () { map.invalidateSize(); }, 50);
 			if (!to) { return me ? 'Sin punto en el mapa' : ''; }
 			if (!me) { return 'Buscando tu ubicación…'; }

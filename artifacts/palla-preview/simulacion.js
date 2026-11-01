@@ -76,7 +76,7 @@
 		check('8. Con el paquete ya no se puede soltar: sin «No puedo» y Core dice too_late', !/No puedo/.test(botones) && ['not_now', 'too_late'].indexOf(r3.data.result) !== -1, botones + ' / ' + r3.data.result);
 		// 8b. 3.14.71.2: «Llegué» en camino: avisa a la gestora, se marca y el botón desaparece.
 		await go('#carrera/9001'); await click('[data-act=llegue]', 900);
-		check('8b. «Llegué» en camino: queda «Llegaste» y ya no sale el botón', !!order(9001).arrived && /Llegaste/.test(text()) && !$('[data-act=llegue]'), text().slice(0, 200));
+		check('8b. «Llegué» en camino: el 📍 queda marcado (negro) y ya no se puede tocar otra vez', !!order(9001).arrived && !!$('.pl-fm-round--on, [aria-label=Llegaste]') && !$('[data-act=llegue]'), text().slice(0, 200));
 		// 9. Entregado de un toque con lo del vale (efectivo USD); antes, «Deshacer» lo para
 		await go('#carrera/9001');
 		var boton9 = ($('[data-act=entregar]') || {}).innerText || '';

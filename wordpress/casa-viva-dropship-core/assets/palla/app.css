@@ -241,3 +241,22 @@ body,.pl-shell{background:var(--surface-sunken)}
 .pl-fm-eta{font-size:26px;line-height:30px}
 .pl-fm-line{display:block}
 .pl-fm-line svg{vertical-align:-4px;margin-right:6px}
+/* 3.14.104 · Más mapa, tarjeta mínima (Ernesto 1-nov: «más limpio, más minimalista, más mapa; achica los textos y la tarjeta»). */
+.pl-fm-top{top:calc(10px + env(safe-area-inset-top));left:10px;right:10px;gap:6px}
+.pl-fm-back{width:40px;height:40px;font-size:22px}
+.pl-fm-chip{height:40px;font-size:15px;padding:0 14px}
+.pl-fm-nav{height:40px;padding:0 14px;font-size:14px}
+.pl-fm-sheet{padding:0 14px calc(10px + env(safe-area-inset-bottom));gap:8px;border-radius:22px 22px 0 0;box-shadow:0 -8px 24px rgba(18,18,18,.14)}
+.pl-fm-handle{height:18px;margin-bottom:-4px}
+.pl-fm-handle::before{top:7px;width:38px;height:4px}
+.pl-fm-center{width:44px;height:44px;top:-56px;right:12px;font-size:18px}
+.pl-fm-eta{font-size:20px;line-height:24px;font-weight:800}
+.pl-fm-where{font-size:13px;line-height:18px;margin-top:1px}
+.pl-fm-line{font-size:13px;line-height:18px;color:var(--ink-muted)}
+.pl-fm-line b{color:var(--ink);font-weight:700;margin:0 2px}
+.pl-fm-warn{font-size:13px}
+.pl-fm-icons{display:flex;flex-direction:row;gap:8px;flex:none}
+.pl-fm-round{width:42px;height:42px;border:0;font-size:18px;cursor:pointer}
+.pl-fm-round--on{background:#121212;color:var(--brand)}
+.pl-fm .pl-btn--lg{min-height:52px;font-size:17px;border-radius:14px}
+.pl-fm .leaflet-control-attribution{font-size:9px;opacity:.55}
