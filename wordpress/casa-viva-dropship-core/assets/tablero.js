@@ -5,6 +5,14 @@
   var root = document.getElementById('tb');
   var carga = document.getElementById('tb-carga');
   var STORE = 'tablero-ultimo';
+  var KEY = 'tablero-k';
+  var token = '';
+  // La clave del enlace llega en #k= (nunca va al servidor ni a la caché): se guarda en el teléfono y se limpia la dirección.
+  (function () {
+    var m = /[#&]k=([0-9]+.[0-9]+.[a-f0-9]{32})/.exec(location.hash || '');
+    if (m) { token = m[1]; try { localStorage.setItem(KEY, token); } catch (e) {} try { history.replaceState(null, '', location.pathname); } catch (e) {} }
+    else { try { token = localStorage.getItem(KEY) || ''; } catch (e) { token = ''; } }
+  })();
   var state = { ver: '', hash: '', data: null, cargando: false, timer: 0 };
 
   function el(tag, cls, text) {
@@ -115,18 +123,30 @@
     if (carga) { carga.classList.add('tb-fuera'); }
   }
 
+  function personal() {
+    root.textContent = '';
+    var m = el('main', 'tb-solo');
+    var logo = el('div', 'tb-logo'); logo.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19V5l14 14V5"/></svg>';
+    m.appendChild(logo);
+    m.appendChild(el('h1', null, 'Este tablero es personal'));
+    m.appendChild(el('p', null, 'Abre el enlace completo que te dieron (desde el mensaje, sin copiar solo una parte). Si ya no funciona, pide uno nuevo.'));
+    root.appendChild(m);
+    root.hidden = false;
+    if (carga) { carga.classList.add('tb-fuera'); }
+  }
+
   function cambiarVista(ver) { state.ver = ver; state.hash = ''; window.scrollTo(0, 0); cargar(true); }
 
   function cargar(forzar) {
     if (state.cargando) return;
     state.cargando = true;
     var body = JSON.stringify({ ver: state.ver, hash: forzar ? '' : state.hash });
-    fetch(B.datos, { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Tablero': '1' }, body: body })
+    fetch(B.datos, { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: token ? { 'Content-Type': 'application/json', 'X-Tablero': '1', 'X-Tablero-Token': token } : { 'Content-Type': 'application/json', 'X-Tablero': '1' }, body: body })
       .then(function (res) { return res.json().then(function (j) { return { status: res.status, j: j }; }); })
       .then(function (x) {
         state.cargando = false;
         if (!x.j || !x.j.ok) {
-          if (x.status === 403) { try { localStorage.removeItem(STORE); } catch (e) {} }
+          if (x.status === 403) { try { localStorage.removeItem(STORE); localStorage.removeItem(KEY); } catch (e) {} personal(); return; }
           error((x.j && x.j.message) || 'Inténtalo de nuevo en un momento.');
           return;
         }

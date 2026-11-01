@@ -109,18 +109,19 @@ final class CVD_Tablero {
 	}
 
 	public static function link_for( int $user_id ): string {
-		return '' === self::role_of( $user_id ) ? '' : add_query_arg( 'k', self::token_for( $user_id ), home_url( '/tablero/' ) );
+		return '' === self::role_of( $user_id ) ? '' : home_url( '/tablero/' ) . '#k=' . self::token_for( $user_id );
 	}
 
 	public static function revoke( int $user_id ): void { update_user_meta( $user_id, self::EPOCH_META, self::epoch( $user_id ) + 1 ); }
 
 	private static function token_expires( string $token ): int { return preg_match( '/^\d+\.(\d+)\./', $token, $m ) ? (int) $m[1] : 0; }
 
-	/** Quién mira: cookie del enlace o sesión de WordPress con rol. */
+	/** Quién mira: la clave que guarda la página (cabecera X-Tablero-Token), la cookie del enlace o la sesión de WordPress con rol. */
 	private static function viewer(): int {
-		$token = (string) ( $_COOKIE[ self::COOKIE ] ?? '' );
-		$user_id = '' !== $token ? self::verify( $token ) : 0;
-		if ( $user_id ) { return $user_id; }
+		foreach ( array( (string) ( $_SERVER['HTTP_X_TABLERO_TOKEN'] ?? '' ), (string) ( $_COOKIE[ self::COOKIE ] ?? '' ) ) as $token ) {
+			$user_id = '' !== $token ? self::verify( trim( $token ) ) : 0;
+			if ( $user_id ) { return $user_id; }
+		}
 		$wp = get_current_user_id();
 		return $wp && '' !== self::role_of( $wp ) ? $wp : 0;
 	}
@@ -158,7 +159,7 @@ final class CVD_Tablero {
 		exit;
 	}
 
-	private static function asset( string $file ): string { return CVD_URL . 'assets/' . $file . '?v=' . rawurlencode( CVD_VERSION ); }
+	private static function asset( string $file ): string { return CVD_URL . 'assets/' . $file . '?v=' . rawurlencode( CVD_VERSION . '-' . (int) @filemtime( CVD_DIR . 'assets/' . $file ) ); }
 
 	private static function page(): void {
 		nocache_headers();
@@ -169,17 +170,10 @@ final class CVD_Tablero {
 				setcookie( self::COOKIE, $token, array( 'expires' => self::token_expires( $token ), 'path' => '/tablero', 'secure' => is_ssl(), 'httponly' => true, 'samesite' => 'Lax' ) );
 				self::log_access( $user_id, 'enlace' );
 			}
-			wp_safe_redirect( home_url( '/tablero/' ), 302 );
+			wp_safe_redirect( home_url( '/tablero/' ) . ( $user_id ? '#k=' . $token : '' ), 302 );
 			exit;
 		}
-		$user_id = self::viewer();
 		header( 'Content-Type: text/html; charset=utf-8' );
-		if ( ! $user_id ) {
-			status_header( 403 );
-			echo self::shell( '<main class="tb-solo"><div class="tb-logo" aria-hidden="true">' . self::logo_svg() . '</div><h1>Este tablero es personal</h1><p>Abre el enlace que te dieron. Si ya no funciona, pide uno nuevo.</p></main>', false );
-			exit;
-		}
-		self::log_access( $user_id, 'vista' );
 		$boot = array( 'datos' => home_url( '/tablero/datos' ), 'sw' => home_url( '/tablero/sw.js' ), 'scope' => home_url( '/tablero/' ), 'version' => CVD_VERSION );
 		$body = '<div id="tb-carga" class="tb-carga" role="status"><div class="tb-logo" aria-hidden="true">' . self::logo_svg() . '</div><p>Cargando el tablero</p></div>'
 			. '<div id="tb" class="tb-wrap" hidden></div>'
@@ -242,6 +236,7 @@ final class CVD_Tablero {
 		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || '1' !== (string) ( $_SERVER['HTTP_X_TABLERO'] ?? '' ) ) { $fail( 405, 'metodo', 'Solicitud no válida.' ); }
 		$user_id = self::viewer();
 		if ( ! $user_id ) { $fail( 403, 'acceso', 'Tu enlace caducó o ya no vale. Pide uno nuevo.' ); }
+		self::log_access( $user_id, 'vista' );
 		$hits_key = 'cvd_tb_hits_' . $user_id . '_' . gmdate( 'YmdHi' );
 		$hits = (int) get_transient( $hits_key );
 		if ( $hits >= 30 ) { $fail( 429, 'despacio', 'Demasiadas actualizaciones seguidas. Espera un minuto.' ); }
