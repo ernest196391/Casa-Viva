@@ -285,7 +285,7 @@ final class CVD_Delivery {
 				$existing=absint($order->get_meta('_cvd_messenger_user_id',true)); return $existing && $existing!==$messenger_id ? CVD_Order_Transition_Service::CONFLICT : true;
 			},
 			'atomic_mutation'=>static function( WC_Order $order ) use ( $messenger_id, $user ): void { $order->update_meta_data('_cvd_messenger_user_id',$messenger_id); $order->add_order_note('Entrega asignada a '.$user->display_name.'.'); },
-			'after_commit'=>static function( WC_Order $order, array $transition ) use ( $user ): void { self::centralized_after_commit($order,'assigned'); if(empty($transition['idempotent_replay'])&&$user->user_email){wp_mail($user->user_email,'Nueva entrega Casa Viva · Pedido #'.$order->get_order_number(),"Tienes una entrega asignada.\n\nRevisar:\n".home_url('/area-mensajeros/'));} },
+			'after_commit'=>static function( WC_Order $order, array $transition ) use ( $user ): void { self::centralized_after_commit($order,'assigned'); if(empty($transition['idempotent_replay'])&&$user->user_email&&self::messenger_mail_on()){wp_mail($user->user_email,'Nueva entrega Casa Viva · Pedido #'.$order->get_order_number(),"Tienes una entrega asignada.\n\nRevisar:\n".home_url('/area-mensajeros/'));} },
 		) );
 		if ( empty( $result['success'] ) ) { return; }
 	}
@@ -446,7 +446,7 @@ final class CVD_Delivery {
 				self::centralized_after_commit( $saved, 'assigned' );
 				if ( ! empty( $transition['idempotent_replay'] ) ) { return; }
 				if ( class_exists( 'CVD_Web_Push' ) ) { CVD_Web_Push::send_offer( $saved, array( $messenger ) ); }
-				if ( $messenger->user_email ) { wp_mail( $messenger->user_email, 'Nueva entrega Casa Viva · Pedido #' . $saved->get_order_number(), "Tienes una entrega asignada.\n\nRevisar:\n" . home_url( '/area-mensajeros/' ) ); }
+				if ( $messenger->user_email && self::messenger_mail_on() ) { wp_mail( $messenger->user_email, 'Nueva entrega Casa Viva · Pedido #' . $saved->get_order_number(), "Tienes una entrega asignada.\n\nRevisar:\n" . home_url( '/area-mensajeros/' ) ); }
 			},
 		) );
 		return ! empty( $result['success'] ) && 'assigned' === ( $result['new_state'] ?? '' );
@@ -522,8 +522,19 @@ final class CVD_Delivery {
 		self::centralized_after_commit( $order, sanitize_key( $next ) );
 	}
 
+	/**
+	 * 3.14.103 (D126, 1-nov): los correos a mensajeros («Nueva carrera disponible», «Nueva entrega») van apagados por
+	 * defecto. Repetían el grupo, el vale y Pa'llá (~52 al día) y gastaban el cupo diario de correo del hosting
+	 * («550 Sender rate overlimit»), con lo que los avisos a Ernesto dejaron de salir desde el 29-oct.
+	 * Encender: opción cvd_correo_mensajeros = si.
+	 */
+	public static function messenger_mail_on(): bool {
+		return 'si' === sanitize_key( (string) get_option( 'cvd_correo_mensajeros', 'no' ) );
+	}
+
 	private static function notify_offer( WC_Order $order, array $messengers ): void {
 		if ( class_exists( 'CVD_Web_Push' ) ) { CVD_Web_Push::send_offer( $order, $messengers ); }
+		if ( ! self::messenger_mail_on() ) { return; }
 		foreach ( $messengers as $messenger ) {
 			if ( ! $messenger->user_email ) { continue; }
 			$zone = self::destination_zone( $order );

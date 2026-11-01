@@ -162,11 +162,22 @@ final class CVD_Bot_Delivery_Change {
 		$subject = self::text( $subject, 140 );
 		$body = trim( wp_strip_all_tags( $body ) );
 		if ( '' === $to || '' === $body ) { return array( 'sent' => false, 'reason' => 'missing' ); }
-		$count = (int) get_transient( 'cvd_bot_aviso_correo_hora' );
-		if ( $count >= 40 ) { return array( 'sent' => false, 'reason' => 'limit' ); }
-		set_transient( 'cvd_bot_aviso_correo_hora', $count + 1, HOUR_IN_SECONDS );
+		// 3.14.103 (1-nov): el tope de 40 cuenta solo los correos que salen, en una hora fija desde el primero. Antes contaba
+		// cada intento y alargaba la hora en cada uno: con el hosting rechazando (cupo diario agotado) los reintentos del
+		// bot lo mantenían lleno y nunca se liberaba.
+		$now = time();
+		$window = get_transient( 'cvd_bot_aviso_correo_ventana' );
+		if ( ! is_array( $window ) || (int) ( $window['hasta'] ?? 0 ) <= $now ) { $window = array( 'n' => 0, 'hasta' => $now + HOUR_IN_SECONDS ); }
+		if ( (int) $window['n'] >= 40 ) { return array( 'sent' => false, 'reason' => 'limit' ); }
+		$error = '';
+		$catch = static function ( $e ) use ( &$error ): void { $error = is_wp_error( $e ) ? $e->get_error_message() : 'error'; };
+		add_action( 'wp_mail_failed', $catch );
 		$sent = wp_mail( $to, '[Casa Viva] ' . ( '' !== $subject ? $subject : 'Aviso del bot' ), mb_substr( $body, 0, 5000 ) . "\n\n— " . $footer . ' (aviso automático, no hace falta responder)' );
-		return array( 'sent' => (bool) $sent );
+		remove_action( 'wp_mail_failed', $catch );
+		if ( ! $sent ) { return array( 'sent' => false, 'reason' => 'mail', 'error' => self::text( $error, 200 ) ); }
+		$window['n'] = (int) $window['n'] + 1;
+		set_transient( 'cvd_bot_aviso_correo_ventana', $window, max( 60, (int) $window['hasta'] - $now ) );
+		return array( 'sent' => true );
 	}
 
 	/** Mensajero elegido (CVD_Direct_Dispatch): dispatch_ready() se lo asigna directo en vez de publicarlo en el grupo. */
