@@ -5,7 +5,8 @@
  * 1-nov (Ernesto: «que se vea de 15 mil USD»): mapa PROPIO. Ya no usamos las teselas públicas de OpenStreetMap (su norma no
  * deja tirar de ellas desde una app): el mapa de Cuba (Protomaps, datos OSM) vive en nuestro VPS como un solo archivo
  * PMTiles y lo pinta MapLibre con el estilo Casa Viva (claro, limpio, calles legibles, negro #121212 y amarillo #FFC21A).
- * MapLibre (cdnjs) y pmtiles (jsdelivr) se cargan solo cuando hay algo que enseñar. Sin Google. */
+ * MapLibre (cdnjs) y pmtiles (jsdelivr) se cargan solo cuando hay algo que enseñar. Sin Google.
+ * El camino por las calles lo da ruta.js (nuestro OSRM del VPS); mientras no llega, o sin señal, la línea de puntos recta. */
 (function () {
 	'use strict';
 	if (window.PallaMapa) { return; }
@@ -16,7 +17,8 @@
 	var TILES = BASE + 'cuba-20261031.pmtiles';
 	var HABANA = [23.125, -82.38];
 	var NEGRO = '#121212', AMARILLO = '#FFC21A';
-	var ready = null;
+	var ready = null, rutaReady = null;
+	var SELF = (document.currentScript && document.currentScript.src) || '';
 	function tag(kind, attrs) {
 		return new Promise(function (ok, fail) {
 			var n = document.createElement(kind);
@@ -43,6 +45,15 @@
 		return ready;
 	}
 
+	// ruta.js (Core 3.14.108): en la app viene en PALLA.rutaUrl; en el seguimiento está junto a este archivo.
+	function rutaJs() {
+		if (window.PallaRuta) { return Promise.resolve(window.PallaRuta); }
+		if (rutaReady) { return rutaReady; }
+		var src = (window.PALLA && window.PALLA.rutaUrl) || SELF.replace(/mapa\.js(\?[^#]*)?$/, 'ruta.js$1');
+		if (!/ruta\.js/.test(src)) { return Promise.resolve(null); }
+		rutaReady = tag('script', { src: src }).then(function () { return window.PallaRuta || null; }, function () { rutaReady = null; return null; });
+		return rutaReady;
+	}
 	function protocol(gl) {
 		if (gl._palla) { gl.removeProtocol('pmtiles'); }
 		gl.addProtocol('pmtiles', new window.pmtiles.Protocol().tile);
@@ -81,7 +92,9 @@
 			layers.push({ id: 'calle-' + r[0], type: 'line', source: 'cuba', 'source-layer': 'roads', minzoom: r[1], filter: road(r[0]), layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': r[2], 'line-width': w(r[4]) } });
 		});
 		layers.push(
-			// El camino del mensajero, debajo de los nombres: borde negro y amarillo Casa Viva.
+			// Lo que falta por las calles (como Uber): negro con borde blanco. Lo ya hecho: borde negro y amarillo Casa Viva.
+			{ id: 'pl-camino-borde', type: 'line', source: 'pl-camino', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#FFFFFF', 'line-width': 9 } },
+			{ id: 'pl-camino', type: 'line', source: 'pl-camino', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': NEGRO, 'line-width': 5 } },
 			{ id: 'pl-hecho-borde', type: 'line', source: 'pl-hecho', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': NEGRO, 'line-width': 9, 'line-opacity': 0.85 } },
 			{ id: 'pl-hecho', type: 'line', source: 'pl-hecho', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': AMARILLO, 'line-width': 5.5 } },
 			{ id: 'pl-falta', type: 'line', source: 'pl-falta', layout: { 'line-cap': 'round' }, paint: { 'line-color': NEGRO, 'line-width': 3, 'line-opacity': 0.65, 'line-dasharray': [0.6, 2.2] } },
@@ -98,7 +111,8 @@
 			sources: {
 				cuba: { type: 'vector', url: 'pmtiles://' + TILES, attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>' },
 				'pl-hecho': { type: 'geojson', data: empty },
-				'pl-falta': { type: 'geojson', data: empty }
+				'pl-falta': { type: 'geojson', data: empty },
+				'pl-camino': { type: 'geojson', data: empty }
 			},
 			layers: layers
 		};
@@ -191,12 +205,30 @@
 		return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 	}
 	function lines(coords) { return { type: 'FeatureCollection', features: coords.filter(function (c) { return c && c.length > 1; }).map(function (c) { return { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: c.map(ll) } }; }) }; }
-	function draw(map, hecho, falta) { // las líneas van en cuanto el estilo está listo (los marcadores no esperan)
-		map._pl.lines = [hecho, falta];
+	function draw(map, hecho, falta, camino) { // las líneas van en cuanto el estilo está listo (los marcadores no esperan)
+		map._pl.lines = [hecho, falta, camino || []];
 		if (!map._pl.styled) { return; }
 		map.getSource('pl-hecho').setData(lines(hecho));
 		map.getSource('pl-falta').setData(lines(falta));
+		map.getSource('pl-camino').setData(lines(camino || []));
 	}
+	// El camino por las calles de from a to → { coords, min, km } o null. Se pide de nuevo al cambiar el destino o al
+	// moverse más de 80 m; mientras llega sirve el anterior. Al llegar, se vuelven a pintar las líneas (map._pl.paint).
+	function calles(map, from, to) {
+		var r = map._pl.camino, key = to.join(',');
+		if (r && r.key === key && dist(r.from, from) < 80) { return r.res; }
+		if (!map._pl.pidiendo) {
+			map._pl.pidiendo = true;
+			rutaJs().then(function (R) { return R ? R.get(from, to) : null; }).catch(function () { return null; }).then(function (res) {
+				map._pl.pidiendo = false;
+				if (!res) { return; } // sin ruta: sigue la recta (ruta.js no repite un fallo antes de 30 s)
+				map._pl.camino = { key: key, from: from, res: res };
+				if (map._pl.paint) { map._pl.paint(); }
+			});
+		}
+		return r && r.key === key ? r.res : null;
+	}
+	function por(c, from, to) { return [[from].concat(c.coords, [to])]; }
 
 	function base(gl, el) {
 		if (el._pallaMap) { return el._pallaMap; }
@@ -223,7 +255,7 @@
 		map.addControl(new gl.NavigationControl({ showCompass: false }), 'top-right');
 		map.addControl(new gl.AttributionControl({ compact: false }), 'bottom-right');
 		map._pl = { mk: {}, last: {}, deg: {}, styled: false, lines: null, fitted: false };
-		map.on('style.load', function () { map._pl.styled = true; if (map._pl.lines) { draw(map, map._pl.lines[0], map._pl.lines[1]); } });
+		map.on('style.load', function () { map._pl.styled = true; var l = map._pl.lines; if (l) { draw(map, l[0], l[1], l[2]); } });
 		map.on('error', function (e) {
 			if (window.console) { console.warn('mapa:', e && e.error ? e.error.message || e.error : e); }
 			if (e && e.sourceId === 'cuba') { again(map); }
@@ -271,8 +303,12 @@
 			if (map) {
 				if (r.store) { put(map, 'tienda', gl, 'tienda', r.store, 'Casa Viva'); pts.push(r.store); }
 				if (r.dest) { put(map, 'casa', gl, 'casa', r.dest, 'Entrega'); pts.push(r.dest); }
-				var to = r.stage === 'tienda' ? r.store : r.dest;
-				draw(map, r.trail && r.trail.length > 1 ? [r.trail] : [], here && to && !r.arrived ? [[here, to]] : []);
+				var to = r.stage === 'tienda' ? r.store : r.dest, hecho = r.trail && r.trail.length > 1 ? [r.trail] : [];
+				map._pl.paint = function () {
+					var c = here && to && !r.arrived ? calles(map, here, to) : null;
+					draw(map, hecho, c || !here || !to || r.arrived ? [] : [[here, to]], c ? por(c, here, to) : []);
+				};
+				map._pl.paint();
 				if (here) {
 					var trail = r.trail || [];
 					if (trail.length > 1 && !map._pl.last.yo) { map._pl.last.yo = trail[trail.length - 2]; }
@@ -345,13 +381,18 @@
 	 */
 	function mensajero(el, me, to, kind) {
 		return load().then(function (gl) {
-			var map = base(gl, el), pts = [];
+			var map = base(gl, el), pts = [], c = null;
 			var big = el.offsetHeight > 400; // a pantalla completa, la tarjeta de abajo tapa ~300 px: que no queden debajo
 			if (map) {
 				// Pantalla completa (Ernesto 30-oct, «como Uber»): el mapa te sigue; si lo mueves con el dedo deja de seguirte hasta 🎯.
 				if (!map._pl.fm) { map._pl.fm = true; map._pl.follow = true; map.on('dragstart', function () { map._pl.follow = false; }); }
 				if (to) { put(map, 'to', gl, kind === 'tienda' ? 'tienda' : 'casa', to, kind === 'tienda' ? 'Casa Viva' : 'Cliente'); pts.push(to); }
-				draw(map, [], me && to ? [[me, to]] : []);
+				map._pl.paint = function () {
+					var c = me && to ? calles(map, me, to) : null;
+					draw(map, [], c || !me || !to ? [] : [[me, to]], c ? por(c, me, to) : []);
+					return c;
+				};
+				c = map._pl.paint();
 				if (me) { turn(put(map, 'yo', gl, 'moto', me, 'Tú'), heading(map, 'yo', me)); pts.push(me); }
 				sweep(map);
 				// Se encuadra al empezar, cuando llega tu ubicación y cuando cambia el destino (de la tienda al cliente): así se acerca.
@@ -369,6 +410,7 @@
 			}
 			if (!to) { return me ? 'Sin punto en el mapa' : ''; }
 			if (!me) { return 'Buscando tu ubicación…'; }
+			if (c) { return c.min + ' min · ' + (c.km < 0.95 ? Math.round(c.km * 100) * 10 + ' m' : c.km.toFixed(1).replace('.', ',') + ' km'); } // por las calles
 			var a = dist(me, to);
 			var km = a < 950 ? Math.round(a / 10) * 10 + ' m' : (a / 1000).toFixed(1).replace('.', ',') + ' km';
 			var min = Math.max(1, Math.round(a * 1.35 / 300)); // en moto: ~300 m/min y las calles alargan la recta un 35 %

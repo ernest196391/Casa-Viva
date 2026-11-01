@@ -1,11 +1,14 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pa'llá · mapa propio (local)</title>
-<!-- Prueba del mapa propio (assets/palla/mapa.js) sin la app: ?modo=mensajero | ruta | tienda | marcar.
+<!-- Prueba del mapa propio (assets/palla/mapa.js) sin la app: ?modo=mensajero | ruta | tienda | marcar (+ &calles=1).
      Servir por http://localhost (el VPS solo da el mapa a casaviva.company y a localhost). -->
 <style>body{margin:0;font:14px system-ui,sans-serif;background:#f6f3ec}#txt{padding:10px 14px;font-weight:600}
 .pl-fm{position:fixed;inset:0}.card{position:fixed;left:0;right:0;bottom:0;height:300px;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -4px 18px rgba(0,0,0,.12);padding:14px}</style></head>
 <body>
+<!-- &calles=1: el camino por las calles con una ruta real de nuestro OSRM guardada (el VPS solo responde a casaviva.company). -->
+<script>if (/calles=1/.test(location.search)) { document.write('<script src="mapa-ruta-ejemplo.js"><' + '/script>'); }</script>
+<script>if (window.PRUEBA_RUTA) { window.PallaRuta = { get: function () { return new Promise(function (ok) { setTimeout(function () { ok(window.PRUEBA_RUTA); }, 600); }); } }; }</script>
 <script src="../../wordpress/casa-viva-dropship-core/assets/palla/mapa.js"></script>
 <script>
 (function () {
