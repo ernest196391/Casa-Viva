@@ -9,6 +9,7 @@
 - Estado: piloto en revisión; sin despliegue y sin cuenta creada. Pruebas locales de contratos y Taller superadas; QA con servidor simulado. CI y recorrido real WordPress pendientes.
 - Bloqueo local de comprobaciones completas: instalación npm interrumpida por conexión y permisos del equipo; no se declaran lint/TypeScript/build superados.
 - Costo nuevo requerido: 0. Composiciones gratuitas con fotos reales; generación nueva con Higgsfield no conectada. Skill original instalada en Codex como herramienta de trabajo.
+- Revisión publicada: #167. Candidata 3.14.112. Contratos locales y prueba real WordPress/MariaDB del panel superados (Actions `41522895994`, revisión `f73428a`); recorrido de navegador y suite completa en comprobación. Reparaciones de CI preexistente documentadas en la guía.
 - Siguiente acción: CI, prueba WordPress controlada y revisión del cambio; solo después, despliegue y creación de cuenta con evidencia. No se inicia otra fase de plataforma.
 
 ## Resumen de reanudación

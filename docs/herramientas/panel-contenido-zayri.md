@@ -31,7 +31,7 @@ Hay control de versión, exclusión mutua por producto, rechazo de ediciones ant
 
 Fuente aportada por Ernesto: https://higgsfield.ai/@adilinthewildtempo/blogs/high-performing-ads-6-formats-for-e-commerce-and-services-2
 
-Skill original `create-ads-with-agents` 2.1.2 descargada e instalada en Codex, no incluida ni ejecutada dentro de WordPress. SHA-256 del paquete original: ver registro local de instalación. El archivo contiene instrucciones, referencias y un registro local de trabajos; no contiene credenciales de producción.
+Skill original `create-ads-with-agents` 2.1.2 descargada e instalada en Codex, no incluida ni ejecutada dentro de WordPress. SHA-256 del paquete original: `5f5a849986b52c9d4649865bdd06074f0f5550e910b7d623084a407e692ebfc0`. El archivo contiene instrucciones, referencias y un registro local de trabajos; no contiene credenciales de producción.
 
 Se analizó también `meta-ads-client-brief.pdf`: negocio, producto, público/alternativas, evidencia, oferta, destino, resultados, presupuesto y fotos. El panel recoge un subconjunto práctico por producto; no afirma que haya investigado compradores ni anuncios.
 
@@ -63,6 +63,10 @@ Limitaciones explícitas:
 Pruebas PHP ejecutables en `artifacts/tests/test-content-studio.php`: acceso, integridad comercial, limpieza de HTML, edición antigua, duplicación por reintento, borradores incompletos, historial y foto protegida. Se conservan las pruebas del Taller. Se incorporan al CI existente.
 
 QA local: interfaz PHP real renderizada con funciones WordPress de prueba y API local simulada; foto real de la biblioteca Casa Viva, exportación JPG 1080×1920 y ancho de pantalla 390 px sin desbordamiento horizontal. Esto no certifica el recorrido con WordPress ni la subida a producción.
+
+La revisión #167 incorpora también integración con WordPress/MariaDB reales (`integration/tests/content-studio.php`) y un recorrido Playwright dedicado (`tests/browser/content-studio.spec.js`) para login con cuenta limitada, guardado, subida multipart, descarga JPG y cambio de contraseña. La integración real de la revisión `f73428a` pasó en Actions `41522895994`; el recorrido de navegador está en comprobación en la candidata posterior.
+
+Se repararon requisitos de CI que fallaban antes del panel: nombre antiguo de categoría, versión fijada a 3.14.71, entorno Ubuntu no soportado por Playwright, un helper del Taller confundido con un React Hook y fecha de entrega pasada en una fixture. No cambian reglas comerciales. Candidata: 3.14.112.
 
 Pendiente antes de entregar acceso real: CI completo, prueba WordPress/WooCommerce en entorno de prueba, revisión del cambio, despliegue con aprobación, crear cuenta y verificar login/subida/edición/publicación con un producto controlado. No declarar lista para usar hasta esa verificación.
 

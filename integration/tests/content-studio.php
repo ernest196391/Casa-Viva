@@ -29,6 +29,8 @@ $p = wc_get_product( $p->get_id() );
 studio_assert( '25' === $p->get_regular_price() && 8 === $p->get_stock_quantity(), 'real Woo price and stock preserved' );
 studio_assert( ! str_contains( $p->get_description(), '<script' ) && (int) $p->get_meta( CVD_Content_Studio::LOCK ) === (int) $id, 'real sanitation and ownership stored' );
 studio_assert( 'Metal, 30 cm.' === $p->get_meta( '_cvd_content_brief' )['facts'], 'brief persists outside public description' );
+$pending = new WP_REST_Request( 'GET' ); $pending->set_param( 'ids', (string) $p->get_id() );
+studio_assert( empty( CVD_Catalogo_Auto::pendientes( $pending )->get_data()['productos'] ), 'automatic writer skips human-owned products' );
 studio_assert( 409 === studio_call( 'POST', 'save', $edit )->get_status(), 'real REST rejects outdated version' );
 $new = array( 'token' => wp_generate_uuid4(), 'name' => 'Mercancía nueva de prueba', 'description' => 'Descripción confirmada.', 'action' => 'save' );
 $r = studio_call( 'POST', 'save', $new ); studio_assert( 200 === $r->get_status(), 'new draft saved' );

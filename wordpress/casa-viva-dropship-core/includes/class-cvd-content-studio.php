@@ -78,7 +78,7 @@ final class CVD_Content_Studio {
 	private static function projection( WC_Product $p ): array {
 		return array( 'id' => $p->get_id(), 'name' => $p->get_name(), 'description' => $p->get_description(),
 			'short' => $p->get_short_description(), 'status' => $p->get_status(),
-			'price' => wp_strip_all_tags( $p->get_price_html() ), 'url' => $p->get_permalink(),
+			'price' => '' === $p->get_price() ? '' : ( $p->is_type( 'variable' ) ? 'Desde ' : '' ) . wp_strip_all_tags( wc_price( $p->get_price() ) ), 'url' => $p->get_permalink(),
 			'image' => (string) wp_get_attachment_image_url( $p->get_image_id(), 'large' ),
 			'image_id' => (int) $p->get_image_id(), 'gallery' => $p->get_gallery_image_ids(),
 			'brief' => (array) $p->get_meta( '_cvd_content_brief' ),

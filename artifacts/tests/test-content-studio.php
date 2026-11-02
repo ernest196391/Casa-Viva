@@ -11,6 +11,7 @@ function sanitize_textarea_field( $v ) { return trim( strip_tags( $v ) ); }
 function sanitize_key( $v ) { return preg_replace( '/[^a-z0-9_-]/', '', strtolower( $v ) ); }
 function wp_kses_post( $v ) { return strip_tags( $v, '<p><b><strong><em><ul><li><br>' ); }
 function wp_strip_all_tags( $v ) { return strip_tags( $v ); }
+function wc_price( $v ) { return '$' . $v; }
 function wp_json_encode( $v ) { return json_encode( $v ); }
 function wp_get_attachment_image_url( $id, $size ) { return $id ? 'https://example.test/photo.jpg' : false; }
 function rest_ensure_response( $v ) { return $v; }

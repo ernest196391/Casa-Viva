@@ -33,4 +33,9 @@ test('Editor de contenido: login, guardar, subir foto y descargar en móvil', as
   await expect(page.getByRole('textbox', { name: 'Texto para compartir', exact: true })).toHaveValue(/Studio browser edited/);
   const width = await page.evaluate(() => ({ viewport: innerWidth, scroll: document.documentElement.scrollWidth }));
   expect(width.scroll).toBeLessThanOrEqual(width.viewport);
+  await page.locator('summary').filter({ hasText: 'Cambiar mi contraseña' }).click();
+  await page.locator('#cv-current-password').fill('Synthetic-Content-Only-1!');
+  await page.locator('#cv-next-password').fill('Synthetic-Content-Changed-2!');
+  await page.getByRole('button', { name: 'Guardar contraseña y volver a entrar', exact: true }).click();
+  await expect(page).toHaveURL(/wp-login\.php/);
 });

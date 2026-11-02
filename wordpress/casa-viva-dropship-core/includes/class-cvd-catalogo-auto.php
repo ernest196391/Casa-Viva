@@ -264,6 +264,9 @@ final class CVD_Catalogo_Auto {
 				array( 'key' => self::META_V, 'value' => self::VERSION, 'compare' => '<', 'type' => 'NUMERIC' ),
 				array( 'key' => self::META_REV, 'value' => 'corregir' ) );
 		}
+		// Do not repeatedly offer human-owned content to the automatic writer.
+		$unowned = array( 'relation' => 'OR', array( 'key' => '_cvd_content_owned', 'compare' => 'NOT EXISTS' ), array( 'key' => '_cvd_content_owned', 'value' => '' ) );
+		$args['meta_query'] = isset( $args['meta_query'] ) ? array( 'relation' => 'AND', $args['meta_query'], $unowned ) : $unowned;
 		$q = new WP_Query( $args );
 		$out = array();
 		foreach ( $q->posts as $id ) { $p = wc_get_product( $id ); if ( $p ) { $out[] = self::datos( $p ); } }
