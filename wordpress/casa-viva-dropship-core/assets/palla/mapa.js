@@ -282,12 +282,31 @@
 	}
 	function size(map) { map.resize(); setTimeout(function () { map.resize(); }, 50); }
 	// Encuadra varios puntos. pad = {top, bottom, left, right}; si el cuadro es pequeño, se achica para que quepa.
+	// → false si no se pudo (cuadro fuera de la página o sin tamaño): quien llama lo vuelve a intentar en la siguiente vuelta.
 	function fit(map, el, pts, p, maxZoom, animate) {
 		size(map);
 		var h = el.clientHeight, w = el.clientWidth;
-		if (h && (p.top + p.bottom > h - 60 || p.left + p.right > w - 60)) { p = pad(24); }
+		if (h < 80 || w < 80) { return false; }
+		if (p.top + p.bottom > h - 60 || p.left + p.right > w - 60) { p = pad(24); }
 		var b = pts.reduce(function (acc, p) { return [[Math.min(acc[0][0], p[1]), Math.min(acc[0][1], p[0])], [Math.max(acc[1][0], p[1]), Math.max(acc[1][1], p[0])]]; }, [[180, 90], [-180, -90]]);
-		map.fitBounds(b, { padding: p, maxZoom: maxZoom, duration: animate ? 700 : 0 });
+		var cam = map.cameraForBounds(b, { padding: p, maxZoom: maxZoom }) || map.cameraForBounds(b, { padding: pad(16), maxZoom: maxZoom });
+		if (!cam) { if (window.console) { console.warn('mapa: no se pudo encuadrar', w + 'x' + h); } return false; }
+		map._pl.busy = Date.now() + (animate ? 900 : 0); // mientras dura, «seguirte» no lo corta (se quedaba lejos)
+		map.easeTo({ center: cam.center, zoom: cam.zoom, duration: animate ? 700 : 0 });
+		return true;
+	}
+	// Red de seguridad: la moto y el destino se ven uno encima del otro estando a más de 150 m → el zoom está mal, encuadrar.
+	function juntos(map, a, b) {
+		if (map._pl.busy > Date.now() || dist(a, b) < 150) { return false; }
+		var pa = map.project(ll(a)), pb = map.project(ll(b));
+		return Math.abs(pa.x - pb.x) + Math.abs(pa.y - pb.y) < 60;
+	}
+	// El primer GPS del teléfono suele venir a kilómetros; luego se corrige. Si desde el último encuadre te has movido más de la
+	// mitad de lo que te faltaba (y más de 300 m), se encuadra otra vez: corrige ese primer punto y se acerca al llegar.
+	function salto(st, me, to) {
+		if (!st.fitMe || st.busy > Date.now()) { return false; }
+		var d = dist(st.fitMe, me);
+		return d > 300 && d > dist(st.fitMe, to) / 2;
 	}
 	function pad(n) { return { top: n, bottom: n, left: n, right: n }; }
 	function ago(s) {
@@ -317,8 +336,7 @@
 				}
 				sweep(map);
 				if (!map._pl.fitted && pts.length) {
-					if (pts.length === 1) { size(map); map.jumpTo({ center: ll(pts[0]), zoom: 15 }); } else { fit(map, el, pts, { top: 60, bottom: 36, left: 36, right: 56 }, 15); } // los pines miden 48 px y el + − va arriba a la derecha
-					map._pl.fitted = true;
+					if (pts.length === 1) { size(map); map.jumpTo({ center: ll(pts[0]), zoom: 15 }); map._pl.fitted = el.clientHeight >= 80; } else { map._pl.fitted = fit(map, el, pts, { top: 60, bottom: 36, left: 36, right: 56 }, 15); } // los pines miden 48 px y el + − va arriba a la derecha
 				} else { size(map); }
 			}
 			var who = r.name || 'El mensajero';
@@ -346,8 +364,7 @@
 			draw(map, [], falta);
 			sweep(map);
 			if (!map._pl.fitted && pts.length) {
-				if (pts.length === 1) { size(map); map.jumpTo({ center: ll(pts[0]), zoom: 14 }); } else { fit(map, el, pts, { top: 60, bottom: 48, left: 48, right: 56 }, 14); } // + los nombres debajo de cada moto
-				map._pl.fitted = true;
+				if (pts.length === 1) { size(map); map.jumpTo({ center: ll(pts[0]), zoom: 14 }); map._pl.fitted = el.clientHeight >= 80; } else { map._pl.fitted = fit(map, el, pts, { top: 60, bottom: 48, left: 48, right: 56 }, 14); } // + los nombres debajo de cada moto
 			} else { size(map); }
 			return pts.length;
 		});
@@ -396,17 +413,25 @@
 				if (me) { turn(put(map, 'yo', gl, 'moto', me, 'Tú'), heading(map, 'yo', me)); pts.push(me); }
 				sweep(map);
 				// Se encuadra al empezar, cuando llega tu ubicación y cuando cambia el destino (de la tienda al cliente): así se acerca.
-				var key = to ? to.join(',') : '', st = map._pl;
-				var p = big ? { top: 130, bottom: 330, left: 40, right: 40 } : { top: 60, bottom: 36, left: 36, right: 36 };
+				// 1-nov (teléfono de Ernesto, #6060): si la app redibuja mientras carga, el cuadro está un momento fuera de la página
+				// (alto 0) y el encuadre no hace nada; antes se daba por hecho y el mapa se quedaba en toda La Habana. Ahora solo
+				// cuenta si se pudo, y se repite si el cuadro cambia mucho de alto (pantalla completa ↔ pequeño).
+				var key = to ? to.join(',') : '', st = map._pl, h = el.clientHeight;
+				var p = big ? { top: 130, bottom: 330, left: 52, right: 52 } : { top: 60, bottom: 36, left: 40, right: 40 }; // la moto mide 44 px
 				var off = big ? [0, -110] : [0, 0]; // tu moto un poco por encima de la tarjeta
-				if (pts.length && (!st.fitted || me && !st.withMe || st.toKey !== key)) {
-					if (pts.length === 1) { size(map); map.easeTo({ center: ll(pts[0]), zoom: 15, offset: off, duration: 0 }); } else { fit(map, el, pts, p, 16, st.fitted); }
-					st.fitted = true; st.withMe = !!me; st.toKey = key;
-				} else if (me && st.follow) {
-					size(map);
-					map.easeTo({ center: ll(me), offset: off, duration: 800 });
-				} else { size(map); }
-				if (!pts.length && !st.fitted) { map.jumpTo({ center: ll(HABANA), zoom: 12 }); } // sin GPS ni punto: La Habana (no un mapa gris)
+				size(map);
+				if (h < 80) {
+					// fuera de la página: nada que encuadrar todavía
+				} else if (pts.length && (!st.fitted || me && !st.withMe || st.toKey !== key || Math.abs(h - (st.h || 0)) > 120 || st.follow && me && to && (juntos(map, me, to) || salto(st, me, to)))) {
+					var ok = true;
+					if (pts.length === 1) { map.easeTo({ center: ll(pts[0]), zoom: 15, offset: off, duration: 0 }); } else { ok = fit(map, el, pts, p, 16, st.fitted && st.h === h); }
+					if (ok) { st.fitted = true; st.withMe = !!me; st.toKey = key; st.h = h; st.fitMe = me; }
+				} else if (me && st.follow && !(st.busy > Date.now())) {
+					// Te sigue: con destino, la moto y el destino siempre a la vista (se acerca según llegas); sin destino, centrada.
+					if (to) { fit(map, el, pts, p, 16, true); } else { map.easeTo({ center: ll(me), offset: off, duration: 800 }); }
+				}
+				st.to = to; st.pad = p;
+				if (!pts.length && !st.fitted && h >= 80) { map.jumpTo({ center: ll(HABANA), zoom: 12 }); } // sin GPS ni punto: La Habana (no un mapa gris)
 			}
 			if (!to) { return me ? 'Sin punto en el mapa' : ''; }
 			if (!me) { return 'Buscando tu ubicación…'; }
@@ -422,6 +447,7 @@
 	function centrar(el, me) {
 		var map = el && el._pallaMap; if (!map) { return; }
 		map._pl.follow = true;
+		if (me && map._pl.to && fit(map, el, [me, map._pl.to], map._pl.pad || pad(36), 16, true)) { return; } // tú y adónde vas
 		if (me) { map.easeTo({ center: ll(me), zoom: Math.max(map.getZoom(), 15), offset: el.offsetHeight > 400 ? [0, -110] : [0, 0], duration: 700 }); }
 	}
 

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pa'llá · mapa propio (local)</title>
-<!-- Prueba del mapa propio (assets/palla/mapa.js) sin la app: ?modo=mensajero | ruta | tienda | marcar (+ &calles=1).
+<!-- Prueba del mapa propio (assets/palla/mapa.js) sin la app: ?modo=mensajero | telefono | ruta | tienda | marcar (+ &calles=1).
      Servir por http://localhost (el VPS solo da el mapa a casaviva.company y a localhost). -->
 <style>body{margin:0;font:14px system-ui,sans-serif;background:#f6f3ec}#txt{padding:10px 14px;font-weight:600}
 .pl-fm{position:fixed;inset:0}.card{position:fixed;left:0;right:0;bottom:0;height:300px;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -4px 18px rgba(0,0,0,.12);padding:14px}</style></head>
@@ -18,7 +18,33 @@
 	window.PRUEBA = { ok: false };
 	function done(t) { txt.textContent = t; window.PRUEBA = { ok: true, texto: t }; }
 	function fail(e) { txt.textContent = 'ERROR ' + e; window.PRUEBA = { ok: false, error: String(e) }; }
-	if (modo === 'mensajero') {
+	if (modo === 'telefono') { // 1-nov, #6060: el cuadro está fuera de la página al cargar, luego llega el GPS y la app redibuja a menudo
+		var fm2 = document.createElement('div'); fm2.className = 'pl-fm'; document.body.appendChild(fm2);
+		var b2 = document.createElement('div'); b2.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
+		var card2 = document.createElement('div'); card2.className = 'card'; card2.appendChild(txt); document.body.appendChild(card2);
+		var M = window.PallaMapa, yo = [23.1243, -82.3760], n = 0;
+		var lejos = /lejos=1/.test(location.search) ? [23.07, -82.45] : yo; // &lejos=1: el primer GPS viene a ~9 km (antena)
+		M.mensajero(b2, /primero=1/.test(location.search) ? yo : null, casa, 'casa').then(function () { return M.mensajero(b2, lejos, casa, 'casa'); }).then(function () { // &primero=1: ya hay GPS al abrir
+			fm2.appendChild(b2); // hasta aquí el cuadro estaba fuera de la página (alto 0), como cuando la app redibuja
+			return M.mensajero(b2, lejos, casa, 'casa');
+		}).then(function () {
+			// &forzar=1: el mapa se queda en toda La Habana (zoom 11), como lo vio Ernesto en #6060; debe recuperarse solo
+			if (/forzar=1/.test(location.search)) { b2._pallaMap.jumpTo({ center: [yo[1], yo[0]], zoom: 11 }); }
+			return M.mensajero(b2, null, casa, 'casa');
+		}).then(function () {
+			var t = setInterval(function () {
+				n++; var me = [yo[0] + n * 0.00003, yo[1] + n * 0.00004];
+				M.mensajero(b2, me, casa, 'casa').then(function (x) {
+					if (n >= 16) {
+						clearInterval(t);
+						var map = b2._pallaMap, r = b2.getBoundingClientRect(), a = map.project([casa[1], casa[0]]), m = map.project([me[1], me[0]]);
+						var dentro = function (q) { return q.x > 0 && q.x < r.width && q.y > 0 && q.y < r.height - 280; };
+						done(x + ' · zoom ' + map.getZoom().toFixed(1) + ' · casa ' + (dentro(a) ? 'se ve' : 'NO se ve') + ' · moto ' + (dentro(m) ? 'se ve' : 'NO se ve') + ' · separadas ' + Math.round(Math.hypot(a.x - m.x, a.y - m.y)) + ' px');
+					}
+				});
+			}, 250);
+		}, fail);
+	} else if (modo === 'mensajero') {
 		var fm = document.createElement('div'); fm.className = 'pl-fm';
 		var box = document.createElement('div'); box.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
 		fm.appendChild(box); document.body.appendChild(fm);
