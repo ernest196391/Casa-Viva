@@ -70,6 +70,8 @@ Actualización: Actions `41524288477`, candidata `815bb0e`, pasó el recorrido c
 
 Se repararon requisitos de CI que fallaban antes del panel: nombre antiguo de categoría, versión fijada a 3.14.71, entorno Ubuntu no soportado por Playwright, un helper del Taller confundido con un React Hook y fecha de entrega pasada en una fixture. No cambian reglas comerciales. Candidata: 3.14.112.
 
-Pendiente antes de entregar acceso real: CI completo, prueba WordPress/WooCommerce en entorno de prueba, revisión del cambio, despliegue con aprobación, crear cuenta y verificar login/subida/edición/publicación con un producto controlado. No declarar lista para usar hasta esa verificación.
+Verificación final del código: revisión `913928fa1290c3658a551b8d68a987834a6ecfeb`, Actions `41525690191`: validate (incluye lint, TypeScript y build), integration, browser y content-studio en verde. Contratos de release `41525690210` y staging `41525690145` verdes. El registro posterior de estos resultados solo modifica documentación.
+
+Pendiente antes de entregar acceso real: revisión del cambio, despliegue con aprobación, crear cuenta y verificar login/subida/edición/publicación con un producto controlado en producción. No declarar lista para usar hasta esa verificación.
 
 Costo nuevo requerido: 0 para este piloto de composiciones. Usa hosting y almacenamiento actuales, sujetos a su capacidad. Próximo escalado: generación de escenas por proveedor, control de consumo por tienda, almacenamiento y procesamiento asíncrono; sin iniciar Foundation multiempresa.

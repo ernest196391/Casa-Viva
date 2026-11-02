@@ -6,12 +6,12 @@
 - Base inspeccionada: `038050a12575e9039d9a766c25036d7fec937ada`, plugin 3.14.111. Producción actual no certificada en esta unidad. No sustituye los estados históricos siguientes.
 - Rama de trabajo: `codex/zahyir-catalog-studio` (el usuario corrigió el nombre a Zayri durante el trabajo).
 - Implementación y límites: `docs/herramientas/panel-contenido-zayri.md`.
-- Estado: piloto en revisión; sin despliegue y sin cuenta creada. Pruebas locales de contratos y Taller superadas; QA con servidor simulado. CI y recorrido real WordPress pendientes.
-- Bloqueo local de comprobaciones completas: instalación npm interrumpida por conexión y permisos del equipo; no se declaran lint/TypeScript/build superados.
+- Estado: piloto construido y probado, en revisión; sin despliegue y sin cuenta creada. Contratos, Taller, WordPress/MariaDB, subida/descarga/cambio de contraseña en navegador real y suite general superados sobre `913928fa1290c3658a551b8d68a987834a6ecfeb` (Actions `41525690191`). Release `41525690210` y staging `41525690145` verdes.
+- Limitación local inicial: npm interrumpido por conexión y permisos del equipo; posteriormente lint, TypeScript y build se superaron en CI sobre `913928f`.
 - Costo nuevo requerido: 0. Composiciones gratuitas con fotos reales; generación nueva con Higgsfield no conectada. Skill original instalada en Codex como herramienta de trabajo.
 - Revisión publicada: #167. Candidata 3.14.112. Contratos locales y prueba real WordPress/MariaDB del panel superados (Actions `41522895994`, revisión `f73428a`); recorrido de navegador y suite completa en comprobación. Reparaciones de CI preexistente documentadas en la guía.
 - Evidencia de candidata `815bb0e`: Actions `41524288477` valida código, navegador general y recorrido real del panel (login limitado, guardado, subida, JPG y cambio de contraseña) en verde; contratos de release y staging verdes. La integración general detectó una fixture antigua que reutiliza dirección sin confirmar el nuevo aviso de duplicado; se adapta la fixture a esa confirmación explícita, sin cambiar la protección de producción.
-- Siguiente acción: CI, prueba WordPress controlada y revisión del cambio; solo después, despliegue y creación de cuenta con evidencia. No se inicia otra fase de plataforma.
+- Siguiente acción: aprobación de despliegue de la revisión #167; después crear la cuenta zayri y verificar en producción con un producto controlado. No se inicia otra fase de plataforma.
 
 ## Resumen de reanudación
 
