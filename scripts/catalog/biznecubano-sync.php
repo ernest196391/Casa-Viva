@@ -153,6 +153,8 @@ function cvd_sync_image( string $url, int $product_id, string $name ): int {
  * Devuelve '' si no hay cambio, 'replaced' o 'failed'.
  */
 function cvd_sync_photo( WC_Product $product, string $url, bool $apply ): string {
+	// Content curated by staff is authoritative for imagery, independently of commercial sync.
+	if ( $product->get_meta( '_cvd_content_owned' ) ) { return ''; }
 	if ( '' === $url ) {
 		return '';
 	}
@@ -563,7 +565,7 @@ $existing = wc_get_products( array( 'limit' => -1, 'status' => array( 'publish' 
 foreach ( $existing as $product ) {
 	$sku = (string) $product->get_sku();
 	// Los artículos «bajo pedido» del mercado (MK-*) no vienen de BizneCubano: no se ocultan.
-	if ( ! empty( $seen_skus[ $sku ] ) || 0 === strpos( $sku, 'MK-' ) ) {
+	if ( ! empty( $seen_skus[ $sku ] ) || 0 === strpos( $sku, 'MK-' ) || '1' === (string) $product->get_meta( '_cvd_content_local' ) ) {
 		continue;
 	}
 	if ( $apply ) {

@@ -32,6 +32,11 @@ jobs:
           node artifacts/tests/test-canonical-order-reader-1a.mjs
           node artifacts/tests/test-canonical-order-reader-history-truncation-1a.mjs
 
+      - name: Validar panel de contenido y protección de fotos
+        run: |
+          php artifacts/tests/test-content-studio.php
+          node --check wordpress/casa-viva-dropship-core/assets/content-studio.js
+
       - name: Validar historial canónico de eventos
         run: php artifacts/tests/test-canonical-order-events-1b.php
 
@@ -170,8 +175,41 @@ jobs:
         if: always()
         run: scripts/integration.sh down
 
+  content-studio:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+      - name: Preparar WordPress de prueba
+        run: scripts/integration.sh up
+      - name: Validar contenido con WordPress y WooCommerce reales
+        run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/content-studio.php
+      - name: Preparar navegador del panel
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Instalar navegador y preparar usuario sintético
+        run: |
+          npm install --no-save @playwright/test@1.54.2
+          npx playwright install --with-deps chromium
+          docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/content-studio-browser.php
+      - name: Probar el panel móvil con subida y descarga reales
+        env:
+          CONTENT_STUDIO_BROWSER: '1'
+        run: npx playwright test tests/browser/content-studio.spec.js --workers=1 --reporter=line
+      - name: Mostrar diagnóstico si falla
+        if: failure()
+        run: scripts/integration.sh logs
+      - name: Eliminar entorno desechable
+        if: always()
+        run: scripts/integration.sh down
+
   browser:
-    runs-on: ubuntu-latest
+    # Playwright 1.54.2 does not support the Ubuntu 26 image now used by latest.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read

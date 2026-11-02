@@ -13,6 +13,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class CVD_Taller_Text {
 	public const KINDS = array(
+		'titulo'      => 'Título del producto',
 		'facebook'    => 'Publicación para Facebook',
 		'estado'      => 'Estado de WhatsApp (corto)',
 		'descripcion' => 'Descripción del producto',
@@ -71,6 +72,7 @@ final class CVD_Taller_Text {
 
 	/** Texto sin IA. Solo usa lo que está en $f (name, lines[], attrs[], extra, price, link). */
 	public static function template( array $f, string $kind ): string {
+		if ( 'titulo' === $kind ) { return trim( (string) ( $f['name'] ?? '' ) ); }
 		$name = trim( (string) ( $f['name'] ?? '' ) );
 		$price = trim( (string) ( $f['price'] ?? '' ) );
 		$link = trim( (string) ( $f['link'] ?? '' ) );
@@ -103,6 +105,7 @@ final class CVD_Taller_Text {
 	/** Instrucción para el modelo de texto. */
 	public static function system_instruction( string $kind ): string {
 		$shape = array(
+			'titulo'      => 'Escribe un título claro para la ficha del producto de 3 a 12 palabras, máximo 120 caracteres. Nombra el producto y solo un detalle confirmado. Sin emojis ni superlativos.',
 			'facebook'    => 'Escribe una publicación de Facebook de 3 a 6 líneas cortas: una frase de gancho, 2 o 3 ventajas reales del producto y una invitación a escribir. Puedes usar hasta 3 emojis.',
 			'estado'      => 'Escribe un texto MUY corto (máximo 2 líneas y 160 letras) para un estado de WhatsApp. Máximo 1 emoji.',
 			'descripcion' => 'Escribe la descripción del producto en 2 o 3 frases claras, sin emojis, para ponerla en una ficha de tienda.',
@@ -134,9 +137,9 @@ final class CVD_Taller_Text {
 	public static function guard( string $ai, array $f, string $kind ): string {
 		$ai = trim( str_replace( array( '“', '”', '"', '**', '__' ), '', $ai ) );
 		$ai = trim( (string) preg_replace( "/\n{3,}/", "\n\n", $ai ) );
-		$max = array( 'facebook' => 700, 'estado' => 220, 'descripcion' => 600 );
+		$max = array( 'facebook' => 700, 'estado' => 220, 'descripcion' => 600, 'titulo' => 120 );
 		$len = mb_strlen( $ai );
-		if ( $len < 20 || $len > ( $max[ $kind ] ?? 700 ) ) { return ''; }
+		if ( $len < ( 'titulo' === $kind ? 3 : 20 ) || $len > ( $max[ $kind ] ?? 700 ) ) { return ''; }
 		if ( preg_match( '#https?://|www\.|@[a-z0-9_]+|\+?\d[\d\s().-]{7,}\d#iu', $ai ) ) { return ''; } // enlaces, usuarios, teléfonos
 		$blob = self::facts_blob( $f );
 		preg_match_all( '/\d+(?:[.,]\d+)?/u', $ai, $m );
@@ -157,7 +160,7 @@ final class CVD_Taller_Text {
 	public static function finish( string $body, array $f, string $kind ): string {
 		$price = trim( (string) ( $f['price'] ?? '' ) );
 		$link = trim( (string) ( $f['link'] ?? '' ) );
-		if ( 'descripcion' === $kind ) { return $body; }
+		if ( in_array( $kind, array( 'descripcion', 'titulo' ), true ) ) { return $body; }
 		if ( 'estado' === $kind ) {
 			return $body . ( '' !== $price ? ' · ' . $price : '' ) . ( '' !== $link ? "\nPídelo aquí 👉 " . $link : '' );
 		}

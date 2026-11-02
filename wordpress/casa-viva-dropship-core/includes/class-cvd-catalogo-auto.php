@@ -264,6 +264,9 @@ final class CVD_Catalogo_Auto {
 				array( 'key' => self::META_V, 'value' => self::VERSION, 'compare' => '<', 'type' => 'NUMERIC' ),
 				array( 'key' => self::META_REV, 'value' => 'corregir' ) );
 		}
+		// Do not repeatedly offer human-owned content to the automatic writer.
+		$unowned = array( 'relation' => 'OR', array( 'key' => '_cvd_content_owned', 'compare' => 'NOT EXISTS' ), array( 'key' => '_cvd_content_owned', 'value' => '' ) );
+		$args['meta_query'] = isset( $args['meta_query'] ) ? array( 'relation' => 'AND', $args['meta_query'], $unowned ) : $unowned;
 		$q = new WP_Query( $args );
 		$out = array();
 		foreach ( $q->posts as $id ) { $p = wc_get_product( $id ); if ( $p ) { $out[] = self::datos( $p ); } }
@@ -291,6 +294,7 @@ final class CVD_Catalogo_Auto {
 		$d = (array) $request->get_json_params();
 		$p = wc_get_product( absint( $d['id'] ?? 0 ) );
 		if ( ! $p || 'publish' !== $p->get_status() ) { return self::json( array( 'ok' => false, 'error' => 'Producto no encontrado o no publicado.' ), 404 ); }
+		if ( $p->get_meta( '_cvd_content_owned' ) ) { return self::json( array( 'ok' => false, 'error' => 'Contenido protegido por el equipo de Casa Viva.' ), 409 ); }
 		$nombre = trim( sanitize_text_field( (string) ( $d['titulo'] ?? '' ) ) );
 		$corta = trim( (string) ( $d['corta'] ?? '' ) );
 		$larga = trim( (string) ( $d['larga_html'] ?? '' ) );
@@ -356,6 +360,7 @@ final class CVD_Catalogo_Auto {
 	public static function deshacer( WP_REST_Request $request ): WP_REST_Response {
 		$p = wc_get_product( absint( $request->get_param( 'id' ) ) );
 		if ( ! $p ) { return self::json( array( 'ok' => false, 'error' => 'No existe.' ), 404 ); }
+		if ( $p->get_meta( '_cvd_content_owned' ) ) { return self::json( array( 'ok' => false, 'error' => 'Contenido protegido por el equipo.' ), 409 ); }
 		return self::json( array( 'ok' => self::restore( $p ) ) );
 	}
 

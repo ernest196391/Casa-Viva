@@ -10,11 +10,18 @@ $draft = array(
 	'orderCode'=>'CVT-FIELD-001', 'managerCode'=>'CVTFIELD', 'customer'=>'Cliente Prueba',
 	'phones'=>array('50000001','50000002'), 'address'=>'Dirección sintética 1', 'betweenStreets'=>'Calle A y Calle B',
 	'reference'=>'Referencia sintética', 'municipality'=>'Municipio Sintético', 'zone'=>'Zona Sintética',
-	'scheduledDate'=>'2026-08-23', 'scheduledTime'=>'tarde', 'notes'=>array('Nota sintética'),
+	'scheduledDate'=>wp_date( 'Y-m-d', time() + DAY_IN_SECONDS ), 'scheduledTime'=>'tarde', 'notes'=>array('Nota sintética'),
 	'changeRequired'=>array(array('amount'=>20,'currency'=>'USD')),
 );
 $request = new WP_REST_Request( 'POST' ); $request->set_header( 'Idempotency-Key', 'field-ready-voucher-confirmation-001' ); $request->set_param( 'draft', $draft ); $request->set_param( 'lines', array(array('productId'=>$product_id,'quantity'=>2)) );
-$first = CVD_Voucher_Intake::create_order( $request ); cvt_field_assert( ! is_wp_error( $first ), 'Falló la creación canónica desde vale.' ); $first_data = $first->get_data();
+$first = CVD_Voucher_Intake::create_order( $request );
+// The shared fixture intentionally reuses an earlier synthetic address. Confirm only the
+// explicit duplicate-data warning, like the seller's «Sí, es el mismo»; other errors still fail.
+if ( is_wp_error( $first ) && 'cvd_vale_dup' === $first->get_error_code() ) {
+	$draft['phoneChecked'] = true; $request->set_param( 'draft', $draft );
+	$first = CVD_Voucher_Intake::create_order( $request );
+}
+cvt_field_assert( ! is_wp_error( $first ), 'Falló la creación canónica desde vale.' . ( is_wp_error( $first ) ? ' ' . $first->get_error_code() . ': ' . $first->get_error_message() : '' ) ); $first_data = $first->get_data();
 $second = CVD_Voucher_Intake::create_order( $request ); cvt_field_assert( ! is_wp_error( $second ), 'Falló el replay idempotente.' ); $second_data = $second->get_data();
 cvt_field_assert( $first_data['orderId'] === $second_data['orderId'] && true === $second_data['replayed'], 'El doble submit creó dos pedidos.' );
 $order = wc_get_order( $first_data['orderId'] ); cvt_field_assert( $order instanceof WC_Order && 'processing' === $order->get_status(), 'El pedido no quedó operativo en WooCommerce.' );

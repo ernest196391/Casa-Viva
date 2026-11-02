@@ -13,7 +13,8 @@ const between = (s, a, b) => s.slice(s.indexOf(a), s.indexOf(b, s.indexOf(a) + a
 const header = plugin.match(/\* Version: ([\d.]+)/)?.[1];
 const constant = plugin.match(/define\( 'CVD_VERSION', '([\d.]+)' \)/)?.[1];
 must(header && header === constant, `Versión distinta en cabecera (${header}) y CVD_VERSION (${constant}).`);
-must(header === '3.14.71', `La versión debe ser 3.14.71 (es ${header}).`);
+const parts = header.split('.').map(Number);
+must(parts[0] > 3 || (parts[0] === 3 && (parts[1] > 14 || (parts[1] === 14 && parts[2] >= 71))), `El contrato necesita 3.14.71 o posterior (es ${header}).`);
 
 // La puerta del bot sigue igual: mismas rutas y misma clave.
 must(php.includes("'/bot/market/publish'") && php.includes("'/bot/market/(?P<item>\\d+)/unpublish'"), 'Las rutas del bot deben seguir.');

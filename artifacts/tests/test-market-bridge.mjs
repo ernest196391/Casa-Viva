@@ -8,7 +8,7 @@ const must = (c, m) => { if (!c) throw new Error(m); };
 
 must(plugin.includes('class-cvd-market-bridge.php') && plugin.includes('CVD_Market_Bridge::register()'), 'El puente del mercado debe cargarse y registrarse.');
 must(php.includes("array( 'CVD_Bot_Bridge', 'authorized' )"), 'El mercado debe usar la misma clave del bot.');
-must(php.includes("SKU_PREFIX = 'MK-'") && php.includes("'Bajo pedido'"), 'SKU MK- y categoría Bajo pedido.');
+must(php.includes("SKU_PREFIX = 'MK-'") && php.includes("CATEGORY = 'Encargo 24 h'") && php.includes("'slug' => 'bajo-pedido'"), 'SKU MK-, categoría Encargo 24 h y slug estable bajo-pedido.');
 must(php.includes("'_cvd_commission_type', 'fixed'"), 'Comisión fija por producto.');
 must(php.includes('set_manage_stock( false )'), 'Sin control de stock: se confirma con el proveedor.');
 must(/supabase\\\.co/.test(php), 'Solo imágenes de Supabase Storage.');

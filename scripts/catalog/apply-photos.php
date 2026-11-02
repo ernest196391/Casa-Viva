@@ -30,6 +30,10 @@ foreach ( $data['photos'] ?? array() as $photo ) {
 		continue;
 	}
 	try {
+		if ( $product->get_meta( '_cvd_content_owned' ) ) {
+			$report['skipped'][] = array( 'sku' => $sku, 'reason' => 'foto protegida por el equipo' );
+			continue;
+		}
 		if ( 'revert' === $mode ) {
 			$prev = (int) $product->get_meta( '_cvd_prev_image_id' );
 			if ( ! $prev ) {
