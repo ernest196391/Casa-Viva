@@ -167,13 +167,29 @@ jobs:
       - name: Validar cobro y pagador dividido
         run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/split-payment-obligations.php
 
-      - name: Validar contenido con WordPress y WooCommerce reales
-        run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/content-studio.php
-
       - name: Mostrar diagnóstico si falla
         if: failure()
         run: scripts/integration.sh logs
 
+      - name: Eliminar entorno desechable
+        if: always()
+        run: scripts/integration.sh down
+
+  content-studio:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+      - name: Preparar WordPress de prueba
+        run: scripts/integration.sh up
+      - name: Validar contenido con WordPress y WooCommerce reales
+        run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/content-studio.php
+      - name: Mostrar diagnóstico si falla
+        if: failure()
+        run: scripts/integration.sh logs
       - name: Eliminar entorno desechable
         if: always()
         run: scripts/integration.sh down
