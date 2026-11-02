@@ -1,0 +1,70 @@
+name: Despliegue aprobado y acceso de Zayri
+on:
+  push:
+    branches: [codex/deploy-zayri-approved]
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: casaviva-approved-zayri-deployment
+  cancel-in-progress: false
+env:
+  APPROVED_SHA: d39e7b3a5cf9da9fae151beea667eee5541422dd
+  GH_TOKEN: ${{ github.token }}
+jobs:
+  approved-deployment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Ejecutar el despliegue existente del SHA aprobado
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)" = "$APPROVED_SHA"
+          started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          gh workflow run deploy-prototype.yml --ref main -f expected_sha="$APPROVED_SHA"
+          deploy_id=''
+          for attempt in {1..20}; do
+            runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/deploy-prototype.yml/runs?event=workflow_dispatch&per_page=20")"
+            deploy_id="$(jq -r --arg sha "$APPROVED_SHA" --arg started "$started" '[.workflow_runs[] | select(.head_sha == $sha and .created_at >= $started)] | sort_by(.id) | last | .id // empty' <<<"$runs")"
+            if [ -n "$deploy_id" ]; then break; fi
+            sleep 3
+          done
+          test -n "$deploy_id"
+          echo "DEPLOY_RUN_ID=$deploy_id"
+          for attempt in {1..120}; do
+            run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$deploy_id")"
+            if [ "$(jq -r .status <<<"$run")" = completed ]; then
+              test "$(jq -r .conclusion <<<"$run")" = success
+              exit 0
+            fi
+            sleep 20
+          done
+          echo 'El despliegue no terminó dentro del plazo; no se crea la cuenta.' >&2
+          exit 1
+      - name: Preparar conexión existente a Casa Viva
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '\n' >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+      - name: Crear cuenta limitada y devolver acceso cifrado
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          scp -P "$SSH_PORT" scripts/ops/create-zayri-approved.php "$SSH_USER@$SSH_HOST:/tmp/cvd-zayri-onboarding.php"
+          scp -P "$SSH_PORT" artifacts/zayri-onboarding-public.pem "$SSH_USER@$SSH_HOST:/tmp/cvd-zayri-onboarding.pub"
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cd /home/u824654880/domains/casaviva.company/public_html && wp eval-file /tmp/cvd-zayri-onboarding.php"
