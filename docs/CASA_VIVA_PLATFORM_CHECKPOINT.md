@@ -1,5 +1,16 @@
 # Casa Viva Platform — Checkpoint operativo
 
+## PREPARE — Mi catálogo y fotos para Zayri (2026-11-02)
+
+- Petición explícita de Ernesto: panel móvil en casaviva.company, crear/editar/publicar contenido y fotos, conservar cambios humanos frente a BizneCubano; mantener precios y existencias.
+- Base inspeccionada: `038050a12575e9039d9a766c25036d7fec937ada`, plugin 3.14.111. Producción actual no certificada en esta unidad. No sustituye los estados históricos siguientes.
+- Rama de trabajo: `codex/zahyir-catalog-studio` (el usuario corrigió el nombre a Zayri durante el trabajo).
+- Implementación y límites: `docs/herramientas/panel-contenido-zayri.md`.
+- Estado: piloto en revisión; sin despliegue y sin cuenta creada. Pruebas locales de contratos y Taller superadas; QA con servidor simulado. CI y recorrido real WordPress pendientes.
+- Bloqueo local de comprobaciones completas: instalación npm interrumpida por conexión y permisos del equipo; no se declaran lint/TypeScript/build superados.
+- Costo nuevo requerido: 0. Composiciones gratuitas con fotos reales; generación nueva con Higgsfield no conectada. Skill original instalada en Codex como herramienta de trabajo.
+- Siguiente acción: CI, prueba WordPress controlada y revisión del cambio; solo después, despliegue y creación de cuenta con evidencia. No se inicia otra fase de plataforma.
+
 ## Resumen de reanudación
 
 ```text

@@ -265,7 +265,7 @@ final class CVD_Market_Bridge {
 		$product_id = $product->save();
 
 		// Fotos: solo la primera vez o si VivaBot manda otras nuevas.
-		if ( $images && ( $is_new || ! empty( $d['replace_images'] ) ) ) {
+		if ( ! $product->get_meta( '_cvd_content_owned' ) && $images && ( $is_new || ! empty( $d['replace_images'] ) ) ) {
 			$ids = array();
 			foreach ( array_slice( $images, 0, 4 ) as $url ) {
 				$att = self::sideload( $url, $product_id, $title );

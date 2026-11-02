@@ -59,6 +59,7 @@ require_once CVD_DIR . 'includes/class-cvd-estudio-core.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-estudio.php';
 require_once CVD_DIR . 'includes/class-cvd-taller-core.php'; // 3.14.91: «Taller de fotos» (texto sin inventar)
 require_once CVD_DIR . 'includes/class-cvd-gestora-taller.php';
+require_once CVD_DIR . 'includes/class-cvd-content-studio.php';
 require_once CVD_DIR . 'includes/class-cvd-seller-store.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-contabilidad.php';
 require_once CVD_DIR . 'includes/class-cvd-program-login.php';
@@ -133,6 +134,7 @@ add_action(
 			CVD_Gestora_Fotos::register();
 			CVD_Seller_Store::register(); // 3.14.87: la tienda propia de un vendedor (Daykel, Ernesto 29-oct)
 			CVD_Gestora_Taller::register(); // 3.14.91: «Taller de fotos» (foto lista en el móvil + texto para publicar, Ernesto 29-oct).
+			CVD_Content_Studio::register();
 			CVD_Gestora_Estudio::register(); // 3.14.1: «Mi estudio de fotos» con la clave de Google de cada gestora (Ernesto, 14-oct).
 			CVD_Program_Login::register();
 			CVD_Gestora_Stock::register();

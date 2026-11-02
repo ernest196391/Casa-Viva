@@ -32,6 +32,11 @@ jobs:
           node artifacts/tests/test-canonical-order-reader-1a.mjs
           node artifacts/tests/test-canonical-order-reader-history-truncation-1a.mjs
 
+      - name: Validar panel de contenido y protección de fotos
+        run: |
+          php artifacts/tests/test-content-studio.php
+          node --check wordpress/casa-viva-dropship-core/assets/content-studio.js
+
       - name: Validar historial canónico de eventos
         run: php artifacts/tests/test-canonical-order-events-1b.php
 

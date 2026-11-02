@@ -291,6 +291,7 @@ final class CVD_Catalogo_Auto {
 		$d = (array) $request->get_json_params();
 		$p = wc_get_product( absint( $d['id'] ?? 0 ) );
 		if ( ! $p || 'publish' !== $p->get_status() ) { return self::json( array( 'ok' => false, 'error' => 'Producto no encontrado o no publicado.' ), 404 ); }
+		if ( $p->get_meta( '_cvd_content_owned' ) ) { return self::json( array( 'ok' => false, 'error' => 'Contenido protegido por el equipo de Casa Viva.' ), 409 ); }
 		$nombre = trim( sanitize_text_field( (string) ( $d['titulo'] ?? '' ) ) );
 		$corta = trim( (string) ( $d['corta'] ?? '' ) );
 		$larga = trim( (string) ( $d['larga_html'] ?? '' ) );
@@ -356,6 +357,7 @@ final class CVD_Catalogo_Auto {
 	public static function deshacer( WP_REST_Request $request ): WP_REST_Response {
 		$p = wc_get_product( absint( $request->get_param( 'id' ) ) );
 		if ( ! $p ) { return self::json( array( 'ok' => false, 'error' => 'No existe.' ), 404 ); }
+		if ( $p->get_meta( '_cvd_content_owned' ) ) { return self::json( array( 'ok' => false, 'error' => 'Contenido protegido por el equipo.' ), 409 ); }
 		return self::json( array( 'ok' => self::restore( $p ) ) );
 	}
 

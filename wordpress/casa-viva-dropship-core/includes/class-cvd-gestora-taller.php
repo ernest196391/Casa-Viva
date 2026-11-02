@@ -139,6 +139,21 @@ final class CVD_Gestora_Taller {
 		return trim( (string) get_option( 'cvd_taller_gemini_key', '' ) );
 	}
 
+	/** Shared text service for the staff content desk, using the existing key, guard and quotas. */
+	public static function content_text( array $facts, string $kind = 'descripcion' ): array {
+		$kind = 'titulo' === $kind ? 'titulo' : 'descripcion';
+		$body = CVD_Taller_Text::template( $facts, $kind );
+		$key = self::key(); $used_ai = false;
+		$daily = self::day_key( get_current_user_id() ); $global = self::global_key();
+		if ( '' !== $key && (int) get_transient( $daily ) < self::MAX_PER_DAY && (int) get_transient( $global ) < self::MAX_GLOBAL_DAY ) {
+			set_transient( $daily, (int) get_transient( $daily ) + 1, DAY_IN_SECONDS );
+			set_transient( $global, (int) get_transient( $global ) + 1, DAY_IN_SECONDS );
+			$clean = CVD_Taller_Text::guard( self::ask( $key, $facts, $kind ), $facts, $kind );
+			if ( '' !== $clean ) { $body = $clean; $used_ai = true; }
+		}
+		return array( 'text' => $body, 'ai' => $used_ai, 'note' => $used_ai ? 'Sugerencia con IA. Revisa los datos antes de usarla.' : 'Texto preparado con tus datos. La IA no está disponible o alcanzó su límite.' );
+	}
+
 	/** Llama al modelo de texto. '' si falla (nunca se registra la clave). */
 	private static function ask( string $key, array $f, string $kind ): string {
 		$model = (string) get_option( 'cvd_taller_text_model', self::DEFAULT_TEXT_MODEL ) ?: self::DEFAULT_TEXT_MODEL;
