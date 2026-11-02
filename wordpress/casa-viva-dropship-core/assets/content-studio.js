@@ -9,7 +9,11 @@
   const plain = (text) => { const d = new DOMParser().parseFromString(text || '', 'text/html'); return d.body.textContent || ''; };
   async function api(path, body) {
     const multipart = body instanceof FormData;
-    const response = await fetch(cvContent.base + path, { method: body ? 'POST' : 'GET', credentials: 'same-origin',
+    // rest_url may be an index.php?rest_route= URL on sites without pretty permalinks.
+    const [route, query = ''] = path.split('?');
+    const url = new URL(cvContent.base + route, location.href);
+    for (const [key, value] of new URLSearchParams(query)) url.searchParams.set(key, value);
+    const response = await fetch(url, { method: body ? 'POST' : 'GET', credentials: 'same-origin',
       headers: { 'X-WP-Nonce': cvContent.nonce, ...(!multipart && body ? { 'Content-Type': 'application/json' } : {}) },
       body: body ? (multipart ? body : JSON.stringify(body)) : undefined });
     const data = await response.json();
