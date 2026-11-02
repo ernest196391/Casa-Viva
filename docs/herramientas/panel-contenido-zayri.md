@@ -66,6 +66,8 @@ QA local: interfaz PHP real renderizada con funciones WordPress de prueba y API 
 
 La revisión #167 incorpora también integración con WordPress/MariaDB reales (`integration/tests/content-studio.php`) y un recorrido Playwright dedicado (`tests/browser/content-studio.spec.js`) para login con cuenta limitada, guardado, subida multipart, descarga JPG y cambio de contraseña. La integración real de la revisión `f73428a` pasó en Actions `41522895994`; el recorrido de navegador está en comprobación en la candidata posterior.
 
+Actualización: Actions `41524288477`, candidata `815bb0e`, pasó el recorrido completo del panel, la validación de código y el navegador general. Release y staging también verdes. Integración general pendiente de repetir tras adaptar la fixture de vales a su aviso de dirección reutilizada (confirmación explícita de datos sintéticos). No hay cambios en esa regla de producción.
+
 Se repararon requisitos de CI que fallaban antes del panel: nombre antiguo de categoría, versión fijada a 3.14.71, entorno Ubuntu no soportado por Playwright, un helper del Taller confundido con un React Hook y fecha de entrega pasada en una fixture. No cambian reglas comerciales. Candidata: 3.14.112.
 
 Pendiente antes de entregar acceso real: CI completo, prueba WordPress/WooCommerce en entorno de prueba, revisión del cambio, despliegue con aprobación, crear cuenta y verificar login/subida/edición/publicación con un producto controlado. No declarar lista para usar hasta esa verificación.

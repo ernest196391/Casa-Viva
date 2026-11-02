@@ -10,6 +10,7 @@
 - Bloqueo local de comprobaciones completas: instalación npm interrumpida por conexión y permisos del equipo; no se declaran lint/TypeScript/build superados.
 - Costo nuevo requerido: 0. Composiciones gratuitas con fotos reales; generación nueva con Higgsfield no conectada. Skill original instalada en Codex como herramienta de trabajo.
 - Revisión publicada: #167. Candidata 3.14.112. Contratos locales y prueba real WordPress/MariaDB del panel superados (Actions `41522895994`, revisión `f73428a`); recorrido de navegador y suite completa en comprobación. Reparaciones de CI preexistente documentadas en la guía.
+- Evidencia de candidata `815bb0e`: Actions `41524288477` valida código, navegador general y recorrido real del panel (login limitado, guardado, subida, JPG y cambio de contraseña) en verde; contratos de release y staging verdes. La integración general detectó una fixture antigua que reutiliza dirección sin confirmar el nuevo aviso de duplicado; se adapta la fixture a esa confirmación explícita, sin cambiar la protección de producción.
 - Siguiente acción: CI, prueba WordPress controlada y revisión del cambio; solo después, despliegue y creación de cuenta con evidencia. No se inicia otra fase de plataforma.
 
 ## Resumen de reanudación
