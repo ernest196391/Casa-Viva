@@ -167,6 +167,9 @@ jobs:
       - name: Validar cobro y pagador dividido
         run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/split-payment-obligations.php
 
+      - name: Validar contenido con WordPress y WooCommerce reales
+        run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/content-studio.php
+
       - name: Mostrar diagnóstico si falla
         if: failure()
         run: scripts/integration.sh logs
@@ -176,7 +179,8 @@ jobs:
         run: scripts/integration.sh down
 
   browser:
-    runs-on: ubuntu-latest
+    # Playwright 1.54.2 does not support the Ubuntu 26 image now used by latest.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
