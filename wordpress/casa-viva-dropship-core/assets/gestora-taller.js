@@ -109,7 +109,7 @@ if (typeof document === 'undefined') return;
   /* ---------------- foto ---------------- */
   var stage = $('[data-cvtl-stage]'), canvas = $('[data-cvtl-canvas]'), ctx = canvas.getContext('2d');
 
-  function useImage(img) {
+  function selectImage(img) {
     state.img = img; state.zoom = 1; state.ox = 0; state.oy = 0;
     $('[data-cvtl-zoom]').value = 100;
     stage.hidden = false; say(msg, '');
@@ -118,7 +118,7 @@ if (typeof document === 'undefined') return;
   function loadUrl(url) {
     var img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = function () { useImage(img); };
+    img.onload = function () { selectImage(img); };
     img.onerror = function () { say(msg, 'No pude abrir esa foto. Sube una de tu móvil.', true); };
     img.src = url;
   }
@@ -128,7 +128,7 @@ if (typeof document === 'undefined') return;
     if (state.objectUrl) { try { URL.revokeObjectURL(state.objectUrl); } catch (ignore) {} }
     state.objectUrl = URL.createObjectURL(f);
     var img = new Image();
-    img.onload = function () { useImage(img); };
+    img.onload = function () { selectImage(img); };
     img.onerror = function () { say(msg, 'Esa foto no se pudo abrir. Prueba con otra (JPG, PNG o WebP).', true); };
     img.src = state.objectUrl;
   });
@@ -260,8 +260,8 @@ if (typeof document === 'undefined') return;
   function showLeft() { leftEl.textContent = cfg.ai ? 'Te quedan ' + cfg.left + ' textos con IA hoy.' : 'Texto sencillo con los datos del producto.'; }
   showLeft();
 
-  $('[data-cvtl-write]').addEventListener('click', function () {
-    var btn = this;
+  $('[data-cvtl-write]').addEventListener('click', function (event) {
+    var btn = event.currentTarget;
     var name = state.name || q.value.trim();
     if (!name) { say(tmsg, 'Primero elige el producto (arriba) o escribe cómo se llama.', true); q.focus(); return; }
     btn.disabled = true; say(tmsg, 'Escribiendo…');

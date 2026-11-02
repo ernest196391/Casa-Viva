@@ -10,7 +10,7 @@ $draft = array(
 	'orderCode'=>'CVT-FIELD-001', 'managerCode'=>'CVTFIELD', 'customer'=>'Cliente Prueba',
 	'phones'=>array('50000001','50000002'), 'address'=>'Dirección sintética 1', 'betweenStreets'=>'Calle A y Calle B',
 	'reference'=>'Referencia sintética', 'municipality'=>'Municipio Sintético', 'zone'=>'Zona Sintética',
-	'scheduledDate'=>'2026-08-23', 'scheduledTime'=>'tarde', 'notes'=>array('Nota sintética'),
+	'scheduledDate'=>wp_date( 'Y-m-d', time() + DAY_IN_SECONDS ), 'scheduledTime'=>'tarde', 'notes'=>array('Nota sintética'),
 	'changeRequired'=>array(array('amount'=>20,'currency'=>'USD')),
 );
 $request = new WP_REST_Request( 'POST' ); $request->set_header( 'Idempotency-Key', 'field-ready-voucher-confirmation-001' ); $request->set_param( 'draft', $draft ); $request->set_param( 'lines', array(array('productId'=>$product_id,'quantity'=>2)) );
