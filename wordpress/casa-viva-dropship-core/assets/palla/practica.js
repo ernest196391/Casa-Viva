@@ -82,7 +82,8 @@
 		var b = moneyText(bringAfter(o));
 		if (!b) { return defaults(o).prepaid ? 'Los productos ya estaban pagados: no llevas dinero de productos a la tienda.' : 'No llevas dinero de productos a la tienda.'; }
 		var detail = moneyText(o.change) ? ' (' + (moneyText(o.transfer ? {} : o.collected) ? moneyText(o.collected) + ' de productos + ' : '') + moneyText(o.change) + ' del vuelto que te dio la tienda)' : '';
-		return 'Lleva ' + b + ' a la tienda' + detail + ' ' + deadline(o.atHour || hour()) + '.';
+		var d = deadline(o.atHour || hour());
+		return 'Lleva ' + b + ' a la tienda' + detail + ' ' + d + (d.slice(-1) === '.' ? '' : '.');
 	}
 	function card(o) {
 		var st = stage(o);

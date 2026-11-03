@@ -211,7 +211,8 @@ final class CVD_Tarjeta_Carrera {
 		if ( $after['change'] ) {
 			$detail = ' (' . ( $after['products'] ? self::money_text( $after['products'] ) . ' de productos + ' : '' ) . self::money_text( $after['change'] ) . ' del vuelto que te dio la tienda)';
 		}
-		return 'Lleva ' . $bring . ' a la tienda' . $detail . ' ' . CVD_Messenger_Delivered_Link::deadline( $when ) . '.';
+		$d = CVD_Messenger_Delivered_Link::deadline( $when ); // ya termina en «p. m.»: sin punto doble
+		return 'Lleva ' . $bring . ' a la tienda' . $detail . ' ' . $d . ( '.' === substr( $d, -1 ) ? '' : '.' );
 	}
 
 	// ------------------------------------------------------------------ Los botones
