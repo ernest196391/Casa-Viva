@@ -1,0 +1,46 @@
+name: Prueba privada del panel de Zayri
+on:
+  push:
+    branches: [codex/preparar-fotos-privadas-01]
+permissions:
+  contents: read
+jobs:
+  fotos:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Preparar conexión existente a Casa Viva
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '\n' >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+      - name: Verificar instalación y preparar entrega cifrada
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          cd /home/u824654880/domains/casaviva.company/public_html/wp-content/plugins/casa-viva-dropship-core
+          sha256sum includes/class-cvd-photo-ai.php includes/class-cvd-content-studio.php assets/content-studio.js
+          test ! -e assets/product-background.js || sha256sum assets/product-background.js
+          dir="$HOME/.cvd-foto-revision-01"
+          mkdir -p -m 700 "$dir"
+          test -f "$dir/transfer.pem" || openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$dir/transfer.pem" 2>/dev/null
+          openssl pkey -in "$dir/transfer.pem" -pubout | base64 -w0
+          echo
+          REMOTE
