@@ -1,0 +1,80 @@
+name: Publicar y verificar fotos IA 3.14.113
+on:
+  push:
+    branches: [codex/publicar-fotos-ia-113]
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: casaviva-photo-ai-113
+  cancel-in-progress: false
+env:
+  APPROVED_SHA: 300fb6b5309ff9b821c1e839dea78da06bd3ae8d
+  GH_TOKEN: ${{ github.token }}
+jobs:
+  approved-deployment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Preparar conexión existente a Casa Viva
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '\n' >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+      - name: Comprobar NEXO desde la tienda antes de desplegar
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cd /home/u824654880/domains/casaviva.company/public_html && wp eval-file -" < scripts/ops/check-nexo-before-studio.php; then exit 0; fi
+            if [ "$attempt" != 3 ]; then sleep 10; fi
+          done
+          exit 1
+      - name: Ejecutar el despliegue existente del SHA aprobado
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)" = "$APPROVED_SHA"
+          started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          gh workflow run deploy-prototype.yml --ref main -f expected_sha="$APPROVED_SHA"
+          deploy_id=''
+          for attempt in {1..20}; do
+            runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/deploy-prototype.yml/runs?event=workflow_dispatch&per_page=20")"
+            deploy_id="$(jq -r --arg sha "$APPROVED_SHA" --arg started "$started" '[.workflow_runs[] | select(.head_sha == $sha and .created_at >= $started)] | sort_by(.id) | last | .id // empty' <<<"$runs")"
+            if [ -n "$deploy_id" ]; then break; fi
+            sleep 3
+          done
+          test -n "$deploy_id"
+          echo "DEPLOY_RUN_ID=$deploy_id"
+          for attempt in {1..120}; do
+            run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$deploy_id")"
+            if [ "$(jq -r .status <<<"$run")" = completed ]; then
+              test "$(jq -r .conclusion <<<"$run")" = success
+              exit 0
+            fi
+            sleep 20
+          done
+          echo 'El despliegue no terminó dentro del plazo; comprueba la ejecución antes de reintentar.' >&2
+          exit 1
+      - name: Verificar panel y permisos de Zayri en la tienda
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cd /home/u824654880/domains/casaviva.company/public_html && wp eval-file -" < scripts/ops/comprobar-fotos-ia.php
