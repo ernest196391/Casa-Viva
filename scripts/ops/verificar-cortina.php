@@ -115,7 +115,7 @@ final class CVD_Preview_Background_AI {
 		if ( is_wp_error( $out ) ) { return $out; }
 		if ( $cf && @getimagesizefromstring( $out ) ) { return self::preview( $out ); }
 		$data = json_decode( $out, true );
-		$image = $cf ? ( $data['result']['image'] ?? $data['background'] ?? '' ) : ( $data['data'][0]['b64_json'] ?? '' );
+		$image = $cf ? ( $data['result']['image'] ?? $data['image'] ?? '' ) : ( $data['data'][0]['b64_json'] ?? '' );
 		return self::preview( base64_decode( $image, true ) );
 	}
 
@@ -172,7 +172,7 @@ try {
 	$request->set_body_params( array( 'provider' => 'cloudflare', 'paid' => '0', 'mode' => 'background', 'layout' => 'spec', 'format' => '1920', 'details' => 'Conserva el producto de la foto de Casa Viva y presenta el mismo color y material.' ) );
 	$data = CVD_Preview_Background_AI::generate($request);
 	if (is_wp_error($data)) throw new RuntimeException($data->get_error_message());
-	if ( ! preg_match( '~^data:image/(jpeg|png|webp);base64,(.+)$~D', $data['image'] ?? '', $matches ) ) { throw new RuntimeException( 'No se recibió la imagen.' ); }
+	if ( ! preg_match( '~^data:image/(jpeg|png|webp);base64,(.+)$~D', $data['background'] ?? '', $matches ) ) { throw new RuntimeException( 'No se recibió la imagen.' ); }
 	$bytes = base64_decode( $matches[2], true );
 	if ( ! $bytes || ! getimagesizefromstring( $bytes ) ) { throw new RuntimeException( 'La vista previa no se pudo abrir.' ); }
 	echo wp_json_encode( array( 'original'=>base64_encode(file_get_contents($jpeg)), 'preview'=>base64_encode($bytes), 'name'=>get_the_title($item->ID) ) );
