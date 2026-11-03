@@ -5,6 +5,18 @@
   if (!$('cv-editor')) return;
   let product = null, photo = null, page = 1, pages = 1, token = crypto.randomUUID(), dirty = false;
   let markers = [], nextMarker = 0;
+  let generationSession = 0;
+  let scenePhoto = null;
+  function resetScenes() {
+    generationSession++;
+    scenePhoto = null;
+    $('cv-variants').replaceChildren();
+    $('cv-ai-status').textContent = '';
+    $('cv-publish-layout').hidden = true;
+    $('cv-import-ai').value = '';
+    $('cv-import-preview').hidden = true;
+    $('cv-import-preview').removeAttribute('src');
+  }
   const message = (text) => { $('cv-message').textContent = text; };
   const plain = (text) => { const d = new DOMParser().parseFromString(text || '', 'text/html'); return d.body.textContent || ''; };
   async function api(path, body) {
@@ -25,6 +37,7 @@
     try { await work(); } catch (error) { message(error.message); } finally { button.disabled = false; }
   }
   function fill(p) {
+    resetScenes();
     product = p; photo = null; dirty = false; markers = []; nextMarker = 0;
     $('cv-editor').hidden = false;
     $('cv-name').value = p.name || ''; $('cv-description').value = p.description || ''; $('cv-short').value = p.short || '';
@@ -89,6 +102,8 @@
   $('cv-publish').addEventListener('click', (e) => busy(e.target, () => save('publish')));
   async function loadImage(url) { const img = new Image(); img.crossOrigin = 'anonymous'; await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = () => reject(new Error('No se pudo abrir la foto. Sube una desde tu móvil.')); img.src = url; }); return img; }
   $('cv-photo').addEventListener('change', (e) => busy($('cv-upload'), async () => {
+    resetScenes();
+    photo = null;
     const file = e.target.files[0]; if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) throw new Error('Elige JPG, PNG o WebP de hasta 8 MB.');
     const url = URL.createObjectURL(file);
@@ -112,9 +127,91 @@
   function drawContained(ctx, img, x, y, w, h) { const scale = Math.min(w / img.width, h / img.height); const iw = img.width * scale, ih = img.height * scale; ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih); }
   function facts() { return $('cv-facts').value.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 3); }
   let imageURL = '';
+  async function jpeg(img, limit) {
+    const c = document.createElement('canvas'), scale = Math.min(1, limit / Math.max(img.width, img.height));
+    c.width = Math.max(1, Math.round(img.width * scale)); c.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = c.getContext('2d'); ctx.fillStyle = 'white'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise(resolve => c.toBlob(resolve, 'image/jpeg', 0.92));
+    if (!blob) throw new Error('No se pudo preparar la foto.');
+    return blob;
+  }
+  async function publishVariant(blob, session) {
+    if (session !== generationSession) return;
+    if (!product?.id) throw new Error('Guarda primero el borrador del producto.');
+    const name = product.name;
+    if (!confirm(`¿Usar esta imagen como principal de «${name}»? Si está publicado, aparecerá en la tienda.`)) return;
+    const body = new FormData(); body.append('id', product.id); body.append('version', product.version);
+    body.append('source', 'ai'); body.append('photo', blob, 'casa-viva-ia.jpg');
+    const updated = await api('upload', body);
+    if (session !== generationSession) return;
+    product = updated; $('cv-ai-status').textContent = 'Imagen elegida guardada como principal.';
+    message('Imagen elegida guardada como principal.');
+  }
+  const providerSelect = $('cv-provider');
+  $('cv-import-ai').addEventListener('change', () => {
+    const file = $('cv-import-ai').files[0], img = $('cv-import-preview');
+    img.hidden = true;
+    if (!file || !['image/png', 'image/webp', 'image/jpeg'].includes(file.type) || file.size > 8 * 1024 ** 2) {
+      $('cv-import-ai').value = ''; message('Elige JPG, PNG o WebP de hasta 8 MB.'); return;
+    }
+    const url = URL.createObjectURL(file); img.onload = () => { img.hidden = false; URL.revokeObjectURL(url); };
+    img.onerror = () => { URL.revokeObjectURL(url); message('No se pudo abrir la imagen.'); };
+    img.src = url;
+  });
+  $('cv-import-button').addEventListener('click', e => busy(e.target, async () => {
+    const img = $('cv-import-preview'), session = generationSession;
+    if (img.hidden || !img.complete || !$('cv-import-ai').files[0]) throw new Error('Elige y revisa una imagen primero.');
+    await publishVariant(await jpeg(img, 1920), session);
+  }));
+  for (const option of providerSelect.options) option.disabled = !cvContent.providers[option.value];
+  const firstProvider = Array.from(providerSelect.options).find(option => !option.disabled);
+  if (firstProvider) providerSelect.value = firstProvider.value;
+  $('cv-generate').disabled = !firstProvider;
+  $('cv-ai-setup').hidden = Boolean(firstProvider);
+  $('cv-generate').addEventListener('click', e => busy(e.target, async () => {
+    const session = generationSession, provider = providerSelect.value;
+    const real = photo || (product?.image ? await loadImage(product.image) : null);
+    if (!real) throw new Error('Elige la foto real del producto antes de generar.');
+    if (session !== generationSession) return;
+    if (provider !== 'cloudflare' && !confirm('¿Generar una imagen con la API de pago seleccionada? Se usará su saldo.')) return;
+    const body = new FormData();
+    body.append('provider', provider); body.append('paid', provider === 'cloudflare' ? '0' : '1');
+    body.append('layout', $('cv-layout').value); body.append('format', $('cv-format').value);
+    body.append('details', [$('cv-name').value, $('cv-facts').value, $('cv-use').value].filter(Boolean).join('. '));
+    body.append('photo', await jpeg(real, provider === 'cloudflare' ? 511 : 1536), 'referencia.jpg');
+    if (session !== generationSession) return;
+    const status = $('cv-ai-status'); status.textContent = 'Generando una opción…';
+    try {
+      let result = await api('ia/generate', body);
+      const deadline = Date.now() + 12 * 60 * 1000;
+      while (result.job && session === generationSession && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 4000));
+        if (session !== generationSession) return;
+        result = await api('ia/poll', {job: result.job});
+      }
+      if (session !== generationSession) return;
+      if (!result.image) throw new Error('La imagen sigue pendiente. Consulta el historial del proveedor antes de repetir.');
+      const img = await loadImage(result.image);
+      if (session !== generationSession) return;
+      const group = $('cv-variants'), card = document.createElement('article'), number = group.children.length + 1;
+      img.alt = `Opción ${number}`; img.style.maxWidth = '100%'; img.style.height = 'auto'; card.append(img);
+      const use = document.createElement('button'); use.type = 'button'; use.textContent = `Usar opción ${number} en la plantilla`;
+      use.onclick = () => { scenePhoto = img; $('cv-publish-layout').hidden = true; $('cv-render').click(); }; card.append(use);
+      const publish = document.createElement('button'); publish.type = 'button'; publish.textContent = `Elegir opción ${number} como foto principal`;
+      publish.onclick = () => busy(publish, async () => publishVariant(await jpeg(img, 1920), session)); card.append(publish);
+      const download = document.createElement('a'); download.href = result.image; download.download = `casa-viva-opcion-${number}`; download.textContent = 'Descargar esta opción'; card.append(download);
+      group.append(card); status.textContent = 'Revisa que coincidan el color, la forma y los detalles. Puedes generar otra opción para comparar.';
+    } catch (error) { if (session === generationSession) status.textContent = error.message; }
+  }));
+  $('cv-publish-layout').addEventListener('click', e => busy(e.target, async () => {
+    const session = generationSession;
+    const blob = await (await fetch($('cv-download').href)).blob();
+    await publishVariant(blob, session);
+  }));
   $('cv-render').addEventListener('click', (e) => busy(e.target, async () => {
     $('cv-download').hidden = true;
-    const img = photo || (product?.image ? await loadImage(product.image) : null); if (!img) throw new Error('Sube una foto real para empezar.');
+    $('cv-publish-layout').hidden = true;
+    const img = scenePhoto || photo || (product?.image ? await loadImage(product.image) : null); if (!img) throw new Error('Sube una foto real para empezar.');
     const layout = $('cv-layout').value, rows = facts(), h = Number($('cv-format').value);
     if (['features', 'spec'].includes(layout) && !rows.length) throw new Error('Añade al menos una característica confirmada.');
     if (layout === 'use' && !$('cv-use').value.trim()) throw new Error('Describe el uso cotidiano confirmado.');
@@ -137,6 +234,7 @@
     ctx.fillStyle = '#173e35'; ctx.fillRect(64, h - 160, 952, 90); wrapped(ctx, 'VER EN CASA VIVA', 105, h - 103, 870, 32, 1, '#fff');
     const blob = await new Promise((resolve) => c.toBlob(resolve, 'image/jpeg', 0.92)); if (!blob) throw new Error('No se pudo preparar la imagen.');
     if (imageURL) URL.revokeObjectURL(imageURL); imageURL = URL.createObjectURL(blob); $('cv-download').href = imageURL;
+    $('cv-publish-layout').hidden = !scenePhoto;
     c.hidden = false; $('cv-download').hidden = false; message(layout === 'features' ? `Imagen preparada. Toca la foto para colocar el número ${nextMarker + 1} en el detalle correspondiente; después descarga.` : 'Imagen lista para descargar.');
   }));
   $('cv-canvas').addEventListener('click', (e) => {
