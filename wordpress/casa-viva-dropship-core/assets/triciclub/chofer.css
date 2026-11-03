@@ -1,0 +1,20 @@
+/* Triciclub dentro de Pa'llá (Core 3.14.117): lo poco que no trae assets/palla/app.css. */
+.tc-in { width: 100%; min-height: 48px; border: 1px solid #D9D9D9; border-radius: 12px; padding: 0 12px; font: inherit; font-size: 16px; background: #fff; box-sizing: border-box; }
+.tc-in:focus { outline: 2px solid #FFC21A; outline-offset: 1px; }
+.tc-lbl { display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; font-size: 13px; font-weight: 700; color: #555; }
+.tc-franjas { display: flex; flex-direction: column; gap: 8px; }
+.tc-franja { display: grid; grid-template-columns: 1fr 96px; gap: 10px; align-items: center; }
+.tc-franja small { display: block; color: #666; font-weight: 500; }
+.tc-franja--ahora { background: #FFF8E1; border-radius: 10px; padding: 6px 8px; margin: 0 -8px; }
+.tc-pct { position: relative; }
+.tc-pct input { padding-right: 28px; text-align: right; }
+.tc-pct::after { content: "%"; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-weight: 700; color: #555; }
+.tc-ejemplos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; text-align: center; }
+.tc-ejemplos div { background: #F5F5F5; border-radius: 10px; padding: 8px 4px; font-size: 13px; }
+.tc-ejemplos b { display: block; font-size: 17px; }
+.tc-checks { display: flex; gap: 8px; flex-wrap: wrap; }
+.tc-checks label { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px solid #D9D9D9; border-radius: 999px; font-weight: 700; font-size: 14px; }
+.tc-checks input { width: 20px; height: 20px; margin: 0; accent-color: #121212; }
+.tc-switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tc-cuenta { font-variant-numeric: tabular-nums; font-weight: 800; }
+.tc-codigo-in { font-size: 28px; letter-spacing: 8px; text-align: center; font-weight: 800; }

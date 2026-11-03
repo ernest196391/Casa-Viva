@@ -561,6 +561,8 @@
 		var d = h.dinero || {};
 		var html = '<header class="pl-top"><div><div class="pl-brand">Pa\'llá</div><div class="pl-sub">' + esc('Hola, ' + (yo.first || 'mensajero')) + '</div></div>' + refreshBtn() + '</header>' + offlineBar();
 		html += '<main class="pl-main">' + dispCard() + soundCard();
+		// 3.14.117: Triciclub (D129–D130) — solo si este mensajero puede llevar viajes de triciclo.
+		if (h.triciclub && h.triciclub.url) { html += '<a class="pl-card pl-card--tap pl-row" style="text-decoration:none;color:inherit;align-items:center" href="' + esc(h.triciclub.url) + '"><span>🛺 Triciclub · viajes y mis precios</span>' + (h.triciclub.estado === 'aprobado' ? '' : badge('warning', h.triciclub.estado === 'pendiente' ? 'En revisión' : 'Apúntate')) + '</a>'; }
 		if (d.pendingText) { html += '<a class="pl-card pl-card--tap pl-card--brand pl-row" style="text-decoration:none;color:inherit;align-items:center" href="#dinero"><span>💵 Por llevar a la tienda</span><span class="pl-strong pl-num">' + esc(d.pendingText) + '</span></a>'; }
 		(h.pases || []).forEach(function (x) {
 			html += '<article class="pl-card pl-card--brand"><div class="pl-row" style="align-items:center"><span class="pl-strong">🔁 ' + esc(x.from) + ' te pasa #' + esc(x.number) + '</span>' + (x.picked ? badge('info', 'Recogida') : '') + '</div>'

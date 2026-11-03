@@ -92,6 +92,7 @@ final class CVD_Palla_Api {
 			'companeros' => self::companions( $me ), // a quién puedo pasar una carrera (solo nombre)
 			'push'     => class_exists( 'CVD_Palla_Push' ) ? CVD_Palla_Push::status_for( $me ) : array( 'allowed' => false, 'key' => '' ), // 3.14.69.1
 			'disp'     => CVD_Palla_Disponible::view( $me->ID ), // 3.14.83: 🟢 Disponible / ⚪ No disponible
+			'triciclub' => class_exists( 'CVD_Triciclub' ) ? CVD_Triciclub::palla_flag( $me ) : null, // 3.14.117: botón «Triciclub» si puede llevar viajes
 		) );
 	}
 
