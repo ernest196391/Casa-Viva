@@ -1,0 +1,84 @@
+name: Prueba privada del panel de Zayri
+on:
+  push:
+    branches: [codex/activar-solo-fotos-zayri-01]
+permissions:
+  contents: read
+jobs:
+  fotos:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Preparar conexión existente a Casa Viva
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '\n' >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+      - name: Descargar la base conocida de los cuatro archivos
+        uses: actions/checkout@v4
+        with:
+          ref: 300fb6b5309ff9b821c1e839dea78da06bd3ae8d
+          path: base-fotos
+          persist-credentials: false
+      - name: Preparar Chromium móvil
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/cv-browser" playwright@1.54.2 --ignore-scripts --no-audit --no-fund
+          "$RUNNER_TEMP/cv-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Activar solo los cuatro archivos y preparar sesión temporal
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          stage="$(ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'umask 077; mktemp -d "$HOME/.cvd-foto-revision-01/run-XXXXXXXX"')"
+          [[ "$stage" =~ ^/home/[a-zA-Z0-9_-]+/\.cvd-foto-revision-01/run-[a-zA-Z0-9]+$ ]]
+          echo "STAGE=$stage" >> "$GITHUB_ENV"
+          files=(assets/product-background.js assets/content-studio.js includes/class-cvd-photo-ai.php includes/class-cvd-content-studio.php)
+          pkg=wordpress/casa-viva-dropship-core
+          (cd "$pkg" && sha256sum "${files[@]}") > "$RUNNER_TEMP/target.sha"
+          (cd "base-fotos/$pkg" && sha256sum "${files[@]:1}") > "$RUNNER_TEMP/baseline.sha"
+          tar czf "$RUNNER_TEMP/panel.tgz" -C "$pkg" "${files[@]}"
+          cat ops-zayri/payload.* > "$RUNNER_TEMP/approved.enc"
+          scp -P "$SSH_PORT" "$RUNNER_TEMP"/{target.sha,baseline.sha,panel.tgz,approved.enc} ops-zayri/{activate.sh,session.php,decrypt.php} "$SSH_USER@$SSH_HOST:$stage/"
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "set -eu; umask 077; cd '$stage'; mkdir new; tar xzf panel.tgz -C new; php decrypt.php '$stage'; bash activate.sh '$stage'; cd /home/u824654880/domains/casaviva.company/public_html; CV_PHOTO_STAGE='$stage' wp eval-file '$stage/session.php'"
+          for file in browser.json reference.jpg approved.png; do scp -P "$SSH_PORT" "$SSH_USER@$SSH_HOST:$stage/$file" "$RUNNER_TEMP/$file"; done
+      - name: Probar generación y revisión en el perfil móvil de Zayri
+        run: NODE_PATH="$RUNNER_TEMP/cv-browser/node_modules" node ops-zayri/mobile.cjs
+      - name: Comprobar la ficha y todo lo ajeno al editor
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "set -eu; cd /home/u824654880/domains/casaviva.company/public_html; CV_PHOTO_STAGE='$STAGE' CV_PHOTO_MODE=compare wp eval-file '$STAGE/session.php'; cd wp-content/plugins/casa-viva-dropship-core; sha256sum -c '$STAGE/other-before.sha' >/dev/null; sha256sum -c '$STAGE/target.sha'"
+      - name: Restaurar únicamente los cuatro archivos en caso de fallo
+        if: failure() && env.STAGE != ''
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "test ! -f '$STAGE/applied' || bash '$STAGE/activate.sh' '$STAGE' rollback"
+      - name: Cerrar la sesión temporal y quitar los archivos de transferencia
+        if: always() && env.STAGE != ''
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "set -eu; cd /home/u824654880/domains/casaviva.company/public_html; if test -f '$STAGE/session-token'; then CV_PHOTO_STAGE='$STAGE' CV_PHOTO_MODE=revoke wp eval-file '$STAGE/session.php'; fi; cd '$STAGE'; rm -f browser.json reference.jpg approved.png approved.enc session-token"
