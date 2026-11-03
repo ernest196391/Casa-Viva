@@ -19,6 +19,31 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Preparar conexión existente a Casa Viva
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '\n' >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+      - name: Comprobar NEXO desde la tienda antes de desplegar
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cd /home/u824654880/domains/casaviva.company/public_html && wp eval-file -" < scripts/ops/check-nexo-before-studio.php; then exit 0; fi
+            if [ "$attempt" != 3 ]; then sleep 10; fi
+          done
+          exit 1
       - name: Ejecutar el despliegue existente del SHA aprobado
         shell: bash
         run: |
@@ -45,19 +70,6 @@ jobs:
           done
           echo 'El despliegue no terminó dentro del plazo; no se crea la cuenta.' >&2
           exit 1
-      - name: Preparar conexión existente a Casa Viva
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
-          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
-          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
-        run: |
-          set -euo pipefail
-          install -m 700 -d ~/.ssh
-          printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
-          printf '\n' >> ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
-          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
       - name: Crear cuenta limitada y devolver acceso cifrado
         env:
           SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
