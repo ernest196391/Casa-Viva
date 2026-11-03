@@ -38,6 +38,10 @@
   }
   function fill(p) {
     resetScenes();
+    if (p.review) {
+      const session = generationSession;
+      loadImage(p.review).then(img => { if (session === generationSession) showVariant(img, p.review, session, true); }).catch(() => message('No se pudo abrir la opción guardada.'));
+    }
     product = p; photo = null; dirty = false; markers = []; nextMarker = 0;
     $('cv-editor').hidden = false;
     $('cv-name').value = p.name || ''; $('cv-description').value = p.description || ''; $('cv-short').value = p.short || '';
@@ -147,6 +151,28 @@
     product = updated; $('cv-ai-status').textContent = 'Imagen elegida guardada como principal.';
     message('Imagen elegida guardada como principal.');
   }
+  function showVariant(img, finalURL, session, saved = false) {
+    const group = $('cv-variants'), card = document.createElement('article'), number = group.children.length + 1;
+    img.alt = `Opción ${number}`; img.style.maxWidth = '100%'; img.style.height = 'auto'; card.append(img);
+    const use = document.createElement('button'); use.type = 'button'; use.textContent = `Usar opción ${number} en la plantilla`;
+    use.onclick = () => { scenePhoto = img; $('cv-publish-layout').hidden = true; $('cv-render').click(); }; card.append(use);
+    const publish = document.createElement('button'); publish.type = 'button'; publish.textContent = `Elegir opción ${number} como foto principal`;
+    publish.onclick = () => busy(publish, async () => publishVariant(await jpeg(img, 1920), session)); card.append(publish);
+    const download = document.createElement('a'); download.href = finalURL; download.download = `casa-viva-opcion-${number}`; download.textContent = 'Descargar esta opción'; card.append(download);
+    if (saved) {
+      const label = document.createElement('p'); label.textContent = 'Guardada para revisar'; card.prepend(label);
+    } else if (product?.id) {
+      const keep = document.createElement('button'); keep.type = 'button'; keep.textContent = 'Guardar para revisar después';
+      keep.onclick = () => busy(keep, async () => {
+        if (session !== generationSession) return;
+        const body = new FormData(); body.append('id', product.id); body.append('version', product.version);
+        body.append('photo', await (await fetch(finalURL)).blob(), 'opcion.png');
+        await api('review', body);
+        if (session === generationSession) $('cv-ai-status').textContent = 'Opción guardada en tu perfil para este producto.';
+      }); card.append(keep);
+    }
+    group.append(card);
+  }
   const providerSelect = $('cv-provider');
   $('cv-import-ai').addEventListener('change', () => {
     const file = $('cv-import-ai').files[0], img = $('cv-import-preview');
@@ -194,14 +220,7 @@
       const finalURL = composition.toDataURL('image/png');
       const img = await loadImage(finalURL);
       if (session !== generationSession) return;
-      const group = $('cv-variants'), card = document.createElement('article'), number = group.children.length + 1;
-      img.alt = `Opción ${number}`; img.style.maxWidth = '100%'; img.style.height = 'auto'; card.append(img);
-      const use = document.createElement('button'); use.type = 'button'; use.textContent = `Usar opción ${number} en la plantilla`;
-      use.onclick = () => { scenePhoto = img; $('cv-publish-layout').hidden = true; $('cv-render').click(); }; card.append(use);
-      const publish = document.createElement('button'); publish.type = 'button'; publish.textContent = `Elegir opción ${number} como foto principal`;
-      publish.onclick = () => busy(publish, async () => publishVariant(await jpeg(img, 1920), session)); card.append(publish);
-      const download = document.createElement('a'); download.href = finalURL; download.download = `casa-viva-opcion-${number}`; download.textContent = 'Descargar esta opción'; card.append(download);
-      group.append(card); status.textContent = 'Revisa que coincidan el color, la forma y los detalles. Puedes generar otra opción para comparar.';
+      showVariant(img, finalURL, session); status.textContent = 'Revisa que coincidan el color, la forma y los detalles. Puedes generar otra opción para comparar.';
     } catch (error) { if (session === generationSession) status.textContent = error.message; }
   }));
   $('cv-publish-layout').addEventListener('click', e => busy(e.target, async () => {

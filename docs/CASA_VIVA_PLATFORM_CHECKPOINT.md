@@ -1,5 +1,9 @@
 # Casa Viva Platform — Checkpoint operativo
 
+## Activación limitada del panel de fotos
+
+La tienda recibe únicamente los cuatro archivos del editor de fotos, con comprobación de huellas y respaldo. Una opción guardada para revisión pertenece a la editora y al producto. Su publicación requiere una acción separada.
+
 ## Fondo protegido de catálogo — 3.14.115
 
 Base `111d70a`, panel 3.14.113 desplegado. La IA genera solo el fondo. El móvil coloca la foto íntegra sin recortar y conserva los detalles opacos. Las fotos de fondo complejo se mantienen completas. Las pruebas distinguen generación y publicación.

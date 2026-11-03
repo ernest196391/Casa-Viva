@@ -66,3 +66,17 @@ remove_filter( 'pre_http_request', $fake_provider, 10 );
 unlink( $tmp );
 studio_assert( 200 === $result->get_status() && str_starts_with( $result->get_data()['background'], 'data:image/jpeg;base64,' ), 'editor receives a reviewable image' );
 studio_assert( $before === wc_get_product( $p->get_id() )->get_image_id(), 'generation does not publish a preview' );
+
+// A review belongs to this editor, not the public product or another editor.
+$before_item = studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_data();
+$tmp = tempnam( sys_get_temp_dir(), 'cv-review-' );
+file_put_contents( $tmp, base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO/aJ1sAAAAASUVORK5CYII=' ) );
+$review_req = new WP_REST_Request( 'POST', '/casa-viva/v1/contenido/review' );
+$review_req->set_body_params( array( 'id' => $p->get_id(), 'version' => $before_item['version'] ) );
+$review_req->set_file_params( array( 'photo' => array( 'tmp_name' => $tmp, 'error' => 0 ) ) );
+studio_assert( rest_do_request( $review_req )->get_status() === 200, 'editor saves a private preview' );
+unlink( $tmp );
+$after_item = studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_data();
+studio_assert( str_starts_with( $after_item['review'], 'data:image/png;base64,' ) && $before_item['version'] === $after_item['version'], 'preview survives reopening without updating the catalog entry' );
+wp_set_current_user( 1 );
+studio_assert( empty( studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_data()['review'] ), 'other users do not receive the editor preview' );
