@@ -61,6 +61,7 @@ final class CVD_Tablero {
 			'comision_h' => 24,
 			'vps_viejo_min' => 10,
 			'senal_mensajes_mensajero' => 3,
+			'meta_mensajes_admin' => 10, // meta del Vigía (3-nov): de ~40 a ≤ 10 mensajes del bot a Lennys al día
 		), is_array( $saved['umbrales'] ?? null ) ? $saved['umbrales'] : array() );
 		$cfg['enlaces'] = array_merge( array(
 			'ventas' => home_url( '/ventas/' ),
@@ -455,6 +456,11 @@ final class CVD_Tablero {
 		$table = $wpdb->prefix . 'cvd_payouts';
 		$out = array( 'pedidas' => array( 'n' => 0, 'importe' => array(), 'horas' => 0 ), 'aprobadas' => array( 'n' => 0, 'importe' => array() ) );
 		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) { return $out; }
+		$out['lista'] = array();
+		foreach ( (array) $wpdb->get_results( "SELECT id, owner_user_id, amount, currency, status, COALESCE(approved_at, requested_at, created_at) since FROM {$table} WHERE status IN ('requested','approved') ORDER BY status='approved' DESC, since ASC LIMIT 12", ARRAY_A ) as $r ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$owner = get_userdata( (int) $r['owner_user_id'] );
+			$out['lista'][] = array( 'id' => (int) $r['id'], 'quien' => $owner ? (string) $owner->display_name : 'Sin nombre', 'importe' => self::money( array( strtoupper( (string) $r['currency'] ) => (float) $r['amount'] ) ), 'estado' => (string) $r['status'], 'horas' => (int) floor( ( time() - self::utc_ts( (string) $r['since'] ) ) / HOUR_IN_SECONDS ) );
+		}
 		$rows = $wpdb->get_results( "SELECT status, currency, COUNT(*) n, SUM(amount) total, MIN(COALESCE(requested_at, created_at)) oldest FROM {$table} WHERE status IN ('requested','approved') GROUP BY status, currency", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		foreach ( (array) $rows as $r ) {
 			$k = 'requested' === $r['status'] ? 'pedidas' : 'aprobadas';
@@ -478,16 +484,17 @@ final class CVD_Tablero {
 		$d = json_decode( (string) file_get_contents( $file ), true );
 		if ( ! is_array( $d ) ) { return array( 'ok' => false ); }
 		$limit = (int) ( $d['reglas']['caduca_dias'] ?? 0 );
-		$live = 0; $soon = 0; $por = array();
+		$live = 0; $soon = 0; $old = 0; $por = array();
 		foreach ( (array) ( $d['items'] ?? array() ) as $it ) {
 			if ( ! empty( $it['caducada'] ) ) { continue; }
 			$live++;
 			$tipo = (string) ( $it['tipo'] ?? 'otro' );
 			$por[ $tipo ] = ( $por[ $tipo ] ?? 0 ) + 1;
 			if ( $limit && (int) ( $it['dias'] ?? 0 ) >= $limit - 1 ) { $soon++; }
+			if ( (int) ( $it['dias'] ?? 0 ) >= 1 ) { $old++; }
 		}
 		$at = strtotime( (string) ( $d['generado_at'] ?? '' ) ) ?: 0;
-		return array( 'ok' => true, 'pendientes' => $live, 'caducan' => $soon, 'por_tipo' => $por, 'min' => $at ? (int) floor( ( time() - $at ) / 60 ) : null );
+		return array( 'ok' => true, 'pendientes' => $live, 'viejas' => $old, 'caducan' => $soon, 'por_tipo' => $por, 'min' => $at ? (int) floor( ( time() - $at ) / 60 ) : null );
 	}
 
 	/** Resumen del VPS y cuántos minutos tiene. */
@@ -563,7 +570,7 @@ final class CVD_Tablero {
 				$rows[] = array( 't' => $c['nombre'], 'r' => $ok ? 'cuadra' : 'diferencia ' . $diff, 'tag' => $ok ? 'verde' : ( $c['nota'] ? 'amarillo' : 'rojo' ), 'tag_txt' => 'firmado ' . $c['firmado'] );
 				if ( ! $ok ) { if ( $c['nota'] ) { $l_yellow[] = $c['nombre'] . ' cerró con diferencia (explicada)'; } else { $l_red[] = $c['nombre'] . ' cerró con diferencia sin explicar'; } }
 			} elseif ( $c['cobros'] ) {
-				$rows[] = array( 't' => $c['nombre'], 'r' => $c['cobros'] . ' cobros hoy', 'tag' => $after_close ? 'amarillo' : '', 'tag_txt' => 'sin firmar' );
+				$rows[] = array( 't' => $c['nombre'], 'r' => self::plural( (int) $c['cobros'], 'cobro', 'cobros' ) . ' hoy', 'tag' => $after_close ? 'amarillo' : '', 'tag_txt' => 'sin firmar' );
 				if ( $after_close ) { $l_yellow[] = $c['nombre'] . ' aún no firmó su cierre'; }
 			} else {
 				$rows[] = array( 't' => $c['nombre'], 'r' => 'sin cobros hoy' );
@@ -577,12 +584,24 @@ final class CVD_Tablero {
 			if ( 'rojo' === $c['nivel'] ) { $l_red[] = $c['mensajero'] . ' tiene ' . $c['importe'] . ' desde hace ' . self::hours_text( $c['horas'] ); }
 			elseif ( 'amarillo' === $c['nivel'] ) { $l_yellow[] = $c['mensajero'] . ' tiene ' . $c['importe'] . ' desde ayer'; }
 		}
+		$reglas = (array) ( self::vps()['data']['reglas'] ?? array() );
+		if ( $reglas ) {
+			$tope = self::money( array( 'USD' => (float) ( $reglas['salidas_tope_usd'] ?? 0 ), 'CUP' => (float) ( $reglas['salidas_tope_cup'] ?? 0 ) ) );
+			$rows[] = array( 't' => 'Tope de salidas del cajón (lo fijas tú)', 'r' => '0' === $tope ? 'sin poner' : $tope );
+		}
 		$lennys_cards[] = array( 'id' => 'dinero', 'titulo' => 'Dinero del día', 'nota' => 'cierre por persona', 'filas' => $rows, 'enlace' => array( 'txt' => 'Ver cierre en Ventas', 'url' => $links['ventas'] ) );
 		$pay = $core['pagos'];
-		$lennys_cards[] = array( 'id' => 'salidas', 'titulo' => 'Salidas por aprobar', 'filas' => array(
+		$pay_rows = array();
+		$viewer_phone = 'administracion' === self::role_of( $user_id ) && class_exists( 'CVD_Payout_Math' ) ? CVD_Payout_Math::phone8( (string) get_user_meta( $user_id, '_cvd_whatsapp', true ) ) : '';
+		foreach ( (array) ( $pay['lista'] ?? array() ) as $po ) {
+			$approved = 'approved' === $po['estado'];
+			$url = $approved && class_exists( 'CVD_Payout_Pay_Page' ) ? ( '' !== $viewer_phone ? CVD_Payout_Pay_Page::signed_url( $po['id'], $viewer_phone ) : CVD_Payout_Pay_Page::url( $po['id'] ) ) : $links['panel'];
+			$pay_rows[] = array( 't' => ( $approved ? 'Pagar a ' : 'Aprobar: ' ) . $po['quien'], 'r' => $po['importe'], 'tag' => $po['horas'] >= (int) $cfg['umbrales']['comision_h'] ? 'amarillo' : '', 'tag_txt' => self::hours_text( max( 1, $po['horas'] ) ), 'url' => $url );
+		}
+		$lennys_cards[] = array( 'id' => 'salidas', 'titulo' => 'Pagos por hacer', 'nota' => 'toca uno para pagar', 'detalle' => $pay_rows, 'filas' => array(
 			array( 't' => 'Comisiones pedidas', 'r' => $pay['pedidas']['n'] . ( $pay['pedidas']['n'] ? ' · ' . self::money( $pay['pedidas']['importe'] ) : '' ), 'tag' => $pay['pedidas']['n'] && $pay['pedidas']['horas'] >= (int) $cfg['umbrales']['comision_h'] ? 'amarillo' : '', 'tag_txt' => $pay['pedidas']['n'] && $pay['pedidas']['horas'] >= (int) $cfg['umbrales']['comision_h'] ? self::hours_text( $pay['pedidas']['horas'] ) : '' ),
 			array( 't' => 'Aprobadas, falta pagar', 'r' => $pay['aprobadas']['n'] . ( $pay['aprobadas']['n'] ? ' · ' . self::money( $pay['aprobadas']['importe'] ) : '' ) ),
-		), 'enlace' => array( 'txt' => 'Abrir el panel', 'url' => $links['panel'] ) );
+		), 'enlace' => array( 'txt' => 'Aprobar en el panel', 'url' => $links['panel'] ) );
 		if ( $pay['pedidas']['n'] && $pay['pedidas']['horas'] >= (int) $cfg['umbrales']['comision_h'] ) { $l_yellow[] = $pay['pedidas']['n'] . ( 1 === $pay['pedidas']['n'] ? ' comisión pedida espera' : ' comisiones pedidas esperan' ) . ' tu visto bueno'; }
 		if ( null !== $core['catalogo']['pendientes'] ) {
 			$lennys_cards[] = array( 'id' => 'catalogo', 'titulo' => 'Catálogo', 'filas' => array( array( 't' => 'Fichas nuevas para tu ✓ / ✗', 'r' => (string) $core['catalogo']['pendientes'] ) ),
@@ -622,6 +641,7 @@ final class CVD_Tablero {
 				$tipos = array(); foreach ( (array) $d['por_tipo'] as $k => $n ) { $tipos[] = ucfirst( (string) $k ) . ' ' . (int) $n; }
 				$cards[] = array( 'id' => 'decisiones', 'titulo' => 'Decisiones', 'nota' => 'bandeja', 'filas' => array(
 					array( 't' => 'Pendientes', 'r' => (string) $d['pendientes'] ),
+					array( 't' => 'Esperan más de 24 h', 'r' => (string) (int) ( $d['viejas'] ?? 0 ), 'tag' => ! empty( $d['viejas'] ) ? 'amarillo' : '' ),
 					array( 't' => 'Caducan pronto (lo reversible se aplica solo)', 'r' => (string) $d['caducan'], 'tag' => $d['caducan'] ? 'amarillo' : '' ),
 					array( 't' => 'Por tema', 'r' => implode( ' · ', $tipos ) ?: '—' ),
 				), 'enlace' => array( 'txt' => 'Decidir ahora', 'url' => $links['decisiones'] ) );
@@ -648,9 +668,10 @@ final class CVD_Tablero {
 				$rows = array();
 				foreach ( array_slice( (array) ( $m['por_persona'] ?? array() ), 0, 12 ) as $pp ) {
 					$role_label = self::person_role( (string) ( $pp['tel8'] ?? '' ), (string) ( $pp['rol'] ?? '' ) );
-					$over = 'mensajero' === $role_label && (int) $pp['n'] > $signal;
+					$over = ( 'mensajero' === $role_label && (int) $pp['n'] > $signal ) || ( 'admin' === $role_label && (int) $pp['n'] > (int) $cfg['umbrales']['meta_mensajes_admin'] );
+					$signal_txt = 'admin' === $role_label ? 'meta ≤ ' . (int) $cfg['umbrales']['meta_mensajes_admin'] : 'más de ' . $signal;
 					$rows[] = array( 't' => (string) $pp['nombre'] . ' · ' . $role_label, 'r' => (string) (int) $pp['n'], 'tag' => $over ? 'amarillo' : ( ! empty( $pp['fallidos'] ) ? 'rojo' : '' ),
-						'tag_txt' => $over ? 'más de ' . $signal : ( ! empty( $pp['fallidos'] ) ? (int) $pp['fallidos'] . ' fallaron' : '' ) );
+						'tag_txt' => $over ? $signal_txt : ( ! empty( $pp['fallidos'] ) ? (int) $pp['fallidos'] . ' fallaron' : '' ) );
 				}
 				$o = (array) ( $m['outbox'] ?? array() );
 				$extra = array();

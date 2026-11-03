@@ -32,7 +32,9 @@
   }
 
   function fila(f) {
-    var r = el('div', 'tb-row');
+    var url = safeUrl(f.url);
+    var r = el(url ? 'a' : 'div', url ? 'tb-row tb-link' : 'tb-row');
+    if (url) { r.href = url; r.rel = 'noopener'; }
     r.appendChild(el('span', 'tb-l', f.t));
     var right = el('span', 'tb-r');
     if (f.r) right.appendChild(el('b', null, f.r));
@@ -58,6 +60,7 @@
       card.appendChild(g);
     }
     if (c.texto) card.appendChild(el('p', 'tb-small', c.texto));
+    (c.detalle || []).forEach(function (f) { card.appendChild(fila(f)); });
     (c.filas || []).forEach(function (f) { card.appendChild(fila(f)); });
     if (c.mas && c.mas.filas && c.mas.filas.length) {
       var det = el('details');
