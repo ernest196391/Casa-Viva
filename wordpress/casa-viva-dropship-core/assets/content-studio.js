@@ -1,4 +1,4 @@
-/* global cvContent */
+/* global cvContent, cvProductBackground */
 (() => {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -174,11 +174,9 @@
     if (!real) throw new Error('Elige la foto real del producto antes de generar.');
     if (session !== generationSession) return;
     if (provider !== 'cloudflare' && !confirm('¿Generar una imagen con la API de pago seleccionada? Se usará su saldo.')) return;
-    const body = new FormData();
-    body.append('provider', provider); body.append('paid', provider === 'cloudflare' ? '0' : '1');
-    body.append('layout', $('cv-layout').value); body.append('format', $('cv-format').value);
-    body.append('details', [$('cv-name').value, $('cv-facts').value, $('cv-use').value].filter(Boolean).join('. '));
-    body.append('photo', await jpeg(real, provider === 'cloudflare' ? 511 : 1536), 'referencia.jpg');
+    const format = $('cv-format').value;
+    const protectWhole = $('cv-protect-whole').checked;
+    const body = {mode: 'background', provider, paid: provider === 'cloudflare' ? '0' : '1', layout: $('cv-layout').value, format};
     if (session !== generationSession) return;
     const status = $('cv-ai-status'); status.textContent = 'Generando una opción…';
     try {
@@ -190,8 +188,11 @@
         result = await api('ia/poll', {job: result.job});
       }
       if (session !== generationSession) return;
-      if (!result.image) throw new Error('La imagen sigue pendiente. Consulta el historial del proveedor antes de repetir.');
-      const img = await loadImage(result.image);
+      if (!result.background) throw new Error('La imagen sigue pendiente. Consulta el historial del proveedor antes de repetir.');
+      const bg = await loadImage(result.background);
+      const composition = cvProductBackground(real, bg, format === '1920', protectWhole);
+      const finalURL = composition.toDataURL('image/png');
+      const img = await loadImage(finalURL);
       if (session !== generationSession) return;
       const group = $('cv-variants'), card = document.createElement('article'), number = group.children.length + 1;
       img.alt = `Opción ${number}`; img.style.maxWidth = '100%'; img.style.height = 'auto'; card.append(img);
@@ -199,7 +200,7 @@
       use.onclick = () => { scenePhoto = img; $('cv-publish-layout').hidden = true; $('cv-render').click(); }; card.append(use);
       const publish = document.createElement('button'); publish.type = 'button'; publish.textContent = `Elegir opción ${number} como foto principal`;
       publish.onclick = () => busy(publish, async () => publishVariant(await jpeg(img, 1920), session)); card.append(publish);
-      const download = document.createElement('a'); download.href = result.image; download.download = `casa-viva-opcion-${number}`; download.textContent = 'Descargar esta opción'; card.append(download);
+      const download = document.createElement('a'); download.href = finalURL; download.download = `casa-viva-opcion-${number}`; download.textContent = 'Descargar esta opción'; card.append(download);
       group.append(card); status.textContent = 'Revisa que coincidan el color, la forma y los detalles. Puedes generar otra opción para comparar.';
     } catch (error) { if (session === generationSession) status.textContent = error.message; }
   }));

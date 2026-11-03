@@ -39,3 +39,19 @@ test('Editor de contenido: login, guardar, subir foto y descargar en móvil', as
   await page.getByRole('button', { name: 'Guardar contraseña y volver a entrar', exact: true }).click();
   await expect(page).toHaveURL(/wp-login\.php/);
 });
+
+test('El fondo cambia y se conservan las piezas negras, claras y los huecos cerrados', async ({ page }) => {
+  await page.goto('about:blank');
+  await page.addScriptTag({path:'wordpress/casa-viva-dropship-core/assets/product-background.js'});
+  const actual = await page.evaluate(() => {
+    const source = document.createElement('canvas'); source.width = 100; source.height = 100;
+    const ctx = source.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,100,100);
+    for (const x of [5,35]) { ctx.fillStyle = '#111'; ctx.fillRect(x,10,14,14); ctx.fillStyle='#fff'; ctx.fillRect(x+4,14,6,6); }
+    ctx.fillStyle='#ebebeb'; ctx.fillRect(70,65,3,6);
+    const bg = document.createElement('canvas'); bg.width=1;bg.height=1;
+    const b=bg.getContext('2d');b.fillStyle='#ccbb99';b.fillRect(0,0,1,1);
+    const composed = window.cvProductBackground(source,bg,true).getContext('2d');
+    return [[5,10],[35,10],[10,16],[70,65],[50,50]].map(([x,y]) => Array.from(composed.getImageData(238+x,462+y,1,1).data).slice(0,3));
+  });
+  expect(actual).toEqual([[17,17,17],[17,17,17],[255,255,255],[235,235,235],[204,187,153]]);
+});

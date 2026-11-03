@@ -5,10 +5,10 @@ defined( 'ABSPATH' ) || exit;
 final class CVD_Photo_AI {
 	private const KEYS = array( 'account' => 'ID de cuenta Cloudflare (Workers Free)', 'cloudflare' => 'Token de Workers AI', 'openai' => 'Clave API de OpenAI', 'higgsfield' => 'Clave completa de Open Higgsfield' );
 	private const SCENES = array(
-		'features' => 'Foto de estudio en tres cuartos sobre gris claro. Destaca los detalles visibles.',
-		'spec' => 'Fotografía técnica de catálogo, producto entero, centrado sobre blanco, iluminación uniforme.',
-		'offer' => 'Foto principal para una oferta, composición limpia con fondo crema y sombra suave.',
-		'use' => 'Escena editorial en un entorno cotidiano apropiado. Mantén el producto como protagonista.',
+		'features' => 'Pale warm-grey seamless matte paper, soft diffuse studio light.',
+		'spec' => 'Warm ivory seamless studio backdrop with a subtle sand-colored gradient at the edges, even diffuse light.',
+		'offer' => 'Soft cream seamless background with a gentle warm gradient.',
+		'use' => 'Empty pale stone tabletop viewed from above, quiet natural window light.',
 	);
 
 	public static function register(): void {
@@ -79,38 +79,38 @@ final class CVD_Photo_AI {
 	private static function preview( $bytes ) {
 		$size = is_string( $bytes ) && strlen( $bytes ) <= 8 * MB_IN_BYTES ? @getimagesizefromstring( $bytes ) : false;
 		if ( ! $size || ! in_array( $size['mime'], array( 'image/png', 'image/jpeg', 'image/webp' ), true ) || $size[0] * $size[1] > 16000000 ) { return self::error( 'El proveedor no devolvió una imagen válida.', 502 ); }
-		return array( 'image' => 'data:' . $size['mime'] . ';base64,' . base64_encode( $bytes ) );
+		return array( 'background' => 'data:' . $size['mime'] . ';base64,' . base64_encode( $bytes ) );
 	}
 
 	public static function generate( WP_REST_Request $r ) {
 		$provider = (string) $r['provider'];
 		if ( empty( self::providers()[ $provider ] ) ) { return self::error( 'Pide al administrador que configure este proveedor.' ); }
 		if ( 'cloudflare' !== $provider && '1' !== $r['paid'] ) { return self::error( 'Confirma el uso de la API de pago.' ); }
-		$file = $r->get_file_params()['photo'] ?? array();
-		if ( empty( $file['tmp_name'] ) || ! empty( $file['error'] ) || filesize( $file['tmp_name'] ) > 2 * MB_IN_BYTES ) { return self::error( 'La foto de referencia no es válida.' ); }
-		$bytes = file_get_contents( $file['tmp_name'] );
-		$size = @getimagesizefromstring( $bytes );
-		$limit = 'cloudflare' === $provider ? 511 : 1536;
-		if ( ! $size || 'image/jpeg' !== $size['mime'] || max( $size[0], $size[1] ) > $limit ) { return self::error( 'Revisa el tamaño y formato de la referencia.' ); }
+		if ( 'background' !== $r['mode'] ) { return self::error( 'Actualiza el panel para generar el fondo con tu foto protegida.' ); }
 		$scene = self::SCENES[ (string) $r['layout'] ] ?? '';
 		if ( ! $scene ) { return self::error( 'Elige una plantilla.' ); }
 		$guard = 'cvd_ai_last_' . get_current_user_id();
 		if ( get_transient( $guard ) ) { return self::error( 'Espera unos segundos antes de generar otra opción.', 429 ); }
 		set_transient( $guard, 1, 10 );
-		$prompt = $scene . ' Usa la foto adjunta como referencia exacta de este producto de Casa Viva. Conserva forma, proporciones, piezas, color y etiquetas visibles. No añadas texto, precios, medidas, accesorios ni detalles ocultos. ' . substr( sanitize_textarea_field( (string) $r['details'] ), 0, 600 );
+		$prompt = $scene . ' Background texture only, edge to edge. The catalog product will be composited afterwards. No objects, props, hardware, lettering, watermark, borders or cast shadows.';
 		$vertical = '1920' === $r['format'];
-		if ( 'higgsfield' === $provider ) { return self::higgsfield( $bytes, $prompt, $vertical ); }
+		if ( 'higgsfield' === $provider ) { return self::higgsfield( $prompt, $vertical ); }
 		$cf = 'cloudflare' === $provider;
-		$url = $cf ? 'https://api.cloudflare.com/client/v4/accounts/' . self::key( 'account' ) . '/ai/run/@cf/black-forest-labs/flux-2-klein-4b' : 'https://api.openai.com/v1/images/edits';
-		$fields = $cf ? array( 'width' => $vertical ? 576 : 1024, 'height' => 1024 ) : array( 'model' => 'gpt-image-1.5', 'quality' => 'low', 'size' => $vertical ? '1024x1536' : '1024x1024', 'output_format' => 'jpeg' );
-		$boundary = wp_generate_uuid4();
-		$body = '';
-		foreach ( $fields + array( 'prompt' => $prompt ) as $key => $value ) {
-			$body .= "--$boundary\r\nContent-Disposition: form-data; name=\"$key\"\r\n\r\n$value\r\n";
+		if ( $cf ) {
+			$url = 'https://api.cloudflare.com/client/v4/accounts/' . self::key( 'account' ) . '/ai/run/@cf/black-forest-labs/flux-2-klein-4b';
+			$boundary = wp_generate_uuid4();
+			$body = '';
+			foreach ( array( 'prompt' => $prompt, 'width' => $vertical ? 576 : 1024, 'height' => 1024 ) as $key => $value ) {
+				$body .= "--$boundary\r\nContent-Disposition: form-data; name=\"$key\"\r\n\r\n$value\r\n";
+			}
+			$body .= "--$boundary--\r\n";
+			$type = 'multipart/form-data; boundary=' . $boundary;
+		} else {
+			$url = 'https://api.openai.com/v1/images/generations';
+			$type = 'application/json';
+			$body = wp_json_encode( array( 'model' => 'gpt-image-1.5', 'quality' => 'low', 'size' => $vertical ? '1024x1536' : '1024x1024', 'output_format' => 'jpeg', 'prompt' => $prompt ) );
 		}
-		$field = $cf ? 'input_image_0' : 'image';
-		$body .= "--$boundary\r\nContent-Disposition: form-data; name=\"$field\"; filename=\"producto.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n" . $bytes . "\r\n--$boundary--\r\n";
-		$out = self::request( $url, array( 'method' => 'POST', 'headers' => array( 'Authorization' => 'Bearer ' . self::key( $provider ), 'Content-Type' => 'multipart/form-data; boundary=' . $boundary ), 'body' => $body ) );
+		$out = self::request( $url, array( 'method' => 'POST', 'headers' => array( 'Authorization' => 'Bearer ' . self::key( $provider ), 'Content-Type' => $type ), 'body' => $body ) );
 		if ( is_wp_error( $out ) ) { return $out; }
 		if ( $cf && @getimagesizefromstring( $out ) ) { return self::preview( $out ); }
 		$data = json_decode( $out, true );
@@ -118,15 +118,9 @@ final class CVD_Photo_AI {
 		return self::preview( base64_decode( $image, true ) );
 	}
 
-	private static function higgsfield( string $bytes, string $prompt, bool $vertical ) {
+	private static function higgsfield( string $prompt, bool $vertical ) {
 		$headers = array( 'Authorization' => 'Key ' . self::key( 'higgsfield' ), 'Content-Type' => 'application/json' );
-		$out = self::request( 'https://api.higgsfield.ai/files/generate-upload-url', array( 'method' => 'POST', 'headers' => $headers, 'body' => wp_json_encode( array( 'content_type' => 'image/jpeg' ) ) ) );
-		if ( is_wp_error( $out ) ) { return $out; }
-		$upload = json_decode( $out, true );
-		if ( ! wp_http_validate_url( $upload['upload_url'] ?? '' ) || ! wp_http_validate_url( $upload['public_url'] ?? '' ) || 'https' !== wp_parse_url( $upload['upload_url'], PHP_URL_SCHEME ) ) { return self::error( 'Higgsfield no preparó la subida.', 502 ); }
-		$out = self::request( $upload['upload_url'], array( 'method' => 'PUT', 'headers' => (array) ( $upload['upload_headers'] ?? array() ) + array( 'Content-Type' => 'image/jpeg' ), 'body' => $bytes ) );
-		if ( is_wp_error( $out ) ) { return $out; }
-		$out = self::request( 'https://api.higgsfield.ai/marketing-studio/image', array( 'method' => 'POST', 'headers' => $headers, 'body' => wp_json_encode( array( 'prompt' => $prompt, 'image_urls' => array( $upload['public_url'] ), 'resolution' => '1k', 'aspect_ratio' => $vertical ? '9:16' : '1:1', 'enhance_prompt' => false ) ) ) );
+		$out = self::request( 'https://api.higgsfield.ai/marketing-studio/image', array( 'method' => 'POST', 'headers' => $headers, 'body' => wp_json_encode( array( 'prompt' => $prompt, 'resolution' => '1k', 'aspect_ratio' => $vertical ? '9:16' : '1:1', 'enhance_prompt' => false ) ) ) );
 		if ( is_wp_error( $out ) ) { return $out; }
 		$id = json_decode( $out, true )['request_id'] ?? '';
 		if ( ! preg_match( '/^[a-zA-Z0-9_-]{1,128}$/', $id ) ) { return self::error( 'Higgsfield no devolvió el identificador.', 502 ); }

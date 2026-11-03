@@ -1,5 +1,9 @@
 # Casa Viva Platform — Checkpoint operativo
 
+## Fondo protegido de catálogo — 3.14.114
+
+Base `111d70a`, panel 3.14.113 desplegado. La IA genera solo el fondo. El móvil coloca la foto íntegra sin recortar y conserva los detalles opacos. Las fotos de fondo complejo se mantienen completas. Las pruebas distinguen generación y publicación.
+
 ## Fotos de catálogo con IA — 3.14.113
 
 La base 3.14.112 (d39e7b3) pasó el despliegue 41667340233 y se creó la cuenta de Zayri. Esta ampliación prepara ediciones desde una referencia mediante Cloudflare Workers AI, OpenAI Images o Higgsfield Marketing Studio. Solo el administrador configura credenciales en WooCommerce → IA para fotos. En Workers Free se aplica la cuota diaria del proveedor. Cada opción se revisa en el móvil antes de designarla imagen principal mediante la subida protegida existente. Las credenciales y el resultado en vivo se verifican por separado del despliegue.
