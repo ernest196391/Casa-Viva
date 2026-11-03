@@ -39,3 +39,30 @@ studio_assert( 'draft' === $draft['status'] && $draft['id'] === studio_call( 'PO
 $publish = array_merge( $new, array( 'id' => $draft['id'], 'version' => $draft['version'], 'action' => 'publish' ) );
 studio_assert( 422 === studio_call( 'POST', 'save', $publish )->get_status(), 'unpriced draft cannot publish' );
 echo "Real WordPress content studio integration passed.\n";
+
+// Exercise real REST permissions and multipart transport with a synthetic provider response.
+define( 'CVD_PHOTO_AI_ACCOUNT', str_repeat( 'a', 32 ) );
+define( 'CVD_PHOTO_AI_CLOUDFLARE', 'integration-only' );
+define( 'CVD_PHOTO_AI_OPENAI', 'integration-only' );
+wp_set_current_user( 0 );
+studio_assert( studio_call( 'POST', 'ia/generate' )->get_status() === 401, 'anonymous generation denied' );
+wp_set_current_user( $id );
+studio_assert( studio_call( 'POST', 'ia/generate', array( 'provider' => 'openai' ) )->get_status() === 422, 'paid generation requires confirmation' );
+$bytes = base64_decode( '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAIAAgDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AL+AD//Z' );
+$tmp = tempnam( sys_get_temp_dir(), 'cv-ai-' );
+file_put_contents( $tmp, $bytes );
+$fake_provider = static function ( $pre, $args, $url ) use ( $bytes ) {
+	studio_assert( str_ends_with( $url, '/ai/run/@cf/black-forest-labs/flux-2-klein-4b' ), 'free route contacts only configured provider' );
+	studio_assert( str_contains( $args['body'], 'name="input_image_0"' ) && str_contains( $args['body'], $bytes ), 'real reference bytes are sent' );
+	return array( 'headers' => array(), 'body' => wp_json_encode( array( 'result' => array( 'image' => base64_encode( $bytes ) ) ) ), 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array() );
+};
+add_filter( 'pre_http_request', $fake_provider, 10, 3 );
+$request = new WP_REST_Request( 'POST', '/casa-viva/v1/contenido/ia/generate' );
+$request->set_body_params( array( 'provider' => 'cloudflare', 'format' => '1920', 'layout' => 'features' ) );
+$request->set_file_params( array( 'photo' => array( 'tmp_name' => $tmp, 'error' => 0 ) ) );
+$before = wc_get_product( $p->get_id() )->get_image_id();
+$result = rest_do_request( $request );
+remove_filter( 'pre_http_request', $fake_provider, 10 );
+unlink( $tmp );
+studio_assert( 200 === $result->get_status() && str_starts_with( $result->get_data()['image'], 'data:image/jpeg;base64,' ), 'editor receives a reviewable image' );
+studio_assert( $before === wc_get_product( $p->get_id() )->get_image_id(), 'generation does not publish a preview' );

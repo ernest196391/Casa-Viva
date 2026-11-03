@@ -1,5 +1,9 @@
 # Casa Viva Platform — Checkpoint operativo
 
+## Fotos de catálogo con IA — 3.14.113
+
+La base 3.14.112 (d39e7b3) pasó el despliegue 41667340233 y se creó la cuenta de Zayri. Esta ampliación prepara ediciones desde una referencia mediante Cloudflare Workers AI, OpenAI Images o Higgsfield Marketing Studio. Solo el administrador configura credenciales en WooCommerce → IA para fotos. En Workers Free se aplica la cuota diaria del proveedor. Cada opción se revisa en el móvil antes de designarla imagen principal mediante la subida protegida existente. Las credenciales y el resultado en vivo se verifican por separado del despliegue.
+
 ## PREPARE — Mi catálogo y fotos para Zayri (2026-11-02)
 
 - Petición explícita de Ernesto: panel móvil en casaviva.company, crear/editar/publicar contenido y fotos, conservar cambios humanos frente a BizneCubano; mantener precios y existencias.
