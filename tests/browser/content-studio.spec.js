@@ -1,6 +1,77 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs');
+const isSave = (request) => request.method() === 'POST' && decodeURIComponent(request.url()).includes('/contenido/save');
+async function openPanel(page) {
+  await page.setViewportSize({ width: 390, height: 844 });
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.goto('http://localhost:8889/wp-login.php');
+  await page.locator('#user_login').fill('cvt_content_browser');
+  await page.locator('#user_pass').fill('Synthetic-Content-Only-1!');
+  await Promise.all([page.waitForNavigation(), page.locator('#wp-submit').click()]);
+  await page.goto('http://localhost:8889/?cvd_contenido=1');
+  await expect(page.getByRole('heading', { name: 'Mi catálogo y fotos', exact: true })).toBeVisible();
+}
+// Holds the first save response until release(); held resolves with the server's answer.
+async function holdFirstSave(page) {
+  let release, answered;
+  const gate = new Promise((resolve) => { release = resolve; }), held = new Promise((resolve) => { answered = resolve; });
+  let first = true;
+  await page.route('**/*', async (route) => {
+    if (!first || !isSave(route.request())) return route.continue();
+    first = false;
+    const response = await route.fetch(); answered(await response.json());
+    await gate; await route.fulfill({ response });
+  });
+  return { release, held };
+}
+const readProduct = (page, id) => page.evaluate(async (id) => {
+  const url = new URL(cvContent.base + 'products', location.href); url.searchParams.set('id', id);
+  return (await fetch(url, { credentials: 'same-origin', headers: { 'X-WP-Nonce': cvContent.nonce } })).json();
+}, id);
+const saveNow = async (page) => (await Promise.all([page.waitForResponse((r) => isSave(r.request())), page.getByRole('button', { name: 'Guardar cambios', exact: true }).click()]))[0].json();
+
+test('Guardado tardío de una ficha publicada no pisa la mercancía nueva', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(60000);
+  await openPanel(page);
+  await page.getByRole('button', { name: 'Studio race fixture 1 · Publicado', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Producto abierto.');
+  const { release, held } = await holdFirstSave(page);
+  await page.getByRole('textbox', { name: 'Título', exact: true }).fill('Ficha A guardada tarde');
+  await page.getByRole('button', { name: 'Guardar cambios', exact: true }).click();
+  const a = await held;
+  await page.locator('#cv-new').click();
+  await page.getByRole('textbox', { name: 'Título', exact: true }).fill('Ficha B nueva');
+  release();
+  await expect(page.getByRole('button', { name: 'Guardar cambios', exact: true })).toBeEnabled();
+  await expect.soft(page.locator('#cv-commercial')).toHaveText('Nueva mercancía · borrador');
+  const b = await saveNow(page);
+  expect(b.name).toBe('Ficha B nueva'); expect(b.status).toBe('draft'); expect(b.id).not.toBe(a.id);
+  const after = await readProduct(page, a.id);
+  expect(after.name).toBe('Ficha A guardada tarde'); expect(after.status).toBe('publish');
+});
+
+test('Guardado tardío de mercancía nueva no pisa la ficha publicada abierta después', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(60000);
+  await openPanel(page);
+  await page.locator('#cv-new').click();
+  const { release, held } = await holdFirstSave(page);
+  await page.getByRole('textbox', { name: 'Título', exact: true }).fill('Ficha nueva guardada tarde');
+  await page.getByRole('button', { name: 'Guardar cambios', exact: true }).click();
+  const fresh = await held;
+  await page.getByRole('button', { name: 'Studio race fixture 2 · Publicado', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Producto abierto.');
+  await page.getByRole('textbox', { name: 'Título', exact: true }).fill('Ficha publicada editada');
+  release();
+  await expect(page.getByRole('button', { name: 'Guardar cambios', exact: true })).toBeEnabled();
+  const published = await saveNow(page);
+  expect(published.id).not.toBe(fresh.id); expect(published.name).toBe('Ficha publicada editada'); expect(published.status).toBe('publish');
+  const after = await readProduct(page, fresh.id);
+  expect(after.name).toBe('Ficha nueva guardada tarde'); expect(after.status).toBe('draft');
+});
+
 test('Editor de contenido: login, guardar, subir foto y descargar en móvil', async ({ page }) => {
   test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
   test.setTimeout(60000);
