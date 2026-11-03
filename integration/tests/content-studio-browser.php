@@ -8,3 +8,8 @@ $user = new WP_User( $id ); $user->add_cap( CVD_Content_Studio::CAP );
 $p = new WC_Product_Simple(); $p->set_name( 'Studio browser fixture' ); $p->set_description( '<p>Datos sintéticos para prueba.</p>' );
 $p->set_regular_price( '25' ); $p->set_manage_stock( true ); $p->set_stock_quantity( 8 ); $p->set_status( 'publish' ); $p->save();
 echo wp_json_encode( array( 'id' => $p->get_id() ) ) . PHP_EOL;
+// Published products for the switch-while-saving race, one per order.
+foreach ( array( 'Studio race fixture 1', 'Studio race fixture 2' ) as $name ) {
+	$race = new WC_Product_Simple(); $race->set_name( $name ); $race->set_description( '<p>Datos sintéticos para prueba.</p>' );
+	$race->set_regular_price( '30' ); $race->set_status( 'publish' ); $race->save();
+}
