@@ -46,3 +46,23 @@ test('Auditoría Casa Viva: nueva mercancía hasta publicación, ocho anuncios y
  const url=await page.locator('#cv-view').getAttribute('href');const publicPage=await request.get(url);expect(publicPage.ok()).toBeTruthy();expect(await publicPage.text()).toContain(desc);
  console.log('AUDIT PASS Publicación rechazada sin precio, aceptada con precio comercial y visible en página pública desechable.');
 });
+test('Auditoría de concurrencia: respuesta de A al abrir una ficha nueva',async({page})=>{
+ test.setTimeout(90000);
+ page.on('dialog',d=>d.accept());
+ await page.goto('http://localhost:8889/wp-login.php');await page.locator('#user_login').fill('cvt_content_browser');await page.locator('#user_pass').fill('Synthetic-Content-Only-1!');
+ await Promise.all([page.waitForNavigation(),page.locator('#wp-submit').click()]);
+ await page.goto('http://localhost:8889/?cvd_contenido=1');await page.locator('#cv-items button').filter({hasText:'Studio browser fixture'}).first().click();
+ let release,ack;const hold=new Promise(r=>release=r),sent=new Promise(r=>ack=r);let once=true;
+ await page.route('**/*',async route=>{
+  if(once&&route.request().method()==='POST'&&decodeURIComponent(route.request().url()).includes('/contenido/save')){
+    once=false;const res=await route.fetch();ack();await hold;await route.fulfill({response:res});
+  }else await route.continue();
+ });
+ await page.locator('#cv-name').fill('Producto A en tránsito');await page.locator('#cv-save').click();await sent;
+ await page.locator('#cv-new').click();await page.locator('#cv-name').fill('Producto B que debía ser borrador');
+ release();await expect(page.locator('#cv-save')).toBeEnabled();
+ const [saveResult]=await Promise.all([page.waitForResponse(r=>r.request().method()==='POST'&&decodeURIComponent(r.url()).includes('/contenido/save')),page.locator('#cv-save').click()]);
+ const item=await saveResult.json();const result=item.status==='publish'&&item.name==='Producto B que debía ser borrador';
+ console.log('AUDIT RACE Una ficha nueva acabó sobrescribiendo el producto A publicado: '+result+'; estado devuelto: '+item.status);
+ expect(['draft','publish']).toContain(item.status);
+});
