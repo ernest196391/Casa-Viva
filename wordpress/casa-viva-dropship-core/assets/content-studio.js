@@ -5,6 +5,8 @@
   if (!$('cv-editor')) return;
   let product = null, photo = null, page = 1, pages = 1, token = crypto.randomUUID(), dirty = false;
   let markers = [], nextMarker = 0;
+  // Changes whenever another product is opened; late answers for an older one must not touch the open form.
+  let ficha = 0;
   let generationSession = 0;
   let scenePhoto = null;
   function resetScenes() {
@@ -37,6 +39,7 @@
     try { await work(); } catch (error) { message(error.message); } finally { button.disabled = false; }
   }
   function fill(p) {
+    ficha++;
     resetScenes();
     if (p.review) {
       const session = generationSession;
@@ -62,7 +65,9 @@
       const title = document.createElement('span'); title.textContent = `${p.name} · ${p.status === 'publish' ? 'Publicado' : 'Borrador / privado'}`; button.append(title);
       button.addEventListener('click', () => busy(button, async () => {
         if (dirty && !confirm('Tienes cambios sin guardar. ¿Abrir otro producto?')) return;
-        fill(await api(`products?id=${p.id}`)); message('Producto abierto.'); $('cv-editor').scrollIntoView({ behavior: 'smooth' });
+        const current = ++ficha, opened = await api(`products?id=${p.id}`);
+        if (current !== ficha) return;
+        fill(opened); message('Producto abierto.'); $('cv-editor').scrollIntoView({ behavior: 'smooth' });
       })); $('cv-items').append(button);
     }
     if (!data.items.length && !append) $('cv-items').textContent = 'No encontramos productos con ese nombre.';
@@ -80,11 +85,13 @@
     dirty = false; location.assign(result.login);
   }); });
   $('cv-suggest').addEventListener('click', (e) => busy(e.target, async () => {
-    const result = await api('suggest', { name: $('cv-name').value, facts: $('cv-facts').value });
+    const current = ficha, result = await api('suggest', { name: $('cv-name').value, facts: $('cv-facts').value });
+    if (current !== ficha) return;
     $('cv-suggestion').value = result.text; message(result.note);
   }));
   $('cv-title-suggest').addEventListener('click', (e) => busy(e.target, async () => {
-    const result = await api('suggest', { name: $('cv-name').value, facts: $('cv-facts').value, kind: 'titulo' });
+    const current = ficha, result = await api('suggest', { name: $('cv-name').value, facts: $('cv-facts').value, kind: 'titulo' });
+    if (current !== ficha) return;
     $('cv-name').value = result.text; dirty = true; message(result.note);
   }));
   $('cv-use-suggestion').addEventListener('click', () => {
@@ -94,9 +101,10 @@
   window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
   async function save(action) {
     if (!$('cv-editor').reportValidity()) return;
-    const p = await api('save', { id: product.id || 0, version: product.version || '', token, action,
+    const current = ficha, p = await api('save', { id: product.id || 0, version: product.version || '', token, action,
       name: $('cv-name').value, description: $('cv-description').value, short: $('cv-short').value,
       brief: Object.fromEntries(['facts', 'buyer', 'objection', 'evidence', 'use', 'headline'].map((key) => [key, $('cv-' + key).value])) });
+    if (current !== ficha) { message(`«${p.name}» quedó guardado. La ficha que tienes abierta no cambió.`); return; }
     // Keep unsaved layout work and selected local photo while refreshing server state.
     product = p; dirty = false; $('cv-commercial').textContent = `Precio actual: ${p.price || 'pendiente'} · ${p.status === 'publish' ? 'Publicado' : 'Borrador'}`;
     $('cv-view').hidden = p.status !== 'publish'; $('cv-view').href = p.url;
@@ -110,15 +118,20 @@
     photo = null;
     const file = e.target.files[0]; if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) throw new Error('Elige JPG, PNG o WebP de hasta 8 MB.');
-    const url = URL.createObjectURL(file);
-    try { photo = await loadImage(url); markers = []; nextMarker = 0; $('cv-original').src = url; $('cv-original').hidden = false; } finally { URL.revokeObjectURL(url); }
+    const current = ficha, url = URL.createObjectURL(file);
+    try {
+      const img = await loadImage(url); if (current !== ficha) return;
+      photo = img; markers = []; nextMarker = 0; $('cv-original').src = url; $('cv-original').hidden = false;
+    } finally { URL.revokeObjectURL(url); }
     message('Foto preparada. Pulsa «Subir como foto principal» para enviarla a la web.');
   }));
   $('cv-upload').addEventListener('click', (e) => busy(e.target, async () => {
     if (!product?.id) throw new Error('Guarda primero el borrador.');
     const file = $('cv-photo').files[0]; if (!file) throw new Error('Elige una foto.');
     const body = new FormData(); body.append('id', product.id); body.append('version', product.version); body.append('photo', file);
-    product = await api('upload', body); message('Foto subida y protegida. Si el producto ya estaba publicado, la foto ya aparece en la tienda.');
+    const current = ficha, updated = await api('upload', body);
+    if (current !== ficha) { message(`La foto quedó subida en «${updated.name}». La ficha que tienes abierta no cambió.`); return; }
+    product = updated; message('Foto subida y protegida. Si el producto ya estaba publicado, la foto ya aparece en la tienda.');
   }));
   function wrapped(ctx, text, x, y, width, size, maxLines = 3, color = '#173e35') {
     ctx.fillStyle = color; ctx.font = `600 ${size}px Arial, sans-serif`; ctx.textAlign = 'left';
