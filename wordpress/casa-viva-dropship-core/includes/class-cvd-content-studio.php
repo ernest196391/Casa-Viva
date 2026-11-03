@@ -110,7 +110,8 @@ final class CVD_Content_Studio {
 			if ( ! $p || ! in_array( $p->get_status(), array( 'publish', 'draft', 'pending', 'private' ), true ) || $p->is_type( 'variation' ) ) { return new WP_Error( 'missing', 'Producto no encontrado.', array( 'status' => 404 ) ); }
 			$item = self::projection( $p );
 			$review = get_user_meta( get_current_user_id(), '_cvd_content_review_' . $id, true );
-			if ( is_array( $review ) && ( $review['version'] ?? '' ) === $item['version'] ) { $item['review'] = $review['image']; }
+			if ( ! is_array( $review ) || ( $review['version'] ?? '' ) !== $item['version'] ) { return rest_ensure_response( $item ); }
+			$item['review'] = $review['image'];
 			$response = rest_ensure_response( $item );
 			$response->header( 'Cache-Control', 'private, no-store' );
 			return $response;
