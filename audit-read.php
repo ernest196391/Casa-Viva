@@ -10,6 +10,11 @@ echo "AUDIT LIVE visitante bloqueado, Zayri lee el catálogo con permisos limita
 foreach(CVD_Photo_AI::providers() as $k=>$v)echo "AUDIT LIVE proveedor ".$k.' '.($v?'configurado':'sin configurar')."\n";
 $products=get_posts(['post_type'=>'product','post_status'=>'publish','s'=>'cortinero extensible','posts_per_page'=>50]);
 foreach($products as $post){if(str_contains($post->post_title,'122')&&str_contains($post->post_title,'213')&&str_contains($post->post_title,'espiral')){
-$d=cv_audit_get($post->ID)->get_data();$raw=$d['review']??'';$bytes=base64_decode(substr($raw,strpos($raw,',')+1),true);
-echo 'AUDIT LIVE vista privada coincide con la aprobada: '.(is_string($bytes)&&hash('sha256',$bytes)==='27959029d4b7ed24ce4a0713696143bb69231bb8cfb405a08e933ce99f529ae6'?'sí':'no')."\n";return;}}
+$res=cv_audit_get($post->ID);$d=$res->get_data();
+$meta=get_user_meta($user->ID,'_cvd_content_review_'.$post->ID,true);
+$stored=is_array($meta)?($meta['image']??''):'';
+$decoded=$stored?base64_decode(substr($stored,strpos($stored,',')+1),true):false;
+echo 'AUDIT DIAG product='.$post->ID.' status='.$res->get_status().' raw_private='.(is_array($meta)?'present':'absent').' private_hash_approved='.($decoded&&hash('sha256',$decoded)==='27959029d4b7ed24ce4a0713696143bb69231bb8cfb405a08e933ce99f529ae6'?'yes':'no').' version_matches='.(!empty($meta['version'])&&$meta['version']===($d['version']??'')?'yes':'no').' response_has_review='.(!empty($d['review'])?'yes':'no').PHP_EOL;
+$raw=$d['review']??'';$bytes=base64_decode(substr($raw,strpos($raw,',')+1),true);
+echo 'AUDIT LIVE vista privada coincide con la aprobada: '.(is_string($bytes)&&hash('sha256',$bytes)==='27959029d4b7ed24ce4a0713696143bb69231bb8cfb405a08e933ce99f529ae6'?'sí':'no')."\n";}}
 echo "AUDIT LIVE no se encontró el producto de control.\n";
