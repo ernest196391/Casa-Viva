@@ -1,6 +1,6 @@
 # Casa Viva Platform — Checkpoint operativo
 
-## Fondo protegido de catálogo — 3.14.114
+## Fondo protegido de catálogo — 3.14.115
 
 Base `111d70a`, panel 3.14.113 desplegado. La IA genera solo el fondo. El móvil coloca la foto íntegra sin recortar y conserva los detalles opacos. Las fotos de fondo complejo se mantienen completas. Las pruebas distinguen generación y publicación.
 
