@@ -35,6 +35,7 @@ jobs:
       - name: Validar panel de contenido y protección de fotos
         run: |
           php artifacts/tests/test-content-studio.php
+          php wordpress/casa-viva-dropship-core/tests/resenas-bot.test.php
           node --check wordpress/casa-viva-dropship-core/assets/content-studio.js
 
       - name: Validar historial canónico de eventos
@@ -187,6 +188,8 @@ jobs:
         run: scripts/integration.sh up
       - name: Validar contenido con WordPress y WooCommerce reales
         run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/content-studio.php
+      - name: Validar reseñas que pide el bot con WordPress y WooCommerce reales
+        run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/resenas-bot.php
       - name: Preparar navegador del panel
         uses: actions/setup-node@v4
         with:
