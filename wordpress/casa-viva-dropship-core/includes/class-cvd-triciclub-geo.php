@@ -413,13 +413,22 @@ final class CVD_Triciclub_Geo {
 		$g = self::data();
 		$q = self::norm( $texto );
 		if ( ! $g || mb_strlen( $q ) < 2 ) { return array(); }
-		$key = 'cvd_tc_sug2_' . md5( $q . '|' . self::clave( $texto ) . '|' . ( null === $cerca_lat ? '' : round( $cerca_lat, 2 ) . ',' . round( (float) $cerca_lng, 2 ) ) );
+		$key = 'cvd_tc_sug3_' . md5( $q . '|' . self::clave( $texto ) . '|' . ( null === $cerca_lat ? '' : round( $cerca_lat, 2 ) . ',' . round( (float) $cerca_lng, 2 ) ) );
 		$hit = get_transient( $key );
 		if ( is_array( $hit ) ) { return $hit; } // lo mismo escrito otra vez (o por otra persona cerca): al momento
 		$out = array();
 		// La búsqueda de dirección exacta es lenta: solo si parece una («23 y L», «Obispo entre…», «esq.», un número).
-		$exacta = preg_match( '/\s(y|e|entre|esq\w*)\s|e\/|#|\d/iu', ' ' . $texto . ' ' ) ? CVD_Triciclub_Api::localizar( $texto, '', null !== $cerca_lat ? array( $cerca_lat, (float) $cerca_lng ) : null ) : null;
-		if ( $exacta ) {
+		// Sin GPS y la cuadra está en varios barrios («17 e/ 10 y 12»: Vedado y Altahabana): salen todas y el cliente elige
+		// (Ernesto 4-nov). Con GPS, la más cercana a él.
+		$exactas = array();
+		if ( preg_match( '/\s(y|e|entre|esq\w*)\s|e\/|#|\d/iu', ' ' . $texto . ' ' ) ) {
+			$exactas = null !== $cerca_lat
+				? array_filter( array( CVD_Triciclub_Api::localizar( $texto, '', array( $cerca_lat, (float) $cerca_lng ) ) ) )
+				: CVD_Geo_Direccion::opciones( static fn() => CVD_Triciclub_Api::localizar( $texto, '' ), 4 );
+			// Varias: la más céntrica arriba (Parque Central), pero salen todas; el cliente toca la suya.
+			usort( $exactas, static fn( array $a, array $b ): int => self::d2( 23.1376, -82.3593, (float) $a['lat'], (float) $a['lon'] ) <=> self::d2( 23.1376, -82.3593, (float) $b['lat'], (float) $b['lon'] ) );
+		}
+		foreach ( $exactas as $exacta ) {
 			$out[] = array( 'texto' => $texto, 'sub' => self::barrio( (float) $exacta['lat'], (float) $exacta['lon'] ), 'lat' => (float) $exacta['lat'], 'lng' => (float) $exacta['lon'], 'tipo' => 'direccion' );
 		}
 		$empieza = array(); $contiene = array();

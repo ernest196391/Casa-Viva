@@ -20,6 +20,30 @@ final class CVD_Geo_Direccion {
 
 	private static $data = null;
 	private static $loose = null;
+	private static $recoger = null; // Triciclub sin GPS: todas las cuadras/esquinas que casan, no solo la mejor (ver opciones())
+
+	/**
+	 * Triciclub, 4-nov (Ernesto: «que elija el cliente»): sin barrio ni GPS, las cuadras distintas (a más de 1,5 km entre
+	 * sí) donde puede estar «17 e/ 10 y 12» (Vedado y Altahabana), la mejor primero → [{lat, lon, how}…], hasta $max.
+	 * $buscar hace la búsqueda normal (locate o localizar); aquí solo se apunta lo que fue viendo. Pedidos: no se usa.
+	 */
+	public static function opciones( callable $buscar, int $max = 3 ): array {
+		self::$recoger = array();
+		$uno = $buscar();
+		$todas = self::$recoger;
+		self::$recoger = null;
+		if ( ! $uno ) { return array(); }
+		usort( $todas, static fn( array $a, array $b ): int => $a[0] <=> $b[0] );
+		$out = array( $uno );
+		foreach ( $todas as $c ) {
+			if ( count( $out ) >= $max ) { break; }
+			foreach ( $out as $o ) {
+				if ( CVD_Palla_Api::meters( $c[1][0], $c[1][1], (float) $o['lat'], (float) $o['lon'] ) < 1500 ) { continue 2; }
+			}
+			$out[] = self::out( $c[1], $c[2] );
+		}
+		return $out;
+	}
 
 	/** La misma forma de escribir un nombre que norm() de construir-calles.mjs. «5ta Avenida» → «5», «D’Strampes» → «dstrampes». */
 	public static function norm( string $s ): string {
@@ -118,6 +142,7 @@ final class CVD_Geo_Direccion {
 					$mid = array( ( $p[0] + $q[0] ) / 2, ( $p[1] + $q[1] ) / 2 );
 					$score = $d + $near( $mid ) * 0.5 + ( $yo ? $yo( $mid ) * 0.1 : 0 ); // 1 km más lejos de quien escribe = 100 m
 					if ( ! $best || $score < $best[0] ) { $best = array( $score, $mid ); }
+					if ( null !== self::$recoger && ! $barrio ) { self::$recoger[] = array( $score, $mid, 'cuadra' ); }
 				}
 			}
 			if ( $best && ( ! $barrio || $near( $best[1] ) < 6000 ) ) { return self::out( $best[1], 'cuadra' ); }
@@ -138,6 +163,10 @@ final class CVD_Geo_Direccion {
 		if ( $barrio ) {
 			usort( $pts, static fn( array $a, array $b ): int => $near( $a ) <=> $near( $b ) );
 			return $near( $pts[0] ) < 6000 ? $pts[0] : null;
+		}
+		if ( null !== self::$recoger ) { // Triciclub sin GPS: la primera, y las demás quedan como opciones para el cliente
+			foreach ( $pts as $p ) { self::$recoger[] = array( 1000, $p, 'esquina' ); }
+			return $pts[0];
 		}
 		foreach ( $pts as $p ) {
 			if ( CVD_Palla_Api::meters( $p[0], $p[1], $pts[0][0], $pts[0][1] ) > $spread ) { return null; }
