@@ -295,6 +295,16 @@ final class CVD_Palla_Push {
 		return 'enviado';
 	}
 
+	/**
+	 * 3.14.124 (Triciclub, Ernesto 4-nov «avisos al móvil»): un aviso que no es de un pedido de la tienda, por las dos vías
+	 * de Pa'llá: el web push (Google; en Cuba no siempre llega) y nuestro ntfy del VPS (sin Google: la app de Pa'llá para
+	 * Android o la app ntfy). No mira cvd_palla_push: solo llega a quien ya dio de alta su teléfono o tiene tema.
+	 */
+	public static function avisar( int $user_id, string $type, string $title, string $message, string $click, array $tags = array() ): void {
+		if ( class_exists( 'CVD_Web_Push' ) ) { CVD_Web_Push::notify_palla( $user_id, 0, $type, $title, $message, $click ); }
+		self::ntfy( $user_id, $title, $message, $click, $tags );
+	}
+
 	/** Enlace para suscribirse en la app oficial de ntfy (F-Droid/GitHub, sin Google): '' si ese mensajero no tiene tema. */
 	public static function ntfy_link( int $user_id ): string {
 		$topic = (string) get_user_meta( $user_id, self::NTFY_TOPIC, true );

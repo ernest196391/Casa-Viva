@@ -335,15 +335,22 @@ final class CVD_Triciclub_Api {
 		return self::out( array( 'ok' => true, 'viaje' => self::vista_cliente( $viaje ) ) );
 	}
 
-	/** Push a Pa'llá: «te piden un viaje» (si el chofer tiene los avisos puestos). */
+	/**
+	 * Aviso al teléfono del chofer: «te piden un viaje». 3.14.124: por las dos vías de Pa'llá (web push y nuestro ntfy, sin
+	 * Google), para que le llegue con la pantalla apagada o la app cerrada. Nunca para el pedido si falla.
+	 */
 	private static function avisar_chofer( object $viaje ): void {
-		if ( ! class_exists( 'CVD_Web_Push' ) || ! method_exists( 'CVD_Web_Push', 'notify_palla' ) ) { return; }
-		$txt = sprintf( '%s → %s · %s CUP. Tienes %d s para aceptar.', $viaje->origen_texto ?: 'Recogida', $viaje->destino_texto ?: 'destino', number_format( (int) $viaje->precio, 0, ',', '.' ), self::ESPERA );
+		$txt = sprintf( '%s → %s · %s CUP. Tienes %d s para aceptar.', self::corto( (string) $viaje->origen_texto ) ?: 'Recogida', self::corto( (string) $viaje->destino_texto ) ?: 'destino', number_format( (int) $viaje->precio, 0, ',', '.' ), self::ESPERA );
+		self::aviso( (int) $viaje->chofer_id, 'tc_pedido', '🛺 Triciclub: te piden un ' . self::servicio_txt( (string) $viaje->servicio ), $txt, array( 'tc', 'pedido' ) );
+	}
+
+	private static function corto( string $t ): string { return trim( explode( ',', $t )[0] ); }
+
+	private static function aviso( int $user_id, string $type, string $title, string $txt, array $tags ): void {
 		try {
-			CVD_Web_Push::notify_palla( (int) $viaje->chofer_id, 0, 'tc_pedido', '🛺 Triciclub: te piden un ' . self::servicio_txt( (string) $viaje->servicio ), $txt, home_url( '/palla/triciclub' ) );
-		} catch ( Throwable $e ) { // el aviso nunca para el pedido
-			unset( $e );
-		}
+			if ( class_exists( 'CVD_Palla_Push' ) && method_exists( 'CVD_Palla_Push', 'avisar' ) ) { CVD_Palla_Push::avisar( $user_id, $type, $title, $txt, home_url( '/palla/triciclub' ), $tags ); }
+			elseif ( class_exists( 'CVD_Web_Push' ) ) { CVD_Web_Push::notify_palla( $user_id, 0, $type, $title, $txt, home_url( '/palla/triciclub' ) ); }
+		} catch ( Throwable $e ) { unset( $e ); }
 	}
 
 	private static function servicio_txt( string $s ): string { return array( 'viaje' => 'viaje', 'paquete' => 'paquete', 'carga' => 'viaje de carga' )[ $s ] ?? 'viaje'; }
@@ -456,6 +463,7 @@ final class CVD_Triciclub_Api {
 		$now = CVD_Triciclub_Db::now();
 		$wpdb->query( $wpdb->prepare( 'UPDATE ' . CVD_Triciclub_Db::t( 'viajes' ) . " SET estado='cancelado', cancelado_at=%s, cancelado_por='cliente', motivo=%s, updated_at=%s WHERE id=%d AND estado=%s", $now, self::txt( $request->get_param( 'motivo' ), 200 ), $now, (int) $viaje->id, $viaje->estado ) );
 		CVD_Triciclub_Db::evento( (int) $viaje->id, 'cliente', (int) $c->id, 'cancelado', array( 'antes' => $viaje->estado ) );
+		if ( 'esperando' !== $viaje->estado ) { self::aviso( (int) $viaje->chofer_id, 'tc_cancelado', '🛺 Triciclub: el cliente canceló', 'Ya no hace falta que vayas a ' . self::corto( (string) $viaje->origen_texto ) . '.', array( 'tc', 'cancelado' ) ); } // 3.14.124
 		return self::out( array( 'ok' => true, 'viaje' => self::vista_cliente( self::viaje( (int) $viaje->id ) ) ) );
 	}
 

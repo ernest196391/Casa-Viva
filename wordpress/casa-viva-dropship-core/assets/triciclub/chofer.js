@@ -66,12 +66,29 @@
 				avisarDesaparecidos(S.hoy, res.data);
 				S.hoy = res.data;
 				if (!S.form || !S.sucio) { S.form = formDe(res.data); }
-				if (res.data.pedidos.length > antes && navigator.vibrate) { try { navigator.vibrate([300, 120, 300, 120, 300]); } catch (e) {} }
+				if (res.data.pedidos.length > antes) { alarma(true); if (navigator.vibrate) { try { navigator.vibrate([300, 120, 300, 120, 300]); } catch (e) {} } }
+				if (!res.data.pedidos.length && audio.timer) { alarma(false); }
 				if (res.data.activo) { gpsViaje(); } else { gpsLibre(); }
+				if (!S.appAvisado && res.data.ficha && (res.data.ficha.disponible || res.data.activo)) { S.appAvisado = true; appAvisos(); }
 			}
 			render(); programar();
 		});
 	}
+	// 3.14.124 (Ernesto 4-nov «avisos al móvil»): con la pantalla abierta, alarma sonora al entrar un pedido (como el
+	// «Activar sonido» de Pa'llá). El navegador solo deja sonar después de un toque: cualquier toque la habilita.
+	var audio = { ctx: null, timer: 0 };
+	function audioCtx() { try { if (!audio.ctx) { var A = window.AudioContext || window.webkitAudioContext; if (A) { audio.ctx = new A(); } } if (audio.ctx && audio.ctx.state === 'suspended') { audio.ctx.resume(); } } catch (e) {} return audio.ctx; }
+	function pitido(f, t0, dur) { var c = audio.ctx, o = c.createOscillator(), g = c.createGain(); o.type = 'square'; o.frequency.value = f; g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.25, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur); o.connect(g); g.connect(c.destination); o.start(t0); o.stop(t0 + dur + 0.02); }
+	function alarma(on) {
+		clearInterval(audio.timer); audio.timer = 0;
+		if (!on || !audioCtx() || audio.ctx.state !== 'running') { return; }
+		var sonar = function () { var t = audio.ctx.currentTime; pitido(880, t, 0.18); pitido(1175, t + 0.22, 0.18); pitido(880, t + 0.44, 0.25); };
+		sonar(); audio.timer = setInterval(sonar, 1600);
+		setTimeout(function () { alarma(false); }, 30000); // como mucho 30 s
+	}
+	function sonidoListo() { return !!(audio.ctx && audio.ctx.state === 'running'); }
+	document.addEventListener('pointerdown', function () { audioCtx(); if (audio.timer) { alarma(false); } }, true);
+
 	// 3.14.123 (prueba del 4-nov): si el cliente cancela, el viaje o el pedido desaparecía sin decir nada. Ahora se avisa.
 	function avisarDesaparecidos(viejo, nuevo) {
 		if (!viejo) { return; }
@@ -123,11 +140,16 @@
 				if (bloqueado(res)) { return; }
 				if (!res.data.ok) { toast(res.data.message || 'No se pudo.'); return; }
 				if (S.hoy && S.hoy.ficha) { S.hoy.ficha.disponible = on; }
+				if (on) { appAvisos(); }
 				toast(on ? 'Conectado: ya sales a los clientes cerca.' : 'Desconectado.');
 				gpsLibre(); render(); programar();
 			});
 		});
 	}
+	// 3.14.124: dentro de la app de Pa'llá para Android, su servicio de avisos (ntfy, sin Google) solo corre si la web le
+	// dice «disponible». Al conectarse a Triciclub se lo decimos, para que el pedido le llegue con la pantalla apagada.
+	// Al desconectarse NO se apaga: podría seguir disponible para las carreras de Pa'llá.
+	function appAvisos() { try { if (window.PallaApp && window.PallaApp.setAvailable) { window.PallaApp.setAvailable(true, 0); } } catch (e) {} }
 	function gpsLibre() { // conectado y sin viaje: su posición cada minuto
 		clearInterval(T.gps); T.gpsModo = 'libre';
 		var f = S.hoy && S.hoy.ficha;
@@ -210,7 +232,8 @@
 		}
 		return '<section class="tc-hoja tc-hoja--corta tc-chofer-hoja"><div class="tc-asa"></div>'
 			+ '<p class="tc-enlinea"><span class="tc-punto-vivo" aria-hidden="true"></span><b>En línea</b> · esperando viajes</p>'
-			+ '<p class="tc-small tc-centro">Deja esta pantalla abierta. Cuando te pidan un viaje vibra y sale aquí.</p>'
+			+ (sonidoListo() ? '<p class="tc-small tc-centro">🔊 Sonará una alarma cuando te pidan un viaje. Con la pantalla apagada te llega el aviso de la app de Pa\'llá.</p>'
+				: '<button type="button" class="tc-btn tc-btn--sec tc-btn--small" data-act="sonido">🔊 Activar el sonido de los pedidos</button>')
 			+ '<p class="tc-small tc-centro">Ahora: ' + esc(fr.nombre || '') + (ex ? ' (+' + ex + ' %)' : '') + ' · 5 km = ' + esc(cup(precio(h.perfil, 5, ex))) + '</p>'
 			+ '<button type="button" class="tc-btn tc-btn--sec" data-act="desconectar"' + (S.busy ? ' disabled' : '') + '>Desconectarme</button></section>';
 	}
@@ -327,7 +350,8 @@
 		if (a === 'menu') { S.hoja = 'menu'; render(); }
 		else if (a === 'cerrar-menu') { S.hoja = ''; S.sucio = false; S.form = formDe(S.hoy); render(); }
 		else if (a === 'guardar') { guardar(); }
-		else if (a === 'conectar') { conectar(true); }
+		else if (a === 'conectar') { audioCtx(); conectar(true); }
+		else if (a === 'sonido') { audioCtx(); setTimeout(function () { var t = audio.ctx && audio.ctx.currentTime; if (t !== undefined && sonidoListo()) { pitido(880, t, 0.15); } render(); }, 150); }
 		else if (a === 'desconectar') { conectar(false); }
 		else if (a === 'centrar') { if (S.gps) { conMapa(function (m) { window.TcMapa.ir(m, S.gps, 16, abajo()); }); } else { toast('Activa la ubicación del teléfono.'); } }
 		else if (a === 'si') { responder(id, true); }
