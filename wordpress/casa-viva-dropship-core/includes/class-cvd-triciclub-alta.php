@@ -15,8 +15,8 @@ defined( 'ABSPATH' ) || exit;
  * - Con todo puesto queda APROBADO al momento (Ernesto: «aprobar automáticamente cuando el chofer envía los datos»); en
  *   modo prueba entra también en cvd_tc_testers. Como Uber o Bolt: se aprueba rápido y se revisa después.
  * - 3.14.132 (Ernesto 4-nov: «aceptó fotos que no eran de triciclo y la selfie puede ser de cualquiera»): verificación
- *   automática como QvaPay o los bancos. El chofer manda su carné por delante, una selfie sosteniendo el carné junto a la
- *   cara (con la cámara) y el triciclo. Al enviar queda «verificando»; el verificador del VPS (triciclub-verifica,
+ *   automática como QvaPay o los bancos. El chofer manda su carné por delante, una selfie de la cara (3.14.134, Ernesto:
+ *   «solo le va a ser difícil hacerse la selfie con el carné»; cámara de la app o galería) y el triciclo. Al enviar queda «verificando»; el verificador del VPS (triciclub-verifica,
  *   GET/POST /bot/triciclub/verificar) compara las caras, lee el carné (edad, nombre), mira si el triciclo es un triciclo
  *   del tipo elegido y contesta: aprobado (y le pone la foto de perfil recortada de la selfie) · corregir (el chofer ve
  *   qué arreglar) · revision (lo decide Ernesto en el panel: caras dudosas, menor de edad, carné repetido). Del carné solo
@@ -238,7 +238,7 @@ final class CVD_Triciclub_Alta {
 		if ( in_array( 'carga', $s, true ) && (int) $ch->carga_kg < 20 ) { $falta[] = 'cuántos kilos cargas'; }
 		if ( self::verificar_on() ) {
 			if ( empty( $f['carne'] ) ) { $falta[] = 'la foto de tu carné'; }
-			if ( empty( $f['selfie'] ) ) { $falta[] = 'la selfie con tu carné'; }
+			if ( empty( $f['selfie'] ) ) { $falta[] = 'tu selfie'; }
 		} elseif ( empty( $f['perfil'] ) ) {
 			$falta[] = 'tu foto';
 		}
@@ -450,7 +450,7 @@ final class CVD_Triciclub_Alta {
 		if ( '' === $tel && $u ) { $tel = CVD_Triciclub::telefono( (string) get_user_meta( $uid, 'billing_phone', true ) ); }
 		$h = '<p><a href="' . esc_url( self::panel_url() ) . '">← Todos los choferes</a></p><h1>' . self::icono( $tipo, 34 ) . ' ' . esc_html( $u ? $u->display_name : '#' . $uid ) . '</h1>'
 			. ( '' !== $msg ? '<p class="m">' . esc_html( $msg ) . '</p>' : '' ) . '<div class="f">';
-		foreach ( array( 'perfil' => 'Su foto', 'selfie' => 'Selfie con carné', 'carne' => 'Carné', 'triciclo' => 'Triciclo', 'licencia' => 'Licencia' ) as $k => $label ) {
+		foreach ( array( 'perfil' => 'Su foto', 'selfie' => 'Selfie', 'carne' => 'Carné', 'triciclo' => 'Triciclo', 'licencia' => 'Licencia' ) as $k => $label ) {
 			$mini = self::foto_url( $ch, $k, true );
 			$h .= '<figure>' . ( '' !== $mini ? '<a href="' . esc_url( self::foto_url( $ch, $k ) ) . '"><img src="' . esc_url( $mini ) . '" alt="' . esc_attr( $label ) . '"></a>' : '<span class="sin">—</span>' )
 				. '<figcaption>' . esc_html( $label . ( '' === $mini ? ' (no la mandó)' : ' · toca para verla grande' ) ) . '</figcaption></figure>';

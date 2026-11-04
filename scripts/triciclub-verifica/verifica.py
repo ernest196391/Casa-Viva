@@ -30,6 +30,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 MODELO = os.environ.get('TC_VERIF_MODELO', 'gpt-4.1')
 PRECIOS = {'gpt-4.1': (2.0, 8.0), 'gpt-4.1-mini': (0.4, 1.6)}  # USD por millón de tokens (vivabot/src/ai-prices.js)
 CARA_OK = 0.363  # SFace, coseno: misma persona a partir de aquí (valor de OpenCV)
+CARA_MIN = 0.20  # por debajo, ni con el sí de la IA: la foto del carné es vieja y pequeña, pero tanto no
 INTENTOS = os.path.join(AQUI, 'intentos.json')
 HABANA = ZoneInfo('America/Havana')
 
@@ -133,15 +134,16 @@ def ia(fotos, chofer):
         return {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + base64.b64encode(datos).decode(), 'detail': detalle}}
     texto = (
         'Eres el verificador de choferes de Triciclub (app de triciclos en La Habana). Te mando 3 fotos de un chofer que se quiere '
-        'dar de alta: 1) su carné de identidad cubano por delante, 2) una selfie sosteniendo el carné junto a la cara, 3) su vehículo. '
+        'dar de alta: 1) su carné de identidad cubano por delante, 2) una selfie de su cara (puede venir en espejo), 3) su vehículo. '
         f'Dice que su vehículo es «{chofer["tipo_nombre"]}» (tipo interno {chofer["tipo"]}, motor {chofer["motor"] or "-"}, '
         f'servicios {", ".join(chofer["servicios"])}). Contesta SOLO con este JSON, sin inventar nada que no se vea:\n'
         '{"carne": {"es_carne_cubano": bool, "legible": bool, "foto_de_pantalla_o_fotocopia": bool, "nombre": "nombre y apellidos tal como se leen o \'\'", "numero": "los 11 dígitos o \'\'"},\n'
-        ' "selfie": {"persona_real": bool, "sostiene_carne": bool, "foto_de_pantalla_o_impresa": bool},\n'
+        ' "selfie": {"persona_real": bool, "foto_de_pantalla_o_impresa": bool, "misma_persona_que_el_carne": "si | no | dudoso"},\n'
         f' "vehiculo": {{"es_vehiculo_real": bool, "que_es": "{TIPOS_VISTOS}", "coincide_con_lo_que_dice": bool, "foto_de_pantalla_o_de_internet": bool}},\n'
         ' "nota": "una frase corta en español si algo no cuadra, o \'\'"}\n'
         'Criterios: un bicitaxi es de pedal; un triciclo eléctrico de pasaje lleva 3-4 personas y el grande 6-8; uno de carga tiene cajón o cama atrás. '
-        '«coincide_con_lo_que_dice» es false solo si se ve claramente otro tipo (p. ej. dice eléctrico de pasaje y es un bicitaxi o un carro).'
+        '«coincide_con_lo_que_dice» es false solo si se ve claramente otro tipo (p. ej. dice eléctrico de pasaje y es un bicitaxi o un carro). '
+        '«misma_persona_que_el_carne»: compara rasgos (forma de la cara, cejas, nariz, orejas), no la edad ni el peinado: la foto del carné puede tener años.'
     )
     body = {'model': MODELO, 'temperature': 0, 'max_tokens': 500, 'response_format': {'type': 'json_object'},
             'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': texto}, img(fotos['carne'], 'high'), img(fotos['selfie'], 'low'), img(fotos['triciclo'], 'low')]}]}
@@ -212,22 +214,32 @@ def verificar(ch):
     im_c, caras_c = caras(imagen(fotos['carne']))
     im_s, caras_s = caras(imagen(fotos['selfie']))
     check('Cara en el carné', caras_c, '' if caras_c else 'no se ve la cara', arreglo='La foto del carné no se ve bien: sácala de nuevo por delante, con buena luz y sin reflejos.')
-    check('Cara en la selfie', caras_s, '' if caras_s else 'no se ve una cara', arreglo='En la selfie tiene que verse bien tu cara, con el carné al lado.')
+    check('Cara en la selfie', caras_s, '' if caras_s else 'no se ve una cara', arreglo='En la selfie tiene que verse bien tu cara, de frente y con buena luz.')
     similitud, perfil = None, ''
     if caras_c and caras_s:
-        viva = rasgo(im_s, caras_s[0])
-        similitud = parecido(viva, rasgo(im_c, caras_c[0]))
-        if len(caras_s) > 1:  # la cara del carné que tiene en la mano
-            similitud = max(similitud, parecido(viva, rasgo(im_s, caras_s[1])))
-        check('Misma persona (selfie y carné)', similitud >= CARA_OK, f'parecido {similitud:.2f} (desde {CARA_OK:.2f} es la misma)', dudas='las caras no se parecen lo suficiente')
+        # La foto del carné es pequeña: al doble, YuNet pone mejor los ojos y la boca y SFace compara bien (prueba 4-nov
+        # con Ernesto: 0,18 → 0,53). La selfie, también en espejo (la cámara delantera a veces la guarda así).
+        carnes = [rasgo(im_c, caras_c[0])]
+        im_c2, caras_c2 = caras(cv2.resize(im_c, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC))
+        if caras_c2:
+            carnes.append(rasgo(im_c2, caras_c2[0]))
+        vivas = [rasgo(im_s, caras_s[0])]
+        espejo, caras_e = caras(cv2.flip(im_s, 1))
+        if caras_e:
+            vivas.append(rasgo(espejo, caras_e[0]))
+        similitud = max(parecido(a, b) for a in vivas for b in carnes)
         perfil = recorte_perfil(im_s, caras_s[0])
 
-    # 2) IA: carné, selfie de verdad, triciclo
+    # 2) IA: carné, selfie de verdad, triciclo, y segunda opinión de las caras
     v, costo = ia(fotos, ch)
     c, s, t = v.get('carne') or {}, v.get('selfie') or {}, v.get('vehiculo') or {}
+    if similitud is not None:  # OpenCV dice cuánto se parecen; si la foto del carné es vieja, la IA desempata
+        ia_misma = str(s.get('misma_persona_que_el_carne', '')).lower()
+        misma = ia_misma != 'no' and (similitud >= CARA_OK or (similitud >= CARA_MIN and ia_misma == 'si'))
+        check('Misma persona (selfie y carné)', misma, f'parecido {similitud:.2f} (desde {CARA_OK:.2f} es la misma) · la IA dice: {ia_misma or "-"}', dudas='las caras no se parecen lo suficiente')
     check('Carné cubano legible', c.get('es_carne_cubano') and c.get('legible'), '' if c.get('legible') else 'no se lee', arreglo='La foto del carné no se lee: sácala de nuevo por delante, que se lean el nombre y el número.')
     check('Carné de verdad (no foto de pantalla)', not c.get('foto_de_pantalla_o_fotocopia'), dudas='el carné parece una foto de pantalla o una fotocopia')
-    check('Selfie con el carné en la mano', s.get('persona_real') and s.get('sostiene_carne'), arreglo='Sácate la selfie sosteniendo tu carné junto a la cara.')
+    check('Selfie de una persona', s.get('persona_real'), arreglo='En la selfie tiene que verse bien tu cara, de frente.')
     check('Selfie de verdad (no foto de pantalla)', not s.get('foto_de_pantalla_o_impresa'), dudas='la selfie parece una foto de pantalla o impresa')
     check('Foto de un vehículo de verdad', t.get('es_vehiculo_real') and not t.get('foto_de_pantalla_o_de_internet'), t.get('que_es', ''),
           arreglo='La foto del triciclo no muestra tu triciclo: sácale una foto de frente o de lado.')

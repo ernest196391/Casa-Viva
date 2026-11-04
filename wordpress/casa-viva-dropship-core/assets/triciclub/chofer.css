@@ -31,3 +31,35 @@ body { background: var(--tc-fondo); }
 .tc-checks label { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px solid var(--tc-borde); border-radius: 999px; font-weight: 700; font-size: 14px; }
 .tc-checks input { width: 20px; height: 20px; margin: 0; accent-color: var(--tc-verde); }
 .tc-chofer-menu .tc-aviso { margin: 0; }
+
+/* 3.14.133: fotos del alta como los bancos — cámara dentro de la página con guía, vista previa, barra de subida y reintento */
+.tc-foto { font: inherit; color: var(--tc-tinta); -webkit-tap-highlight-color: transparent; }
+.tc-foto__img { position: relative; display: block; width: 64px; height: 64px; }
+.tc-foto__img img { display: block; }
+.tc-foto--lista { border-style: solid; border-color: var(--tc-verde); }
+.tc-foto--subiendo img { opacity: .55; }
+.tc-foto--error { border-style: solid; border-color: #b42318; }
+.tc-foto--error small { color: #b42318; font-weight: 700; }
+.tc-foto__barra { position: absolute; left: 6px; right: 6px; bottom: 6px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.85); overflow: hidden; }
+.tc-foto__barra span { display: block; height: 100%; background: var(--tc-verde); transition: width .25s ease; }
+.tc-foto__ok { position: absolute; right: -6px; top: -6px; width: 24px; height: 24px; border-radius: 12px; background: var(--tc-verde); color: #fff; font-size: 14px; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+body.tc-cam-abierta { overflow: hidden; }
+.tc-cam { position: fixed; inset: 0; z-index: 9999; background: #000; }
+.tc-cam[hidden] { display: none; }
+.tc-cam__video, .tc-cam__foto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.tc-cam__video--espejo { transform: scaleX(-1); }
+.tc-cam__foto { object-fit: contain; background: #000; }
+.tc-cam__foto[hidden] { display: none; }
+.tc-cam__guia { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); border: 3px solid rgba(255,255,255,.95); box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); pointer-events: none; }
+.tc-cam__guia--carne { width: 86vw; max-width: 520px; aspect-ratio: 1.586; border-radius: 14px; }
+.tc-cam__guia--selfie { width: 60vw; max-width: 320px; aspect-ratio: .78; border-radius: 50%; }
+.tc-cam__guia--ancho { width: 92vw; max-width: 600px; aspect-ratio: 4 / 3; border-radius: 16px; }
+.tc-cam__guia--fuera { display: none; }
+.tc-cam__txt { position: absolute; left: 16px; right: 16px; top: max(16px, env(safe-area-inset-top)); margin: 0; padding: 10px 14px; border-radius: 12px; background: rgba(0,0,0,.45); color: #fff; font-size: 16px; font-weight: 700; text-align: center; }
+.tc-cam__botones { position: absolute; left: 0; right: 0; bottom: max(28px, env(safe-area-inset-bottom)); display: flex; justify-content: space-around; align-items: center; gap: 12px; padding: 0 16px; }
+.tc-cam__b { min-width: 100px; padding: 14px 18px; border: 0; border-radius: 99px; background: rgba(255,255,255,.2); color: #fff; font: inherit; font-size: 16px; font-weight: 700; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.tc-cam__b--si { background: var(--tc-verde); }
+.tc-cam__disparo { width: 78px; height: 78px; padding: 0; border: 4px solid #fff; border-radius: 50%; background: transparent; display: flex; align-items: center; justify-content: center; }
+.tc-cam__disparo span { display: block; width: 60px; height: 60px; border-radius: 50%; background: #fff; transition: transform .1s; }
+.tc-cam__disparo:active span { transform: scale(.88); }
+.tc-cam__b--chico { min-width: 0; padding: 12px 14px; font-size: 15px; }

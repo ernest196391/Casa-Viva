@@ -16,7 +16,7 @@
 	var USOS = [['pasaje', 'Pasaje', ['viaje', 'paquete']], ['carga', 'Carga', ['carga', 'paquete']], ['dos', 'Los dos', ['viaje', 'paquete', 'carga']]];
 	// 3.14.132: con verificación (como QvaPay): carné + selfie sosteniendo el carné, con la cámara (capture), no de la galería.
 	var FOTOS = C.verificar
-		? [['carne', 'Tu carné', 'por delante, que se lea', 'environment'], ['selfie', 'Selfie con tu carné', 'tu cara y el carné al lado', 'user'], ['triciclo', 'Tu triciclo', 'de frente o de lado', 'environment'], ['licencia', 'Licencia', 'si la tienes', '']]
+		? [['carne', 'Tu carné', 'por delante, que se lea', 'environment'], ['selfie', 'Tu cara (selfie)', 'de frente, sin gafas ni gorra', 'user'], ['triciclo', 'Tu triciclo', 'de frente o de lado', 'environment'], ['licencia', 'Licencia', 'si la tienes', 'environment']]
 		: [['perfil', 'Tu foto', 'tu cara, de frente', 'user'], ['triciclo', 'Tu triciclo', 'de frente o de lado', ''], ['licencia', 'Licencia', 'si la tienes', '']];
 	var S = { token: '', hoy: null, blocked: null, toast: '', busy: false, hoja: '', form: null, sucio: false, offline: false, gps: null, terminado: null, subiendo: {} };
 	var T = { poll: 0, gps: 0, toast: 0, tick: 0 };
@@ -74,7 +74,11 @@
 				var era = S.hoy && S.hoy.ficha && S.hoy.ficha.estado, es = res.data.ficha && res.data.ficha.estado;
 				if (era === 'verificando' && es && es !== 'verificando') { S.hoja = ''; S.sucio = false; toast(es === 'aprobado' ? '✅ ¡Aprobado! Toca «Conectarme» para recibir viajes.' : (es === 'revision' ? 'Una persona mirará tus datos. Te avisamos.' : 'Hay algo que corregir: míralo arriba.')); }
 				S.hoy = res.data;
-				if (!S.form || !S.sucio) { S.form = formDe(res.data); }
+				if (!S.form || !S.sucio) {
+					S.form = formDe(res.data);
+					var bo = borrador(), fe = res.data.ficha && res.data.ficha.estado;
+					if (bo && fe !== 'aprobado' && fe !== 'verificando' && fe !== 'revision') { Object.keys(bo).forEach(function (k) { S.form[k] = bo[k]; }); S.sucio = true; }
+				}
 				if (res.data.pedidos.length > antes) { alarma(true); if (navigator.vibrate) { try { navigator.vibrate([300, 120, 300, 120, 300]); } catch (e) {} } }
 				if (!res.data.pedidos.length && audio.timer) { alarma(false); }
 				if (res.data.activo) { gpsViaje(); } else { gpsLibre(); }
@@ -143,17 +147,165 @@
 			img.src = url;
 		});
 	}
-	function subirFoto(cual, file) {
-		S.subiendo[cual] = true; render();
-		achicar(file, 1280).then(function (blob) {
-			var fd = new FormData(); fd.append('cual', cual); fd.append('foto', blob, cual + '.jpg');
-			return fetch(API + 'chofer/foto', { method: 'POST', headers: { 'X-Palla-Token': S.token }, body: fd, credentials: 'omit', cache: 'no-store' }).then(function (r) { return r.json(); });
-		}).then(function (d) {
-			S.subiendo[cual] = false;
-			if (d && d.ok) { toast('Foto guardada.'); load(); } else { toast((d && d.message) || 'No se pudo subir la foto.'); }
-		}, function () { S.subiendo[cual] = false; toast('Sin conexión. Prueba otra vez.'); });
+	// 3.14.133 (Ernesto 4-nov: «tomé la foto y no cargó y no sé qué pasó»): la pantalla se repintaba cada 30 s con la cámara
+	// abierta y el <input> de la foto se cambiaba por otro: la foto llegaba a uno que ya no estaba y se perdía sin aviso.
+	// Ahora, como los bancos: cámara dentro de la página con guía (no se sale a otra app, que en Android puede recargar la
+	// página), la foto se ve al momento con aviso si está oscura o movida, y se sube con barra de % y reintento sin repetirla.
+	// Si el móvil no deja usar la cámara aquí, un <input> fijo fuera de la pantalla que se repinta (no se pierde).
+	var FOTO = {}; // cual → { local: url de la vista previa, estado: subiendo|lista|error, pct, blob, aviso, msg }
+	function datoFoto(cual) { return FOTOS.filter(function (p) { return p[0] === cual; })[0] || [cual, cual, '', '']; }
+	function calidad(canvas) { // en el móvil, gratis: luz media y nitidez (varianza del laplaciano) en 160 px
+		try {
+			var w = 160, h = Math.max(1, Math.round(canvas.height * 160 / canvas.width)), c = document.createElement('canvas');
+			c.width = w; c.height = h; var cx = c.getContext('2d'); cx.drawImage(canvas, 0, 0, w, h);
+			var d = cx.getImageData(0, 0, w, h).data, g = new Float32Array(w * h), suma = 0, i, x, y;
+			for (i = 0; i < w * h; i++) { g[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]; suma += g[i]; }
+			var lap = 0, n = 0;
+			for (y = 1; y < h - 1; y++) { for (x = 1; x < w - 1; x++) { i = y * w + x; var v = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - w] - g[i + w]; lap += v * v; n++; } }
+			var luz = suma / (w * h), nitidez = n ? lap / n : 999;
+			return luz < 55 ? 'Está oscura: busca más luz.' : (luz > 235 ? 'Tiene demasiada luz o reflejo.' : (nitidez < 30 ? 'Parece movida: sujeta el móvil quieto.' : ''));
+		} catch (e) { return ''; }
 	}
+	function subir(cual, blob) {
+		var f = FOTO[cual] = FOTO[cual] || {};
+		f.blob = blob; f.estado = 'subiendo'; f.pct = 0; f.msg = '';
+		pintarFoto(cual);
+		var xhr = new XMLHttpRequest();
+		xhr.open('POST', API + 'chofer/foto');
+		xhr.setRequestHeader('X-Palla-Token', S.token);
+		xhr.timeout = 120000;
+		xhr.upload.onprogress = function (e) { if (e.lengthComputable) { f.pct = Math.min(99, Math.round(100 * e.loaded / e.total)); pintarFoto(cual); } };
+		xhr.onload = function () {
+			var d = {}; try { d = JSON.parse(xhr.responseText); } catch (e) {}
+			if (xhr.status === 200 && d.ok) { f.estado = 'lista'; f.blob = null; if (navigator.vibrate) { try { navigator.vibrate(40); } catch (e) {} } load(); }
+			else { f.estado = 'error'; f.msg = d.message || 'No se subió.'; }
+			pintarFoto(cual);
+		};
+		xhr.onerror = xhr.ontimeout = function () { f.estado = 'error'; f.msg = 'Sin conexión.'; pintarFoto(cual); };
+		var fd = new FormData(); fd.append('cual', cual); fd.append('foto', blob, cual + '.jpg');
+		xhr.send(fd);
+	}
+	function usarFoto(cual, canvas) { // canvas ya achicado → vista previa al momento + aviso de calidad + subir
+		var f = FOTO[cual] = FOTO[cual] || {};
+		f.aviso = calidad(canvas);
+		canvas.toBlob(function (b) {
+			if (!b) { toast('No se pudo leer la foto.'); return; }
+			if (f.local) { URL.revokeObjectURL(f.local); }
+			f.local = URL.createObjectURL(b);
+			subir(cual, b);
+		}, 'image/jpeg', 0.82);
+	}
+	function lienzo(fuente, ancho, alto, lado) {
+		var k = Math.min(1, lado / Math.max(ancho, alto)), c = document.createElement('canvas');
+		c.width = Math.round(ancho * k); c.height = Math.round(alto * k);
+		c.getContext('2d').drawImage(fuente, 0, 0, c.width, c.height);
+		return c;
+	}
+	// El <input> de reserva vive fuera de #app: los repintados no lo cambian y la foto siempre llega.
+	var archivo = document.createElement('input');
+	archivo.type = 'file'; archivo.accept = 'image/*'; archivo.hidden = true; document.body.appendChild(archivo);
+	archivo.addEventListener('change', function () {
+		var cual = archivo.getAttribute('data-cual'), file = archivo.files && archivo.files[0];
+		archivo.value = '';
+		if (!cual || !file) { return; }
+		var img = new Image(), url = URL.createObjectURL(file);
+		img.onload = function () { var c = lienzo(img, img.naturalWidth, img.naturalHeight, 1280); URL.revokeObjectURL(url); usarFoto(cual, c); };
+		img.onerror = function () { URL.revokeObjectURL(url); subir(cual, file); };
+		img.src = url;
+	});
+	function elegirArchivo(cual, camara) { // camara = abrir la cámara del móvil; si no, la galería (fotos que ya tiene)
+		var p = datoFoto(cual);
+		archivo.setAttribute('data-cual', cual);
+		if (camara && p[3]) { archivo.setAttribute('capture', p[3]); } else { archivo.removeAttribute('capture'); }
+		archivo.click();
+	}
+	// La cámara dentro de la página, con la guía de cada foto.
+	var CAM = { el: null, stream: null, cual: '', facing: 'environment', foto: null };
+	var GUIA = { carne: ['carne', 'Pon tu carné dentro del recuadro, por delante y que se lea.'], licencia: ['carne', 'Pon tu licencia dentro del recuadro.'], selfie: ['selfie', 'Tu cara dentro del óvalo, de frente y con buena luz.'], perfil: ['selfie', 'Tu cara dentro del óvalo.'], triciclo: ['ancho', 'Que se vea el triciclo entero, de frente o de lado.'] };
+	function camaraUI() {
+		if (CAM.el) { return CAM.el; }
+		var el = document.createElement('div');
+		el.className = 'tc-cam'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Cámara'); el.hidden = true;
+		el.innerHTML = '<video class="tc-cam__video" playsinline muted autoplay></video><img class="tc-cam__foto" alt="" hidden><div class="tc-cam__guia"></div>'
+			+ '<p class="tc-cam__txt" role="status"></p><div class="tc-cam__botones"></div>';
+		el.addEventListener('click', function (e) {
+			var b = e.target.closest('[data-cam]'); if (!b) { return; }
+			var a = b.getAttribute('data-cam');
+			if (a === 'cerrar') { cerrarCamara(); }
+			else if (a === 'disparar') { disparar(); }
+			else if (a === 'girar') { CAM.facing = CAM.facing === 'user' ? 'environment' : 'user'; encender(); }
+			else if (a === 'repetir') { CAM.foto = null; pintarCamara(); }
+			else if (a === 'usar') { var c = CAM.foto, cual = CAM.cual; cerrarCamara(); usarFoto(cual, c); }
+			else if (a === 'galeria') { var q = CAM.cual; cerrarCamara(); elegirArchivo(q); }
+		});
+		document.body.appendChild(el);
+		return (CAM.el = el);
+	}
+	function pintarCamara() {
+		var el = CAM.el, g = GUIA[CAM.cual] || ['ancho', ''], foto = el.querySelector('.tc-cam__foto'), video = el.querySelector('.tc-cam__video');
+		el.querySelector('.tc-cam__guia').className = 'tc-cam__guia tc-cam__guia--' + g[0] + (CAM.foto ? ' tc-cam__guia--fuera' : '');
+		video.classList.toggle('tc-cam__video--espejo', CAM.facing === 'user');
+		foto.hidden = !CAM.foto;
+		var aviso = CAM.foto ? calidad(CAM.foto) : '';
+		if (CAM.foto) { foto.src = CAM.foto.toDataURL('image/jpeg', 0.7); }
+		el.querySelector('.tc-cam__txt').innerHTML = CAM.foto ? (aviso ? '⚠ ' + esc(aviso) + ' Mejor repítela.' : '✓ Se ve bien. ¿La usamos?') : esc(g[1]);
+		el.querySelector('.tc-cam__botones').innerHTML = CAM.foto
+			? '<button type="button" class="tc-cam__b" data-cam="repetir">Repetir</button><button type="button" class="tc-cam__b tc-cam__b--si" data-cam="usar">Usar foto</button>'
+			: '<button type="button" class="tc-cam__b tc-cam__b--chico" data-cam="cerrar">Cerrar</button><button type="button" class="tc-cam__b tc-cam__b--chico" data-cam="galeria">Galería</button><button type="button" class="tc-cam__disparo" data-cam="disparar" aria-label="Sacar la foto"><span></span></button><button type="button" class="tc-cam__b tc-cam__b--chico" data-cam="girar" aria-label="Cambiar de cámara">↺</button>';
+	}
+	function encender() {
+		if (CAM.stream) { CAM.stream.getTracks().forEach(function (t) { t.stop(); }); CAM.stream = null; }
+		var el = camaraUI(), video = el.querySelector('.tc-cam__video');
+		el.querySelector('.tc-cam__txt').textContent = 'Abriendo la cámara…';
+		navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: CAM.facing, width: { ideal: 1920 }, height: { ideal: 1440 } } }).then(function (st) {
+			if (el.hidden) { st.getTracks().forEach(function (t) { t.stop(); }); return; }
+			CAM.stream = st; video.srcObject = st; var pl = video.play(); if (pl && pl.catch) { pl.catch(function () {}); }
+			pintarCamara();
+		}, function () { // sin permiso o sin cámara: la de siempre (o la galería)
+			var q = CAM.cual; cerrarCamara(); toast('La cámara no se pudo abrir aquí: se abre la del móvil.'); elegirArchivo(q, true);
+		});
+	}
+	function abrirCamara(cual) {
+		if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { elegirArchivo(cual, true); return; }
+		var el = camaraUI(), p = datoFoto(cual);
+		CAM.cual = cual; CAM.foto = null; CAM.facing = p[3] === 'user' ? 'user' : 'environment';
+		el.hidden = false; document.body.classList.add('tc-cam-abierta');
+		pintarCamara(); encender();
+	}
+	function disparar() {
+		var v = CAM.el.querySelector('.tc-cam__video');
+		if (!v.videoWidth) { return; }
+		CAM.foto = lienzo(v, v.videoWidth, v.videoHeight, 1280);
+		if (navigator.vibrate) { try { navigator.vibrate(30); } catch (e) {} }
+		pintarCamara();
+	}
+	function cerrarCamara() {
+		if (CAM.stream) { CAM.stream.getTracks().forEach(function (t) { t.stop(); }); CAM.stream = null; }
+		if (CAM.el) { CAM.el.hidden = true; CAM.el.querySelector('.tc-cam__video').srcObject = null; }
+		document.body.classList.remove('tc-cam-abierta');
+	}
+	function htmlFoto(p, url) { // el recuadro de una foto: vista previa, barra de subida, lista o reintentar
+		var f = FOTO[p[0]] || {}, img = f.local || url, est = f.estado || (url ? 'lista' : '');
+		var pie = est === 'subiendo' ? 'Subiendo ' + (f.pct || 0) + ' %' : (est === 'error' ? '✖ ' + (f.msg || 'No se subió') + ' Toca para reintentar' : (est === 'lista' ? (f.aviso ? '⚠ ' + f.aviso : '✓ Lista · toca para cambiarla') : p[2]));
+		return '<button type="button" class="tc-foto tc-foto--' + (est || 'vacia') + '" data-act="foto" data-id="' + p[0] + '">'
+			+ '<span class="tc-foto__img">' + (img ? '<img src="' + esc(img) + '" alt="">' : '<span class="tc-foto__mas" aria-hidden="true">📷</span>')
+			+ (est === 'subiendo' ? '<span class="tc-foto__barra"><span style="width:' + (f.pct || 0) + '%"></span></span>' : '')
+			+ (est === 'lista' && !f.aviso ? '<span class="tc-foto__ok" aria-hidden="true">✓</span>' : '') + '</span>'
+			+ '<b>' + esc(p[1]) + '</b><small role="status">' + esc(pie) + '</small></button>';
+	}
+	function pintarFoto(cual) { // solo ese recuadro, sin repintar toda la pantalla (no se pierde lo que escribes)
+		var b = app.querySelector('[data-act="foto"][data-id="' + cual + '"]'), p = datoFoto(cual);
+		if (!b) { return; }
+		var fi = (S.hoy && S.hoy.ficha) || {}, t = document.createElement('div');
+		t.innerHTML = htmlFoto(p, (fi.fotos || {})[cual]);
+		b.parentNode.replaceChild(t.firstChild, b);
+	}
+	// Lo que escribe el chofer queda en el móvil hasta enviarlo (si Android recarga la página, no se pierde).
+	function guardarBorrador() { if (S.form && S.sucio) { set('tc.borrador', JSON.stringify(S.form)); } }
+	function borrador() { try { return JSON.parse(get('tc.borrador') || 'null'); } catch (e) { return null; } }
 	function enviarAlta() {
+		var subiendo = Object.keys(FOTO).filter(function (k) { return FOTO[k].estado === 'subiendo'; });
+		if (subiendo.length) { toast('Espera a que terminen de subir las fotos.'); return; }
 		var e = erroresPrecio(S.form);
 		if (e.length) { toast('Revisa: ' + e.join(' · ')); return; }
 		S.busy = true; render();
@@ -165,6 +317,7 @@
 				S.busy = false;
 				if (bloqueado(r)) { return; }
 				if (!r.data.ok) { toast(r.data.message || 'No se pudo.'); load(); return; }
+				set('tc.borrador', '');
 				if (r.data.estado === 'verificando') { toast('Enviado. Comprobamos tus datos en 1 o 2 minutos.'); load(); return; }
 				S.hoja = ''; toast('¡Listo! Ya eres chofer de Triciclub. Toca «Conectarme» para recibir viajes.'); load();
 			});
@@ -382,12 +535,7 @@
 			+ (uso !== 'carga' ? '<label class="tc-field"><span>¿Cuántas personas llevas?</span><input class="tc-input" inputmode="numeric" data-f="plazas" value="' + esc(f.plazas) + '"></label>' : '')
 			+ (uso === 'carga' || uso === 'dos' ? '<label class="tc-field"><span>¿Cuántos kilos cargas?</span><input class="tc-input" inputmode="numeric" data-f="carga_kg" value="' + esc(f.carga_kg) + '"></label>' : '') + '</div>';
 		x += '<p class="tc-strong" style="margin:4px 0 0">Fotos</p><div class="tc-fotos">';
-		FOTOS.forEach(function (p) {
-			var url = fotos[p[0]], sub = S.subiendo[p[0]];
-			x += '<label class="tc-foto' + (url ? ' tc-foto--ok' : '') + '"><input type="file" accept="image/*"' + (p[3] ? ' capture="' + p[3] + '"' : '') + ' data-foto="' + p[0] + '" hidden>'
-				+ (url ? '<img src="' + esc(url) + '" alt="">' : '<span class="tc-foto__mas" aria-hidden="true">📷</span>')
-				+ '<b>' + esc(p[1]) + '</b><small>' + (sub ? 'Subiendo…' : esc(url ? 'toca para cambiarla' : p[2])) + '</small></label>';
-		});
+		FOTOS.forEach(function (p) { x += htmlFoto(p, fotos[p[0]]); });
 		x += '</div>';
 		if (est !== 'aprobado' && fi.faltan && fi.faltan.length && fi.enviado) { x += '<p class="tc-small">Falta: ' + esc(fi.faltan.join(', ')) + '.</p>'; }
 		return x;
@@ -417,6 +565,7 @@
 		var c = document.getElementById('tc-codigo'); if (c) { c.value = codigo; }
 		if (foco) { var el = app.querySelector('[data-f="' + foco + '"],[data-x="' + foco + '"],#' + String(foco).replace(/[^\w-]/g, '')); if (el && el.focus) { el.focus(); } }
 		if (conMapaFondo) { if (!antes && mapa) { setTimeout(function () { mapa.resize(); }, 30); } pintarMapa(); }
+		guardarBorrador();
 	}
 
 	// ------------------------------------------------------------ Eventos
@@ -424,13 +573,11 @@
 		var t = e.target, k = t.getAttribute('data-f'), x = t.getAttribute('data-x');
 		if (!S.form) { return; }
 		if (k || x) { S.sucio = true; }
-		if (k) { S.form[k] = t.value; }
+		if (k) { S.form[k] = t.value; guardarBorrador(); }
 		if (x) { S.form.extras[x] = Math.max(0, Math.min(100, parseInt(t.value, 10) || 0)); }
 		if (k || x) { var ej = app.querySelector('.tc-ejemplos'); if (ej) { var ex = S.form.extras[S.hoy.franja.id] || 0; ej.innerHTML = [2, 5, 8].map(function (km) { return '<div>' + km + ' km<b>' + esc(cup(precio(S.form, km, ex))) + '</b></div>'; }).join(''); } }
 	});
 	app.addEventListener('change', function (e) {
-		var fo = e.target.getAttribute('data-foto');
-		if (fo && e.target.files && e.target.files[0]) { subirFoto(fo, e.target.files[0]); return; }
 		var s = e.target.getAttribute('data-s');
 		if (s && S.form) { var l = S.form.servicios.filter(function (x) { return x !== s; }); if (e.target.checked) { l.push(s); } S.form.servicios = l; S.sucio = true; }
 	});
@@ -442,6 +589,7 @@
 		else if (a === 'cerrar-menu') { S.hoja = ''; S.sucio = false; S.form = formDe(S.hoy); render(); }
 		else if (a === 'guardar') { guardar(); }
 		else if (a === 'alta') { enviarAlta(); }
+		else if (a === 'foto') { var fx = FOTO[id] || {}; if (fx.estado === 'subiendo') { return; } if (fx.estado === 'error' && fx.blob) { subir(id, fx.blob); } else { abrirCamara(id); } }
 		else if (a === 'tipo' && S.form) {
 			var tp = TIPOS.filter(function (t) { return t.id === id; })[0] || {};
 			S.form.tipo = id; if (tp.motor) { S.form.motor = tp.motor; }
