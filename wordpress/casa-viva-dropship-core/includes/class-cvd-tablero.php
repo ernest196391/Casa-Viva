@@ -133,7 +133,7 @@ final class CVD_Tablero {
 		$path = '/' . trim( (string) wp_parse_url( $uri, PHP_URL_PATH ), '/' );
 		$home = '/' . trim( (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH ), '/' );
 		if ( '/' !== $home && 0 === strpos( $path, $home ) ) { $path = '/' . ltrim( substr( $path, strlen( $home ) ), '/' ); }
-		$map = array( '/tablero' => 'page', '/tablero/datos' => 'data', '/tablero/sw.js' => 'sw', '/tablero/manifest.webmanifest' => 'manifest' );
+		$map = array( '/tablero' => 'page', '/tablero/datos' => 'data', '/tablero/accion' => 'action', '/tablero/sw.js' => 'sw', '/tablero/manifest.webmanifest' => 'manifest' );
 		return $map[ $path ] ?? '';
 	}
 
@@ -149,6 +149,7 @@ final class CVD_Tablero {
 		if ( 'manifest' === $kind ) { self::manifest(); }
 		if ( ! self::enabled() ) { self::closed(); }
 		if ( 'data' === $kind ) { self::data_request(); }
+		if ( 'action' === $kind ) { self::action_request(); }
 		self::page();
 	}
 
@@ -175,7 +176,7 @@ final class CVD_Tablero {
 			exit;
 		}
 		header( 'Content-Type: text/html; charset=utf-8' );
-		$boot = array( 'datos' => home_url( '/tablero/datos' ), 'sw' => home_url( '/tablero/sw.js' ), 'scope' => home_url( '/tablero/' ), 'version' => CVD_VERSION );
+		$boot = array( 'datos' => home_url( '/tablero/datos' ), 'accion' => home_url( '/tablero/accion' ), 'sw' => home_url( '/tablero/sw.js' ), 'scope' => home_url( '/tablero/' ), 'version' => CVD_VERSION );
 		$body = '<div id="tb-carga" class="tb-carga" role="status"><div class="tb-logo" aria-hidden="true">' . self::logo_svg() . '</div><p>Cargando el tablero</p></div>'
 			. '<div id="tb" class="tb-wrap" hidden></div>'
 			. '<noscript><main class="tb-solo"><p>El tablero necesita JavaScript.</p></main></noscript>'
@@ -259,6 +260,57 @@ final class CVD_Tablero {
 		$out['visto'] = self::local( time(), 'H:i' );
 		echo wp_json_encode( $out, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
 		exit;
+	}
+
+	/**
+	 * POST /tablero/accion {tipo:"pago", id, decision:"aprobar"|"rechazar", prueba?}. Etapa 2 (Ernesto 3-nov): decisión de un
+	 * toque. Firma la persona que toca (su usuario de la web) y usa CVD_Payouts::transition, igual que el panel. Con
+	 * «prueba» hace todas las comprobaciones y no cambia nada.
+	 */
+	private static function action_request(): void {
+		nocache_headers();
+		header( 'Content-Type: application/json; charset=utf-8' );
+		$out = static function ( int $status, bool $ok, string $message, array $extra = array() ): void {
+			status_header( $status );
+			echo wp_json_encode( array_merge( array( 'ok' => $ok, 'message' => $message ), $extra ), JSON_UNESCAPED_UNICODE );
+			exit;
+		};
+		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || '1' !== (string) ( $_SERVER['HTTP_X_TABLERO'] ?? '' ) ) { $out( 405, false, 'Solicitud no válida.' ); }
+		$user_id = self::viewer();
+		if ( ! $user_id ) { $out( 403, false, 'Tu enlace caducó o ya no vale.' ); }
+		if ( ! in_array( self::role_of( $user_id ), array( 'administracion', 'dueno' ), true ) || ! user_can( $user_id, 'manage_woocommerce' ) ) { $out( 403, false, 'Esta decisión no te toca.' ); }
+		$hits_key = 'cvd_tb_act_' . $user_id . '_' . gmdate( 'YmdHi' );
+		$hits = (int) get_transient( $hits_key );
+		if ( $hits >= 10 ) { $out( 429, false, 'Demasiadas decisiones seguidas. Espera un minuto.' ); }
+		set_transient( $hits_key, $hits + 1, 2 * MINUTE_IN_SECONDS );
+		$in = json_decode( (string) file_get_contents( 'php://input', false, null, 0, 2001 ), true );
+		$in = is_array( $in ) ? $in : array();
+		$tipo = sanitize_key( (string) ( $in['tipo'] ?? '' ) );
+		$id = absint( $in['id'] ?? 0 );
+		$decision = sanitize_key( (string) ( $in['decision'] ?? '' ) );
+		if ( 'pago' !== $tipo || ! $id || ! in_array( $decision, array( 'aprobar', 'rechazar' ), true ) || ! class_exists( 'CVD_Payouts' ) ) { $out( 422, false, 'Decisión no válida.' ); }
+		$payout = CVD_Payouts::get( $id );
+		if ( ! $payout ) { $out( 404, false, 'Ese pago ya no existe.' ); }
+		if ( 'requested' !== (string) $payout['status'] ) { $out( 409, false, 'Esa comisión ya se decidió. Toca «Actualizar».' ); }
+		$owner = get_userdata( (int) $payout['owner_user_id'] );
+		$who = $owner ? (string) $owner->display_name : 'la gestora';
+		$amount = self::money( array( strtoupper( (string) $payout['currency'] ) => (float) $payout['amount'] ) );
+		if ( ! empty( $in['prueba'] ) ) { $out( 200, true, 'Prueba: se podría ' . ( 'aprobar' === $decision ? 'aprobar' : 'no aprobar' ) . ' ' . $amount . ' a ' . $who . '. No se cambió nada.', array( 'prueba' => true ) ); }
+		wp_set_current_user( $user_id );
+		$result = CVD_Payouts::transition( $id, 'aprobar' === $decision ? 'approve' : 'reject', 'tablero' );
+		$ok = ! is_wp_error( $result );
+		$list = get_option( 'cvd_tablero_decisiones', array() );
+		$list = is_array( $list ) ? $list : array();
+		array_unshift( $list, array( 'user' => $user_id, 'tipo' => $tipo, 'id' => $id, 'decision' => $decision, 'ok' => $ok, 'error' => $ok ? '' : $result->get_error_message(), 'at' => gmdate( 'Y-m-d H:i:s' ) ) );
+		update_option( 'cvd_tablero_decisiones', array_slice( $list, 0, 200 ), false );
+		if ( ! $ok ) { $out( 409, false, 'No se pudo: ' . $result->get_error_message() ); }
+		// Se lee el estado real antes de decir «hecho».
+		$after = CVD_Payouts::get( $id );
+		$want = 'aprobar' === $decision ? 'approved' : 'rejected';
+		if ( ! $after || $want !== (string) $after['status'] ) { $out( 500, false, 'No se pudo comprobar el cambio. Míralo en el panel.' ); }
+		delete_transient( 'cvd_tb_core' );
+		update_option( 'cvd_tablero_rev', (int) get_option( 'cvd_tablero_rev', 0 ) + 1, false );
+		$out( 200, true, 'aprobar' === $decision ? 'Hecho: aprobada la comisión de ' . $who . ' (' . $amount . '). Ya sale en «Pagar a…».' : 'Hecho: no aprobada la comisión de ' . $who . ' (' . $amount . ').' );
 	}
 
 	private static function log_access( int $user_id, string $via ): void {
@@ -521,7 +573,7 @@ final class CVD_Tablero {
 	public static function view( string $role, int $user_id ): array {
 		// La vista hecha se guarda 60 s (y se rehace al llegar otro resumen del VPS): con internet lento cada segundo cuenta.
 		$saved = get_option( self::VPS, array() );
-		$key = 'cvd_tb_view_' . md5( $role . '|' . $user_id . '|' . (int) ( is_array( $saved ) ? ( $saved['at'] ?? 0 ) : 0 ) );
+		$key = 'cvd_tb_view_' . md5( $role . '|' . $user_id . '|' . (int) ( is_array( $saved ) ? ( $saved['at'] ?? 0 ) : 0 ) . '|' . (int) get_option( 'cvd_tablero_rev', 0 ) );
 		$cached = get_transient( $key );
 		if ( is_array( $cached ) ) { return $cached; }
 		$out = self::build_view( $role, $user_id );
@@ -596,9 +648,20 @@ final class CVD_Tablero {
 		foreach ( (array) ( $pay['lista'] ?? array() ) as $po ) {
 			$approved = 'approved' === $po['estado'];
 			$url = $approved && class_exists( 'CVD_Payout_Pay_Page' ) ? ( '' !== $viewer_phone ? CVD_Payout_Pay_Page::signed_url( $po['id'], $viewer_phone ) : CVD_Payout_Pay_Page::url( $po['id'] ) ) : $links['panel'];
-			$pay_rows[] = array( 't' => ( $approved ? 'Pagar a ' : 'Aprobar: ' ) . $po['quien'], 'r' => $po['importe'], 'tag' => $po['horas'] >= (int) $cfg['umbrales']['comision_h'] ? 'amarillo' : '', 'tag_txt' => self::hours_text( max( 1, $po['horas'] ) ), 'url' => $url );
+			$row = array( 't' => ( $approved ? 'Pagar a ' : 'Comisión pedida: ' ) . $po['quien'], 'r' => $po['importe'], 'tag' => $po['horas'] >= (int) $cfg['umbrales']['comision_h'] ? 'amarillo' : '', 'tag_txt' => self::hours_text( max( 1, $po['horas'] ) ) );
+			if ( $approved ) {
+				$row['url'] = $url;
+			} else {
+				// Decisión de un toque (Etapa 2, Ernesto 3-nov): el mismo camino que el panel (CVD_Payouts::transition).
+				$row['efecto'] = 'Si apruebas, pasa a «Pagar a…» por ' . $po['importe'] . '.';
+				$row['acciones'] = array(
+					array( 'txt' => 'Aprobar', 'tipo' => 'pago', 'id' => $po['id'], 'decision' => 'aprobar', 'aviso' => 'Aprobando ' . $po['importe'] . ' a ' . $po['quien'] ),
+					array( 'txt' => 'No aprobar', 'tipo' => 'pago', 'id' => $po['id'], 'decision' => 'rechazar', 'aviso' => 'No apruebas la comisión de ' . $po['quien'] ),
+				);
+			}
+			$pay_rows[] = $row;
 		}
-		$lennys_cards[] = array( 'id' => 'salidas', 'titulo' => 'Pagos por hacer', 'nota' => 'toca uno para pagar', 'detalle' => $pay_rows, 'filas' => array(
+		$lennys_cards[] = array( 'id' => 'salidas', 'titulo' => 'Pagos por hacer', 'nota' => 'decide o paga desde aquí', 'detalle' => $pay_rows, 'filas' => array(
 			array( 't' => 'Comisiones pedidas', 'r' => $pay['pedidas']['n'] . ( $pay['pedidas']['n'] ? ' · ' . self::money( $pay['pedidas']['importe'] ) : '' ), 'tag' => $pay['pedidas']['n'] && $pay['pedidas']['horas'] >= (int) $cfg['umbrales']['comision_h'] ? 'amarillo' : '', 'tag_txt' => $pay['pedidas']['n'] && $pay['pedidas']['horas'] >= (int) $cfg['umbrales']['comision_h'] ? self::hours_text( $pay['pedidas']['horas'] ) : '' ),
 			array( 't' => 'Aprobadas, falta pagar', 'r' => $pay['aprobadas']['n'] . ( $pay['aprobadas']['n'] ? ' · ' . self::money( $pay['aprobadas']['importe'] ) : '' ) ),
 		), 'enlace' => array( 'txt' => 'Aprobar en el panel', 'url' => $links['panel'] ) );

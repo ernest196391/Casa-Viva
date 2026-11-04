@@ -40,7 +40,50 @@
     if (f.r) right.appendChild(el('b', null, f.r));
     if (f.tag) right.appendChild(tag(f.tag, f.tag_txt));
     r.appendChild(right);
-    return r;
+    if (!f.acciones || !f.acciones.length) return r;
+    var wrap = el('div', 'tb-dec');
+    wrap.appendChild(r);
+    if (f.efecto) wrap.appendChild(el('p', 'tb-small', f.efecto));
+    var bar = el('div', 'tb-acts');
+    f.acciones.forEach(function (a, i) {
+      var b = el('button', i === 0 ? 'tb-act tb-act-si' : 'tb-act', a.txt); b.type = 'button';
+      b.addEventListener('click', function () { decidir(a, wrap); });
+      bar.appendChild(b);
+    });
+    wrap.appendChild(bar);
+    return wrap;
+  }
+
+  // Decisión de un toque: 10 s para deshacer y, después, la web dice el resultado real.
+  function decidir(a, wrap) {
+    var bar = wrap.querySelector('.tb-acts');
+    var seg = 10;
+    bar.textContent = '';
+    var msg = el('span', 'tb-cuenta', a.aviso + ' en ' + seg + ' s');
+    var undo = el('button', 'tb-act', 'Deshacer'); undo.type = 'button';
+    bar.appendChild(msg); bar.appendChild(undo);
+    var timer = setInterval(function () {
+      seg -= 1;
+      if (seg > 0) { msg.textContent = a.aviso + ' en ' + seg + ' s'; return; }
+      clearInterval(timer);
+      undo.remove();
+      msg.textContent = 'Guardando…';
+      enviar(a, msg);
+    }, 1000);
+    undo.addEventListener('click', function () { clearInterval(timer); state.hash = ''; cargar(true); });
+  }
+
+  function enviar(a, msg) {
+    var headers = { 'Content-Type': 'application/json', 'X-Tablero': '1' };
+    if (token) headers['X-Tablero-Token'] = token;
+    fetch(B.accion, { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: headers, body: JSON.stringify({ tipo: a.tipo, id: a.id, decision: a.decision }) })
+      .then(function (res) { return res.json(); })
+      .then(function (j) {
+        msg.textContent = (j && j.message) || 'No se pudo. Inténtalo de nuevo.';
+        msg.className = 'tb-cuenta ' + (j && j.ok ? 'tb-ok' : 'tb-mal');
+        if (j && j.ok) setTimeout(function () { state.hash = ''; cargar(true); }, 2500);
+      })
+      .catch(function () { msg.textContent = 'Sin conexión: no se guardó. Inténtalo cuando vuelva.'; msg.className = 'tb-cuenta tb-mal'; });
   }
 
   function tarjeta(c) {
