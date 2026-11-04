@@ -281,6 +281,8 @@ final class CVD_Triciclub_Api {
 			'nota'        => null !== $ch->nota_media ? round( (float) $ch->nota_media, 1 ) : null,
 			'viajes'      => (int) $ch->viajes_total,
 			'lot_ok'      => '' !== (string) $ch->lot_numero && null !== $ch->lot_vence && (string) $ch->lot_vence >= $hoy,
+			'tipo'        => CVD_Triciclub_Alta::tipo_de( $ch ), // 3.14.130: el cliente elige el tipo
+			'foto'        => CVD_Triciclub_Alta::foto_url( $ch, 'perfil', true ),
 		);
 	}
 
@@ -506,7 +508,7 @@ final class CVD_Triciclub_Api {
 			'ok'       => true,
 			'now'      => gmdate( 'c' ),
 			'yo'       => array( 'nombre' => (string) $u->display_name ),
-			'ficha'    => $ch ? self::ficha( $ch ) : null,
+			'ficha'    => $ch ? self::ficha( $ch, $u ) : null,
 			'perfil'   => $perfil,
 			'franjas'  => CVD_Triciclub_Precio::franjas(),
 			'franja'   => self::franja_publica(),
@@ -518,9 +520,19 @@ final class CVD_Triciclub_Api {
 		) );
 	}
 
-	private static function ficha( object $ch ): array {
+	private static function ficha( object $ch, ?WP_User $u = null ): array {
 		return array(
 			'estado'        => (string) $ch->estado,
+			// 3.14.130: alta de choferes (se aprueba sola con todo puesto)
+			'tipo'          => isset( CVD_Triciclub_Alta::TIPOS[ (string) $ch->tipo ] ) ? (string) $ch->tipo : '',
+			'motor'         => (string) $ch->motor,
+			'carga_kg'      => (int) $ch->carga_kg,
+			'fotos'         => array_combine( CVD_Triciclub_Alta::FOTOS, array_map( static fn( string $c ): string => CVD_Triciclub_Alta::foto_url( $ch, $c, true ), CVD_Triciclub_Alta::FOTOS ) ),
+			'nombre'        => $u ? (string) $u->display_name : '',
+			'propio'        => $u ? CVD_Triciclub_Alta::es_propio( $u ) : false,
+			'faltan'        => $u ? CVD_Triciclub_Alta::faltan( $ch, $u ) : array(),
+			'enviado'       => null !== $ch->enviado_at,
+			'motivo'        => (string) $ch->motivo,
 			'numero'        => (string) $ch->numero,
 			'descripcion'   => (string) $ch->descripcion,
 			'plazas'        => (int) $ch->plazas,
@@ -588,10 +600,17 @@ final class CVD_Triciclub_Api {
 			if ( isset( $p[ $k ] ) ) { $set[ $k ] = self::txt( $p[ $k ], $max ); }
 		}
 		if ( isset( $p['plazas'] ) ) { $set['plazas'] = $int( $p['plazas'], 0, 12 ); }
+		if ( isset( $p['tipo'] ) && isset( CVD_Triciclub_Alta::TIPOS[ (string) $p['tipo'] ] ) ) { $set['tipo'] = (string) $p['tipo']; } // 3.14.130
+		if ( isset( $p['motor'] ) && isset( CVD_Triciclub_Alta::MOTORES[ (string) $p['motor'] ] ) ) { $set['motor'] = (string) $p['motor']; }
+		if ( isset( $p['carga_kg'] ) ) { $set['carga_kg'] = $int( $p['carga_kg'], 0, 2000 ); }
+		if ( isset( $p['nombre'] ) && CVD_Triciclub_Alta::es_propio( $u ) ) {
+			$nombre = self::txt( $p['nombre'], 60 );
+			if ( mb_strlen( $nombre ) >= 2 ) { wp_update_user( array( 'ID' => $u->ID, 'display_name' => $nombre ) ); $u = get_userdata( $u->ID ); }
+		}
 		if ( isset( $p['lot_vence'] ) ) { $d = (string) $p['lot_vence']; $set['lot_vence'] = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $d ) ? $d : null; }
 		$wpdb->update( $t, $set, array( 'user_id' => $u->ID ) );
 		$ch = CVD_Triciclub::chofer_de( $u->ID );
-		return self::out( array( 'ok' => true, 'ficha' => self::ficha( $ch ), 'perfil' => CVD_Triciclub_Precio::perfil( $ch ) ) );
+		return self::out( array( 'ok' => true, 'ficha' => self::ficha( $ch, $u ), 'perfil' => CVD_Triciclub_Precio::perfil( $ch ) ) );
 	}
 
 	public static function chofer_disponible( WP_REST_Request $request ): WP_REST_Response {

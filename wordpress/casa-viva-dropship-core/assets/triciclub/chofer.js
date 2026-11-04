@@ -10,8 +10,12 @@
 	if (!app) { return; }
 	var API = C.api || '/wp-json/casa-viva/v1/triciclub/';
 	var HABANA = C.habana || [23.125, -82.38];
-	var SERV = [['viaje', 'Viajes'], ['paquete', 'Paquetes'], ['carga', 'Carga']];
-	var S = { token: '', hoy: null, blocked: null, toast: '', busy: false, hoja: '', form: null, sucio: false, offline: false, gps: null, terminado: null };
+	var TIPOS = C.tipos || [];
+	var MOTORES = [['pedal', 'Pedal'], ['electrico', 'Eléctrico'], ['gasolina', 'Gasolina']];
+	// 3.14.130: «Qué haces» en tres botones; los paquetes van siempre (caben en cualquier triciclo).
+	var USOS = [['pasaje', 'Pasaje', ['viaje', 'paquete']], ['carga', 'Carga', ['carga', 'paquete']], ['dos', 'Los dos', ['viaje', 'paquete', 'carga']]];
+	var FOTOS = [['perfil', 'Tu foto', 'tu cara, de frente'], ['triciclo', 'Tu triciclo', 'de frente o de lado'], ['licencia', 'Licencia', 'si la tienes']];
+	var S = { token: '', hoy: null, blocked: null, toast: '', busy: false, hoja: '', form: null, sucio: false, offline: false, gps: null, terminado: null, subiendo: {} };
 	var T = { poll: 0, gps: 0, toast: 0, tick: 0 };
 	var mapa = null, mapaEl = null;
 
@@ -54,7 +58,7 @@
 	}
 	function formDe(h) {
 		var f = h.ficha || {}, p = h.perfil || {};
-		return { numero: f.numero || '', descripcion: f.descripcion || '', plazas: f.plazas || '', servicios: f.servicios || ['viaje', 'paquete', 'carga'], lot_numero: f.lot_numero || '', lot_vence: f.lot_vence || '', licencia_cat: f.licencia_cat || '', transferencia: f.transferencia || '', precio_km: p.precio_km || 300, km_tramo: p.km_tramo || 5, precio_km_despues: p.precio_km_despues || 150, extras: p.extras || {} };
+		return { nombre: f.propio && /^Chofer \d+$/.test(f.nombre || '') ? '' : (f.nombre || ''), tipo: f.tipo || '', motor: f.motor || '', carga_kg: f.carga_kg || '', numero: f.numero || '', descripcion: f.descripcion || '', plazas: f.plazas || '', servicios: f.servicios || ['viaje', 'paquete', 'carga'], lot_numero: f.lot_numero || '', lot_vence: f.lot_vence || '', licencia_cat: f.licencia_cat || '', transferencia: f.transferencia || '', precio_km: p.precio_km || 300, km_tramo: p.km_tramo || 5, precio_km_despues: p.precio_km_despues || 150, extras: p.extras || {} };
 	}
 
 	// ------------------------------------------------------------ Datos
@@ -118,6 +122,53 @@
 			S.sucio = false; S.hoja = ''; toast('Guardado. Así te ven los clientes.'); load();
 		});
 	}
+
+	// 3.14.130: alta de choferes. La foto se achica aquí (máx. 1280 px, JPEG): con datos móviles cuesta poco subirla.
+	function achicar(file, lado) {
+		return new Promise(function (ok) {
+			if (!window.URL || !document.createElement('canvas').toBlob) { ok(file); return; }
+			var img = new Image(), url = URL.createObjectURL(file);
+			img.onload = function () {
+				var k = Math.min(1, lado / Math.max(img.width, img.height)), c = document.createElement('canvas');
+				c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+				c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+				c.toBlob(function (b) { ok(b || file); }, 'image/jpeg', 0.8);
+			};
+			img.onerror = function () { URL.revokeObjectURL(url); ok(file); };
+			img.src = url;
+		});
+	}
+	function subirFoto(cual, file) {
+		S.subiendo[cual] = true; render();
+		achicar(file, 1280).then(function (blob) {
+			var fd = new FormData(); fd.append('cual', cual); fd.append('foto', blob, cual + '.jpg');
+			return fetch(API + 'chofer/foto', { method: 'POST', headers: { 'X-Palla-Token': S.token }, body: fd, credentials: 'omit', cache: 'no-store' }).then(function (r) { return r.json(); });
+		}).then(function (d) {
+			S.subiendo[cual] = false;
+			if (d && d.ok) { toast('Foto guardada.'); load(); } else { toast((d && d.message) || 'No se pudo subir la foto.'); }
+		}, function () { S.subiendo[cual] = false; toast('Sin conexión. Prueba otra vez.'); });
+	}
+	function enviarAlta() {
+		var e = erroresPrecio(S.form);
+		if (e.length) { toast('Revisa: ' + e.join(' · ')); return; }
+		S.busy = true; render();
+		api('chofer/perfil', S.form).then(function (res) {
+			if (bloqueado(res)) { return; }
+			if (!res.data.ok) { S.busy = false; toast(res.data.message || 'No se pudo guardar.'); return; }
+			S.sucio = false;
+			api('chofer/alta', {}).then(function (r) {
+				S.busy = false;
+				if (bloqueado(r)) { return; }
+				if (!r.data.ok) { toast(r.data.message || 'No se pudo.'); load(); return; }
+				S.hoja = ''; toast('¡Listo! Ya eres chofer de Triciclub. Toca «Conectarme» para recibir viajes.'); load();
+			});
+		});
+	}
+	function usoDe(servicios) {
+		var v = servicios.indexOf('viaje') !== -1, c = servicios.indexOf('carga') !== -1;
+		return v && c ? 'dos' : (c ? 'carga' : (v ? 'pasaje' : ''));
+	}
+	function iconoTipo(t, size, color) { return '<svg width="' + size + '" height="' + Math.round(size * 0.75) + '" viewBox="0 0 32 24" fill="none" stroke="' + color + '" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + t.icono + '</svg>'; }
 
 	// ------------------------------------------------------------ GPS
 	function vigilarGps() {
@@ -216,7 +267,8 @@
 
 	function arriba() {
 		var h = S.hoy || {}, d = h.hoy || { viajes: 0, cup: 0 };
-		return '<div class="tc-arriba"><a class="tc-redondo" href="' + esc(C.palla || '/palla/') + '" aria-label="Volver a Pa\'llá">' + svg(I.atras) + '</a>'
+		var propio = h.ficha && h.ficha.propio;
+		return '<div class="tc-arriba">' + (propio ? '<span class="tc-redondo" style="visibility:hidden"></span>' : '<a class="tc-redondo" href="' + esc(C.palla || '/palla/') + '" aria-label="Volver a Pa\'llá">' + svg(I.atras) + '</a>')
 			+ '<span class="tc-saldo"><b>' + esc(cup(d.cup)) + '</b><small>hoy · ' + d.viajes + (d.viajes === 1 ? ' viaje' : ' viajes') + '</small></span>'
 			+ '<button type="button" class="tc-redondo" data-act="menu" aria-label="Mi triciclo y mis precios">' + svg(I.menu) + '</button></div>'
 			+ (S.offline ? '<div class="tc-sinred" role="status">Sin conexión. Toca otra vez cuando vuelva la señal.</div>' : '');
@@ -281,9 +333,10 @@
 	function hojaMenu() {
 		var f = S.form, h = S.hoy, est = h.ficha ? h.ficha.estado : 'nuevo', ahora = h.franja && h.franja.id;
 		var x = '<section class="tc-hoja tc-hoja--alta tc-chofer-menu"><div class="tc-buscar-cab">' + (est === 'aprobado' ? '<button type="button" class="tc-redondo" data-act="cerrar-menu" aria-label="Volver">' + svg(I.atras) + '</button>' : '') + '<span class="tc-strong">' + (est === 'aprobado' ? 'Mi triciclo y mis precios' : 'Hazte chofer de Triciclub') + '</span></div>';
-		if (est === 'pendiente') { x += '<p class="tc-aviso">Triciclub está revisando tu triciclo y tu LOT. Te avisamos.</p>'; }
-		if (est === 'suspendido') { x += '<p class="tc-aviso">Tu cuenta está parada (por ejemplo, la LOT venció). Llama a Triciclub.</p>'; }
-		x += '<h2 class="tc-h2">💰 Mis precios</h2><p class="tc-small">Los pones tú. El cliente ve el de cada triciclo según la hora y elige.</p>'
+		if (est !== 'aprobado' && est !== 'suspendido') { x += '<p class="tc-aviso">Pon tu triciclo y tus fotos, toca «Enviar y empezar» y ya puedes recibir viajes.</p>'; }
+		if (est === 'suspendido') { x += '<p class="tc-aviso">Tu cuenta está parada' + (h.ficha && h.ficha.motivo ? ': ' + esc(h.ficha.motivo) : '') + '. Escribe a Triciclub por WhatsApp.</p>'; }
+		if (est !== 'aprobado') { x += bloqueTriciclo(f, est); }
+		x += '<h2 class="tc-h2">💰 Mis precios</h2><p class="tc-small">Los pones tú' + (est !== 'aprobado' ? ' (puedes cambiarlos cuando quieras)' : '') + '. El cliente ve el de cada triciclo según la hora y elige.</p>'
 			+ '<div class="tc-tres-campos"><label class="tc-field"><span>CUP por km</span><input class="tc-input" inputmode="numeric" data-f="precio_km" value="' + esc(f.precio_km) + '"></label>'
 			+ '<label class="tc-field"><span>hasta el km</span><input class="tc-input" inputmode="decimal" data-f="km_tramo" value="' + esc(f.km_tramo) + '"></label>'
 			+ '<label class="tc-field"><span>luego, CUP/km</span><input class="tc-input" inputmode="numeric" data-f="precio_km_despues" value="' + esc(f.precio_km_despues) + '"></label></div>'
@@ -294,13 +347,40 @@
 		});
 		var ex = f.extras[ahora] != null ? f.extras[ahora] : 0;
 		x += '<div class="tc-ejemplos">' + [2, 5, 8].map(function (km) { return '<div>' + km + ' km<b>' + esc(cup(precio(f, km, ex))) + '</b></div>'; }).join('') + '</div>';
-		x += '<h2 class="tc-h2">🛺 Mi triciclo</h2>'
-			+ '<div class="tc-dos-campos"><label class="tc-field"><span>Número</span><input class="tc-input" data-f="numero" maxlength="12" value="' + esc(f.numero) + '"></label><label class="tc-field"><span>Plazas</span><input class="tc-input" inputmode="numeric" data-f="plazas" value="' + esc(f.plazas) + '"></label></div>'
+		x += (est === 'aprobado' ? bloqueTriciclo(f, est) : '<h2 class="tc-h2">🛺 Más datos (si quieres)</h2>')
+			+ '<label class="tc-field"><span>Número (si tiene)</span><input class="tc-input" data-f="numero" maxlength="12" value="' + esc(f.numero) + '"></label>'
 			+ '<label class="tc-field"><span>Cómo es (color, toldo…)</span><input class="tc-input" data-f="descripcion" maxlength="80" value="' + esc(f.descripcion) + '"></label>'
-			+ '<div class="tc-field"><span>Qué haces</span><div class="tc-checks">' + SERV.map(function (s) { return '<label><input type="checkbox" data-s="' + s[0] + '"' + (f.servicios.indexOf(s[0]) !== -1 ? ' checked' : '') + '>' + s[1] + '</label>'; }).join('') + '</div></div>'
 			+ '<div class="tc-dos-campos"><label class="tc-field"><span>Nº de la LOT</span><input class="tc-input" data-f="lot_numero" maxlength="40" value="' + esc(f.lot_numero) + '"></label><label class="tc-field"><span>La LOT vence</span><input class="tc-input" type="date" data-f="lot_vence" value="' + esc(f.lot_vence) + '"></label></div>'
 			+ '<div class="tc-dos-campos"><label class="tc-field"><span>Licencia</span><input class="tc-input" data-f="licencia_cat" maxlength="8" value="' + esc(f.licencia_cat) + '" placeholder="A"></label><label class="tc-field"><span>Tarjeta (transferencias)</span><input class="tc-input" data-f="transferencia" maxlength="40" value="' + esc(f.transferencia) + '"></label></div>'
-			+ '<button type="button" class="tc-btn" data-act="guardar"' + (S.busy ? ' disabled' : '') + '>Guardar</button></section>';
+			+ (est === 'aprobado' ? '<button type="button" class="tc-btn" data-act="guardar"' + (S.busy ? ' disabled' : '') + '>Guardar</button>'
+				: '<button type="button" class="tc-btn" data-act="alta"' + (S.busy ? ' disabled' : '') + '>Enviar y empezar</button><p class="tc-small tc-centro">Con todo puesto quedas aprobado al momento.</p>')
+			+ '</section>';
+		return x;
+	}
+
+	// 3.14.130: el tipo (como lo elige el cliente), el motor, qué hace, cuántos lleva y las fotos.
+	function bloqueTriciclo(f, est) {
+		var fi = (S.hoy && S.hoy.ficha) || {}, fotos = fi.fotos || {}, uso = usoDe(f.servicios || []);
+		var x = '<h2 class="tc-h2">🛺 Mi triciclo</h2>';
+		if (est !== 'aprobado' && (fi.propio || !fi.nombre)) { x += '<label class="tc-field"><span>Tu nombre</span><input class="tc-input" data-f="nombre" maxlength="60" autocomplete="name" value="' + esc(f.nombre) + '"></label>'; }
+		x += '<p class="tc-strong" style="margin:4px 0 0">¿Qué tienes?</p><div class="tc-tipos">';
+		TIPOS.forEach(function (t) { var on = f.tipo === t.id; x += '<button type="button" class="tc-tipo' + (on ? ' tc-tipo--sel' : '') + '" data-act="tipo" data-id="' + t.id + '" aria-pressed="' + on + '">' + iconoTipo(t, 40, on ? '#fff' : '#087a3d') + '<b>' + esc(t.nombre) + '</b><small>' + esc(t.sub) + '</small></button>'; });
+		x += '</div><p class="tc-strong" style="margin:4px 0 0">Motor</p><div class="tc-elige">';
+		MOTORES.forEach(function (m) { x += '<button type="button" class="tc-elige__b' + (f.motor === m[0] ? ' tc-elige__b--sel' : '') + '" data-act="motor" data-id="' + m[0] + '">' + m[1] + '</button>'; });
+		x += '</div><p class="tc-strong" style="margin:4px 0 0">¿Qué haces?</p><div class="tc-elige">';
+		USOS.forEach(function (u) { x += '<button type="button" class="tc-elige__b' + (uso === u[0] ? ' tc-elige__b--sel' : '') + '" data-act="uso" data-id="' + u[0] + '">' + u[1] + '</button>'; });
+		x += '</div><div class="tc-dos-campos">'
+			+ (uso !== 'carga' ? '<label class="tc-field"><span>¿Cuántas personas llevas?</span><input class="tc-input" inputmode="numeric" data-f="plazas" value="' + esc(f.plazas) + '"></label>' : '')
+			+ (uso === 'carga' || uso === 'dos' ? '<label class="tc-field"><span>¿Cuántos kilos cargas?</span><input class="tc-input" inputmode="numeric" data-f="carga_kg" value="' + esc(f.carga_kg) + '"></label>' : '') + '</div>';
+		x += '<p class="tc-strong" style="margin:4px 0 0">Fotos</p><div class="tc-fotos">';
+		FOTOS.forEach(function (p) {
+			var url = fotos[p[0]], sub = S.subiendo[p[0]];
+			x += '<label class="tc-foto' + (url ? ' tc-foto--ok' : '') + '"><input type="file" accept="image/*" data-foto="' + p[0] + '" hidden>'
+				+ (url ? '<img src="' + esc(url) + '" alt="">' : '<span class="tc-foto__mas" aria-hidden="true">📷</span>')
+				+ '<b>' + esc(p[1]) + '</b><small>' + (sub ? 'Subiendo…' : esc(url ? 'toca para cambiarla' : p[2])) + '</small></label>';
+		});
+		x += '</div>';
+		if (est !== 'aprobado' && fi.faltan && fi.faltan.length && fi.enviado) { x += '<p class="tc-small">Falta: ' + esc(fi.faltan.join(', ')) + '.</p>'; }
 		return x;
 	}
 
@@ -340,6 +420,8 @@
 		if (k || x) { var ej = app.querySelector('.tc-ejemplos'); if (ej) { var ex = S.form.extras[S.hoy.franja.id] || 0; ej.innerHTML = [2, 5, 8].map(function (km) { return '<div>' + km + ' km<b>' + esc(cup(precio(S.form, km, ex))) + '</b></div>'; }).join(''); } }
 	});
 	app.addEventListener('change', function (e) {
+		var fo = e.target.getAttribute('data-foto');
+		if (fo && e.target.files && e.target.files[0]) { subirFoto(fo, e.target.files[0]); return; }
 		var s = e.target.getAttribute('data-s');
 		if (s && S.form) { var l = S.form.servicios.filter(function (x) { return x !== s; }); if (e.target.checked) { l.push(s); } S.form.servicios = l; S.sucio = true; }
 	});
@@ -350,6 +432,15 @@
 		if (a === 'menu') { S.hoja = 'menu'; render(); }
 		else if (a === 'cerrar-menu') { S.hoja = ''; S.sucio = false; S.form = formDe(S.hoy); render(); }
 		else if (a === 'guardar') { guardar(); }
+		else if (a === 'alta') { enviarAlta(); }
+		else if (a === 'tipo' && S.form) {
+			var tp = TIPOS.filter(function (t) { return t.id === id; })[0] || {};
+			S.form.tipo = id; if (tp.motor) { S.form.motor = tp.motor; }
+			if (id === 'carga') { S.form.servicios = ['carga', 'paquete']; } else if (usoDe(S.form.servicios) === 'carga') { S.form.servicios = ['viaje', 'paquete']; }
+			S.sucio = true; render();
+		}
+		else if (a === 'motor' && S.form) { S.form.motor = id; S.sucio = true; render(); }
+		else if (a === 'uso' && S.form) { S.form.servicios = (USOS.filter(function (u) { return u[0] === id; })[0] || USOS[0])[2].slice(); S.sucio = true; render(); }
 		else if (a === 'conectar') { audioCtx(); conectar(true); }
 		else if (a === 'sonido') { audioCtx(); setTimeout(function () { var t = audio.ctx && audio.ctx.currentTime; if (t !== undefined && sonidoListo()) { pitido(880, t, 0.15); } render(); }, 150); }
 		else if (a === 'desconectar') { conectar(false); }

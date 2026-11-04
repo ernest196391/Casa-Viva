@@ -72,8 +72,9 @@ final class CVD_Triciclub {
 	public static function chofer_bloqueado( WP_User $user ): string {
 		$mode = self::mode();
 		if ( 'no' === $mode ) { return 'closed'; }
-		if ( 'prueba' === $mode && ! in_array( $user->ID, self::testers(), true ) ) { return 'not_tester'; }
-		if ( ! CVD_Registration::is_approved_messenger( $user ) ) { return 'not_messenger'; }
+		$propio = CVD_Triciclub_Alta::es_propio( $user ); // 3.14.130: chofer de Triciclub sin ser mensajero (entra a darse de alta)
+		if ( 'prueba' === $mode && ! $propio && ! in_array( $user->ID, self::testers(), true ) ) { return 'not_tester'; }
+		if ( ! $propio && ! CVD_Registration::is_approved_messenger( $user ) ) { return 'not_messenger'; }
 		return '';
 	}
 
@@ -279,6 +280,8 @@ final class CVD_Triciclub {
 			'/triciclub/'                     => 'app',
 			'/triciclub/sw.js'                => 'sw',
 			'/triciclub/manifest.webmanifest' => 'manifest',
+			'/triciclub/admin'                => 'admin',
+			'/triciclub/admin/'               => 'admin',
 			'/palla/triciclub'                => 'chofer',
 			'/palla/triciclub/'               => 'chofer',
 		)[ $path ] ?? '';
@@ -294,6 +297,7 @@ final class CVD_Triciclub {
 		if ( 'sw' === $kind ) { self::service_worker(); }
 		if ( 'manifest' === $kind ) { self::manifest(); }
 		if ( 'chofer' === $kind ) { self::page_chofer(); }
+		if ( 'admin' === $kind ) { CVD_Triciclub_Alta::pagina_admin(); }
 		self::page();
 	}
 
@@ -317,6 +321,7 @@ final class CVD_Triciclub {
 			'logo'     => self::asset( 'logo.png' ),
 			'mapaUrl'  => self::asset( 'mapa.js' ), // 3.14.118: el mapa de Triciclub
 			'habana'   => array( 23.125, -82.38 ),
+			'tipos'    => CVD_Triciclub_Alta::tipos_publicos(), // 3.14.130: los 6 tipos de triciclo, con su dibujo
 		);
 	}
 

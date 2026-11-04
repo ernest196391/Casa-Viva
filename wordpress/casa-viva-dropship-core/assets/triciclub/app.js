@@ -213,7 +213,7 @@
 	// ------------------------------------------------------------ Elegir triciclo y pedir
 	function verTriciclos() {
 		if (!S.origen || !S.destino) { return; }
-		S.view = 'elegir'; S.cerca = null; S.elegido = 0; S.verTodos = false; render(); pintarMapa();
+		S.view = 'elegir'; S.cerca = null; S.elegido = 0; S.verTodos = false; S.tipo = ''; render(); pintarMapa();
 		api('cerca?servicio=' + S.servicio + '&olat=' + S.origen.lat + '&olng=' + S.origen.lng + '&dlat=' + S.destino.lat + '&dlng=' + S.destino.lng).then(function (res) {
 			if (salir(res)) { return; }
 			if (!res.data.ok) { S.cerca = { error: res.data.message || (res.status ? 'No se pudo.' : 'Sin conexión.'), triciclos: [] }; render(); return; }
@@ -223,8 +223,17 @@
 	function ordenar() {
 		if (!S.cerca || !S.cerca.triciclos) { return; }
 		S.cerca.triciclos.sort(S.orden === 'cerca' ? function (a, b) { return a.lejos_m - b.lejos_m; } : function (a, b) { return a.precio - b.precio || a.lejos_m - b.lejos_m; });
-		S.elegido = 0;
+		S.elegido = 0; primero();
 	}
+	// 3.14.130: el cliente elige el tipo (Bici, Eléctrico, XL, Motor, Moto, Carga) como en La Nave; '' = todos.
+	function tipoDe(x) { return x.tipo || 'electrico'; }
+	function visibles() { var l = (S.cerca && S.cerca.triciclos) || []; return l.map(function (x, i) { return i; }).filter(function (i) { return !S.tipo || tipoDe(l[i]) === S.tipo; }); }
+	function primero() { var v = visibles(); if (v.length && v.indexOf(S.elegido) === -1) { S.elegido = v[0]; } }
+	function iconoTipo(id, size, color) {
+		var t = (C.tipos || []).filter(function (x) { return x.id === id; })[0];
+		return t ? '<svg width="' + size + '" height="' + Math.round(size * 0.75) + '" viewBox="0 0 32 24" fill="none" stroke="' + color + '" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + t.icono + '</svg>' : '';
+	}
+	function nombreTipo(id) { var t = (C.tipos || []).filter(function (x) { return x.id === id; })[0]; return t ? t.nombre : ''; }
 	function pedir() {
 		var t = S.cerca && S.cerca.triciclos[S.elegido];
 		if (!t || S.busy) { return; }
@@ -389,8 +398,8 @@
 
 	function tarjetaTri(t, i, sel) {
 		return '<button type="button" class="tc-opcion' + (sel ? ' tc-opcion--sel' : '') + '" data-act="elegir-tri" data-id="' + i + '" aria-pressed="' + sel + '">'
-			+ '<span class="tc-avatar" aria-hidden="true">' + esc(ini(t.nombre)) + '</span>'
-			+ '<span class="tc-opcion__q"><b>' + esc(t.nombre) + (t.nota ? ' · ★ ' + esc(String(t.nota).replace('.', ',')) : '') + '</b><small>Llega en ' + t.llega + ' min' + esc(t.numero ? ' · Nº ' + t.numero : '') + (t.lot_ok ? ' · LOT ✓' : '') + '</small></span>'
+			+ '<span class="tc-avatar" aria-hidden="true">' + (t.foto ? '<img src="' + esc(t.foto) + '" alt="" loading="lazy">' : esc(ini(t.nombre))) + '</span>'
+			+ '<span class="tc-opcion__q"><b>' + esc(t.nombre) + (t.nota ? ' · ★ ' + esc(String(t.nota).replace('.', ',')) : '') + '</b><small>' + esc(nombreTipo(tipoDe(t))) + ' · llega en ' + t.llega + ' min' + esc(t.numero ? ' · Nº ' + t.numero : '') + (t.lot_ok ? ' · LOT ✓' : '') + '</small></span>'
 			+ '<span class="tc-opcion__p">' + esc(cup(t.precio)) + '<small>' + (t.extra ? '+' + t.extra + ' % · ' : '') + 'fijo</small></span></button>';
 	}
 
@@ -407,8 +416,17 @@
 			return h + '<p class="tc-strong">' + esc(c.error || 'No hay triciclos libres cerca ahora.') + '</p><p class="tc-small">Prueba en unos minutos o llama a Triciclub.</p>'
 				+ '<div class="tc-dos-btn"><button type="button" class="tc-btn tc-btn--sec" data-act="otra-vez">Buscar otra vez</button><a class="tc-btn" href="tel:+' + esc(C.telefono) + '">Llamar</a></div></section>';
 		}
-		var t = l[S.elegido] || l[0];
-		if (S.verTodos) { h += '<div class="tc-todos">'; l.forEach(function (x, i) { h += tarjetaTri(x, i, i === S.elegido); }); h += '</div>'; }
+		var hay = {}; // el precio más bajo de cada tipo que hay libre
+		l.forEach(function (x) { var k = tipoDe(x); if (hay[k] === undefined || x.precio < hay[k]) { hay[k] = x.precio; } });
+		var tipos = (C.tipos || []).filter(function (tp) { return hay[tp.id] !== undefined; });
+		if (tipos.length > 1) {
+			h += '<div class="tc-tipos-fila" role="radiogroup" aria-label="Tipo de triciclo"><button type="button" role="radio" class="tc-tipo' + (S.tipo ? '' : ' tc-tipo--sel') + '" data-act="tipo" data-id="" aria-checked="' + !S.tipo + '"><b>Todos</b><small>' + l.length + ' libres</small></button>';
+			tipos.forEach(function (tp) { var on = S.tipo === tp.id; h += '<button type="button" role="radio" class="tc-tipo' + (on ? ' tc-tipo--sel' : '') + '" data-act="tipo" data-id="' + tp.id + '" aria-checked="' + on + '">' + iconoTipo(tp.id, 32, on ? '#fff' : '#087a3d') + '<b>' + esc(tp.nombre) + '</b><small>desde ' + esc(cup(hay[tp.id])) + '</small></button>'; });
+			h += '</div>';
+		}
+		var vis = visibles();
+		var t = l[S.elegido] || l[vis[0]] || l[0];
+		if (S.verTodos) { h += '<div class="tc-todos">'; vis.forEach(function (i) { h += tarjetaTri(l[i], i, i === S.elegido); }); h += '</div>'; }
 		else { h += tarjetaTri(t, S.elegido, true); }
 		if (S.servicio === 'paquete') {
 			h += '<div class="tc-dos-campos"><input class="tc-input" data-campo="recibe.nombre" value="' + esc(S.recibe.nombre) + '" placeholder="Quién recibe" aria-label="Quién recibe el paquete" maxlength="80">'
@@ -419,7 +437,7 @@
 		h += '<div class="tc-pildoras">'
 			+ '<button type="button" class="tc-pildora" data-act="pago">' + svg('<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>', 16, '#087a3d') + (S.pago === 'efectivo' ? 'Efectivo' : 'Transferencia') + '</button>'
 			+ (l.length > 1 ? '<button type="button" class="tc-pildora" data-act="orden" data-id="' + (S.orden === 'barato' ? 'cerca' : 'barato') + '">' + (S.orden === 'barato' ? 'Más barato' : 'Más cerca') + ' ⇅</button>'
-				+ '<button type="button" class="tc-pildora" data-act="' + (S.verTodos ? 'ver-uno' : 'ver-todos') + '">' + (S.verTodos ? 'Ver menos' : 'Ver ' + l.length + ' triciclos') + '</button>' : '')
+				+ (vis.length > 1 ? '<button type="button" class="tc-pildora" data-act="' + (S.verTodos ? 'ver-uno' : 'ver-todos') + '">' + (S.verTodos ? 'Ver menos' : 'Ver ' + vis.length + ' triciclos') + '</button>' : '') : '')
 			+ (S.notaAbierta ? '' : '<button type="button" class="tc-pildora" data-act="nota">+ Nota</button>')
 			+ '</div>';
 		return h + '<button type="button" class="tc-btn" data-act="pedir"' + (S.busy ? ' disabled' : '') + '>Pedir triciclo · ' + esc(cup(t.precio)) + '</button>'
@@ -565,6 +583,7 @@
 		else if (a === 'orden') { S.orden = id; ordenar(); render(); }
 		else if (a === 'elegir-tri') { S.elegido = +id; S.verTodos = false; render(); }
 		else if (a === 'ver-todos') { S.verTodos = true; render(); }
+		else if (a === 'tipo') { S.tipo = id || ''; S.verTodos = false; primero(); render(); }
 		else if (a === 'ver-uno') { S.verTodos = false; render(); }
 		else if (a === 'pago') { S.pago = S.pago === 'efectivo' ? 'transferencia' : 'efectivo'; render(); }
 		else if (a === 'nota') { S.notaAbierta = true; render(); var n = app.querySelector('[data-campo="nota"]'); if (n) { n.focus(); } }

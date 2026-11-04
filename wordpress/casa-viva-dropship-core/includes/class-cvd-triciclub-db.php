@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  * - Un viaje NO es un pedido de WooCommerce.
  */
 final class CVD_Triciclub_Db {
-	public const VERSION = 1;
+	public const VERSION = 2; // 2 (4-nov): alta de choferes — tipo, motor, carga_kg, enviado_at, revisado_at, motivo
 	private const VERSION_OPTION = 'cvd_tc_db';
 
 	public static function t( string $name ): string {
@@ -48,6 +48,12 @@ final class CVD_Triciclub_Db {
   user_id bigint(20) unsigned NOT NULL,
   estado varchar(12) NOT NULL DEFAULT 'pendiente',
   vehiculo varchar(20) NOT NULL DEFAULT 'triciclo_electrico',
+  tipo varchar(16) NOT NULL DEFAULT '',
+  motor varchar(10) NOT NULL DEFAULT '',
+  carga_kg smallint unsigned NOT NULL DEFAULT 0,
+  enviado_at datetime NULL,
+  revisado_at datetime NULL,
+  motivo varchar(200) NOT NULL DEFAULT '',
   numero varchar(12) NOT NULL DEFAULT '',
   descripcion varchar(80) NOT NULL DEFAULT '',
   plazas tinyint unsigned NOT NULL DEFAULT 0,
@@ -170,6 +176,7 @@ final class CVD_Triciclub_Db {
   KEY pendientes (enviado_at,vence_at),
   KEY ip_fecha (ip,created_at)
 ) {$c};" );
+		if ( ! get_role( CVD_Triciclub_Alta::ROL ) ) { add_role( CVD_Triciclub_Alta::ROL, 'Chofer de Triciclub', array( 'read' => true ) ); }
 		update_option( self::VERSION_OPTION, self::VERSION, true ); // autoload: se mira en cada carga, sin consulta aparte
 	}
 
