@@ -241,7 +241,8 @@ test('Tarjeta de reseña: solo reseñas reales guardadas con permiso, nombre con
   await page.getByRole('checkbox', { name: 'El cliente me dio permiso para publicar su comentario y su nombre' }).check();
   await page.getByRole('button', { name: 'Guardar reseña', exact: true }).click();
   await expect(page.getByRole('status')).toHaveText('Reseña guardada. Ya aparece en la tienda y puedes usarla en la tarjeta.');
-  await expect(page.locator('#cv-review-pick option')).toHaveText(['★★★★★ «Llegó rápido y quedó precioso en la sala.» — María G.']);
+  // The list shortens long comments; the card draws the whole text.
+  await expect(page.locator('#cv-review-pick option')).toHaveText([/^★★★★★ «Llegó rápido y quedó precioso en la sala.*» — María G\.$/]);
   for (const format of ['1920', '1080']) {
     await page.locator('#cv-format').selectOption(format);
     await page.evaluate(() => { window.__drawn = []; });
