@@ -133,6 +133,8 @@ final class CVD_PWA {
 		// Dependienta (3.13.49): entra directo a Pedidos, con los pedidos abiertos y sus botones («Listo para salir», «Entregado al mensajero»).
 		if ( in_array( 'cvd_clerk', $roles, true ) ) { return home_url( '/ventas/' ); }
 		if ( array_intersect( array( 'administrator', 'shop_manager', 'cvd_operator' ), $roles ) ) { return home_url( '/centro-operaciones/' ); }
+		// Editora de catálogo (Zayri): entra directo a «Mi catálogo y fotos», no a la tienda.
+		if ( class_exists( 'CVD_Content_Studio' ) && user_can( $user, CVD_Content_Studio::CAP ) ) { return add_query_arg( 'cvd_contenido', '1', home_url( '/' ) ); }
 		$owner = CVD_Attribution::current_customer_owner();
 		if ( $owner && ! empty( $owner['referral_code'] ) ) { return add_query_arg( 'ref', $owner['referral_code'], wc_get_page_permalink( 'shop' ) ); }
 		return wc_get_page_permalink( 'shop' );
