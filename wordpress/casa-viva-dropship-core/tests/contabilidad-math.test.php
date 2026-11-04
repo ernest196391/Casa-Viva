@@ -43,5 +43,18 @@ check( 'margen tras gestora', $b['margen_tras_gestora'], 13.0 );
 check( 'costo de hoy (sin guardar)', $b['lineas_costo_de_hoy'], 1 );
 check( 'sin pedidos', $M::summarize( array(), 0.005, 0.015 )['tienda']['margen'], 0.0 );
 
+// 3.14.126: por día y comisiones por estado.
+$tienda['dia'] = '2026-11-02'; $tienda['commission_status'] = 'paid';
+$mixto['dia'] = '2026-11-01'; $mixto['commission_status'] = 'approved';
+$cancelado = array( 'dia' => '2026-11-02', 'commission' => 4, 'commission_status' => 'cancelled', 'lines' => array( array( 'kind' => 'tienda', 'total' => 20 ) ) );
+check( 'ventas por día en orden', $M::by_day( array( $tienda, $mixto, $cancelado ) ), array(
+	array( 'dia' => '2026-11-01', 'tienda' => 30.0, 'bajo_pedido' => 70.0 ),
+	array( 'dia' => '2026-11-02', 'tienda' => 70.0, 'bajo_pedido' => 0.0 ),
+) );
+check( 'comisiones por estado', $M::commission_by_status( array( $tienda, $mixto, $cancelado ) ), array(
+	'tienda' => array( 'pagado' => 5.0, 'por_pagar' => 3.0 ),
+	'bajo_pedido' => array( 'pagado' => 0.0, 'por_pagar' => 7.0 ),
+) );
+
 echo $fails ? "\n{$fails} de {$n} pruebas fallan\n" : "OK: {$n} pruebas\n";
 exit( $fails ? 1 : 0 );

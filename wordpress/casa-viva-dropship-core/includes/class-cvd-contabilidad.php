@@ -14,6 +14,8 @@ defined( 'ABSPATH' ) || exit;
  *      _cvd_line_kind         tienda | bajo_pedido (SKU MK-)
  * 2) GET /bot/contabilidad?desde=AAAA-MM-DD&hasta=AAAA-MM-DD (clave del bot): pedidos completados en esos días de Cuba,
  *    con la tienda y bajo pedido por separado (cuentas en CVD_Contabilidad_Math). Lo usa el cierre diario del VPS.
+ *    3.14.126: con detalle=1 añade ventas por día, comisiones pagadas / por pagar y el reparto de cada pedido de bajo
+ *    pedido (lo usa el cierre del mes del día 1).
  * Rellenar pedidos viejos (solo añade, nunca cambia lo guardado): wp eval 'print_r( CVD_Contabilidad::backfill( "2026-10-01", "2026-11-04" ) );'
  */
 final class CVD_Contabilidad {
@@ -98,9 +100,12 @@ final class CVD_Contabilidad {
 				$lines[] = array( 'kind' => $kind, 'total' => (float) $item->get_total(), 'qty' => (int) $item->get_quantity(), 'cost_unit' => $cost, 'stamped' => $stamped );
 			}
 			$status = (string) $order->get_meta( '_cvd_commission_status' );
+			$done = $order->get_date_completed();
 			$out[] = array(
 				'id' => $order->get_id(),
+				'dia' => $done ? wp_date( 'Y-m-d', $done->getTimestamp() ) : '',
 				'commission' => 'cancelled' === $status ? 0.0 : (float) $order->get_meta( '_cvd_commission_amount' ),
+				'commission_status' => $status,
 				'markup' => (float) $order->get_meta( '_cvd_margin_amount' ),
 				'lines' => $lines,
 			);
@@ -122,6 +127,26 @@ final class CVD_Contabilidad {
 		$dep = (float) get_option( 'cvd_conta_dependientas_pct', 0.5 ) / 100;
 		$ern = (float) get_option( 'cvd_conta_ernesto_pct', 1.5 ) / 100;
 		$sum = CVD_Contabilidad_Math::summarize( $orders, $dep, $ern );
+		if ( $request->get_param( 'detalle' ) ) {
+			$sum['por_dia'] = CVD_Contabilidad_Math::by_day( $orders );
+			$sum['comisiones'] = CVD_Contabilidad_Math::commission_by_status( $orders );
+			$sum['reparto_bajo_pedido'] = self::supplier_splits( $orders );
+		}
 		return new WP_REST_Response( array( 'ok' => true, 'desde' => $desde, 'hasta' => $hasta, 'pedidos' => count( $orders ), 'porcentajes' => array( 'dependientas' => $dep * 100, 'ernesto' => $ern * 100 ) ) + $sum, 200 );
+	}
+
+	/** 3.14.126: reparto («Reparto de la venta de proveedor», D69) de cada pedido con bajo pedido de la lista. */
+	private static function supplier_splits( array $orders ): array {
+		if ( ! class_exists( 'CVD_Supplier_Split' ) ) { return array(); }
+		$rows = array();
+		foreach ( $orders as $o ) {
+			if ( ! in_array( CVD_Contabilidad_Math::BAJO_PEDIDO, array_column( (array) $o['lines'], 'kind' ), true ) ) { continue; }
+			$order = wc_get_order( $o['id'] );
+			$s = $order ? CVD_Supplier_Split::compute( $order ) : null;
+			if ( ! $s || empty( $s['applies'] ) ) { continue; }
+			$rows[] = array_intersect_key( $s, array_flip( array( 'number', 'gestora', 'supplier', 'webUsd', 'costUsd', 'rate', 'marginUsd', 'gestoraUsd', 'messengerCup', 'clerkCup', 'storeCup', 'specialCup', 'saved' ) ) )
+				+ array( 'dia' => $o['dia'], 'products' => implode( ', ', array_map( static fn( $l ) => ( $l['qty'] > 1 ? $l['qty'] . '× ' : '' ) . $l['name'], (array) $s['lines'] ) ) );
+		}
+		return $rows;
 	}
 }

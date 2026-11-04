@@ -65,4 +65,37 @@ final class CVD_Contabilidad_Math {
 		$round = static function ( array $a ): array { return array_map( static fn( $v ) => is_float( $v ) ? self::r2( $v ) : $v, $a ); };
 		return array( 'tienda' => $round( $t ), 'bajo_pedido' => $round( $b ) );
 	}
+
+	/** 3.14.126: ventas por día (clave 'dia' del pedido) → [ [ 'dia', 'tienda', 'bajo_pedido' ] ] en orden. */
+	public static function by_day( array $orders ): array {
+		$days = array();
+		foreach ( $orders as $o ) {
+			$d = (string) ( $o['dia'] ?? '' );
+			$days[ $d ] = $days[ $d ] ?? array( 'dia' => $d, 'tienda' => 0.0, 'bajo_pedido' => 0.0 );
+			foreach ( (array) ( $o['lines'] ?? array() ) as $l ) {
+				$days[ $d ][ self::BAJO_PEDIDO === ( $l['kind'] ?? '' ) ? self::BAJO_PEDIDO : self::TIENDA ] += (float) ( $l['total'] ?? 0 );
+			}
+		}
+		ksort( $days );
+		return array_values( array_map( static fn( $r ) => array( 'dia' => $r['dia'], 'tienda' => self::r2( $r['tienda'] ), 'bajo_pedido' => self::r2( $r['bajo_pedido'] ) ), $days ) );
+	}
+
+	/** 3.14.126: comisiones pagadas y por pagar (estado del pedido 'commission_status'), repartidas por línea como en summarize. */
+	public static function commission_by_status( array $orders ): array {
+		$out = array( self::TIENDA => array( 'pagado' => 0.0, 'por_pagar' => 0.0 ), self::BAJO_PEDIDO => array( 'pagado' => 0.0, 'por_pagar' => 0.0 ) );
+		foreach ( $orders as $o ) {
+			$status = (string) ( $o['commission_status'] ?? '' );
+			if ( 'cancelled' === $status ) { continue; }
+			$bucket = 'paid' === $status ? 'pagado' : 'por_pagar';
+			$lines = (array) ( $o['lines'] ?? array() );
+			$sum = 0.0;
+			foreach ( $lines as $l ) { $sum += (float) ( $l['total'] ?? 0 ); }
+			foreach ( $lines as $l ) {
+				$kind = self::BAJO_PEDIDO === ( $l['kind'] ?? '' ) ? self::BAJO_PEDIDO : self::TIENDA;
+				$out[ $kind ][ $bucket ] += $sum > 0 ? (float) ( $o['commission'] ?? 0 ) * (float) ( $l['total'] ?? 0 ) / $sum : 0.0;
+			}
+		}
+		foreach ( $out as $k => $v ) { $out[ $k ] = array_map( array( __CLASS__, 'r2' ), $v ); }
+		return $out;
+	}
 }
