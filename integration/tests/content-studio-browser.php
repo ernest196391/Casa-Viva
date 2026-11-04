@@ -13,3 +13,7 @@ foreach ( array( 'Studio race fixture 1', 'Studio race fixture 2' ) as $name ) {
 	$race = new WC_Product_Simple(); $race->set_name( $name ); $race->set_description( '<p>Datos sintéticos para prueba.</p>' );
 	$race->set_regular_price( '30' ); $race->set_status( 'publish' ); $race->save();
 }
+// A private option saved before the source photo and the text changed.
+$stale = new WC_Product_Simple(); $stale->set_name( 'Studio stale review fixture' ); $stale->set_description( '<p>Datos sintéticos para prueba.</p>' ); $stale->set_status( 'draft' ); $stale->save();
+update_user_meta( $id, '_cvd_content_review_' . $stale->get_id(), array( 'version' => 'antigua', 'photo' => 999999, 'text' => 'antiguo',
+	'image' => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO/aJ1sAAAAASUVORK5CYII=' ) );

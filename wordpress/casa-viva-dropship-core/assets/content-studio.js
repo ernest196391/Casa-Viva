@@ -41,9 +41,10 @@
   function fill(p) {
     ficha++;
     resetScenes();
-    if (p.review) {
-      const session = generationSession;
-      loadImage(p.review).then(img => { if (session === generationSession) showVariant(img, p.review, session, true); }).catch(() => message('No se pudo abrir la opción guardada.'));
+    const review = p.review || p.review_old;
+    if (review) {
+      const session = generationSession, changed = p.review_old ? (p.review_changed || []) : null;
+      loadImage(review).then(img => { if (session === generationSession) showVariant(img, review, session, true, changed); }).catch(() => message('No se pudo abrir la opción guardada.'));
     }
     product = p; photo = null; dirty = false; markers = []; nextMarker = 0;
     $('cv-editor').hidden = false;
@@ -164,7 +165,8 @@
     product = updated; $('cv-ai-status').textContent = 'Imagen elegida guardada como principal.';
     message('Imagen elegida guardada como principal.');
   }
-  function showVariant(img, finalURL, session, saved = false) {
+  // changed: null for a current option; for an option saved before the product changed, what changed ([] if unknown).
+  function showVariant(img, finalURL, session, saved = false, changed = null) {
     const group = $('cv-variants'), card = document.createElement('article'), number = group.children.length + 1;
     img.alt = `Opción ${number}`; img.style.maxWidth = '100%'; img.style.height = 'auto'; card.append(img);
     const use = document.createElement('button'); use.type = 'button'; use.textContent = `Usar opción ${number} en la plantilla`;
@@ -172,7 +174,17 @@
     const publish = document.createElement('button'); publish.type = 'button'; publish.textContent = `Elegir opción ${number} como foto principal`;
     publish.onclick = () => busy(publish, async () => publishVariant(await jpeg(img, 1920), session)); card.append(publish);
     const download = document.createElement('a'); download.href = finalURL; download.download = `casa-viva-opcion-${number}`; download.textContent = 'Descargar esta opción'; card.append(download);
-    if (saved) {
+    if (saved && changed) {
+      const what = { foto: 'la foto original', texto: 'el texto de la ficha' }, reasons = changed.map((key) => what[key]).filter(Boolean);
+      const label = document.createElement('p');
+      label.textContent = (reasons.length ? `Guardada para revisar. Desde entonces cambió ${reasons.join(' y ')}.` : 'Guardada para revisar. La ficha cambió desde que guardaste esta opción.') + ' Compárala con los datos actuales antes de usarla.';
+      card.prepend(label);
+      const check = document.createElement('label'), box = document.createElement('input');
+      box.type = 'checkbox'; check.append(box, ' Ya la comparé con la ficha actual');
+      use.disabled = true; publish.disabled = true;
+      box.addEventListener('change', () => { use.disabled = !box.checked; publish.disabled = !box.checked; });
+      download.before(check);
+    } else if (saved) {
       const label = document.createElement('p'); label.textContent = 'Guardada para revisar'; card.prepend(label);
     } else if (product?.id) {
       const keep = document.createElement('button'); keep.type = 'button'; keep.textContent = 'Guardar para revisar después';
@@ -285,6 +297,13 @@
     $('cv-prompt').value += `\nContexto aportado por la tienda (no investigación independiente): comprador/situación: ${$('cv-buyer').value || 'pendiente'}; objeción: ${$('cv-objection').value || 'pendiente'}; evidencia: ${$('cv-evidence').value || 'pendiente'}. Investiga antes de generar si estas fuentes no bastan para sustentar el mensaje. No deduzcas ventas por la duración o alcance de un anuncio competidor.`;
     message('Textos e instrucción preparados con tus datos. Puedes editarlos.');
   });
-  $('cv-copy-save').addEventListener('click', () => { const url = URL.createObjectURL(new Blob([$('cv-copy').value, '\n\n', $('cv-prompt').value], {type: 'text/plain;charset=utf-8'})); const a = document.createElement('a'); a.href = url; a.download = 'casa-viva-textos.txt'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
+  $('cv-copy-save').addEventListener('click', () => {
+    // Paragraph and line breaks of the description survive as new lines.
+    const description = plain($('cv-description').value.replace(/<\/(p|li|h[1-6])>|<br\s*\/?>/gi, '$&\n')).replace(/\n{3,}/g, '\n\n').trim();
+    const sections = [['TÍTULO', $('cv-name').value.trim()], ['DESCRIPCIÓN', description], ['TEXTO PARA REDES', $('cv-copy').value.trim()]];
+    if ($('cv-copy-prompt').checked) sections.push(['INSTRUCCIÓN PARA IA', $('cv-prompt').value.trim()]);
+    const text = sections.filter(([, body]) => body).map(([head, body]) => `${head}\n${body}`).join('\n\n') + '\n';
+    const url = URL.createObjectURL(new Blob([text], {type: 'text/plain;charset=utf-8'})); const a = document.createElement('a'); a.href = url; a.download = 'casa-viva-textos.txt'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
   list().catch((error) => message(error.message));
 })();

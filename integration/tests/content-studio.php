@@ -80,3 +80,16 @@ $after_item = studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->g
 studio_assert( str_starts_with( $after_item['review'], 'data:image/png;base64,' ) && $before_item['version'] === $after_item['version'], 'preview survives reopening without updating the catalog entry' );
 wp_set_current_user( 1 );
 studio_assert( empty( studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_data()['review'] ), 'other users do not receive the editor preview' );
+
+// After the product changes, the editor still gets the option, marked as old, with what changed.
+$p = wc_get_product( $p->get_id() ); $p->set_short_description( 'Texto cambiado por otra persona.' ); $p->save();
+wp_set_current_user( $id );
+$stale = studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_data();
+studio_assert( empty( $stale['review'] ) && str_starts_with( $stale['review_old'], 'data:image/png;base64,' ) && array( 'texto' ) === $stale['review_changed'], 'changed product keeps the old option and says the text changed' );
+studio_assert( wc_get_product( $p->get_id() )->get_image_id() === $before, 'old option is not applied to the product' );
+$legacy = get_user_meta( $id, '_cvd_content_review_' . $p->get_id(), true );
+update_user_meta( $id, '_cvd_content_review_' . $p->get_id(), array( 'version' => 'antigua', 'image' => $legacy['image'] ) );
+$stale = studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_data();
+studio_assert( $legacy['image'] === $stale['review_old'] && array() === $stale['review_changed'], 'option saved before this change is still shown without guessing what changed' );
+wp_set_current_user( 1 );
+studio_assert( empty( studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_data()['review_old'] ), 'other users do not receive an old editor option' );

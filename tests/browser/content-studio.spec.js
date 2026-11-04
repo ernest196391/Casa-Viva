@@ -72,6 +72,43 @@ test('Guardado tardío de mercancía nueva no pisa la ficha publicada abierta de
   expect(after.name).toBe('Ficha nueva guardada tarde'); expect(after.status).toBe('draft');
 });
 
+test('Una opción guardada antes de cambiar la ficha se ve con aviso y no se usa sin compararla', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(60000);
+  await openPanel(page);
+  await page.getByRole('button', { name: 'Studio stale review fixture · Borrador / privado', exact: true }).click();
+  const card = page.locator('#cv-variants article');
+  await expect(card).toContainText('Desde entonces cambió la foto original y el texto de la ficha. Compárala con los datos actuales antes de usarla.');
+  const choose = card.getByRole('button', { name: 'Elegir opción 1 como foto principal', exact: true });
+  const use = card.getByRole('button', { name: 'Usar opción 1 en la plantilla', exact: true });
+  await expect(choose).toBeDisabled(); await expect(use).toBeDisabled();
+  await expect(card.getByRole('link', { name: 'Descargar esta opción', exact: true })).toBeVisible();
+  await card.getByRole('checkbox', { name: 'Ya la comparé con la ficha actual' }).check();
+  await expect(choose).toBeEnabled(); await expect(use).toBeEnabled();
+});
+
+test('El TXT trae título, descripción y texto para redes; la instrucción para IA solo si se marca', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(60000);
+  await openPanel(page);
+  let saves = 0; page.on('request', (request) => { if (isSave(request)) saves++; });
+  await page.locator('#cv-new').click();
+  await page.getByRole('textbox', { name: 'Título', exact: true }).fill('Lámpara TXT');
+  await page.locator('#cv-description').fill('<p>Base de metal confirmada.</p><p>Luz cálida.</p>');
+  await page.locator('#cv-facts').fill('Metal confirmado');
+  await page.locator('#cv-use').fill('Para la mesa de noche');
+  await page.getByRole('button', { name: 'Preparar textos para redes', exact: true }).click();
+  const download = async () => {
+    const [file] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Descargar textos', exact: true }).click()]);
+    return fs.readFileSync(await file.path(), 'utf8');
+  };
+  expect(await download()).toBe('TÍTULO\nLámpara TXT\n\nDESCRIPCIÓN\nBase de metal confirmada.\nLuz cálida.\n\nTEXTO PARA REDES\nLámpara TXT\n• Metal confirmado\nPara la mesa de noche\nConsulta en Casa Viva.\n');
+  await page.getByRole('checkbox', { name: 'Incluir la instrucción para IA en el archivo' }).check();
+  const withPrompt = await download();
+  expect(withPrompt).toContain('\n\nINSTRUCCIÓN PARA IA\nCrea una imagen comercial para Casa Viva');
+  expect(saves).toBe(0);
+});
+
 test('Editor de contenido: login, guardar, subir foto y descargar en móvil', async ({ page }) => {
   test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
   test.setTimeout(60000);

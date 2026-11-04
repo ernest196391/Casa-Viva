@@ -89,6 +89,11 @@ final class CVD_Content_Studio {
 		return hash( 'sha256', wp_json_encode( array( $p->get_name(), $p->get_description(), $p->get_short_description(), $p->get_image_id(), $p->get_gallery_image_ids(), $p->get_status(), $p->get_meta( '_cvd_content_brief' ) ) ) );
 	}
 
+	/** Text part of the version, to tell the editor whether text or the source photo changed. */
+	private static function text_version( WC_Product $p ): string {
+		return hash( 'sha256', wp_json_encode( array( $p->get_name(), $p->get_description(), $p->get_short_description(), $p->get_meta( '_cvd_content_brief' ) ) ) );
+	}
+
 	public static function review( WP_REST_Request $r ) {
 		$p = wc_get_product( absint( $r['id'] ) );
 		if ( ! $p || $p->is_type( 'variation' ) || ! in_array( $p->get_status(), array( 'publish', 'draft', 'pending', 'private' ), true ) || ! hash_equals( self::version( $p ), (string) $r['version'] ) ) { return new WP_Error( 'conflict', 'Abre de nuevo el producto antes de guardar la opción.', array( 'status' => 409 ) ); }
@@ -98,7 +103,7 @@ final class CVD_Content_Studio {
 		$dim = @getimagesizefromstring( $bytes );
 		if ( ! $dim || 'image/png' !== $dim['mime'] || $dim[0] > 1920 || $dim[1] > 1920 ) { return new WP_Error( 'image', 'La opción no es válida.', array( 'status' => 422 ) ); }
 		$key = '_cvd_content_review_' . $p->get_id();
-		$value = array( 'version' => self::version( $p ), 'image' => 'data:image/png;base64,' . base64_encode( $bytes ) );
+		$value = array( 'version' => self::version( $p ), 'photo' => (int) $p->get_image_id(), 'text' => self::text_version( $p ), 'image' => 'data:image/png;base64,' . base64_encode( $bytes ) );
 		if ( false === update_user_meta( get_current_user_id(), $key, $value ) && get_user_meta( get_current_user_id(), $key, true ) !== $value ) { return new WP_Error( 'save', 'No se pudo guardar la opción.', array( 'status' => 500 ) ); }
 		return rest_ensure_response( array( 'ok' => true ) );
 	}
@@ -110,8 +115,17 @@ final class CVD_Content_Studio {
 			if ( ! $p || ! in_array( $p->get_status(), array( 'publish', 'draft', 'pending', 'private' ), true ) || $p->is_type( 'variation' ) ) { return new WP_Error( 'missing', 'Producto no encontrado.', array( 'status' => 404 ) ); }
 			$item = self::projection( $p );
 			$review = get_user_meta( get_current_user_id(), '_cvd_content_review_' . $id, true );
-			if ( ! is_array( $review ) || ( $review['version'] ?? '' ) !== $item['version'] ) { return rest_ensure_response( $item ); }
-			$item['review'] = $review['image'];
+			if ( ! is_array( $review ) || empty( $review['image'] ) ) { return rest_ensure_response( $item ); }
+			if ( ( $review['version'] ?? '' ) === $item['version'] ) {
+				$item['review'] = $review['image'];
+			} else {
+				// Kept for the editor to compare with the current product; never applied automatically.
+				$item['review_old'] = $review['image'];
+				$item['review_changed'] = array_keys( array_filter( array(
+					'foto' => isset( $review['photo'] ) && (int) $review['photo'] !== (int) $p->get_image_id(),
+					'texto' => isset( $review['text'] ) && $review['text'] !== self::text_version( $p ),
+				) ) );
+			}
 			$response = rest_ensure_response( $item );
 			$response->header( 'Cache-Control', 'private, no-store' );
 			return $response;
@@ -216,7 +230,7 @@ final class CVD_Content_Studio {
 		<form id="cv-editor" hidden><h2>1. Ficha del producto</h2><p id="cv-commercial"></p><label>Título<input id="cv-name" maxlength="160" required></label><label>Descripción<textarea id="cv-description" rows="6"></textarea></label><label>Resumen<textarea id="cv-short" rows="3"></textarea></label><p>Conservamos precios y existencias. En mercancía nueva, guarda el borrador y completa esos datos en el catálogo comercial antes de publicar.</p><button id="cv-save" type="submit">Guardar cambios</button><button id="cv-publish" type="button">Publicar en Casa Viva</button><a id="cv-view" target="_blank" rel="noopener" hidden>Ver en la tienda</a>
 		<h2>2. Foto real</h2><label>Subir foto desde el móvil<input id="cv-photo" type="file" accept="image/jpeg,image/png,image/webp"></label><img id="cv-original" alt="Foto principal del producto" hidden><button type="button" id="cv-upload">Subir como foto principal</button><p>La foto anterior se conserva en la galería. Las fotos que subas se protegerán al sincronizar.</p>
 		<h2>3. Preparar imágenes para redes</h2><details><summary>¿A quién le sirve y qué necesita saber?</summary><label>Comprador y situación de uso<textarea id="cv-buyer" maxlength="1000" rows="2" placeholder="Qué necesita resolver y qué alternativa usa hoy"></textarea></label><label>Duda antes de comprar<textarea id="cv-objection" maxlength="1000" rows="2" placeholder="Qué le haría dudar de este producto"></textarea></label><label>Evidencia que tenemos<textarea id="cv-evidence" maxlength="1000" rows="2" placeholder="Foto del detalle, ficha del fabricante, comentarios reales o enlace"></textarea></label><p>Si no tienes evidencia, deja el dato pendiente. La guía no equivale a una investigación de mercado.</p></details><label>Plantilla<select id="cv-layout"><option value="features">Características señaladas</option><option value="spec">Ficha técnica</option><option value="offer">Producto y precio</option><option value="use">Uso cotidiano</option></select></label><label>Formato<select id="cv-format"><option value="1920">Historia 9:16</option><option value="1080">Publicación 1:1</option></select></label><label>Características confirmadas (una por línea, hasta tres)<textarea id="cv-facts" rows="3" maxlength="400" placeholder="Medida real, material confirmado, detalle visible"></textarea></label><label>Frase principal<input id="cv-headline" maxlength="90" placeholder="Qué hace útil este producto"></label><label>Uso cotidiano confirmado<input id="cv-use" maxlength="150" placeholder="Dónde y para qué se utiliza"></label><fieldset><legend>Generar opciones con mi foto</legend><label>Proveedor<select id="cv-provider"><option value="cloudflare">Cloudflare · cuota gratuita con Workers Free</option><option value="openai">OpenAI · API de pago</option><option value="higgsfield">Higgsfield · API de pago</option></select></label><p id="cv-ai-setup" hidden>El administrador puede activar la generación en WooCommerce → IA para fotos.</p><p>La IA prepara solo el fondo. Tu móvil coloca encima la foto real completa y conserva las piezas. Puedes guardar una opción por producto para revisarla desde tu perfil.</p><label><input type="checkbox" id="cv-protect-whole"> Conservar también el fondo original dentro de la foto</label><button type="button" id="cv-generate">Generar una opción</button><p id="cv-ai-status" aria-live="polite"></p><div id="cv-variants"></div><details><summary>Usar mi suscripción en su web</summary><p>Prepara los textos en el paso 4, copia la instrucción y adjunta la foto en <a href="https://chatgpt.com/" target="_blank" rel="noopener">ChatGPT</a> o <a href="https://higgsfield.ai/" target="_blank" rel="noopener">Higgsfield</a>. Descarga el resultado para traerlo al panel.</p><input id="cv-import-ai" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Importar resultado de IA"><img id="cv-import-preview" alt="Vista previa de la imagen importada" style="max-width:100%" hidden><button type="button" id="cv-import-button">Elegir imagen importada como principal</button></details></fieldset><button type="button" id="cv-publish-layout" hidden>Elegir el anuncio preparado como imagen principal</button><button type="button" id="cv-render">Preparar imagen</button><canvas id="cv-canvas" width="1080" height="1920" hidden aria-label="Vista previa del anuncio"></canvas><a id="cv-download" download="casa-viva.jpg" hidden>Descargar imagen</a>
-		<h2>4. Texto y guía para IA</h2><button type="button" id="cv-title-suggest">Mejorar título con mis datos</button><button type="button" id="cv-suggest">Mejorar descripción con mis datos</button><label>Descripción sugerida<textarea id="cv-suggestion" rows="5"></textarea></label><button type="button" id="cv-use-suggestion">Usar en la ficha</button><button type="button" id="cv-copy-build">Preparar textos para redes</button><label>Texto para compartir<textarea id="cv-copy" rows="6"></textarea></label><button type="button" id="cv-copy-save">Descargar textos</button><details><summary>Instrucción para crear una escena con IA</summary><p>Adjunta siempre la foto real. Revisa el resultado antes de subirlo como foto del producto. Puedes usar la instrucción en tu cuenta del proveedor.</p><textarea id="cv-prompt" rows="9" readonly></textarea></details>
+		<h2>4. Texto y guía para IA</h2><button type="button" id="cv-title-suggest">Mejorar título con mis datos</button><button type="button" id="cv-suggest">Mejorar descripción con mis datos</button><label>Descripción sugerida<textarea id="cv-suggestion" rows="5"></textarea></label><button type="button" id="cv-use-suggestion">Usar en la ficha</button><button type="button" id="cv-copy-build">Preparar textos para redes</button><label>Texto para compartir<textarea id="cv-copy" rows="6"></textarea></label><label><input type="checkbox" id="cv-copy-prompt"> Incluir la instrucción para IA en el archivo</label><button type="button" id="cv-copy-save">Descargar textos</button><details><summary>Instrucción para crear una escena con IA</summary><p>Adjunta siempre la foto real. Revisa el resultado antes de subirlo como foto del producto. Puedes usar la instrucción en tu cuenta del proveedor.</p><textarea id="cv-prompt" rows="9" readonly></textarea></details>
 		</form></main><?php wp_footer(); ?></body></html><?php
 		exit;
 	}
