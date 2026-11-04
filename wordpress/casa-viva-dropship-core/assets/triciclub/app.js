@@ -262,7 +262,8 @@
 				}
 				seguir();
 			});
-		}, document.hidden ? 30000 : (v.estado === 'esperando' ? 4000 : 8000));
+		}, S.yaMismo ? 0 : (document.hidden ? 30000 : (v.estado === 'esperando' ? 4000 : 8000)));
+		S.yaMismo = false;
 	}
 	function cancelar() {
 		if (!S.viaje || !window.confirm('¿Seguro que quieres cancelar?')) { return; }
@@ -440,14 +441,16 @@
 		if (v.estado === 'esperando') {
 			var falta = Math.max(0, Math.round((new Date(v.espera_hasta).getTime() - Date.now()) / 1000));
 			return h + '<h1 class="tc-h2" style="font-size:20px">Esperando que ' + esc((v.chofer && v.chofer.nombre || 'el chofer').split(' ')[0]) + ' acepte</h1>'
-				+ '<div class="tc-espera" aria-hidden="true"><div style="width:' + Math.round(100 * falta / 90) + '%"></div></div><p class="tc-small">Tiene ' + falta + ' segundos. Si no puede, eliges otro.</p>'
+				+ '<div class="tc-espera" aria-hidden="true"><div style="width:' + Math.round(100 * falta / 90) + '%"></div></div><p class="tc-small">' + (falta > 0 ? 'Tiene ' + falta + ' segundos. Si no puede, eliges otro.' : 'Se acabó el tiempo. Mirando si aceptó…') + '</p>'
 				+ chofer(v) + '<div class="tc-row"><span class="tc-muted">' + esc(serv(v.servicio).nombre) + ' · ' + (v.forma_pago === 'efectivo' ? 'efectivo' : 'transferencia') + '</span><span class="tc-strong">' + esc(cup(v.precio)) + ' fijo</span></div>'
 				+ '<button type="button" class="tc-btn tc-btn--link" data-act="cancelar">Cancelar</button></section>';
 		}
 		if (v.estado === 'rechazado' || v.estado === 'cancelado') {
-			return h + '<h1 class="tc-h2" style="font-size:20px">' + (v.estado === 'rechazado' ? esc((v.chofer && v.chofer.nombre || 'El chofer').split(' ')[0]) + ' no puede ahora' : 'Viaje cancelado') + '</h1>'
-				+ '<p class="tc-muted">' + (v.estado === 'rechazado' ? 'No pasa nada: elige otro triciclo.' : (v.motivo ? esc(v.motivo) : 'No se cobra nada.')) + '</p>'
-				+ (v.estado === 'rechazado' ? '<button type="button" class="tc-btn" data-act="otro">Elegir otro triciclo</button>' : '') + '<button type="button" class="tc-btn tc-btn--sec" data-act="nuevo">Volver al inicio</button></section>';
+			// 3.14.123: si el que suelta es el chofer, el cliente puede elegir otro al momento (antes solo «Volver al inicio»).
+			var otro = v.estado === 'rechazado' || v.cancelado_por === 'chofer', nom = esc((v.chofer && v.chofer.nombre || 'El chofer').split(' ')[0]);
+			return h + '<h1 class="tc-h2" style="font-size:20px">' + (v.estado === 'rechazado' ? nom + ' no puede ahora' : (v.cancelado_por === 'chofer' ? nom + ' no puede hacer el viaje' : 'Viaje cancelado')) + '</h1>'
+				+ '<p class="tc-muted">' + (v.estado === 'rechazado' ? 'No pasa nada: elige otro triciclo.' : (v.motivo ? '«' + esc(v.motivo) + '»' : '') + ' No se cobra nada.') + '</p>'
+				+ (otro ? '<button type="button" class="tc-btn" data-act="otro">Elegir otro triciclo</button>' : '') + '<button type="button" class="tc-btn tc-btn--sec" data-act="nuevo">Volver al inicio</button></section>';
 		}
 		var titulo = { asignado: 'Tu triciclo viene', llego: '¡Ya llegó! Sal a buscarlo', recogido: 'En camino a ' + corto(v.destino.texto) }[v.estado] || 'Tu viaje';
 		var tel = v.chofer && v.chofer.telefono;
@@ -569,7 +572,11 @@
 		else if (a === 'pedir') { pedir(); }
 		else if (a === 'cancelar') { cancelar(); }
 		else if (a === 'compartir') { compartir(); }
-		else if (a === 'otro') { S.viaje = null; location.hash = '#inicio'; verTriciclos(); }
+		else if (a === 'otro') { // 3.14.123: de dónde a dónde, del propio viaje (tras recargar la página no se sabía)
+			var vj = S.viaje;
+			if (vj) { S.origen = { texto: vj.origen.texto, sub: '', lat: vj.origen.lat, lng: vj.origen.lng }; S.destino = { texto: vj.destino.texto, sub: '', lat: vj.destino.lat, lng: vj.destino.lng }; S.servicio = vj.servicio || S.servicio; }
+			S.viaje = null; location.hash = '#inicio'; verTriciclos();
+		}
 		else if (a === 'nuevo') { inicio(); }
 		else if (a === 'estrella') { S.estrellas = +id; render(); }
 		else if (a === 'tag') { S.tags[id] = !S.tags[id]; render(); }
@@ -582,7 +589,13 @@
 	window.addEventListener('online', function () { S.offline = false; var p = store.json('cola', null); if (p) { enviar(p); } else { render(); } });
 	window.addEventListener('offline', function () { S.offline = true; render(); });
 	document.addEventListener('visibilitychange', function () { if (!document.hidden && S.viaje) { seguir(); } });
-	T.tick = setInterval(function () { if (S.view === 'viaje' && S.viaje && S.viaje.estado === 'esperando') { render(); } }, 1000);
+	T.tick = setInterval(function () {
+		if (S.view !== 'viaje' || !S.viaje || S.viaje.estado !== 'esperando') { return; }
+		render();
+		// 3.14.123 (prueba del 4-nov): al llegar a 0 se quedaba en «Tiene 0 segundos»: ahora pregunta al momento (una vez).
+		var falta = new Date(S.viaje.espera_hasta).getTime() - Date.now();
+		if (falta <= 0 && S.ceroDe !== S.viaje.uuid) { S.ceroDe = S.viaje.uuid; S.yaMismo = true; seguir(); }
+	}, 1000);
 
 	function ruta() {
 		if (!S.token) { return; }

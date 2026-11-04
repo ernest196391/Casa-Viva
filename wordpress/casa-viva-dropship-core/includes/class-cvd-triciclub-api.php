@@ -223,10 +223,14 @@ final class CVD_Triciclub_Api {
 			AND NOT EXISTS (SELECT 1 FROM {$v} x WHERE x.chofer_id=c.user_id AND (x.estado IN ('asignado','llego','recogido') OR (x.estado='esperando' AND x.created_at>%s)))
 			LIMIT 200", $desde, $ocupado ) );
 		$radio = absint( get_option( 'cvd_tc_radio_m', self::RADIO_M ) ) ?: self::RADIO_M;
+		// 3.14.123 (prueba del 4-nov): el chofer que dijo «No puedo» (o no contestó) a este cliente no vuelve a salirle en 15 min.
+		$yo = self::cliente( $request );
+		$no = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT chofer_id FROM {$v} WHERE cliente_id=%d AND estado='rechazado' AND updated_at>%s", (int) $yo->id, gmdate( 'Y-m-d H:i:s', time() - 15 * MINUTE_IN_SECONDS ) ) ) );
 		$testers = 'prueba' === CVD_Triciclub::mode() ? CVD_Triciclub::testers() : null;
 		$lista = array();
 		foreach ( $rows as $ch ) {
 			if ( null !== $testers && ! in_array( (int) $ch->user_id, $testers, true ) ) { continue; }
+			if ( in_array( (int) $ch->user_id, $no, true ) ) { continue; }
 			if ( ! in_array( $servicio, explode( ',', (string) $ch->servicios ), true ) ) { continue; }
 			$lejos = CVD_Triciclub_Precio::recta_m( (float) $ch->lat, (float) $ch->lng, $olat, $olng );
 			if ( $lejos > $radio ) { continue; }
@@ -420,6 +424,7 @@ final class CVD_Triciclub_Api {
 			// 3.14.121: el camino por las calles (1 h en caché: no vuelve a pedirlo al VPS cada 8 s).
 			'linea'         => $activo || 'esperando' === $viaje->estado ? CVD_Triciclub_Precio::linea_guardada( (float) $viaje->origen_lat, (float) $viaje->origen_lng, (float) $viaje->destino_lat, (float) $viaje->destino_lng ) : null,
 			'motivo'        => (string) $viaje->motivo,
+			'cancelado_por' => (string) $viaje->cancelado_por, // 3.14.123: si fue el chofer, el cliente elige otro
 			'cobrado'       => null !== $viaje->cobrado_at,
 			'creado'        => gmdate( 'c', (int) strtotime( $viaje->created_at . ' UTC' ) ),
 			'espera_hasta'  => 'esperando' === $viaje->estado ? gmdate( 'c', (int) strtotime( $viaje->created_at . ' UTC' ) + self::ESPERA ) : null,
@@ -556,9 +561,9 @@ final class CVD_Triciclub_Api {
 		$p = (array) $request->get_json_params();
 		$set = array( 'updated_at' => $now );
 		$int = static fn( $v, int $min, int $max ): int => max( $min, min( $max, (int) $v ) );
-		if ( isset( $p['precio_km'] ) ) { $set['precio_km'] = $int( $p['precio_km'], 50, 3000 ); }
-		if ( isset( $p['km_tramo'] ) ) { $set['km_tramo'] = max( 0, min( 50, round( (float) str_replace( ',', '.', (string) $p['km_tramo'] ), 1 ) ) ); }
-		if ( isset( $p['precio_km_despues'] ) ) { $set['precio_km_despues'] = $int( $p['precio_km_despues'], 50, 3000 ); }
+		if ( isset( $p['precio_km'] ) && is_numeric( $p['precio_km'] ) ) { $set['precio_km'] = $int( $p['precio_km'], 50, 3000 ); }
+		if ( isset( $p['km_tramo'] ) && is_numeric( str_replace( ',', '.', (string) $p['km_tramo'] ) ) ) { $set['km_tramo'] = max( 1, min( 50, round( (float) str_replace( ',', '.', (string) $p['km_tramo'] ), 1 ) ) ); } // 3.14.123: «abc» no se guarda
+		if ( isset( $p['precio_km_despues'] ) && is_numeric( $p['precio_km_despues'] ) ) { $set['precio_km_despues'] = $int( $p['precio_km_despues'], 50, 3000 ); }
 		if ( isset( $p['extras'] ) && is_array( $p['extras'] ) ) {
 			$extras = array();
 			foreach ( CVD_Triciclub_Precio::franjas() as $f ) { $extras[ $f['id'] ] = CVD_Triciclub_Precio::extra( $p['extras'][ $f['id'] ] ?? 0 ); }

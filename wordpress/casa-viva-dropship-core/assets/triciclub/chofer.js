@@ -16,7 +16,7 @@
 	var mapa = null, mapaEl = null;
 
 	function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-	function cup(n) { return String(Math.round(+n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' CUP'; }
+	function cup(n) { if (typeof n === 'number' && isNaN(n)) { return '—'; } return String(Math.round(+n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' CUP'; }
 	function get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
 	function set(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
 	function toast(t) { S.toast = t; render(); clearTimeout(T.toast); T.toast = setTimeout(function () { S.toast = ''; render(); }, 3500); }
@@ -36,8 +36,18 @@
 	function bloqueado(res) { if (res.status === 401 || res.status === 403) { S.blocked = res.data.message || 'No puedes entrar ahora.'; render(); return true; } return false; }
 
 	// ------------------------------------------------------------ Precio (la misma cuenta que el servidor)
+	function num(v) { var n = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(n) ? n : NaN; }
+	// 3.14.123 (prueba del 4-nov): «abc» o vacío daban precios falsos en la vista previa y se guardaban sin avisar.
+	function erroresPrecio(f) {
+		var e = [];
+		if (!(num(f.precio_km) >= 50 && num(f.precio_km) <= 3000)) { e.push('CUP por km: entre 50 y 3.000'); }
+		if (!(num(f.km_tramo) >= 1 && num(f.km_tramo) <= 50)) { e.push('hasta el km: entre 1 y 50'); }
+		if (!(num(f.precio_km_despues) >= 50 && num(f.precio_km_despues) <= 3000)) { e.push('luego, CUP/km: entre 50 y 3.000'); }
+		return e;
+	}
 	function precio(perfil, km, extra) {
-		var tramo = +perfil.km_tramo || 0, a = +perfil.precio_km || 0, b = +perfil.precio_km_despues || 0;
+		var tramo = num(perfil.km_tramo) || 0, a = num(perfil.precio_km) || 0, b = num(perfil.precio_km_despues) || 0;
+		if (erroresPrecio(perfil).length) { return NaN; }
 		var base = km <= tramo ? km * a : tramo * a + (km - tramo) * b;
 		base = Math.max(a, base);
 		return Math.ceil(Math.round(base * (100 + (+extra || 0))) / 100 / 10) * 10;
@@ -53,12 +63,25 @@
 			if (bloqueado(res)) { return; }
 			if (res.data.ok) {
 				var antes = S.hoy && S.hoy.pedidos ? S.hoy.pedidos.length : 0;
+				avisarDesaparecidos(S.hoy, res.data);
 				S.hoy = res.data;
 				if (!S.form || !S.sucio) { S.form = formDe(res.data); }
 				if (res.data.pedidos.length > antes && navigator.vibrate) { try { navigator.vibrate([300, 120, 300, 120, 300]); } catch (e) {} }
 				if (res.data.activo) { gpsViaje(); } else { gpsLibre(); }
 			}
 			render(); programar();
+		});
+	}
+	// 3.14.123 (prueba del 4-nov): si el cliente cancela, el viaje o el pedido desaparecía sin decir nada. Ahora se avisa.
+	function avisarDesaparecidos(viejo, nuevo) {
+		if (!viejo) { return; }
+		var ids = function (h) { var o = {}; (h.pedidos || []).forEach(function (p) { o[p.id] = p; }); if (h.activo) { o[h.activo.id] = h.activo; } return o; };
+		var a = ids(viejo), b = ids(nuevo), yo = S.yoHice || {};
+		Object.keys(a).forEach(function (id) {
+			if (b[id] || yo[id]) { return; }
+			var p = a[id], vencido = p.estado === 'esperando' && p.espera_hasta && new Date(p.espera_hasta).getTime() <= Date.now() + 2000;
+			toast(vencido ? 'Se acabó el tiempo de ese pedido.' : (p.estado === 'esperando' ? 'El cliente canceló el pedido.' : 'El cliente canceló el viaje. No hace falta que vayas.'));
+			if (navigator.vibrate) { try { navigator.vibrate([400, 150, 400]); } catch (e) {} }
 		});
 	}
 	function programar() {
@@ -68,6 +91,8 @@
 		T.poll = setTimeout(load, document.hidden ? Math.max(cada, 30000) : cada);
 	}
 	function guardar() {
+		var e = erroresPrecio(S.form);
+		if (e.length) { toast('Revisa: ' + e.join(' · ')); return; }
 		S.busy = true; render();
 		api('chofer/perfil', S.form).then(function (res) {
 			S.busy = false;
@@ -122,11 +147,13 @@
 
 	// ------------------------------------------------------------ Botones del viaje
 	function responder(id, acepto) {
+		S.yoHice = S.yoHice || {}; if (!acepto) { S.yoHice[id] = 1; }
 		S.busy = true; render();
 		api('chofer/viajes/' + id + '/responder', { acepto: acepto }).then(function (res) { S.busy = false; if (bloqueado(res)) { return; } if (!res.data.ok) { toast(res.data.message || 'No se pudo.'); } load(); });
 	}
 	function paso(id, accion, extra) {
 		var body = { accion: accion }; Object.keys(extra || {}).forEach(function (k) { body[k] = extra[k]; });
+		if (accion === 'termine' || accion === 'suelto') { S.yoHice = S.yoHice || {}; S.yoHice[id] = 1; }
 		S.busy = true; render();
 		api('chofer/viajes/' + id + '/estado', body).then(function (res) {
 			S.busy = false;
