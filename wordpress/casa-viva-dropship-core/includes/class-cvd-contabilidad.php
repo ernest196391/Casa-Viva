@@ -18,6 +18,10 @@ defined( 'ABSPATH' ) || exit;
  *    pedido (lo usa el cierre del mes del día 1).
  * 3) 3.14.127: GET /panel/contabilidad (clave del panel), igual, para la pestaña «Cierre» del panel; y «gastos_mes»
  *    (opciones cvd_conta_fijos_usd_mes y cvd_conta_ia_usd_mes) para repartir gastos fijos e IA por día.
+ * 4) 3.14.138 (Ernesto 4-nov): «Datos del mes» que la web no sabe sola y apunta Lennys en el panel: impuestos, fluctuación
+ *    del cambio, reparaciones, otros gastos, parte de ELIO, % de inversores y, si cambian ese mes, gastos fijos e IA.
+ *    Opción cvd_conta_mes_AAAA-MM = {valores, historial[{at, by, campo, antes, despues}]}. GET/POST /panel/contabilidad/mes
+ *    (clave del panel) y GET /bot/contabilidad/mes (clave del bot). /…/contabilidad devuelve «datos_mes» del mes de «desde».
  * Rellenar pedidos viejos (solo añade, nunca cambia lo guardado): wp eval 'print_r( CVD_Contabilidad::backfill( "2026-10-01", "2026-11-04" ) );'
  */
 final class CVD_Contabilidad {
@@ -27,6 +31,12 @@ final class CVD_Contabilidad {
 	public const KIND = '_cvd_line_kind';
 	private const NS = 'casa-viva/v1';
 	private const MAX_DAYS = 62;
+	/** 3.14.138: campos de «Datos del mes» → etiqueta. Todos en USD salvo inversores_pct (%) y nota (texto). */
+	public const MES_FIELDS = array(
+		'impuestos_usd' => 'Impuestos', 'fluctuacion_usd' => 'Fluctuación del cambio', 'reparaciones_usd' => 'Reparaciones',
+		'otros_gastos_usd' => 'Otros gastos', 'elio_usd' => 'Parte de ELIO para Casa Viva', 'inversores_pct' => '% para inversores',
+		'fijos_usd' => 'Gastos fijos del mes', 'ia_usd' => 'IA y herramientas', 'nota' => 'Nota',
+	);
 
 	public static function register(): void {
 		add_action( 'woocommerce_new_order_item', array( __CLASS__, 'stamp_new_item' ), 10, 3 );
@@ -119,6 +129,57 @@ final class CVD_Contabilidad {
 		register_rest_route( self::NS, '/bot/contabilidad', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'rest_summary' ), 'permission_callback' => array( 'CVD_Bot_Bridge', 'authorized' ) ) );
 		// 3.14.127: lo mismo para la pestaña «Cierre» del panel (solo dueñas: lo filtra la función nexo-panel-web).
 		register_rest_route( self::NS, '/panel/contabilidad', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'rest_summary' ), 'permission_callback' => array( 'CVD_Panel_Bridge', 'authorized' ) ) );
+		register_rest_route( self::NS, '/panel/contabilidad/mes', array(
+			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'rest_mes_get' ), 'permission_callback' => array( 'CVD_Panel_Bridge', 'authorized' ) ),
+			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'rest_mes_save' ), 'permission_callback' => array( 'CVD_Panel_Bridge', 'authorized' ) ),
+		) );
+		register_rest_route( self::NS, '/bot/contabilidad/mes', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'rest_mes_get' ), 'permission_callback' => array( 'CVD_Bot_Bridge', 'authorized' ) ) );
+	}
+
+	/** 3.14.138: datos del mes 'AAAA-MM' → {mes, valores{campo: número|texto|null}, historial[]}. Sin dato = null (no 0). */
+	public static function month_data( string $mes ): array {
+		$raw = get_option( 'cvd_conta_mes_' . $mes, array() );
+		$raw = is_array( $raw ) ? $raw : ( json_decode( (string) $raw, true ) ?: array() );
+		$vals = array();
+		foreach ( self::MES_FIELDS as $k => $label ) { $vals[ $k ] = $raw['valores'][ $k ] ?? null; }
+		return array( 'mes' => $mes, 'campos' => self::MES_FIELDS, 'valores' => $vals, 'historial' => array_values( (array) ( $raw['historial'] ?? array() ) ) );
+	}
+
+	/** Guarda lo que cambió y apunta en el historial quién, cuándo, antes y después. '' = borrar el dato. */
+	public static function save_month( string $mes, array $input, string $by ) {
+		if ( ! preg_match( '/^\d{4}-(0[1-9]|1[0-2])$/', $mes ) ) { return new WP_Error( 'cvd_conta', 'Mes no válido (AAAA-MM).', array( 'status' => 422 ) ); }
+		$cur = self::month_data( $mes );
+		$vals = $cur['valores'];
+		$hist = $cur['historial'];
+		$by = mb_substr( sanitize_text_field( $by ), 0, 120 ) ?: 'panel';
+		foreach ( self::MES_FIELDS as $k => $label ) {
+			if ( ! array_key_exists( $k, $input ) ) { continue; }
+			$raw = trim( (string) $input[ $k ] );
+			if ( 'nota' === $k ) { $new = '' === $raw ? null : mb_substr( sanitize_textarea_field( $raw ), 0, 600 ); }
+			elseif ( '' === $raw ) { $new = null; }
+			else {
+				$num = str_replace( array( ' ', ',' ), array( '', '.' ), $raw );
+				if ( ! is_numeric( $num ) || abs( (float) $num ) > 1000000 ) { return new WP_Error( 'cvd_conta', $label . ': escribe un número.', array( 'status' => 422 ) ); }
+				$new = round( (float) $num, 2 );
+				if ( 'inversores_pct' === $k && ( $new < 0 || $new > 100 ) ) { return new WP_Error( 'cvd_conta', 'El % para inversores va de 0 a 100.', array( 'status' => 422 ) ); }
+			}
+			if ( $new === $vals[ $k ] ) { continue; }
+			$hist[] = array( 'at' => gmdate( 'c' ), 'by' => $by, 'campo' => $k, 'antes' => $vals[ $k ], 'despues' => $new );
+			$vals[ $k ] = $new;
+		}
+		update_option( 'cvd_conta_mes_' . $mes, array( 'valores' => $vals, 'historial' => array_slice( $hist, -200 ) ), false );
+		return self::month_data( $mes );
+	}
+
+	public static function rest_mes_get( WP_REST_Request $request ): WP_REST_Response {
+		$mes = sanitize_text_field( (string) ( $request->get_param( 'mes' ) ?: wp_date( 'Y-m' ) ) );
+		return new WP_REST_Response( preg_match( '/^\d{4}-\d{2}$/', $mes ) ? self::month_data( $mes ) : array( 'error' => 'Mes no válido.' ), 200 );
+	}
+
+	public static function rest_mes_save( WP_REST_Request $request ) {
+		$p = (array) $request->get_json_params();
+		$r = self::save_month( sanitize_text_field( (string) ( $p['mes'] ?? '' ) ), (array) ( $p['valores'] ?? array() ), (string) ( $p['by'] ?? 'panel' ) );
+		return is_wp_error( $r ) ? $r : new WP_REST_Response( $r, 200 );
 	}
 
 	public static function rest_summary( WP_REST_Request $request ): WP_REST_Response {
@@ -138,7 +199,11 @@ final class CVD_Contabilidad {
 		}
 		// 3.14.127: gastos del mes que no salen de los pedidos (D135), un solo sitio para el panel y el VPS.
 		$gastos = array( 'fijos' => (float) get_option( 'cvd_conta_fijos_usd_mes', 618.36 ), 'ia' => (float) get_option( 'cvd_conta_ia_usd_mes', 270 ) );
-		return new WP_REST_Response( array( 'ok' => true, 'desde' => $desde, 'hasta' => $hasta, 'pedidos' => count( $orders ), 'porcentajes' => array( 'dependientas' => $dep * 100, 'ernesto' => $ern * 100 ), 'gastos_mes' => $gastos ) + $sum, 200 );
+		// 3.14.138: los datos del mes de «desde» mandan sobre los fijos e IA por defecto.
+		$dm = self::month_data( substr( $desde, 0, 7 ) );
+		if ( null !== $dm['valores']['fijos_usd'] ) { $gastos['fijos'] = (float) $dm['valores']['fijos_usd']; }
+		if ( null !== $dm['valores']['ia_usd'] ) { $gastos['ia'] = (float) $dm['valores']['ia_usd']; }
+		return new WP_REST_Response( array( 'ok' => true, 'desde' => $desde, 'hasta' => $hasta, 'pedidos' => count( $orders ), 'porcentajes' => array( 'dependientas' => $dep * 100, 'ernesto' => $ern * 100 ), 'gastos_mes' => $gastos, 'datos_mes' => $dm ) + $sum, 200 );
 	}
 
 	/** 3.14.126: reparto («Reparto de la venta de proveedor», D69) de cada pedido con bajo pedido de la lista. */
