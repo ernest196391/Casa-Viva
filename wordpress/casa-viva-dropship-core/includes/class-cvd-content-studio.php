@@ -80,6 +80,7 @@ final class CVD_Content_Studio {
 			'short' => $p->get_short_description(), 'status' => $p->get_status(),
 			'price' => '' === $p->get_price() ? '' : ( $p->is_type( 'variable' ) ? 'Desde ' : '' ) . wp_strip_all_tags( wc_price( $p->get_price() ) ), 'url' => $p->get_permalink(),
 			'image' => (string) wp_get_attachment_image_url( $p->get_image_id(), 'large' ),
+			'image_full' => (string) wp_get_attachment_image_url( $p->get_image_id(), 'full' ),
 			'image_id' => (int) $p->get_image_id(), 'gallery' => $p->get_gallery_image_ids(),
 			'brief' => (array) $p->get_meta( '_cvd_content_brief' ),
 			'version' => self::version( $p ), 'protected' => (bool) $p->get_meta( self::LOCK ) );
@@ -101,9 +102,9 @@ final class CVD_Content_Studio {
 		if ( empty( $file['tmp_name'] ) || ! empty( $file['error'] ) || filesize( $file['tmp_name'] ) > 3 * MB_IN_BYTES ) { return new WP_Error( 'image', 'La opción es demasiado grande.', array( 'status' => 422 ) ); }
 		$bytes = file_get_contents( $file['tmp_name'] );
 		$dim = @getimagesizefromstring( $bytes );
-		if ( ! $dim || 'image/png' !== $dim['mime'] || $dim[0] > 1920 || $dim[1] > 1920 ) { return new WP_Error( 'image', 'La opción no es válida.', array( 'status' => 422 ) ); }
+		if ( ! $dim || ! in_array( $dim['mime'], array( 'image/png', 'image/jpeg', 'image/webp' ), true ) || $dim[0] > 1920 || $dim[1] > 1920 ) { return new WP_Error( 'image', 'La opción no es válida.', array( 'status' => 422 ) ); }
 		$key = '_cvd_content_review_' . $p->get_id();
-		$value = array( 'version' => self::version( $p ), 'photo' => (int) $p->get_image_id(), 'text' => self::text_version( $p ), 'image' => 'data:image/png;base64,' . base64_encode( $bytes ) );
+		$value = array( 'version' => self::version( $p ), 'photo' => (int) $p->get_image_id(), 'text' => self::text_version( $p ), 'image' => 'data:' . $dim['mime'] . ';base64,' . base64_encode( $bytes ) );
 		if ( false === update_user_meta( get_current_user_id(), $key, $value ) && get_user_meta( get_current_user_id(), $key, true ) !== $value ) { return new WP_Error( 'save', 'No se pudo guardar la opción.', array( 'status' => 500 ) ); }
 		return rest_ensure_response( array( 'ok' => true ) );
 	}

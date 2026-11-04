@@ -126,8 +126,13 @@ test('Editor de contenido: login, guardar, subir foto y descargar en móvil', as
   const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO/aJ1sAAAAASUVORK5CYII=', 'base64');
   await page.locator('#cv-photo').setInputFiles({ name: 'fixture.png', mimeType: 'image/png', buffer: pixel });
   await expect(page.getByRole('status')).toContainText('Foto preparada.');
-  await page.getByRole('button', { name: 'Subir como foto principal', exact: true }).click();
+  const [uploaded] = await Promise.all([
+    page.waitForResponse((r) => r.request().method() === 'POST' && decodeURIComponent(r.url()).includes('/contenido/upload')),
+    page.getByRole('button', { name: 'Subir como foto principal', exact: true }).click(),
+  ]);
   await expect(page.getByRole('status')).toContainText('Foto subida y protegida.');
+  // The web copy is converted to WebP in the browser before it is sent.
+  expect((await uploaded.json()).image_full).toMatch(/\.webp$/);
   await expect(page.locator('#cv-commercial')).toContainText('25');
   await page.getByRole('textbox', { name: 'Características confirmadas (una por línea, hasta tres)', exact: true }).fill('Dato sintético de prueba');
   await page.getByRole('button', { name: 'Preparar imagen', exact: true }).click();
@@ -158,8 +163,12 @@ test('El fondo cambia y se conservan las piezas negras, claras y los huecos cerr
     ctx.fillStyle='#ebebeb'; ctx.fillRect(70,65,3,6);
     const bg = document.createElement('canvas'); bg.width=1;bg.height=1;
     const b=bg.getContext('2d');b.fillStyle='#ccbb99';b.fillRect(0,0,1,1);
-    const composed = window.cvProductBackground(source,bg,true).getContext('2d');
-    return [[5,10],[35,10],[10,16],[70,65],[50,50]].map(([x,y]) => Array.from(composed.getImageData(238+x,462+y,1,1).data).slice(0,3));
+    const vertical = window.cvProductBackground(source,bg,true), square = window.cvProductBackground(source,bg,false);
+    const composed = vertical.getContext('2d');
+    return { sizes: [[vertical.width, vertical.height], [square.width, square.height]],
+      pixels: [[5,10],[35,10],[10,16],[70,65],[50,50]].map(([x,y]) => Array.from(composed.getImageData(490+x,910+y,1,1).data).slice(0,3)) };
   });
-  expect(actual).toEqual([[17,17,17],[17,17,17],[255,255,255],[235,235,235],[204,187,153]]);
+  // Composed at social size so templates and downloads are not upscaled.
+  expect(actual.sizes).toEqual([[1080, 1920], [1080, 1080]]);
+  expect(actual.pixels).toEqual([[17,17,17],[17,17,17],[255,255,255],[235,235,235],[204,187,153]]);
 });

@@ -129,8 +129,9 @@
   $('cv-upload').addEventListener('click', (e) => busy(e.target, async () => {
     if (!product?.id) throw new Error('Guarda primero el borrador.');
     const file = $('cv-photo').files[0]; if (!file) throw new Error('Elige una foto.');
-    const body = new FormData(); body.append('id', product.id); body.append('version', product.version); body.append('photo', file);
-    const current = ficha, updated = await api('upload', body);
+    const current = ficha, ready = await webImage(file);
+    const body = new FormData(); body.append('id', product.id); body.append('version', product.version); body.append('photo', ready, webName('foto', ready));
+    const updated = await api('upload', body);
     if (current !== ficha) { message(`La foto quedó subida en «${updated.name}». La ficha que tienes abierta no cambió.`); return; }
     product = updated; message('Foto subida y protegida. Si el producto ya estaba publicado, la foto ya aparece en la tienda.');
   }));
@@ -145,21 +146,42 @@
   function drawContained(ctx, img, x, y, w, h) { const scale = Math.min(w / img.width, h / img.height); const iw = img.width * scale, ih = img.height * scale; ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih); }
   function facts() { return $('cv-facts').value.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 3); }
   let imageURL = '';
-  async function jpeg(img, limit) {
+  async function jpeg(img, limit, quality = 0.92) {
     const c = document.createElement('canvas'), scale = Math.min(1, limit / Math.max(img.width, img.height));
     c.width = Math.max(1, Math.round(img.width * scale)); c.height = Math.max(1, Math.round(img.height * scale));
     const ctx = c.getContext('2d'); ctx.fillStyle = 'white'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height);
-    const blob = await new Promise(resolve => c.toBlob(resolve, 'image/jpeg', 0.92));
+    const blob = await new Promise(resolve => c.toBlob(resolve, 'image/jpeg', quality));
     if (!blob) throw new Error('No se pudo preparar la foto.');
     return blob;
   }
-  async function publishVariant(blob, session) {
+  // Photos for the web: WebP up to 1600 px; light JPEG where the browser cannot write WebP.
+  async function webImage(source) {
+    let img = source, url = '';
+    if (source instanceof Blob) { url = URL.createObjectURL(source); }
+    try {
+      if (url) img = await loadImage(url);
+      const width = img.naturalWidth || img.width, height = img.naturalHeight || img.height;
+      const c = document.createElement('canvas'), scale = Math.min(1, 1600 / Math.max(width, height));
+      c.width = Math.max(1, Math.round(width * scale)); c.height = Math.max(1, Math.round(height * scale));
+      const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, c.width, c.height);
+      let blob = await new Promise(resolve => c.toBlob(resolve, 'image/webp', 0.85));
+      if (!blob || blob.type !== 'image/webp') {
+        ctx.globalCompositeOperation = 'destination-over'; ctx.fillStyle = 'white'; ctx.fillRect(0, 0, c.width, c.height);
+        blob = await new Promise(resolve => c.toBlob(resolve, 'image/jpeg', 0.88));
+      }
+      if (!blob) throw new Error('No se pudo preparar la foto.');
+      return blob;
+    } finally { if (url) URL.revokeObjectURL(url); }
+  }
+  const webName = (base, blob) => `${base}.${blob.type === 'image/webp' ? 'webp' : 'jpg'}`;
+  async function publishVariant(source, session) {
     if (session !== generationSession) return;
     if (!product?.id) throw new Error('Guarda primero el borrador del producto.');
     const name = product.name;
     if (!confirm(`¿Usar esta imagen como principal de «${name}»? Si está publicado, aparecerá en la tienda.`)) return;
+    const blob = await webImage(source);
     const body = new FormData(); body.append('id', product.id); body.append('version', product.version);
-    body.append('source', 'ai'); body.append('photo', blob, 'casa-viva-ia.jpg');
+    body.append('source', 'ai'); body.append('photo', blob, webName('casa-viva-ia', blob));
     const updated = await api('upload', body);
     if (session !== generationSession) return;
     product = updated; $('cv-ai-status').textContent = 'Imagen elegida guardada como principal.';
@@ -172,7 +194,7 @@
     const use = document.createElement('button'); use.type = 'button'; use.textContent = `Usar opción ${number} en la plantilla`;
     use.onclick = () => { scenePhoto = img; $('cv-publish-layout').hidden = true; $('cv-render').click(); }; card.append(use);
     const publish = document.createElement('button'); publish.type = 'button'; publish.textContent = `Elegir opción ${number} como foto principal`;
-    publish.onclick = () => busy(publish, async () => publishVariant(await jpeg(img, 1920), session)); card.append(publish);
+    publish.onclick = () => busy(publish, async () => publishVariant(img, session)); card.append(publish);
     const download = document.createElement('a'); download.href = finalURL; download.download = `casa-viva-opcion-${number}`; download.textContent = 'Descargar esta opción'; card.append(download);
     if (saved && changed) {
       const what = { foto: 'la foto original', texto: 'el texto de la ficha' }, reasons = changed.map((key) => what[key]).filter(Boolean);
@@ -191,7 +213,8 @@
       keep.onclick = () => busy(keep, async () => {
         if (session !== generationSession) return;
         const body = new FormData(); body.append('id', product.id); body.append('version', product.version);
-        body.append('photo', await (await fetch(finalURL)).blob(), 'opcion.png');
+        // High-quality JPEG keeps a 1080 px option within the private review limit.
+        body.append('photo', await jpeg(img, 1920, 0.95), 'opcion.jpg');
         await api('review', body);
         if (session === generationSession) $('cv-ai-status').textContent = 'Opción guardada en tu perfil para este producto.';
       }); card.append(keep);
@@ -212,7 +235,7 @@
   $('cv-import-button').addEventListener('click', e => busy(e.target, async () => {
     const img = $('cv-import-preview'), session = generationSession;
     if (img.hidden || !img.complete || !$('cv-import-ai').files[0]) throw new Error('Elige y revisa una imagen primero.');
-    await publishVariant(await jpeg(img, 1920), session);
+    await publishVariant(img, session);
   }));
   for (const option of providerSelect.options) option.disabled = !cvContent.providers[option.value];
   const firstProvider = Array.from(providerSelect.options).find(option => !option.disabled);
@@ -221,7 +244,7 @@
   $('cv-ai-setup').hidden = Boolean(firstProvider);
   $('cv-generate').addEventListener('click', e => busy(e.target, async () => {
     const session = generationSession, provider = providerSelect.value;
-    const real = photo || (product?.image ? await loadImage(product.image) : null);
+    const real = photo || (product?.image ? await loadImage(product.image_full || product.image) : null);
     if (!real) throw new Error('Elige la foto real del producto antes de generar.');
     if (session !== generationSession) return;
     if (provider !== 'cloudflare' && !confirm('¿Generar una imagen con la API de pago seleccionada? Se usará su saldo.')) return;
@@ -256,7 +279,7 @@
   $('cv-render').addEventListener('click', (e) => busy(e.target, async () => {
     $('cv-download').hidden = true;
     $('cv-publish-layout').hidden = true;
-    const img = scenePhoto || photo || (product?.image ? await loadImage(product.image) : null); if (!img) throw new Error('Sube una foto real para empezar.');
+    const img = scenePhoto || photo || (product?.image ? await loadImage(product.image_full || product.image) : null); if (!img) throw new Error('Sube una foto real para empezar.');
     const layout = $('cv-layout').value, rows = facts(), h = Number($('cv-format').value);
     if (['features', 'spec'].includes(layout) && !rows.length) throw new Error('Añade al menos una característica confirmada.');
     if (layout === 'use' && !$('cv-use').value.trim()) throw new Error('Describe el uso cotidiano confirmado.');
@@ -277,7 +300,8 @@
     if (layout === 'offer') { wrapped(ctx, `Precio actual: ${product?.price || 'Consulta en la tienda'}`, 64, y, 952, 38, 2); }
     if (layout === 'use') wrapped(ctx, $('cv-use').value, 64, y, 952, 38, 3);
     ctx.fillStyle = '#173e35'; ctx.fillRect(64, h - 160, 952, 90); wrapped(ctx, 'VER EN CASA VIVA', 105, h - 103, 870, 32, 1, '#fff');
-    const blob = await new Promise((resolve) => c.toBlob(resolve, 'image/jpeg', 0.92)); if (!blob) throw new Error('No se pudo preparar la imagen.');
+    // Social downloads go out at maximum JPEG quality; the networks compress them again.
+    const blob = await new Promise((resolve) => c.toBlob(resolve, 'image/jpeg', 1)); if (!blob) throw new Error('No se pudo preparar la imagen.');
     if (imageURL) URL.revokeObjectURL(imageURL); imageURL = URL.createObjectURL(blob); $('cv-download').href = imageURL;
     $('cv-publish-layout').hidden = !scenePhoto;
     c.hidden = false; $('cv-download').hidden = false; message(layout === 'features' ? `Imagen preparada. Toca la foto para colocar el número ${nextMarker + 1} en el detalle correspondiente; después descarga.` : 'Imagen lista para descargar.');

@@ -98,3 +98,15 @@ studio_assert( empty( studio_call( 'GET', 'products', array( 'id' => $p->get_id(
 $panel = add_query_arg( 'cvd_contenido', '1', home_url( '/' ) );
 studio_assert( $panel === apply_filters( 'login_redirect', $panel, $panel, get_user_by( 'id', $id ) ), 'editor login lands on the catalog panel' );
 studio_assert( $panel === apply_filters( 'login_redirect', home_url( '/' ), '', get_user_by( 'id', $id ) ), 'editor login without a destination also lands on the panel' );
+
+// A full-size option is kept as JPEG so it fits the private review limit.
+wp_set_current_user( $id );
+$current = studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_data();
+$tmp = tempnam( sys_get_temp_dir(), 'cv-review-' );
+$gd = imagecreatetruecolor( 2, 2 ); imagejpeg( $gd, $tmp, 95 ); imagedestroy( $gd );
+$review_req = new WP_REST_Request( 'POST', '/casa-viva/v1/contenido/review' );
+$review_req->set_body_params( array( 'id' => $p->get_id(), 'version' => $current['version'] ) );
+$review_req->set_file_params( array( 'photo' => array( 'tmp_name' => $tmp, 'error' => 0 ) ) );
+studio_assert( rest_do_request( $review_req )->get_status() === 200, 'editor saves a JPEG option' );
+unlink( $tmp );
+studio_assert( str_starts_with( studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_data()['review'], 'data:image/jpeg;base64,' ), 'JPEG option comes back as JPEG' );
