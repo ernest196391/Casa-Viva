@@ -110,3 +110,13 @@ $review_req->set_file_params( array( 'photo' => array( 'tmp_name' => $tmp, 'erro
 studio_assert( rest_do_request( $review_req )->get_status() === 200, 'editor saves a JPEG option' );
 unlink( $tmp );
 studio_assert( str_starts_with( studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_data()['review'], 'data:image/jpeg;base64,' ), 'JPEG option comes back as JPEG' );
+
+// A real customer review is saved only with the customer's permission, as a store review.
+$denied = studio_call( 'POST', 'resena', array( 'id' => $p->get_id(), 'text' => 'Llegó rápido y es muy bonito.', 'name' => 'María González', 'rating' => '5', 'permission' => '0' ) );
+studio_assert( 422 === $denied->get_status() && 0 === (int) get_comments( array( 'post_id' => $p->get_id(), 'type' => 'review', 'count' => true ) ), 'review without permission is not saved' );
+$saved = studio_call( 'POST', 'resena', array( 'id' => $p->get_id(), 'text' => 'Llegó rápido y es muy bonito.', 'name' => 'María González', 'rating' => '5', 'permission' => '1' ) );
+studio_assert( 200 === $saved->get_status(), 'review with permission is saved' );
+$comment = get_comment( $saved->get_data()['saved'] );
+studio_assert( 'review' === $comment->comment_type && '1' === (string) $comment->comment_approved && 5 === (int) get_comment_meta( $comment->comment_ID, 'rating', true ) && 'whatsapp' === get_comment_meta( $comment->comment_ID, '_cvd_resena_origen', true ), 'review stored as an approved store review with stars and origin' );
+$item = studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_data();
+studio_assert( 'María González' === $item['reviews'][0]['name'] && 5 === $item['reviews'][0]['rating'], 'the panel receives the review for the card' );
