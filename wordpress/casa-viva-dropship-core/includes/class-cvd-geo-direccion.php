@@ -47,8 +47,12 @@ final class CVD_Geo_Direccion {
 		return $found;
 	}
 
-	/** «Belascoaín 610 entre Clavel y Santo Tomás» (+ barrio o municipio) → { lat, lon, how } o null. */
-	public static function locate( string $address, string $context = '' ): ?array {
+	/**
+	 * «Belascoaín 610 entre Clavel y Santo Tomás» (+ barrio o municipio) → { lat, lon, how } o null.
+	 * $cerca = [lat, lon] de quien escribe (Triciclub, 4-nov): sin barrio, de varias cuadras con los mismos nombres
+	 * («17 e/ 10 y 12» está en Vedado y en Altahabana) gana la más cercana a él. Solo ordena, no descarta ninguna.
+	 */
+	public static function locate( string $address, string $context = '', ?array $cerca = null ): ?array {
 		$data = self::data();
 		if ( ! $data ) { return null; }
 		$raw = ' ' . strtolower( remove_accents( $address ) ) . ' ';
@@ -71,11 +75,12 @@ final class CVD_Geo_Direccion {
 		}
 		$barrio = self::barrio( $address . ' ' . $context );
 		$near = static fn( array $p ): float => $barrio ? min( array_map( static fn( array $b ): float => CVD_Palla_Api::meters( $p[0], $p[1], $b[0], $b[1] ), $barrio ) ) : 0.0;
+		$yo = ! $barrio && $cerca && isset( $cerca[0], $cerca[1] ) ? static fn( array $p ): float => CVD_Palla_Api::meters( $p[0], $p[1], (float) $cerca[0], (float) $cerca[1] ) : null;
 		$first = self::match( $main );
 		if ( ! $first ) { return null; }
 		// Primero con la primera calle de la dirección; las otras que nombre («carretera del roble calle 20»), solo si no sale.
 		foreach ( $cross ? array_unique( array( $first, self::match( $main, true ) ), SORT_REGULAR ) : array() as $m ) {
-			$found = self::corners( $m, $cross, $barrio, $near );
+			$found = self::corners( $m, $cross, $barrio, $near, $yo );
 			if ( $found ) { return $found; }
 		}
 		// Sin entrecalles (o no están en el mapa): un punto de la calle cerca del barrio. Sin barrio no se adivina.
@@ -90,7 +95,7 @@ final class CVD_Geo_Direccion {
 	}
 
 	/** Las esquinas de la calle $m con sus entrecalles → la cuadra (las dos), la esquina (una) o null. */
-	private static function corners( array $m, array $cross, ?array $barrio, callable $near ): ?array {
+	private static function corners( array $m, array $cross, ?array $barrio, callable $near, ?callable $yo = null ): ?array {
 		$data = self::data();
 		$sets = array();
 		foreach ( $cross as $c ) {
@@ -111,21 +116,25 @@ final class CVD_Geo_Direccion {
 					$d = CVD_Palla_Api::meters( $p[0], $p[1], $q[0], $q[1] );
 					if ( $d > 600 ) { continue; }
 					$mid = array( ( $p[0] + $q[0] ) / 2, ( $p[1] + $q[1] ) / 2 );
-					$score = $d + $near( $mid ) * 0.5;
+					$score = $d + $near( $mid ) * 0.5 + ( $yo ? $yo( $mid ) * 0.1 : 0 ); // 1 km más lejos de quien escribe = 100 m
 					if ( ! $best || $score < $best[0] ) { $best = array( $score, $mid ); }
 				}
 			}
 			if ( $best && ( ! $barrio || $near( $best[1] ) < 6000 ) ) { return self::out( $best[1], 'cuadra' ); }
 		}
 		foreach ( $sets as $pts ) { // una esquina sola (o las dos no casan): la de la primera entrecalle que se sepa cuál es
-			$pick = self::pick( $pts, $barrio, $near, 1500 );
+			$pick = self::pick( $pts, $barrio, $near, 1500, $yo );
 			if ( $pick ) { return self::out( $pick, 'esquina' ); }
 		}
 		return null;
 	}
 
 	/** De varios puntos: el más cerca del barrio; sin barrio, solo si están todos juntos (si no, no se sabe cuál es). */
-	private static function pick( array $pts, ?array $barrio, callable $near, float $spread ): ?array {
+	private static function pick( array $pts, ?array $barrio, callable $near, float $spread, ?callable $yo = null ): ?array {
+		if ( ! $barrio && $yo ) { // sin barrio pero se sabe dónde está quien escribe: la más cercana a él
+			usort( $pts, static fn( array $a, array $b ): int => $yo( $a ) <=> $yo( $b ) );
+			return $pts[0];
+		}
 		if ( $barrio ) {
 			usort( $pts, static fn( array $a, array $b ): int => $near( $a ) <=> $near( $b ) );
 			return $near( $pts[0] ) < 6000 ? $pts[0] : null;

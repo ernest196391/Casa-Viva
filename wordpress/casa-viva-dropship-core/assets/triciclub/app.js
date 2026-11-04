@@ -356,7 +356,7 @@
 		h += '<label class="tc-q"><span class="tc-ruta__punto' + (S.campo === 'destino' ? ' tc-ruta__punto--dest' : '') + '"></span><input id="tc-q" data-campo="q" value="' + esc(S.texto) + '" placeholder="' + (S.campo === 'destino' ? 'Calle, esquina o barrio' : 'Dónde estás') + '" autocomplete="off" enterkeyhint="search"></label>';
 		h += '<div class="tc-lista">';
 		(S.sugerencias || []).forEach(function (s, i) {
-			h += '<button type="button" class="tc-item" data-act="sug" data-id="' + i + '">' + svg(s.tipo === 'direccion' ? I.pin : I.calle, 20, '#4A5D52') + '<span><b>' + esc(s.texto) + '</b><small>' + esc(s.tipo === 'calle' ? (s.sub ? s.sub + ' · ' : '') + 'pon el punto en el mapa' : s.sub) + '</small></span></button>';
+			h += '<button type="button" class="tc-item" data-act="sug" data-id="' + i + '">' + svg(s.tipo === 'direccion' || s.tipo === 'lugar' ? I.pin : I.calle, 20, '#4A5D52') + '<span><b>' + esc(s.texto) + '</b><small>' + esc(s.tipo === 'calle' ? (s.sub ? s.sub + ' · ' : '') + 'pon el punto en el mapa' : s.sub) + '</small></span></button>';
 		});
 		var aviso = q.length < 2 || (S.sugerencias || []).length ? '' : (S.sugEstado === 'buscando' ? 'Buscando…' : (S.sugEstado === 'sinred' ? 'Sin conexión ahora. Ponla en el mapa: 👇' : (S.sugEstado === 'listo' ? 'No la encontramos escrita. Ponla en el mapa: 👇' : '')));
 		h += '<p class="tc-small" id="tc-sug-estado" role="status" style="padding:8px 4px;margin:0">' + esc(aviso) + '</p>';
