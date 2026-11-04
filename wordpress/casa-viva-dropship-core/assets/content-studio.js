@@ -135,8 +135,8 @@
     if (current !== ficha) { message(`La foto quedó subida en «${updated.name}». La ficha que tienes abierta no cambió.`); return; }
     product = updated; message('Foto subida y protegida. Si el producto ya estaba publicado, la foto ya aparece en la tienda.');
   }));
-  function wrapped(ctx, text, x, y, width, size, maxLines = 3, color = '#173e35') {
-    ctx.fillStyle = color; ctx.font = `600 ${size}px Arial, sans-serif`; ctx.textAlign = 'left';
+  function wrapped(ctx, text, x, y, width, size, maxLines = 3, color = '#173e35', weight = 600) {
+    ctx.fillStyle = color; ctx.font = `${weight} ${size}px Arial, sans-serif`; ctx.textAlign = 'left';
     const words = String(text).split(/\s+/); let line = '', lines = [];
     for (const word of words) { const next = line ? `${line} ${word}` : word; if (ctx.measureText(next).width > width && line) { lines.push(line); line = word; } else line = next; }
     if (line) lines.push(line);
@@ -145,6 +145,42 @@
   }
   function drawContained(ctx, img, x, y, w, h) { const scale = Math.min(w / img.width, h / img.height); const iw = img.width * scale, ih = img.height * scale; ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih); }
   function facts() { return $('cv-facts').value.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 3); }
+  // Callout diagram: product box, and where the explanations go (below in 9:16, at the right in 1:1).
+  const featureBox = (h) => h === 1080 ? { x: 64, y: 290, w: 500, h: 560 } : { x: 64, y: 380, w: 952, h: 780 };
+  function drawFeatures(ctx, img, rows, h) {
+    const box = featureBox(h), square = h === 1080, line = '#173e35';
+    ctx.fillStyle = '#fff'; ctx.fillRect(box.x, box.y, box.w, box.h); drawContained(ctx, img, box.x + 20, box.y + 20, box.w - 40, box.h - 40);
+    // «Característica — para qué sirve»: the part after a spaced dash is the everyday benefit.
+    const items = rows.map((s) => { const m = s.match(/^(.*?)\s+[—–-]\s+(.+)$/); return m ? { fact: m[1], benefit: m[2] } : { fact: s, benefit: '' }; });
+    const left = square ? 600 : 64, width = square ? 416 : 952, factSize = square ? 28 : 34, benefitSize = square ? 24 : 28;
+    let top = square ? box.y + 10 : box.y + box.h + 50;
+    const anchors = items.map((item, i) => {
+      const factY = top + factSize, factH = wrapped(ctx, item.fact, left + 60, factY, width - 60, factSize, 2);
+      const benefitH = item.benefit ? wrapped(ctx, item.benefit, left + 60, factY + factH + 2, width - 60, benefitSize, 2, '#4b5b55', 400) : 0;
+      ctx.beginPath(); ctx.arc(left + 22, top + 22, 22, 0, Math.PI * 2); ctx.fillStyle = line; ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.fillText(String(i + 1), left + 22, top + 31); ctx.textAlign = 'left';
+      const anchor = top + 22; top = factY + factH + benefitH + 22;
+      if (top > h - 190) throw new Error('Acorta las características para que se lean completas.');
+      return anchor;
+    });
+    // Thin line from each tapped point to its explanation, routed along the margin so it does not cover the product.
+    // Each line has its own lane so two lines never share a segment.
+    ctx.strokeStyle = line; ctx.lineWidth = 3;
+    items.forEach((item, i) => {
+      const point = markers[i]; if (!point) return;
+      const x = point.x * 1080, y = point.y * h, ay = anchors[i];
+      ctx.beginPath(); ctx.moveTo(x, y);
+      if (square) { const lane = 572 + i * 10; ctx.lineTo(lane, y); ctx.lineTo(lane, ay); ctx.lineTo(left, ay); }
+      else { const lane = x < 540 ? 24 + i * 14 : 1056 - i * 14; ctx.lineTo(lane, y); ctx.lineTo(lane, ay); ctx.lineTo(x < 540 ? left : left + width, ay); }
+      ctx.stroke();
+    });
+    items.forEach((item, i) => {
+      const point = markers[i]; if (!point) return;
+      const x = point.x * 1080, y = point.y * h;
+      ctx.beginPath(); ctx.arc(x, y, 22, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = line; ctx.lineWidth = 4; ctx.stroke();
+      ctx.fillStyle = line; ctx.font = 'bold 26px Arial'; ctx.textAlign = 'center'; ctx.fillText(String(i + 1), x, y + 9); ctx.textAlign = 'left';
+    });
+  }
   let imageURL = '';
   async function jpeg(img, limit, quality = 0.92) {
     const c = document.createElement('canvas'), scale = Math.min(1, limit / Math.max(img.width, img.height));
@@ -288,15 +324,10 @@
     const title = $('cv-headline').value.trim() || $('cv-name').value.trim();
     wrapped(ctx, title, 64, 150, 952, h === 1080 ? 44 : 58, 3);
     const imageTop = h === 1080 ? 300 : 400, imageH = h === 1080 ? 370 : 820;
-    ctx.fillStyle = '#fff'; ctx.fillRect(64, imageTop, 952, imageH); drawContained(ctx, img, 88, imageTop + 24, 904, imageH - 48);
-    if (layout === 'features') rows.forEach((s, i) => {
-      const point = markers[i]; if (!point) return;
-      const x = point.x * 1080, y = point.y * h;
-      ctx.beginPath(); ctx.arc(x, y, 24, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#173e35'; ctx.lineWidth = 3; ctx.stroke();
-      ctx.fillStyle = '#173e35'; ctx.font = 'bold 28px Arial'; ctx.textAlign = 'center'; ctx.fillText(String(i + 1), x, y + 10); ctx.textAlign = 'left';
-    });
+    if (layout === 'features') drawFeatures(ctx, img, rows, h);
+    else { ctx.fillStyle = '#fff'; ctx.fillRect(64, imageTop, 952, imageH); drawContained(ctx, img, 88, imageTop + 24, 904, imageH - 48); }
     let y = imageTop + imageH + 70;
-    if (['features', 'spec'].includes(layout)) rows.forEach((s, i) => { y += wrapped(ctx, `${i + 1}. ${s}`, 64, y, 952, h === 1080 ? 27 : 38, 2) + 16; });
+    if (layout === 'spec') rows.forEach((s, i) => { y += wrapped(ctx, `${i + 1}. ${s}`, 64, y, 952, h === 1080 ? 27 : 38, 2) + 16; });
     if (layout === 'offer') { wrapped(ctx, `Precio actual: ${product?.price || 'Consulta en la tienda'}`, 64, y, 952, 38, 2); }
     if (layout === 'use') wrapped(ctx, $('cv-use').value, 64, y, 952, 38, 3);
     ctx.fillStyle = '#173e35'; ctx.fillRect(64, h - 160, 952, 90); wrapped(ctx, 'VER EN CASA VIVA', 105, h - 103, 870, 32, 1, '#fff');
@@ -309,8 +340,8 @@
   $('cv-canvas').addEventListener('click', (e) => {
     if ($('cv-layout').value !== 'features' || !facts().length) return;
     const c = e.currentTarget, rect = c.getBoundingClientRect(), x = (e.clientX - rect.left) / rect.width, y = (e.clientY - rect.top) / rect.height;
-    const h = c.height, top = h === 1080 ? 300 : 400, height = h === 1080 ? 370 : 820;
-    if (x < 64 / 1080 || x > 1016 / 1080 || y < top / h || y > (top + height) / h) return;
+    const h = c.height, box = featureBox(h);
+    if (x < box.x / 1080 || x > (box.x + box.w) / 1080 || y < box.y / h || y > (box.y + box.h) / h) return;
     markers[nextMarker] = {x, y}; nextMarker = (nextMarker + 1) % facts().length; $('cv-render').click();
   });
   $('cv-copy-build').addEventListener('click', () => {

@@ -109,6 +109,32 @@ test('El TXT trae título, descripción y texto para redes; la instrucción para
   expect(saves).toBe(0);
 });
 
+test('Características señaladas: línea fina de cada punto a su explicación', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(60000);
+  await openPanel(page);
+  await page.locator('#cv-new').click();
+  await page.getByRole('textbox', { name: 'Título', exact: true }).fill('Diagrama de prueba');
+  await page.locator('#cv-facts').fill('Metal resistente — aguanta cortinas pesadas\nExtensible — sirve para ventanas grandes');
+  const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO/aJ1sAAAAASUVORK5CYII=', 'base64');
+  await page.locator('#cv-photo').setInputFiles({ name: 'diagrama.png', mimeType: 'image/png', buffer: pixel });
+  await expect(page.getByRole('status')).toContainText('Foto preparada.');
+  await page.locator('#cv-layout').selectOption('features'); await page.locator('#cv-format').selectOption('1920');
+  await page.getByRole('button', { name: 'Preparar imagen', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('número 1');
+  const canvas = page.locator('#cv-canvas');
+  const tap = async (x, y, next) => {
+    const b = await canvas.boundingBox();
+    await canvas.click({ position: { x: x * b.width / 1080, y: y * b.height / 1920 } });
+    await expect(page.getByRole('status')).toContainText(`número ${next}`);
+  };
+  await tap(300, 800, 2); await tap(800, 900, 1);
+  // Point 1 is on the left: its line runs down the first left lane; point 2 down the second right lane.
+  const colors = await canvas.evaluate((c) => [[24, 1000], [1042, 1100], [540, 330]].map(([x, y]) => Array.from(c.getContext('2d').getImageData(x, y, 1, 1).data).slice(0, 3)));
+  expect(colors).toEqual([[23, 62, 53], [23, 62, 53], [246, 242, 233]]);
+  await expect(page.getByRole('link', { name: 'Descargar imagen', exact: true })).toBeVisible();
+});
+
 test('Editor de contenido: login, guardar, subir foto y descargar en móvil', async ({ page }) => {
   test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
   test.setTimeout(60000);
