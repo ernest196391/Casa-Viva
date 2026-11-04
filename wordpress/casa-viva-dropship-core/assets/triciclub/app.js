@@ -97,16 +97,18 @@
 				M.triciclos(m, []);
 				var o = [v.origen.lat, v.origen.lng], d = [v.destino.lat, v.destino.lng], pos = v.pos ? [v.pos.lat, v.pos.lon] : null;
 				M.pin(m, 'origen', v.estado === 'recogido' ? null : o); M.pin(m, 'destino', d); M.chofer(m, pos);
-				var clave = v.uuid + v.estado;
-				if (m._tcVista !== clave) { m._tcVista = clave; M.ruta(m, v.estado === 'recogido' ? (pos || o) : o, d); M.ver(m, [pos, v.estado === 'recogido' ? null : o, d], abajo()); }
+				// 3.14.121: siempre el camino por las calles de la recogida al destino (lo manda el servidor en `linea`).
+				var clave = v.uuid + v.estado + (v.linea ? '+l' : '');
+				if (m._tcVista !== clave) { m._tcVista = clave; M.ruta(m, o, d, v.linea); M.ver(m, [pos, v.estado === 'recogido' ? null : o, d], abajo()); }
 				return;
 			}
 			M.chofer(m, null);
 			M.pin(m, 'origen', p2(S.origen));
 			M.pin(m, 'destino', S.view === 'elegir' ? p2(S.destino) : null);
 			if (S.view === 'elegir' && S.origen && S.destino) {
-				var k = S.origen.lat + ',' + S.origen.lng + '>' + S.destino.lat + ',' + S.destino.lng;
-				if (m._tcVista !== k) { m._tcVista = k; M.ruta(m, p2(S.origen), p2(S.destino)); M.ver(m, [p2(S.origen), p2(S.destino)], abajo()); }
+				var lc = S.cerca && S.cerca.linea; // 3.14.121: la ruta por calles llega con los precios
+				var k = S.origen.lat + ',' + S.origen.lng + '>' + S.destino.lat + ',' + S.destino.lng + (lc ? '+l' : (S.cerca ? '+sin' : ''));
+				if (m._tcVista !== k) { var nueva = (m._tcVista || '').split('+')[0] !== k.split('+')[0]; m._tcVista = k; if (lc || S.cerca) { M.ruta(m, p2(S.origen), p2(S.destino), lc); } else { M.ruta(m, p2(S.origen), p2(S.destino), null); } if (nueva || lc) { M.ver(m, lc && lc.length > 1 ? [p2(S.origen), p2(S.destino)].concat([lc[Math.floor(lc.length / 2)]]) : [p2(S.origen), p2(S.destino)], abajo()); } }
 			} else if (S.view === 'mapa') {
 				if (m._tcVista !== 'mapa') { m._tcVista = 'mapa'; M.ruta(m, null, null); if (S.origen || S.gps) { M.ir(m, p2(S.origen) || S.gps, 16, abajo()); } }
 			}

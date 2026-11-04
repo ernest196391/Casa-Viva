@@ -125,22 +125,36 @@ final class CVD_Triciclub_Precio {
 
 	/** {metros, minutos, como: calles|recta}. Guarda 1 h en caché por par de puntos (~10 m). */
 	public static function trayecto( float $olat, float $olng, float $dlat, float $dlng ): array {
-		$key = 'cvd_tc_ruta_' . md5( implode( ',', array_map( static fn( float $v ): string => number_format( $v, 4, '.', '' ), array( $olat, $olng, $dlat, $dlng ) ) ) );
+		// 3.14.121 (Ernesto 3-nov, «ruta por calles siempre»): además de los km, el camino por las calles (`linea`,
+		// [[lat, lon]…]) para que la app lo pinte sin pedirlo ella al VPS (desde el móvil a veces tardaba y salía recta).
+		$key = 'cvd_tc_ruta2_' . md5( implode( ',', array_map( static fn( float $v ): string => number_format( $v, 4, '.', '' ), array( $olat, $olng, $dlat, $dlng ) ) ) );
 		$hit = get_transient( $key );
 		if ( is_array( $hit ) ) { return $hit; }
 		$api = rtrim( (string) get_option( 'cvd_tc_ruta_api', self::RUTA_API ), '/' );
-		$url = $api . '/route/v1/driving/' . $olng . ',' . $olat . ';' . $dlng . ',' . $dlat . '?overview=false';
-		$res = wp_remote_get( $url, array( 'timeout' => 4, 'redirection' => 0 ) );
-		$data = is_wp_error( $res ) ? null : json_decode( (string) wp_remote_retrieve_body( $res ), true );
-		$route = is_array( $data ) && 'Ok' === ( $data['code'] ?? '' ) ? ( $data['routes'][0] ?? null ) : null;
-		if ( is_array( $route ) && (float) ( $route['distance'] ?? 0 ) > 0 ) {
-			$metros = (int) round( (float) $route['distance'] );
-			$out = array( 'metros' => $metros, 'minutos' => self::minutos_triciclo( $metros ), 'como' => 'calles' );
-			set_transient( $key, $out, HOUR_IN_SECONDS );
-			return $out;
+		$url = $api . '/route/v1/driving/' . $olng . ',' . $olat . ';' . $dlng . ',' . $dlat . '?overview=full&geometries=geojson';
+		for ( $intento = 0; $intento < 2; $intento++ ) { // un reintento: la red del VPS a veces corta
+			$res = wp_remote_get( $url, array( 'timeout' => 5, 'redirection' => 0 ) );
+			$data = is_wp_error( $res ) ? null : json_decode( (string) wp_remote_retrieve_body( $res ), true );
+			$route = is_array( $data ) && 'Ok' === ( $data['code'] ?? '' ) ? ( $data['routes'][0] ?? null ) : null;
+			if ( is_array( $route ) && (float) ( $route['distance'] ?? 0 ) > 0 ) {
+				$metros = (int) round( (float) $route['distance'] );
+				$linea = array();
+				foreach ( (array) ( $route['geometry']['coordinates'] ?? array() ) as $c ) {
+					if ( is_array( $c ) && isset( $c[0], $c[1] ) ) { $linea[] = array( round( (float) $c[1], 5 ), round( (float) $c[0], 5 ) ); }
+				}
+				$out = array( 'metros' => $metros, 'minutos' => self::minutos_triciclo( $metros ), 'como' => 'calles', 'linea' => count( $linea ) > 1 ? $linea : null );
+				set_transient( $key, $out, HOUR_IN_SECONDS );
+				return $out;
+			}
 		}
 		$metros = (int) round( self::recta_m( $olat, $olng, $dlat, $dlng ) * 1.3 );
-		return array( 'metros' => $metros, 'minutos' => self::minutos_triciclo( $metros ), 'como' => 'recta' );
+		return array( 'metros' => $metros, 'minutos' => self::minutos_triciclo( $metros ), 'como' => 'recta', 'linea' => null );
+	}
+
+	/** El camino por las calles si ya está en caché (lo dejó «cerca» al cotizar); nunca llama al VPS. */
+	public static function linea_guardada( float $olat, float $olng, float $dlat, float $dlng ): ?array {
+		$hit = get_transient( 'cvd_tc_ruta2_' . md5( implode( ',', array_map( static fn( float $v ): string => number_format( $v, 4, '.', '' ), array( $olat, $olng, $dlat, $dlng ) ) ) ) );
+		return is_array( $hit ) && ! empty( $hit['linea'] ) ? $hit['linea'] : null;
 	}
 
 	/** Un triciclo eléctrico en la ciudad: ~15 km/h con paradas (el OSRM de coche iría demasiado rápido). */

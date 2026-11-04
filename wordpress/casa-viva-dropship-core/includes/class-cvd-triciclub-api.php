@@ -252,6 +252,7 @@ final class CVD_Triciclub_Api {
 			'km'       => round( $tray['metros'] / 1000, 1 ),
 			'minutos'  => (int) $tray['minutos'],
 			'como'     => $tray['como'],
+			'linea'    => $tray['linea'] ?? null, // 3.14.121: el camino por las calles, para pintarlo ya
 			'franja'   => self::franja_publica(),
 			'vence'    => time() + CVD_Triciclub_Precio::FIRMA_TTL,
 			'triciclos' => array_slice( $lista, 0, 10 ),
@@ -416,6 +417,8 @@ final class CVD_Triciclub_Api {
 			'codigo'        => $activo || 'esperando' === $viaje->estado ? (string) $viaje->codigo : '',
 			'chofer'        => $chofer,
 			'pos'           => $activo ? self::posicion( $viaje ) : null,
+			// 3.14.121: el camino por las calles (1 h en caché: no vuelve a pedirlo al VPS cada 8 s).
+			'linea'         => $activo || 'esperando' === $viaje->estado ? CVD_Triciclub_Precio::linea_guardada( (float) $viaje->origen_lat, (float) $viaje->origen_lng, (float) $viaje->destino_lat, (float) $viaje->destino_lng ) : null,
 			'motivo'        => (string) $viaje->motivo,
 			'cobrado'       => null !== $viaje->cobrado_at,
 			'creado'        => gmdate( 'c', (int) strtotime( $viaje->created_at . ' UTC' ) ),

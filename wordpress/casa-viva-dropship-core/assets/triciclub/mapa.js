@@ -57,8 +57,9 @@
 		roads.forEach(function (r) { layers.push({ id: 'b-' + r[0], type: 'line', source: 'cuba', 'source-layer': 'roads', minzoom: r[1], filter: road(r[0]), layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': r[3], 'line-gap-width': w(r[4]), 'line-width': 1 } }); });
 		roads.forEach(function (r) { layers.push({ id: 'c-' + r[0], type: 'line', source: 'cuba', 'source-layer': 'roads', minzoom: r[1], filter: road(r[0]), layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': r[2], 'line-width': w(r[4]) } }); });
 		layers.push(
-			{ id: 'tc-ruta-borde', type: 'line', source: 'tc-ruta', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#FFFFFF', 'line-width': 9 } },
-			{ id: 'tc-ruta', type: 'line', source: 'tc-ruta', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': VERDE, 'line-width': 5 } },
+			{ id: 'tc-ruta-borde', type: 'line', source: 'tc-ruta', filter: ['!=', ['get', 'p'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#FFFFFF', 'line-width': 9 } },
+			{ id: 'tc-ruta', type: 'line', source: 'tc-ruta', filter: ['!=', ['get', 'p'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': VERDE, 'line-width': 5 } },
+			{ id: 'tc-ruta-prov', type: 'line', source: 'tc-ruta', filter: ['==', ['get', 'p'], 1], layout: { 'line-cap': 'round' }, paint: { 'line-color': VERDE, 'line-width': 3, 'line-opacity': 0.6, 'line-dasharray': [0.6, 2.2] } },
 			{ id: 'calles', type: 'symbol', source: 'cuba', 'source-layer': 'roads', minzoom: 14, filter: ['all', ['has', 'name'], ['in', ['get', 'kind'], ['literal', ['minor_road', 'medium_road', 'major_road', 'highway']]]], layout: { 'symbol-placement': 'line', 'text-field': name, 'text-font': ['Noto Sans Regular'], 'text-size': ['interpolate', ['linear'], ['zoom'], 14, 10, 17, 13] }, paint: { 'text-color': '#5D6B62', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.6 } },
 			{ id: 'barrios', type: 'symbol', source: 'cuba', 'source-layer': 'places', minzoom: 12, filter: ['in', ['get', 'kind'], ['literal', ['neighbourhood', 'macrohood']]], layout: { 'text-field': name, 'text-font': ['Noto Sans Medium'], 'text-size': 12, 'text-transform': 'uppercase', 'text-letter-spacing': 0.08 }, paint: { 'text-color': '#8A988F', 'text-halo-color': '#EEF3EF', 'text-halo-width': 1.4 } }
 		);
@@ -111,21 +112,26 @@
 		map._tc.tri.forEach(function (m) { m.remove(); });
 		map._tc.tri = (list || []).map(function (p) { return mk(map._tc.gl, 'tri').setLngLat(ll(p)).addTo(map); });
 	}
-	function linea(map, coords) {
+	function linea(map, coords, provisional) {
 		var src = map.getSource && map.getSource('tc-ruta');
-		var data = { type: 'FeatureCollection', features: coords && coords.length > 1 ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords.map(ll) } }] : [] };
+		var data = { type: 'FeatureCollection', features: coords && coords.length > 1 ? [{ type: 'Feature', properties: { p: provisional ? 1 : 0 }, geometry: { type: 'LineString', coordinates: coords.map(ll) } }] : [] };
 		if (src) { src.setData(data); } else { map.once('load', function () { var s = map.getSource('tc-ruta'); if (s) { s.setData(data); } }); }
 	}
-	// Camino por las calles (nuestro OSRM); sin respuesta en 6 s, la línea recta.
-	function ruta(map, a, b) {
+	// Camino por las calles. 3.14.121: si el servidor ya lo mandó (`coords`), se pinta al momento. Si no, se pide a
+	// nuestro OSRM (2 intentos de 8 s); mientras tanto, línea de PUNTOS recta (se nota que es provisional).
+	function ruta(map, a, b, coords) {
 		if (!a || !b) { linea(map, null); return Promise.resolve(null); }
-		linea(map, [a, b]);
-		var ctrl = window.AbortController ? new AbortController() : null;
-		var t = setTimeout(function () { if (ctrl) { ctrl.abort(); } }, 6000);
-		return fetch(RUTA + a[1] + ',' + a[0] + ';' + b[1] + ',' + b[0] + '?overview=full&geometries=geojson', { signal: ctrl ? ctrl.signal : undefined, credentials: 'omit' })
-			.then(function (r) { return r.json(); })
-			.then(function (d) { clearTimeout(t); var g = d && d.routes && d.routes[0] && d.routes[0].geometry; if (g && g.coordinates) { linea(map, g.coordinates.map(function (c) { return [c[1], c[0]]; })); } return d && d.routes && d.routes[0] || null; })
-			.catch(function () { clearTimeout(t); return null; });
+		if (coords && coords.length > 1) { linea(map, coords); return Promise.resolve(true); }
+		linea(map, [a, b], true);
+		var pedir = function (intento) {
+			var ctrl = window.AbortController ? new AbortController() : null;
+			var t = setTimeout(function () { if (ctrl) { ctrl.abort(); } }, 8000);
+			return fetch(RUTA + a[1] + ',' + a[0] + ';' + b[1] + ',' + b[0] + '?overview=full&geometries=geojson', { signal: ctrl ? ctrl.signal : undefined, credentials: 'omit' })
+				.then(function (r) { return r.json(); })
+				.then(function (d) { clearTimeout(t); var g = d && d.routes && d.routes[0] && d.routes[0].geometry; if (g && g.coordinates) { linea(map, g.coordinates.map(function (c) { return [c[1], c[0]]; })); return true; } throw new Error('ruta'); })
+				.catch(function () { clearTimeout(t); return intento < 1 ? pedir(intento + 1) : null; });
+		};
+		return pedir(0);
 	}
 	function ver(map, pts, abajo) {
 		pts = (pts || []).filter(Boolean);
