@@ -322,6 +322,7 @@ final class CVD_Triciclub {
 			'mapaUrl'  => self::asset( 'mapa.js' ), // 3.14.118: el mapa de Triciclub
 			'habana'   => array( 23.125, -82.38 ),
 			'tipos'    => CVD_Triciclub_Alta::tipos_publicos(), // 3.14.130: los 6 tipos de triciclo, con su dibujo
+			'verificar' => CVD_Triciclub_Alta::verificar_on(), // 3.14.132: carné + selfie con carné, comprobados solos
 		);
 	}
 

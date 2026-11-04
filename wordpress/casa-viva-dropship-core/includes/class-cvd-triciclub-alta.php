@@ -14,13 +14,21 @@ defined( 'ABSPATH' ) || exit;
  *   uploads/cvd-tc-privado/, que no se ve desde fuera: solo con un enlace firmado (foto_url), más una miniatura de 240 px.
  * - Con todo puesto queda APROBADO al momento (Ernesto: «aprobar automáticamente cuando el chofer envía los datos»); en
  *   modo prueba entra también en cvd_tc_testers. Como Uber o Bolt: se aprueba rápido y se revisa después.
+ * - 3.14.132 (Ernesto 4-nov: «aceptó fotos que no eran de triciclo y la selfie puede ser de cualquiera»): verificación
+ *   automática como QvaPay o los bancos. El chofer manda su carné por delante, una selfie sosteniendo el carné junto a la
+ *   cara (con la cámara) y el triciclo. Al enviar queda «verificando»; el verificador del VPS (triciclub-verifica,
+ *   GET/POST /bot/triciclub/verificar) compara las caras, lee el carné (edad, nombre), mira si el triciclo es un triciclo
+ *   del tipo elegido y contesta: aprobado (y le pone la foto de perfil recortada de la selfie) · corregir (el chofer ve
+ *   qué arreglar) · revision (lo decide Ernesto en el panel: caras dudosas, menor de edad, carné repetido). Del carné solo
+ *   se guarda una huella (carne_hash) para no repetir y el número tapado. Apagar: wp option update cvd_tc_verificar no.
  * - Panel /triciclub/admin (Ernesto: «una base de datos que yo pueda ver en un panel, no por WhatsApp, para ahorrar datos»):
  *   números del día, choferes nuevos sin revisar, en línea, parados; ficha con fotos y botones Revisado / Parar / Volver a
  *   aprobar. Entra con el usuario de administrador de la web. Sin avisos por WhatsApp ni correo. HTML del servidor, sin JS.
  */
 final class CVD_Triciclub_Alta {
 	public const ROL = 'cvd_tc_chofer';
-	public const FOTOS = array( 'perfil', 'triciclo', 'licencia' );
+	public const FOTOS = array( 'perfil', 'triciclo', 'licencia', 'carne', 'selfie' );
+	public const ESTADOS = array( 'pendiente' => 'Rellenando sus datos', 'verificando' => 'Comprobando sus datos', 'revision' => 'Para que lo mires tú', 'aprobado' => 'Aprobado', 'suspendido' => 'Parado' );
 	public const MOTORES = array( 'pedal' => 'Pedal', 'electrico' => 'Eléctrico', 'gasolina' => 'Gasolina' );
 
 	/** Los 6 tipos que elige el cliente (investigación 4-nov: docs/nexo-business/apps/triciclub/sms-y-tipos-de-triciclo-2026-11-04.md). */
@@ -44,6 +52,8 @@ final class CVD_Triciclub_Alta {
 		register_rest_route( $ns, '/triciclub/chofer/alta', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'enviar' ), 'permission_callback' => $d ) );
 		register_rest_route( $ns, '/triciclub/foto', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'ver_foto' ), 'permission_callback' => '__return_true' ) );
 		register_rest_route( $ns, '/bot/triciclub/chofer', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'bot_chofer' ), 'permission_callback' => array( 'CVD_Bot_Bridge', 'authorized' ) ) );
+		register_rest_route( $ns, '/bot/triciclub/verificar', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'bot_por_verificar' ), 'permission_callback' => array( 'CVD_Bot_Bridge', 'authorized' ) ) );
+		register_rest_route( $ns, '/bot/triciclub/verificar/(?P<id>\d+)', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'bot_verificado' ), 'permission_callback' => array( 'CVD_Bot_Bridge', 'authorized' ) ) );
 	}
 
 	/** Para la app (cliente y chofer): nombre, explicación y dibujo de cada tipo. */
@@ -184,25 +194,34 @@ final class CVD_Triciclub_Alta {
 		$file = $request->get_file_params()['foto'] ?? null;
 		if ( ! is_array( $file ) || UPLOAD_ERR_OK !== (int) ( $file['error'] ?? 1 ) || ! is_uploaded_file( (string) $file['tmp_name'] ) ) { return self::fail( 'foto', 'La foto no llegó. Prueba otra vez.' ); }
 		if ( (int) $file['size'] > 8 * MB_IN_BYTES ) { return self::fail( 'foto', 'La foto pesa demasiado.' ); }
-		$info = @getimagesize( (string) $file['tmp_name'] ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- un archivo que no es foto da aviso.
-		if ( ! $info || ! in_array( $info['mime'] ?? '', array( 'image/jpeg', 'image/png', 'image/webp' ), true ) ) { return self::fail( 'foto', 'Eso no es una foto.' ); }
-		$dir = self::carpeta( (int) $u->ID );
+		$error = self::guardar_foto( $ch, $cual, (string) $file['tmp_name'] );
+		if ( '' !== $error ) { return self::fail( 'foto', $error ); }
+		return self::ok( array( 'ok' => true, 'cual' => $cual, 'url' => self::foto_url( CVD_Triciclub::chofer_de( (int) $u->ID ), $cual, true ) ) );
+	}
+
+	/** Guarda la foto $tmp como $cual del chofer (y su miniatura), sin EXIF ni GPS. → '' o el error para enseñar. */
+	private static function guardar_foto( object $ch, string $cual, string $tmp ): string {
+		global $wpdb;
+		$info = @getimagesize( $tmp ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- un archivo que no es foto da aviso.
+		if ( ! $info || ! in_array( $info['mime'] ?? '', array( 'image/jpeg', 'image/png', 'image/webp' ), true ) ) { return 'Eso no es una foto.'; }
+		$uid = (int) $ch->user_id;
+		$dir = self::carpeta( $uid );
 		$nombre = $cual . '-' . wp_generate_password( 10, false, false ) . '.jpg';
-		foreach ( array( '' => 1280, '-t' => 240 ) as $suf => $lado ) { // la foto y su miniatura, de nuevo en JPEG: sin EXIF ni GPS
-			$ed = wp_get_image_editor( (string) $file['tmp_name'] );
-			if ( is_wp_error( $ed ) ) { return self::fail( 'foto', 'No se pudo leer la foto.' ); }
+		foreach ( array( '' => 1280, '-t' => 240 ) as $suf => $lado ) { // la foto y su miniatura, de nuevo en JPEG
+			$ed = wp_get_image_editor( $tmp );
+			if ( is_wp_error( $ed ) ) { return 'No se pudo leer la foto.'; }
 			$ed->resize( $lado, $lado, '-t' === $suf );
 			$ed->set_quality( '-t' === $suf ? 70 : 80 );
-			if ( is_wp_error( $ed->save( $dir . str_replace( '.jpg', $suf . '.jpg', $nombre ), 'image/jpeg' ) ) ) { return self::fail( 'foto', 'No se pudo guardar la foto.' ); }
+			if ( is_wp_error( $ed->save( $dir . str_replace( '.jpg', $suf . '.jpg', $nombre ), 'image/jpeg' ) ) ) { return 'No se pudo guardar la foto.'; }
 		}
-		$fotos = self::fotos( $ch );
+		$fotos = self::fotos( CVD_Triciclub::chofer_de( $uid ) );
 		if ( ! empty( $fotos[ $cual ] ) ) {
 			$vieja = basename( (string) $fotos[ $cual ] );
 			foreach ( array( $vieja, str_replace( '.jpg', '-t.jpg', $vieja ) ) as $v ) { if ( is_file( $dir . $v ) ) { wp_delete_file( $dir . $v ); } }
 		}
 		$fotos[ $cual ] = $nombre;
-		$wpdb->update( CVD_Triciclub_Db::t( 'choferes' ), array( 'fotos' => wp_json_encode( $fotos ), 'updated_at' => CVD_Triciclub_Db::now() ), array( 'user_id' => (int) $u->ID ) );
-		return self::ok( array( 'ok' => true, 'cual' => $cual, 'url' => self::foto_url( CVD_Triciclub::chofer_de( (int) $u->ID ), $cual, true ) ) );
+		$wpdb->update( CVD_Triciclub_Db::t( 'choferes' ), array( 'fotos' => wp_json_encode( $fotos ), 'updated_at' => CVD_Triciclub_Db::now() ), array( 'user_id' => $uid ) );
+		return '';
 	}
 
 	// ------------------------------------------------------------------ Enviar = aprobado
@@ -217,7 +236,12 @@ final class CVD_Triciclub_Alta {
 		if ( ! isset( self::MOTORES[ (string) $ch->motor ] ) ) { $falta[] = 'el motor'; }
 		if ( in_array( 'viaje', $s, true ) && (int) $ch->plazas < 1 ) { $falta[] = 'cuántas personas llevas'; }
 		if ( in_array( 'carga', $s, true ) && (int) $ch->carga_kg < 20 ) { $falta[] = 'cuántos kilos cargas'; }
-		if ( empty( $f['perfil'] ) ) { $falta[] = 'tu foto'; }
+		if ( self::verificar_on() ) {
+			if ( empty( $f['carne'] ) ) { $falta[] = 'la foto de tu carné'; }
+			if ( empty( $f['selfie'] ) ) { $falta[] = 'la selfie con tu carné'; }
+		} elseif ( empty( $f['perfil'] ) ) {
+			$falta[] = 'tu foto';
+		}
 		if ( empty( $f['triciclo'] ) ) { $falta[] = 'la foto del triciclo'; }
 		return $falta;
 	}
@@ -232,13 +256,88 @@ final class CVD_Triciclub_Alta {
 		$falta = self::faltan( $ch, $u );
 		if ( $falta ) { return self::fail( 'faltan', 'Falta: ' . implode( ', ', $falta ) . '.' ); }
 		$ya = 'aprobado' === $ch->estado;
+		if ( 'revision' === $ch->estado ) { return self::ok( array( 'ok' => true, 'estado' => 'revision' ) ); } // ya lo mira Ernesto
 		$now = CVD_Triciclub_Db::now();
-		$wpdb->update( CVD_Triciclub_Db::t( 'choferes' ), array( 'enviado_at' => $now, 'motivo' => '', 'updated_at' => $now ), array( 'user_id' => (int) $u->ID ) );
-		if ( ! $ya ) {
-			CVD_Triciclub::aprobar_chofer( (int) $u->ID );
-			if ( 'prueba' === CVD_Triciclub::mode() ) { update_option( CVD_Triciclub::TESTERS, array_values( array_unique( array_merge( CVD_Triciclub::testers(), array( (int) $u->ID ) ) ) ), false ); }
+		$set = array( 'enviado_at' => $now, 'motivo' => '', 'updated_at' => $now );
+		if ( ! $ya && self::verificar_on() ) { $set['estado'] = 'verificando'; }
+		$wpdb->update( CVD_Triciclub_Db::t( 'choferes' ), $set, array( 'user_id' => (int) $u->ID ) );
+		if ( ! $ya && ! self::verificar_on() ) { self::aprobar( (int) $u->ID ); }
+		return self::ok( array( 'ok' => true, 'estado' => $ya || ! self::verificar_on() ? 'aprobado' : 'verificando', 'nuevo' => ! $ya ) );
+	}
+
+	public static function verificar_on(): bool {
+		return 'no' !== get_option( 'cvd_tc_verificar', 'si' );
+	}
+
+	/** Aprobado (y en modo prueba, dentro de los que prueban). */
+	private static function aprobar( int $uid, int $por = 0 ): void {
+		CVD_Triciclub::aprobar_chofer( $uid, $por );
+		if ( 'prueba' === CVD_Triciclub::mode() ) { update_option( CVD_Triciclub::TESTERS, array_values( array_unique( array_merge( CVD_Triciclub::testers(), array( $uid ) ) ) ), false ); }
+	}
+
+	// ------------------------------------------------------------------ Verificador del VPS
+
+	/** GET /bot/triciclub/verificar — los choferes que esperan su comprobación (fotos con enlace firmado). */
+	public static function bot_por_verificar(): WP_REST_Response {
+		global $wpdb;
+		$rows = $wpdb->get_results( 'SELECT * FROM ' . CVD_Triciclub_Db::t( 'choferes' ) . " WHERE estado='verificando' ORDER BY enviado_at ASC LIMIT 5" ); // phpcs:ignore WordPress.DB.PreparedSQL -- sin datos de fuera.
+		$out = array();
+		foreach ( $rows as $ch ) {
+			$u = get_userdata( (int) $ch->user_id );
+			$fotos = array();
+			foreach ( array( 'carne', 'selfie', 'triciclo', 'licencia' ) as $c ) { $fotos[ $c ] = self::foto_url( $ch, $c ); }
+			$out[] = array( 'id' => (int) $ch->user_id, 'nombre' => $u ? (string) $u->display_name : '', 'tipo' => self::tipo_de( $ch ), 'tipo_nombre' => self::TIPOS[ self::tipo_de( $ch ) ]['nombre'], 'motor' => (string) $ch->motor, 'servicios' => explode( ',', (string) $ch->servicios ), 'plazas' => (int) $ch->plazas, 'carga_kg' => (int) $ch->carga_kg, 'fotos' => $fotos, 'enviado_at' => (string) $ch->enviado_at );
 		}
-		return self::ok( array( 'ok' => true, 'aprobado' => true, 'nuevo' => ! $ya ) );
+		return self::ok( array( 'ok' => true, 'choferes' => $out ) );
+	}
+
+	/**
+	 * POST /bot/triciclub/verificar/{id} {resultado: aprobado|corregir|revision, motivo (para el chofer), checks: [{que, ok, nota}],
+	 * carne: {numero, nombre, edad}, similitud, perfil_jpg (base64)} — Core guarda la huella del carné (y si ya es de otro
+	 * chofer, pasa a revisión) y deja el estado.
+	 */
+	public static function bot_verificado( WP_REST_Request $request ): WP_REST_Response {
+		global $wpdb;
+		$uid = absint( $request['id'] );
+		$ch = CVD_Triciclub::chofer_de( $uid );
+		if ( ! $ch || 'verificando' !== $ch->estado ) { return self::fail( 'estado', 'Ese chofer no está esperando verificación.', 409 ); }
+		$p = (array) $request->get_json_params();
+		$res = in_array( $p['resultado'] ?? '', array( 'aprobado', 'corregir', 'revision' ), true ) ? (string) $p['resultado'] : 'revision';
+		$motivo = mb_substr( sanitize_text_field( (string) ( $p['motivo'] ?? '' ) ), 0, 200 );
+		$carne = (array) ( $p['carne'] ?? array() );
+		$num = preg_replace( '/\D+/', '', (string) ( $carne['numero'] ?? '' ) );
+		$hash = 11 === strlen( $num ) ? hash_hmac( 'sha256', $num, wp_salt( 'auth' ) . '|cvd-tc-carne' ) : '';
+		$checks = array_map( static fn( $c ): array => array( 'que' => sanitize_text_field( (string) ( $c['que'] ?? '' ) ), 'ok' => (bool) ( $c['ok'] ?? false ), 'nota' => sanitize_text_field( (string) ( $c['nota'] ?? '' ) ) ), array_slice( (array) ( $p['checks'] ?? array() ), 0, 20 ) );
+		if ( '' !== $hash ) {
+			$otro = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . CVD_Triciclub_Db::t( 'choferes' ) . ' WHERE carne_hash=%s AND user_id<>%d LIMIT 1', $hash, $uid ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( $otro ) {
+				$checks[] = array( 'que' => 'Carné único', 'ok' => false, 'nota' => 'Ese carné ya está en la cuenta del chofer #' . $otro );
+				if ( 'aprobado' === $res ) { $res = 'revision'; }
+			}
+		}
+		$verif = array(
+			'at'        => gmdate( 'c' ),
+			'resultado' => $res,
+			'checks'    => $checks,
+			'similitud' => isset( $p['similitud'] ) ? round( (float) $p['similitud'], 3 ) : null,
+			'carne'     => array( 'numero' => '' !== $num ? str_repeat( '•', 7 ) . substr( $num, -4 ) : '', 'nombre' => sanitize_text_field( (string) ( $carne['nombre'] ?? '' ) ), 'edad' => isset( $carne['edad'] ) ? (int) $carne['edad'] : null ),
+			'costo_usd' => isset( $p['costo_usd'] ) ? round( (float) $p['costo_usd'], 4 ) : null,
+		);
+		$set = array( 'verif' => wp_json_encode( $verif ), 'carne_hash' => $hash, 'updated_at' => CVD_Triciclub_Db::now() );
+		$set['estado'] = 'corregir' === $res ? 'pendiente' : ( 'revision' === $res ? 'revision' : 'verificando' );
+		$set['motivo'] = 'corregir' === $res ? $motivo : '';
+		$wpdb->update( CVD_Triciclub_Db::t( 'choferes' ), $set, array( 'user_id' => $uid ) );
+		if ( 'aprobado' === $res ) {
+			$jpg = base64_decode( (string) ( $p['perfil_jpg'] ?? '' ), true );
+			if ( $jpg && strlen( $jpg ) < 2 * MB_IN_BYTES ) { // la cara recortada de la selfie = su foto para los clientes
+				$tmp = wp_tempnam( 'cvd-tc-perfil' );
+				file_put_contents( $tmp, $jpg ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+				self::guardar_foto( CVD_Triciclub::chofer_de( $uid ), 'perfil', $tmp );
+				wp_delete_file( $tmp );
+			}
+			self::aprobar( $uid );
+		}
+		return self::ok( array( 'ok' => true, 'estado' => CVD_Triciclub::chofer_de( $uid )->estado ) );
 	}
 
 	// ------------------------------------------------------------------ Panel /triciclub/admin
@@ -254,9 +353,9 @@ final class CVD_Triciclub_Alta {
 		$v = CVD_Triciclub_Db::t( 'viajes' );
 		$inicio = ( new DateTimeImmutable( 'today', new DateTimeZone( 'America/Havana' ) ) )->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
 		$vivo = gmdate( 'Y-m-d H:i:s', time() - CVD_Triciclub_Api::VIVO );
-		$c = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) total, SUM(estado='aprobado') aprobados, SUM(estado='suspendido') parados, SUM(estado='aprobado' AND revisado_at IS NULL) nuevos, SUM(estado='aprobado' AND disponible=1 AND ubicado_at>%s) en_linea FROM {$t}", $vivo ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- nombre de tabla propio.
+		$c = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) total, SUM(estado='aprobado') aprobados, SUM(estado='suspendido') parados, SUM(estado='aprobado' AND revisado_at IS NULL) nuevos, SUM(estado='aprobado' AND disponible=1 AND ubicado_at>%s) en_linea, SUM(estado='revision') revision FROM {$t}", $vivo ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- nombre de tabla propio.
 		$h = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) n, COALESCE(SUM(precio),0) cup FROM {$v} WHERE estado='terminado' AND terminado_at>=%s", $inicio ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		return array( 'total' => (int) $c->total, 'aprobados' => (int) $c->aprobados, 'parados' => (int) $c->parados, 'nuevos' => (int) $c->nuevos, 'en_linea' => (int) $c->en_linea, 'viajes' => (int) $h->n, 'cup' => (int) $h->cup );
+		return array( 'total' => (int) $c->total, 'aprobados' => (int) $c->aprobados, 'parados' => (int) $c->parados, 'nuevos' => (int) $c->nuevos, 'en_linea' => (int) $c->en_linea, 'revision' => (int) $c->revision, 'viajes' => (int) $h->n, 'cup' => (int) $h->cup );
 	}
 
 	private static function panel_url( array $q = array() ): string {
@@ -290,9 +389,12 @@ final class CVD_Triciclub_Alta {
 				$wpdb->update( $t, array( 'motivo' => sanitize_text_field( wp_unslash( (string) ( $_POST['motivo'] ?? '' ) ) ), 'revisado_at' => $now ), array( 'user_id' => $uid ) );
 				$msg = '⛔ Parado: ya no sale a los clientes.';
 			} elseif ( 'aprobar' === $accion ) {
-				CVD_Triciclub::aprobar_chofer( $uid, get_current_user_id() );
+				self::aprobar( $uid, get_current_user_id() );
 				$wpdb->update( $t, array( 'motivo' => '', 'revisado_at' => $now ), array( 'user_id' => $uid ) );
-				$msg = '✅ Aprobado otra vez.';
+				$msg = '✅ Aprobado.';
+			} elseif ( 'corregir' === $accion ) {
+				$wpdb->update( $t, array( 'estado' => 'pendiente', 'disponible' => 0, 'motivo' => sanitize_text_field( wp_unslash( (string) ( $_POST['motivo'] ?? '' ) ) ), 'revisado_at' => $now ), array( 'user_id' => $uid ) );
+				$msg = '↩ Le pedimos que corrija.';
 			}
 		}
 		$ver = sanitize_key( (string) ( $_GET['ver'] ?? '' ) );
@@ -312,6 +414,7 @@ final class CVD_Triciclub_Alta {
 		$vivo = gmdate( 'Y-m-d H:i:s', time() - CVD_Triciclub_Api::VIVO );
 		$where = array(
 			'nuevos'   => "estado='aprobado' AND revisado_at IS NULL",
+			'revision' => "estado IN ('revision','verificando')",
 			'linea'    => $wpdb->prepare( "estado='aprobado' AND disponible=1 AND ubicado_at>%s", $vivo ),
 			'parados'  => "estado='suspendido'",
 			'rellenan' => "estado='pendiente'",
@@ -320,7 +423,7 @@ final class CVD_Triciclub_Alta {
 		$h = '<h1>🛺 Triciclub · panel</h1><div class="n">'
 			. '<div><b>' . $n['en_linea'] . '</b>en línea</div><div><b>' . $n['viajes'] . '</b>viajes hoy</div><div><b>' . number_format( $n['cup'], 0, ',', '.' ) . '</b>CUP hoy</div><div><b>' . $n['aprobados'] . '</b>choferes</div></div>'
 			. '<nav>';
-		foreach ( array( '' => 'Todos (' . $n['total'] . ')', 'nuevos' => 'Nuevos sin revisar (' . $n['nuevos'] . ')', 'linea' => 'En línea (' . $n['en_linea'] . ')', 'rellenan' => 'Rellenando', 'parados' => 'Parados (' . $n['parados'] . ')' ) as $k => $label ) {
+		foreach ( array( '' => 'Todos (' . $n['total'] . ')', 'revision' => 'Para ti (' . $n['revision'] . ')', 'nuevos' => 'Nuevos sin revisar (' . $n['nuevos'] . ')', 'linea' => 'En línea (' . $n['en_linea'] . ')', 'rellenan' => 'Rellenando', 'parados' => 'Parados (' . $n['parados'] . ')' ) as $k => $label ) {
 			$h .= '<a href="' . esc_url( self::panel_url( '' === $k ? array() : array( 'ver' => $k ) ) ) . '"' . ( $k === $ver ? ' class="on"' : '' ) . '>' . esc_html( $label ) . '</a>';
 		}
 		$h .= '</nav>';
@@ -330,11 +433,11 @@ final class CVD_Triciclub_Alta {
 			$u = get_userdata( (int) $ch->user_id );
 			$tipo = self::tipo_de( $ch );
 			$mini = self::foto_url( $ch, 'perfil', true );
-			$estado = array( 'aprobado' => null === $ch->revisado_at ? 'nuevo' : 'ok', 'suspendido' => 'parado', 'pendiente' => 'rellenando' )[ $ch->estado ] ?? $ch->estado;
+			$estado = array( 'aprobado' => null === $ch->revisado_at ? 'nuevo' : 'ok', 'suspendido' => 'parado', 'pendiente' => 'rellenando', 'verificando' => 'comprobando', 'revision' => 'para ti' )[ $ch->estado ] ?? $ch->estado;
 			$h .= '<li><a href="' . esc_url( self::panel_url( array( 'c' => (int) $ch->user_id ) ) ) . '">'
 				. ( '' !== $mini ? '<img src="' . esc_url( $mini ) . '" alt="" width="48" height="48" loading="lazy">' : '<span class="sin">' . self::icono( $tipo, 28 ) . '</span>' )
 				. '<span class="q"><b>' . esc_html( $u ? $u->display_name : '#' . $ch->user_id ) . '</b><small>' . esc_html( self::TIPOS[ $tipo ]['nombre'] . ' · ' . (int) $ch->viajes_total . ' viajes' . ( null !== $ch->nota_media ? ' · ★ ' . round( (float) $ch->nota_media, 1 ) : '' ) . ' · ' . self::hora( $ch->enviado_at ?: $ch->created_at ) ) . '</small></span>'
-				. '<span class="e e--' . esc_attr( $estado ) . '">' . esc_html( $estado ) . '</span></a></li>';
+				. '<span class="e e--' . esc_attr( str_replace( ' ', '', $estado ) ) . '">' . esc_html( $estado ) . '</span></a></li>';
 		}
 		return $h . '</ul>';
 	}
@@ -347,14 +450,22 @@ final class CVD_Triciclub_Alta {
 		if ( '' === $tel && $u ) { $tel = CVD_Triciclub::telefono( (string) get_user_meta( $uid, 'billing_phone', true ) ); }
 		$h = '<p><a href="' . esc_url( self::panel_url() ) . '">← Todos los choferes</a></p><h1>' . self::icono( $tipo, 34 ) . ' ' . esc_html( $u ? $u->display_name : '#' . $uid ) . '</h1>'
 			. ( '' !== $msg ? '<p class="m">' . esc_html( $msg ) . '</p>' : '' ) . '<div class="f">';
-		foreach ( array( 'perfil' => 'Su foto', 'triciclo' => 'Triciclo', 'licencia' => 'Licencia' ) as $k => $label ) {
+		foreach ( array( 'perfil' => 'Su foto', 'selfie' => 'Selfie con carné', 'carne' => 'Carné', 'triciclo' => 'Triciclo', 'licencia' => 'Licencia' ) as $k => $label ) {
 			$mini = self::foto_url( $ch, $k, true );
 			$h .= '<figure>' . ( '' !== $mini ? '<a href="' . esc_url( self::foto_url( $ch, $k ) ) . '"><img src="' . esc_url( $mini ) . '" alt="' . esc_attr( $label ) . '"></a>' : '<span class="sin">—</span>' )
 				. '<figcaption>' . esc_html( $label . ( '' === $mini ? ' (no la mandó)' : ' · toca para verla grande' ) ) . '</figcaption></figure>';
 		}
 		$s = explode( ',', (string) $ch->servicios );
-		$h .= '</div><dl>'
-			. '<dt>Estado</dt><dd>' . esc_html( array( 'aprobado' => '✅ Aprobado' . ( null === $ch->revisado_at ? ' (sin revisar)' : ' y revisado' ), 'suspendido' => '⛔ Parado' . ( '' !== (string) $ch->motivo ? ': ' . $ch->motivo : '' ), 'pendiente' => 'Rellenando sus datos' )[ $ch->estado ] ?? $ch->estado ) . '</dd>'
+		$v = json_decode( (string) $ch->verif, true );
+		$h .= '</div>';
+		if ( is_array( $v ) ) { // lo que comprobó el verificador
+			$h .= '<dl><dt>Comprobación automática · ' . esc_html( self::hora( gmdate( 'Y-m-d H:i:s', strtotime( (string) $v['at'] ) ) ) ) . '</dt><dd>' . esc_html( array( 'aprobado' => '✅ Todo cuadra', 'corregir' => '↩ Le pidió que corrija', 'revision' => '👀 Dudas: decide tú' )[ $v['resultado'] ] ?? $v['resultado'] ) . '</dd>';
+			foreach ( (array) $v['checks'] as $c ) { $h .= '<dd class="ck">' . ( $c['ok'] ? '✔' : '✖' ) . ' ' . esc_html( $c['que'] . ( '' !== $c['nota'] ? ': ' . $c['nota'] : '' ) ) . '</dd>'; }
+			if ( ! empty( $v['carne']['nombre'] ) || ! empty( $v['carne']['numero'] ) ) { $h .= '<dt>Carné</dt><dd>' . esc_html( trim( $v['carne']['nombre'] . ' · ' . $v['carne']['numero'] . ( null !== $v['carne']['edad'] ? ' · ' . $v['carne']['edad'] . ' años' : '' ), ' ·' ) ) . '</dd>'; }
+			$h .= '</dl>';
+		}
+		$h .= '<dl>'
+			. '<dt>Estado</dt><dd>' . esc_html( array( 'aprobado' => '✅ Aprobado' . ( null === $ch->revisado_at ? ' (sin revisar)' : ' y revisado' ), 'suspendido' => '⛔ Parado' . ( '' !== (string) $ch->motivo ? ': ' . $ch->motivo : '' ), 'pendiente' => 'Rellenando sus datos' . ( '' !== (string) $ch->motivo ? ' (tiene que corregir: ' . $ch->motivo . ')' : '' ), 'verificando' => '⏳ Comprobando sus datos', 'revision' => '👀 Para que decidas tú' )[ $ch->estado ] ?? $ch->estado ) . '</dd>'
 			. '<dt>Teléfono</dt><dd>' . ( '' !== $tel ? '<a href="https://wa.me/' . esc_attr( $tel ) . '">' . esc_html( $tel ) . '</a> · <a href="tel:+' . esc_attr( $tel ) . '">llamar</a>' : '—' ) . '</dd>'
 			. '<dt>Tipo</dt><dd>' . esc_html( self::TIPOS[ $tipo ]['nombre'] . ' · motor ' . ( self::MOTORES[ (string) $ch->motor ] ?? '—' ) ) . '</dd>'
 			. '<dt>Hace</dt><dd>' . esc_html( implode( ', ', array_map( static fn( string $x ): string => array( 'viaje' => 'pasaje', 'paquete' => 'paquetes', 'carga' => 'carga' )[ $x ] ?? $x, $s ) ) . ( (int) $ch->plazas ? ' · ' . (int) $ch->plazas . ' personas' : '' ) . ( (int) $ch->carga_kg ? ' · ' . (int) $ch->carga_kg . ' kg' : '' ) ) . '</dd>'
@@ -365,6 +476,9 @@ final class CVD_Triciclub_Alta {
 			. '<dt>Alta · mandó datos · revisado</dt><dd>' . esc_html( self::hora( $ch->created_at ) . ' · ' . self::hora( $ch->enviado_at ) . ' · ' . self::hora( $ch->revisado_at ) ) . '</dd></dl>';
 		$form = static fn( string $accion, string $boton, string $clase, string $extra = '' ): string => '<form method="post" action="' . esc_url( self::panel_url( array( 'c' => $uid ) ) ) . '">' . wp_nonce_field( 'cvd_tc_admin_' . $uid, '_wpnonce', true, false ) . $extra . '<input type="hidden" name="accion" value="' . esc_attr( $accion ) . '"><button class="b ' . esc_attr( $clase ) . '">' . esc_html( $boton ) . '</button></form>';
 		if ( 'aprobado' === $ch->estado && null === $ch->revisado_at ) { $h .= $form( 'revisado', '✔ Lo revisé, todo bien', 'b--ok' ); }
+		if ( in_array( $ch->estado, array( 'revision', 'verificando' ), true ) ) {
+			$h .= $form( 'aprobar', '✅ Aprobarlo', 'b--ok' ) . $form( 'corregir', '↩ Pedirle que corrija', 'b--gris', '<input name="motivo" placeholder="Qué tiene que arreglar (lo verá él)" maxlength="200" required>' );
+		}
 		$h .= 'suspendido' === $ch->estado
 			? $form( 'aprobar', 'Volver a aprobarlo', 'b--ok' )
 			: $form( 'parar', 'Parar a este chofer', 'b--no', '<input name="motivo" placeholder="Por qué (lo verá el chofer)" maxlength="200">' );
@@ -376,8 +490,8 @@ final class CVD_Triciclub_Alta {
 			. '.n{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.n div{background:#fff;border-radius:12px;padding:10px;font-size:12px;color:#4a5d52;text-align:center}.n b{display:block;font-size:22px;color:#18221c}'
 			. 'nav{display:flex;gap:6px;overflow-x:auto;margin:14px 0 8px}nav a{white-space:nowrap;background:#fff;border-radius:99px;padding:7px 12px;font-size:14px;text-decoration:none;color:#18221c}nav a.on{background:#087a3d;color:#fff}'
 			. '.l{list-style:none;margin:0;padding:0}.l li{background:#fff;border-radius:12px;margin:6px 0}.l a{display:flex;gap:10px;align-items:center;padding:10px;text-decoration:none;color:inherit}.l img,.sin{width:48px;height:48px;border-radius:50%;object-fit:cover;background:#e3ebe5;display:flex;align-items:center;justify-content:center;flex:none}'
-			. '.q{flex:1;min-width:0}.q b{display:block}.q small{color:#4a5d52}.e{font-size:12px;border-radius:99px;padding:3px 8px;background:#e3ebe5}.e--nuevo{background:#fff1c2}.e--parado{background:#fde2e0}.e--ok{background:#d9f2e3}'
-			. '.f{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.f figure{margin:0}.f img,.f .sin{width:100%;height:auto;aspect-ratio:1;border-radius:12px;object-fit:cover}.f figcaption{font-size:12px;color:#4a5d52}'
+			. '.q{flex:1;min-width:0}.q b{display:block}.q small{color:#4a5d52}.e{font-size:12px;border-radius:99px;padding:3px 8px;background:#e3ebe5}.e--nuevo{background:#fff1c2}.e--parado{background:#fde2e0}.e--ok{background:#d9f2e3}.e--parati{background:#ffd9b3}.e--comprobando{background:#e3e8ff}.ck{font-weight:500}.b--gris{background:#4a5d52}'
+			. '.f{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;row-gap:12px}.f figure{margin:0}.f img,.f .sin{width:100%;height:auto;aspect-ratio:1;border-radius:12px;object-fit:cover}.f figcaption{font-size:12px;color:#4a5d52}'
 			. 'dl{background:#fff;border-radius:12px;padding:12px 14px;margin:12px 0}dt{font-size:13px;color:#4a5d52}dd{margin:0 0 8px;font-weight:600}.b{display:block;width:100%;border:0;border-radius:12px;padding:15px;font-size:17px;font-weight:700;color:#fff;margin-top:8px}.b--ok{background:#087a3d}.b--no{background:#b42318}'
 			. '.m{background:#fff;border-radius:12px;padding:12px;font-weight:700}.vacio{color:#4a5d52}input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #c9d2cc;border-radius:10px;font-size:16px;margin-top:8px}';
 	}

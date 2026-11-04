@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  * - Un viaje NO es un pedido de WooCommerce.
  */
 final class CVD_Triciclub_Db {
-	public const VERSION = 2; // 2 (4-nov): alta de choferes — tipo, motor, carga_kg, enviado_at, revisado_at, motivo
+	public const VERSION = 3; // 2 (4-nov): alta — tipo, motor, carga_kg, enviado_at, revisado_at, motivo · 3: verificación — verif, carne_hash
 	private const VERSION_OPTION = 'cvd_tc_db';
 
 	public static function t( string $name ): string {
@@ -54,6 +54,8 @@ final class CVD_Triciclub_Db {
   enviado_at datetime NULL,
   revisado_at datetime NULL,
   motivo varchar(200) NOT NULL DEFAULT '',
+  verif longtext NULL,
+  carne_hash varchar(64) NOT NULL DEFAULT '',
   numero varchar(12) NOT NULL DEFAULT '',
   descripcion varchar(80) NOT NULL DEFAULT '',
   plazas tinyint unsigned NOT NULL DEFAULT 0,
@@ -81,7 +83,8 @@ final class CVD_Triciclub_Db {
   PRIMARY KEY  (id),
   UNIQUE KEY user_id (user_id),
   KEY disponibles (estado,disponible,ubicado_at),
-  KEY lot_vence (lot_vence)
+  KEY lot_vence (lot_vence),
+  KEY carne_hash (carne_hash)
 ) {$c};" );
 		dbDelta( 'CREATE TABLE ' . self::t( 'viajes' ) . " (
   id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
