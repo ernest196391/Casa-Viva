@@ -95,7 +95,7 @@
     if (p.image) $('cv-original').src = p.image; else $('cv-original').removeAttribute('src');
     $('cv-view').hidden = p.status !== 'publish'; if (p.url) $('cv-view').href = p.url;
     $('cv-photo').value = ''; $('cv-facts').value = ''; $('cv-headline').value = ''; $('cv-use').value = '';
-    for (const key of ['facts', 'buyer', 'objection', 'evidence', 'use', 'headline']) $('cv-' + key).value = p.brief?.[key] || '';
+    for (const key of ['facts', 'buyer', 'objection', 'evidence', 'use', 'headline', 'offer']) $('cv-' + key).value = p.brief?.[key] || '';
     $('cv-canvas').hidden = true; $('cv-download').hidden = true; $('cv-copy').value = ''; $('cv-prompt').value = ''; $('cv-suggestion').value = '';
   }
   async function list(append = false) {
@@ -145,7 +145,7 @@
     if (!$('cv-editor').reportValidity()) return;
     const current = ficha, p = await api('save', { id: product.id || 0, version: product.version || '', token, action,
       name: $('cv-name').value, description: editableText('cv-description'), short: editableText('cv-short'),
-      brief: Object.fromEntries(['facts', 'buyer', 'objection', 'evidence', 'use', 'headline'].map((key) => [key, $('cv-' + key).value])) });
+      brief: Object.fromEntries(['facts', 'buyer', 'objection', 'evidence', 'use', 'headline', 'offer'].map((key) => [key, $('cv-' + key).value])) });
     if (current !== ficha) { message(`«${p.name}» quedó guardado. La ficha que tienes abierta no cambió.`); return; }
     // Keep unsaved layout work and selected local photo while refreshing server state.
     product = p; dirty = false; $('cv-commercial').textContent = `Precio actual: ${p.price || 'pendiente'} · ${p.status === 'publish' ? 'Publicado' : 'Borrador'}`;
@@ -186,6 +186,26 @@
   }
   function drawContained(ctx, img, x, y, w, h) { const scale = Math.min(w / img.width, h / img.height); const iw = img.width * scale, ih = img.height * scale; ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih); }
   function facts() { return $('cv-facts').value.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 3); }
+  // Offer card: only real data. Store price (and a store sale with its end date) plus the editor's current offer.
+  const saleUntil = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('es', { day: 'numeric', month: 'long' });
+  function drawOffer(ctx, h, y) {
+    if (!product?.price) throw new Error('La tarjeta de oferta necesita el precio del catálogo comercial.');
+    const square = h === 1080, sale = product.sale, offer = $('cv-offer').value.trim(), big = square ? 64 : 96, small = square ? 26 : 34;
+    const price = sale ? sale.price : product.price, priceY = y + big * 0.8;
+    ctx.fillStyle = '#173e35'; ctx.font = `700 ${big}px Arial, sans-serif`; ctx.textAlign = 'left'; ctx.fillText(price, 64, priceY);
+    let next = priceY + 16;
+    if (sale) {
+      const x = 64 + ctx.measureText(price).width + 28;
+      ctx.fillStyle = '#6b7a74'; ctx.font = `400 ${small + 6}px Arial, sans-serif`; ctx.fillText(sale.regular, x, priceY);
+      ctx.fillRect(x, priceY - (small + 6) * 0.35, ctx.measureText(sale.regular).width, 3);
+      if (sale.until && sale.until >= new Date().toLocaleDateString('en-CA')) next += wrapped(ctx, `Oferta hasta el ${saleUntil(sale.until)}`, 64, next + small, 952, small, 1);
+    }
+    if (offer) {
+      const lines = square ? 1 : 2, top = next + 12;
+      ctx.fillStyle = '#e4eee8'; ctx.fillRect(64, top, 952, lines * small * 1.25 + 24);
+      wrapped(ctx, offer, 84, top + 12 + small, 912, small, lines);
+    }
+  }
   // Callout diagram: product box, and where the explanations go (below in 9:16, at the right in 1:1).
   const featureBox = (h) => h === 1080 ? { x: 64, y: 290, w: 500, h: 560 } : { x: 64, y: 380, w: 952, h: 780 };
   function drawFeatures(ctx, img, rows, h) {
@@ -369,7 +389,7 @@
     else { ctx.fillStyle = '#fff'; ctx.fillRect(64, imageTop, 952, imageH); drawContained(ctx, img, 88, imageTop + 24, 904, imageH - 48); }
     let y = imageTop + imageH + 70;
     if (layout === 'spec') rows.forEach((s, i) => { y += wrapped(ctx, `${i + 1}. ${s}`, 64, y, 952, h === 1080 ? 27 : 38, 2) + 16; });
-    if (layout === 'offer') { wrapped(ctx, `Precio actual: ${product?.price || 'Consulta en la tienda'}`, 64, y, 952, 38, 2); }
+    if (layout === 'offer') drawOffer(ctx, h, y);
     if (layout === 'use') wrapped(ctx, $('cv-use').value, 64, y, 952, 38, 3);
     ctx.fillStyle = '#173e35'; ctx.fillRect(64, h - 160, 952, 90); wrapped(ctx, 'VER EN CASA VIVA', 105, h - 103, 870, 32, 1, '#fff');
     // Social downloads go out at maximum JPEG quality; the networks compress them again.
@@ -388,7 +408,9 @@
   $('cv-copy-build').addEventListener('click', () => {
     const rows = facts(), title = $('cv-name').value.trim(), usage = $('cv-use').value.trim();
     const link = product?.status === 'publish' ? product.url : '';
-    $('cv-copy').value = [title, ...rows.map((s) => `• ${s}`), usage, product?.price ? `Precio actual: ${product.price}` : '', link ? `Míralo en Casa Viva: ${link}` : 'Consulta en Casa Viva.'].filter(Boolean).join('\n');
+    const sale = product?.sale, offer = $('cv-offer').value.trim();
+    const priceLine = sale ? `Precio de oferta: ${sale.price} (antes ${sale.regular})` : product?.price ? `Precio actual: ${product.price}` : '';
+    $('cv-copy').value = [title, ...rows.map((s) => `• ${s}`), usage, priceLine, offer ? `Oferta: ${offer}` : '', link ? `Míralo en Casa Viva: ${link}` : 'Consulta en Casa Viva.'].filter(Boolean).join('\n');
     $('cv-prompt').value = `Crea una imagen comercial para Casa Viva, formato ${$('cv-format').value === '1920' ? '9:16' : '1:1'}. Usa la foto real adjunta como referencia exacta. Conserva forma, color, etiquetas, marca, piezas y proporciones. No inventes vistas interiores ni accesorios incluidos. Estilo minimalista cálido, beige y verde oscuro, luz suave. Producto: ${title}. Datos confirmados: ${rows.join('; ') || plain($('cv-description').value)}. Uso confirmado: ${usage || 'no indicado'}. Deja espacio para añadir textos después. No dibujes precios, descuentos, estrellas, testimonios ni garantías. Si falta información, pregunta. Devuelve además tres títulos breves y una descripción usando solo estos datos. Revisa PROOF: promesa sustentada, evidencia real, oferta vigente, objeción y siguiente paso. No presentes el resultado como fotografía documental si modificas el producto.`;
     $('cv-prompt').value += `\nContexto aportado por la tienda (no investigación independiente): comprador/situación: ${$('cv-buyer').value || 'pendiente'}; objeción: ${$('cv-objection').value || 'pendiente'}; evidencia: ${$('cv-evidence').value || 'pendiente'}. Investiga antes de generar si estas fuentes no bastan para sustentar el mensaje. No deduzcas ventas por la duración o alcance de un anuncio competidor.`;
     message('Textos e instrucción preparados con tus datos. Puedes editarlos.');

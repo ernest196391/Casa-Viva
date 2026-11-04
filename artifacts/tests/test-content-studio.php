@@ -37,6 +37,7 @@ class WC_Product {
  public function get_price_html() { return '$' . $this->data['price']; }
  public function get_permalink() { return 'https://example.test/?p=' . $this->data['id']; }
  public function is_type( $type ) { return 'simple' === $type; }
+ public function is_on_sale() { return false; }
  public function get_meta( $k ) { return $this->data['meta'][$k] ?? ''; }
  public function update_meta_data( $k, $v ) { $this->data['meta'][$k] = $v; }
  public function save() { if ( ! $this->data['id'] ) { $this->data['id'] = count( $GLOBALS['products'] ) + 1; } $GLOBALS['products'][$this->data['id']] = clone $this; return $this->data['id']; }
