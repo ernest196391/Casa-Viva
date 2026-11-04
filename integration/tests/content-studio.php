@@ -93,3 +93,8 @@ $stale = studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_da
 studio_assert( $legacy['image'] === $stale['review_old'] && array() === $stale['review_changed'], 'option saved before this change is still shown without guessing what changed' );
 wp_set_current_user( 1 );
 studio_assert( empty( studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_data()['review_old'] ), 'other users do not receive an old editor option' );
+
+// Logging in with the editor account opens the panel, not the shop.
+$panel = add_query_arg( 'cvd_contenido', '1', home_url( '/' ) );
+studio_assert( $panel === apply_filters( 'login_redirect', $panel, $panel, get_user_by( 'id', $id ) ), 'editor login lands on the catalog panel' );
+studio_assert( $panel === apply_filters( 'login_redirect', home_url( '/' ), '', get_user_by( 'id', $id ) ), 'editor login without a destination also lands on the panel' );
