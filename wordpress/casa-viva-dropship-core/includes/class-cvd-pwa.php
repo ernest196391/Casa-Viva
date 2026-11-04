@@ -19,6 +19,19 @@ final class CVD_PWA {
 		add_filter( 'woocommerce_email_from_name', array( __CLASS__, 'mail_from_name' ) );
 		add_filter( 'login_url', array( __CLASS__, 'password_reset_login_url' ), 30, 3 );
 		add_filter( 'the_title', array( __CLASS__, 'compact_app_page_title' ), 30, 2 );
+		add_action( 'login_enqueue_scripts', array( __CLASS__, 'login_brand' ) );
+		add_filter( 'login_headerurl', array( __CLASS__, 'login_header_url' ) );
+		add_filter( 'login_headertext', array( __CLASS__, 'mail_from_name' ) );
+	}
+
+	/** The login page shows Casa Viva, not WordPress. Look only; the login itself is unchanged. */
+	public static function login_brand(): void {
+		$logo = esc_url( CVD_URL . 'assets/logo-casa-viva-crema.svg' );
+		wp_add_inline_style( 'login', "body.login{background:#173e35}.login h1 a{background:url('{$logo}') center/contain no-repeat;width:280px;height:58px}.login form{border:0;border-radius:14px}.login #nav a,.login #backtoblog a,.login .privacy-policy-link,.login .language-switcher label .dashicons{color:#f6f1e6}.wp-core-ui .button-primary{background:#173e35;border-color:#173e35}" );
+	}
+
+	public static function login_header_url(): string {
+		return home_url( '/' );
 	}
 
 	public static function compact_app_page_title( string $title, int $post_id ): string {
