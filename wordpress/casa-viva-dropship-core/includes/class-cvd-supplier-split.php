@@ -30,7 +30,7 @@ final class CVD_Supplier_Split {
 	public const ROUTES = array( 'A' => 'El proveedor lo trae a la tienda', 'B' => 'Nuestro mensajero lo recoge en el proveedor', 'C' => 'El proveedor lo lleva directo al cliente' );
 	public const VEHICLES = array( 'moto' => 'Moto', 'triciclo' => 'Triciclo', 'ninguno' => 'Sin vehículo' );
 	/** Sugerencias por defecto (D69), en CUP. Se pueden cambiar sin tocar código con estas opciones. */
-	private const DEFAULTS = array( 'moto' => 1000, 'triciclo' => 2500, 'clerk_per_item' => 500, 'store' => 3000, 'store_min' => 1000 ); // D92: 3.000 por la opción cvd_supplier_split_store (antes 1.500); los cerrados guardan el suyo
+	private const DEFAULTS = array( 'moto' => 1000, 'triciclo' => 2500, 'clerk_per_item' => 500, 'store' => 2500, 'store_min' => 1000 ); // D92: 3.000; 3.14.136 (Ernesto 4-nov): 2.500 siempre (opción cvd_supplier_split_store); los cerrados guardan el suyo
 	public const SPECIAL_NAME = 'Ernesto';
 	/** 3.14.48 (D92): usuario de la cuenta de gestor del dueño (hoy 137). Vacía = nada de lo del dueño-gestor tiene efecto. */
 	public const OWNER_OPTION = 'cvd_owner_gestor_user';
@@ -133,6 +133,23 @@ final class CVD_Supplier_Split {
 		return 'triciclo' === $vehicle ? self::opt( 'triciclo' ) : self::opt( 'moto' );
 	}
 
+	/**
+	 * 3.14.136 (Ernesto 4-nov): la dependienta que recibió el pedido = la que lo marcó «Listo» en la tienda; si no, la que
+	 * recibió el dinero. '' si ninguna de las dos es dependienta. Así su parte (500 CUP por artículo) siempre lleva nombre.
+	 */
+	public static function clerk_from_history( WC_Order $order ): string {
+		$ids = array();
+		foreach ( array_reverse( (array) $order->get_meta( '_cvd_operation_history', true ) ) as $h ) {
+			if ( is_array( $h ) && 'ready' === ( $h['to'] ?? '' ) && ! empty( $h['user_id'] ) ) { $ids[] = absint( $h['user_id'] ); }
+		}
+		$ids[] = absint( $order->get_meta( '_cvd_collection_received_by', true ) );
+		foreach ( $ids as $id ) {
+			$user = $id ? get_userdata( $id ) : null;
+			if ( $user && in_array( 'cvd_clerk', (array) $user->roles, true ) ) { return (string) $user->display_name; }
+		}
+		return '';
+	}
+
 	/** 3.14.49: dependienta sugerida: ruta C = 0 (va directo del proveedor al cliente); si no, 500 CUP (opción) por artículo. */
 	public static function clerk_default( string $route, int $qty ): int {
 		return 'C' === $route ? 0 : self::opt( 'clerk_per_item' ) * max( 1, $qty );
@@ -197,7 +214,8 @@ final class CVD_Supplier_Split {
 			'defaults' => array( 'moto' => self::opt( 'moto' ), 'triciclo' => self::opt( 'triciclo' ), 'clerkPerItem' => self::opt( 'clerk_per_item' ), 'store' => self::opt( 'store' ), 'storeMin' => self::opt( 'store_min' ) ),
 			'saved' => ! empty( $saved['input'] ), 'savedAt' => $saved['savedAt'] ?? null, 'savedBy' => $saved['savedBy'] ?? null,
 			'closed' => '' !== $closed_at, 'closedAt' => '' !== $closed_at ? $closed_at : null,
-			'state' => '' !== $closed_at ? 'cerrado' : ( in_array( $order->get_status(), array( 'cancelled', 'refunded', 'failed' ), true ) ? 'cancelado' : 'abierto' ),
+			// 3.14.136: un pedido devuelto después de cerrarse (#4988, olla) es «cancelado»: su parte no se cobra.
+			'state' => in_array( $order->get_status(), array( 'cancelled', 'refunded', 'failed' ), true ) ? 'cancelado' : ( '' !== $closed_at ? 'cerrado' : 'abierto' ),
 			// 3.14.50 (Ernesto 22-oct 14:35): recargo de la forma de pago que SÍ es ganancia (Clásica cambiada a USD). Hoy solo
 			// viene de lo sellado (#3845: webUsd 120,75 = 105 + 15,75); aquí 0 para que el sellado lo pueda traer.
 			'surchargeUsd' => 0.0, 'surchargeNote' => '',
@@ -207,6 +225,7 @@ final class CVD_Supplier_Split {
 		if ( '' !== $closed_at && is_array( $saved['snapshot'] ?? null ) ) {
 			$result = array_merge( $result, array_intersect_key( $saved['snapshot'], $result ) );
 		}
+		if ( '' === $result['clerkName'] && $result['clerkCup'] > 0 ) { $result['clerkName'] = self::clerk_from_history( $order ); }
 		return $result;
 	}
 
