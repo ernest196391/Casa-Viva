@@ -157,6 +157,25 @@ test('Descripción y resumen en texto normal, sin código, y sin la barra de la 
   expect(rich.description).toBe('<p>Con <strong>negrita</strong>.</p>');
 });
 
+test('La entrada lleva la marca Casa Viva y el aviso del panel no tapa la pantalla', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(60000);
+  await page.goto('http://localhost:8889/wp-login.php');
+  await expect(page.locator('.login h1 a')).toHaveText('Casa Viva');
+  await expect(page.locator('.login h1 a')).toHaveCSS('background-image', /logo-casa-viva-crema\.svg/);
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(23, 62, 53)');
+  await openPanel(page);
+  await page.getByRole('button', { name: 'Studio text fixture · Borrador / privado', exact: true }).click();
+  const notice = page.getByRole('status');
+  await expect(notice).toHaveText('Producto abierto.');
+  await expect(notice).toHaveCSS('position', 'fixed');
+  await notice.click();
+  await expect(notice).toBeHidden();
+  await page.getByRole('button', { name: 'Studio text fixture · Borrador / privado', exact: true }).click();
+  await expect(notice).toHaveText('Producto abierto.');
+  await expect(notice).toBeHidden({ timeout: 15000 });
+});
+
 test('Editor de contenido: login, guardar, subir foto y descargar en móvil', async ({ page }) => {
   test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
   test.setTimeout(60000);

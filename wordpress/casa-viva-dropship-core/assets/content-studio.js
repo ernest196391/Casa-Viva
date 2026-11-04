@@ -19,7 +19,10 @@
     $('cv-import-preview').hidden = true;
     $('cv-import-preview').removeAttribute('src');
   }
-  const message = (text) => { $('cv-message').textContent = text; };
+  // Notice at the bottom of the screen: it clears itself after 10 s or when tapped, so it never covers the work.
+  let messageTimer = 0;
+  const message = (text) => { $('cv-message').textContent = text; clearTimeout(messageTimer); messageTimer = setTimeout(() => { $('cv-message').textContent = ''; }, 10000); };
+  $('cv-message').addEventListener('click', () => { $('cv-message').textContent = ''; });
   const plain = (text) => { const d = new DOMParser().parseFromString(text || '', 'text/html'); return d.body.textContent || ''; };
   // Description and summary are edited as plain text: blank line = paragraph, «• » = list item, short line ending in «:» = heading.
   // Text with any other formatting (bold, links, tables…) stays as HTML so nothing is lost on save.
