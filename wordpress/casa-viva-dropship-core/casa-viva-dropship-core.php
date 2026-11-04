@@ -95,6 +95,7 @@ require_once CVD_DIR . 'includes/class-cvd-triciclub-db.php'; // 3.14.117: Trici
 require_once CVD_DIR . 'includes/class-cvd-triciclub-precio.php'; // 3.14.117: el precio lo pone cada chofer, por franja horaria.
 require_once CVD_DIR . 'includes/class-cvd-triciclub.php'; // 3.14.117: /triciclub/ (cliente) y /palla/triciclub (chofer). Nace apagado: cvd_tc = no.
 require_once CVD_DIR . 'includes/class-cvd-triciclub-api.php'; // 3.14.117: casa-viva/v1/triciclub/…
+require_once CVD_DIR . 'includes/class-cvd-triciclub-geo.php'; // 3.14.118: direcciones como La Nave (GPS → «Calle 23 e/ L y M», sugerencias)
 require_once CVD_DIR . 'includes/class-cvd-order-seq.php'; // 3.14.69.11: Nº propio del pedido que nunca salta (Lennys #581).
 require_once CVD_DIR . 'includes/class-cvd-ficha-contesta.php'; // 3.14.65: «Ficha que contesta» — datos de la tienda y preguntas atadas al producto (D107, mejora 7 del diagnóstico)
 require_once CVD_DIR . 'includes/class-cvd-catalogo-auto.php'; // 3.14.84: catálogo al estándar (D124): fichas del bot, candado de bajo pedido, fotos reales y revisión ✓/✗ de Lennys

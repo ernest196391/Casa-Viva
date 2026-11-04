@@ -315,7 +315,7 @@ final class CVD_Triciclub {
 			'mode'     => self::mode(),
 			'telefono' => self::tel_triciclub(),
 			'logo'     => self::asset( 'logo.png' ),
-			'mapaUrl'  => CVD_URL . 'assets/palla/mapa.js?v=' . CVD_VERSION,
+			'mapaUrl'  => self::asset( 'mapa.js' ), // 3.14.118: el mapa de Triciclub
 			'habana'   => array( 23.125, -82.38 ),
 		);
 	}
@@ -397,7 +397,7 @@ final class CVD_Triciclub {
 		header( 'Content-Type: application/javascript; charset=utf-8' );
 		header( 'Cache-Control: no-cache, no-store, must-revalidate' );
 		$shell = wp_json_encode( home_url( '/triciclub/' ) );
-		$files = wp_json_encode( array_map( array( __CLASS__, 'asset' ), array( 'app.js', 'app.css', 'icon.svg', 'logo.png' ) ), JSON_UNESCAPED_SLASHES );
+		$files = wp_json_encode( array_map( array( __CLASS__, 'asset' ), array( 'app.js', 'mapa.js', 'app.css', 'icon.svg', 'logo.png' ) ), JSON_UNESCAPED_SLASHES );
 		echo "const CACHE='tc-" . esc_js( CVD_VERSION ) . "',SHELL={$shell},FILES={$files};\n";
 		echo "self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>Promise.race([Promise.all([SHELL].concat(FILES).map(u=>c.add(u).catch(()=>null))),new Promise(ok=>setTimeout(ok,10000))])).catch(()=>null))});\n";
 		echo "self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k.startsWith('tc-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});\n";

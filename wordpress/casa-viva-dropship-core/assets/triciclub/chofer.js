@@ -24,7 +24,9 @@
 	function api(path, body) {
 		var h = { 'Accept': 'application/json', 'X-Palla-Token': state.token };
 		if (body) { h['Content-Type'] = 'application/json'; }
-		return fetch(API + path, { method: body ? 'POST' : 'GET', headers: h, body: body ? JSON.stringify(body) : undefined, cache: 'no-store', credentials: 'omit' })
+		var ctrl = window.AbortController ? new AbortController() : null, corte = setTimeout(function () { if (ctrl) { ctrl.abort(); } }, 15000); // con mala red, nunca colgada
+		return fetch(API + path, { method: body ? 'POST' : 'GET', headers: h, body: body ? JSON.stringify(body) : undefined, cache: 'no-store', credentials: 'omit', signal: ctrl ? ctrl.signal : undefined })
+			.then(function (r) { clearTimeout(corte); return r; }, function (e) { clearTimeout(corte); throw e; })
 			.then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { state.offline = false; return { status: r.status, data: d || {} }; }); })
 			.catch(function () { state.offline = true; return { status: 0, data: { message: 'Sin conexión.' } }; });
 	}

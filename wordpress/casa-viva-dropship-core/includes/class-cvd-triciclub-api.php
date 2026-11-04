@@ -37,6 +37,9 @@ final class CVD_Triciclub_Api {
 		$r( 'cliente/entrar', 'POST', 'entrar', $open );
 		$r( 'yo', 'GET', 'yo', $c );
 		$r( 'lugar', 'GET', 'lugar', $c );
+		$r( 'donde', 'GET', 'donde', $c );       // 3.14.118: GPS/mapa → «Calle 23 e/ L y M»
+		$r( 'sugerir', 'GET', 'sugerir', $c );   // 3.14.118: sugerencias mientras escribe
+		$r( 'libres', 'GET', 'libres', $c );     // 3.14.118: triciclos libres en el mapa
 		$r( 'cerca', 'GET', 'cerca', $c );
 		$r( 'viajes', 'GET', 'mis_viajes', $c );
 		$r( 'viajes', 'POST', 'crear_viaje', $c );
@@ -65,6 +68,10 @@ final class CVD_Triciclub_Api {
 	}
 
 	private static function out( array $data, int $status = 200 ): WP_REST_Response {
+		// 3.14.118.1: LiteSpeed guardaba estas respuestas (sin cookies) y las repetía: el chofer no veía que aceptó, y la
+		// caché no distingue el token, así que podía enseñar datos de una persona a otra. Nunca a la caché.
+		do_action( 'litespeed_control_set_nocache', 'Triciclub: datos privados' );
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) { define( 'DONOTCACHEPAGE', true ); }
 		$res = new WP_REST_Response( $data, $status );
 		$res->header( 'Cache-Control', 'no-store' );
 		return $res;
@@ -138,9 +145,58 @@ final class CVD_Triciclub_Api {
 	public static function lugar( WP_REST_Request $request ): WP_REST_Response {
 		$texto = self::txt( $request->get_param( 'texto' ), 160 );
 		if ( mb_strlen( $texto ) < 3 ) { return self::fail( 'texto', 'Escribe la dirección: calle y entrecalles, o una esquina.' ); }
-		$p = class_exists( 'CVD_Geo_Direccion' ) ? CVD_Geo_Direccion::locate( $texto, (string) $request->get_param( 'zona' ) ) : null;
-		if ( ! $p || ! isset( $p['lat'], $p['lon'] ) ) { return self::fail( 'no_encontrado', 'No encontramos esa dirección. Prueba con calle y entrecalles, o toca el mapa.', 404 ); }
+		$p = self::localizar( $texto, (string) $request->get_param( 'zona' ) );
+		if ( ! $p ) { return self::fail( 'no_encontrado', 'No encontramos esa dirección. Prueba con calle y entrecalles, o toca el mapa.', 404 ); }
 		return self::out( array( 'ok' => true, 'lat' => (float) $p['lat'], 'lng' => (float) $p['lon'], 'texto' => $texto, 'como' => (string) ( $p['how'] ?? '' ) ) );
+	}
+
+	/** Texto → {lat, lon, how} o null. «23 y L», «Obispo y Bernaza» = una esquina en Cuba (si no, sería «la calle 23»). */
+	public static function localizar( string $texto, string $zona = '' ): ?array {
+		if ( ! class_exists( 'CVD_Geo_Direccion' ) || mb_strlen( trim( $texto ) ) < 3 ) { return null; }
+		$p = null;
+		if ( ! preg_match( '/\bentre\b|\besq/i', $texto ) && preg_match( '/^(.+?)\s+y\s+(.+)$/iu', $texto, $m ) ) {
+			$p = CVD_Geo_Direccion::locate( $m[1] . ' esquina ' . $m[2], $zona );
+			if ( $p && 'esquina' !== ( $p['how'] ?? '' ) ) { $p = null; }
+		}
+		if ( ! $p ) { $p = CVD_Geo_Direccion::locate( $texto, $zona ); }
+		// Una calle suelta («Obispo») no es una dirección: para eso están las sugerencias de calle + el mapa.
+		return $p && isset( $p['lat'], $p['lon'] ) && in_array( $p['how'] ?? '', array( 'esquina', 'cuadra' ), true ) ? $p : null;
+	}
+
+	/** GET donde?lat&lng — el punto del GPS o del mapa escrito como en Cuba: «Calle 23 e/ L y M», con el barrio. */
+	public static function donde( WP_REST_Request $request ): WP_REST_Response {
+		$lat = self::coord( $request->get_param( 'lat' ), true );
+		$lng = self::coord( $request->get_param( 'lng' ), false );
+		if ( null === $lat || null === $lng ) { return self::fail( 'puntos', 'Ese punto está fuera de Cuba.' ); }
+		$d = CVD_Triciclub_Geo::donde( $lat, $lng );
+		return self::out( array( 'ok' => true, 'texto' => $d ? $d['texto'] : 'Punto en el mapa', 'barrio' => $d ? $d['barrio'] : '', 'conocido' => (bool) $d ) );
+	}
+
+	/** GET sugerir?texto&lat&lng — mientras escribe: dirección exacta si la entiende, calles y barrios. */
+	public static function sugerir( WP_REST_Request $request ): WP_REST_Response {
+		$lat = self::coord( $request->get_param( 'lat' ), true );
+		$lng = self::coord( $request->get_param( 'lng' ), false );
+		$l = CVD_Triciclub_Geo::sugerir( self::txt( $request->get_param( 'texto' ), 80 ), $lat, null === $lat ? null : $lng );
+		return self::out( array( 'ok' => true, 'sugerencias' => $l ) );
+	}
+
+	/** GET libres?lat&lng — dónde hay triciclos libres cerca (solo puntos, para pintarlos en el mapa). */
+	public static function libres( WP_REST_Request $request ): WP_REST_Response {
+		global $wpdb;
+		$lat = self::coord( $request->get_param( 'lat' ), true );
+		$lng = self::coord( $request->get_param( 'lng' ), false );
+		if ( null === $lat || null === $lng ) { return self::out( array( 'ok' => true, 'triciclos' => array() ) ); }
+		$t = CVD_Triciclub_Db::t( 'choferes' );
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT user_id, lat, lng FROM {$t} WHERE estado='aprobado' AND disponible=1 AND ubicado_at>%s AND lat IS NOT NULL LIMIT 200", gmdate( 'Y-m-d H:i:s', time() - self::VIVO ) ) );
+		$testers = 'prueba' === CVD_Triciclub::mode() ? CVD_Triciclub::testers() : null;
+		$out = array();
+		foreach ( $rows as $r ) {
+			if ( null !== $testers && ! in_array( (int) $r->user_id, $testers, true ) ) { continue; }
+			if ( CVD_Triciclub_Precio::recta_m( (float) $r->lat, (float) $r->lng, $lat, $lng ) > 5000 ) { continue; }
+			// Un poco movido (±60 m): se ve dónde hay triciclos, no la casa exacta del chofer.
+			$out[] = array( round( (float) $r->lat + ( wp_rand( -5, 5 ) / 10000 ), 5 ), round( (float) $r->lng + ( wp_rand( -5, 5 ) / 10000 ), 5 ) );
+		}
+		return self::out( array( 'ok' => true, 'triciclos' => $out ) );
 	}
 
 	/**
@@ -205,8 +261,9 @@ final class CVD_Triciclub_Api {
 	/** Lo que el cliente ve de un chofer (nunca su teléfono antes de aceptar, nunca su LOT entera). */
 	private static function chofer_publico( object $ch ): array {
 		$u = get_userdata( (int) $ch->user_id );
-		$partes = preg_split( '/\s+/', trim( $u ? (string) $u->display_name : '' ) );
-		$nombre = ( $partes[0] ?? 'Chofer' ) . ( isset( $partes[1] ) && '' !== $partes[1] ? ' ' . mb_substr( $partes[1], 0, 1 ) . '.' : '' );
+		$limpio = trim( (string) preg_replace( '/\([^)]*\)/u', '', $u ? (string) $u->display_name : '' ) ); // «Ernesto (prueba)» → «Ernesto»
+		$partes = preg_split( '/\s+/', '' !== $limpio ? $limpio : 'Chofer' );
+		$nombre = $partes[0] . ( isset( $partes[1] ) && preg_match( '/^\p{L}/u', $partes[1] ) ? ' ' . mb_substr( $partes[1], 0, 1 ) . '.' : '' );
 		$hoy = ( new DateTimeImmutable( 'now', new DateTimeZone( 'America/Havana' ) ) )->format( 'Y-m-d' );
 		return array(
 			'nombre'      => $nombre,
