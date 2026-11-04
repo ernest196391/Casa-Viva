@@ -129,8 +129,8 @@ test('Características señaladas: línea fina de cada punto a su explicación',
     await expect(page.getByRole('status')).toContainText(`número ${next}`);
   };
   await tap(300, 800, 2); await tap(800, 900, 1);
-  // Point 1 is on the left: its line runs down the left margin; point 2 down the right margin.
-  const colors = await canvas.evaluate((c) => [[36, 1000], [1044, 1100], [540, 330]].map(([x, y]) => Array.from(c.getContext('2d').getImageData(x, y, 1, 1).data).slice(0, 3)));
+  // Point 1 is on the left: its line runs down the first left lane; point 2 down the second right lane.
+  const colors = await canvas.evaluate((c) => [[24, 1000], [1042, 1100], [540, 330]].map(([x, y]) => Array.from(c.getContext('2d').getImageData(x, y, 1, 1).data).slice(0, 3)));
   expect(colors).toEqual([[23, 62, 53], [23, 62, 53], [246, 242, 233]]);
   await expect(page.getByRole('link', { name: 'Descargar imagen', exact: true })).toBeVisible();
 });

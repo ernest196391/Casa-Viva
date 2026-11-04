@@ -164,13 +164,14 @@
       return anchor;
     });
     // Thin line from each tapped point to its explanation, routed along the margin so it does not cover the product.
+    // Each line has its own lane so two lines never share a segment.
     ctx.strokeStyle = line; ctx.lineWidth = 3;
     items.forEach((item, i) => {
       const point = markers[i]; if (!point) return;
       const x = point.x * 1080, y = point.y * h, ay = anchors[i];
       ctx.beginPath(); ctx.moveTo(x, y);
-      if (square) { ctx.lineTo(580, y); ctx.lineTo(580, ay); ctx.lineTo(left, ay); }
-      else { const side = x < 540 ? 36 : 1044; ctx.lineTo(side, y); ctx.lineTo(side, ay); ctx.lineTo(x < 540 ? left : left + width, ay); }
+      if (square) { const lane = 572 + i * 10; ctx.lineTo(lane, y); ctx.lineTo(lane, ay); ctx.lineTo(left, ay); }
+      else { const lane = x < 540 ? 24 + i * 14 : 1056 - i * 14; ctx.lineTo(lane, y); ctx.lineTo(lane, ay); ctx.lineTo(x < 540 ? left : left + width, ay); }
       ctx.stroke();
     });
     items.forEach((item, i) => {
