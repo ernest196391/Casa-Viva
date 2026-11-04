@@ -539,6 +539,7 @@ final class CVD_Triciclub_Api {
 			'recibe'          => $activo && '' !== (string) $viaje->recibe_nombre ? array( 'nombre' => (string) $viaje->recibe_nombre, 'telefono' => (string) $viaje->recibe_telefono ) : null,
 			'cobrado'         => null !== $viaje->cobrado_at,
 			'espera_hasta'    => 'esperando' === $viaje->estado ? gmdate( 'c', (int) strtotime( $viaje->created_at . ' UTC' ) + self::ESPERA ) : null,
+			'linea'           => CVD_Triciclub_Precio::linea_guardada( (float) $viaje->origen_lat, (float) $viaje->origen_lng, (float) $viaje->destino_lat, (float) $viaje->destino_lng ), // 3.14.122: la ruta en el mapa del chofer
 		);
 	}
 

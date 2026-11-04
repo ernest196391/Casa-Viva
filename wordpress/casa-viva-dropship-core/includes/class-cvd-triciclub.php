@@ -362,6 +362,7 @@ final class CVD_Triciclub {
 		echo '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
 			. '<meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#121212"><title>Pa\'llá · Triciclub</title>'
 			. '<link rel="stylesheet" href="' . esc_url( CVD_Palla::asset( 'app.css' ) ) . '">'
+			. '<link rel="stylesheet" href="' . esc_url( self::asset( 'app.css' ) ) . '">' // 3.14.122: mapa a pantalla completa y hoja, como el cliente
 			. '<link rel="stylesheet" href="' . esc_url( self::asset( 'chofer.css' ) ) . '">'
 			. '</head><body>' . $body . '</body></html>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- armado con esc_* arriba.
 		exit;
