@@ -21,6 +21,40 @@
   }
   const message = (text) => { $('cv-message').textContent = text; };
   const plain = (text) => { const d = new DOMParser().parseFromString(text || '', 'text/html'); return d.body.textContent || ''; };
+  // Description and summary are edited as plain text: blank line = paragraph, «• » = list item, short line ending in «:» = heading.
+  // Text with any other formatting (bold, links, tables…) stays as HTML so nothing is lost on save.
+  const simpleTags = new Set(['P', 'H3', 'UL', 'LI', 'BR']);
+  const rawHtml = {};
+  function toText(html) {
+    const body = new DOMParser().parseFromString(html || '', 'text/html').body;
+    if ([...body.querySelectorAll('*')].some((el) => !simpleTags.has(el.tagName) || el.attributes.length) || body.querySelector('li ul, p ul')) return null;
+    const line = (el) => [...el.childNodes].map((n) => n.nodeName === 'BR' ? '\n' : n.textContent.replace(/\s+/g, ' ')).join('').split('\n').map((s) => s.trim()).join('\n').trim();
+    const blocks = [...body.childNodes].map((node) => {
+      if (node.nodeType !== Node.ELEMENT_NODE) return node.textContent.trim();
+      if (node.tagName === 'H3') return `${line(node).replace(/:$/, '')}:`;
+      if (node.tagName === 'UL') return [...node.children].map((li) => `• ${line(li)}`).join('\n');
+      return line(node);
+    });
+    return blocks.filter(Boolean).join('\n\n');
+  }
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  function toHtml(text) {
+    const html = [];
+    for (const block of text.trim().split(/\n\s*\n/)) {
+      let para = [], list = [];
+      const flushPara = () => { if (para.length) html.push(`<p>${para.map(esc).join('<br>')}</p>`); para = []; };
+      const flushList = () => { if (list.length) html.push(`<ul>${list.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>`); list = []; };
+      for (const l of block.split('\n').map((s) => s.trim()).filter(Boolean)) {
+        const bullet = l.match(/^[•*-]\s+(.+)$/);
+        if (bullet) { flushPara(); list.push(bullet[1]); }
+        else if (l.endsWith(':') && l.length <= 60 && !para.length) { flushList(); html.push(`<h3>${esc(l.slice(0, -1))}</h3>`); }
+        else { flushList(); para.push(l); }
+      }
+      flushPara(); flushList();
+    }
+    return html.join('');
+  }
+  const editableText = (id) => rawHtml[id] ? $(id).value : toHtml($(id).value);
   async function api(path, body) {
     const multipart = body instanceof FormData;
     // rest_url may be an index.php?rest_route= URL on sites without pretty permalinks.
@@ -48,7 +82,11 @@
     }
     product = p; photo = null; dirty = false; markers = []; nextMarker = 0;
     $('cv-editor').hidden = false;
-    $('cv-name').value = p.name || ''; $('cv-description').value = p.description || ''; $('cv-short').value = p.short || '';
+    $('cv-name').value = p.name || '';
+    for (const [id, html] of [['cv-description', p.description], ['cv-short', p.short]]) {
+      const text = toText(html); rawHtml[id] = text === null; $(id).value = text ?? html ?? '';
+    }
+    $('cv-text-note').hidden = !rawHtml['cv-description'] && !rawHtml['cv-short'];
     $('cv-commercial').textContent = p.id ? `Precio actual: ${p.price || 'pendiente'} · ${p.status === 'publish' ? 'Publicado' : 'Sin publicar'}` : 'Nueva mercancía · borrador';
     $('cv-original').hidden = !p.image;
     if (p.image) $('cv-original').src = p.image; else $('cv-original').removeAttribute('src');
@@ -103,7 +141,7 @@
   async function save(action) {
     if (!$('cv-editor').reportValidity()) return;
     const current = ficha, p = await api('save', { id: product.id || 0, version: product.version || '', token, action,
-      name: $('cv-name').value, description: $('cv-description').value, short: $('cv-short').value,
+      name: $('cv-name').value, description: editableText('cv-description'), short: editableText('cv-short'),
       brief: Object.fromEntries(['facts', 'buyer', 'objection', 'evidence', 'use', 'headline'].map((key) => [key, $('cv-' + key).value])) });
     if (current !== ficha) { message(`«${p.name}» quedó guardado. La ficha que tienes abierta no cambió.`); return; }
     // Keep unsaved layout work and selected local photo while refreshing server state.

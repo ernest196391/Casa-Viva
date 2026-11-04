@@ -17,3 +17,8 @@ foreach ( array( 'Studio race fixture 1', 'Studio race fixture 2' ) as $name ) {
 $stale = new WC_Product_Simple(); $stale->set_name( 'Studio stale review fixture' ); $stale->set_description( '<p>Datos sintéticos para prueba.</p>' ); $stale->set_status( 'draft' ); $stale->save();
 update_user_meta( $id, '_cvd_content_review_' . $stale->get_id(), array( 'version' => 'antigua', 'photo' => 999999, 'text' => 'antiguo',
 	'image' => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO/aJ1sAAAAASUVORK5CYII=' ) );
+// Descriptions for plain-text editing: one with simple structure, one with formatting that must stay HTML.
+$simple = new WC_Product_Simple(); $simple->set_name( 'Studio text fixture' ); $simple->set_status( 'draft' );
+$simple->set_description( "<p>Un cortinero para vestir\nla ventana.</p>\n<h3>Características</h3>\n<ul>\n<li>Metal negro</li>\n<li>Ligero</li>\n</ul>" ); $simple->set_short_description( '<p>Corto.</p>' ); $simple->save();
+$rich = new WC_Product_Simple(); $rich->set_name( 'Studio rich text fixture' ); $rich->set_status( 'draft' );
+$rich->set_description( '<p>Con <strong>negrita</strong>.</p>' ); $rich->save();
