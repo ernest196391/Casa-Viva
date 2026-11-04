@@ -135,6 +135,28 @@ test('Características señaladas: línea fina de cada punto a su explicación',
   await expect(page.getByRole('link', { name: 'Descargar imagen', exact: true })).toBeVisible();
 });
 
+test('Descripción y resumen en texto normal, sin código, y sin la barra de la tienda', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(60000);
+  await openPanel(page);
+  await expect(page.locator('.cvd-customer-nav')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Studio text fixture · Borrador / privado', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Producto abierto.');
+  await expect(page.locator('#cv-description')).toHaveValue('Un cortinero para vestir la ventana.\n\nCaracterísticas:\n\n• Metal negro\n• Ligero');
+  await expect(page.locator('#cv-short')).toHaveValue('Corto.');
+  await expect(page.locator('#cv-text-note')).toBeHidden();
+  await page.locator('#cv-description').fill('Un cortinero para vestir la ventana.\n\nCaracterísticas:\n• Metal negro\n• Ligero\n\nNuevo párrafo <b>');
+  const saved = await saveNow(page);
+  expect(saved.description).toBe('<p>Un cortinero para vestir la ventana.</p><h3>Características</h3><ul><li>Metal negro</li><li>Ligero</li></ul><p>Nuevo párrafo &lt;b&gt;</p>');
+  expect(saved.short).toBe('<p>Corto.</p>');
+  // Formatting the plain editor cannot keep is shown as HTML, with a note, and saved untouched.
+  await page.getByRole('button', { name: 'Studio rich text fixture · Borrador / privado', exact: true }).click();
+  await expect(page.locator('#cv-description')).toHaveValue('<p>Con <strong>negrita</strong>.</p>');
+  await expect(page.locator('#cv-text-note')).toBeVisible();
+  const rich = await saveNow(page);
+  expect(rich.description).toBe('<p>Con <strong>negrita</strong>.</p>');
+});
+
 test('Editor de contenido: login, guardar, subir foto y descargar en móvil', async ({ page }) => {
   test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
   test.setTimeout(60000);

@@ -44,6 +44,8 @@ final class CVD_Customer_Navigation {
 	private static function is_customer_surface(): bool {
 		if ( is_admin() || wp_doing_ajax() ) { return false; }
 		if ( function_exists( 'is_checkout' ) && is_checkout() ) { return false; }
+		// «Mi catálogo y fotos» is a work tool, not a shopping page.
+		if ( isset( $_GET['cvd_contenido'] ) ) { return false; } // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( is_user_logged_in() ) {
 			$user = wp_get_current_user();
 			$program = class_exists( 'CVD_Registration' ) ? CVD_Registration::program_type( $user ) : '';
