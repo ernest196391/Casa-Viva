@@ -16,6 +16,8 @@ defined( 'ABSPATH' ) || exit;
  *    con la tienda y bajo pedido por separado (cuentas en CVD_Contabilidad_Math). Lo usa el cierre diario del VPS.
  *    3.14.126: con detalle=1 añade ventas por día, comisiones pagadas / por pagar y el reparto de cada pedido de bajo
  *    pedido (lo usa el cierre del mes del día 1).
+ * 3) 3.14.127: GET /panel/contabilidad (clave del panel), igual, para la pestaña «Cierre» del panel; y «gastos_mes»
+ *    (opciones cvd_conta_fijos_usd_mes y cvd_conta_ia_usd_mes) para repartir gastos fijos e IA por día.
  * Rellenar pedidos viejos (solo añade, nunca cambia lo guardado): wp eval 'print_r( CVD_Contabilidad::backfill( "2026-10-01", "2026-11-04" ) );'
  */
 final class CVD_Contabilidad {
@@ -115,6 +117,8 @@ final class CVD_Contabilidad {
 
 	public static function routes(): void {
 		register_rest_route( self::NS, '/bot/contabilidad', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'rest_summary' ), 'permission_callback' => array( 'CVD_Bot_Bridge', 'authorized' ) ) );
+		// 3.14.127: lo mismo para la pestaña «Cierre» del panel (solo dueñas: lo filtra la función nexo-panel-web).
+		register_rest_route( self::NS, '/panel/contabilidad', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'rest_summary' ), 'permission_callback' => array( 'CVD_Panel_Bridge', 'authorized' ) ) );
 	}
 
 	public static function rest_summary( WP_REST_Request $request ): WP_REST_Response {
@@ -132,7 +136,9 @@ final class CVD_Contabilidad {
 			$sum['comisiones'] = CVD_Contabilidad_Math::commission_by_status( $orders );
 			$sum['reparto_bajo_pedido'] = self::supplier_splits( $orders );
 		}
-		return new WP_REST_Response( array( 'ok' => true, 'desde' => $desde, 'hasta' => $hasta, 'pedidos' => count( $orders ), 'porcentajes' => array( 'dependientas' => $dep * 100, 'ernesto' => $ern * 100 ) ) + $sum, 200 );
+		// 3.14.127: gastos del mes que no salen de los pedidos (D135), un solo sitio para el panel y el VPS.
+		$gastos = array( 'fijos' => (float) get_option( 'cvd_conta_fijos_usd_mes', 618.36 ), 'ia' => (float) get_option( 'cvd_conta_ia_usd_mes', 270 ) );
+		return new WP_REST_Response( array( 'ok' => true, 'desde' => $desde, 'hasta' => $hasta, 'pedidos' => count( $orders ), 'porcentajes' => array( 'dependientas' => $dep * 100, 'ernesto' => $ern * 100 ), 'gastos_mes' => $gastos ) + $sum, 200 );
 	}
 
 	/** 3.14.126: reparto («Reparto de la venta de proveedor», D69) de cada pedido con bajo pedido de la lista. */
