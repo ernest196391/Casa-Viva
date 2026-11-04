@@ -145,20 +145,23 @@ final class CVD_Triciclub_Api {
 	public static function lugar( WP_REST_Request $request ): WP_REST_Response {
 		$texto = self::txt( $request->get_param( 'texto' ), 160 );
 		if ( mb_strlen( $texto ) < 3 ) { return self::fail( 'texto', 'Escribe la dirección: calle y entrecalles, o una esquina.' ); }
-		$p = self::localizar( $texto, (string) $request->get_param( 'zona' ) );
+		$lat = self::coord( $request->get_param( 'lat' ), true ); // opcional: dónde está quien escribe (desempata cuadras)
+		$lng = self::coord( $request->get_param( 'lng' ), false );
+		$p = self::localizar( $texto, (string) $request->get_param( 'zona' ), null !== $lat && null !== $lng ? array( $lat, $lng ) : null );
 		if ( ! $p ) { return self::fail( 'no_encontrado', 'No encontramos esa dirección. Prueba con calle y entrecalles, o toca el mapa.', 404 ); }
 		return self::out( array( 'ok' => true, 'lat' => (float) $p['lat'], 'lng' => (float) $p['lon'], 'texto' => $texto, 'como' => (string) ( $p['how'] ?? '' ) ) );
 	}
 
 	/** Texto → {lat, lon, how} o null. «23 y L», «Obispo y Bernaza» = una esquina en Cuba (si no, sería «la calle 23»). */
-	public static function localizar( string $texto, string $zona = '' ): ?array {
+	public static function localizar( string $texto, string $zona = '', ?array $cerca = null ): ?array {
 		if ( ! class_exists( 'CVD_Geo_Direccion' ) || mb_strlen( trim( $texto ) ) < 3 ) { return null; }
 		$p = null;
-		if ( ! preg_match( '/\bentre\b|\besq/i', $texto ) && preg_match( '/^(.+?)\s+y\s+(.+)$/iu', $texto, $m ) ) {
-			$p = CVD_Geo_Direccion::locate( $m[1] . ' esquina ' . $m[2], $zona );
+		// «23 y L» es una esquina; «L e/ 21 y 23» o «82 e 9 y 11» no (4-nov: se partía por la «y» y salía la esquina L y 21).
+		if ( ! preg_match( '/\bentre\b|\besq|\be\s*\/|\be\.\s|\se\s+(?=\S+(?:\s+\S+)?\s+y\s)/i', $texto ) && preg_match( '/^(.+?)\s+y\s+(.+)$/iu', $texto, $m ) ) {
+			$p = CVD_Geo_Direccion::locate( $m[1] . ' esquina ' . $m[2], $zona, $cerca );
 			if ( $p && 'esquina' !== ( $p['how'] ?? '' ) ) { $p = null; }
 		}
-		if ( ! $p ) { $p = CVD_Geo_Direccion::locate( $texto, $zona ); }
+		if ( ! $p ) { $p = CVD_Geo_Direccion::locate( $texto, $zona, $cerca ); }
 		// Una calle suelta («Obispo») no es una dirección: para eso están las sugerencias de calle + el mapa.
 		return $p && isset( $p['lat'], $p['lon'] ) && in_array( $p['how'] ?? '', array( 'esquina', 'cuadra' ), true ) ? $p : null;
 	}
