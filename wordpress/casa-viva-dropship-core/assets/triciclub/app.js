@@ -387,15 +387,16 @@
 	function tarjetaTri(t, i, sel) {
 		return '<button type="button" class="tc-opcion' + (sel ? ' tc-opcion--sel' : '') + '" data-act="elegir-tri" data-id="' + i + '" aria-pressed="' + sel + '">'
 			+ '<span class="tc-avatar" aria-hidden="true">' + esc(ini(t.nombre)) + '</span>'
-			+ '<span class="tc-opcion__q"><b>' + esc(t.nombre) + (t.nota ? ' · ★ ' + esc(String(t.nota).replace('.', ',')) : '') + '</b><small>' + esc([t.numero ? 'Nº ' + t.numero : '', t.descripcion, 'llega en ' + t.llega + ' min'].filter(Boolean).join(' · ')) + (t.lot_ok ? ' · LOT ✓' : '') + '</small></span>'
-			+ '<span class="tc-opcion__p">' + esc(cup(t.precio)) + (t.extra ? '<small>+' + t.extra + ' %</small>' : '') + '</span></button>';
+			+ '<span class="tc-opcion__q"><b>' + esc(t.nombre) + (t.nota ? ' · ★ ' + esc(String(t.nota).replace('.', ',')) : '') + '</b><small>Llega en ' + t.llega + ' min' + esc(t.numero ? ' · Nº ' + t.numero : '') + (t.lot_ok ? ' · LOT ✓' : '') + '</small></span>'
+			+ '<span class="tc-opcion__p">' + esc(cup(t.precio)) + '<small>' + (t.extra ? '+' + t.extra + ' % · ' : '') + 'fijo</small></span></button>';
 	}
 
 	function screenElegir() {
-		var c = S.cerca, h = barraArriba('volver-mapa') + sinRed() + '<section class="tc-hoja" aria-label="Elegir triciclo"><div class="tc-asa"></div>';
-		h += '<div class="tc-dos">' + lugarLinea(S.origen) + lugarLinea(S.destino, ' tc-ruta__punto--dest') + '</div>';
-		h += '<div class="tc-carrusel" role="radiogroup" aria-label="Servicio">';
-		SERV.forEach(function (s) { h += '<button type="button" role="radio" class="tc-cat" data-act="servicio" data-id="' + s.id + '" aria-checked="' + (S.servicio === s.id) + '">' + svg(s.icon, 26, S.servicio === s.id ? '#fff' : '#087a3d') + '<b>' + s.nombre + '</b><small>' + s.sub + '</small></button>'; });
+		// 3.14.120 (Ernesto 3-nov, «hoja más pequeña»): como La Nave, la hoja ocupa ~1/3 y se ve la ruta en el mapa.
+		var c = S.cerca, h = barraArriba('volver-mapa') + sinRed() + '<section class="tc-hoja tc-hoja--corta" aria-label="Elegir triciclo"><div class="tc-asa"></div>';
+		h += '<p class="tc-trayecto"><span class="tc-ruta__punto"></span><b>' + esc(corto(S.origen.texto)) + '</b><span aria-hidden="true">→</span><span class="tc-ruta__punto tc-ruta__punto--dest"></span><b>' + esc(corto(S.destino.texto)) + '</b></p>';
+		h += '<div class="tc-servs" role="radiogroup" aria-label="Servicio">';
+		SERV.forEach(function (s) { h += '<button type="button" role="radio" class="tc-serv-mini" data-act="servicio" data-id="' + s.id + '" aria-checked="' + (S.servicio === s.id) + '">' + svg(s.icon, 18, S.servicio === s.id ? '#fff' : '#087a3d') + s.nombre + '</button>'; });
 		h += '</div>';
 		if (!c) { return h + '<p class="tc-muted" role="status">Buscando triciclos libres cerca…</p></section>'; }
 		var l = c.triciclos || [];
@@ -404,19 +405,22 @@
 				+ '<div class="tc-dos-btn"><button type="button" class="tc-btn tc-btn--sec" data-act="otra-vez">Buscar otra vez</button><a class="tc-btn" href="tel:+' + esc(C.telefono) + '">Llamar</a></div></section>';
 		}
 		var t = l[S.elegido] || l[0];
-		h += '<div class="tc-row tc-small"><span>' + esc(String(c.km).replace('.', ',')) + ' km · ' + esc(c.franja.nombre) + ' · precio por el triciclo entero</span>'
-			+ (l.length > 1 ? '<span class="tc-orden"><button type="button" data-act="orden" data-id="barato" aria-pressed="' + (S.orden === 'barato') + '">Más barato</button><button type="button" data-act="orden" data-id="cerca" aria-pressed="' + (S.orden === 'cerca') + '">Más cerca</button></span>' : '') + '</div>';
-		if (S.verTodos) { l.forEach(function (x, i) { h += tarjetaTri(x, i, i === S.elegido); }); }
-		else { h += tarjetaTri(t, S.elegido, true) + (l.length > 1 ? '<button type="button" class="tc-btn tc-btn--link tc-btn--verde" data-act="ver-todos">Ver los ' + l.length + ' triciclos libres</button>' : ''); }
+		if (S.verTodos) { h += '<div class="tc-todos">'; l.forEach(function (x, i) { h += tarjetaTri(x, i, i === S.elegido); }); h += '</div>'; }
+		else { h += tarjetaTri(t, S.elegido, true); }
 		if (S.servicio === 'paquete') {
 			h += '<div class="tc-dos-campos"><input class="tc-input" data-campo="recibe.nombre" value="' + esc(S.recibe.nombre) + '" placeholder="Quién recibe" aria-label="Quién recibe el paquete" maxlength="80">'
 				+ '<input class="tc-input" type="tel" inputmode="tel" data-campo="recibe.telefono" value="' + esc(S.recibe.telefono) + '" placeholder="Su teléfono" aria-label="Teléfono de quien recibe"></div>';
 		}
-		h += '<div class="tc-tres"><span>' + svg(I.candado, 18, '#087a3d') + '<b>' + esc(cup(t.precio)) + '</b><small>Precio fijo</small></span>'
-			+ '<button type="button" data-act="pago">' + svg('<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>', 18, '#087a3d') + '<b>' + (S.pago === 'efectivo' ? 'Efectivo' : 'Transferencia') + '</b><small>Toca para cambiar</small></button>'
-			+ '<span>' + svg(I.reloj, 18, '#087a3d') + '<b>' + t.llega + ' min</b><small>Llegada</small></span></div>';
-		h += S.notaAbierta ? '<input class="tc-input" data-campo="nota" value="' + esc(S.nota) + '" maxlength="200" placeholder="Nota para el chofer (ej.: voy con dos maletas)" aria-label="Nota para el chofer">' : '<button type="button" class="tc-btn tc-btn--link tc-btn--verde" data-act="nota">+ Nota para el chofer</button>';
-		return h + '<button type="button" class="tc-btn" data-act="pedir"' + (S.busy ? ' disabled' : '') + '>Pedir triciclo · ' + esc(cup(t.precio)) + '</button></section>';
+		if (S.notaAbierta) { h += '<input class="tc-input" data-campo="nota" value="' + esc(S.nota) + '" maxlength="200" placeholder="Nota para el chofer (ej.: voy con dos maletas)" aria-label="Nota para el chofer">'; }
+		// Una fila de botones pequeños en vez de tres bloques: pago, orden, ver todos y nota.
+		h += '<div class="tc-pildoras">'
+			+ '<button type="button" class="tc-pildora" data-act="pago">' + svg('<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>', 16, '#087a3d') + (S.pago === 'efectivo' ? 'Efectivo' : 'Transferencia') + '</button>'
+			+ (l.length > 1 ? '<button type="button" class="tc-pildora" data-act="orden" data-id="' + (S.orden === 'barato' ? 'cerca' : 'barato') + '">' + (S.orden === 'barato' ? 'Más barato' : 'Más cerca') + ' ⇅</button>'
+				+ '<button type="button" class="tc-pildora" data-act="' + (S.verTodos ? 'ver-uno' : 'ver-todos') + '">' + (S.verTodos ? 'Ver menos' : 'Ver ' + l.length + ' triciclos') + '</button>' : '')
+			+ (S.notaAbierta ? '' : '<button type="button" class="tc-pildora" data-act="nota">+ Nota</button>')
+			+ '</div>';
+		return h + '<button type="button" class="tc-btn" data-act="pedir"' + (S.busy ? ' disabled' : '') + '>Pedir triciclo · ' + esc(cup(t.precio)) + '</button>'
+			+ '<p class="tc-small tc-pie">' + esc(String(c.km).replace('.', ',')) + ' km · ' + esc(c.franja.nombre) + ' · precio fijo por el triciclo entero</p></section>';
 	}
 
 	function chofer(v) {
@@ -556,6 +560,7 @@
 		else if (a === 'orden') { S.orden = id; ordenar(); render(); }
 		else if (a === 'elegir-tri') { S.elegido = +id; S.verTodos = false; render(); }
 		else if (a === 'ver-todos') { S.verTodos = true; render(); }
+		else if (a === 'ver-uno') { S.verTodos = false; render(); }
 		else if (a === 'pago') { S.pago = S.pago === 'efectivo' ? 'transferencia' : 'efectivo'; render(); }
 		else if (a === 'nota') { S.notaAbierta = true; render(); var n = app.querySelector('[data-campo="nota"]'); if (n) { n.focus(); } }
 		else if (a === 'otra-vez') { verTriciclos(); }

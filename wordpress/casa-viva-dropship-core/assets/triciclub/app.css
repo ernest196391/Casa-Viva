@@ -178,3 +178,18 @@ body.tc-con-mapa .tc-sinred { position: absolute; top: 70px; left: 14px; right: 
 .tc-btn--verde { color: var(--tc-verde); }
 .tc-dos-btn, .tc-dos-campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .tc-tri__cab { display: flex; gap: 12px; align-items: center; }
+
+/* ── 3.14.120: hoja corta al elegir (como La Nave: se ve la ruta) ── */
+.tc-hoja--corta { gap: 10px; padding-top: 6px; max-height: 60vh; }
+.tc-trayecto { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--tc-gris); min-width: 0; }
+.tc-trayecto b { color: var(--tc-tinta); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 42%; }
+.tc-trayecto .tc-ruta__punto { width: 9px; height: 9px; flex-shrink: 0; }
+.tc-servs { display: flex; gap: 8px; }
+.tc-serv-mini { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border-radius: 12px; border: 1px solid var(--tc-borde); background: #fff; font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; color: var(--tc-tinta); }
+.tc-serv-mini[aria-checked="true"] { background: var(--tc-verde); border-color: var(--tc-verde); color: #fff; }
+.tc-todos { display: flex; flex-direction: column; gap: 8px; max-height: 32vh; overflow-y: auto; }
+.tc-hoja--corta .tc-opcion { padding: 8px 10px; }
+.tc-hoja--corta .tc-avatar { width: 40px; height: 40px; font-size: 14px; }
+.tc-pildoras { display: flex; gap: 6px; overflow-x: auto; }
+.tc-pildora { flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--tc-borde); background: #fff; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; color: var(--tc-tinta); }
+.tc-pie { margin: -4px 0 0; text-align: center; font-size: 12px; }
