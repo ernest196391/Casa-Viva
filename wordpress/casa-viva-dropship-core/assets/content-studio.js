@@ -96,6 +96,8 @@
     $('cv-view').hidden = p.status !== 'publish'; if (p.url) $('cv-view').href = p.url;
     $('cv-photo').value = ''; $('cv-facts').value = ''; $('cv-headline').value = ''; $('cv-use').value = '';
     for (const key of ['facts', 'buyer', 'objection', 'evidence', 'use', 'headline', 'offer']) $('cv-' + key).value = p.brief?.[key] || '';
+    showReviews(p.reviews || []);
+    $('cv-review-text').value = ''; $('cv-review-name').value = ''; $('cv-review-rating').value = '0'; $('cv-review-permission').checked = false;
     $('cv-canvas').hidden = true; $('cv-download').hidden = true; $('cv-copy').value = ''; $('cv-prompt').value = ''; $('cv-suggestion').value = '';
   }
   async function list(append = false) {
@@ -186,6 +188,39 @@
   }
   function drawContained(ctx, img, x, y, w, h) { const scale = Math.min(w / img.width, h / img.height); const iw = img.width * scale, ih = img.height * scale; ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih); }
   function facts() { return $('cv-facts').value.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 3); }
+  // Review card: only real reviews stored on the product (web reviews or comments saved with the customer's permission).
+  // Shown with first name and surname initial: «María González» → «María G.».
+  const shortName = (name) => { const parts = name.trim().split(/\s+/); return parts.length < 2 || /[.,]/.test(parts[1]) ? name.trim() : `${parts[0]} ${parts[1][0].toUpperCase()}.`; };
+  const stars = (rating) => rating ? '★'.repeat(rating) + '☆'.repeat(5 - rating) : '';
+  function showReviews(reviews) {
+    const pick = $('cv-review-pick'); pick.replaceChildren();
+    if (!reviews.length) { pick.append(new Option('Aún no hay reseñas reales', '')); return; }
+    for (const r of reviews) pick.append(new Option(`${stars(r.rating)} «${r.text.slice(0, 40)}${r.text.length > 40 ? '…' : ''}» — ${shortName(r.name)}`.trim(), String(r.id)));
+  }
+  const pickedReview = () => (product?.reviews || []).find((r) => String(r.id) === $('cv-review-pick').value);
+  $('cv-review-save').addEventListener('click', (e) => busy(e.target, async () => {
+    if (!product?.id) throw new Error('Guarda primero el borrador.');
+    const current = ficha, result = await api('resena', { id: product.id, text: $('cv-review-text').value, name: $('cv-review-name').value,
+      rating: $('cv-review-rating').value, permission: $('cv-review-permission').checked ? '1' : '0' });
+    if (current !== ficha) return;
+    product.reviews = result.reviews; showReviews(result.reviews); $('cv-review-pick').value = String(result.saved);
+    $('cv-review-text').value = ''; $('cv-review-name').value = ''; $('cv-review-rating').value = '0'; $('cv-review-permission').checked = false;
+    message('Reseña guardada. Ya aparece en la tienda y puedes usarla en la tarjeta.');
+  }));
+  function drawReview(ctx, img, review, h) {
+    const square = h === 1080, line = '#173e35';
+    const box = square ? { x: 64, y: 290, w: 400, h: 560 } : { x: 64, y: 300, w: 952, h: 620 };
+    ctx.fillStyle = '#fff'; ctx.fillRect(box.x, box.y, box.w, box.h); drawContained(ctx, img, box.x + 20, box.y + 20, box.w - 40, box.h - 40);
+    const left = square ? 500 : 64, width = square ? 516 : 952, size = square ? 30 : 44;
+    let y = square ? 330 : 990;
+    ctx.fillStyle = line; ctx.font = `700 ${square ? 110 : 150}px Georgia, serif`; ctx.textAlign = 'left'; ctx.fillText('“', left - 6, y + (square ? 60 : 80));
+    y += square ? 90 : 120;
+    try { y += wrapped(ctx, review.text, left, y, width, size, square ? 7 : 6, line, 400) + (square ? 20 : 30); }
+    catch { throw new Error('La reseña es demasiado larga para la tarjeta. Elige otra más corta.'); }
+    if (review.rating) { ctx.fillStyle = '#c99a1e'; ctx.font = `${square ? 34 : 48}px Arial, sans-serif`; ctx.fillText(stars(review.rating), left, y); y += square ? 50 : 70; }
+    wrapped(ctx, `— ${shortName(review.name)}`, left, y, width, square ? 26 : 34, 1);
+    if (y > h - 190) throw new Error('La reseña es demasiado larga para la tarjeta. Elige otra más corta.');
+  }
   // Offer card: only real data. Store price (and a store sale with its end date) plus the editor's current offer.
   const saleUntil = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('es', { day: 'numeric', month: 'long' });
   function drawOffer(ctx, h, y) {
@@ -380,12 +415,15 @@
     const layout = $('cv-layout').value, rows = facts(), h = Number($('cv-format').value);
     if (['features', 'spec'].includes(layout) && !rows.length) throw new Error('Añade al menos una característica confirmada.');
     if (layout === 'use' && !$('cv-use').value.trim()) throw new Error('Describe el uso cotidiano confirmado.');
+    const review = pickedReview();
+    if (layout === 'review' && !review) throw new Error('Elige o añade una reseña real del cliente.');
     const c = $('cv-canvas'); c.height = h; const ctx = c.getContext('2d');
     ctx.fillStyle = '#f6f2e9'; ctx.fillRect(0, 0, 1080, h); ctx.fillStyle = '#173e35'; ctx.font = '600 26px Arial'; ctx.fillText('CASA VIVA', 64, 70);
     const title = $('cv-headline').value.trim() || $('cv-name').value.trim();
     wrapped(ctx, title, 64, 150, 952, h === 1080 ? 44 : 58, 3);
     const imageTop = h === 1080 ? 300 : 400, imageH = h === 1080 ? 370 : 820;
     if (layout === 'features') drawFeatures(ctx, img, rows, h);
+    else if (layout === 'review') drawReview(ctx, img, review, h);
     else { ctx.fillStyle = '#fff'; ctx.fillRect(64, imageTop, 952, imageH); drawContained(ctx, img, 88, imageTop + 24, 904, imageH - 48); }
     let y = imageTop + imageH + 70;
     if (layout === 'spec') rows.forEach((s, i) => { y += wrapped(ctx, `${i + 1}. ${s}`, 64, y, 952, h === 1080 ? 27 : 38, 2) + 16; });
@@ -410,7 +448,8 @@
     const link = product?.status === 'publish' ? product.url : '';
     const sale = product?.sale, offer = $('cv-offer').value.trim();
     const priceLine = sale ? `Precio de oferta: ${sale.price} (antes ${sale.regular})` : product?.price ? `Precio actual: ${product.price}` : '';
-    $('cv-copy').value = [title, ...rows.map((s) => `• ${s}`), usage, priceLine, offer ? `Oferta: ${offer}` : '', link ? `Míralo en Casa Viva: ${link}` : 'Consulta en Casa Viva.'].filter(Boolean).join('\n');
+    const review = $('cv-layout').value === 'review' ? pickedReview() : null;
+    $('cv-copy').value = [title, ...rows.map((s) => `• ${s}`), usage, priceLine, offer ? `Oferta: ${offer}` : '', review ? `«${review.text}» — ${shortName(review.name)}` : '', link ? `Míralo en Casa Viva: ${link}` : 'Consulta en Casa Viva.'].filter(Boolean).join('\n');
     $('cv-prompt').value = `Crea una imagen comercial para Casa Viva, formato ${$('cv-format').value === '1920' ? '9:16' : '1:1'}. Usa la foto real adjunta como referencia exacta. Conserva forma, color, etiquetas, marca, piezas y proporciones. No inventes vistas interiores ni accesorios incluidos. Estilo minimalista cálido, beige y verde oscuro, luz suave. Producto: ${title}. Datos confirmados: ${rows.join('; ') || plain($('cv-description').value)}. Uso confirmado: ${usage || 'no indicado'}. Deja espacio para añadir textos después. No dibujes precios, descuentos, estrellas, testimonios ni garantías. Si falta información, pregunta. Devuelve además tres títulos breves y una descripción usando solo estos datos. Revisa PROOF: promesa sustentada, evidencia real, oferta vigente, objeción y siguiente paso. No presentes el resultado como fotografía documental si modificas el producto.`;
     $('cv-prompt').value += `\nContexto aportado por la tienda (no investigación independiente): comprador/situación: ${$('cv-buyer').value || 'pendiente'}; objeción: ${$('cv-objection').value || 'pendiente'}; evidencia: ${$('cv-evidence').value || 'pendiente'}. Investiga antes de generar si estas fuentes no bastan para sustentar el mensaje. No deduzcas ventas por la duración o alcance de un anuncio competidor.`;
     message('Textos e instrucción preparados con tus datos. Puedes editarlos.');
