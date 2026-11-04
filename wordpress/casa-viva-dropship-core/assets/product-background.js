@@ -1,8 +1,9 @@
 /* Place the source photo above a generated backdrop. Only the backdrop is synthesized. */
 window.cvProductBackground = function composeProduct(source, background, vertical, protectWhole = false) {
+  // Social size: only the plain backdrop is stretched; the real photo keeps its own resolution.
   const canvas = document.createElement('canvas');
-  canvas.width = vertical ? 576 : 1024;
-  canvas.height = 1024;
+  canvas.width = 1080;
+  canvas.height = vertical ? 1920 : 1080;
   const ctx = canvas.getContext('2d');
   ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
   const layer = document.createElement('canvas');
