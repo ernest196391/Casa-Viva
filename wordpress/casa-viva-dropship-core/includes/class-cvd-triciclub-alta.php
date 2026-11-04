@@ -52,6 +52,7 @@ final class CVD_Triciclub_Alta {
 		register_rest_route( $ns, '/triciclub/chofer/alta', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'enviar' ), 'permission_callback' => $d ) );
 		register_rest_route( $ns, '/triciclub/foto', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'ver_foto' ), 'permission_callback' => '__return_true' ) );
 		register_rest_route( $ns, '/bot/triciclub/chofer', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'bot_chofer' ), 'permission_callback' => array( 'CVD_Bot_Bridge', 'authorized' ) ) );
+		register_rest_route( $ns, '/bot/triciclub/choferes', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'bot_choferes' ), 'permission_callback' => array( 'CVD_Bot_Bridge', 'authorized' ) ) );
 		register_rest_route( $ns, '/bot/triciclub/verificar', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'bot_por_verificar' ), 'permission_callback' => array( 'CVD_Bot_Bridge', 'authorized' ) ) );
 		register_rest_route( $ns, '/bot/triciclub/verificar/(?P<id>\d+)', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'bot_verificado' ), 'permission_callback' => array( 'CVD_Bot_Bridge', 'authorized' ) ) );
 	}
@@ -273,6 +274,29 @@ final class CVD_Triciclub_Alta {
 	private static function aprobar( int $uid, int $por = 0 ): void {
 		CVD_Triciclub::aprobar_chofer( $uid, $por );
 		if ( 'prueba' === CVD_Triciclub::mode() ) { update_option( CVD_Triciclub::TESTERS, array_values( array_unique( array_merge( CVD_Triciclub::testers(), array( $uid ) ) ) ), false ); }
+	}
+
+	/**
+	 * 3.14.135 · GET /bot/triciclub/choferes?desde=<ISO UTC> — para que el bot acompañe a cada chofer (avisar al aprobarse,
+	 * explicar el «corrige esto», recordar lo que falta, «lo está mirando Ernesto»). Solo los que cambiaron desde «desde»;
+	 * de los aprobados, solo si se aprobaron después (si no, cada posición del GPS los repetiría). Sin los parados.
+	 */
+	public static function bot_choferes( WP_REST_Request $request ): WP_REST_Response {
+		global $wpdb;
+		$ts = strtotime( (string) $request->get_param( 'desde' ) );
+		$desde = gmdate( 'Y-m-d H:i:s', $ts ? $ts : time() - DAY_IN_SECONDS );
+		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . CVD_Triciclub_Db::t( 'choferes' ) . " WHERE updated_at>%s AND estado<>'suspendido' AND (estado<>'aprobado' OR aprobado_at>%s) ORDER BY updated_at ASC LIMIT 50", $desde, $desde ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$out = array();
+		foreach ( $rows as $ch ) {
+			$u = get_userdata( (int) $ch->user_id );
+			$tel = $u ? (string) get_user_meta( $u->ID, 'cvd_tc_telefono', true ) : '';
+			if ( '' === $tel && $u ) { $tel = CVD_Triciclub::telefono( (string) get_user_meta( $u->ID, 'billing_phone', true ) ); }
+			$out[] = array(
+				'id' => (int) $ch->user_id, 'telefono' => $tel, 'nombre' => $u ? (string) $u->display_name : '', 'estado' => (string) $ch->estado, 'motivo' => (string) $ch->motivo,
+				'faltan' => $u ? self::faltan( $ch, $u ) : array(), 'enviado_at' => (string) $ch->enviado_at, 'aprobado_at' => (string) $ch->aprobado_at, 'updated_at' => (string) $ch->updated_at,
+			);
+		}
+		return self::ok( array( 'ok' => true, 'mode' => CVD_Triciclub::mode(), 'ahora' => gmdate( 'c' ), 'choferes' => $out ) );
 	}
 
 	// ------------------------------------------------------------------ Verificador del VPS
