@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.124.1
+ * Version: 3.14.125
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.124.1' );
+define( 'CVD_VERSION', '3.14.125' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -66,6 +66,8 @@ require_once CVD_DIR . 'includes/class-cvd-seller-store.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-contabilidad.php';
 require_once CVD_DIR . 'includes/class-cvd-program-login.php';
 require_once CVD_DIR . 'includes/class-cvd-daily-rates.php';
+require_once CVD_DIR . 'includes/class-cvd-contabilidad-math.php';
+require_once CVD_DIR . 'includes/class-cvd-contabilidad.php'; // 3.14.125: costo de cada línea al vender y /bot/contabilidad (D135)
 require_once CVD_DIR . 'includes/class-cvd-delivery-when.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-stock.php';
 require_once CVD_DIR . 'includes/class-cvd-direct-dispatch.php';
@@ -164,6 +166,7 @@ add_action(
 			CVD_Caja_Bridge::register(); // 3.14.42: /panel/caja/* (pedidos web en la caja, efectivo de Ventas para el cierre).
 			CVD_Encuesta::register(); // 3.14.35: encuesta anónima en /encuesta/ (nace cerrada; Ernesto 16-oct).
 			CVD_Daily_Rates::register(); // 3.13.64: cada pedido nuevo guarda la tasa CUP del día de la venta (regla de Ernesto, 12-oct).
+			CVD_Contabilidad::register(); // 3.14.125: costo de cada línea guardado al vender + /bot/contabilidad para el cierre diario (Ernesto 4-nov, D135).
 			CVD_Palla::register(); // 3.14.61: Pa'llá (interruptor cvd_palla: no | prueba | si; testers en cvd_palla_testers).
 			CVD_Palla_Api::register(); // 3.14.61: GET hoy · POST cojo · POST carrera (mismos caminos que el «Yo» y la tarjeta de carrera).
 			CVD_Palla_Push::register(); // 3.14.69.3: avisos al teléfono; encendido solo «🛵 Carrera libre» (cvd_palla_push_tipos).
