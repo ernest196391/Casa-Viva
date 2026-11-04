@@ -924,7 +924,9 @@
 		var title = { palla_token: 'Tu enlace ya no vale', palla_closed: 'Todavía no está abierta', palla_not_tester: 'Pa\'llá está en prueba', palla_not_messenger: 'Solo para mensajeros', palla_nolink: 'Abre tu enlace personal' }[b.code] || 'No puedes entrar ahora';
 		// 3.14.69.18: en la app de Android, si se abrió sin el enlace, se puede pegar aquí.
 		var paste = NATIVE && (b.code === 'palla_nolink' || b.code === 'palla_token') ? '<label class="pl-field" style="width:100%">Pega tu enlace de Pa\'llá<input id="pl-enlace" type="url" inputmode="url" autocomplete="off" placeholder="https://casaviva.company/palla/#k=…"></label><button type="button" class="pl-btn pl-btn--primary pl-btn--block" data-act="enlace">Entrar</button>' : '';
-		return '<main class="pl-closed"><div class="pl-logo" aria-hidden="true">P</div><h1>' + esc(title) + '</h1>' + (paste ? '' : '<p>' + esc(b.message || '') + '</p>') + paste + '<button type="button" class="pl-btn pl-btn--secondary" data-act="retry">Probar otra vez</button></main>';
+		// 3.14.116 (3-nov, Lázaro: «la descargué pero me dice de un enlace»): un toque abre WhatsApp con «Pa'llá» escrito y el bot contesta con el enlace.
+		var ask = (b.code === 'palla_nolink' || b.code === 'palla_token') && C.whatsapp ? '<p>Toca el botón, envía el mensaje y en un momento te llega <b>tu enlace</b> por WhatsApp. Tócalo y entras.</p><a class="pl-btn pl-btn--primary pl-btn--block" href="https://wa.me/' + esc(C.whatsapp) + '?text=' + encodeURIComponent('Pa\'llá') + '" target="_blank" rel="noopener noreferrer">' + icon('mensaje') + 'Pedir mi enlace por WhatsApp</a>' : '';
+		return '<main class="pl-closed"><div class="pl-logo" aria-hidden="true">P</div><h1>' + esc(title) + '</h1>' + (ask || paste ? '' : '<p>' + esc(b.message || '') + '</p>') + ask + (paste ? '<p style="margin-top:18px">¿Ya tienes el enlace? Pégalo aquí:</p>' + paste.replace('pl-btn--primary', 'pl-btn--secondary') : '') + '<button type="button" class="pl-btn pl-btn--secondary" data-act="retry">Probar otra vez</button></main>';
 	}
 
 	function practiceBar() {
@@ -1164,7 +1166,7 @@
 			state.token = token;
 			nativeToken(token); // 3.14.69.18: la app de Android se conecta a los avisos con este enlace
 			if (!token) {
-				if (!state.blocked) { state.blocked = { code: 'palla_nolink', message: 'Pídele a la tienda tu enlace de Pa\'llá y ábrelo en este teléfono. Es solo tuyo: no lo compartas.' }; }
+				if (!state.blocked) { state.blocked = { code: 'palla_nolink', message: 'Escribe «Pa\'llá» al WhatsApp de Casa Viva y ábrelo en este teléfono. Es solo tuyo: no lo compartas.' }; }
 				state.loading = false; render(); return;
 			}
 			return Q.all().then(function (l) { state.queue = l || []; return flush(); }).then(load);
