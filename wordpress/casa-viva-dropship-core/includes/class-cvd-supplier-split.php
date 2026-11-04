@@ -22,10 +22,14 @@ defined( 'ABSPATH' ) || exit;
  *   GET  /panel/supplier-split/<id>         reparto guardado o sugerido
  *   POST /panel/supplier-split/<id>         guardar {supplier, costUsd, route, vehicle, messengerCup, messengerName, clerkCup, clerkName, storeCup, by}
  *   GET  /panel/supplier-sales?month=AAAA-MM  ventas de proveedor del mes con cada parte y totales por persona
+ *   POST /panel/supplier-split/<id>/paid    {part: clerk|messenger|supplier, paid: bool, by} (3.14.137: «pagado»)
  */
 final class CVD_Supplier_Split {
 	public const META = '_cvd_supplier_split';
 	public const CLOSED = '_cvd_supplier_split_closed_at';
+	/** 3.14.137 (Ernesto 4-nov): qué partes del reparto ya se pagaron: {clerk|messenger|supplier: {at, by}}. Se puede marcar aunque esté cerrado. */
+	public const PAID = '_cvd_supplier_split_paid';
+	public const PAID_PARTS = array( 'clerk' => 'dependienta', 'messenger' => 'mensajero', 'supplier' => 'proveedor' );
 	private const NS = 'casa-viva/v1';
 	public const ROUTES = array( 'A' => 'El proveedor lo trae a la tienda', 'B' => 'Nuestro mensajero lo recoge en el proveedor', 'C' => 'El proveedor lo lleva directo al cliente' );
 	public const VEHICLES = array( 'moto' => 'Moto', 'triciclo' => 'Triciclo', 'ninguno' => 'Sin vehículo' );
@@ -79,6 +83,7 @@ final class CVD_Supplier_Split {
 		register_rest_route( self::NS, '/panel/supplier-split/(?P<id>\d+)', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'rest_get' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/supplier-split/(?P<id>\d+)', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'rest_save' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/supplier-sales', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'rest_month' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/panel/supplier-split/(?P<id>\d+)/paid', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'rest_paid' ), 'permission_callback' => $auth ) );
 	}
 
 	// ---------- cálculo ----------
@@ -113,6 +118,31 @@ final class CVD_Supplier_Split {
 			$lines[0]['gestoraUsd'] = round( (float) $order->get_meta( '_cvd_commission_amount', true ), 2 );
 		}
 		return $lines;
+	}
+
+	/** 3.14.137: partes pagadas → { clerk: {at, by} | null, messenger: …, supplier: … }. */
+	public static function paid( WC_Order $order ): array {
+		$raw = $order->get_meta( self::PAID, true );
+		$data = is_array( $raw ) ? $raw : json_decode( (string) $raw, true );
+		$out = array();
+		foreach ( array_keys( self::PAID_PARTS ) as $k ) { $out[ $k ] = is_array( $data[ $k ] ?? null ) ? $data[ $k ] : null; }
+		return $out;
+	}
+
+	/** 3.14.137: marca (o desmarca) una parte como pagada y lo apunta en el pedido. Es información: no mueve dinero. */
+	public static function set_paid( WC_Order $order, string $part, bool $paid, string $by ) {
+		if ( ! isset( self::PAID_PARTS[ $part ] ) ) { return new WP_Error( 'cvd_split', 'Parte no válida (clerk, messenger o supplier).', array( 'status' => 422 ) ); }
+		if ( ! self::supplier_lines( $order ) ) { return new WP_Error( 'cvd_split_none', 'Este pedido no tiene productos de proveedor.', array( 'status' => 422 ) ); }
+		$by = mb_substr( sanitize_text_field( $by ), 0, 120 ) ?: 'panel';
+		$all = self::paid( $order );
+		$all[ $part ] = $paid ? array( 'at' => gmdate( 'c' ), 'by' => $by ) : null;
+		$order->update_meta_data( self::PAID, wp_json_encode( array_filter( $all ) ) );
+		$s = self::compute( $order );
+		$amount = 'supplier' === $part ? self::usd_text( (float) $s['costUsd'] ) : self::cup_text( (int) $s[ $part . 'Cup' ] );
+		$name = 'clerk' === $part ? $s['clerkName'] : ( 'messenger' === $part ? $s['messengerName'] : $s['supplier'] );
+		$order->add_order_note( ( $paid ? 'Pagado' : 'Quitado «pagado»' ) . ' · ' . self::PAID_PARTS[ $part ] . ( '' !== (string) $name ? ' ' . $name : '' ) . ' ' . $amount . ' (venta de proveedor) · ' . $by );
+		$order->save();
+		return self::compute( wc_get_order( $order->get_id() ) );
 	}
 
 	public static function saved( WC_Order $order ): array {
@@ -219,6 +249,7 @@ final class CVD_Supplier_Split {
 			// 3.14.50 (Ernesto 22-oct 14:35): recargo de la forma de pago que SÍ es ganancia (Clásica cambiada a USD). Hoy solo
 			// viene de lo sellado (#3845: webUsd 120,75 = 105 + 15,75); aquí 0 para que el sellado lo pueda traer.
 			'surchargeUsd' => 0.0, 'surchargeNote' => '',
+			'paid' => self::paid( $order ),
 		);
 		// 3.14.48 (D92): un reparto cerrado no cambia. Sin esto, al subir la tienda a 3.000 CUP (opción) los cerrados con
 		// el reparto sugerido (#4201, #4244: tienda 1.500) se recalculaban y Ernesto veía 1.500 CUP menos en cada uno.
@@ -350,7 +381,7 @@ final class CVD_Supplier_Split {
 			if ( $created < $start->getTimestamp() || $created >= $end->getTimestamp() ) { continue; }
 			$s = self::compute( $order );
 			if ( ! $s['applies'] ) { continue; }
-			$rows[] = array_intersect_key( $s, array_flip( array( 'orderId', 'number', 'date', 'orderStatus', 'state', 'gestora', 'supplier', 'route', 'vehicle', 'webUsd', 'costUsd', 'rate', 'marginUsd', 'marginCup', 'gestoraUsd', 'gestoraCup', 'messengerCup', 'messengerName', 'clerkCup', 'clerkName', 'storeCup', 'specialCup', 'meetsMin', 'warning', 'saved', 'closedAt' ) ) )
+			$rows[] = array_intersect_key( $s, array_flip( array( 'orderId', 'number', 'date', 'orderStatus', 'state', 'gestora', 'supplier', 'route', 'vehicle', 'webUsd', 'costUsd', 'rate', 'marginUsd', 'marginCup', 'gestoraUsd', 'gestoraCup', 'messengerCup', 'messengerName', 'clerkCup', 'clerkName', 'storeCup', 'specialCup', 'meetsMin', 'warning', 'saved', 'closedAt', 'paid' ) ) )
 				+ array( 'products' => implode( ', ', array_map( static fn( $l ) => ( $l['qty'] > 1 ? $l['qty'] . '× ' : '' ) . $l['name'], $s['lines'] ) ) );
 			if ( 'cancelado' === $s['state'] ) { continue; }
 			foreach ( array( 'marginCup', 'messengerCup', 'clerkCup', 'storeCup', 'gestoraCup', 'specialCup' ) as $k ) { $tot[ $k ] += (int) $s[ $k ]; }
@@ -779,6 +810,15 @@ final class CVD_Supplier_Split {
 		if ( is_wp_error( $order ) ) { return $order; }
 		$p = (array) $request->get_json_params();
 		$result = self::save( $order, $p, (string) ( $p['by'] ?? 'panel' ) );
+		if ( is_wp_error( $result ) ) { return $result; }
+		return self::no_cache( $result );
+	}
+
+	public static function rest_paid( WP_REST_Request $request ) {
+		$order = self::order_or_error( $request['id'] );
+		if ( is_wp_error( $order ) ) { return $order; }
+		$p = (array) $request->get_json_params();
+		$result = self::set_paid( $order, sanitize_key( (string) ( $p['part'] ?? '' ) ), ! empty( $p['paid'] ), (string) ( $p['by'] ?? 'panel' ) );
 		if ( is_wp_error( $result ) ) { return $result; }
 		return self::no_cache( $result );
 	}
