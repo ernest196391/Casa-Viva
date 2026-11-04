@@ -176,6 +176,45 @@ test('La entrada lleva la marca Casa Viva y el aviso del panel no tapa la pantal
   await expect(notice).toBeHidden({ timeout: 15000 });
 });
 
+test('Tarjeta de oferta: precio de la tienda, rebaja real con fecha y oferta escrita por la editora', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(60000);
+  // Record what the card draws, to check the words without reading pixels.
+  await page.addInitScript(() => {
+    window.__drawn = []; const fill = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (text, ...rest) { window.__drawn.push(String(text)); return fill.call(this, text, ...rest); };
+  });
+  await openPanel(page);
+  await page.getByRole('button', { name: 'Studio offer fixture · Publicado', exact: true }).click();
+  await expect(page.locator('#cv-offer')).toHaveValue('Entrega gratis en La Habana');
+  const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO/aJ1sAAAAASUVORK5CYII=', 'base64');
+  await page.locator('#cv-photo').setInputFiles({ name: 'oferta.png', mimeType: 'image/png', buffer: pixel });
+  await expect(page.getByRole('status')).toContainText('Foto preparada.');
+  await page.locator('#cv-layout').selectOption('offer');
+  for (const format of ['1920', '1080']) {
+    await page.locator('#cv-format').selectOption(format);
+    await page.evaluate(() => { window.__drawn = []; });
+    await page.getByRole('button', { name: 'Preparar imagen', exact: true }).click();
+    await expect(page.getByRole('status')).toHaveText('Imagen lista para descargar.');
+    const drawn = (await page.evaluate(() => window.__drawn)).join(' | ');
+    expect(drawn).toMatch(/25\.00/); expect(drawn).toMatch(/30\.00/);
+    expect(drawn).toContain('Oferta hasta el'); expect(drawn).toContain('Entrega gratis en La Habana');
+  }
+  await page.getByRole('button', { name: 'Preparar textos para redes', exact: true }).click();
+  await expect(page.locator('#cv-copy')).toHaveValue(/Precio de oferta: .*25\.00 \(antes .*30\.00\)\nOferta: Entrega gratis en La Habana/);
+  await page.locator('#cv-offer').fill('Entrega gratis en Centro Habana');
+  const saved = await saveNow(page);
+  expect(saved.brief.offer).toBe('Entrega gratis en Centro Habana');
+  // Without a store price there is no offer card.
+  await page.locator('#cv-new').click();
+  await page.getByRole('textbox', { name: 'Título', exact: true }).fill('Sin precio');
+  await page.locator('#cv-photo').setInputFiles({ name: 'oferta.png', mimeType: 'image/png', buffer: pixel });
+  await expect(page.getByRole('status')).toContainText('Foto preparada.');
+  await page.locator('#cv-layout').selectOption('offer');
+  await page.getByRole('button', { name: 'Preparar imagen', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('La tarjeta de oferta necesita el precio del catálogo comercial.');
+});
+
 test('Editor de contenido: login, guardar, subir foto y descargar en móvil', async ({ page }) => {
   test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
   test.setTimeout(60000);
