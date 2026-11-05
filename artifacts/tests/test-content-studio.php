@@ -16,6 +16,7 @@ function wp_json_encode( $v ) { return json_encode( $v ); }
 function wp_get_attachment_image_url( $id, $size ) { return $id ? 'https://example.test/photo.jpg' : false; }
 function rest_ensure_response( $v ) { return $v; }
 function get_comments( $args ) { return array(); }
+function get_post_meta( $id, $k, $single ) { return ''; }
 function clean_post_cache( $id ) {}
 function do_action( ...$args ) {}
 function add_option( $k, $v, $deprecated = '', $autoload = false ) { if ( isset( $GLOBALS['options'][$k] ) ) { return false; } $GLOBALS['options'][$k] = $v; return true; }

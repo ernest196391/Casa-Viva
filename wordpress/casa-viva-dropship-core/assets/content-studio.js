@@ -96,7 +96,7 @@
     $('cv-view').hidden = p.status !== 'publish'; if (p.url) $('cv-view').href = p.url;
     $('cv-photo').value = ''; $('cv-facts').value = ''; $('cv-headline').value = ''; $('cv-use').value = '';
     for (const key of ['facts', 'buyer', 'objection', 'evidence', 'use', 'headline', 'offer']) $('cv-' + key).value = p.brief?.[key] || '';
-    showReviews(p.reviews || []);
+    showReviews(p.reviews || []); showAds(p.anuncios || []);
     $('cv-review-text').value = ''; $('cv-review-name').value = ''; $('cv-review-rating').value = '0'; $('cv-review-permission').checked = false;
     $('cv-canvas').hidden = true; $('cv-download').hidden = true; $('cv-copy').value = ''; $('cv-prompt').value = ''; $('cv-suggestion').value = '';
   }
@@ -454,6 +454,24 @@
     $('cv-prompt').value += `\nContexto aportado por la tienda (no investigación independiente): comprador/situación: ${$('cv-buyer').value || 'pendiente'}; objeción: ${$('cv-objection').value || 'pendiente'}; evidencia: ${$('cv-evidence').value || 'pendiente'}. Investiga antes de generar si estas fuentes no bastan para sustentar el mensaje. No deduzcas ventas por la duración o alcance de un anuncio competidor.`;
     message('Textos e instrucción preparados con tus datos. Puedes editarlos.');
   });
+  // Ads measured by the code in their WhatsApp link: who wrote, and orders from them in the next 14 days.
+  const layoutNames = { features: 'Características', spec: 'Ficha técnica', offer: 'Oferta', use: 'Uso cotidiano', review: 'Reseña' };
+  function showAds(ads) {
+    $('cv-ads').replaceChildren(...ads.map((a) => {
+      const li = document.createElement('li');
+      li.textContent = `${a.code} · ${layoutNames[a.layout] || 'Anuncio'} ${a.format === '1080' ? '1:1' : '9:16'} · ${a.created} — ${a.mensajes} ${a.mensajes === 1 ? 'persona escribió' : 'personas escribieron'} · ${a.pedidos} ${a.pedidos === 1 ? 'pedido' : 'pedidos'}${a.total ? ` · ${a.total}` : ''}`;
+      return li;
+    }));
+  }
+  $('cv-ad-link').addEventListener('click', (e) => busy(e.target, async () => {
+    if (!product?.id) throw new Error('Guarda primero el borrador.');
+    const current = ficha, result = await api('anuncio', { id: product.id, layout: $('cv-layout').value, format: $('cv-format').value });
+    if (current !== ficha) return;
+    product.anuncios = result.anuncios; showAds(result.anuncios);
+    const line = `Escríbenos por WhatsApp: ${result.link}`;
+    $('cv-copy').value = $('cv-copy').value.split('\n').filter((l) => !l.startsWith('Escríbenos por WhatsApp: ')).concat(line).join('\n').trim();
+    message(`Enlace del anuncio ${result.code} añadido al texto. Ponlo solo en el pie del anuncio.`);
+  }));
   $('cv-copy-save').addEventListener('click', () => {
     // Paragraph and line breaks of the description survive as new lines.
     const description = plain($('cv-description').value.replace(/<\/(p|li|h[1-6])>|<br\s*\/?>/gi, '$&\n')).replace(/\n{3,}/g, '\n\n').trim();
