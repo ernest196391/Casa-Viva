@@ -192,5 +192,6 @@
 /* Aviso abajo: se quita solo o al tocarlo */
 .cv-content #cv-message{position:fixed;left:12px;right:12px;bottom:calc(88px + env(safe-area-inset-bottom));max-width:536px;margin:0 auto;background:var(--cv-green);color:var(--cv-white);padding:12px 14px;border-radius:12px;z-index:50;box-shadow:0 6px 20px rgba(0,0,0,.2);cursor:pointer;font-size:15px}
 .cv-content #cv-message:empty{display:none}
+.cv-content.cv-sheet-open #cv-message{top:calc(12px + env(safe-area-inset-top));bottom:auto}
 @media (prefers-reduced-motion:reduce){.cv-content *{animation:none!important;transition:none!important}}
 @media (min-width:600px){.cv-content .cv-brand{border-radius:0 0 18px 18px}}

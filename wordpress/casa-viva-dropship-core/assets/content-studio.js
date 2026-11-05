@@ -84,12 +84,12 @@
   function openSheet(id, from) {
     closeSheet();
     const sheet = $(id); sheetReturn = from || document.activeElement;
-    sheet.hidden = false; $('cv-scrim').hidden = false; openSheetEl = sheet;
+    sheet.hidden = false; $('cv-scrim').hidden = false; openSheetEl = sheet; document.body.classList.add('cv-sheet-open');
     sheet.querySelector('h2')?.focus();
   }
   function closeSheet() {
     if (!openSheetEl) return;
-    openSheetEl.hidden = true; $('cv-scrim').hidden = true; openSheetEl = null;
+    openSheetEl.hidden = true; $('cv-scrim').hidden = true; openSheetEl = null; document.body.classList.remove('cv-sheet-open');
     if (sheetReturn && document.contains(sheetReturn) && !sheetReturn.closest('[hidden]')) sheetReturn.focus();
     sheetReturn = null;
   }
@@ -135,7 +135,7 @@
     if (!product) return;
     const isNew = !product.id, published = product.status === 'publish';
     const save = $('cv-save'), pub = $('cv-publish'), fin = $('cv-render');
-    save.textContent = isNew ? 'Guardar borrador' : published ? 'Guardar cambios' : 'Guardar';
+    save.textContent = isNew ? 'Guardar borrador' : published && tab === 'ficha' ? 'Guardar cambios' : 'Guardar';
     save.hidden = tab !== 'ficha' && !dirty;
     save.classList.toggle('cv-primary', published && tab === 'ficha');
     pub.hidden = tab !== 'ficha' || published;
