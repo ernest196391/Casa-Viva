@@ -215,6 +215,44 @@ test('Tarjeta de oferta: precio de la tienda, rebaja real con fecha y oferta esc
   await expect(page.getByRole('status')).toHaveText('La tarjeta de oferta necesita el precio del catálogo comercial.');
 });
 
+test('Tarjeta de reseña: solo reseñas reales guardadas con permiso, nombre con inicial y estrellas si las dio', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(60000);
+  await page.addInitScript(() => {
+    window.__drawn = []; const fill = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (text, ...rest) { window.__drawn.push(String(text)); return fill.call(this, text, ...rest); };
+  });
+  await openPanel(page);
+  await page.getByRole('button', { name: 'Studio rich text fixture · Borrador / privado', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Producto abierto.');
+  await page.locator('summary').filter({ hasText: 'Reseñas reales de clientes' }).click();
+  await expect(page.locator('#cv-review-pick option')).toHaveText(['Aún no hay reseñas reales']);
+  const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO/aJ1sAAAAASUVORK5CYII=', 'base64');
+  await page.locator('#cv-photo').setInputFiles({ name: 'resena.png', mimeType: 'image/png', buffer: pixel });
+  await expect(page.getByRole('status')).toContainText('Foto preparada.');
+  await page.locator('#cv-layout').selectOption('review');
+  await page.getByRole('button', { name: 'Preparar imagen', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Elige o añade una reseña real del cliente.');
+  await page.locator('#cv-review-text').fill('Llegó rápido y quedó precioso en la sala.');
+  await page.locator('#cv-review-name').fill('María González');
+  await page.locator('#cv-review-rating').selectOption('5');
+  await page.getByRole('button', { name: 'Guardar reseña', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Solo con el permiso del cliente para publicar su comentario y su nombre.');
+  await page.getByRole('checkbox', { name: 'El cliente me dio permiso para publicar su comentario y su nombre' }).check();
+  await page.getByRole('button', { name: 'Guardar reseña', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Reseña guardada. Ya aparece en la tienda y puedes usarla en la tarjeta.');
+  // The list shortens long comments; the card draws the whole text.
+  await expect(page.locator('#cv-review-pick option')).toHaveText([/^★★★★★ «Llegó rápido y quedó precioso en la sala.*» — María G\.$/]);
+  for (const format of ['1920', '1080']) {
+    await page.locator('#cv-format').selectOption(format);
+    await page.evaluate(() => { window.__drawn = []; });
+    await page.getByRole('button', { name: 'Preparar imagen', exact: true }).click();
+    await expect(page.getByRole('status')).toHaveText('Imagen lista para descargar.');
+    const drawn = (await page.evaluate(() => window.__drawn)).join(' | ');
+    expect(drawn).toContain('★★★★★'); expect(drawn).toContain('— María G.'); expect(drawn).toContain('Llegó');
+  }
+});
+
 test('Editor de contenido: login, guardar, subir foto y descargar en móvil', async ({ page }) => {
   test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
   test.setTimeout(60000);
