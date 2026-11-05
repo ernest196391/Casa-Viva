@@ -272,7 +272,7 @@ final class CVD_Pv_Api {
 		if ( null === $olat || null === $olng || null === $dlat || null === $dlng ) { return self::fail( 'puntos', 'Falta dónde recoger o a dónde ir.' ); }
 		$tam = sanitize_key( (string) $request->get_param( 'tam' ) );
 		$tam = isset( CVD_Pv_Tarifa::TAMANOS[ $tam ] ) ? $tam : 'mano';
-		$tray = CVD_Triciclub_Precio::trayecto( $olat, $olng, $dlat, $dlng );
+		$tray = self::trayecto( 'taxi' === $grupo ? 'driving' : 'cycling', $olat, $olng, $dlat, $dlng );
 		$recta = CVD_Triciclub_Precio::recta_m( $olat, $olng, $dlat, $dlng );
 		$noche = CVD_Pv_Tarifa::noche();
 		$libres = self::en_linea();
@@ -585,7 +585,7 @@ final class CVD_Pv_Api {
 
 	/** La ruta del viaje (recogida → destino) por calles: de la caché o de nuestro OSRM. Nunca una recta: si falla, null. */
 	private static function linea_viaje( object $v ): ?array {
-		$t = CVD_Triciclub_Precio::trayecto( (float) $v->origen_lat, (float) $v->origen_lng, (float) $v->destino_lat, (float) $v->destino_lng );
+		$t = self::trayecto( self::perfil( (string) $v->clase ), (float) $v->origen_lat, (float) $v->origen_lng, (float) $v->destino_lat, (float) $v->destino_lng );
 		return ! empty( $t['linea'] ) ? $t['linea'] : null;
 	}
 
@@ -599,10 +599,44 @@ final class CVD_Pv_Api {
 		$guardada = get_transient( $key );
 		$linea = is_array( $guardada ) ? $guardada : null;
 		if ( $linea && self::lejos_de_linea( $linea, (float) $pos['lat'], (float) $pos['lng'] ) <= 120 ) { return $linea; }
-		$t = CVD_Triciclub_Precio::trayecto( (float) $pos['lat'], (float) $pos['lng'], (float) $v->origen_lat, (float) $v->origen_lng );
+		$t = self::trayecto( self::perfil( (string) $v->clase ), (float) $pos['lat'], (float) $pos['lng'], (float) $v->origen_lat, (float) $v->origen_lng );
 		if ( empty( $t['linea'] ) ) { return $linea; } // OSRM no contestó: la de antes (o nada), nunca una recta
 		set_transient( $key, $t['linea'], 2 * HOUR_IN_SECONDS );
 		return $t['linea'];
+	}
+
+	/** Con qué calles se va: el taxi por las de carro; triciclo, bici, moto y mensajero, por el camino corto (perfil de bici). */
+	public static function perfil( string $clase ): string { return 'taxi' === CVD_Pv_Tarifa::grupo( $clase ) ? 'driving' : 'cycling'; }
+
+	/**
+	 * Ruta por calles con el perfil del vehículo (5-nov, Ernesto: «el triciclo por el camino corto, no el del carro»).
+	 * 'cycling' = segundo motor OSRM del VPS con el perfil de bici (/route/v1/cycling → 127.0.0.1:5001): usa parques, calles
+	 * peatonales y atajos, como las apps grandes con su perfil de moto/bici. Si no contesta, la de carro; nunca una recta.
+	 * Apagar: wp option update cvd_pv_ruta_bici no.
+	 */
+	public static function trayecto( string $perfil, float $olat, float $olng, float $dlat, float $dlng ): array {
+		if ( 'cycling' !== $perfil || 'no' === get_option( 'cvd_pv_ruta_bici', 'si' ) ) { return CVD_Triciclub_Precio::trayecto( $olat, $olng, $dlat, $dlng ); }
+		$key = 'cvd_pv_rb_' . md5( implode( ',', array_map( static fn( float $x ): string => number_format( $x, 4, '.', '' ), array( $olat, $olng, $dlat, $dlng ) ) ) );
+		$hit = get_transient( $key );
+		if ( is_array( $hit ) ) { return $hit; }
+		$api = rtrim( (string) get_option( 'cvd_tc_ruta_api', 'https://179-236-242-212.sslip.io' ), '/' );
+		$url = $api . '/route/v1/cycling/' . $olng . ',' . $olat . ';' . $dlng . ',' . $dlat . '?overview=full&geometries=geojson';
+		for ( $i = 0; $i < 2; $i++ ) {
+			$res = wp_remote_get( $url, array( 'timeout' => 5, 'redirection' => 0 ) );
+			$data = is_wp_error( $res ) ? null : json_decode( (string) wp_remote_retrieve_body( $res ), true );
+			$route = is_array( $data ) && 'Ok' === ( $data['code'] ?? '' ) ? ( $data['routes'][0] ?? null ) : null;
+			if ( is_array( $route ) && (float) ( $route['distance'] ?? 0 ) > 0 ) {
+				$linea = array();
+				foreach ( (array) ( $route['geometry']['coordinates'] ?? array() ) as $c ) {
+					if ( is_array( $c ) && isset( $c[0], $c[1] ) ) { $linea[] = array( round( (float) $c[1], 5 ), round( (float) $c[0], 5 ) ); }
+				}
+				$metros = (int) round( (float) $route['distance'] );
+				$out = array( 'metros' => $metros, 'minutos' => CVD_Triciclub_Precio::minutos_triciclo( $metros ), 'como' => 'calles', 'linea' => count( $linea ) > 1 ? $linea : null );
+				set_transient( $key, $out, HOUR_IN_SECONDS );
+				return $out;
+			}
+		}
+		return CVD_Triciclub_Precio::trayecto( $olat, $olng, $dlat, $dlng );
 	}
 
 	/** Metros desde un punto a la línea más cercana de una ruta [[lat, lng]…]. */

@@ -382,7 +382,7 @@
 		if (!c && S.cot && S.origen && S.destino && !S.cot.pidiendoRuta) {
 			S.cot.pidiendoRuta = true;
 			var cot = S.cot;
-			U.ruta([S.origen.lng, S.origen.lat], [S.destino.lng, S.destino.lat]).then(function (r) {
+			U.ruta([S.origen.lng, S.origen.lat], [S.destino.lng, S.destino.lat], S.grupo !== 'taxi').then(function (r) {
 				if (r && cot === S.cot) { cot.linea = r.map(function (p) { return [p[1], p[0]]; }); if (actual === 'tipo' || actual === 'precio' || actual === 'envio-precio') { escenaActual(); } }
 			});
 		}
@@ -647,7 +647,7 @@
 		if (deEsteTramo(v)) { return Promise.resolve(tramo); }
 		var a = rec ? U.P(v.origen) : (v.pos ? [v.pos.lng, v.pos.lat] : null), b = rec ? U.P(v.destino) : U.P(v.origen);
 		if (!a) { return Promise.resolve(null); }
-		return U.ruta(a, b).then(function (c) {
+		return U.ruta(a, b, grupoDe(v.clase) !== 'taxi').then(function (c) {
 			if (c && c.length > 1 && !deEsteTramo(v)) { tramo = { clave: base + firmaLinea(c), c: c, largo: largo(c) }; }
 			return deEsteTramo(v) ? tramo : null;
 		});

@@ -281,7 +281,7 @@
 		if (deEsteTramo(v)) { return Promise.resolve(tramo); }
 		var b = rec ? U.P(v.destino) : U.P(v.origen), a = rec ? U.P(v.origen) : (S.pos ? [S.pos.lng, S.pos.lat] : null);
 		if (!a) { return Promise.resolve(null); }
-		return U.ruta(a, b).then(function (c) {
+		return U.ruta(a, b, grupoDe(v.clase) !== 'taxi').then(function (c) {
 			if (c && c.length > 1 && !deEsteTramo(v)) { tramo = { clave: base + firmaLinea(c), c: c, largo: largo(c) }; }
 			return deEsteTramo(v) ? tramo : null;
 		});
