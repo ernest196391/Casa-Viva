@@ -132,7 +132,73 @@ final class CVD_Content_Studio {
 		return rest_ensure_response( CVD_Gestora_Taller::content_text( $facts, (string) $r->get_param( 'kind' ) ) );
 	}
 
+	/** 3.14.145 (Ernesto 5-nov, #6144 «Mesa de oficina.»): title without trailing dots or extra spaces. */
+	public static function clean_title( string $name ): string {
+		$name = trim( (string) preg_replace( '/\s+/u', ' ', $name ) );
+		return trim( (string) preg_replace( '/[\s.]+$/u', '', $name ) );
+	}
+
+	/** Stock that Lennys set: a managed quantity above zero (on the product or, if variable, on one of its variations). */
+	private static function has_stock( WC_Product $p ): bool {
+		if ( $p->managing_stock() && (float) $p->get_stock_quantity() > 0 ) { return true; }
+		if ( $p->is_type( 'variable' ) ) {
+			foreach ( $p->get_children() as $child_id ) {
+				$v = wc_get_product( $child_id );
+				if ( $v && $v->managing_stock() && (float) $v->get_stock_quantity() > 0 ) { return true; }
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 3.14.145 (Ernesto 5-nov): what a draft still needs before «Publicar en Casa Viva». The real photo is optional to save;
+	 * price and stock are set by Lennys. Keys: descripcion, foto, precio, existencias.
+	 */
+	public static function faltan( WC_Product $p ): array {
+		return array_keys( array_filter( array(
+			'descripcion' => '' === trim( wp_strip_all_tags( $p->get_description() ) ),
+			'foto'        => ! $p->get_image_id(),
+			'precio'      => '' === $p->get_price(),
+			'existencias' => ! self::has_stock( $p ),
+		) ) );
+	}
+
+	/** «descripción (medidas y color), foto real, precio y existencias, que pone Lennys». Empty when nothing is missing. */
+	public static function faltan_texto( array $faltan ): string {
+		$names = array( 'descripcion' => 'descripción (medidas y color)', 'foto' => 'foto real', 'precio' => 'precio', 'existencias' => 'existencias' );
+		$join = static function ( array $items ): string {
+			$last = array_pop( $items );
+			return $items ? implode( ', ', $items ) . ' y ' . $last : (string) $last;
+		};
+		$own = array(); $lennys = array();
+		foreach ( $faltan as $key ) {
+			if ( in_array( $key, array( 'precio', 'existencias' ), true ) ) { $lennys[] = $names[ $key ]; } elseif ( isset( $names[ $key ] ) ) { $own[] = $names[ $key ]; }
+		}
+		$parts = $own;
+		if ( $lennys ) { $parts[] = $join( $lennys ) . ', que pone Lennys'; }
+		if ( ! $parts ) { return ''; }
+		return 1 === count( $parts ) ? $parts[0] : implode( ', ', array_slice( $parts, 0, -1 ) ) . ', ' . end( $parts );
+	}
+
+	/** Meta read by the 17:00 summary to Lennys (GET /bot/atrasos → fichas): set while a studio product stays unpublished. */
+	public const READY = '_cvd_ficha_lista';
+
+	/** Drafts saved from this screen, waiting for Lennys (price, stock, publish). For the 17:00 summary; no WhatsApp of its own. */
+	public static function fichas_para_revisar(): array {
+		$out = array();
+		foreach ( get_posts( array( 'post_type' => 'product', 'post_status' => array( 'draft', 'pending' ), 'posts_per_page' => 20,
+			'meta_key' => self::READY, 'orderby' => 'meta_value', 'order' => 'DESC', 'fields' => 'ids' ) ) as $id ) {
+			$p = wc_get_product( $id );
+			if ( ! $p || preg_match( '/\bprueba\b/iu', $p->get_name() ) ) { continue; }
+			$faltan = self::faltan( $p );
+			$out[] = array( 'id' => $p->get_id(), 'nombre' => self::clean_title( $p->get_name() ), 'faltan' => $faltan,
+				'falta' => self::faltan_texto( $faltan ), 'desde' => (string) $p->get_meta( self::READY ) );
+		}
+		return $out;
+	}
+
 	private static function projection( WC_Product $p ): array {
+		$faltan = self::faltan( $p );
 		return array( 'id' => $p->get_id(), 'name' => $p->get_name(), 'description' => $p->get_description(),
 			'short' => $p->get_short_description(), 'status' => $p->get_status(),
 			'price' => '' === $p->get_price() ? '' : ( $p->is_type( 'variable' ) ? 'Desde ' : '' ) . wp_strip_all_tags( wc_price( $p->get_price() ) ), 'url' => $p->get_permalink(),
@@ -143,7 +209,9 @@ final class CVD_Content_Studio {
 				'until' => $p->get_date_on_sale_to() ? $p->get_date_on_sale_to()->date( 'Y-m-d' ) : '' ) : null,
 			'image_id' => (int) $p->get_image_id(), 'gallery' => $p->get_gallery_image_ids(),
 			'brief' => (array) $p->get_meta( '_cvd_content_brief' ), 'reviews' => self::reviews( $p->get_id() ),
-			'version' => self::version( $p ), 'protected' => (bool) $p->get_meta( self::LOCK ) );
+			'version' => self::version( $p ), 'protected' => (bool) $p->get_meta( self::LOCK ),
+			// 3.14.145: what is still missing before it can go live (shown on save; «Publicar» waits for price and stock).
+			'faltan' => $faltan, 'falta' => self::faltan_texto( $faltan ) );
 	}
 
 	/** Approved store reviews: written on the web by customers, or real comments saved with the customer's permission. */
@@ -228,7 +296,7 @@ final class CVD_Content_Studio {
 	/** Accept content only. No price, stock, SKU, type, categories or commercial setters. */
 	public static function save( WP_REST_Request $r ) {
 		$id = absint( $r->get_param( 'id' ) );
-		$name = sanitize_text_field( (string) $r->get_param( 'name' ) );
+		$name = self::clean_title( sanitize_text_field( (string) $r->get_param( 'name' ) ) ); // 3.14.145: «Mesa de oficina.» → «Mesa de oficina»
 		$description = wp_kses_post( (string) $r->get_param( 'description' ) );
 		$short = wp_kses_post( (string) $r->get_param( 'short' ) );
 		if ( '' === trim( $name ) || mb_strlen( $name ) > 160 || mb_strlen( $description ) > 20000 || mb_strlen( $short ) > 2000 ) { return new WP_Error( 'content', 'Revisa el título y la longitud del texto.', array( 'status' => 422 ) ); }
@@ -248,7 +316,11 @@ final class CVD_Content_Studio {
 			} elseif ( ! hash_equals( self::version( $p ), (string) $r->get_param( 'version' ) ) ) { return new WP_Error( 'conflict', 'El producto cambió. Recárgalo antes de guardar para conservar los cambios del equipo.', array( 'status' => 409 ) ); }
 			if ( ! $id ) { $p->set_status( 'draft' ); }
 			$publish = 'publish' === $r->get_param( 'action' );
-			if ( $publish && ( '' === $p->get_price() || ! $p->get_image_id() || '' === trim( wp_strip_all_tags( $description ) ) ) ) { return new WP_Error( 'incomplete', 'Para publicar necesita foto, descripción y un precio configurado en el catálogo comercial.', array( 'status' => 422 ) ); }
+			if ( $publish && 'publish' !== $p->get_status() ) {
+				// 3.14.145 (Ernesto 5-nov): a draft goes live only with photo, description, price AND stock (price and stock: Lennys).
+				$faltan = array_values( array_diff( self::faltan( $p ), '' === trim( wp_strip_all_tags( $description ) ) ? array() : array( 'descripcion' ) ) );
+				if ( $faltan ) { return new WP_Error( 'incomplete', 'Todavía no se puede publicar. Falta: ' . self::faltan_texto( $faltan ) . '. Guárdalo como borrador.', array( 'status' => 422, 'faltan' => $faltan ) ); }
+			} elseif ( $publish && ( '' === $p->get_price() || ! $p->get_image_id() || '' === trim( wp_strip_all_tags( $description ) ) ) ) { return new WP_Error( 'incomplete', 'Para publicar necesita foto, descripción y un precio configurado en el catálogo comercial.', array( 'status' => 422 ) ); }
 			if ( $id ) {
 				$history = $p->get_meta( '_cvd_content_history' );
 				$history = is_array( $history ) ? $history : array();
@@ -267,6 +339,8 @@ final class CVD_Content_Studio {
 			$p->update_meta_data( self::LOCK, get_current_user_id() );
 			$p->update_meta_data( '_cvd_texto_fijo', gmdate( 'c' ) );
 			if ( ! $id ) { $p->update_meta_data( '_cvd_content_local', '1' ); }
+			// 3.14.145: an unpublished ficha goes into Lennys' 17:00 summary («ficha lista para revisar»); live ones leave it.
+			if ( 'publish' === $p->get_status() ) { $p->delete_meta_data( self::READY ); } else { $p->update_meta_data( self::READY, gmdate( 'c' ) ); }
 			$p->save();
 			do_action( 'litespeed_purge_post', $p->get_id() ); clean_post_cache( $p->get_id() );
 			if ( ! $id ) { update_user_meta( get_current_user_id(), '_cvd_content_token_' . $token, $p->get_id() ); }
@@ -295,6 +369,7 @@ final class CVD_Content_Studio {
 		$p->set_gallery_image_ids( array_values( array_unique( array_filter( array_map( 'intval', $gallery ) ) ) ) );
 		$p->set_image_id( $att );
 		$p->update_meta_data( self::LOCK, get_current_user_id() );
+		if ( 'publish' !== $p->get_status() ) { $p->update_meta_data( self::READY, gmdate( 'c' ) ); } // 3.14.145: photo added → ready for review again
 		$p->save();
 		do_action( 'litespeed_purge_post', $p->get_id() ); clean_post_cache( $p->get_id() );
 		return rest_ensure_response( self::projection( $p ) );
@@ -315,8 +390,8 @@ final class CVD_Content_Studio {
 		<section><form id="cv-search"><label>Buscar un producto<input name="search" type="search" placeholder="Nombre del producto"></label><button>Buscar</button><button type="button" id="cv-new">Nueva mercancía</button></form><div id="cv-items"></div><button id="cv-more" hidden>Ver más</button></section>
 		<p id="cv-message" role="status" aria-live="polite"></p>
 		<details><summary>Cambiar mi contraseña</summary><form id="cv-password"><label>Contraseña actual<input id="cv-current-password" type="password" autocomplete="current-password" required></label><label>Nueva contraseña (12 caracteres como mínimo)<input id="cv-next-password" type="password" autocomplete="new-password" minlength="12" maxlength="200" required></label><button>Guardar contraseña y volver a entrar</button></form></details>
-		<form id="cv-editor" hidden><h2>1. Ficha del producto</h2><p id="cv-commercial"></p><label>Título<input id="cv-name" maxlength="160" required></label><label>Descripción<textarea id="cv-description" rows="6"></textarea></label><label>Resumen<textarea id="cv-short" rows="3"></textarea></label><p>Escribe normal: deja una línea en blanco entre párrafos, empieza con «• » cada punto de una lista y termina en «:» un título corto.</p><p id="cv-text-note" hidden>Este texto tiene formato especial (negritas, enlaces o tablas) y se edita como código para no perderlo.</p><p>Conservamos precios y existencias. En mercancía nueva, guarda el borrador y completa esos datos en el catálogo comercial antes de publicar.</p><button id="cv-save" type="submit">Guardar cambios</button><button id="cv-publish" type="button">Publicar en Casa Viva</button><a id="cv-view" target="_blank" rel="noopener" hidden>Ver en la tienda</a>
-		<h2>2. Foto real</h2><label>Subir foto desde el móvil<input id="cv-photo" type="file" accept="image/jpeg,image/png,image/webp"></label><img id="cv-original" alt="Foto principal del producto" hidden><button type="button" id="cv-upload">Subir como foto principal</button><p>La foto anterior se conserva en la galería. Las fotos que subas se protegerán al sincronizar.</p>
+		<form id="cv-editor" hidden><h2>1. Ficha del producto</h2><p id="cv-commercial"></p><label>Título<input id="cv-name" maxlength="160" required></label><label>Descripción<textarea id="cv-description" rows="6"></textarea></label><label>Resumen<textarea id="cv-short" rows="3"></textarea></label><p>Escribe normal: deja una línea en blanco entre párrafos, empieza con «• » cada punto de una lista y termina en «:» un título corto.</p><p id="cv-text-note" hidden>Este texto tiene formato especial (negritas, enlaces o tablas) y se edita como código para no perderlo.</p><p>Mercancía nueva: escribe el título y, en la descripción, las medidas y los colores. Guarda aunque no tengas foto: queda en borrador y Lennys pone el precio y las existencias.</p><button id="cv-save" type="submit">Guardar cambios</button><button id="cv-publish" type="button">Publicar en Casa Viva</button><p id="cv-publish-note" hidden>«Publicar» se activa cuando Lennys ponga el precio y las existencias.</p><a id="cv-view" target="_blank" rel="noopener" hidden>Ver en la tienda</a>
+		<h2>2. Foto real (opcional)</h2><p id="cv-photo-optional">Cuando tengas foto, súbela; si no, se queda en borrador.</p><label>Subir foto desde el móvil<input id="cv-photo" type="file" accept="image/jpeg,image/png,image/webp"></label><img id="cv-original" alt="Foto principal del producto" hidden><button type="button" id="cv-upload">Subir como foto principal</button><p>La foto anterior se conserva en la galería. Las fotos que subas se protegerán al sincronizar.</p>
 		<h2>3. Preparar imágenes para redes</h2><details><summary>¿A quién le sirve y qué necesita saber?</summary><label>Comprador y situación de uso<textarea id="cv-buyer" maxlength="1000" rows="2" placeholder="Qué necesita resolver y qué alternativa usa hoy"></textarea></label><label>Duda antes de comprar<textarea id="cv-objection" maxlength="1000" rows="2" placeholder="Qué le haría dudar de este producto"></textarea></label><label>Evidencia que tenemos<textarea id="cv-evidence" maxlength="1000" rows="2" placeholder="Foto del detalle, ficha del fabricante, comentarios reales o enlace"></textarea></label><p>Si no tienes evidencia, deja el dato pendiente. La guía no equivale a una investigación de mercado.</p></details><label>Plantilla<select id="cv-layout"><option value="features">Características señaladas</option><option value="spec">Ficha técnica</option><option value="offer">Oferta y precio</option><option value="use">Uso cotidiano</option><option value="review">Reseña de cliente</option></select></label><label>Formato<select id="cv-format"><option value="1920">Historia 9:16</option><option value="1080">Publicación 1:1</option></select></label><label>Características confirmadas (una por línea, hasta tres)<textarea id="cv-facts" rows="3" maxlength="400" placeholder="Extensible de 122 a 213 cm — sirve para ventanas pequeñas y grandes"></textarea></label><p>Después del guion, para qué le sirve al cliente en su día a día (opcional). En «Características señaladas», toca la foto para unir cada número con su detalle.</p><label>Frase principal<input id="cv-headline" maxlength="90" placeholder="Qué hace útil este producto"></label><label>Uso cotidiano confirmado<input id="cv-use" maxlength="150" placeholder="Dónde y para qué se utiliza"></label><label>Oferta vigente (solo si es real)<input id="cv-offer" maxlength="120" placeholder="Ej.: entrega gratis en La Habana hasta el domingo"></label><p>El precio y la rebaja salen de la tienda. No escribas descuentos, regalos ni plazos que no existan.</p><details><summary>Reseñas reales de clientes</summary><label>Reseña para la tarjeta<select id="cv-review-pick"></select></label><p>Añadir una reseña real, copiada tal cual del WhatsApp del cliente. Nunca escribas una reseña inventada.</p><label>Comentario del cliente<textarea id="cv-review-text" maxlength="400" rows="3"></textarea></label><label>Nombre e inicial<input id="cv-review-name" maxlength="60" placeholder="María G., La Habana"></label><label>Estrellas<select id="cv-review-rating"><option value="0">Sin estrellas (el cliente no puntuó)</option><option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select></label><label><input type="checkbox" id="cv-review-permission"> El cliente me dio permiso para publicar su comentario y su nombre</label><button type="button" id="cv-review-save">Guardar reseña</button><p>Se guarda como reseña del producto en la tienda.</p></details><fieldset><legend>Generar opciones con mi foto</legend><label>Proveedor<select id="cv-provider"><option value="cloudflare">Cloudflare · cuota gratuita con Workers Free</option><option value="openai">OpenAI · API de pago</option><option value="higgsfield">Higgsfield · API de pago</option></select></label><p id="cv-ai-setup" hidden>El administrador puede activar la generación en WooCommerce → IA para fotos.</p><p>La IA prepara solo el fondo. Tu móvil coloca encima la foto real completa y conserva las piezas. Puedes guardar una opción por producto para revisarla desde tu perfil.</p><label><input type="checkbox" id="cv-protect-whole"> Conservar también el fondo original dentro de la foto</label><button type="button" id="cv-generate">Generar una opción</button><p id="cv-ai-status" aria-live="polite"></p><div id="cv-variants"></div><details><summary>Usar mi suscripción en su web</summary><p>Prepara los textos en el paso 4, copia la instrucción y adjunta la foto en <a href="https://chatgpt.com/" target="_blank" rel="noopener">ChatGPT</a> o <a href="https://higgsfield.ai/" target="_blank" rel="noopener">Higgsfield</a>. Descarga el resultado para traerlo al panel.</p><input id="cv-import-ai" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Importar resultado de IA"><img id="cv-import-preview" alt="Vista previa de la imagen importada" style="max-width:100%" hidden><button type="button" id="cv-import-button">Elegir imagen importada como principal</button></details></fieldset><button type="button" id="cv-publish-layout" hidden>Elegir el anuncio preparado como imagen principal</button><button type="button" id="cv-render">Preparar imagen</button><canvas id="cv-canvas" width="1080" height="1920" hidden aria-label="Vista previa del anuncio"></canvas><a id="cv-download" download="casa-viva.jpg" hidden>Descargar imagen</a>
 		<h2>4. Texto y guía para IA</h2><button type="button" id="cv-title-suggest">Mejorar título con mis datos</button><button type="button" id="cv-suggest">Mejorar descripción con mis datos</button><label>Descripción sugerida<textarea id="cv-suggestion" rows="5"></textarea></label><button type="button" id="cv-use-suggestion">Usar en la ficha</button><button type="button" id="cv-copy-build">Preparar textos para redes</button><label>Texto para compartir<textarea id="cv-copy" rows="6"></textarea></label><button type="button" id="cv-ad-link">Crear enlace de WhatsApp para el pie del anuncio</button><p>Un enlace por anuncio, solo en el pie (nunca en el video). Así sabemos cuántos escribieron y compraron por ese anuncio.</p><ul id="cv-ads"></ul><label><input type="checkbox" id="cv-copy-prompt"> Incluir la instrucción para IA en el archivo</label><button type="button" id="cv-copy-save">Descargar textos</button><details><summary>Instrucción para crear una escena con IA</summary><p>Adjunta siempre la foto real. Revisa el resultado antes de subirlo como foto del producto. Puedes usar la instrucción en tu cuenta del proveedor.</p><textarea id="cv-prompt" rows="9" readonly></textarea></details>
 		</form></main><?php wp_footer(); ?></body></html><?php

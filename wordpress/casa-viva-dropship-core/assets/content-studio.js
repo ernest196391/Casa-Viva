@@ -73,7 +73,18 @@
   }
   async function busy(button, work) {
     button.disabled = true;
-    try { await work(); } catch (error) { message(error.message); } finally { button.disabled = false; }
+    try { await work(); } catch (error) { message(error.message); } finally { button.disabled = false; updatePublish(); }
+  }
+  // 3.14.145 (Ernesto 5-nov): the real photo is optional to save. A draft goes live only after Lennys sets price and stock.
+  const lennysPending = (p) => !p?.id || (p.faltan || []).some((k) => k === 'precio' || k === 'existencias');
+  function updatePublish() {
+    const blocked = Boolean(product) && product.status !== 'publish' && lennysPending(product);
+    $('cv-publish').disabled = blocked; $('cv-publish-note').hidden = !blocked;
+  }
+  function statusLine(p) {
+    if (!p.id) return 'Nueva mercancía · borrador';
+    if (p.status === 'publish') return `Precio actual: ${p.price || 'pendiente'} · Publicado`;
+    return `Precio actual: ${p.price || 'pendiente'} · Borrador${p.falta ? ` · Falta: ${p.falta}.` : ' · Listo para publicar.'}`;
   }
   function fill(p) {
     ficha++;
@@ -90,7 +101,7 @@
       const text = toText(html); rawHtml[id] = text === null; $(id).value = text ?? html ?? '';
     }
     $('cv-text-note').hidden = !rawHtml['cv-description'] && !rawHtml['cv-short'];
-    $('cv-commercial').textContent = p.id ? `Precio actual: ${p.price || 'pendiente'} · ${p.status === 'publish' ? 'Publicado' : 'Sin publicar'}` : 'Nueva mercancía · borrador';
+    $('cv-commercial').textContent = statusLine(p);
     $('cv-original').hidden = !p.image;
     if (p.image) $('cv-original').src = p.image; else $('cv-original').removeAttribute('src');
     $('cv-view').hidden = p.status !== 'publish'; if (p.url) $('cv-view').href = p.url;
@@ -99,6 +110,7 @@
     showReviews(p.reviews || []); showAds(p.anuncios || []);
     $('cv-review-text').value = ''; $('cv-review-name').value = ''; $('cv-review-rating').value = '0'; $('cv-review-permission').checked = false;
     $('cv-canvas').hidden = true; $('cv-download').hidden = true; $('cv-copy').value = ''; $('cv-prompt').value = ''; $('cv-suggestion').value = '';
+    updatePublish();
   }
   async function list(append = false) {
     const data = await api(`products?search=${encodeURIComponent($('cv-search').elements.search.value)}&page=${page}`);
@@ -150,9 +162,10 @@
       brief: Object.fromEntries(['facts', 'buyer', 'objection', 'evidence', 'use', 'headline', 'offer'].map((key) => [key, $('cv-' + key).value])) });
     if (current !== ficha) { message(`«${p.name}» quedó guardado. La ficha que tienes abierta no cambió.`); return; }
     // Keep unsaved layout work and selected local photo while refreshing server state.
-    product = p; dirty = false; $('cv-commercial').textContent = `Precio actual: ${p.price || 'pendiente'} · ${p.status === 'publish' ? 'Publicado' : 'Borrador'}`;
+    product = p; dirty = false; $('cv-commercial').textContent = statusLine(p); updatePublish();
+    $('cv-name').value = p.name; // the server tidies the title («Mesa de oficina.» → «Mesa de oficina»)
     $('cv-view').hidden = p.status !== 'publish'; $('cv-view').href = p.url;
-    message(p.status === 'publish' ? 'Cambios publicados en Casa Viva.' : 'Borrador guardado. Puedes subir la foto.');
+    message(p.status === 'publish' ? 'Cambios publicados en Casa Viva.' : (p.falta ? `Guardado como borrador. Falta: ${p.falta}.` : 'Guardado como borrador. Ya tiene todo: puedes publicarlo.'));
   }
   $('cv-editor').addEventListener('submit', (e) => { e.preventDefault(); busy($('cv-save'), () => save('save')); });
   $('cv-publish').addEventListener('click', (e) => busy(e.target, () => save('publish')));
@@ -176,7 +189,8 @@
     const body = new FormData(); body.append('id', product.id); body.append('version', product.version); body.append('photo', ready, webName('foto', ready));
     const updated = await api('upload', body);
     if (current !== ficha) { message(`La foto quedó subida en «${updated.name}». La ficha que tienes abierta no cambió.`); return; }
-    product = updated; message('Foto subida y protegida. Si el producto ya estaba publicado, la foto ya aparece en la tienda.');
+    product = updated; $('cv-commercial').textContent = statusLine(updated); updatePublish();
+    message(updated.status === 'publish' ? 'Foto subida y protegida. La foto ya aparece en la tienda.' : `Foto subida. Sigue en borrador${updated.falta ? `. Falta: ${updated.falta}.` : ': ya puedes publicarlo.'}`);
   }));
   function wrapped(ctx, text, x, y, width, size, maxLines = 3, color = '#173e35', weight = 600) {
     ctx.fillStyle = color; ctx.font = `${weight} ${size}px Arial, sans-serif`; ctx.textAlign = 'left';
