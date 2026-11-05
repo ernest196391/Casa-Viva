@@ -294,3 +294,22 @@
 .cvd-sale-card .cvd-sale-reserva small { display: block; font-size: .8em; font-weight: 600; margin-top: 3px; }
 .cvd-sale-card .cvd-sale-reserva.is-active { background: #b3261e; color: #fff; }
 .cvd-sale-card .cvd-sale-reserva.is-expired { background: #fff3d6; border: 1px solid #e0b24a; color: #6a4300; }
+
+/* 3.14.116 (Ernesto 3-nov): «Dividir pedido» (mismo aspecto que «Cambiar pedido»). */
+#cvd-split-dialog { border: 0; border-radius: 24px; box-shadow: 0 24px 80px rgba(30,20,20,.3); max-height: calc(100dvh - 28px); max-width: 560px; overflow: auto; width: calc(100% - 28px); }
+#cvd-split-dialog::backdrop { background: rgba(30,20,20,.55); }
+#cvd-split-form { display: grid; gap: 12px; }
+#cvd-split-form h2 { margin: 0; text-align: center; }
+#cvd-split-form h3 { font-size: 15px; margin: 6px 0 0; }
+#cvd-split-form label { display: grid; font-size: 12px; font-weight: 800; gap: 5px; }
+#cvd-split-form input, #cvd-split-form select, #cvd-split-form textarea { border: 1px solid #cdb8ad; border-radius: 11px; font: inherit; min-height: 44px; padding: 8px 11px; }
+#cvd-split-form .cvd-edit-two { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+#cvd-split-form .cvd-edit-line { align-items: center; display: grid; gap: 8px; grid-template-columns: 1fr 80px; margin: 0; }
+#cvd-split-form .cvd-edit-line input { text-align: center; }
+#cvd-split-form .cvd-edit-hint { color: #68524e; font-size: 12px; margin: 0; }
+#cvd-split-form .cvd-edit-warn { background: #fff4e5; border-radius: 12px; color: #8a4b12; font-weight: 700; margin: 0; padding: 10px 12px; }
+#cvd-split-form [data-split-msg]:empty, #cvd-split-form [data-split-sum]:empty { display: none; }
+#cvd-split-form .cvd-edit-buttons { display: flex; gap: 9px; }
+#cvd-split-form .cvd-edit-buttons button { border: 0; border-radius: 999px; cursor: pointer; flex: 1; font-weight: 800; min-height: 45px; }
+#cvd-split-submit { background: #177d54; color: #fff; }
+@media (max-width: 480px) { #cvd-split-form .cvd-edit-two { grid-template-columns: 1fr; } }
