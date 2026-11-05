@@ -41,6 +41,9 @@ final class CVD_Bot_Bridge {
 		// 3.13.55: el mensajero dice que ya tiene el paquete → «Entregado al mensajero» automático.
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/picked-up', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'picked_up' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'order_status' ), 'permission_callback' => $auth ) );
+		// 3.14.143 (Ernesto 5-nov: 15 avisos «hay que llevarle X de vuelto» que el bot no podía poner): la gestora dueña del
+		// pedido pone el vuelto por WhatsApp (mismas reglas que Ventas: CVD_Order_Edit::set_change).
+		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)/change', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'gestora_change' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/orders/(?P<id>\d+)/whatsapp', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'verified_whatsapp' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/gestora', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'gestora_link' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/gestora/orders', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'gestora_orders' ), 'permission_callback' => $auth ) );
@@ -848,6 +851,23 @@ final class CVD_Bot_Bridge {
 			'seq' => class_exists( 'CVD_Order_Seq' ) ? CVD_Order_Seq::label( $order ) : '', // 3.14.69.11 (#581)
 			'reserva' => class_exists( 'CVD_Reserva' ) ? CVD_Reserva::get( $order ) : null, // 3.14.72: reserva de la recogida (o null)
 		) );
+	}
+
+	/** 3.14.143: vuelto puesto por la gestora dueña del pedido desde WhatsApp. → { ok, change, before, message, messenger_phone, messenger_name } */
+	public static function gestora_change( WP_REST_Request $request ) {
+		$order = self::order( $request );
+		if ( is_wp_error( $order ) ) { return $order; }
+		$gestora = self::gestora_by_phone( (string) $request->get_param( 'phone' ) );
+		if ( ! $gestora || absint( $order->get_meta( '_cvd_owner_user_id', true ) ) !== $gestora->ID ) {
+			return new WP_Error( 'cvd_not_owner', 'Ese pedido no es de esta gestora.', array( 'status' => 403 ) );
+		}
+		if ( ! class_exists( 'CVD_Order_Edit' ) ) { return new WP_Error( 'cvd_no_edit', 'No disponible.', array( 'status' => 503 ) ); }
+		$before = CVD_Order_Edit::change_of( $order );
+		$result = CVD_Order_Edit::set_change( $order->get_id(), (array) $request->get_param( 'change' ), $gestora->ID, 'bot', $gestora->display_name . ' (gestora, por WhatsApp)' );
+		if ( is_wp_error( $result ) ) { return $result; }
+		$messenger = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
+		$m_phone = $messenger ? preg_replace( '/\D+/', '', (string) ( get_user_meta( $messenger->ID, '_cvd_whatsapp', true ) ?: get_user_meta( $messenger->ID, 'billing_phone', true ) ) ) : '';
+		return self::no_cache( array_merge( $result, array( 'before' => $before, 'number' => $order->get_order_number(), 'messenger_phone' => $m_phone, 'messenger_name' => $messenger ? $messenger->display_name : '' ) ) );
 	}
 
 	private static function order( WP_REST_Request $request ) {

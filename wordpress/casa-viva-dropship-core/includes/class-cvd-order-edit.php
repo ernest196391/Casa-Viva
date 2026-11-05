@@ -309,7 +309,7 @@ final class CVD_Order_Edit {
 		if ( $before == $list ) { return array( 'ok' => true, 'change' => $list, 'message' => 'El vuelto ya era ' . $label( $list ) . '.' ); }
 		$order->update_meta_data( '_cvd_change_required', $list );
 		$who = '' !== $by ? $by : ( get_userdata( $user_id ) ? get_userdata( $user_id )->display_name : 'la tienda' );
-		$order->add_order_note( sprintf( 'Vuelto (%s): antes %s → ahora %s. Lo cambió %s.', 'caja' === $source ? 'caja' : ( 'panel' === $source ? 'panel' : 'Ventas' ), $label( $before ), $label( $list ), $who ) );
+		$order->add_order_note( sprintf( 'Vuelto (%s): antes %s → ahora %s. Lo cambió %s.', 'caja' === $source ? 'caja' : ( 'panel' === $source ? 'panel' : ( 'bot' === $source ? 'WhatsApp' : 'Ventas' ) ), $label( $before ), $label( $list ), $who ) );
 		$order->save();
 		return array( 'ok' => true, 'change' => $list, 'message' => 'Vuelto del pedido #' . $order->get_order_number() . ': ' . $label( $list ) . '. Avísale al mensajero.' );
 	}
