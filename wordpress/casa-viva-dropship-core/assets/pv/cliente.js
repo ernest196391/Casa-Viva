@@ -375,13 +375,26 @@
 		});
 	}
 	function claseCot() { var l = (S.cot && S.cot.clases) || []; return l.filter(function (c) { return c.clase === S.clase; })[0] || l[0] || null; }
-	function rutaCot() { var c = S.cot && U.lineaLonLat(S.cot.linea); return c || (S.origen && S.destino ? [[S.origen.lng, S.origen.lat], [S.destino.lng, S.destino.lat]] : null); }
+	// Ruta SIEMPRE por calles (la calcula el servidor). Si aún no llegó, no se dibuja ninguna línea (nunca una recta):
+	// se piden las calles a nuestro motor de rutas y la pantalla se repinta al llegar.
+	function rutaCot() {
+		var c = S.cot && U.lineaLonLat(S.cot.linea);
+		if (!c && S.cot && S.origen && S.destino && !S.cot.pidiendoRuta) {
+			S.cot.pidiendoRuta = true;
+			var cot = S.cot;
+			U.ruta([S.origen.lng, S.origen.lat], [S.destino.lng, S.destino.lat]).then(function (r) {
+				if (r && cot === S.cot) { cot.linea = r.map(function (p) { return [p[1], p[0]]; }); if (actual === 'tipo' || actual === 'precio' || actual === 'envio-precio') { escenaActual(); } }
+			});
+		}
+		return c;
+	}
+	function sinRuta(etq) { return { ver: [ptoOrigen(), [S.destino.lng, S.destino.lat]], pins: [['origen', ptoOrigen()], ['destino', [S.destino.lng, S.destino.lat], etq || '']] }; }
 	function precioDe(q) { var p = S.precio || q.justo; return Math.min(q.max, Math.max(q.min, p)); }
 
 	SCR.tipo = {
 		mapa: function () {
-			var c = rutaCot(); if (!c) { return { ver: [ptoOrigen()], zoom: 15 }; }
-			var q = claseCot();
+			var c = rutaCot(), q = claseCot();
+			if (!c) { return sinRuta(esc(corto(S.destino.texto)) + (q ? ' · ' + q.minutos + ' min' : '')); }
 			return { ruta: c, ver: c, pins: [['origen', c[0]], ['destino', c[c.length - 1], esc(corto(S.destino.texto)) + (q ? ' · ' + q.minutos + ' min' : '')]] };
 		},
 		html: function () {
@@ -438,7 +451,7 @@
 	}
 
 	SCR.precio = {
-		mapa: function () { var c = rutaCot(); return c ? { ruta: c, rutaQuieta: true, ver: c, arriba: 70, pins: [['origen', c[0]], ['destino', c[c.length - 1]]] } : { ver: [ptoOrigen()], zoom: 15 }; },
+		mapa: function () { var c = rutaCot(); return c ? { ruta: c, rutaQuieta: true, ver: c, arriba: 70, pins: [['origen', c[0]], ['destino', c[c.length - 1]]] } : sinRuta(''); },
 		html: function () {
 			return '<div class="pa-arriba">' + volverR('tipo') + '</div>'
 				+ '<section class="pa-hoja"><div class="p-hoja__asa"></div><div id="cuerpo">' + esqueleto() + '</div></section>';
@@ -620,20 +633,30 @@
 
 	// ---------- El chofer viene / en viaje / envío ----------
 	var tramo = null; // { clave, c:[[lon,lat]…], largo }
+	// La ruta del tramo (chofer → recogida, o recogida → destino) la manda el SERVIDOR, por calles (`viene` / `linea`);
+	// si el chofer se desvía, el servidor manda otra y aquí se cambia. Nunca se dibuja una recta: sin ruta, solo los puntos.
+	function firmaLinea(c) { return c ? c.length + ':' + c[0][0].toFixed(4) + ',' + c[0][1].toFixed(4) : ''; }
+	function deEsteTramo(v) { return !!tramo && tramo.clave.indexOf(v.uuid + (v.estado === 'recogido' ? 'r' : 'a') + '|') === 0; }
 	function prepararTramo(v) {
-		var rec = v.estado === 'recogido';
+		var rec = v.estado === 'recogido', base = v.uuid + (rec ? 'r' : 'a') + '|';
+		var srv = U.lineaLonLat(rec ? v.linea : v.viene);
+		if (srv) {
+			if (!tramo || tramo.clave !== base + firmaLinea(srv)) { tramo = { clave: base + firmaLinea(srv), c: srv, largo: largo(srv) }; }
+			return Promise.resolve(tramo);
+		}
+		if (deEsteTramo(v)) { return Promise.resolve(tramo); }
 		var a = rec ? U.P(v.origen) : (v.pos ? [v.pos.lng, v.pos.lat] : null), b = rec ? U.P(v.destino) : U.P(v.origen);
-		var clave = v.uuid + (rec ? 'r' : 'a');
-		if (tramo && tramo.clave === clave) { return Promise.resolve(tramo); }
 		if (!a) { return Promise.resolve(null); }
-		var linea = rec ? U.lineaLonLat(v.linea) : null;
-		return (linea ? Promise.resolve(linea) : U.ruta(a, b)).then(function (c) { c = c && c.length > 1 ? c : [a, b]; tramo = { clave: clave, c: c, largo: largo(c) }; return tramo; });
+		return U.ruta(a, b).then(function (c) {
+			if (c && c.length > 1 && !deEsteTramo(v)) { tramo = { clave: base + firmaLinea(c), c: c, largo: largo(c) }; }
+			return deEsteTramo(v) ? tramo : null;
+		});
 	}
 	function escenaTramo(v) {
 		var rec = v.estado === 'recogido', img = U.veh(imgDe(v.clase), 'arriba');
 		var fin = rec ? [v.destino.lng, v.destino.lat] : [v.origen.lng, v.origen.lat];
 		var et = rec ? esc(corto(v.destino.texto)) : (esEnvio(v) ? 'Recogida' : 'Tú');
-		if (!tramo || tramo.clave !== v.uuid + (rec ? 'r' : 'a')) {
+		if (!deEsteTramo(v)) {
 			var pins = [[rec ? 'destino' : 'origen', fin, et]], cond = [];
 			if (v.pos) { cond.push(['chofer', img, [[v.pos.lng, v.pos.lat], [v.pos.lng + 0.0001, v.pos.lat]], 0]); }
 			return { ver: v.pos ? [fin, [v.pos.lng, v.pos.lat]] : [fin], zoom: v.pos ? 0 : 16, pins: pins, conducir: cond };
@@ -642,11 +665,11 @@
 	}
 	function kDe(v) {
 		if (v.estado === 'llego') { return 1; }
-		if (!tramo) { return 0; }
+		if (!deEsteTramo(v)) { return 0; }
 		if (!v.pos) { return 0; }
 		return PMapa.avance(tramo.c, [v.pos.lng, v.pos.lat]);
 	}
-	function minutosResto(v, k) { return tramo ? Math.max(0, Math.ceil(tramo.largo * (1 - k) / (VEL[grupoDe(v.clase)] || 250))) : (v.estado === 'recogido' ? v.minutos : null); }
+	function minutosResto(v, k) { return deEsteTramo(v) ? Math.max(0, Math.ceil(tramo.largo * (1 - k) / (VEL[grupoDe(v.clase)] || 250))) : (v.estado === 'recogido' ? v.minutos : null); }
 	function moverBarra(r, v) {
 		var k = kDe(v), m = minutosResto(v, k);
 		U.pintarBarra(r, k, 'chofer');
@@ -928,7 +951,7 @@
 	};
 
 	SCR['envio-precio'] = {
-		mapa: function () { var c = rutaCot(); return c ? { ruta: c, ver: c, arriba: 70, pins: [['origen', c[0]], ['destino', c[c.length - 1], esc(nombreCorto(S.envio.recibe))]] } : { ver: [ptoOrigen()], zoom: 15 }; },
+		mapa: function () { var c = rutaCot(); return c ? { ruta: c, ver: c, arriba: 70, pins: [['origen', c[0]], ['destino', c[c.length - 1], esc(nombreCorto(S.envio.recibe))]] } : sinRuta(esc(nombreCorto(S.envio.recibe))); },
 		html: function () { return '<div class="pa-arriba">' + volverR('envio-recibe') + '</div><section class="pa-hoja"><div class="p-hoja__asa"></div><div id="cuerpo">' + esqueleto() + '</div></section>'; },
 		init: function (r) {
 			if (!S.origen || !S.destino) { ir('envio'); return; }
@@ -995,7 +1018,7 @@
 			pidiendo = false;
 			if (x.status === 404) { ponerViaje(null); dejar(); ir('inicio'); return; }
 			if (!x.data.ok) { return; }
-			if (x.data.igual) { if (x.data.pos && S.viaje) { S.viaje.pos = x.data.pos; alPos(); } return; }
+			if (x.data.igual) { if (S.viaje && x.data.viene) { S.viaje.viene = x.data.viene; } if (x.data.pos && S.viaje) { S.viaje.pos = x.data.pos; alPos(); } return; }
 			if (x.data.viaje) { cambio(x.data.viaje); }
 		});
 	}

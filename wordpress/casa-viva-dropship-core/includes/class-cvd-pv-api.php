@@ -550,8 +550,9 @@ final class CVD_Pv_Api {
 			'chofer'        => $chofer,
 			'ofertas'       => 'buscando' === $v->estado ? self::ofertas_de( $v ) : array(),
 			'busca_hasta'   => 'buscando' === $v->estado ? gmdate( 'c', (int) strtotime( (string) ( $v->busca_desde ?: $v->created_at ) . ' UTC' ) + self::BUSCA_SEG ) : null,
-			'pos'           => $activo ? self::posicion( $v ) : null,
-			'linea'         => CVD_Triciclub_Precio::linea_guardada( (float) $v->origen_lat, (float) $v->origen_lng, (float) $v->destino_lat, (float) $v->destino_lng ),
+			'pos'           => $pos = ( $activo ? self::posicion( $v ) : null ),
+			'linea'         => self::linea_viaje( $v ),
+			'viene'         => in_array( $v->estado, array( 'asignado', 'llego' ), true ) ? self::ruta_viene( $v, $pos ) : null,
 			'envio'         => $envio ? array( 'que' => (string) $v->envio_que, 'tam' => (string) $v->envio_tam, 'recibe' => (string) $v->recibe_nombre, 'telefono' => (string) $v->recibe_telefono, 'cobrar' => (int) $v->cobrar_cup, 'codigo' => (string) $v->entrega_codigo, 'foto' => '' !== (string) $v->entrega_foto ? self::foto_url( $v ) : '' ) : null,
 			'llego'         => self::iso( $v->llego_at ),
 			'recogido'      => self::iso( $v->recogido_at ),
@@ -574,9 +575,49 @@ final class CVD_Pv_Api {
 		if ( null !== $rev && (int) $rev === (int) $v->rev && ! in_array( $v->estado, array( 'buscando', 'llego' ), true ) ) {
 			$out = array( 'ok' => true, 'igual' => true, 'rev' => (int) $v->rev );
 			if ( in_array( $v->estado, self::ACTIVOS, true ) ) { $out['pos'] = self::posicion( $v ); }
+			if ( 'asignado' === $v->estado ) { $out['viene'] = self::ruta_viene( $v, $out['pos'] ); } // si se desvió, la ruta nueva
 			return self::out( $out );
 		}
 		return self::out( array( 'ok' => true, 'viaje' => self::vista_cliente( $v ) ) );
+	}
+
+	// ------------------------------------------------------------------ Rutas por calles (como Uber/Yandex: las hace el servidor)
+
+	/** La ruta del viaje (recogida → destino) por calles: de la caché o de nuestro OSRM. Nunca una recta: si falla, null. */
+	private static function linea_viaje( object $v ): ?array {
+		$t = CVD_Triciclub_Precio::trayecto( (float) $v->origen_lat, (float) $v->origen_lng, (float) $v->destino_lat, (float) $v->destino_lng );
+		return ! empty( $t['linea'] ) ? $t['linea'] : null;
+	}
+
+	/**
+	 * La ruta del chofer hasta la recogida, por calles. Se calcula una vez y se guarda (2 h); solo se rehace si el chofer
+	 * se aparta más de 120 m de ella (se desvió o cogió otra calle), como el «rerouting» de las apps grandes.
+	 */
+	private static function ruta_viene( object $v, ?array $pos ): ?array {
+		if ( ! $pos ) { return null; }
+		$key = 'cvd_pv_viene_' . (int) $v->id;
+		$guardada = get_transient( $key );
+		$linea = is_array( $guardada ) ? $guardada : null;
+		if ( $linea && self::lejos_de_linea( $linea, (float) $pos['lat'], (float) $pos['lng'] ) <= 120 ) { return $linea; }
+		$t = CVD_Triciclub_Precio::trayecto( (float) $pos['lat'], (float) $pos['lng'], (float) $v->origen_lat, (float) $v->origen_lng );
+		if ( empty( $t['linea'] ) ) { return $linea; } // OSRM no contestó: la de antes (o nada), nunca una recta
+		set_transient( $key, $t['linea'], 2 * HOUR_IN_SECONDS );
+		return $t['linea'];
+	}
+
+	/** Metros desde un punto a la línea más cercana de una ruta [[lat, lng]…]. */
+	public static function lejos_de_linea( array $linea, float $lat, float $lng ): float {
+		$kx = 111320 * cos( deg2rad( $lat ) );
+		$ky = 110540;
+		$mejor = INF;
+		for ( $i = 1, $n = count( $linea ); $i < $n; $i++ ) {
+			$ax = ( $linea[ $i - 1 ][1] - $lng ) * $kx; $ay = ( $linea[ $i - 1 ][0] - $lat ) * $ky;
+			$bx = ( $linea[ $i ][1] - $lng ) * $kx; $by = ( $linea[ $i ][0] - $lat ) * $ky;
+			$dx = $bx - $ax; $dy = $by - $ay; $l2 = $dx * $dx + $dy * $dy;
+			$t = $l2 > 0 ? max( 0, min( 1, -( $ax * $dx + $ay * $dy ) / $l2 ) ) : 0;
+			$mejor = min( $mejor, hypot( $ax + $t * $dx, $ay + $t * $dy ) );
+		}
+		return $mejor;
 	}
 
 	public static function mis_viajes( WP_REST_Request $request ): WP_REST_Response {
@@ -814,7 +855,8 @@ final class CVD_Pv_Api {
 			'envio'      => $envio ? array( 'que' => (string) $v->envio_que, 'tam' => (string) $v->envio_tam, 'recibe' => (string) $v->recibe_nombre, 'telefono' => (string) $v->recibe_telefono, 'cobrar' => (int) $v->cobrar_cup, 'foto' => '' !== (string) $v->entrega_foto ) : null,
 			'llego'      => self::iso( $v->llego_at ),
 			'cobrado'    => null !== $v->cobrado_at,
-			'linea'      => CVD_Triciclub_Precio::linea_guardada( (float) $v->origen_lat, (float) $v->origen_lng, (float) $v->destino_lat, (float) $v->destino_lng ),
+			'linea'      => self::linea_viaje( $v ),
+			'viene'      => in_array( $v->estado, array( 'asignado', 'llego' ), true ) ? self::ruta_viene( $v, self::posicion( $v ) ) : null, // su camino a la recogida, por calles
 			'valorado'   => self::valorado( (int) $v->id, 'chofer' ),
 		);
 	}

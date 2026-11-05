@@ -41,6 +41,13 @@ pv_ok( 0 === CVD_Pv_Tarifa::espera( '2026-11-05 10:00:00', '2026-11-05 10:04:59'
 pv_ok( 2400 === CVD_Pv_Tarifa::ajustar( 100, array( 2400, 4500 ) ) && 4500 === CVD_Pv_Tarifa::ajustar( 99999, array( 2400, 4500 ) ), 'ajustar a los límites' );
 pv_ok( CVD_Pv_Tarifa::noche( strtotime( '2026-11-05 03:30:00 UTC' ) ) && ! CVD_Pv_Tarifa::noche( strtotime( '2026-11-05 16:00:00 UTC' ) ), 'noche en hora de Cuba' );
 
+// ---------- Ruta: desvío del chofer (si se aparta > 120 m, el servidor rehace la ruta por calles)
+$L = array( array( 23.14, -82.38 ), array( 23.14, -82.37 ) );
+pv_ok( CVD_Pv_Api::lejos_de_linea( $L, 23.14, -82.375 ) < 1, 'sobre la ruta: 0 m' );
+$d = CVD_Pv_Api::lejos_de_linea( $L, 23.141, -82.375 );
+pv_ok( $d > 100 && $d < 120, 'a una cuadra de la ruta: ~110 m (' . round( $d ) . ')' );
+pv_ok( CVD_Pv_Api::lejos_de_linea( $L, 23.143, -82.375 ) > 120, 'desviado: más de 120 m' );
+
 // ---------- Datos de prueba
 update_option( 'cvd_palla_ntfy_url', 'https://ntfy.invalid' );
 update_option( 'cvd_palla_ntfy_token', 'prueba' );

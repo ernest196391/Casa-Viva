@@ -267,23 +267,34 @@
 
 	// ---------- Ir a recoger / en viaje ----------
 	var tramo = null;
+	// La ruta (a la recogida o al destino) la manda el SERVIDOR por calles (`viene` / `linea`) y la rehace si te desvías.
+	// Nunca se dibuja una recta: sin ruta, solo el punto.
+	function firmaLinea(c) { return c ? c.length + ':' + c[0][0].toFixed(4) + ',' + c[0][1].toFixed(4) : ''; }
+	function deEsteTramo(v) { return !!tramo && !!v && tramo.clave.indexOf(v.id + (v.estado === 'recogido' ? 'r' : 'a') + '|') === 0; }
 	function prepararTramo(v) {
-		var rec = v.estado === 'recogido', clave = v.id + (rec ? 'r' : 'a');
-		if (tramo && tramo.clave === clave) { return Promise.resolve(tramo); }
+		var rec = v.estado === 'recogido', base = v.id + (rec ? 'r' : 'a') + '|';
+		var srv = U.lineaLonLat(rec ? v.linea : v.viene);
+		if (srv) {
+			if (!tramo || tramo.clave !== base + firmaLinea(srv)) { tramo = { clave: base + firmaLinea(srv), c: srv, largo: largo(srv) }; }
+			return Promise.resolve(tramo);
+		}
+		if (deEsteTramo(v)) { return Promise.resolve(tramo); }
 		var b = rec ? U.P(v.destino) : U.P(v.origen), a = rec ? U.P(v.origen) : (S.pos ? [S.pos.lng, S.pos.lat] : null);
 		if (!a) { return Promise.resolve(null); }
-		var linea = rec ? U.lineaLonLat(v.linea) : null;
-		return (linea ? Promise.resolve(linea) : U.ruta(a, b)).then(function (c) { c = c && c.length > 1 ? c : [a, b]; tramo = { clave: clave, c: c, largo: largo(c) }; return tramo; });
+		return U.ruta(a, b).then(function (c) {
+			if (c && c.length > 1 && !deEsteTramo(v)) { tramo = { clave: base + firmaLinea(c), c: c, largo: largo(c) }; }
+			return deEsteTramo(v) ? tramo : null;
+		});
 	}
 	function escenaViaje() {
 		var v = H.activo, rec = v.estado === 'recogido', fin = rec ? [v.destino.lng, v.destino.lat] : [v.origen.lng, v.origen.lat];
 		var quien = v.envio ? (rec ? nombreCorto(v.envio.recibe) : 'Recogida') : (rec ? corto(v.destino.texto) : nombreCorto(v.cliente && v.cliente.nombre));
 		var img = U.veh(imgDe(v.clase), 'arriba'), pins = [[rec ? 'destino' : 'origen', fin, esc(quien)]];
-		if (!tramo || tramo.clave !== v.id + (rec ? 'r' : 'a')) { return { ver: S.pos ? [fin, [S.pos.lng, S.pos.lat]] : [fin], zoom: S.pos ? 0 : 16, pins: pins }; }
+		if (!deEsteTramo(v)) { return { ver: S.pos ? [fin, [S.pos.lng, S.pos.lat]] : [fin], zoom: S.pos ? 0 : 16, pins: pins }; }
 		return { ver: tramo.c, ruta: tramo.c, rutaQuieta: true, pins: pins, conducir: [['yo-ch', img, tramo.c, S.pos ? PMapa.avance(tramo.c, [S.pos.lng, S.pos.lat]) : 0]] };
 	}
 	function moverYo(r) {
-		var v = H.activo; if (!v || !tramo || !S.pos) { return; }
+		var v = H.activo; if (!v || !deEsteTramo(v) || !S.pos) { return; }
 		var k = PMapa.avance(tramo.c, [S.pos.lng, S.pos.lat]); PMapa.colocar('yo-ch', k);
 		var m = Math.max(0, Math.ceil(tramo.largo * (1 - k) / (VEL[grupoDe(v.clase)] || 250))), e = $('#eta-min', r);
 		if (e) { e.textContent = m <= 0 ? 'ya casi' : m + ' min'; }
