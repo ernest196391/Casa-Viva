@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.138
+ * Version: 3.14.141
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.138' );
+define( 'CVD_VERSION', '3.14.141' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -98,6 +98,7 @@ require_once CVD_DIR . 'includes/class-cvd-triciclub-precio.php'; // 3.14.117: e
 require_once CVD_DIR . 'includes/class-cvd-triciclub.php'; // 3.14.117: /triciclub/ (cliente) y /palla/triciclub (chofer). Nace apagado: cvd_tc = no.
 require_once CVD_DIR . 'includes/class-cvd-triciclub-api.php'; // 3.14.117: casa-viva/v1/triciclub/…
 require_once CVD_DIR . 'includes/class-cvd-triciclub-alta.php'; // 3.14.130: alta de choferes (cualquiera, se aprueba solo) y panel /triciclub/admin
+require_once CVD_DIR . 'includes/class-cvd-resenas-bot.php'; // 3.14.141: /bot/resenas (reseñas reales pedidas por VivaBot, Ernesto 4-nov)
 require_once CVD_DIR . 'includes/class-cvd-triciclub-geo.php'; // 3.14.118: direcciones como La Nave (GPS → «Calle 23 e/ L y M», sugerencias)
 require_once CVD_DIR . 'includes/class-cvd-order-seq.php'; // 3.14.69.11: Nº propio del pedido que nunca salta (Lennys #581).
 require_once CVD_DIR . 'includes/class-cvd-ficha-contesta.php'; // 3.14.65: «Ficha que contesta» — datos de la tienda y preguntas atadas al producto (D107, mejora 7 del diagnóstico)
@@ -174,6 +175,7 @@ add_action(
 			CVD_Triciclub::register(); // 3.14.117: Triciclub (interruptor cvd_tc: no | prueba | si; D129–D130).
 			CVD_Triciclub_Api::register();
 			CVD_Triciclub_Alta::register();
+			CVD_Resenas_Bot::register(); // 3.14.141: VivaBot pide UNA reseña real tras la entrega (solo clientes directos) y la guarda con permiso.
 			CVD_Order_Seq::register(); // 3.14.69.11: «Nº 292 · 8.º de hoy» (el #número no cambia).
 			CVD_Ficha_Contesta::register(); // 3.14.65: «Datos de la tienda» y «Preguntar a la tienda» en la ficha; la tienda contesta con enlace firmado (opción cvd_ficha_contesta = no|datos|si).
 			CVD_Catalogo_Auto::register(); // 3.14.84 (D124)
