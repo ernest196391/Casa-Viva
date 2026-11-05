@@ -1,5 +1,9 @@
 # Casa Viva Platform — Checkpoint operativo
 
+## Pa'llá transporte — apps del cliente y del chofer (2026-11-05)
+
+Rama `feat/palla-transporte` (sin fusionar, sin desplegar). Servidor (D138–D140) + `assets/pv/cliente.js` (`/palla/ir/`) y `assets/pv/chofer.js` (`/palla/chofer/`) con el diseño v2 aprobado. Probado en un WordPress de prueba en el VPS: `pv-flujo.php` 76/76 y recorrido completo cliente ↔ chofer (viaje y envío con foto y código) en Chrome sin pantalla, claro y oscuro. Nace apagado (`cvd_pv = no`). Falta: prueba en el Redmi de Ernesto y subida a la web con su SÍ (pasos en `/root/archivos/palla/informe-construccion-20261105.md`).
+
 ## Activación limitada del panel de fotos
 
 La tienda recibe únicamente los cuatro archivos del editor de fotos, con comprobación de huellas y respaldo. Una opción guardada para revisión pertenece a la editora y al producto. Su publicación requiere una acción separada.

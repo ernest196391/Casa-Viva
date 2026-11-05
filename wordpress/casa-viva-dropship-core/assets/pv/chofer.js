@@ -114,7 +114,7 @@
 	}
 	function filaPersona(n, nota, sub, tel) {
 		var t = tel ? U.tel53(tel) : '';
-		return '<div class="pa-chofer"><span class="p-cara">' + esc(U.iniciales(n)) + '</span><div class="pa-chofer__q"><b>' + esc(n) + ' ' + U.estr(nota) + '</b><span>' + sub + '</span></div>'
+		return '<div class="pa-chofer"><span class="p-cara">' + esc(U.iniciales(n)) + '</span><div class="pa-chofer__q"><b>' + esc(n) + (nota === false ? '' : ' ' + U.estr(nota)) + '</b><span>' + sub + '</span></div>'
 			+ (t ? '<a class="p-btn p-btn--icono" href="tel:+' + t + '" aria-label="Llamar">' + ico('telefono', 'p-ico--20') + '</a><a class="p-btn p-btn--icono" href="' + waLink(t) + '" aria-label="Mensaje por WhatsApp">' + ico('whatsapp', 'p-ico--20') + '</a>' : '') + '</div>';
 	}
 	function monto(mini, n) { return '<div class="pa-monto"><p class="p-mini">' + mini + '</p><span class="p-precio">' + cupG(n) + '</span></div>'; }
@@ -256,7 +256,7 @@
 						if (x.status === 0) { el.classList.remove('is-enviado'); U.tostada('Sin señal. Prueba otra vez.', 'alerta'); return; }
 						perder(el, x.data.message || 'Ya no está.'); return;
 					}
-					if (x.data.elegido) { H.activo = x.data.activo; H.pedidos = []; guardarH(); U.tostada('¡Aceptó ' + cup(x.data.activo.precio) + '! Ve a recoger.'); vibrar([120, 60, 120]); seguirGps(); ir('ch-recoger'); return; }
+					if (x.data.elegido) { H.activo = x.data.activo; H.pedidos = []; guardarH(); U.tostada('¡Aceptó ' + cup(x.data.activo.precio) + '! Ve a recoger.'); vibrar([120, 60, 120]); seguirGps(); mandarPos(); ir('ch-recoger'); return; }
 					p.mia = { precio: x.data.oferta.precio, pct: x.data.oferta.pct, estado: 'activa', vence: x.data.oferta.vence };
 					var tmp = document.createElement('div'); tmp.innerHTML = tarjeta(p); var nuevo = tmp.firstChild;
 					el.parentNode.replaceChild(nuevo, el); engancharPedido(r, nuevo, p);
@@ -362,7 +362,7 @@
 					+ '<section class="pa-hoja"><div class="p-hoja__asa"></div>'
 					+ eta('Entregar a ' + rn + ' · ' + U.km(v.km) + ' km', esc(corto(v.destino.texto)), v.total, nombrePago(v.forma_pago))
 					+ (env.cobrar ? '<p class="p-aviso p-aviso--aviso" style="margin:10px 0 4px">' + ico('efectivo') + '<span>Cobra a ' + rn + ' <b>' + cup(env.cobrar) + '</b> al entregar.</span></p>' : '')
-					+ filaPersona(env.recibe || 'Quien recibe', null, 'Recibe · ' + esc(env.que), env.telefono)
+					+ filaPersona(env.recibe || 'Quien recibe', false, 'Recibe · ' + esc(env.que), env.telefono)
 					+ '<label class="p-btn p-btn--suave p-btn--ancho" style="margin-top:12px">' + ico('camara', 'p-ico--20') + '<span id="foto-t">' + (env.foto ? 'Foto hecha · otra' : 'Hacer la foto de la entrega') + '</span><input type="file" id="foto" accept="image/*" capture="environment" hidden></label>'
 					+ cajasCodigo('Pide el código a ' + rn)
 					+ '<p class="p-aviso p-aviso--error" id="err" hidden></p>'
@@ -548,6 +548,7 @@
 				});
 			}
 			seguirGps();
+			if (!!H.activo !== !!(antes && antes.activo)) { mandarPos(); } // al coger o soltar un viaje, la posición sale ya (y luego cada 10 s)
 			if (H.estado !== 'aprobado') { if (actual !== 'ch-alta') { ir('ch-alta'); } return; }
 			(H.pedidos || []).forEach(function (p) { if (!S.visto[p.id]) { S.visto[p.id] = 1; if (antes) { nuevos++; } } });
 			if (nuevos && !H.activo) { sonar(); }
