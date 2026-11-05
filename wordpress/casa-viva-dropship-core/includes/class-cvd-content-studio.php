@@ -132,7 +132,73 @@ final class CVD_Content_Studio {
 		return rest_ensure_response( CVD_Gestora_Taller::content_text( $facts, (string) $r->get_param( 'kind' ) ) );
 	}
 
+	/** 3.14.145 (Ernesto 5-nov, #6144 «Mesa de oficina.»): title without trailing dots or extra spaces. */
+	public static function clean_title( string $name ): string {
+		$name = trim( (string) preg_replace( '/\s+/u', ' ', $name ) );
+		return trim( (string) preg_replace( '/[\s.]+$/u', '', $name ) );
+	}
+
+	/** Stock that Lennys set: a managed quantity above zero (on the product or, if variable, on one of its variations). */
+	private static function has_stock( WC_Product $p ): bool {
+		if ( $p->managing_stock() && (float) $p->get_stock_quantity() > 0 ) { return true; }
+		if ( $p->is_type( 'variable' ) ) {
+			foreach ( $p->get_children() as $child_id ) {
+				$v = wc_get_product( $child_id );
+				if ( $v && $v->managing_stock() && (float) $v->get_stock_quantity() > 0 ) { return true; }
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 3.14.145 (Ernesto 5-nov): what a draft still needs before «Publicar en Casa Viva». The real photo is optional to save;
+	 * price and stock are set by Lennys. Keys: descripcion, foto, precio, existencias.
+	 */
+	public static function faltan( WC_Product $p ): array {
+		return array_keys( array_filter( array(
+			'descripcion' => '' === trim( wp_strip_all_tags( $p->get_description() ) ),
+			'foto'        => ! $p->get_image_id(),
+			'precio'      => '' === $p->get_price(),
+			'existencias' => ! self::has_stock( $p ),
+		) ) );
+	}
+
+	/** «descripción (medidas y color), foto real, precio y existencias, que pone Lennys». Empty when nothing is missing. */
+	public static function faltan_texto( array $faltan ): string {
+		$names = array( 'descripcion' => 'descripción (medidas y color)', 'foto' => 'foto real', 'precio' => 'precio', 'existencias' => 'existencias' );
+		$join = static function ( array $items ): string {
+			$last = array_pop( $items );
+			return $items ? implode( ', ', $items ) . ' y ' . $last : (string) $last;
+		};
+		$own = array(); $lennys = array();
+		foreach ( $faltan as $key ) {
+			if ( in_array( $key, array( 'precio', 'existencias' ), true ) ) { $lennys[] = $names[ $key ]; } elseif ( isset( $names[ $key ] ) ) { $own[] = $names[ $key ]; }
+		}
+		$parts = $own;
+		if ( $lennys ) { $parts[] = $join( $lennys ) . ', que pone Lennys'; }
+		if ( ! $parts ) { return ''; }
+		return 1 === count( $parts ) ? $parts[0] : implode( ', ', array_slice( $parts, 0, -1 ) ) . ', ' . end( $parts );
+	}
+
+	/** Meta read by the 17:00 summary to Lennys (GET /bot/atrasos → fichas): set while a studio product stays unpublished. */
+	public const READY = '_cvd_ficha_lista';
+
+	/** Drafts saved from this screen, waiting for Lennys (price, stock, publish). For the 17:00 summary; no WhatsApp of its own. */
+	public static function fichas_para_revisar(): array {
+		$out = array();
+		foreach ( get_posts( array( 'post_type' => 'product', 'post_status' => array( 'draft', 'pending' ), 'posts_per_page' => 20,
+			'meta_key' => self::READY, 'orderby' => 'meta_value', 'order' => 'DESC', 'fields' => 'ids' ) ) as $id ) {
+			$p = wc_get_product( $id );
+			if ( ! $p || preg_match( '/\bprueba\b/iu', $p->get_name() ) ) { continue; }
+			$faltan = self::faltan( $p );
+			$out[] = array( 'id' => $p->get_id(), 'nombre' => self::clean_title( $p->get_name() ), 'faltan' => $faltan,
+				'falta' => self::faltan_texto( $faltan ), 'desde' => (string) $p->get_meta( self::READY ) );
+		}
+		return $out;
+	}
+
 	private static function projection( WC_Product $p ): array {
+		$faltan = self::faltan( $p );
 		return array( 'id' => $p->get_id(), 'name' => $p->get_name(), 'description' => $p->get_description(),
 			'short' => $p->get_short_description(), 'status' => $p->get_status(),
 			'price' => '' === $p->get_price() ? '' : ( $p->is_type( 'variable' ) ? 'Desde ' : '' ) . wp_strip_all_tags( wc_price( $p->get_price() ) ), 'url' => $p->get_permalink(),
@@ -143,7 +209,9 @@ final class CVD_Content_Studio {
 				'until' => $p->get_date_on_sale_to() ? $p->get_date_on_sale_to()->date( 'Y-m-d' ) : '' ) : null,
 			'image_id' => (int) $p->get_image_id(), 'gallery' => $p->get_gallery_image_ids(),
 			'brief' => (array) $p->get_meta( '_cvd_content_brief' ), 'reviews' => self::reviews( $p->get_id() ),
-			'version' => self::version( $p ), 'protected' => (bool) $p->get_meta( self::LOCK ) );
+			'version' => self::version( $p ), 'protected' => (bool) $p->get_meta( self::LOCK ),
+			// 3.14.145: what is still missing before it can go live (shown on save; «Publicar» waits for price and stock).
+			'faltan' => $faltan, 'falta' => self::faltan_texto( $faltan ) );
 	}
 
 	/** Approved store reviews: written on the web by customers, or real comments saved with the customer's permission. */
@@ -228,7 +296,7 @@ final class CVD_Content_Studio {
 	/** Accept content only. No price, stock, SKU, type, categories or commercial setters. */
 	public static function save( WP_REST_Request $r ) {
 		$id = absint( $r->get_param( 'id' ) );
-		$name = sanitize_text_field( (string) $r->get_param( 'name' ) );
+		$name = self::clean_title( sanitize_text_field( (string) $r->get_param( 'name' ) ) ); // 3.14.145: «Mesa de oficina.» → «Mesa de oficina»
 		$description = wp_kses_post( (string) $r->get_param( 'description' ) );
 		$short = wp_kses_post( (string) $r->get_param( 'short' ) );
 		if ( '' === trim( $name ) || mb_strlen( $name ) > 160 || mb_strlen( $description ) > 20000 || mb_strlen( $short ) > 2000 ) { return new WP_Error( 'content', 'Revisa el título y la longitud del texto.', array( 'status' => 422 ) ); }
@@ -248,7 +316,11 @@ final class CVD_Content_Studio {
 			} elseif ( ! hash_equals( self::version( $p ), (string) $r->get_param( 'version' ) ) ) { return new WP_Error( 'conflict', 'El producto cambió. Recárgalo antes de guardar para conservar los cambios del equipo.', array( 'status' => 409 ) ); }
 			if ( ! $id ) { $p->set_status( 'draft' ); }
 			$publish = 'publish' === $r->get_param( 'action' );
-			if ( $publish && ( '' === $p->get_price() || ! $p->get_image_id() || '' === trim( wp_strip_all_tags( $description ) ) ) ) { return new WP_Error( 'incomplete', 'Para publicar necesita foto, descripción y un precio configurado en el catálogo comercial.', array( 'status' => 422 ) ); }
+			if ( $publish && 'publish' !== $p->get_status() ) {
+				// 3.14.145 (Ernesto 5-nov): a draft goes live only with photo, description, price AND stock (price and stock: Lennys).
+				$faltan = array_values( array_diff( self::faltan( $p ), '' === trim( wp_strip_all_tags( $description ) ) ? array() : array( 'descripcion' ) ) );
+				if ( $faltan ) { return new WP_Error( 'incomplete', 'Todavía no se puede publicar. Falta: ' . self::faltan_texto( $faltan ) . '. Guárdalo como borrador.', array( 'status' => 422, 'faltan' => $faltan ) ); }
+			} elseif ( $publish && ( '' === $p->get_price() || ! $p->get_image_id() || '' === trim( wp_strip_all_tags( $description ) ) ) ) { return new WP_Error( 'incomplete', 'Para publicar necesita foto, descripción y un precio configurado en el catálogo comercial.', array( 'status' => 422 ) ); }
 			if ( $id ) {
 				$history = $p->get_meta( '_cvd_content_history' );
 				$history = is_array( $history ) ? $history : array();
@@ -267,6 +339,8 @@ final class CVD_Content_Studio {
 			$p->update_meta_data( self::LOCK, get_current_user_id() );
 			$p->update_meta_data( '_cvd_texto_fijo', gmdate( 'c' ) );
 			if ( ! $id ) { $p->update_meta_data( '_cvd_content_local', '1' ); }
+			// 3.14.145: an unpublished ficha goes into Lennys' 17:00 summary («ficha lista para revisar»); live ones leave it.
+			if ( 'publish' === $p->get_status() ) { $p->delete_meta_data( self::READY ); } else { $p->update_meta_data( self::READY, gmdate( 'c' ) ); }
 			$p->save();
 			do_action( 'litespeed_purge_post', $p->get_id() ); clean_post_cache( $p->get_id() );
 			if ( ! $id ) { update_user_meta( get_current_user_id(), '_cvd_content_token_' . $token, $p->get_id() ); }
@@ -295,6 +369,7 @@ final class CVD_Content_Studio {
 		$p->set_gallery_image_ids( array_values( array_unique( array_filter( array_map( 'intval', $gallery ) ) ) ) );
 		$p->set_image_id( $att );
 		$p->update_meta_data( self::LOCK, get_current_user_id() );
+		if ( 'publish' !== $p->get_status() ) { $p->update_meta_data( self::READY, gmdate( 'c' ) ); } // 3.14.145: photo added → ready for review again
 		$p->save();
 		do_action( 'litespeed_purge_post', $p->get_id() ); clean_post_cache( $p->get_id() );
 		return rest_ensure_response( self::projection( $p ) );

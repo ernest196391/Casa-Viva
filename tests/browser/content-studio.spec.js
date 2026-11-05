@@ -323,6 +323,22 @@ test('Enlace de WhatsApp por anuncio: va al texto para el pie y aparece en Resul
   await expect(page.locator('#cv-ads li')).toHaveCount(2);
 });
 
+test('Un borrador sin foto ni existencias no se publica y el panel dice lo que falta', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(60000);
+  await openPanel(page);
+  await page.getByRole('button', { name: 'Studio stock fixture · Borrador / privado', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Producto abierto.');
+  await expect(page.locator('#cv-publish')).toBeDisabled();
+  await expect(page.locator('#cv-publish')).toContainText('Falta foto, existencias (Lennys)');
+  // The title is saved without a trailing dot.
+  await page.locator('#cv-name').fill('Mesa de oficina.');
+  const saved = await saveNow(page);
+  expect(saved.name).toBe('Mesa de oficina'); expect(saved.status).toBe('draft');
+  expect(saved.faltan).toEqual(['foto', 'existencias']);
+  await expect(page.getByRole('status')).toHaveText('Borrador guardado. Falta: foto real, existencias, que pone Lennys.');
+});
+
 test('Editor de contenido: login, guardar, subir foto y descargar en móvil', async ({ page }) => {
   test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
   test.setTimeout(60000);

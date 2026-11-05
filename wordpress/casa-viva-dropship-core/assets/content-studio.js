@@ -128,7 +128,11 @@
     const m = [];
     if (!product?.image) m.push('foto');
     if (!plain(editableText('cv-description')).trim()) m.push('descripción');
-    if (!product?.price) m.push('precio');
+    // 3.14.145 (Ernesto 5-nov): a draft goes live only when Lennys has set price and stock.
+    const lennys = [];
+    if (!product?.price) lennys.push('precio');
+    if (!product?.id || (product.faltan || []).includes('existencias')) lennys.push('existencias');
+    if (lennys.length) m.push(`${lennys.join(' y ')} (Lennys)`);
     return m;
   }
   function updateBar() {
@@ -321,7 +325,7 @@
     if (current !== ficha) { message(`«${p.name}» quedó guardado. La ficha que tienes abierta no cambió.`); return; }
     // Keep unsaved layout work and selected local photo while refreshing server state.
     product = { ...p, anuncios: product.anuncios || [] }; dirty = false; refreshHeader(); updateBar();
-    message(p.status === 'publish' ? 'Cambios publicados en Casa Viva.' : 'Borrador guardado. Puedes subir la foto.');
+    message(p.status === 'publish' ? 'Cambios publicados en Casa Viva.' : (p.falta ? `Borrador guardado. Falta: ${p.falta}.` : 'Borrador guardado. Ya tiene todo: puedes publicarlo.'));
   }
   $('cv-editor').addEventListener('submit', (e) => { e.preventDefault(); busy($('cv-save'), () => save('save')); });
   $('cv-publish').addEventListener('click', (e) => busy(e.currentTarget, () => save('publish')));
@@ -356,8 +360,9 @@
     const body = new FormData(); body.append('id', product.id); body.append('version', product.version); body.append('photo', ready, webName('foto', ready));
     const updated = await api('upload', body);
     if (current !== ficha) { message(`La foto quedó subida en «${updated.name}». La ficha que tienes abierta no cambió.`); return; }
-    product = { ...updated, anuncios: product.anuncios || [] }; $('cv-upload').hidden = true; refreshHeader();
-    message((wasNew ? 'Borrador guardado. ' : '') + 'Foto subida y protegida. Si el producto ya estaba publicado, la foto ya aparece en la tienda.');
+    product = { ...updated, anuncios: product.anuncios || [] }; $('cv-upload').hidden = true; refreshHeader(); updateBar();
+    message(updated.status === 'publish' ? 'Foto subida y protegida. La foto ya aparece en la tienda.'
+      : `${wasNew ? 'Borrador guardado. ' : ''}Foto subida. ${updated.falta ? `Falta: ${updated.falta}.` : 'Ya puedes publicarlo.'}`);
   }));
 
   /* ---------- Dibujo del anuncio (1080 px) ---------- */

@@ -26,3 +26,6 @@ $rich->set_description( '<p>Con <strong>negrita</strong>.</p>' ); $rich->save();
 $offer = new WC_Product_Simple(); $offer->set_name( 'Studio offer fixture' ); $offer->set_description( '<p>Datos sintéticos para prueba.</p>' );
 $offer->set_regular_price( '30' ); $offer->set_sale_price( '25' ); $offer->set_date_on_sale_to( gmdate( 'Y-m-d', time() + 7 * DAY_IN_SECONDS ) . ' 23:59:59' );
 $offer->update_meta_data( '_cvd_content_brief', array( 'offer' => 'Entrega gratis en La Habana' ) ); $offer->set_status( 'publish' ); $offer->save();
+// A draft with price but no photo and no stock: it cannot go live until Lennys sets the stock (3.14.145).
+$stock = new WC_Product_Simple(); $stock->set_name( 'Studio stock fixture' ); $stock->set_description( '<p>Datos sintéticos para prueba.</p>' );
+$stock->set_regular_price( '20' ); $stock->set_status( 'draft' ); $stock->save();
