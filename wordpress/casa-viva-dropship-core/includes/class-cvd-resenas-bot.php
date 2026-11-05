@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Reseñas reales pedidas por VivaBot (Ernesto 4-nov, Core 3.14.139).
+ * Reseñas reales pedidas por VivaBot (Ernesto 4-nov, Core 3.14.141).
  *
  * Después de la entrega, el bot escribe UNA sola vez al cliente directo de Casa Viva y le pide estrellas (opcional),
  * un comentario corto y permiso para publicarlo con su nombre e inicial. Si el cliente lo da, el bot lo guarda aquí como

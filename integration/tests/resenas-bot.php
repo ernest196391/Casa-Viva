@@ -1,5 +1,5 @@
 <?php
-/** Solo en la base de integración desechable. Reseñas que pide VivaBot (Core 3.14.139) con WooCommerce real. */
+/** Solo en la base de integración desechable. Reseñas que pide VivaBot (Core 3.14.141) con WooCommerce real. */
 defined( 'ABSPATH' ) || exit( 1 );
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || 'localhost' !== wp_parse_url( home_url(), PHP_URL_HOST ) ) { throw new RuntimeException( 'Disposable localhost environment required.' ); }
 function resena_assert( $ok, string $label ): void { if ( ! $ok ) { throw new RuntimeException( $label ); } echo "PASS $label\n"; }
