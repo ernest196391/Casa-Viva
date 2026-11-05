@@ -417,6 +417,15 @@ final class CVD_Sales {
 			}
 			return rest_ensure_response( array( 'message' => 'Pedido actualizado.', 'notice' => self::test_notice( $order, $next ), 'order' => self::payload( wc_get_order( $order->get_id() ) ), 'transition' => $result ) );
 		}
+		// 3.14.142 (Nana 4 y 5-nov, #6064 #6067 #6086): el mensajero ya tenía el paquete o ya entregó, pero la tienda no marcó
+		// «Entregado al mensajero» y el pedido seguía en «Listo para salir»: «Dinero recibido» salía y luego no se dejaba
+		// («Ese cambio de estado no está permitido»), y había que ir al teléfono. Ahora Core pone solo los pasos que faltan.
+		if ( 'delivered' === $next && 'pickup' !== $fulfillment && in_array( $current, array( 'new', 'confirmed', 'preparing', 'ready' ), true ) ) {
+			$caught = self::catch_up_for_cash( $order, $current );
+			if ( is_wp_error( $caught ) ) { return $caught; }
+			$order = wc_get_order( $order->get_id() );
+			$current = self::operation_status( $order );
+		}
 		$allowed = self::allowed_transitions( $current );
 		if ( ! in_array( $next, $allowed, true ) ) {
 			return new WP_Error( 'cvd_invalid_transition', 'Ese cambio de estado no está permitido.', array( 'status' => 409 ) );
@@ -493,6 +502,40 @@ final class CVD_Sales {
 			if ( $order && ! $order->has_status( 'completed' ) ) { $order->update_status( 'completed', 'Dinero recibido y operación completada.' ); }
 		}
 		return rest_ensure_response( array( 'message' => 'Pedido actualizado.', 'notice' => self::test_notice( $order, $next ), 'order' => self::payload( wc_get_order( $order->get_id() ) ) ) );
+	}
+
+	/**
+	 * 3.14.142: antes de registrar el dinero de un pedido a domicilio que sigue «Listo para salir», pone los pasos que faltan:
+	 * «Entregado al mensajero» (si el mensajero aún no lo tenía) y la operación «Con mensajero». Deja nota en el pedido.
+	 */
+	private static function catch_up_for_cash( WC_Order $order, string $current ) {
+		if ( ! class_exists( 'CVD_Delivery' ) ) { return true; }
+		if ( ! absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) {
+			return new WP_Error( 'cvd_no_messenger', 'Este pedido no tiene mensajero. Asígnale uno antes de registrar el dinero.', array( 'status' => 409 ) );
+		}
+		$user_id = get_current_user_id();
+		if ( in_array( CVD_Delivery::status( $order ), array( 'assigned', 'accepted', 'to_store' ), true ) ) {
+			if ( ! CVD_Delivery::handover_by_staff( $order, $user_id, 'sales_cash_catch_up' ) ) {
+				return new WP_Error( 'cvd_invalid_handover', 'No se pudo marcar «Entregado al mensajero» antes del dinero. Avisa a Ernesto.', array( 'status' => 409 ) );
+			}
+			$order = wc_get_order( $order->get_id() );
+			$order->add_order_note( 'Entregado al mensajero: marcado solo al registrar el dinero en Ventas (la tienda no lo había marcado).' );
+			$order->save();
+		}
+		$current = self::operation_status( $order );
+		if ( in_array( $current, array( 'new', 'confirmed', 'preparing', 'ready' ), true ) && in_array( CVD_Delivery::status( $order ), array( 'picked_up', 'handed_over', 'delivered' ), true ) ) {
+			$history = $order->get_meta( '_cvd_operation_history', true );
+			$history = is_array( $history ) ? $history : array();
+			$history[] = array( 'from' => $current, 'to' => 'with_courier', 'user_id' => $user_id, 'at' => current_time( 'mysql', true ), 'event_anchor' => wp_generate_uuid4() );
+			$order->update_meta_data( '_cvd_operation_history', array_slice( $history, -100 ) );
+			$order->update_meta_data( self::STATUS_META, 'with_courier' );
+			$order->update_meta_data( '_cvd_operation_updated_at', current_time( 'mysql', true ) );
+			$order->add_order_note( sprintf( 'Operación Casa Viva: %s → %s (automático al registrar el dinero: el mensajero ya tenía el paquete).', self::label( $current ), self::label( 'with_courier' ) ) );
+			$order->save();
+			$last_event = end( $history );
+			do_action( 'cvd_order_transition_observed', $order->get_id(), 'operation', $current, 'with_courier', 'cvd_sales_cash_catch_up', array(), (string) ( $last_event['event_anchor'] ?? '' ) );
+		}
+		return true;
 	}
 
 	/** 3.13.54: al pulsar «Listo para salir» en un pedido de prueba, la tienda lee claro que no salió al reparto. */
