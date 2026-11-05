@@ -253,6 +253,24 @@ test('Tarjeta de reseña: solo reseñas reales guardadas con permiso, nombre con
   }
 });
 
+test('Enlace de WhatsApp por anuncio: va al texto para el pie y aparece en la lista con sus resultados', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(60000);
+  await openPanel(page);
+  await page.getByRole('button', { name: 'Studio offer fixture · Publicado', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Producto abierto.');
+  await page.locator('#cv-layout').selectOption('offer');
+  await page.getByRole('button', { name: 'Preparar textos para redes', exact: true }).click();
+  await page.getByRole('button', { name: 'Crear enlace de WhatsApp para el pie del anuncio', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText(/Enlace del anuncio A\d+ añadido al texto/);
+  await expect(page.locator('#cv-copy')).toHaveValue(/\nEscríbenos por WhatsApp: https:\/\/wa\.me\/5354056173\?text=.*%C2%B7%20A\d+$/);
+  await expect(page.locator('#cv-ads li')).toHaveText([/^A\d+ · Oferta 9:16 · \d{4}-\d{2}-\d{2} — 0 personas escribieron · 0 pedidos$/]);
+  // A second ad replaces the link line in the text and adds a row.
+  await page.getByRole('button', { name: 'Crear enlace de WhatsApp para el pie del anuncio', exact: true }).click();
+  await expect(page.locator('#cv-ads li')).toHaveCount(2);
+  expect((await page.locator('#cv-copy').inputValue()).match(/Escríbenos por WhatsApp:/g)).toHaveLength(1);
+});
+
 test('Editor de contenido: login, guardar, subir foto y descargar en móvil', async ({ page }) => {
   test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
   test.setTimeout(60000);

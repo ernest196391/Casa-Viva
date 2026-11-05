@@ -120,3 +120,16 @@ $comment = get_comment( $saved->get_data()['saved'] );
 studio_assert( 'review' === $comment->comment_type && '1' === (string) $comment->comment_approved && 5 === (int) get_comment_meta( $comment->comment_ID, 'rating', true ) && 'whatsapp' === get_comment_meta( $comment->comment_ID, '_cvd_resena_origen', true ), 'review stored as an approved store review with stars and origin' );
 $item = studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_data();
 studio_assert( 'María González' === $item['reviews'][0]['name'] && 5 === $item['reviews'][0]['rating'], 'the panel receives the review for the card' );
+
+// Ad measurement: link with a code, the bot reports who wrote, and an order from that phone within 14 days counts.
+$ad = studio_call( 'POST', 'anuncio', array( 'id' => $p->get_id(), 'layout' => 'features', 'format' => '1920' ) )->get_data();
+studio_assert( preg_match( '/^A\d+$/', $ad['code'] ) && str_contains( $ad['link'], 'wa.me/' ) && str_contains( rawurldecode( $ad['link'] ), '· ' . $ad['code'] ), 'ad link carries its code in the prefilled text' );
+$bot = static fn( array $body ) => CVD_Content_Studio::anuncio_mensaje( ( static function ( $b ) { $q = new WP_REST_Request( 'POST', '/casa-viva/v1/bot/anuncio/mensaje' ); $q->set_body_params( $b ); return $q; } )( $body ) )->get_data();
+studio_assert( true === $bot( array( 'code' => $ad['code'], 'phone' => '+53 5123 4567' ) )['nuevo'] && false === $bot( array( 'code' => $ad['code'], 'phone' => '5351234567' ) )['nuevo'], 'the same phone is counted once' );
+studio_assert( false === $bot( array( 'code' => 'A999999', 'phone' => '5351234567' ) )['ok'], 'unknown codes are ignored' );
+$order = wc_create_order(); $order->set_billing_phone( '51234567' ); $order->set_total( 25 ); $order->set_status( 'processing' ); $order->save();
+$other = wc_create_order(); $other->set_billing_phone( '59999999' ); $other->set_total( 40 ); $other->set_status( 'processing' ); $other->save();
+$stats = studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_data()['anuncios'][0];
+studio_assert( $ad['code'] === $stats['code'] && 1 === $stats['mensajes'] && 1 === $stats['pedidos'] && str_contains( $stats['total'], '25' ), 'the ad shows one person who wrote and one order from that phone' );
+$route = rest_do_request( new WP_REST_Request( 'POST', '/casa-viva/v1/bot/anuncio/mensaje' ) );
+studio_assert( $route->get_status() >= 400, 'the bot route needs the bot key' );

@@ -26,12 +26,69 @@ final class CVD_Content_Studio {
 	}
 
 	public static function routes(): void {
-		foreach ( array( 'products' => 'GET', 'save' => 'POST', 'upload' => 'POST', 'review' => 'POST', 'resena' => 'POST', 'suggest' => 'POST', 'password' => 'POST' ) as $action => $method ) {
+		foreach ( array( 'products' => 'GET', 'save' => 'POST', 'upload' => 'POST', 'review' => 'POST', 'resena' => 'POST', 'anuncio' => 'POST', 'suggest' => 'POST', 'password' => 'POST' ) as $action => $method ) {
 			register_rest_route( 'casa-viva/v1', '/contenido/' . $action, array(
 				'methods' => $method, 'callback' => array( __CLASS__, $action ),
 				'permission_callback' => array( __CLASS__, 'allowed' ),
 			) );
 		}
+		// VivaBot tells which ad a WhatsApp message came from (code in the prefilled text of the ad link).
+		register_rest_route( 'casa-viva/v1', '/bot/anuncio/mensaje', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'anuncio_mensaje' ), 'permission_callback' => array( 'CVD_Bot_Bridge', 'authorized' ) ) );
+	}
+
+	/** Orders count for an ad when the same phone orders within this many days after writing. */
+	private const AD_WINDOW_DAYS = 14;
+	private static function phone_key( string $phone ): string { return substr( preg_replace( '/\D/', '', $phone ), -8 ); }
+
+	/** A WhatsApp link for the caption of one ad: prefilled text with its code (A + number) so the bot can count it. */
+	public static function anuncio( WP_REST_Request $r ) {
+		$p = wc_get_product( absint( $r->get_param( 'id' ) ) );
+		if ( ! $p || $p->is_type( 'variation' ) || ! in_array( $p->get_status(), array( 'publish', 'draft', 'pending', 'private' ), true ) ) { return new WP_Error( 'missing', 'Primero guarda el producto.', array( 'status' => 404 ) ); }
+		$code = 'A' . ( (int) get_option( 'cvd_anuncio_seq', 0 ) + 1 );
+		update_option( 'cvd_anuncio_seq', (int) substr( $code, 1 ), false );
+		update_option( 'cvd_anuncio_' . $code, array( 'product' => $p->get_id(), 'layout' => sanitize_key( (string) $r->get_param( 'layout' ) ), 'format' => sanitize_key( (string) $r->get_param( 'format' ) ),
+			'created' => time(), 'by' => get_current_user_id(), 'contacts' => array() ), false );
+		$codes = array_filter( (array) $p->get_meta( '_cvd_anuncios' ) ); $codes[] = $code;
+		update_post_meta( $p->get_id(), '_cvd_anuncios', array_values( $codes ) );
+		$name = mb_substr( $p->get_name(), 0, 40 );
+		$base = class_exists( 'CVD_Aprende' ) ? CVD_Aprende::WHATSAPP : 'https://wa.me/5354056173';
+		return rest_ensure_response( array( 'code' => $code, 'link' => $base . '?text=' . rawurlencode( "Hola Casa Viva, vi el anuncio de {$name} · {$code}" ), 'anuncios' => self::anuncios( $p->get_id() ) ) );
+	}
+
+	/** The bot records the first time each phone writes with an ad code. It never changes what the bot answers. */
+	public static function anuncio_mensaje( WP_REST_Request $r ) {
+		$code = strtoupper( sanitize_key( (string) $r->get_param( 'code' ) ) );
+		$phone = self::phone_key( (string) $r->get_param( 'phone' ) );
+		$ad = get_option( 'cvd_anuncio_' . $code );
+		if ( ! is_array( $ad ) || 8 !== strlen( $phone ) ) { return rest_ensure_response( array( 'ok' => false ) ); }
+		$nuevo = ! isset( $ad['contacts'][ $phone ] );
+		if ( $nuevo ) { $ad['contacts'][ $phone ] = time(); update_option( 'cvd_anuncio_' . $code, $ad, false ); }
+		return rest_ensure_response( array( 'ok' => true, 'nuevo' => $nuevo, 'product' => (int) $ad['product'] ) );
+	}
+
+	/** Per ad: people who wrote, and orders (with total) from those phones within AD_WINDOW_DAYS after they wrote. */
+	private static function anuncios( int $id ): array {
+		$codes = array_filter( (array) get_post_meta( $id, '_cvd_anuncios', true ) );
+		if ( ! $codes ) { return array(); }
+		$skip = array( 'wc-cancelled', 'wc-failed', 'wc-refunded', 'wc-pending', 'wc-checkout-draft' );
+		$out = array();
+		foreach ( array_reverse( $codes ) as $code ) {
+			$ad = get_option( 'cvd_anuncio_' . $code );
+			if ( ! is_array( $ad ) ) { continue; }
+			$contacts = (array) ( $ad['contacts'] ?? array() ); $orders = 0; $total = 0.0;
+			if ( $contacts ) {
+				$ids = wc_get_orders( array( 'limit' => -1, 'return' => 'ids', 'type' => 'shop_order', 'date_created' => '>=' . min( $contacts ),
+					'status' => array_diff( array_keys( wc_get_order_statuses() ), $skip ) ) );
+				foreach ( $ids as $order_id ) {
+					$order = wc_get_order( $order_id ); $since = $contacts[ self::phone_key( (string) $order->get_billing_phone() ) ] ?? null;
+					$at = $order->get_date_created() ? $order->get_date_created()->getTimestamp() : 0;
+					if ( null !== $since && $at >= $since && $at <= $since + self::AD_WINDOW_DAYS * DAY_IN_SECONDS ) { $orders++; $total += (float) $order->get_total(); }
+				}
+			}
+			$out[] = array( 'code' => $code, 'layout' => $ad['layout'] ?? '', 'format' => $ad['format'] ?? '', 'created' => gmdate( 'Y-m-d', (int) $ad['created'] ),
+				'mensajes' => count( $contacts ), 'pedidos' => $orders, 'total' => $orders ? wp_strip_all_tags( wc_price( $total ) ) : '' );
+		}
+		return $out;
 	}
 
 	/** Create a dedicated account only on an explicit administrator form submission. */
@@ -144,6 +201,7 @@ final class CVD_Content_Studio {
 			$p = wc_get_product( $id );
 			if ( ! $p || ! in_array( $p->get_status(), array( 'publish', 'draft', 'pending', 'private' ), true ) || $p->is_type( 'variation' ) ) { return new WP_Error( 'missing', 'Producto no encontrado.', array( 'status' => 404 ) ); }
 			$item = self::projection( $p );
+			$item['anuncios'] = self::anuncios( $p->get_id() );
 			$review = get_user_meta( get_current_user_id(), '_cvd_content_review_' . $id, true );
 			if ( ! is_array( $review ) || empty( $review['image'] ) ) { return rest_ensure_response( $item ); }
 			if ( ( $review['version'] ?? '' ) === $item['version'] ) {
@@ -260,7 +318,7 @@ final class CVD_Content_Studio {
 		<form id="cv-editor" hidden><h2>1. Ficha del producto</h2><p id="cv-commercial"></p><label>Título<input id="cv-name" maxlength="160" required></label><label>Descripción<textarea id="cv-description" rows="6"></textarea></label><label>Resumen<textarea id="cv-short" rows="3"></textarea></label><p>Escribe normal: deja una línea en blanco entre párrafos, empieza con «• » cada punto de una lista y termina en «:» un título corto.</p><p id="cv-text-note" hidden>Este texto tiene formato especial (negritas, enlaces o tablas) y se edita como código para no perderlo.</p><p>Conservamos precios y existencias. En mercancía nueva, guarda el borrador y completa esos datos en el catálogo comercial antes de publicar.</p><button id="cv-save" type="submit">Guardar cambios</button><button id="cv-publish" type="button">Publicar en Casa Viva</button><a id="cv-view" target="_blank" rel="noopener" hidden>Ver en la tienda</a>
 		<h2>2. Foto real</h2><label>Subir foto desde el móvil<input id="cv-photo" type="file" accept="image/jpeg,image/png,image/webp"></label><img id="cv-original" alt="Foto principal del producto" hidden><button type="button" id="cv-upload">Subir como foto principal</button><p>La foto anterior se conserva en la galería. Las fotos que subas se protegerán al sincronizar.</p>
 		<h2>3. Preparar imágenes para redes</h2><details><summary>¿A quién le sirve y qué necesita saber?</summary><label>Comprador y situación de uso<textarea id="cv-buyer" maxlength="1000" rows="2" placeholder="Qué necesita resolver y qué alternativa usa hoy"></textarea></label><label>Duda antes de comprar<textarea id="cv-objection" maxlength="1000" rows="2" placeholder="Qué le haría dudar de este producto"></textarea></label><label>Evidencia que tenemos<textarea id="cv-evidence" maxlength="1000" rows="2" placeholder="Foto del detalle, ficha del fabricante, comentarios reales o enlace"></textarea></label><p>Si no tienes evidencia, deja el dato pendiente. La guía no equivale a una investigación de mercado.</p></details><label>Plantilla<select id="cv-layout"><option value="features">Características señaladas</option><option value="spec">Ficha técnica</option><option value="offer">Oferta y precio</option><option value="use">Uso cotidiano</option><option value="review">Reseña de cliente</option></select></label><label>Formato<select id="cv-format"><option value="1920">Historia 9:16</option><option value="1080">Publicación 1:1</option></select></label><label>Características confirmadas (una por línea, hasta tres)<textarea id="cv-facts" rows="3" maxlength="400" placeholder="Extensible de 122 a 213 cm — sirve para ventanas pequeñas y grandes"></textarea></label><p>Después del guion, para qué le sirve al cliente en su día a día (opcional). En «Características señaladas», toca la foto para unir cada número con su detalle.</p><label>Frase principal<input id="cv-headline" maxlength="90" placeholder="Qué hace útil este producto"></label><label>Uso cotidiano confirmado<input id="cv-use" maxlength="150" placeholder="Dónde y para qué se utiliza"></label><label>Oferta vigente (solo si es real)<input id="cv-offer" maxlength="120" placeholder="Ej.: entrega gratis en La Habana hasta el domingo"></label><p>El precio y la rebaja salen de la tienda. No escribas descuentos, regalos ni plazos que no existan.</p><details><summary>Reseñas reales de clientes</summary><label>Reseña para la tarjeta<select id="cv-review-pick"></select></label><p>Añadir una reseña real, copiada tal cual del WhatsApp del cliente. Nunca escribas una reseña inventada.</p><label>Comentario del cliente<textarea id="cv-review-text" maxlength="400" rows="3"></textarea></label><label>Nombre e inicial<input id="cv-review-name" maxlength="60" placeholder="María G., La Habana"></label><label>Estrellas<select id="cv-review-rating"><option value="0">Sin estrellas (el cliente no puntuó)</option><option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select></label><label><input type="checkbox" id="cv-review-permission"> El cliente me dio permiso para publicar su comentario y su nombre</label><button type="button" id="cv-review-save">Guardar reseña</button><p>Se guarda como reseña del producto en la tienda.</p></details><fieldset><legend>Generar opciones con mi foto</legend><label>Proveedor<select id="cv-provider"><option value="cloudflare">Cloudflare · cuota gratuita con Workers Free</option><option value="openai">OpenAI · API de pago</option><option value="higgsfield">Higgsfield · API de pago</option></select></label><p id="cv-ai-setup" hidden>El administrador puede activar la generación en WooCommerce → IA para fotos.</p><p>La IA prepara solo el fondo. Tu móvil coloca encima la foto real completa y conserva las piezas. Puedes guardar una opción por producto para revisarla desde tu perfil.</p><label><input type="checkbox" id="cv-protect-whole"> Conservar también el fondo original dentro de la foto</label><button type="button" id="cv-generate">Generar una opción</button><p id="cv-ai-status" aria-live="polite"></p><div id="cv-variants"></div><details><summary>Usar mi suscripción en su web</summary><p>Prepara los textos en el paso 4, copia la instrucción y adjunta la foto en <a href="https://chatgpt.com/" target="_blank" rel="noopener">ChatGPT</a> o <a href="https://higgsfield.ai/" target="_blank" rel="noopener">Higgsfield</a>. Descarga el resultado para traerlo al panel.</p><input id="cv-import-ai" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Importar resultado de IA"><img id="cv-import-preview" alt="Vista previa de la imagen importada" style="max-width:100%" hidden><button type="button" id="cv-import-button">Elegir imagen importada como principal</button></details></fieldset><button type="button" id="cv-publish-layout" hidden>Elegir el anuncio preparado como imagen principal</button><button type="button" id="cv-render">Preparar imagen</button><canvas id="cv-canvas" width="1080" height="1920" hidden aria-label="Vista previa del anuncio"></canvas><a id="cv-download" download="casa-viva.jpg" hidden>Descargar imagen</a>
-		<h2>4. Texto y guía para IA</h2><button type="button" id="cv-title-suggest">Mejorar título con mis datos</button><button type="button" id="cv-suggest">Mejorar descripción con mis datos</button><label>Descripción sugerida<textarea id="cv-suggestion" rows="5"></textarea></label><button type="button" id="cv-use-suggestion">Usar en la ficha</button><button type="button" id="cv-copy-build">Preparar textos para redes</button><label>Texto para compartir<textarea id="cv-copy" rows="6"></textarea></label><label><input type="checkbox" id="cv-copy-prompt"> Incluir la instrucción para IA en el archivo</label><button type="button" id="cv-copy-save">Descargar textos</button><details><summary>Instrucción para crear una escena con IA</summary><p>Adjunta siempre la foto real. Revisa el resultado antes de subirlo como foto del producto. Puedes usar la instrucción en tu cuenta del proveedor.</p><textarea id="cv-prompt" rows="9" readonly></textarea></details>
+		<h2>4. Texto y guía para IA</h2><button type="button" id="cv-title-suggest">Mejorar título con mis datos</button><button type="button" id="cv-suggest">Mejorar descripción con mis datos</button><label>Descripción sugerida<textarea id="cv-suggestion" rows="5"></textarea></label><button type="button" id="cv-use-suggestion">Usar en la ficha</button><button type="button" id="cv-copy-build">Preparar textos para redes</button><label>Texto para compartir<textarea id="cv-copy" rows="6"></textarea></label><button type="button" id="cv-ad-link">Crear enlace de WhatsApp para el pie del anuncio</button><p>Un enlace por anuncio, solo en el pie (nunca en el video). Así sabemos cuántos escribieron y compraron por ese anuncio.</p><ul id="cv-ads"></ul><label><input type="checkbox" id="cv-copy-prompt"> Incluir la instrucción para IA en el archivo</label><button type="button" id="cv-copy-save">Descargar textos</button><details><summary>Instrucción para crear una escena con IA</summary><p>Adjunta siempre la foto real. Revisa el resultado antes de subirlo como foto del producto. Puedes usar la instrucción en tu cuenta del proveedor.</p><textarea id="cv-prompt" rows="9" readonly></textarea></details>
 		</form></main><?php wp_footer(); ?></body></html><?php
 		exit;
 	}
