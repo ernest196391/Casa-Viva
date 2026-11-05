@@ -855,7 +855,7 @@
 	function pintarViajes(l) {
 		if (!l) { return '<div style="display:flex;flex-direction:column;gap:12px">' + esqueleto() + esqueleto() + '</div>'; }
 		if (!l.length) { return '<p class="p-aviso">' + ico('info') + 'Todavía no tienes viajes.</p><a class="p-btn p-btn--marca p-btn--ancho" href="#inicio" style="margin-top:16px">Pedir uno</a>'; }
-		var hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+		var hoy = new Date(U.ahora()); hoy.setHours(0, 0, 0, 0);
 		var lunes = new Date(hoy); lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7));
 		var grupo = '', h = '', DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 		l.forEach(function (x, i) {

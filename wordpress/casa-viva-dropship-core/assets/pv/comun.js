@@ -17,7 +17,8 @@
 	function cupG(n) { return miles(n) + '<small>CUP</small>'; }
 	function km(x) { return String(Math.round((+x || 0) * 10) / 10).replace('.', ','); }
 	function hhmm(d) { return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }
-	function hora(minMas) { return hhmm(new Date(Date.now() + (minMas || 0) * 60000)); }
+	// Hora REAL (la del servidor): en Cuba muchos móviles tienen la hora puesta a mano y mal (5-nov: el Redmi iba 1 h adelantado).
+	function hora(minMas) { return hhmm(new Date(ahora() + (minMas || 0) * 60000)); }
 	function ahora() { return Date.now() + desfase; }
 	function seg(iso) { return iso ? Math.round((Date.parse(iso) - ahora()) / 1000) : 0; }
 	function estr(e) { return e == null ? '<span class="pa-estr">Nuevo</span>' : '<span class="pa-estr">' + ico('estrella-llena', 'p-ico--16') + String(e).replace('.', ',') + '</span>'; }
