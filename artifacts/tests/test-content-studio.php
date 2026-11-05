@@ -42,6 +42,7 @@ class WC_Product {
  public function is_on_sale() { return false; }
  public function managing_stock() { return true; }
  public function get_children() { return array(); }
+ public function delete_meta_data( $k ) { unset( $this->data['meta'][$k] ); }
  public function get_meta( $k ) { return $this->data['meta'][$k] ?? ''; }
  public function update_meta_data( $k, $v ) { $this->data['meta'][$k] = $v; }
  public function save() { if ( ! $this->data['id'] ) { $this->data['id'] = count( $GLOBALS['products'] ) + 1; } $GLOBALS['products'][$this->data['id']] = clone $this; return $this->data['id']; }
