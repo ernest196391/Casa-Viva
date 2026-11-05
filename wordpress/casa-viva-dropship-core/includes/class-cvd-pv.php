@@ -93,8 +93,8 @@ final class CVD_Pv {
 		header( 'X-Content-Type-Options: nosniff' );
 		header( 'X-Robots-Tag: noindex, nofollow' );
 		if ( 'manifest' === $kind ) { self::manifest(); }
-		if ( 'sw-cliente' === $kind ) { self::service_worker( '/palla/ir/', 'pvc-', array( 'cliente.js' ) ); }
-		if ( 'sw-chofer' === $kind ) { self::service_worker( '/palla/chofer/', 'pvd-', array( 'chofer.js' ) ); }
+		if ( 'sw-cliente' === $kind ) { self::service_worker( '/palla/ir/', 'pvc-', array( 'comun.js', 'cliente.js' ) ); }
+		if ( 'sw-chofer' === $kind ) { self::service_worker( '/palla/chofer/', 'pvd-', array( 'comun.js', 'chofer.js' ) ); }
 		self::page( 'chofer' === $kind );
 	}
 
@@ -135,6 +135,7 @@ final class CVD_Pv {
 				. '<noscript><p style="padding:24px">Pa\'llá necesita JavaScript.</p></noscript>'
 				. '<script>window.PV=' . wp_json_encode( self::config( $chofer ) ) . ';</script>'
 				. '<script src="' . esc_url( self::asset( 'mapa.js' ) ) . '" defer></script>'
+				. '<script src="' . esc_url( self::asset( 'comun.js' ) ) . '" defer></script>'
 				. '<script src="' . esc_url( self::asset( $chofer ? 'chofer.js' : 'cliente.js' ) ) . '" defer></script>';
 		}
 		echo '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'

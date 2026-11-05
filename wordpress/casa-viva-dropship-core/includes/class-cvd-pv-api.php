@@ -513,10 +513,12 @@ final class CVD_Pv_Api {
 	public static function vista_cliente( object $v ): array {
 		$activo = in_array( $v->estado, self::ACTIVOS, true );
 		$chofer = (int) $v->chofer_id ? self::chofer_publico( (int) $v->chofer_id ) : null;
-		if ( $chofer && $activo ) {
+		// Al terminar y hasta que cobre, el cliente sigue viendo cómo pagarle (puede cambiar a Transfermóvil en la llegada).
+		$por_pagar = 'terminado' === $v->estado && null === $v->cobrado_at;
+		if ( $chofer && ( $activo || $por_pagar ) ) {
 			$tel = preg_replace( '/\D+/', '', (string) ( get_user_meta( (int) $v->chofer_id, '_cvd_whatsapp', true ) ?: get_user_meta( (int) $v->chofer_id, 'billing_phone', true ) ) );
 			$chofer['telefono'] = 8 === strlen( $tel ) ? '53' . $tel : $tel;
-			if ( 'transferencia' === $v->forma_pago ) { $ch = CVD_Triciclub::chofer_de( (int) $v->chofer_id ); $chofer['transferencia'] = $ch ? (string) $ch->transferencia : ''; }
+			if ( 'transferencia' === $v->forma_pago || $por_pagar ) { $ch = CVD_Triciclub::chofer_de( (int) $v->chofer_id ); $chofer['transferencia'] = $ch ? (string) $ch->transferencia : ''; }
 		}
 		$envio = 'mensajero' === $v->clase;
 		$precio_de = $envio && 'grande' === $v->envio_tam ? 'tric_carga' : (string) $v->clase;
