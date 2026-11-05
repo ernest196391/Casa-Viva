@@ -79,6 +79,7 @@ require_once CVD_DIR . 'includes/class-cvd-tablero.php'; // 3.14.98: tablero ún
 require_once CVD_DIR . 'includes/class-cvd-fichas.php';
 require_once CVD_DIR . 'includes/class-cvd-aprende.php';
 require_once CVD_DIR . 'includes/class-cvd-order-edit.php';
+require_once CVD_DIR . 'includes/class-cvd-gestora-pedidos.php'; // 3.14.116: la gestora cambia, cancela o recupera SUS pedidos (Ernesto 3-nov, #6062)
 require_once CVD_DIR . 'includes/class-cvd-reserva.php'; // 3.14.72: reserva de una recogida («guardar hasta mañana») dentro del pedido (Pilar 3, Ernesto 28-oct).
 require_once CVD_DIR . 'includes/class-cvd-order-avisos.php';
 require_once CVD_DIR . 'includes/class-cvd-costs.php';
@@ -155,6 +156,7 @@ add_action(
 			CVD_Messenger_Cash::register();
 			CVD_Fichas::register();
 			CVD_Aprende::register(); // 3.13.77: «Aprende» (tutoriales) en el área de la gestora y del mensajero.
+			CVD_Gestora_Pedidos::register(); // 3.14.116: /gestora/pedido/{id}/cambiar|cancelar|recuperar (nivel 1 del plan del Vigía, 3-nov).
 			CVD_Order_Edit::register(); // 3.13.97: cancelar con motivo y cambiar pedidos desde /ventas/ y el panel (Ernesto, 14-oct).
 			CVD_Reserva::register(); // 3.14.72: reserva visible para la tienda, frena la cancelación y avisa una vez al vencer.
 			CVD_Order_Avisos::register(); // 3.13.98: el bot avisa por WhatsApp al cancelar o cambiar un pedido (Ernesto, 14-oct).
