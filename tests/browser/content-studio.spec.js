@@ -335,6 +335,7 @@ test('Un borrador sin foto ni existencias no se publica y el panel dice lo que f
   await page.locator('#cv-name').fill('Mesa de oficina.');
   const saved = await saveNow(page);
   expect(saved.name).toBe('Mesa de oficina'); expect(saved.status).toBe('draft');
+  await expect(page.locator('#cv-name')).toHaveValue('Mesa de oficina');
   expect(saved.faltan).toEqual(['foto', 'existencias']);
   await expect(page.getByRole('status')).toHaveText('Borrador guardado. Falta: foto real, existencias, que pone Lennys.');
 });

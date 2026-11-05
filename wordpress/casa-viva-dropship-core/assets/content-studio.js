@@ -325,6 +325,7 @@
     if (current !== ficha) { message(`«${p.name}» quedó guardado. La ficha que tienes abierta no cambió.`); return; }
     // Keep unsaved layout work and selected local photo while refreshing server state.
     product = { ...p, anuncios: product.anuncios || [] }; dirty = false; refreshHeader(); updateBar();
+    $('cv-name').value = p.name; // the server tidies the title («Mesa de oficina.» → «Mesa de oficina»)
     message(p.status === 'publish' ? 'Cambios publicados en Casa Viva.' : (p.falta ? `Borrador guardado. Falta: ${p.falta}.` : 'Borrador guardado. Ya tiene todo: puedes publicarlo.'));
   }
   $('cv-editor').addEventListener('submit', (e) => { e.preventDefault(); busy($('cv-save'), () => save('save')); });
