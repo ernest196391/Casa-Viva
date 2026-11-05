@@ -43,6 +43,9 @@ async function fillFacts(page, rows) {
   }
 }
 const finish = (page) => page.getByRole('button', { name: 'Terminar anuncio', exact: true }).click();
+// The notice can still show the previous «Imagen lista…»: wait for the sheet itself, then close it.
+const pieSheet = (page) => page.getByRole('dialog', { name: 'Pie del anuncio' });
+async function closePie(page) { await expect(pieSheet(page)).toBeVisible(); await page.keyboard.press('Escape'); await expect(pieSheet(page)).toBeHidden(); }
 
 test('Guardado tardío de una ficha publicada no pisa la mercancía nueva', async ({ page }) => {
   test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
@@ -225,11 +228,12 @@ test('Tarjeta de oferta: precio de la tienda, rebaja real con fecha y oferta esc
     await pick(page, format);
     await page.evaluate(() => { window.__drawn = []; });
     await finish(page);
+    await expect(pieSheet(page)).toBeVisible();
     await expect(page.getByRole('status')).toHaveText('Imagen lista para descargar.');
     const drawn = (await page.evaluate(() => window.__drawn)).join(' | ');
     expect(drawn).toMatch(/25\.00/); expect(drawn).toMatch(/30\.00/);
     expect(drawn).toContain('Oferta hasta el'); expect(drawn).toContain('Entrega gratis en La Habana');
-    await page.keyboard.press('Escape');
+    await closePie(page);
   }
   await expect(page.locator('#cv-copy')).toHaveValue(/Precio de oferta: .*25\.00 \(antes .*30\.00\)\nOferta: Entrega gratis en La Habana/);
   await page.locator('#cv-offer').fill('Entrega gratis en Centro Habana');
@@ -282,10 +286,11 @@ test('Tarjeta de reseña: solo reseñas reales guardadas con permiso, nombre con
     await pick(page, format);
     await page.evaluate(() => { window.__drawn = []; });
     await finish(page);
+    await expect(pieSheet(page)).toBeVisible();
     await expect(page.getByRole('status')).toHaveText('Imagen lista para descargar.');
     const drawn = (await page.evaluate(() => window.__drawn)).join(' | ');
     expect(drawn).toContain('★★★★★'); expect(drawn).toContain('— María G.'); expect(drawn).toContain('Llegó');
-    await page.keyboard.press('Escape');
+    await closePie(page);
   }
 });
 
@@ -306,14 +311,14 @@ test('Enlace de WhatsApp por anuncio: va al texto para el pie y aparece en Resul
   };
   await createAd();
   await expect(page.locator('#cv-copy')).toHaveValue(/\nEscríbenos por WhatsApp: https:\/\/wa\.me\/5354056173\?text=.*%C2%B7%20A\d+$/);
-  await page.keyboard.press('Escape');
+  await closePie(page);
   await tab(page, 'Resultados');
   await expect(page.locator('#cv-ads li')).toHaveText([/^A\d+ Oferta · 9:16 \d{1,2} \D+?0 escribieron 0 pedidos Repetir$/]);
   // A second ad replaces the link line in the text and adds a row.
   await tab(page, 'Anuncio');
   await createAd();
   expect((await page.locator('#cv-copy').inputValue()).match(/Escríbenos por WhatsApp:/g)).toHaveLength(1);
-  await page.keyboard.press('Escape');
+  await closePie(page);
   await tab(page, 'Resultados');
   await expect(page.locator('#cv-ads li')).toHaveCount(2);
 });
@@ -355,7 +360,7 @@ test('Editor de contenido: login, guardar, subir foto y descargar en móvil', as
   await expect(page.getByRole('textbox', { name: 'Pie del anuncio', exact: true })).toHaveValue(/Studio browser edited/);
   const width = await page.evaluate(() => ({ viewport: innerWidth, scroll: document.documentElement.scrollWidth }));
   expect(width.scroll).toBeLessThanOrEqual(width.viewport);
-  await page.keyboard.press('Escape');
+  await closePie(page);
   await back(page);
   await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
   await page.getByRole('button', { name: 'Cambiar contraseña', exact: true }).click();

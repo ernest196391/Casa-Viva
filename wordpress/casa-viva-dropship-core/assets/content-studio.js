@@ -648,7 +648,7 @@
     const pic = document.createElement('span'); pic.className = 'cv-opt-pic';
     const thumb = document.createElement('img'); thumb.src = finalURL; thumb.alt = ''; pic.append(thumb);
     if (saved) { const flag = document.createElement('span'); flag.className = option.stale ? 'cv-flag cv-flag-gold' : 'cv-flag'; flag.textContent = option.stale ? 'Revisar' : 'Guardada'; pic.append(flag); }
-    const name = document.createElement('span'); name.textContent = label || (saved ? 'Guardada' : `Opción ${number}`);
+    const name = document.createElement('span'); name.textContent = label || (saved ? 'Guardada' : `Opción ${number}`); b.setAttribute('aria-label', name.textContent);
     b.append(pic, name); b.addEventListener('click', () => selectOption(option));
     $('cv-variants').append(b);
     return option;
