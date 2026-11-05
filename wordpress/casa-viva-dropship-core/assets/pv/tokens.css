@@ -1,0 +1,220 @@
+/* Pa'llá · sistema de diseño v2 (tokens + piezas) · 4-nov-2026
+   Más minimalista: blanco, negro, gris y UN amarillo por pantalla (el botón principal). Oscuro de noche (html[data-tema="oscuro"]).
+   Copiar tal cual al código: solo variables CSS y clases cortas con prefijo «p-». Sin librerías. */
+
+/* Letra: Geist variable (neo-grotesca tipo Helvética), un archivo de 29 KB, solo latín (á, ñ, ¿, ¡…). Sin ancho expandido.
+   Si no carga: Helvetica Neue / Helvetica / Roboto / Arial. */
+@font-face{font-family:Geist;src:url("fonts/Geist-var-latin.woff2") format("woff2");font-weight:400 700;font-display:swap}
+
+:root{
+  /* Marca */
+  --amarillo:#FFC21A;          /* SOLO el botón principal de cada pantalla */
+  --amarillo-hondo:#E5A800;    /* al pulsar */
+  --amarillo-suave:#FFF4D1;
+  --negro:#0E0E0E;
+  --blanco:#FFFFFF;
+
+  /* Superficies y texto (claro) */
+  --fondo:#FFFFFF;
+  --fondo-2:#F4F4F2;           /* hundido: campos, fila elegida */
+  --fondo-3:#E9E9E6;           /* esqueletos, pistas */
+  --tinta:#0E0E0E;             /* texto principal · 19,8:1 sobre blanco */
+  --tinta-2:#62625D;           /* texto secundario · 6,2:1 */
+  --tinta-3:#8C8C86;           /* ayudas, desactivado (solo textos grandes o iconos) */
+  --linea:#ECECE8;             /* separadores finos */
+  --linea-fuerte:#D2D2CB;
+  --sobre-amarillo:#0E0E0E;
+  --velo:rgba(14,14,14,.36);
+  --cristal:rgba(255,255,255,.86);
+
+  /* Servicios: solo en el icono pequeño del servicio */
+  --taxi:#2C5BC7;      --taxi-suave:#E7EEFB;
+  --tric:#16855A;      --tric-suave:#E3F3EB;
+  --mens:#C9561E;      --mens-suave:#FBEBE2;
+
+  /* Estados (texto e icono; fondos casi nunca) */
+  --bien:#18794A;      --bien-suave:#E3F4EA;
+  --aviso:#A35A00;     --aviso-suave:#FDF0DC;
+  --error:#B8261B;     --error-suave:#FCE7E5;
+  --foco:#2C5BC7;
+
+  /* Letra: solo 2 pesos, 500 (texto) y 600 (títulos y precios) */
+  --letra:Geist,"Helvetica Neue",Helvetica,Roboto,Arial,sans-serif;
+  --t-titulo:600 24px/30px var(--letra);
+  --t-h1:600 22px/28px var(--letra);
+  --t-h2:600 18px/24px var(--letra);
+  --t-cuerpo-g:500 17px/24px var(--letra);
+  --t-cuerpo:500 15px/22px var(--letra);
+  --t-peq:500 13px/18px var(--letra);
+  --t-mini:500 12px/16px var(--letra);
+  --t-precio:600 40px/44px var(--letra);    /* «CUP» pequeño y gris al lado */
+
+  /* Espacios (de 4 en 4) */
+  --e1:4px; --e2:8px; --e3:12px; --e4:16px; --e5:20px; --e6:24px; --e8:32px; --e10:40px; --e14:56px;
+
+  /* Radio único */
+  --r:14px; --r1:14px; --r2:14px; --r3:14px; --r4:14px; --r-pastilla:999px;
+
+  /* Sombras: SOLO la hoja inferior y los botones flotantes */
+  --s-flota:0 2px 6px rgba(14,14,14,.08),0 6px 20px rgba(14,14,14,.10);
+  --s3:0 -1px 0 rgba(14,14,14,.04),0 -10px 32px rgba(14,14,14,.10);   /* hoja inferior */
+  --s1:none; --s2:var(--s-flota); --s-boton:none;
+
+  /* Tamaños táctiles */
+  --toque:48px; --toque-g:56px;
+
+  /* Movimiento: corto (≤ 250 ms) y suave */
+  --m1:120ms; --m2:180ms; --m3:240ms;
+  --curva:cubic-bezier(.2,.8,.2,1);
+  --curva-sale:cubic-bezier(.4,0,1,1);
+
+  color-scheme:light;
+}
+
+/* Oscuro (de noche): negro de verdad; el amarillo se mantiene solo en el botón principal. */
+html[data-tema="oscuro"],.p-oscuro{
+  --fondo:#0F0F10;
+  --fondo-2:#1A1A1C;
+  --fondo-3:#26262A;
+  --tinta:#F3F3EF;             /* 17,4:1 */
+  --tinta-2:#A9A9A3;           /* 7,9:1 */
+  --tinta-3:#77776F;
+  --linea:#232326;
+  --linea-fuerte:#3A3A3F;
+  --amarillo-suave:#2B2410;
+  --velo:rgba(0,0,0,.6);
+  --cristal:rgba(25,25,27,.86);
+  --taxi:#86A6F2;  --taxi-suave:#18213A;
+  --tric:#4CC38A;  --tric-suave:#12271D;
+  --mens:#F08F5C;  --mens-suave:#2D1B12;
+  --bien:#4CC38A;  --bien-suave:#12271D;
+  --aviso:#F2B24C; --aviso-suave:#2B2210;
+  --error:#F27A6E; --error-suave:#2E1513;
+  --foco:#86A6F2;
+  --s-flota:0 2px 6px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.45);
+  --s3:0 -1px 0 rgba(255,255,255,.04),0 -10px 32px rgba(0,0,0,.5);
+  color-scheme:dark;
+}
+
+@media (prefers-reduced-motion:reduce){:root{--m1:0ms;--m2:0ms;--m3:0ms}}
+
+/* ---------- Base ---------- */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--fondo);color:var(--tinta);font:var(--t-cuerpo);-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+b,strong{font-weight:600}
+:focus-visible{outline:2px solid var(--foco);outline-offset:2px}
+.p-num{font-variant-numeric:tabular-nums}
+.p-titulo{font:var(--t-titulo);letter-spacing:-.02em;margin:0}
+.p-h1{font:var(--t-h1);letter-spacing:-.015em;margin:0}
+.p-h2{font:var(--t-h2);letter-spacing:-.01em;margin:0}
+.p-cuerpo-g{font:var(--t-cuerpo-g)}
+.p-peq{font:var(--t-peq);color:var(--tinta-2)}
+.p-mini{font:var(--t-mini);color:var(--tinta-2)}
+.p-2{color:var(--tinta-2)}
+.p-ico{width:24px;height:24px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.p-ico--20{width:20px;height:20px}
+.p-ico--16{width:16px;height:16px;stroke-width:2}
+
+/* Precio grande: cifra 600 y «CUP» pequeño y gris */
+.p-precio{font:var(--t-precio);letter-spacing:-.03em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.p-precio small,.p-cup{font:500 15px/1 var(--letra);letter-spacing:0;color:var(--tinta-2);margin-left:4px}
+
+/* ---------- Botones ---------- */
+.p-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--e2);min-height:var(--toque-g);padding:0 var(--e6);border:0;border-radius:var(--r);font:600 16px/1 var(--letra);text-decoration:none;transition:transform var(--m1) var(--curva),background-color var(--m2) var(--curva);user-select:none}
+.p-btn:active{transform:scale(.98)}
+.p-btn[disabled]{opacity:.35;pointer-events:none}
+.p-btn--ancho{width:100%}
+.p-btn--marca{background:var(--amarillo);color:var(--sobre-amarillo)}
+.p-btn--marca:active{background:var(--amarillo-hondo)}
+.p-btn--tinta{background:var(--tinta);color:var(--fondo)}
+.p-btn--borde{background:transparent;color:var(--tinta);box-shadow:inset 0 0 0 1px var(--linea-fuerte)}
+.p-btn--suave{background:var(--fondo-2);color:var(--tinta)}
+.p-btn--texto{background:none;color:var(--tinta-2);min-height:var(--toque);padding:0 var(--e3);font-weight:500}
+.p-btn--chico{min-height:44px;padding:0 var(--e4);font-size:15px}
+.p-btn--redondo{width:var(--toque);height:var(--toque);min-height:0;padding:0;border-radius:50%;background:var(--fondo);color:var(--tinta);box-shadow:var(--s-flota)}
+.p-btn--icono{width:44px;height:44px;min-height:0;padding:0;border-radius:50%;background:var(--fondo-2);color:var(--tinta)}
+
+/* ---------- Chips y sellos (siempre gris neutro) ---------- */
+.p-chip{text-decoration:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 14px;border-radius:var(--r-pastilla);background:var(--fondo-2);color:var(--tinta);border:0;font:500 14px/1 var(--letra);white-space:nowrap;transition:background-color var(--m2) var(--curva)}
+.p-chip[aria-pressed="true"],.p-chip.is-on{background:var(--tinta);color:var(--fondo)}
+.p-sello{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:var(--r-pastilla);background:var(--fondo-2);color:var(--tinta-2);font:500 12px/1 var(--letra);white-space:nowrap}
+.p-sello .p-ico{width:14px;height:14px}
+
+/* ---------- Pestañas finas de texto ---------- */
+.p-pest{display:flex;gap:20px;border-bottom:1px solid var(--linea)}
+.p-pest button{position:relative;border:0;background:none;padding:10px 0 12px;font:500 15px/1 var(--letra);color:var(--tinta-2)}
+.p-pest button[aria-pressed="true"]{color:var(--tinta);font-weight:600}
+.p-pest button[aria-pressed="true"]::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px;background:var(--tinta)}
+
+/* ---------- Oferta (cliente): 2 líneas + un botón + línea que se vacía ---------- */
+.p-oferta{position:relative;display:grid;grid-template-columns:32px 1fr auto;gap:2px 12px;align-items:center;padding:14px 0 16px;animation:p-entra var(--m3) var(--curva) backwards;touch-action:pan-y;background:var(--fondo)}
+.p-oferta + .p-oferta{border-top:1px solid var(--linea)}
+.p-oferta__cara{grid-column:1;grid-row:1 / 3}
+.p-oferta__q{grid-column:2;grid-row:1;min-width:0;font:600 16px/22px var(--letra);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-oferta__q span{font-weight:500;color:var(--tinta-2)}
+.p-oferta__s{grid-column:2;grid-row:2;min-width:0;font:var(--t-peq);color:var(--tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-oferta__precio{grid-column:3;grid-row:1 / 3;align-self:center;text-align:right;font:600 24px/1 var(--letra);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.p-oferta__precio small{display:block;font:500 12px/16px var(--letra);color:var(--tinta-2);letter-spacing:0;margin-top:2px}
+.p-oferta .p-btn{grid-column:1 / -1;grid-row:3;margin-top:10px;min-height:48px}
+.p-oferta__tiempo{position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--linea-fuerte);transform-origin:left;transition:transform 1s linear}
+
+/* Cara con iniciales (32 px) */
+.p-cara{width:32px;height:32px;border-radius:50%;background:var(--fondo-3);display:grid;place-items:center;font:600 12px/1 var(--letra);color:var(--tinta-2);flex:none}
+
+/* ---------- Barra de progreso del viaje (como Yandex Go) ----------
+   Barra fina a lo ancho con el vehículo encima; % recorrido y hora de llegada. La mueve el mismo valor que el vehículo del mapa. */
+.p-progreso{padding:20px 0 0}
+.p-progreso__pista{position:relative;height:4px;border-radius:2px;background:var(--fondo-3)}
+.p-progreso__lleno{position:absolute;inset:0;border-radius:2px;background:var(--tinta);transform-origin:left;transform:scaleX(0)}
+.p-progreso__veh{position:absolute;bottom:2px;left:0;width:36px;height:21px;pointer-events:none}
+.p-progreso__veh img{display:block;width:36px;height:21px;object-fit:contain}
+.p-progreso__txt{display:flex;justify-content:space-between;margin-top:8px;font:var(--t-peq);color:var(--tinta-2);font-variant-numeric:tabular-nums}
+.p-progreso__txt b{font-weight:600;color:var(--tinta)}
+@media (prefers-reduced-motion:reduce){.p-progreso *{transition:none!important}}
+
+/* ---------- Esqueleto de carga ---------- */
+.p-esq{display:block;border-radius:8px;background:var(--fondo-3);animation:p-late 1.4s ease-in-out infinite}
+@keyframes p-late{50%{opacity:.45}}
+
+/* ---------- Hoja inferior (lleva sombra) ---------- */
+.p-hoja{position:absolute;left:0;right:0;bottom:0;background:var(--fondo);border-radius:var(--r) var(--r) 0 0;box-shadow:var(--s3);padding:var(--e2) var(--e4) calc(var(--e4) + env(safe-area-inset-bottom));animation:p-sube var(--m3) var(--curva) both}
+.p-hoja__asa{width:36px;height:4px;border-radius:2px;background:var(--linea-fuerte);margin:2px auto var(--e3)}
+
+/* ---------- Campos ---------- */
+.p-campo{display:flex;align-items:center;gap:var(--e3);min-height:var(--toque-g);padding:0 var(--e4);background:var(--fondo-2);border-radius:var(--r);border:1px solid transparent;transition:border-color var(--m2) var(--curva)}
+.p-campo:focus-within{border-color:var(--tinta);background:var(--fondo)}
+.p-campo input{flex:1;min-width:0;border:0;background:none;outline:0;font:var(--t-cuerpo-g);padding:0;height:52px}
+.p-campo input::placeholder{color:var(--tinta-3)}
+
+/* Interruptor */
+.p-interruptor{position:relative;flex:none;width:48px;height:28px;border-radius:14px;background:var(--linea-fuerte);border:0;padding:0;transition:background-color var(--m2) var(--curva)}
+.p-interruptor::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:transform var(--m2) var(--curva)}
+.p-interruptor[aria-checked="true"]{background:var(--tinta)}
+.p-interruptor[aria-checked="true"]::after{transform:translateX(20px);background:var(--fondo)}
+
+/* Fila de lista: separadores finos, nada de tarjetas */
+.p-fila{text-decoration:none;display:flex;align-items:center;gap:var(--e3);min-height:var(--toque-g);padding:var(--e2) 0;width:100%;background:none;border:0;text-align:left;color:inherit}
+.p-fila + .p-fila{border-top:1px solid var(--linea)}
+.p-fila__ico{flex:none;width:32px;height:32px;border-radius:50%;background:var(--fondo-2);display:grid;place-items:center;color:var(--tinta)}
+.p-fila__ico .p-ico{width:18px;height:18px}
+.p-fila__txt{flex:1;min-width:0}
+.p-fila__txt b{display:block;font:500 16px/21px var(--letra);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-fila__txt span{display:block;font:var(--t-peq);color:var(--tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-fila__fin{flex:none;font:var(--t-peq);color:var(--tinta-2);font-variant-numeric:tabular-nums}
+
+/* Avisos: una línea gris con icono (sin cajas de color) */
+.p-aviso{display:flex;gap:var(--e2);align-items:center;font:var(--t-peq);color:var(--tinta-2)}
+.p-aviso .p-ico{width:18px;height:18px}
+.p-aviso--bien .p-ico{color:var(--bien)}
+.p-aviso--aviso .p-ico{color:var(--aviso)}
+.p-aviso--error .p-ico{color:var(--error)}
+.p-aviso b{color:var(--tinta)}
+
+/* Movimientos */
+@keyframes p-entra{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes p-sube{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}
+@keyframes p-aparece{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:1ms!important;animation-iteration-count:1!important;transition-duration:1ms!important}}
