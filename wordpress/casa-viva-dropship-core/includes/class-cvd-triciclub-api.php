@@ -517,6 +517,8 @@ final class CVD_Triciclub_Api {
 			'activo'   => $activo,
 			'hoy'      => $hoy,
 			'espera'   => self::ESPERA,
+			// 5-nov: ¿puede usar la app nueva de chofer de Pa'llá? (encendida, y en prueba solo los probadores)
+			'pv'       => class_exists( 'CVD_Pv' ) && ( 'si' === CVD_Pv::mode() || ( 'prueba' === CVD_Pv::mode() && in_array( $u->ID, CVD_Triciclub::testers(), true ) ) ),
 		) );
 	}
 
@@ -538,6 +540,8 @@ final class CVD_Triciclub_Api {
 			'plazas'        => (int) $ch->plazas,
 			'servicios'     => array_values( array_intersect( self::SERVICIOS, explode( ',', (string) $ch->servicios ) ) ),
 			'lot_numero'    => (string) $ch->lot_numero,
+			'chapa'         => (string) ( $ch->chapa ?? '' ), // 5-nov: Pa'llá (taxi)
+			'color'         => (string) ( $ch->color ?? '' ),
 			'lot_vence'     => (string) $ch->lot_vence,
 			'licencia_cat'  => (string) $ch->licencia_cat,
 			'transferencia' => (string) $ch->transferencia,
@@ -596,7 +600,7 @@ final class CVD_Triciclub_Api {
 			$s = array_values( array_intersect( self::SERVICIOS, array_map( 'sanitize_key', $p['servicios'] ) ) );
 			$set['servicios'] = implode( ',', $s ?: array( 'viaje' ) );
 		}
-		foreach ( array( 'numero' => 12, 'descripcion' => 80, 'lot_numero' => 40, 'licencia_cat' => 8, 'transferencia' => 40, 'chapa_o_chasis' => 40 ) as $k => $max ) {
+		foreach ( array( 'numero' => 12, 'descripcion' => 80, 'lot_numero' => 40, 'licencia_cat' => 8, 'transferencia' => 40, 'chapa_o_chasis' => 40, 'chapa' => 16, 'color' => 20 ) as $k => $max ) { // 5-nov: + chapa y color (Pa'llá)
 			if ( isset( $p[ $k ] ) ) { $set[ $k ] = self::txt( $p[ $k ], $max ); }
 		}
 		if ( isset( $p['plazas'] ) ) { $set['plazas'] = $int( $p['plazas'], 0, 12 ); }
