@@ -439,11 +439,20 @@
     var moneyUrl = cvdSales.url + "/" + document.getElementById("cvd-money-order").value + "/status";
     var moneyBody = { status: "delivered", collectionMethod: document.getElementById("cvd-money-method").value, collectedUsd: document.getElementById("cvd-money-usd").value, collectedCup: document.getElementById("cvd-money-cup").value, collectionNote: document.getElementById("cvd-money-note").value, collectionAccount: moneyAccount ? moneyAccount.value : "", collectionReference: moneyReference ? moneyReference.value : "", collectionCardLabel: document.getElementById("cvd-money-card-label").value, collectionCardLast4: document.getElementById("cvd-money-card-last4").value, collectionSaveCard: document.getElementById("cvd-money-save-card").checked, moneyConfirmed: document.getElementById("cvd-money-confirmed").checked, handoverConfirmed: pickup ? document.getElementById("cvd-handover-confirmed").checked : false };
     // 3.14.76 (Ernesto 28-oct): si Core pregunta «¿Lo recibiste hoy?» (entrega de otro día), se contesta y se reenvía.
+    // 3.14.140 (Nana 4-nov, #6086 #6067 #6064 #6077): si cash-day.js no cargó, la pregunta salía como error rojo y el
+    // pedido no se cerraba nunca. Ahora se contesta igual con las ventanas del móvil.
+    function askCashDayPlain(d) {
+      d = d || {};
+      var why = d.delivered_day ? "Este pedido se entregó el " + d.delivered_day + "." : "";
+      if (window.confirm("¿Lo recibiste hoy?\n" + why + "\n\nAceptar = sí, entró hoy · Cancelar = no, entró otro día")) return { cashReceivedToday: "yes", cashReceivedDay: d.today || "" };
+      var day = window.prompt("¿Qué día entró el dinero a la tienda? (AAAA-MM-DD)", d.delivered_day || "");
+      return day === null ? null : { cashReceivedToday: "no", cashReceivedDay: String(day).trim() };
+    }
     try {
       try { await api(moneyUrl, { method: "POST", body: JSON.stringify(moneyBody) }); }
       catch (asked) {
-        if (!window.cvdCashDay || asked.code !== window.cvdCashDay.code) throw asked;
-        var reply = await window.cvdCashDay.ask(asked.data && asked.data.data);
+        if (asked.code !== "cvd_cash_day_question") throw asked;
+        var reply = window.cvdCashDay ? await window.cvdCashDay.ask(asked.data && asked.data.data) : askCashDayPlain(asked.data && asked.data.data);
         if (!reply) { message.className = ""; message.textContent = "No se guardó: falta decir si el dinero entró hoy."; return; }
         await api(moneyUrl, { method: "POST", body: JSON.stringify(Object.assign({}, moneyBody, reply)) });
       }
