@@ -698,9 +698,19 @@ final class CVD_Pv_Api {
 	 * 'cycling' = segundo motor OSRM del VPS con el perfil de bici (/route/v1/cycling → 127.0.0.1:5001): usa parques, calles
 	 * peatonales y atajos, como las apps grandes con su perfil de moto/bici. Si no contesta, la de carro; nunca una recta.
 	 * Apagar: wp option update cvd_pv_ruta_bici no.
+	 * Revisión 7-nov: a veces el perfil de bici da una vuelta enorme (550 m del chofer a la recogida → 5 km por el motor de
+	 * bici, 1 km por el de carro). Si la de bici sale más larga que la de carro, se usa la de carro: siempre la más corta.
 	 */
 	public static function trayecto( string $perfil, float $olat, float $olng, float $dlat, float $dlng ): array {
 		if ( 'cycling' !== $perfil || 'no' === get_option( 'cvd_pv_ruta_bici', 'si' ) ) { return CVD_Triciclub_Precio::trayecto( $olat, $olng, $dlat, $dlng ); }
+		$bici = self::trayecto_bici( $olat, $olng, $dlat, $dlng );
+		if ( 'calles' !== $bici['como'] ) { return $bici; } // ya es la de carro (o nada)
+		$carro = CVD_Triciclub_Precio::trayecto( $olat, $olng, $dlat, $dlng );
+		return 'calles' === $carro['como'] && (int) $carro['metros'] < (int) $bici['metros'] ? $carro : $bici;
+	}
+
+	/** La ruta del motor OSRM de bici (caché 1 h). Si no contesta, la de carro. */
+	private static function trayecto_bici( float $olat, float $olng, float $dlat, float $dlng ): array {
 		$key = 'cvd_pv_rb_' . md5( implode( ',', array_map( static fn( float $x ): string => number_format( $x, 4, '.', '' ), array( $olat, $olng, $dlat, $dlng ) ) ) );
 		$hit = get_transient( $key );
 		if ( is_array( $hit ) ) { return $hit; }

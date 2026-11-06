@@ -331,6 +331,28 @@ pv_ok( count( $mv['viajes'] ) >= 4, 'mis viajes' );
 list( , $se ) = pv_req( 'GET', 'chofer/semana', array(), $P( $d2 ) );
 pv_ok( 1 === $se['viajes'] && $se['total'] === $V['oferta'] + 150, 'semana del chofer' );
 
+// ---------- Ruta de bici más larga que la de carro (revisión 7-nov: en la web, 550 m del chofer a la recogida salían 5 km
+// por el motor de bici, con una vuelta enorme en el mapa). Se usa la más corta de las dos; si la de bici es más corta, la de bici.
+$osrm = static function ( float $bici, float $carro ): callable {
+	return static function ( $pre, $args, $url ) use ( $bici, $carro ) {
+		if ( false === strpos( (string) $url, '/route/v1/' ) ) { return $pre; }
+		$m = false !== strpos( (string) $url, '/cycling/' ) ? $bici : $carro;
+		$geo = array( 'coordinates' => array( array( -82.381, 23.140 ), array( -82.380, 23.141 ), array( -82.379, 23.142 ) ) );
+		return array( 'headers' => array(), 'body' => wp_json_encode( array( 'code' => 'Ok', 'routes' => array( array( 'distance' => $m, 'geometry' => $geo ) ) ) ), 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array(), 'filename' => null );
+	};
+};
+$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '%transient%cvd_pv_rb_%' OR option_name LIKE '%transient%cvd_tc_ruta2_%'" );
+$f = $osrm( 5074, 1074 );
+add_filter( 'pre_http_request', $f, 10, 3 );
+$t = CVD_Pv_Api::trayecto( 'cycling', 23.1447, -82.3787, 23.14031, -82.38105 );
+remove_filter( 'pre_http_request', $f, 10 );
+pv_ok( 1074 === $t['metros'] && 'calles' === $t['como'], 'ruta de bici más larga que la de carro: se usa la de carro (' . $t['metros'] . ' m)' );
+$f = $osrm( 800, 1100 );
+add_filter( 'pre_http_request', $f, 10, 3 );
+$t = CVD_Pv_Api::trayecto( 'cycling', 23.1300, -82.3900, 23.1250, -82.3850 );
+remove_filter( 'pre_http_request', $f, 10 );
+pv_ok( 800 === $t['metros'], 'ruta de bici más corta: se queda la de bici (' . $t['metros'] . ' m)' );
+
 // ---------- Limpieza
 foreach ( array( $d1, $d2, $d3, $d4, $d5 ) as $u ) { $wpdb->delete( CVD_Triciclub_Db::t( 'choferes' ), array( 'user_id' => $u ) ); require_once ABSPATH . 'wp-admin/includes/user.php'; wp_delete_user( $u ); }
 foreach ( array( 'viajes' => 'cliente_id', 'clientes' => 'id' ) as $tb => $col ) { $wpdb->delete( CVD_Triciclub_Db::t( $tb ), array( $col => (int) $cli->id ) ); }

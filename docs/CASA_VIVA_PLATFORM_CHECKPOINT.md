@@ -4,6 +4,8 @@
 
 Rama `feat/palla-transporte` (sin fusionar, sin desplegar). Servidor (D138–D140) + `assets/pv/cliente.js` (`/palla/ir/`) y `assets/pv/chofer.js` (`/palla/chofer/`) con el diseño v2 aprobado. Probado en un WordPress de prueba en el VPS: `pv-flujo.php` 76/76 y recorrido completo cliente ↔ chofer (viaje y envío con foto y código) en Chrome sin pantalla, claro y oscuro. Nace apagado (`cvd_pv = no`). Falta: prueba en el Redmi de Ernesto y subida a la web con su SÍ (pasos en `/root/archivos/palla/informe-construccion-20261105.md`).
 
+Revisión en la web real (2026-11-07, modo prueba, cuentas inventadas): precios D140/D142, viaje completo, Comida, Carga y llamadas viejas bien por HTTPS. Fallo arreglado en la rama: la ruta de bici a veces daba una vuelta enorme (550 m → 5 km, «Llega en 21 min»); ahora triciclo/moto/mensajero usan la más corta de bici o carro (`CVD_Pv_Api::trayecto`, `pv-flujo.php` 113/113). Sin subir. Informe: `/root/archivos/palla/informe-revision-7nov.md`.
+
 ## Activación limitada del panel de fotos
 
 La tienda recibe únicamente los cuatro archivos del editor de fotos, con comprobación de huellas y respaldo. Una opción guardada para revisión pertenece a la editora y al producto. Su publicación requiere una acción separada.
