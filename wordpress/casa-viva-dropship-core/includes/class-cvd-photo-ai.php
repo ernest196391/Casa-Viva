@@ -3,7 +3,10 @@
 defined( 'ABSPATH' ) || exit;
 
 final class CVD_Photo_AI {
-	private const KEYS = array( 'account' => 'ID de cuenta Cloudflare (Workers Free)', 'cloudflare' => 'Token de Workers AI', 'openai' => 'Clave API de OpenAI', 'higgsfield' => 'Clave completa de Open Higgsfield' );
+	private const KEYS = array( 'account' => 'ID de cuenta Cloudflare (Workers Free)', 'cloudflare' => 'Token de Workers AI', 'vps' => 'Clave del servidor de imágenes del VPS (OpenAI con tope común)', 'openai' => 'Clave API de OpenAI', 'higgsfield' => 'Clave completa de Open Higgsfield' );
+	// 6-nov-2026 (Ernesto): imágenes con OpenAI a través del VPS (vivabot scripts/imagen-servidor.mjs → src/imagen-ia.js):
+	// la clave de OpenAI no sale del VPS y el gasto cuenta en el mismo tope que «#imagen» y `cv imagen` (1 USD/día, 10/mes).
+	private const VPS_URL = 'https://179-236-242-212.sslip.io/imagen/panel';
 	private const SCENES = array(
 		'features' => 'Pale warm-grey seamless matte paper, soft diffuse studio light.',
 		'spec' => 'Warm ivory seamless studio backdrop with a subtle sand-colored gradient at the edges, even diffuse light.',
@@ -34,7 +37,37 @@ final class CVD_Photo_AI {
 	}
 
 	public static function providers(): array {
-		return array( 'cloudflare' => (bool) ( self::key( 'cloudflare' ) && preg_match( '/^[a-f0-9]{32}$/i', self::key( 'account' ) ) ), 'openai' => (bool) self::key( 'openai' ), 'higgsfield' => (bool) self::key( 'higgsfield' ) );
+		return array( 'cloudflare' => (bool) ( self::key( 'cloudflare' ) && preg_match( '/^[a-f0-9]{32}$/i', self::key( 'account' ) ) ), 'vps' => (bool) self::key( 'vps' ), 'openai' => (bool) self::key( 'openai' ), 'higgsfield' => (bool) self::key( 'higgsfield' ) );
+	}
+
+	/**
+	 * Imagen con OpenAI a través del VPS (tope común). Sin $refs genera desde texto; con $refs (bytes de 1–2 fotos reales,
+	 * JPG/PNG/WebP de hasta 4 MB) edita a partir de ellas. $opts: calidad (baja|media|alta), tam (1024x1024|1024x1536|
+	 * 1536x1024|auto), modelo (de la lista con precio del VPS), fidelidad ('alta' = respeta más forma, color y etiquetas
+	 * de la foto real). → bytes de la imagen o WP_Error (429 = tope del día, subtope del panel 0,5 USD/día u ocupado).
+	 * Tarda 20–60 s. Para el rediseño del panel (fotos de estudio a partir de la foto del móvil).
+	 */
+	public static function vps_image( string $prompt, array $opts = array(), array $refs = array() ) {
+		$key = self::key( 'vps' );
+		if ( ! $key ) { return self::error( 'Pide al administrador que configure el servidor de imágenes.' ); }
+		$body = array( 'prompt' => $prompt, 'quien' => (string) wp_get_current_user()->user_login );
+		foreach ( array( 'calidad', 'tam', 'modelo', 'fidelidad' ) as $k ) { if ( ! empty( $opts[ $k ] ) ) { $body[ $k ] = (string) $opts[ $k ]; } }
+		foreach ( array_slice( $refs, 0, 2 ) as $bytes ) {
+			$size = is_string( $bytes ) && strlen( $bytes ) <= 4 * MB_IN_BYTES ? @getimagesizefromstring( $bytes ) : false;
+			if ( ! $size || ! in_array( $size['mime'], array( 'image/png', 'image/jpeg', 'image/webp' ), true ) ) { return self::error( 'La foto de base debe ser JPG, PNG o WebP de hasta 4 MB.' ); }
+			$body['refs'][] = array( 'mime' => $size['mime'], 'b64' => base64_encode( $bytes ) );
+		}
+		$url = defined( 'CVD_PHOTO_AI_VPS_URL' ) ? (string) CVD_PHOTO_AI_VPS_URL : self::VPS_URL;
+		$response = wp_safe_remote_post( $url, array( 'timeout' => 150, 'redirection' => 0, 'limit_response_size' => 16 * MB_IN_BYTES, 'headers' => array( 'Content-Type' => 'application/json', 'X-Imagen-Key' => $key ), 'body' => wp_json_encode( $body ) ) );
+		if ( is_wp_error( $response ) ) { return self::error( 'El servidor de imágenes no respondió a tiempo. Espera un minuto antes de repetir.', 502 ); }
+		$status = (int) wp_remote_retrieve_response_code( $response );
+		$data = json_decode( wp_remote_retrieve_body( $response ), true );
+		if ( 200 !== $status || empty( $data['ok'] ) || empty( $data['image_b64'] ) ) {
+			$msg = is_array( $data ) && ! empty( $data['error'] ) ? (string) $data['error'] : 'El servidor de imágenes no hizo la imagen (HTTP ' . $status . ').';
+			return self::error( $msg, in_array( $status, array( 400, 429 ), true ) ? $status : 502 );
+		}
+		$bytes = base64_decode( (string) $data['image_b64'], true );
+		return $bytes ? $bytes : self::error( 'El servidor de imágenes devolvió una imagen vacía.', 502 );
 	}
 
 	public static function settings(): void {
@@ -94,6 +127,10 @@ final class CVD_Photo_AI {
 		set_transient( $guard, 1, 10 );
 		$prompt = $scene . ' Background texture only, edge to edge. The catalog product will be composited afterwards. No objects, props, hardware, lettering, watermark, borders or cast shadows.';
 		$vertical = '1920' === $r['format'];
+		if ( 'vps' === $provider ) {
+			$image = self::vps_image( $prompt, array( 'calidad' => 'media', 'tam' => $vertical ? '1024x1536' : '1024x1024' ) );
+			return is_wp_error( $image ) ? $image : self::preview( $image );
+		}
 		if ( 'higgsfield' === $provider ) { return self::higgsfield( $prompt, $vertical ); }
 		$cf = 'cloudflare' === $provider;
 		if ( $cf ) {
