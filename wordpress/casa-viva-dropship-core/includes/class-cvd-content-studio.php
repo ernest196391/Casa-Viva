@@ -466,7 +466,7 @@ final class CVD_Content_Studio {
 				<button type="button" id="cv-copy-save-prompt" class="cv-btn cv-wide">Descargar textos con la instrucción (.txt)</button></div>
 
 			<div class="cv-sheet" id="cv-ai-sheet" role="dialog" aria-modal="true" aria-labelledby="cv-ai-heading" data-nodirty hidden><div class="cv-sheet-head"><h2 id="cv-ai-heading" tabindex="-1">Fondo con IA</h2><button type="button" class="cv-icon" data-close aria-label="Cerrar"><svg class="cv-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-				<div id="cv-provider-wrap"><label class="cv-label" for="cv-provider">Proveedor</label><select id="cv-provider"><option value="cloudflare">Gratis</option><option value="openai">OpenAI · de pago</option><option value="higgsfield">Higgsfield · de pago</option></select></div>
+				<div id="cv-provider-wrap"><label class="cv-label" for="cv-provider">Proveedor</label><select id="cv-provider"><option value="cloudflare">Gratis</option><option value="vps">OpenAI · tope común</option><option value="openai">OpenAI · de pago</option><option value="higgsfield">Higgsfield · de pago</option></select></div>
 				<label class="cv-switch"><input type="checkbox" id="cv-protect-whole"><span>Foto entera, sin recortar</span></label>
 				<button type="button" id="cv-ai-create" class="cv-btn cv-primary cv-wide">Crear opción</button></div>
 		</form>
