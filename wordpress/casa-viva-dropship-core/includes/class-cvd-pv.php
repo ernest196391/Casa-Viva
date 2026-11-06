@@ -117,6 +117,9 @@ final class CVD_Pv {
 			'telefono' => preg_replace( '/\D+/', '', (string) get_option( 'cvd_tc_telefono', CVD_Triciclub::TELEFONO ) ),
 			'clases'   => CVD_Pv_Tarifa::publicas(),
 			'tamanos'  => CVD_Pv_Tarifa::TAMANOS,
+			'ayudante'   => CVD_Pv_Tarifa::ayudante(),    // v3 Carga: precio fijo del ayudante
+			'comidaTope' => CVD_Pv_Tarifa::comida_tope(), // v3 Comida: lo más que adelanta el mensajero
+			'pesos'      => CVD_Pv_Tarifa::PESOS,
 		);
 	}
 

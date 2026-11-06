@@ -1,5 +1,7 @@
-/* Pa'llá transporte (5-nov-2026) · app del CLIENTE en /palla/ir/. Pantallas del diseño v2 aprobado (prototipo/app.js) con
- * los datos reales de la API casa-viva/v1/pv/… Sin librerías: window.PV (servidor) + window.PMapa (mapa.js) + window.PU
+/* Pa'llá transporte (5-nov-2026) · app del CLIENTE en /palla/ir/. Pantallas del diseño v3 aprobado (6-nov, D142:
+ * diseno-v3/prototipo/app.js): inicio con 4 servicios (Viajar · Paquete · Comida · Carga); Viajar enseña los 7 vehículos con
+ * su precio y el precio se toca para subirlo o bajarlo (pista B); la recogida es opcional («Desde…»). Paquete, Comida y Carga
+ * usan la misma hoja de precio. Con los datos reales de la API casa-viva/v1/pv/… Sin librerías: window.PV (servidor) + window.PMapa (mapa.js) + window.PU
  * (comun.js). Token del cliente en localStorage «pv.k» → cabecera X-TC-Token (también vale #k=… en la URL).
  * En vivo: canal ntfy del viaje (PU.enVivo) + pregunta a la web cada 4 s buscando y cada 15 s en viaje (30 s oculta).
  * La primera pantalla sale al momento: el mapa (o su plano de reserva) llega después. Sin red, el pedido se guarda y sale
@@ -12,7 +14,10 @@
 	var pant = $('#pant'), marco = $('#marco'), mapaEl = $('#mapa');
 	var TEMA = document.documentElement.dataset.tema;
 	var CLASES = C.clases || {};
-	var PALABRA = { tric: 'triciclo', taxi: 'taxi', moto: 'moto', mens: 'mensajero' };
+	var PALABRA = { tric: 'triciclo', taxi: 'taxi', moto: 'moto', mens: 'mensajero', viajar: 'vehículo' };
+	var PESOS = { poco: ['Hasta 50 kg', 'cajas, sillas'], medio: ['50–150 kg', 'nevera, cama'], mucho: ['150–300 kg', 'de todo un poco'] };
+	var ETAPAS = { paquete: ['Recogido', 'En camino', 'Entregado'], comida: ['Pagada', 'En camino', 'Entregada'], carga: ['Cargado', 'En camino', 'Entregado'] };
+	var AYUDANTE = +C.ayudante || 500, TOPE_COMIDA = +C.comidaTope || 5000; // los manda el servidor (opciones cvd_pv_ayudante_cup / cvd_pv_comida_tope)
 	var ICO_G = { tric: 'triciclo', taxi: 'coche', moto: 'moto', mens: 'paquete' };
 	var COLOR_G = { tric: 'tric', taxi: 'taxi', moto: 'taxi', mens: 'mens' };
 	var VEL = { taxi: 400, tric: 250, moto: 400, mens: 380 }; // metros por minuto en la ciudad (como el servidor)
@@ -34,10 +39,12 @@
 	function qs(o) { return Object.keys(o).filter(function (k) { return o[k] != null && o[k] !== ''; }).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(o[k]); }).join('&'); }
 
 	// ---------- Estado (lo del camino se guarda en el móvil) ----------
-	var S = { svc: 'tric', grupo: 'tric', clase: '', origen: null, destino: null, nota: '', precio: 0, primera: false, pago: 'efectivo', para: 'destino', envio: { que: '', tam: 'mano', recibe: '', tel: '', cobrar: false, cobrarCup: 0, nota: '' } };
-	(function () { var g = LS.json('s'); if (g) { Object.keys(S).forEach(function (k) { if (g[k] != null) { S[k] = g[k]; } }); } S.primera = false; })();
+	// modo (v3): viajar | paquete | comida | carga. envio: lo de Paquete, Comida (sitio, adelanto, cobrar, quién recibe) y Carga (peso, ayudante).
+	var ENVIO0 = { que: '', tam: 'mano', recibe: '', tel: '', cobrar: false, cobrarCup: 0, nota: '', recoge: '', paga: false, pagaCup: 0, otro: false, peso: 'medio', ayuda: false };
+	var S = { svc: 'tric', modo: 'viajar', grupo: 'tric', clase: '', origen: null, destino: null, nota: '', precio: 0, primera: false, pago: 'efectivo', para: 'destino', envio: ENVIO0 };
+	(function () { var g = LS.json('s'); if (g) { Object.keys(S).forEach(function (k) { if (g[k] != null) { S[k] = g[k]; } }); } S.primera = false; Object.keys(ENVIO0).forEach(function (k) { if (S.envio[k] == null) { S.envio[k] = ENVIO0[k]; } }); })();
 	S.yo = LS.json('yo'); S.recientes = LS.json('recientes') || []; S.viaje = LS.json('viaje'); S.cot = null; S.estrellas = 0; S.ocultas = {};
-	function guardar() { LS.set('s', JSON.stringify({ svc: S.svc, grupo: S.grupo, clase: S.clase, origen: S.origen, destino: S.destino, nota: S.nota, precio: S.precio, pago: S.pago, para: S.para, envio: S.envio })); }
+	function guardar() { LS.set('s', JSON.stringify({ svc: S.svc, modo: S.modo, grupo: S.grupo, clase: S.clase, origen: S.origen, destino: S.destino, nota: S.nota, precio: S.precio, pago: S.pago, para: S.para, envio: S.envio })); }
 	function ponerViaje(v) { S.viaje = v; LS.set('viaje', v ? JSON.stringify(v) : null); }
 
 	// ---------- Utilidades ----------
@@ -50,6 +57,10 @@
 	function imgDe(clase) { return (CLASES[clase] && CLASES[clase].img) || 'tric-electrico'; }
 	function nombreDe(clase) { return (CLASES[clase] && CLASES[clase].nombre) || 'Pa\'llá'; }
 	function esEnvio(v) { return v && v.clase === 'mensajero'; }
+	function servDe(v) { return v.servicio || (esEnvio(v) ? 'paquete' : 'viaje'); }
+	// v3: el nombre que ve el cliente de su pedido (los envíos, por su servicio; la comida, «Moto con caja térmica»).
+	function nombreServ(v) { var s = servDe(v); return s === 'comida' ? 'Moto con caja térmica' : (s === 'carga' ? 'Triciclo de carga' : (s === 'paquete' ? (v.envio && v.envio.tam === 'grande' ? 'Triciclo de carga' : 'Mensajero') : nombreDe(v.clase))); }
+	function imgServ(v) { var s = servDe(v); return s === 'comida' ? 'comida' : (s === 'carga' || (v.envio && v.envio.tam === 'grande') ? 'tric-carga' : imgDe(v.clase)); }
 	function arriba10(x) { return Math.ceil(x / 10) * 10; }
 	function dist(a, b) { var x = (b[0] - a[0]) * Math.cos((a[1] + b[1]) * Math.PI / 360), y = b[1] - a[1]; return Math.sqrt(x * x + y * y) * 111320; }
 	function largo(c) { var l = 0; for (var i = 1; i < c.length; i++) { l += dist(c[i - 1], c[i]); } return l; }
@@ -159,38 +170,43 @@
 	var cercanosCache = [];
 	SCR.inicio = {
 		mapa: function () { return { ver: [ptoOrigen()], zoom: 15.4, pins: S.origen ? [['yo', ptoOrigen()]] : [], conducir: cercanosCache }; },
+		// v3: arriba, desde dónde sales (lo pone el GPS; se toca para cambiarlo) · 4 servicios grandes con su vehículo 3D ·
+		// debajo, los 2 últimos sitios (desde uno, 2 toques: sitio → Pedir).
 		html: function () {
-			var serv = function (s, n, i) { return '<button type="button" class="pa-serv" data-s="' + s + '" aria-pressed="' + (S.svc === s) + '">' + ico(i, 'p-ico--20') + n + '</button>'; };
-			var mens = S.svc === 'mens';
-			var chip = function (k, i, n) { return '<button type="button" class="p-chip" data-lugar="' + k + '">' + ico(i, 'p-ico--16') + n + '</button>'; };
-			var rec = (S.recientes || []).slice(0, 3).map(function (x, i) { return filaLugar('data-rec="' + i + '"', 'reloj', esc(corto(x.texto)), esc(x.texto.indexOf(',') > 0 ? x.texto.slice(x.texto.indexOf(',') + 1).trim() : '')); }).join('');
+			var s4 = function (modo, n, sub, imgs) {
+				return '<button type="button" class="pa-s4" data-modo="' + modo + '"><b>' + n + '</b><span>' + sub + '</span>'
+					+ imgs.map(function (i, k) { return '<img class="pa-s4__img pa-s4__img--' + (imgs.length > 1 ? k + 1 : 0) + '" src="' + U.veh(i) + '" alt="">'; }).join('') + '</button>';
+			};
+			var rec = (S.recientes || []).slice(0, 2).map(function (x, i) { return filaLugar('data-rec="' + i + '"', 'reloj', esc(corto(x.texto)), esc(x.texto.indexOf(',') > 0 ? x.texto.slice(x.texto.indexOf(',') + 1).trim() : '')); }).join('');
 			var activo = S.viaje && ACTIVOS.indexOf(S.viaje.estado) >= 0;
-			return '<div class="pa-arriba"><a class="p-btn p-btn--redondo" href="#perfil" aria-label="Menú">' + ico('menu') + '</a></div>'
-				+ '<section class="pa-hoja" aria-label="Pedir"><div class="p-hoja__asa"></div>'
-				+ (activo ? '<a class="p-aviso p-aviso--bien" href="#' + pantallaDe(S.viaje) + '" style="text-decoration:none;margin:0 0 12px">' + ico('ruta') + '<span>Tienes un ' + PALABRA[grupoDe(S.viaje.clase)] + ' en marcha. Ver.</span></a>' : '')
-				+ '<div class="pa-servicios">' + serv('taxi', 'Taxi', 'coche') + serv('tric', 'Triciclo', 'triciclo') + serv('mens', 'Mensajero', 'paquete') + '</div>'
-				+ '<a class="pa-buscar" href="#' + (mens ? 'envio' : 'destino') + '" id="buscar"><i>' + ico('buscar', 'p-ico--20') + '</i><div><b>' + (mens ? '¿Qué mandamos?' : '¿A dónde vamos?') + '</b><span id="desde">' + (S.origen ? 'Desde ' + esc(corto(S.origen.texto)) : 'Buscando dónde estás…') + '</span></div></a>'
-				+ '<div class="pa-fila-chips">' + chip('casa', 'casa', 'Casa') + chip('trabajo', 'trabajo', 'Trabajo') + '</div>'
-				+ rec
+			return '<div class="pa-arriba"><a class="p-btn p-btn--redondo" href="#perfil" aria-label="Menú">' + ico('menu') + '</a>'
+				+ '<button type="button" class="pa-pastilla pa-desde" id="desde"><span class="pm-pin pm-pin--yo"></span><span id="desde-t">' + (S.origen ? esc(corto(S.origen.texto)) : 'Buscando dónde estás…') + '</span></button></div>'
+				+ '<section class="pa-hoja pa-hoja--inicio" aria-label="¿Qué necesitas?"><div class="p-hoja__asa"></div>'
+				+ (activo ? '<a class="p-aviso p-aviso--bien" href="#' + pantallaDe(S.viaje) + '" style="text-decoration:none;margin:0 0 12px">' + ico('ruta') + '<span>Tienes un pedido en marcha. Ver.</span></a>' : '')
+				+ '<nav class="pa-svc4" aria-label="Servicios">'
+				+ s4('viajar', 'Viajar', 'Taxi, triciclo, moto', ['taxi-basico', 'tric-electrico'])
+				+ s4('paquete', 'Paquete', 'Mensajero', ['mensajero'])
+				+ s4('comida', 'Comida', 'De donde sea', ['comida'])
+				+ s4('carga', 'Carga', 'Hasta 300 kg', ['tric-carga'])
+				+ '</nav>'
+				+ (rec ? '<div class="pa-recientes">' + rec + '</div>' : '')
 				+ '</section>';
 		},
 		init: function (r) {
-			$$('.pa-serv', r).forEach(function (b) { b.onclick = function () { S.svc = b.dataset.s; if (S.svc !== 'mens') { S.grupo = S.svc; S.clase = ''; } S.precio = 0; guardar(); mostrar(true); pintarCercanos(); }; });
-			$('#buscar', r).addEventListener('click', function () { S.para = 'destino'; guardar(); });
-			var siguiente = function () { ir(S.svc === 'mens' ? 'envio' : (S.origen ? 'recogida' : 'destino')); };
-			$$('[data-lugar]', r).forEach(function (b) {
+			$$('[data-modo]', r).forEach(function (b) {
 				b.onclick = function () {
-					var l = ((S.yo && S.yo.lugares) || {})[b.dataset.lugar];
-					if (!l) { S.para = b.dataset.lugar; guardar(); ir('destino'); return; }
-					S.destino = { texto: l.texto, lat: l.lat, lng: l.lng }; S.precio = 0; guardar(); siguiente();
+					var m = b.dataset.modo; if (m !== S.modo) { S.envio.que = ''; } S.modo = m; S.precio = 0; S.cot = null;
+					if (m === 'viajar') { S.svc = 'viajar'; S.para = 'destino'; guardar(); ir('destino'); return; }
+					S.svc = 'mens'; guardar(); ir(m === 'paquete' ? 'envio' : m);
 				};
 			});
-			$$('[data-rec]', r).forEach(function (b) { b.onclick = function () { var x = S.recientes[+b.dataset.rec]; S.destino = { texto: x.texto, lat: x.lat, lng: x.lng }; S.precio = 0; guardar(); siguiente(); }; });
+			$('#desde', r).onclick = function () { S.para = 'origen'; guardar(); ir('destino'); };
+			$$('[data-rec]', r).forEach(function (b) { b.onclick = function () { var x = S.recientes[+b.dataset.rec]; S.modo = 'viajar'; S.svc = 'viajar'; S.destino = { texto: x.texto, lat: x.lat, lng: x.lng }; S.precio = 0; S.cot = null; guardar(); ir(S.origen ? 'viajar' : 'destino'); }; });
 			if (!S.origen || Date.now() - (S.origenT || 0) > 600000) {
 				gps().then(function (p) {
-					if (!p) { var d = $('#desde'); if (d && !S.origen) { d.textContent = 'Toca para decir dónde estás'; } return; }
+					if (!p) { var d = $('#desde-t'); if (d && !S.origen) { d.textContent = 'Toca para decir dónde estás'; } return; }
 					S.origenT = Date.now();
-					return lugarDe(p).then(function (l) { S.origen = l; guardar(); var d = $('#desde'); if (d && actual === 'inicio') { d.textContent = 'Desde ' + corto(l.texto); escenaActual(); pintarCercanos(); } });
+					return lugarDe(p).then(function (l) { S.origen = l; S.cot = null; guardar(); var d = $('#desde-t'); if (d && actual === 'inicio') { d.textContent = corto(l.texto); escenaActual(); pintarCercanos(); } });
 				});
 			}
 			pintarCercanos();
@@ -198,8 +214,7 @@
 	};
 	function pintarCercanos() {
 		if (!S.origen) { return; }
-		var g = S.svc === 'mens' ? 'mens' : S.svc;
-		api('cercanos?' + qs({ lat: S.origen.lat, lng: S.origen.lng, grupo: g })).then(function (x) {
+		api('cercanos?' + qs({ lat: S.origen.lat, lng: S.origen.lng })).then(function (x) {
 			var pts = (x.data && x.data.puntos) || [];
 			cercanosCache = pts.map(function (p, i) { var a = Math.random() * Math.PI * 2; return ['c' + i, U.veh(p.img, 'arriba'), [[p.lng, p.lat], [p.lng + Math.cos(a) * 0.0002, p.lat + Math.sin(a) * 0.0002]], 0]; });
 			if (actual === 'inicio') { escenaActual(); }
@@ -223,17 +238,18 @@
 	function trasElegir(para) {
 		var c = campoDe(para);
 		if (c === 'casa' || c === 'trabajo') { ir('perfil'); return; }
-		if (para === 'envio-o' || para === 'envio-d') { ir('envio'); return; }
-		if (c === 'origen' && !S.destino) { S.para = 'destino'; guardar(); mostrar(true); return; }
+		if (para === 'envio-o' || para === 'envio-d') { ir(pantallaEnvio()); return; }
+		if (c === 'origen' && !S.destino) { ir('inicio'); return; } // «Desde…» del inicio: cambia el origen y vuelve
 		if (!S.origen) { S.para = 'origen'; guardar(); mostrar(true); return; }
-		ir('recogida');
+		ir('viajar'); // v3: la recogida ya no es un paso (el GPS pone el origen; «Desde…» para cambiarlo)
 	}
+	function pantallaEnvio() { return S.modo === 'comida' || S.modo === 'carga' ? S.modo : 'envio'; }
 	SCR.destino = {
 		html: function () {
 			var c = campoDe(S.para), dos = c === 'origen' || c === 'destino';
 			var titulo = { origen: '¿Dónde te recogemos?', destino: S.para === 'envio-d' ? '¿A dónde lo llevamos?' : '¿A dónde vamos?', casa: 'Tu casa', trabajo: 'Tu trabajo' }[c];
 			if (S.para === 'envio-o') { titulo = '¿Dónde lo recogemos?'; }
-			var atras = S.para.indexOf('envio') === 0 ? 'envio' : (c === 'casa' || c === 'trabajo' ? 'perfil' : 'inicio');
+			var atras = S.para.indexOf('envio') === 0 ? pantallaEnvio() : (c === 'casa' || c === 'trabajo' ? 'perfil' : (c === 'origen' && S.destino && S.modo === 'viajar' ? 'viajar' : 'inicio'));
 			var campo = function (id, val, aria, foco) { return '<label class="p-campo' + (foco ? ' is-foco' : '') + '"><input id="' + id + '" value="' + esc(val) + '" aria-label="' + aria + '" autocomplete="off" enterkeyhint="search"><button type="button" class="pa-volver" style="width:32px;height:32px" data-borrar="' + id + '" aria-label="Borrar">' + ico('cerrar', 'p-ico--16') + '</button></label>'; };
 			return '<div class="pa-llena"><div class="pa-cab">' + volver(atras) + '<h1>' + titulo + '</h1></div>'
 				+ '<div class="pa-cuerpo" style="gap:4px">'
@@ -341,17 +357,17 @@
 		mapa: function () { return { ver: [ptoOrigen()], zoom: 17, arriba: 0, listo: true }; },
 		html: function () {
 			if (!S.origen || !S.destino) { return ''; }
-			return '<div class="pa-arriba">' + volverR('destino') + '<span class="pa-pastilla">A ' + esc(corto(S.destino.texto)) + '</span></div>'
+			return '<div class="pa-arriba">' + volverR('viajar') + '<span class="pa-pastilla">Mueve el mapa</span></div>'
 				+ pinCentro(150)
 				+ '<section class="pa-hoja"><div class="p-hoja__asa"></div><p class="p-h2" style="margin:0">¿Te recogemos aquí?</p>'
 				+ '<p class="p-peq" style="margin:2px 0 14px" id="dir">' + esc(S.origen.texto) + '</p>'
 				+ '<label class="p-campo" style="margin-bottom:12px">' + ico('nota', 'p-ico--20') + '<input id="nota" maxlength="200" value="' + esc(S.nota) + '" placeholder="Nota para el chofer" aria-label="Nota para el chofer"></label>'
-				+ '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="ok">Confirmar recogida</button></section>';
+				+ '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="ok">Recoger aquí</button></section>';
 		},
 		init: function (r) {
 			if (!S.origen || !S.destino) { S.para = S.origen ? 'destino' : 'origen'; ir('destino'); return; }
 			$('#nota', r).addEventListener('input', function () { S.nota = this.value; guardar(); });
-			$('#ok', r).onclick = function () { S.nota = $('#nota', r).value.trim(); guardar(); ir('tipo'); };
+			$('#ok', r).onclick = function () { S.nota = $('#nota', r).value.trim(); guardar(); ir('viajar'); };
 		},
 		listo: function (r) {
 			escucharCentro(function (l) {
@@ -364,26 +380,34 @@
 	};
 
 	// ---------- Tipo y precio ----------
-	function claveCot(g, tam) { return [g, tam || '', S.origen && S.origen.lat, S.origen && S.origen.lng, S.destino && S.destino.lat, S.destino && S.destino.lng].join('|'); }
-	function cotVale(g, tam) { return S.cot && S.cot.k === claveCot(g, tam) && S.cot.vence * 1000 > U.ahora() + 30000; }
-	function cotizar(g, tam) {
-		if (cotVale(g, tam)) { return Promise.resolve(S.cot); }
-		var k = claveCot(g, tam);
-		return api('cotizar?' + qs({ grupo: g, olat: S.origen.lat, olng: S.origen.lng, dlat: S.destino.lat, dlng: S.destino.lng, tam: tam || '' })).then(function (x) {
+	// m = { grupo: 'viajar' | 'mens', tam, servicio: paquete|comida|carga, ayudante: 0|1 } (v3; las cotizaciones se guardan por clave)
+	function claveCot(m) { return [m.grupo, m.tam || '', m.servicio || '', m.ayudante ? 1 : 0, S.origen && S.origen.lat, S.origen && S.origen.lng, S.destino && S.destino.lat, S.destino && S.destino.lng].join('|'); }
+	function cotVale(m) { return S.cot && S.cot.k === claveCot(m) && S.cot.vence * 1000 > U.ahora() + 30000; }
+	function cotizar(m) {
+		if (cotVale(m)) { return Promise.resolve(S.cot); }
+		var k = claveCot(m);
+		return api('cotizar?' + qs({ grupo: m.grupo, olat: S.origen.lat, olng: S.origen.lng, dlat: S.destino.lat, dlng: S.destino.lng, tam: m.tam || '', servicio: m.servicio || '', ayudante: m.ayudante ? 1 : '' })).then(function (x) {
 			if (!x.data.ok) { return { error: x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No se pudo calcular el precio.') }; }
 			x.data.k = k; S.cot = x.data; return S.cot;
 		});
 	}
 	function claseCot() { var l = (S.cot && S.cot.clases) || []; return l.filter(function (c) { return c.clase === S.clase; })[0] || l[0] || null; }
-	// Ruta SIEMPRE por calles (la calcula el servidor). Si aún no llegó, no se dibuja ninguna línea (nunca una recta):
-	// se piden las calles a nuestro motor de rutas y la pantalla se repinta al llegar.
+	// Ruta SIEMPRE por calles (la calcula el servidor). En Viajar cada clase tiene la suya (taxi por calles de carro, el
+	// resto por el camino corto de bici: `lineas`). Si aún no llegó, no se dibuja ninguna línea (nunca una recta): se piden
+	// las calles a nuestro motor de rutas y la pantalla se repinta al llegar.
 	function rutaCot() {
-		var c = S.cot && U.lineaLonLat(S.cot.linea);
-		if (!c && S.cot && S.origen && S.destino && !S.cot.pidiendoRuta) {
-			S.cot.pidiendoRuta = true;
+		var q = claseCot(), bici = q ? q.perfil !== 'driving' : true;
+		var lin = S.cot && (S.cot.lineas ? S.cot.lineas[bici ? 'cycling' : 'driving'] : S.cot.linea);
+		var c = U.lineaLonLat(lin);
+		var marca = bici ? 'pidiendoB' : 'pidiendoC';
+		if (!c && S.cot && S.origen && S.destino && !S.cot[marca]) {
+			S.cot[marca] = true;
 			var cot = S.cot;
-			U.ruta([S.origen.lng, S.origen.lat], [S.destino.lng, S.destino.lat], S.grupo !== 'taxi').then(function (r) {
-				if (r && cot === S.cot) { cot.linea = r.map(function (p) { return [p[1], p[0]]; }); if (actual === 'tipo' || actual === 'precio' || actual === 'envio-precio') { escenaActual(); } }
+			U.ruta([S.origen.lng, S.origen.lat], [S.destino.lng, S.destino.lat], bici).then(function (r) {
+				if (!r || cot !== S.cot) { return; }
+				var l = r.map(function (p) { return [p[1], p[0]]; });
+				if (cot.lineas) { cot.lineas[bici ? 'cycling' : 'driving'] = l; } else { cot.linea = l; }
+				if (actual === 'viajar' || actual === 'envio-precio') { escenaActual(); }
 			});
 		}
 		return c;
@@ -391,57 +415,107 @@
 	function sinRuta(etq) { return { ver: [ptoOrigen(), [S.destino.lng, S.destino.lat]], pins: [['origen', ptoOrigen()], ['destino', [S.destino.lng, S.destino.lat], etq || '']] }; }
 	function precioDe(q) { var p = S.precio || q.justo; return Math.min(q.max, Math.max(q.min, p)); }
 
-	SCR.tipo = {
+	// =====================================================================================
+	// v3: la línea «precio · pago · llega» + la pista B (se toca el precio y ahí mismo salen − / +) + el botón amarillo.
+	// cfg = { q (la clase cotizada: justo, min, max), llega(), boton(p), alPintar(p), alPedir() }. El precio va de 10 en 10
+	// entre min y max (los da el servidor: −20 %…+50 %, nunca bajo el mínimo); el botón cambia a la vez.
+	// =====================================================================================
+	function difTxt(p, j) { return p === j ? 'Precio justo' : (p > j ? '+' : '−') + Math.round(Math.abs(p - j) / j * 100) + ' % · justo ' + miles(j); }
+	function bloquePrecio(el, cfg) {
+		var abierto = false;
+		function pintar() {
+			var q = cfg.q, p = precioDe(q), j = q.justo, h;
+			if (abierto) {
+				h = '<div class="pa-linea is-edita">'
+					+ '<button type="button" class="p-btn p-btn--icono pa-pm" id="menos" aria-label="Bajar 10 CUP"' + (p <= q.min ? ' disabled' : '') + '>' + ico('menos') + '</button>'
+					+ '<button type="button" class="pa-edita-n" id="listo-pr" aria-live="polite" aria-label="Listo"><b>' + cupG(p) + '</b><span>' + difTxt(p, j) + '</span></button>'
+					+ '<button type="button" class="p-btn p-btn--icono pa-pm" id="mas" aria-label="Subir 10 CUP"' + (p >= q.max ? ' disabled' : '') + '>' + ico('mas') + '</button></div>';
+			} else {
+				var etq = p === j ? 'Precio justo' : 'Tu oferta · ' + (p > j ? '+' : '−') + Math.round(Math.abs(p - j) / j * 100) + ' %';
+				h = '<div class="pa-linea">'
+					+ '<button type="button" class="pa-celda pa-celda--pr is-toca" id="pr" aria-label="' + cup(p) + '. Toca para ofrecer otro precio"><b>' + cupG(p) + '</b><span>' + etq + ico('mas-menos', 'pa-mm') + '</span></button>'
+					+ '<button type="button" class="pa-celda" id="pago"><b>' + nombrePago() + '</b><span>Pago' + ico('abajo', 'pa-mm') + '</span></button>'
+					+ '<div class="pa-celda"><b>' + cfg.llega() + '</b><span>Llega</span></div></div>';
+			}
+			el.innerHTML = h + (S.cot && S.cot.noche ? '<p class="p-aviso" style="justify-content:center;margin:-4px 0 8px">' + ico('luna') + 'Tarifa de noche</p>' : '')
+				+ '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="pedir">' + cfg.boton(p) + '</button>';
+			var x;
+			if ((x = $('#pr', el))) { x.onclick = function () { abierto = true; pintar(); }; }
+			if ((x = $('#listo-pr', el))) { x.onclick = function () { abierto = false; pintar(); }; }
+			if ((x = $('#menos', el))) { x.onclick = function () { poner(precioDe(cfg.q) - 10); }; }
+			if ((x = $('#mas', el))) { x.onclick = function () { poner(precioDe(cfg.q) + 10); }; }
+			if ((x = $('#pago', el))) { x.onclick = function () { hojaPago(pintar); }; }
+			$('#pedir', el).onclick = function () { this.disabled = true; cfg.alPedir(precioDe(cfg.q)); };
+			if (cfg.alPintar) { cfg.alPintar(p); }
+		}
+		function poner(v) { S.precio = Math.min(cfg.q.max, Math.max(cfg.q.min, v)); guardar(); pintar(); }
+		pintar();
+		// La primera vez, el precio «respira» una vez para que se note que se puede tocar.
+		if (!LS.get('pista')) { T(function () { var c = $('#pr', el); if (c) { c.classList.add('is-late'); LS.set('pista', '1'); } }, 900); }
+		return { pintar: pintar, cerrar: function () { abierto = false; } };
+	}
+
+	// ---------- Viajar: los 7 vehículos 3D con su precio (de más barato a más caro), como La Nave ----------
+	SCR.viajar = {
 		mapa: function () {
-			var c = rutaCot(), q = claseCot();
-			if (!c) { return sinRuta(esc(corto(S.destino.texto)) + (q ? ' · ' + q.minutos + ' min' : '')); }
-			return { ruta: c, ver: c, pins: [['origen', c[0]], ['destino', c[c.length - 1], esc(corto(S.destino.texto)) + (q ? ' · ' + q.minutos + ' min' : '')]] };
+			var c = rutaCot(), q = claseCot(), et = esc(corto(S.destino.texto)) + (q ? ' · ' + q.minutos + ' min' : '');
+			if (!c) { return sinRuta(et); }
+			return { ruta: c, ver: c, arriba: 60, pins: [['origen', c[0]], ['destino', c[c.length - 1], et]] };
 		},
 		html: function () {
-			var g = S.grupo === 'taxi' || S.grupo === 'moto' ? S.grupo : 'tric';
-			var pest = function (k, n) { return '<button type="button" aria-pressed="' + (g === k) + '" data-g="' + k + '">' + n + '</button>'; };
-			return '<div class="pa-arriba">' + volverR('recogida') + '</div>'
-				+ '<section class="pa-hoja"><div class="p-hoja__asa"></div><div class="p-pest">' + pest('tric', 'Triciclo') + pest('taxi', 'Taxi') + pest('moto', 'Moto') + '</div>'
-				+ '<div class="pa-tipos" id="tipos">' + esqueleto() + esqueleto() + '</div>'
-				+ '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="elegir" disabled>Elegir</button></section>';
+			if (!S.origen || !S.destino) { return ''; }
+			return '<div class="pa-arriba">' + volverR('destino') + '</div>'
+				+ '<section class="pa-hoja pa-hoja--viajar"><div class="p-hoja__asa"></div>'
+				+ '<div class="pa-od2"><a href="#recogida"><span class="pm-pin pm-pin--yo"></span><span>Desde ' + esc(corto(S.origen.texto)) + '</span></a><a href="#destino" id="a-dest"><span class="pm-pin pm-pin--destino"></span><b>' + esc(corto(S.destino.texto)) + '</b></a></div>'
+				+ '<div class="pa-carr" role="listbox" aria-label="Vehículos" id="carr">' + esqueleto() + '</div>'
+				+ '<p class="pa-resumen-l" id="res"></p>'
+				+ '<div id="bloque"></div></section>';
 		},
 		init: function (r) {
-			if (!S.origen || !S.destino) { ir('destino'); return; }
-			var g = S.grupo === 'taxi' || S.grupo === 'moto' ? S.grupo : 'tric';
-			$$('[data-g]', r).forEach(function (b) { b.onclick = function () { S.grupo = b.dataset.g; S.svc = S.grupo === 'taxi' ? 'taxi' : 'tric'; S.clase = ''; S.precio = 0; guardar(); mostrar(true); }; });
-			var pintar = function () {
-				var l = S.cot.clases;
-				if (!l.some(function (c) { return c.clase === S.clase; })) { S.clase = (l.filter(function (c) { return c.libres; })[0] || l[0]).clase; }
-				$('#tipos', r).innerHTML = l.map(function (c) {
+			if (!S.origen || !S.destino) { S.para = S.origen ? 'destino' : 'origen'; guardar(); ir('destino'); return; }
+			S.modo = 'viajar'; S.svc = 'viajar'; guardar();
+			$('#a-dest', r).onclick = function () { S.para = 'destino'; guardar(); };
+			cotizar({ grupo: 'viajar' }).then(function (cq) {
+				if (actual !== 'viajar') { return; }
+				if (cq.error) { $('#carr', r).innerHTML = '<p class="p-aviso p-aviso--error">' + ico('alerta') + esc(cq.error) + '</p>'; return; }
+				var l = cq.clases;
+				// Sale marcado el último vehículo que usó el cliente (1.ª vez: Triciclo eléctrico), o el que ya tocó.
+				if (!l.some(function (c) { return c.clase === S.clase; })) { S.clase = cq.ultima || 'tric_electrico'; S.precio = 0; guardar(); }
+				var carr = $('#carr', r);
+				carr.innerHTML = l.map(function (c) {
 					var k = CLASES[c.clase] || {};
-					return '<button type="button" class="pa-tipo" data-t="' + c.clase + '" aria-pressed="' + (S.clase === c.clase) + '"><img src="' + U.veh(k.img) + '" alt="" width="72" height="41"><span><b>' + esc(k.nombre) + '</b><span>' + ico(c.clase === 'tric_carga' ? 'caja' : 'usuario', 'p-ico--16') + esc(k.plazas) + ' · ' + (c.llega != null ? c.llega + ' min' : 'nadie cerca') + '</span></span><span class="pr">' + cupG(c.justo) + '</span></button>';
+					return '<button type="button" class="pa-v' + (c.llega == null ? ' is-nadie' : '') + '" role="option" data-t="' + c.clase + '" aria-selected="' + (S.clase === c.clase) + '">'
+						+ '<img src="' + U.veh(k.img) + '" alt="" width="100" height="60"><b>' + esc(k.nombre) + '</b><span>' + miles(c.justo) + '</span></button>';
 				}).join('');
-				$('#elegir', r).disabled = false; $('#elegir', r).textContent = 'Elegir ' + nombreDe(S.clase);
-				$$('[data-t]', r).forEach(function (b) { b.onclick = function () { S.clase = b.dataset.t; S.precio = 0; guardar(); $$('[data-t]', r).forEach(function (x) { x.setAttribute('aria-pressed', x === b); }); $('#elegir', r).textContent = 'Elegir ' + nombreDe(S.clase); }; });
+				var cfg = {
+					q: claseCot(),
+					llega: function () { var q = claseCot(); return q.llega == null ? '—' : q.llega + ' min'; },
+					boton: function (p) { return 'Pedir ' + esc(nombreDe(S.clase)) + ' · ' + cup(p); },
+					alPintar: function () { var q = claseCot(), k = CLASES[q.clase] || {}; $('#res', r).textContent = (k.largo || k.nombre) + (k.plazas ? ' · ' + k.plazas + (/kg/.test(k.plazas) ? '' : (k.plazas === '1' ? ' plaza' : ' plazas')) : '') + ' · ' + q.minutos + ' min de viaje' + (q.llega == null ? ' · nadie cerca ahora' : ''); },
+					alPedir: function (p) {
+						var q = claseCot();
+						pedir({ grupo: 'viajar', nombre: nombreDe(q.clase) }, { cid: cid(), firma: q.firma, precio: p, primera: 0, forma_pago: S.pago, origen_texto: S.origen.texto, destino_texto: S.destino.texto, nota: S.nota });
+					}
+				};
+				var bloque = bloquePrecio($('#bloque', r), cfg);
+				var sel = $('[aria-selected="true"]', carr);
+				// Solo se desplaza si el elegido no se ve: los más baratos quedan a la vista.
+				if (sel && sel.offsetLeft + sel.offsetWidth > carr.clientWidth) { carr.style.scrollBehavior = 'auto'; carr.scrollLeft = sel.offsetLeft - (carr.clientWidth - sel.offsetWidth) / 2; carr.style.scrollBehavior = ''; }
+				$$('[data-t]', carr).forEach(function (b) {
+					b.onclick = function () {
+						var antes = claseCot();
+						S.clase = b.dataset.t; S.precio = 0; guardar();
+						$$('[data-t]', carr).forEach(function (x) { x.setAttribute('aria-selected', x === b); });
+						cfg.q = claseCot(); bloque.cerrar(); bloque.pintar();
+						if (antes.perfil !== cfg.q.perfil || antes.minutos !== cfg.q.minutos) { escenaActual(); } // taxi ↔ triciclo: otra ruta
+					};
+				});
 				escenaActual();
-			};
-			cotizar(g).then(function (q) {
-				if (actual !== 'tipo') { return; }
-				if (q.error) { $('#tipos', r).innerHTML = '<p class="p-aviso p-aviso--error">' + ico('alerta') + esc(q.error) + '</p>'; return; }
-				pintar();
 			});
-			$('#elegir', r).onclick = function () { S.primera = false; guardar(); ir('precio'); };
 		}
 	};
-
-	// Control del precio: − / + de 10 en 10 entre min y max (los da el servidor: −20 %…+50 %, nunca bajo el mínimo).
-	function controlPrecio(q, p) {
-		var j = q.justo;
-		var dif = p === j ? 'Precio justo' : (p > j ? '+' : '−') + Math.round(Math.abs(p - j) / j * 100) + ' % · justo ' + miles(j);
-		return '<div class="pa-precio"><button type="button" class="p-btn p-btn--icono pa-pm" id="menos" aria-label="Bajar 10 CUP"' + (p <= q.min ? ' disabled' : '') + '>' + ico('menos') + '</button>'
-			+ '<div class="pa-precio-n" aria-live="polite"><span class="p-precio">' + cupG(p) + '</span><span>' + dif + '</span></div>'
-			+ '<button type="button" class="p-btn p-btn--icono pa-pm" id="mas" aria-label="Subir 10 CUP"' + (p >= q.max ? ' disabled' : '') + '>' + ico('mas') + '</button></div>';
-	}
-	function engancharPrecio(r, q, alCambiar) {
-		var poner = function (v) { S.precio = Math.min(q.max, Math.max(q.min, v)); guardar(); $('#ctl', r).innerHTML = controlPrecio(q, S.precio); engancharPrecio(r, q, alCambiar); alCambiar(S.precio); };
-		$('#menos', r).onclick = function () { poner(precioDe(q) - 10); };
-		$('#mas', r).onclick = function () { poner(precioDe(q) + 10); };
-	}
+	// Las pantallas de la v2 (tipo → precio) quedan como entrada a Viajar (enlaces viejos o móviles con el estado guardado).
+	SCR.tipo = SCR.precio = { html: function () { return ''; }, init: function () { T(function () { ir('viajar'); }, 0); } };
 	function nombrePago(p) { return (p || S.pago) === 'transferencia' ? 'Transfermóvil' : 'Efectivo'; }
 	function hojaPago(alElegir) {
 		var op = function (v, i, n) { return '<button type="button" class="p-fila" data-pago="' + v + '"><span class="p-fila__ico">' + ico(i) + '</span><span class="p-fila__txt"><b>' + n + '</b></span>' + (S.pago === v ? ico('check', 'p-ico--20') : '') + '</button>'; };
@@ -450,32 +524,6 @@
 		});
 	}
 
-	SCR.precio = {
-		mapa: function () { var c = rutaCot(); return c ? { ruta: c, rutaQuieta: true, ver: c, arriba: 70, pins: [['origen', c[0]], ['destino', c[c.length - 1]]] } : sinRuta(''); },
-		html: function () {
-			return '<div class="pa-arriba">' + volverR('tipo') + '</div>'
-				+ '<section class="pa-hoja"><div class="p-hoja__asa"></div><div id="cuerpo">' + esqueleto() + '</div></section>';
-		},
-		init: function (r) {
-			if (!S.origen || !S.destino) { ir('destino'); return; }
-			cotizar(S.grupo === 'taxi' || S.grupo === 'moto' ? S.grupo : 'tric').then(function (cq) {
-				if (actual !== 'precio') { return; }
-				if (cq.error) { $('#cuerpo', r).innerHTML = '<p class="p-aviso p-aviso--error">' + ico('alerta') + esc(cq.error) + '</p>'; return; }
-				var q = claseCot(); S.clase = q.clase; var g = grupoDe(q.clase);
-				$('#cuerpo', r).innerHTML = '<div class="pa-resumen"><img src="' + U.veh(imgDe(q.clase)) + '" alt="" width="56" height="32"><div><b>' + esc(nombreDe(q.clase)) + '</b><span>' + esc(corto(S.destino.texto)) + ' · ' + U.km(q.km) + ' km · ' + q.minutos + ' min</span></div></div>'
-					+ '<div id="ctl">' + controlPrecio(q, precioDe(q)) + '</div>'
-					+ (cq.noche ? '<p class="p-aviso" style="justify-content:center;margin:0 0 4px">' + ico('luna') + 'Tarifa de noche</p>' : '')
-					+ '<div class="pa-op"><b>Coger la 1.ª oferta</b><button type="button" class="p-interruptor" role="switch" aria-checked="' + S.primera + '" id="primera" aria-label="Coger la primera oferta"></button></div>'
-					+ '<button type="button" class="pa-op" id="pago">' + ico(S.pago === 'transferencia' ? 'transfer' : 'efectivo', 'p-ico--20') + '<b>' + nombrePago() + '</b>' + ico('sigue', 'p-ico--20') + '</button>'
-					+ '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="pedir" style="margin-top:12px">Pedir ' + PALABRA[g] + ' · ' + cup(precioDe(q)) + '</button>';
-				escenaActual();
-				engancharPrecio(r, q, function (p) { $('#pedir', r).textContent = 'Pedir ' + PALABRA[g] + ' · ' + cup(p); });
-				$('#primera', r).onclick = function () { S.primera = !S.primera; this.setAttribute('aria-checked', S.primera); };
-				$('#pago', r).onclick = function () { hojaPago(function () { mostrar(true); }); };
-				$('#pedir', r).onclick = function () { this.disabled = true; pedir({ grupo: g, tam: '' }, { cid: cid(), firma: q.firma, precio: precioDe(q), primera: S.primera ? 1 : 0, forma_pago: S.pago, origen_texto: S.origen.texto, destino_texto: S.destino.texto, nota: S.nota }); };
-			});
-		}
-	};
 
 	// ---------- Pedir (se guarda en el móvil; si no hay red, sale solo al volver) ----------
 	var reintento = 0;
@@ -492,7 +540,7 @@
 			}
 			if (x.data.code === 'precio_vencido' && !otraVez && S.origen && S.destino) {
 				S.cot = null; // el precio caducó (p. ej. esperando señal): se vuelve a mirar y sale con la misma oferta
-				return cotizar(p.meta.grupo, p.meta.tam).then(function (q) {
+				return cotizar(p.meta).then(function (q) {
 					var cl = q && !q.error && q.clases.filter(function (c) { return c.clase === S.clase; })[0];
 					if (!cl) { LS.set('pend', null); U.tostada('El precio caducó. Vuelve a mirarlo.', 'alerta'); ir('inicio'); return; }
 					p.body.firma = cl.firma; p.body.precio = Math.min(cl.max, Math.max(cl.min, p.body.precio)); LS.set('pend', JSON.stringify(p)); return enviarPend(true);
@@ -509,8 +557,9 @@
 		mapa: function () { return { offline: true }; },
 		html: function () {
 			var p = LS.json('pend'), b = p && p.body, lug = (S.yo && S.yo.lugares) || {};
-			var que = b ? (b.envio ? 'Envío a ' + corto(b.destino_texto) : PALABRA[p.meta.grupo].charAt(0).toUpperCase() + PALABRA[p.meta.grupo].slice(1) + ' a ' + corto(b.destino_texto)) : '';
-			var txt = b ? 'Hola, quiero un ' + (b.envio ? 'mensajero' : PALABRA[p.meta.grupo]) + ' de ' + b.origen_texto + ' a ' + b.destino_texto + ' por ' + cup(b.precio) + '.' : '';
+			var pal = p ? (p.meta.nombre || PALABRA[p.meta.grupo] || 'vehículo') : '';
+			var que = b ? (b.envio ? 'Envío a ' + corto(b.destino_texto) : pal.charAt(0).toUpperCase() + pal.slice(1) + ' a ' + corto(b.destino_texto)) : '';
+			var txt = b ? 'Hola, quiero un ' + (b.envio ? 'mensajero' : pal.toLowerCase()) + ' de ' + b.origen_texto + ' a ' + b.destino_texto + ' por ' + cup(b.precio) + '.' : '';
 			return '<section class="pa-hoja"><div class="p-hoja__asa"></div>'
 				+ (b ? filaLugar('disabled', 'reloj', esc(que), cup(b.precio) + ' · guardado', '') : '')
 				+ (C.telefono ? '<div class="pa-dos"><a class="p-btn p-btn--suave p-btn--chico" href="' + waLink(C.telefono, txt) + '">' + ico('whatsapp', 'p-ico--20') + 'Por WhatsApp</a><a class="p-btn p-btn--suave p-btn--chico" href="tel:+' + U.tel53(C.telefono) + '">' + ico('telefono', 'p-ico--20') + 'Llamar</a></div>' : '')
@@ -545,11 +594,22 @@
 			return '<div class="pa-radar" aria-hidden="true"><i></i><i></i><i></i></div>'
 				+ '<div class="pa-arriba"><button type="button" class="pa-pastilla" id="cancelar">' + ico('cerrar', 'p-ico--16') + 'Cancelar</button></div>'
 				+ '<section class="pa-hoja" style="max-height:74%"><div class="p-hoja__asa"></div>'
-				+ '<div class="pa-tuya"><div><p class="p-mini" style="margin:0 0 4px">Tu oferta · ' + esc(nombreDe(v.clase)) + '</p><b id="tuya">' + cup(v.oferta) + '</b></div><button type="button" class="p-btn p-btn--suave p-btn--chico" id="subir">' + ico('mas', 'p-ico--16') + '10 %</button></div>'
+				+ '<div class="pa-tuya"><div><p class="p-mini" style="margin:0 0 4px">Tu oferta · ' + esc(nombreServ(v)) + '</p><b id="tuya">' + cup(v.oferta) + '</b></div><button type="button" class="p-btn p-btn--suave p-btn--chico" id="subir">' + ico('mas', 'p-ico--16') + '10 %</button></div>'
+				// v3: «Coger la 1.ª oferta» vive aquí (donde importa). Al encenderlo, si ya hay un «Acepto», se coge al momento.
+				+ '<div class="pa-op" style="border-top:0;border-bottom:1px solid var(--linea)"><b>Coger la 1.ª que acepte</b><button type="button" class="p-interruptor" role="switch" aria-checked="' + !!v.primera + '" id="primera" aria-label="Coger la primera oferta que acepte mi precio"></button></div>'
 				+ '<div class="pa-ofertas" id="ofertas"></div><div id="esq">' + esqueleto() + esqueleto() + '</div></section>';
 		},
 		init: function (r) {
 			var v = S.viaje;
+			$('#primera', r).onclick = function () {
+				var b = this, on = b.getAttribute('aria-checked') !== 'true';
+				b.setAttribute('aria-checked', on); b.disabled = true;
+				api('viajes/' + S.viaje.uuid + '/primera', { on: on ? 1 : 0 }).then(function (x) {
+					b.disabled = false;
+					if (!x.data.ok) { b.setAttribute('aria-checked', !on); U.tostada(x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No se pudo.'), 'alerta'); return; }
+					cambio(x.data.viaje);
+				});
+			};
 			api('cercanos?' + qs({ lat: v.origen.lat, lng: v.origen.lng, grupo: grupoDe(v.clase) })).then(function (x) {
 				cercanosCache = ((x.data && x.data.puntos) || []).map(function (p, i) { var a = Math.random() * 6.28; return ['c' + i, U.veh(p.img, 'arriba'), [[p.lng, p.lat], [p.lng + Math.cos(a) * 0.0002, p.lat + Math.sin(a) * 0.0002]], 0]; });
 				if (actual === 'buscando') { escenaActual(); }
@@ -571,6 +631,7 @@
 		},
 		actualizar: function (r, v) {
 			$('#tuya', r).textContent = cup(v.oferta);
+			var pri = $('#primera', r); if (pri && !pri.disabled) { pri.setAttribute('aria-checked', !!v.primera); }
 			$('#subir', r).hidden = v.oferta >= v.max;
 			var cont = $('#ofertas', r), ids = {};
 			(v.ofertas || []).forEach(function (o) {
@@ -725,14 +786,18 @@
 			html: function () {
 				var v = S.viaje, ch = v.chofer || { nombre: 'Tu chofer' }, g = grupoDe(v.clase), llego = v.estado === 'llego';
 				if (paso === 'envio') {
-					var e = v.envio || {}, rec = v.estado === 'recogido';
+					var e = v.envio || {}, rec = v.estado === 'recogido', sv = servDe(v), et = ETAPAS[sv] || ETAPAS.paquete;
+					var yo = U.tel53(e.telefono) === U.tel53((S.yo && S.yo.telefono) || ''); // Comida y Carga: casi siempre recibe el mismo cliente
 					var txtWa = 'Hola ' + nombreCorto(e.recibe) + ', te mandé ' + e.que + ' con Pa\'llá. Te lo lleva ' + ch.nombre + '. Cuando llegue, dale este código: ' + e.codigo + '.';
+					var antes = sv === 'comida' && !e.adelanto ? 'Recogiendo' : (sv === 'comida' ? 'Pagando' : (sv === 'carga' ? 'Cargando' : 'Recogiendo'));
+					var recibo = sv === 'comida' && e.adelanto ? '<p class="p-aviso pa-aviso-env" style="margin:14px 0 0">' + ico('camara') + '<span>' + (e.recibo ? esc(nombreCorto(ch.nombre)) + ' pagó <b>' + cup(e.adelanto) + '</b> · <a href="' + esc(e.recibo) + '" target="_blank" rel="noopener">foto del recibo</a>' : esc(nombreCorto(ch.nombre)) + ' paga <b>' + cup(e.adelanto) + '</b> al recoger y te manda la foto del recibo') + '</span></p>' : '';
 					return arribaViaje('inicio') + '<section class="pa-hoja"><div class="p-hoja__asa"></div>'
-						+ '<ol class="pa-etapas" aria-label="Estado del envío"><li class="' + (rec ? 'is-hecho' : 'is-ahora') + '">' + (rec ? 'Recogido' : 'Recogiendo') + '</li><li class="' + (rec ? 'is-ahora' : '') + '">En camino</li><li>Entregado</li></ol>'
-						+ eta(esc(e.que) + ' · para ' + esc(nombreCorto(e.recibe)), llego ? 'Recogiendo' : 'Calculando…', v.total, 'Fijo · ' + nombrePago(v.forma_pago).toLowerCase())
-						+ U.barra(imgDe(v.clase), '')
+						+ '<ol class="pa-etapas" aria-label="Estado del envío"><li class="' + (rec ? 'is-hecho' : 'is-ahora') + '">' + (rec ? et[0] : antes) + '</li><li class="' + (rec ? 'is-ahora' : '') + '">' + et[1] + '</li><li>' + et[2] + '</li></ol>'
+						+ eta(esc(e.que) + ' · ' + (yo ? 'para ti' : 'para ' + esc(nombreCorto(e.recibe))), llego ? (sv === 'carga' ? 'Cargando' : 'Recogiendo') : 'Calculando…', v.total, 'Fijo · ' + nombrePago(v.forma_pago).toLowerCase())
+						+ U.barra(imgServ(v), '')
+						+ recibo
 						+ filaChofer(ch, subChofer(ch, v))
-						+ '<div class="pa-codigo"><span>Código de ' + esc(nombreCorto(e.recibe)) + '</span><b>' + esc(e.codigo) + '</b><a class="p-btn p-btn--suave p-btn--chico" href="' + waLink(e.telefono, txtWa) + '">' + ico('whatsapp', 'p-ico--16') + 'Mandar</a></div></section>';
+						+ '<div class="pa-codigo"><span>' + (yo ? 'Tu código' : 'Código de ' + esc(nombreCorto(e.recibe))) + '</span><b>' + esc(e.codigo) + '</b>' + (yo ? '' : '<a class="p-btn p-btn--suave p-btn--chico" href="' + waLink(e.telefono, txtWa) + '">' + ico('whatsapp', 'p-ico--16') + 'Mandar</a>') + '</div></section>';
 				}
 				if (paso === 'viene') {
 					return arribaViaje() + '<section class="pa-hoja"><div class="p-hoja__asa"></div>'
@@ -758,6 +823,7 @@
 			actualizar: function (r, v) {
 				var antes = tramo && tramo.clave;
 				if (paso === 'envio' && $$('.pa-etapas li', r)[0].className !== (v.estado === 'recogido' ? 'is-hecho' : 'is-ahora')) { mostrar(true); return; }
+				if (paso === 'envio' && v.envio && v.envio.adelanto && !!v.envio.recibo !== !!$('.pa-aviso-env a', r)) { mostrar(true); return; } // llegó la foto del recibo
 				if (paso === 'viene' && !!$('#eta-mini', r).textContent.match(/llegó/) !== (v.estado === 'llego')) { mostrar(true); return; }
 				prepararTramo(v).then(function () { if (tramo && tramo.clave !== antes) { escenaActual(); } moverBarra(r, v); });
 			},
@@ -814,12 +880,16 @@
 	SCR['envio-entregado'] = {
 		viaje: true,
 		html: function () {
-			var v = S.viaje, ch = v.chofer || {}, e = v.envio || {};
+			var v = S.viaje, ch = v.chofer || {}, e = v.envio || {}, sv = servDe(v);
+			var yo = U.tel53(e.telefono) === U.tel53((S.yo && S.yo.telefono) || '');
+			// v3 Comida: si el mensajero adelantó la comida, en la puerta se paga la comida + el envío (un solo número).
+			var comida = sv === 'comida' && e.cobrar && yo, total = v.total + (comida ? e.cobrar : 0);
 			S.pagoFin = S.pagoFin || v.forma_pago;
-			return '<div class="pa-llena"><div class="pa-cab"><a class="pa-volver" href="#inicio" aria-label="Volver">' + ico('atras') + '</a><h1>Entregado</h1></div><div class="pa-cuerpo">'
-				+ '<div class="pa-hecho">' + ico('check', 'p-ico--20') + '<p style="margin:0">' + esc(nombreCorto(e.recibe) || 'Lo') + ' lo recibió a las ' + (v.terminado ? U.hhmm(new Date(v.terminado)) : U.hora(0)) + ' · código ' + esc(e.codigo) + '</p></div>'
-				+ (e.foto ? '<figure style="margin:0"><img class="pa-foto" src="' + esc(e.foto) + '" alt="Foto de la entrega" loading="lazy" style="object-fit:cover"><figcaption class="p-peq" style="margin-top:6px">Foto de ' + esc(ch.nombre || 'tu mensajero') + '</figcaption></figure>' : '')
-				+ '<div class="pa-total"><span>A pagar</span><span class="p-precio" style="font-size:28px">' + cupG(v.total) + '</span></div>'
+			return '<div class="pa-llena"><div class="pa-cab"><a class="pa-volver" href="#inicio" aria-label="Volver">' + ico('atras') + '</a><h1>' + (ETAPAS[sv] || ETAPAS.paquete)[2] + '</h1></div><div class="pa-cuerpo">'
+				+ '<div class="pa-hecho">' + ico('check', 'p-ico--20') + '<p style="margin:0">' + (yo ? 'Lo recibiste' : esc(nombreCorto(e.recibe) || 'Lo') + ' lo recibió') + ' a las ' + (v.terminado ? U.hhmm(new Date(v.terminado)) : U.hora(0)) + ' · código ' + esc(e.codigo) + '</p></div>'
+				+ (e.foto ? '<figure style="margin:0"><img class="pa-foto" src="' + esc(e.foto) + '" alt="Foto de la entrega" loading="lazy" style="object-fit:cover"><figcaption class="p-peq" style="margin-top:6px">Foto de ' + esc(ch.nombre || 'tu mensajero') + (e.recibo ? ' · <a href="' + esc(e.recibo) + '" target="_blank" rel="noopener">foto del recibo</a>' : '') + '</figcaption></figure>' : '')
+				+ (comida ? '<div class="pa-desglose"><span>Comida' + (e.adelanto ? ' · la adelantó ' + esc(nombreCorto(ch.nombre)) : '') + '</span><b>' + miles(e.cobrar) + '</b><span>Envío</span><b>' + miles(v.total) + '</b></div>' : '')
+				+ '<div class="pa-total"><span>A pagar</span><span class="p-precio" style="font-size:28px">' + cupG(total) + '</span></div>'
 				+ bloquePago(v)
 				+ (v.valorado ? '' : U.estrellas(S.estrellas))
 				+ '</div><div class="pa-pie"><button type="button" class="p-btn p-btn--marca p-btn--ancho" id="listo">Listo</button></div></div>';
@@ -835,7 +905,7 @@
 	// ---------- Mis viajes (tocar = repetir) ----------
 	SCR.viajes = {
 		html: function () {
-			return '<div class="pa-llena"><div class="pa-cab">' + volver('inicio') + '<h1>Mis viajes</h1></div><div class="pa-cuerpo" style="gap:0" id="lista">' + pintarViajes(LS.json('viajes')) + '</div></div>';
+			return '<div class="pa-llena"><div class="pa-cab">' + volver('inicio') + '<h1>Mis pedidos</h1></div><div class="pa-cuerpo" style="gap:0" id="lista">' + pintarViajes(LS.json('viajes')) + '</div></div>';
 		},
 		init: function (r) {
 			var enganchar = function () {
@@ -843,8 +913,8 @@
 					a.onclick = function () {
 						var x = (LS.json('viajes') || [])[+a.dataset.rep]; if (!x) { return; }
 						S.origen = x.origen; S.destino = x.destino; S.precio = 0; S.cot = null;
-						if (x.clase === 'mensajero') { S.svc = 'mens'; guardar(); ir('envio'); return; }
-						S.grupo = x.grupo; S.svc = x.grupo === 'taxi' ? 'taxi' : 'tric'; S.clase = x.clase; guardar(); ir('precio');
+						if (x.clase === 'mensajero') { S.svc = 'mens'; S.modo = servDe(x); guardar(); ir(pantallaEnvio()); return; }
+						S.modo = 'viajar'; S.svc = 'viajar'; S.clase = x.clase; guardar(); ir('viajar');
 					};
 				});
 			};
@@ -863,8 +933,9 @@
 			if (gr !== grupo) { h += '<p class="pa-etq"' + (grupo ? ' style="margin-top:20px"' : '') + '>' + gr + '</p>'; grupo = gr; }
 			var cuando = gr === 'Hoy' ? U.hhmm(f) : (gr === 'Esta semana' ? DIAS[f.getDay()] + ' ' + U.hhmm(f) : f.getDate() + '/' + (f.getMonth() + 1));
 			var estado = x.estado === 'cancelado' ? ' · cancelado' : (x.estado === 'sin_chofer' ? ' · sin chofer' : '');
-			var t = x.clase === 'mensajero' ? 'Envío a ' + corto(x.destino.texto) : corto(x.destino.texto);
-			h += '<button type="button" class="p-fila pa-viaje" data-rep="' + i + '"><span class="p-fila__ico" style="color:var(--' + COLOR_G[x.grupo] + ')">' + ico(ICO_G[x.grupo] || 'triciclo') + '</span><span class="p-fila__txt"><b>' + esc(t) + '</b><span>' + esc(nombreDe(x.clase)) + ' · ' + cuando + (x.chofer ? ' · ' + esc(nombreCorto(x.chofer)) : '') + (x.foto ? ' · con foto' : '') + estado + '</span></span><span class="p-fila__fin">' + (x.estado === 'terminado' ? cup(x.total) : '') + '</span></button>';
+			var sv = servDe(x), SV = { paquete: 'Paquete', comida: 'Comida', carga: 'Carga' };
+			var t = x.clase === 'mensajero' ? (x.que ? x.que + ' a ' : (sv === 'paquete' ? 'Envío a ' : SV[sv] + ' a ')) + corto(x.destino.texto) : corto(x.destino.texto);
+			h += '<button type="button" class="p-fila pa-viaje pa-pedido-h" data-rep="' + i + '"><img src="' + U.veh(imgServ(x)) + '" alt="" width="56" height="34"><span class="p-fila__txt"><b>' + esc(t) + '</b><span>' + esc(SV[sv] || nombreDe(x.clase)) + ' · ' + cuando + (x.chofer ? ' · ' + esc(nombreCorto(x.chofer)) : '') + (x.foto ? ' · con foto' : '') + estado + '</span></span><span class="p-fila__fin">' + (x.estado === 'terminado' ? cup(x.total) : '') + '</span></button>';
 		});
 		return h + '<p class="p-aviso" style="margin-top:20px">' + ico('guardado') + 'Se ven aunque no haya señal.</p>';
 	}
@@ -899,7 +970,7 @@
 			var e = S.envio;
 			var tam = function (k, i, n, s) { return '<button type="button" data-tam="' + k + '" aria-pressed="' + (e.tam === k) + '">' + ico(i) + '<b>' + n + '</b><span>' + s + '</span></button>'; };
 			var campo = function (para, val, aria, ph) { return '<button type="button" class="p-campo" data-para="' + para + '" aria-label="' + aria + '" style="text-align:left;width:100%;min-height:52px;font:inherit;color:' + (val ? 'var(--tinta)' : 'var(--tinta-2)') + '">' + esc(val || ph) + '</button>'; };
-			return '<div class="pa-llena"><div class="pa-cab">' + volver('inicio') + '<h1>Mandar algo</h1></div><div class="pa-cuerpo">'
+			return '<div class="pa-llena">' + cabSvc('Paquete', 'mensajero') + '<div class="pa-cuerpo">'
 				+ '<div class="pa-od"><span class="pm-pin"></span><span class="pm-pin pm-pin--destino"></span>'
 				+ campo('envio-o', S.origen && S.origen.texto, 'Recoger en', '¿Dónde lo recogemos?') + campo('envio-d', S.destino && S.destino.texto, 'Llevar a', '¿A dónde lo llevamos?') + '</div>'
 				+ '<div><label class="pa-etq" for="que">¿Qué mandas?</label><label class="p-campo"><input id="que" maxlength="120" value="' + esc(e.que) + '" placeholder="Llaves, un sobre…"></label></div>'
@@ -909,7 +980,7 @@
 				+ '</div><div class="pa-pie"><button type="button" class="p-btn p-btn--marca p-btn--ancho" id="seguir">Seguir</button></div></div>';
 		},
 		init: function (r) {
-			S.svc = 'mens'; guardar();
+			S.svc = 'mens'; S.modo = 'paquete'; guardar();
 			$('#que', r).addEventListener('input', function () { S.envio.que = this.value; guardar(); });
 			$$('[data-para]', r).forEach(function (b) { b.onclick = function () { S.para = b.dataset.para; guardar(); ir('destino'); }; });
 			$$('[data-tam]', r).forEach(function (b) { b.onclick = function () { S.envio.tam = b.dataset.tam; S.precio = 0; guardar(); $$('[data-tam]', r).forEach(function (x) { x.setAttribute('aria-pressed', x === b); }); }; });
@@ -950,29 +1021,149 @@
 		}
 	};
 
-	SCR['envio-precio'] = {
-		mapa: function () { var c = rutaCot(); return c ? { ruta: c, ver: c, arriba: 70, pins: [['origen', c[0]], ['destino', c[c.length - 1], esc(nombreCorto(S.envio.recibe))]] } : sinRuta(esc(nombreCorto(S.envio.recibe))); },
-		html: function () { return '<div class="pa-arriba">' + volverR('envio-recibe') + '</div><section class="pa-hoja"><div class="p-hoja__asa"></div><div id="cuerpo">' + esqueleto() + '</div></section>'; },
+	// ---------- v3: piezas de Paquete, Comida y Carga ----------
+	function cabSvc(t, img) { return '<div class="pa-cab">' + volver('inicio') + '<h1>' + t + '</h1><img class="pa-cab__veh" src="' + U.veh(img) + '" alt=""></div>'; }
+	function campoPunto(para, val, aria, ph) { return '<button type="button" class="p-campo" data-para="' + para + '" aria-label="' + aria + '" style="text-align:left;width:100%;min-height:52px;font:inherit;color:' + (val ? 'var(--tinta)' : 'var(--tinta-2)') + '">' + esc(val || ph) + '</button>'; }
+	function seg(clave, no, si, val) { return '<div class="pa-seg" data-seg="' + clave + '"><button type="button" data-v="0" aria-pressed="' + !val + '">' + no + '</button><button type="button" data-v="1" aria-pressed="' + !!val + '">' + si + '</button></div>'; }
+	function campoCup(id, n, ver, etq) { return '<label class="p-campo pa-cupcampo" id="' + id + '" style="display:' + (ver ? 'flex' : 'none') + '">' + ico('efectivo', 'p-ico--20') + '<input inputmode="numeric" value="' + (n ? miles(n) : '') + '" placeholder="0" aria-label="' + etq + '"><span class="p-cup">CUP</span></label>'; }
+	function leerCup(r, id) { var i = $('#' + id + ' input', r); return i ? (+i.value.replace(/\D+/g, '') || 0) : 0; }
+	function engancharSeg(r, alCambiar) {
+		$$('[data-seg]', r).forEach(function (g) {
+			$$('[data-v]', g).forEach(function (b) {
+				b.onclick = function () { $$('[data-v]', g).forEach(function (x) { x.setAttribute('aria-pressed', x === b); }); alCambiar(g.dataset.seg, b.dataset.v === '1'); guardar(); };
+			});
+		});
+	}
+	function verSi(r, id, si) { var e = $('#' + id, r); if (e) { e.style.display = si ? '' : 'none'; } }
+	function errEnvio(r, m) { var err = $('#err', r); err.hidden = false; err.innerHTML = ico('alerta') + '<span>' + m + '</span>'; }
+	function puntosEnvio(r) {
+		$$('[data-para]', r).forEach(function (b) { b.onclick = function () { S.para = b.dataset.para; guardar(); ir('destino'); }; });
+		if (!S.origen && S.modo !== 'comida') { gps().then(function (p) { if (p && !S.origen) { lugarDe(p).then(function (l) { S.origen = l; guardar(); if (actual === pantallaEnvio()) { mostrar(true); } }); } }); }
+		if (S.modo === 'comida' && !S.destino) { gps().then(function (p) { if (p && !S.destino) { lugarDe(p).then(function (l) { S.destino = l; guardar(); if (actual === 'comida') { mostrar(true); } }); } }); } // la comida viene a donde estás
+	}
+	function quienRecibe(e) { return e.otro ? { n: e.recibe, t: e.tel } : { n: (S.yo && S.yo.nombre) || '', t: (S.yo && S.yo.telefono) || '' }; }
+
+	// ---------- Comida: funciona como un envío (sin menú). Recibe «tú» (se puede cambiar). ----------
+	SCR.comida = {
+		html: function () {
+			var e = S.envio, yo = S.yo || {};
+			return '<div class="pa-llena">' + cabSvc('Comida', 'comida') + '<div class="pa-cuerpo">'
+				+ '<div class="pa-od"><span class="pm-pin"></span><span class="pm-pin pm-pin--destino"></span>'
+				+ campoPunto('envio-o', S.origen && S.origen.texto, 'Recoger en', 'Recoger en (restaurante o casa)') + campoPunto('envio-d', S.destino && S.destino.texto, 'Llevar a', 'Llevar a') + '</div>'
+				+ '<div><label class="pa-etq" for="sitio">Nombre del sitio</label><label class="p-campo"><input id="sitio" maxlength="120" value="' + esc(e.recoge) + '" placeholder="Ej.: Pizzería Obispo"></label></div>'
+				+ '<div><label class="pa-etq" for="que">¿Qué es?</label><label class="p-campo"><input id="que" maxlength="120" value="' + esc(e.que) + '" placeholder="Ej.: 2 pizzas, ya encargadas"></label></div>'
+				+ '<div><p class="pa-etq">¿El mensajero la paga al recoger?</p>' + seg('paga', 'No, ya está pagada', 'Sí, la paga', e.paga) + '</div>'
+				+ campoCup('pagaN', e.pagaCup, e.paga, 'Cuánto paga al recoger')
+				+ '<p class="p-peq" id="tope" style="margin:-8px 0 0;display:' + (e.paga ? '' : 'none') + '">Hasta ' + cup(TOPE_COMIDA) + '. Si es más, paga tú al restaurante por Transfermóvil.</p>'
+				+ '<div><p class="pa-etq">¿Cobrar al entregar?</p>' + seg('cobrar', 'No', 'Sí, cobrar', e.cobrar || e.paga) + '</div>'
+				+ '<p class="p-aviso" id="cobraT" style="display:' + (e.paga ? 'flex' : 'none') + '">' + ico('efectivo') + '<span>Cobra la comida + el envío</span></p>'
+				+ campoCup('cobraN', e.cobrarCup, e.cobrar && !e.paga, 'Cuánto cobrar al entregar')
+				+ '<button type="button" class="p-fila pa-recibe" id="recibe"><span class="p-fila__ico">' + ico('usuario') + '</span><span class="p-fila__txt"><b>' + (e.otro ? 'Recibe ' + esc(e.recibe || '…') : 'Recibe ' + esc(nombreCorto(yo.nombre) || '') + ' (tú)') + '</b><span>' + esc(U.telBonito(e.otro ? e.tel : yo.telefono)) + '</span></span><span class="p-fila__fin">Cambiar</span></button>'
+				+ '<div id="otro" style="display:' + (e.otro ? '' : 'none') + '"><label class="p-campo" style="margin-bottom:8px">' + ico('usuario', 'p-ico--20') + '<input id="rn" maxlength="80" value="' + esc(e.recibe) + '" placeholder="Nombre" aria-label="Nombre de quien recibe"></label>'
+				+ '<div class="pa-tel"><span class="pref">+53</span><label class="p-campo"><input id="rt" inputmode="tel" maxlength="12" value="' + esc(e.tel) + '" placeholder="Teléfono" aria-label="Teléfono de quien recibe"></label></div></div>'
+				+ '<p class="p-aviso p-aviso--error" id="err" hidden></p>'
+				+ '</div><div class="pa-pie"><button type="button" class="p-btn p-btn--marca p-btn--ancho" id="ver">Ver precio</button></div></div>';
+		},
 		init: function (r) {
-			if (!S.origen || !S.destino) { ir('envio'); return; }
+			S.svc = 'mens'; S.modo = 'comida'; guardar();
+			puntosEnvio(r);
 			var e = S.envio;
-			cotizar('mens', e.tam).then(function (cq) {
+			var ver = function () { verSi(r, 'pagaN', e.paga); verSi(r, 'tope', e.paga); verSi(r, 'cobraT', e.paga); verSi(r, 'cobraN', e.cobrar && !e.paga); };
+			engancharSeg(r, function (k, v) {
+				if (k === 'paga') { e.paga = v; if (v) { e.cobrar = true; $$('[data-seg="cobrar"] [data-v]', r).forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === '1'); }); } }
+				if (k === 'cobrar') { e.cobrar = v; if (!v && e.paga) { e.cobrar = true; $$('[data-seg="cobrar"] [data-v]', r).forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === '1'); }); U.tostada('Si el mensajero paga la comida, se la devuelves al entregar.', 'info'); } }
+				ver();
+			});
+			var leer = function () { e.recoge = $('#sitio', r).value.trim(); e.que = $('#que', r).value.trim(); e.pagaCup = leerCup(r, 'pagaN'); e.cobrarCup = leerCup(r, 'cobraN'); e.recibe = $('#rn', r).value.trim(); e.tel = $('#rt', r).value.replace(/\D+/g, ''); guardar(); };
+			$$('input', r).forEach(function (i) { i.addEventListener('change', leer); });
+			$('#recibe', r).onclick = function () { e.otro = !e.otro; guardar(); mostrar(true); };
+			$('#ver', r).onclick = function () {
+				leer();
+				var t = e.tel.length === 10 && e.tel.indexOf('53') === 0 ? e.tel.slice(2) : e.tel;
+				var m = !S.origen ? 'Falta dónde se recoge.' : !S.destino ? 'Falta a dónde la llevamos.' : e.que.length < 2 ? 'Escribe qué comida es.'
+					: (e.paga && !e.pagaCup) ? 'Escribe cuánto paga el mensajero.' : (e.paga && e.pagaCup > TOPE_COMIDA) ? 'El mensajero adelanta como mucho ' + cup(TOPE_COMIDA) + '. Si es más, paga tú por Transfermóvil.'
+					: (e.cobrar && !e.paga && !e.cobrarCup) ? 'Escribe cuánto cobrar.' : (e.otro && (e.recibe.length < 2 || t.length !== 8 || t.charAt(0) !== '5')) ? 'Escribe nombre y teléfono de quien recibe (8 números, empieza por 5).' : '';
+				if (m) { errEnvio(r, m); return; }
+				ir('envio-precio');
+			};
+		}
+	};
+
+	// ---------- Carga: triciclo de carga hasta 300 kg. El peso no cambia el precio; el ayudante suma un precio fijo. ----------
+	SCR.carga = {
+		html: function () {
+			var e = S.envio;
+			var peso = function (k) { return '<button type="button" data-peso="' + k + '" aria-pressed="' + (e.peso === k) + '"><b>' + PESOS[k][0] + '</b><span>' + PESOS[k][1] + '</span></button>'; };
+			return '<div class="pa-llena">' + cabSvc('Carga', 'tric-carga') + '<div class="pa-cuerpo">'
+				+ '<div class="pa-od"><span class="pm-pin"></span><span class="pm-pin pm-pin--destino"></span>'
+				+ campoPunto('envio-o', S.origen && S.origen.texto, 'Recoger en', 'Recoger en') + campoPunto('envio-d', S.destino && S.destino.texto, 'Llevar a', 'Llevar a') + '</div>'
+				+ '<div><label class="pa-etq" for="que">¿Qué llevas?</label><label class="p-campo"><input id="que" maxlength="120" value="' + esc(e.que) + '" placeholder="Ej.: un refrigerador y 2 sillas"></label></div>'
+				+ '<div><p class="pa-etq">Peso aproximado</p><div class="pa-tamano pa-peso">' + peso('poco') + peso('medio') + peso('mucho') + '</div></div>'
+				+ '<div><p class="pa-etq">¿Ayuda para cargar?</p>' + seg('ayuda', 'No, cargo yo', 'Sí · +' + miles(AYUDANTE) + ' CUP', e.ayuda) + '</div>'
+				+ '<p class="p-aviso">' + ico('info') + '<span>Más de 300 kg o una mudanza: ' + (C.telefono ? '<a href="' + waLink(C.telefono, 'Hola, quiero mover una carga de más de 300 kg (o una mudanza) con Pa\'llá.') + '">escríbenos</a>' : 'escríbenos') + '.</span></p>'
+				+ '<p class="p-aviso p-aviso--error" id="err" hidden></p>'
+				+ '</div><div class="pa-pie"><button type="button" class="p-btn p-btn--marca p-btn--ancho" id="ver">Ver precio</button></div></div>';
+		},
+		init: function (r) {
+			S.svc = 'mens'; S.modo = 'carga'; guardar();
+			puntosEnvio(r);
+			var e = S.envio;
+			$('#que', r).addEventListener('input', function () { e.que = this.value; guardar(); });
+			$$('[data-peso]', r).forEach(function (b) { b.onclick = function () { e.peso = b.dataset.peso; guardar(); $$('[data-peso]', r).forEach(function (x) { x.setAttribute('aria-pressed', x === b); }); }; });
+			engancharSeg(r, function (k, v) { e.ayuda = v; S.precio = 0; });
+			$('#ver', r).onclick = function () {
+				e.que = $('#que', r).value.trim(); guardar();
+				var m = !S.origen ? 'Falta dónde recogemos.' : !S.destino ? 'Falta a dónde lo llevamos.' : e.que.length < 2 ? 'Escribe qué llevas.' : !PESOS[e.peso] ? 'Di cuánto pesa más o menos.' : '';
+				if (m) { errEnvio(r, m); return; }
+				ir('envio-precio');
+			};
+		}
+	};
+
+	// ---------- Precio de Paquete, Comida y Carga: la MISMA hoja que Viajar (vehículo 3D + precio · pago · llega + botón) ----------
+	function metaEnvio() {
+		var e = S.envio, m = S.modo;
+		if (m === 'carga') { return { grupo: 'mens', tam: 'grande', servicio: 'carga', ayudante: e.ayuda ? 1 : 0 }; }
+		if (m === 'comida') { return { grupo: 'mens', tam: 'mochila', servicio: 'comida' }; }
+		return { grupo: 'mens', tam: e.tam, servicio: 'paquete' };
+	}
+	SCR['envio-precio'] = {
+		mapa: function () { var et = S.modo === 'paquete' ? esc(nombreCorto(S.envio.recibe)) : ''; var c = rutaCot(); return c ? { ruta: c, ver: c, arriba: 60, pins: [['origen', c[0]], ['destino', c[c.length - 1], et]] } : sinRuta(et); },
+		html: function () { return '<div class="pa-arriba">' + volverR(S.modo === 'paquete' ? 'envio-recibe' : pantallaEnvio()) + '</div><section class="pa-hoja pa-hoja--viajar"><div class="p-hoja__asa"></div><div id="cuerpo">' + esqueleto() + '</div></section>'; },
+		init: function (r) {
+			if (!S.origen || !S.destino) { ir(pantallaEnvio()); return; }
+			var e = S.envio, modo = S.modo === 'comida' || S.modo === 'carga' ? S.modo : 'paquete', meta = metaEnvio();
+			cotizar(meta).then(function (cq) {
 				if (actual !== 'envio-precio') { return; }
 				if (cq.error) { $('#cuerpo', r).innerHTML = '<p class="p-aviso p-aviso--error">' + ico('alerta') + esc(cq.error) + '</p>'; return; }
-				var q = cq.clases[0]; S.clase = 'mensajero';
-				$('#cuerpo', r).innerHTML = '<div class="pa-resumen"><img src="' + U.veh(e.tam === 'grande' ? 'tric-carga' : 'mensajero') + '" alt="" width="56" height="32"><div><b>' + esc(e.que) + '</b><span>' + esc(corto(S.destino.texto)) + ' · ' + U.km(q.km) + ' km</span></div></div>'
-					+ '<div id="ctl">' + controlPrecio(q, precioDe(q)) + '</div>'
-					+ '<p class="p-aviso" style="justify-content:center;margin:4px 0 8px">' + ico('camara') + 'Foto al entregar</p>'
-					+ '<button type="button" class="pa-op" id="pago">' + ico(S.pago === 'transferencia' ? 'transfer' : 'efectivo', 'p-ico--20') + '<b>' + nombrePago() + '</b>' + ico('sigue', 'p-ico--20') + '</button>'
-					+ '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="pedir" style="margin-top:12px">Buscar mensajero · ' + cup(precioDe(q)) + '</button>';
+				var q = cq.clases[0], carga = modo === 'carga' || (modo === 'paquete' && e.tam === 'grande'); S.clase = 'mensajero';
+				var img = modo === 'comida' ? 'comida' : (carga ? 'tric-carga' : 'mensajero'), quien = quienRecibe(e);
+				var sub = modo === 'comida' ? (e.otro ? 'Para ' + esc(nombreCorto(quien.n)) : 'Para ti') : (modo === 'carga' ? (e.ayuda ? 'Con ayudante' : 'Cargas tú') : 'Para ' + esc(nombreCorto(e.recibe)));
+				var aviso;
+				if (modo === 'comida') { aviso = '<p class="p-aviso pa-aviso-env" id="puerta">' + ico('efectivo') + '<span></span></p>'; }
+				else if (modo === 'carga') { aviso = '<p class="p-aviso pa-aviso-env">' + ico('caja') + '<span>' + PESOS[e.peso][0] + (e.ayuda ? ' · ayudante incluido (+' + miles(q.extra || AYUDANTE) + ')' : '') + '</span></p>'; }
+				else { aviso = '<p class="p-aviso pa-aviso-env">' + ico('camara') + '<span>Código para ' + esc(nombreCorto(e.recibe)) + ' y foto al entregar' + (e.cobrar && e.cobrarCup ? ' · cobra ' + miles(e.cobrarCup) : '') + '</span></p>'; }
+				$('#cuerpo', r).innerHTML = '<div class="pa-heroe"><img src="' + U.veh(img) + '" alt="" width="120" height="80"><div><b>' + esc(e.que) + '</b><span>' + sub + ' · ' + U.km(q.km) + ' km · ' + q.minutos + ' min</span></div></div>'
+					+ aviso + '<div id="bloque"></div>';
 				escenaActual();
-				engancharPrecio(r, q, function (p) { $('#pedir', r).textContent = 'Buscar mensajero · ' + cup(p); });
-				$('#pago', r).onclick = function () { hojaPago(function () { mostrar(true); }); };
-				$('#pedir', r).onclick = function () {
-					this.disabled = true;
-					var t = e.tel.length === 10 ? e.tel.slice(2) : e.tel;
-					pedir({ grupo: 'mens', tam: e.tam }, { cid: cid(), firma: q.firma, precio: precioDe(q), primera: 0, forma_pago: S.pago, origen_texto: S.origen.texto, destino_texto: S.destino.texto, nota: e.nota, envio: { que: e.que, recibe_nombre: e.recibe, recibe_telefono: t, cobrar_cup: e.cobrar ? e.cobrarCup : 0 } });
-				};
+				var adel = modo === 'comida' && e.paga ? e.pagaCup : 0, cobrar = modo === 'comida' ? (e.paga ? e.pagaCup : (e.cobrar ? e.cobrarCup : 0)) : (e.cobrar ? e.cobrarCup : 0);
+				bloquePrecio($('#bloque', r), {
+					q: q,
+					llega: function () { return q.llega == null ? '—' : q.llega + ' min'; },
+					boton: function (p) { return 'Pedir ' + (carga ? 'triciclo' : 'mensajero') + ' · ' + cup(p); },
+					alPintar: function (p) {
+						var el = $('#puerta span', r); if (!el) { return; }
+						el.innerHTML = cobrar && !e.otro ? 'En la puerta pagas <b>' + cup(cobrar + p) + '</b> · comida ' + miles(cobrar) + ' + envío' : (cobrar ? 'Al entregar cobra ' + cup(cobrar) + ' + el envío' : 'La comida ya está pagada');
+					},
+					alPedir: function (p) {
+						var t = String(quien.t || '').replace(/\D+/g, ''); if (t.length === 10 && t.indexOf('53') === 0) { t = t.slice(2); }
+						var env = { que: e.que, recibe_nombre: modo === 'paquete' ? e.recibe : quien.n, recibe_telefono: modo === 'paquete' ? (e.tel.length === 10 ? e.tel.slice(2) : e.tel) : t, cobrar_cup: cobrar };
+						if (modo === 'comida') { env.recoge = e.recoge; env.adelanto_cup = adel; }
+						if (modo === 'carga') { env.peso = e.peso; }
+						meta.nombre = modo === 'paquete' ? 'mensajero' : modo;
+						pedir(meta, { cid: cid(), firma: q.firma, precio: p, primera: 0, forma_pago: S.pago, origen_texto: S.origen.texto, destino_texto: S.destino.texto, nota: modo === 'paquete' ? e.nota : '', envio: env });
+					}
+				});
 			});
 		}
 	};
@@ -1071,7 +1262,7 @@
 			if (cfg.listo && s.listo) { PMapa.iniciar(mapaEl, TEMA).then(function () { if (actual === id) { s.listo(pant); } }); }
 		}
 		if (s.init) { s.init(pant); }
-		var titulos = { inicio: '', entrar: 'Entrar', codigo: 'Código', destino: 'Destino', fijar: 'Fijar en el mapa', recogida: 'Recogida', tipo: 'Elegir', precio: 'Precio', buscando: 'Buscando', viene: 'Tu chofer viene', viaje: 'En viaje', llegada: 'Pagar', viajes: 'Mis viajes', perfil: 'Perfil', envio: 'Mandar algo', 'envio-recibe': 'Quién recibe', 'envio-precio': 'Precio del envío', 'envio-seguimiento': 'Envío', 'envio-entregado': 'Entregado', sinconexion: 'Sin señal' };
+		var titulos = { inicio: '', entrar: 'Entrar', codigo: 'Código', destino: 'Destino', fijar: 'Fijar en el mapa', recogida: 'Recogida', tipo: 'Viajar', precio: 'Viajar', viajar: 'Viajar', comida: 'Comida', carga: 'Carga', buscando: 'Buscando', viene: 'Tu chofer viene', viaje: 'En viaje', llegada: 'Pagar', viajes: 'Mis pedidos', perfil: 'Perfil', envio: 'Paquete', 'envio-recibe': 'Quién recibe', 'envio-precio': 'Precio', 'envio-seguimiento': 'Envío', 'envio-entregado': 'Entregado', sinconexion: 'Sin señal' };
 		document.title = (titulos[id] ? titulos[id] + ' · ' : '') + 'Pa\'llá';
 		if (!mismo) { pant.scrollTop = 0; }
 	}

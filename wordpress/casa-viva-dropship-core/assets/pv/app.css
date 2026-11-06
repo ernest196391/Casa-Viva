@@ -363,3 +363,9 @@ button.pa-celda:active{background:var(--fondo-2)}
 .pa-desglose{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font:var(--t-peq);color:var(--tinta-2);padding-bottom:12px;border-bottom:1px solid var(--linea)}
 .pa-desglose b{font-weight:500;color:var(--tinta);font-variant-numeric:tabular-nums;text-align:right}
 .pa-pedido-h img{width:56px;height:36px;object-fit:contain;flex:none}
+/* v3 en la app: los 4 servicios son botones; las filas de «Mis pedidos» llevan su vehículo 3D */
+.pa-s4{border:0;width:100%;text-align:left;font:inherit;cursor:pointer}
+.pa-desde{border:0;font:inherit;cursor:pointer}
+.pa-desde > span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pa-pedido-h{gap:12px}
+.pa-recibe{border:0;width:100%;background:none;text-align:left;font:inherit;color:inherit}
