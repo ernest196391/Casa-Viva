@@ -282,3 +282,84 @@ html[data-tema="oscuro"] .pa-seg button[aria-pressed="true"]{background:var(--fo
 .sin-red #mapa .maplibregl-canvas{opacity:0!important}
 .sin-red #mapa .maplibregl-marker{display:none}
 html[data-tema="oscuro"] .pm-veh img{filter:drop-shadow(0 0 1.5px rgba(255,255,255,.55)) drop-shadow(0 1px 2px rgba(0,0,0,.6))}
+
+
+/* ======================================================================================
+   v3 (5-nov-2026): inicio con 4 servicios, lista de vehículos con precio, línea precio · pago · llega y la pista del precio
+   ====================================================================================== */
+
+/* Vehículos 3D: en oscuro, un filo claro para que no se pierdan */
+html[data-tema="oscuro"] .pa-v img,html[data-tema="oscuro"] .pa-s4__img,html[data-tema="oscuro"] .pa-heroe img,html[data-tema="oscuro"] .pa-cab__veh,html[data-tema="oscuro"] .pa-pedido-h img{filter:drop-shadow(0 0 1px rgba(255,255,255,.22))}
+
+/* Inicio: de dónde (pastilla sobre el mapa) + 4 servicios grandes + 2 recientes */
+.pa-desde{min-width:0;max-width:calc(100% - 60px);gap:10px}
+.pa-desde .pm-pin--yo{width:10px;height:10px;flex:none;box-shadow:0 0 0 2px #fff,0 0 0 6px rgba(44,91,199,.18)}
+.pa-hoja--inicio{padding-bottom:calc(8px + env(safe-area-inset-bottom))}
+.pa-svc4{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pa-s4{position:relative;display:block;height:124px;padding:14px 14px 0;border-radius:var(--r);background:var(--fondo-2);color:var(--tinta);text-decoration:none;overflow:hidden;transition:transform var(--m1) var(--curva)}
+.pa-s4:active{transform:scale(.97)}
+.pa-s4 b{position:relative;z-index:1;display:block;font:600 19px/24px var(--letra);letter-spacing:-.015em}
+.pa-s4 > span{position:relative;z-index:1;display:block;font:var(--t-mini);color:var(--tinta-2)}
+.pa-s4__img{position:absolute;right:-4px;bottom:-2px;height:80px;width:auto;max-width:132px;object-fit:contain}
+.pa-s4__img--1{right:58px;bottom:24px;height:44px;max-width:none}        /* Viajar: el taxi, detrás y más pequeño */
+.pa-s4__img--2{right:-4px;bottom:-3px;height:76px}                       /* Viajar: el triciclo, delante */
+.pa-recientes{margin-top:6px}
+.pa-recientes .p-fila{min-height:52px}
+
+/* Viajar: origen → destino en 2 líneas (como La Nave) */
+.pa-od2{position:relative;display:flex;flex-direction:column}
+.pa-od2::before{content:"";position:absolute;left:5.25px;top:16px;bottom:16px;width:1.5px;background:var(--linea-fuerte)}
+.pa-od2 a{position:relative;display:block;min-height:30px;padding:6px 0 6px 24px;color:var(--tinta-2);text-decoration:none;font:500 14px/18px var(--letra);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pa-od2 b{font:600 15px/18px var(--letra);color:var(--tinta)}
+.pa-od2 .pm-pin{position:absolute;left:0;top:50%;width:12px;height:12px;margin-top:-6px}
+.pa-od2 .pm-pin::after{inset:3.5px}
+.pa-od2 .pm-pin--yo{box-shadow:0 0 0 2px var(--fondo)}
+
+/* Viajar: fila de vehículos 3D con su precio. El elegido, más grande y sobre gris (como La Nave). */
+.pa-carr{display:flex;gap:2px;overflow-x:auto;scroll-snap-type:x proximity;scroll-behavior:smooth;margin:6px -16px 0;padding:6px 16px 2px;scrollbar-width:none}
+.pa-carr::-webkit-scrollbar{display:none}
+.pa-v{flex:none;width:96px;display:flex;flex-direction:column;align-items:center;padding:6px 2px 10px;border:0;border-radius:var(--r);background:transparent;color:var(--tinta);scroll-snap-align:start;transition:background-color var(--m2) var(--curva)}
+.pa-v img{display:block;width:86px;height:52px;object-fit:contain;transition:transform var(--m2) var(--curva)}
+.pa-v b{margin-top:6px;font:500 13px/16px var(--letra);white-space:nowrap}
+.pa-v span{font:600 15px/20px var(--letra);font-variant-numeric:tabular-nums}
+.pa-v[aria-selected="true"]{background:var(--fondo-2)}
+.pa-v[aria-selected="true"] img{transform:scale(1.16) translateY(-3px)}
+.pa-v[aria-selected="true"] b{font-weight:600}
+.pa-v.is-nadie > *{opacity:.4}
+.pa-resumen-l{margin:8px 0 0;font:var(--t-peq);color:var(--tinta-2);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* La línea precio · pago · llega (la «clave» de La Nave, más limpia) */
+.pa-linea{display:grid;grid-template-columns:1.3fr 1fr .8fr;margin:10px 0 12px;border-top:1px solid var(--linea);border-bottom:1px solid var(--linea)}
+.pa-celda{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:62px;padding:6px 4px;border:0;background:none;color:var(--tinta);text-align:center;transition:background-color var(--m1)}
+.pa-celda + .pa-celda{box-shadow:inset 1px 0 0 var(--linea)}
+button.pa-celda:active{background:var(--fondo-2)}
+.pa-celda b{font:600 17px/22px var(--letra);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pa-celda b small{font:500 12px/1 var(--letra);color:var(--tinta-2);margin-left:3px}
+.pa-celda span{display:inline-flex;align-items:center;gap:3px;font:var(--t-mini);color:var(--tinta-2);white-space:nowrap}
+.pa-mm{width:12px;height:12px;stroke-width:2.2}
+/* Manera B: el número se subraya con puntos (se puede tocar) y lleva un «±» pequeño */
+.pa-celda--pr.is-toca b{text-decoration:underline dotted var(--tinta-3);text-decoration-thickness:1.5px;text-underline-offset:5px}
+.pa-celda--pr.is-late{animation:pa-late 1.8s var(--curva) 1;border-radius:var(--r)}
+@keyframes pa-late{0%,100%{box-shadow:inset 0 0 0 0 transparent}25%,60%{box-shadow:inset 0 0 0 1.5px var(--tinta)}}
+.pa-linea.is-edita{grid-template-columns:auto 1fr auto;align-items:center;gap:12px;padding:8px 0;animation:p-aparece var(--m2) both}
+.pa-edita-n{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:none;color:var(--tinta);padding:0}
+.pa-edita-n b{font:600 30px/34px var(--letra);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.pa-edita-n b small{font:500 14px/1 var(--letra);color:var(--tinta-2);margin-left:4px;letter-spacing:0}
+.pa-edita-n span{font:var(--t-mini);color:var(--tinta-2)}
+/* Manera A: enlace discreto debajo de la línea */
+.pa-otro{display:block;margin:-6px auto 6px;min-height:36px;padding:0 12px;border:0;background:none;font:var(--t-peq);color:var(--tinta-2);text-decoration:underline;text-underline-offset:3px}
+.pa-atajos{display:flex;gap:8px;justify-content:center;margin:0 0 16px}
+
+/* Precio de Paquete, Comida y Carga: el vehículo 3D grande y la misma línea */
+.pa-heroe{display:flex;align-items:center;gap:14px}
+.pa-heroe img{width:108px;height:72px;object-fit:contain;flex:none}
+.pa-heroe > div{min-width:0}
+.pa-heroe b{display:block;font:600 18px/24px var(--letra);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pa-heroe span{display:block;font:var(--t-peq);color:var(--tinta-2)}
+.pa-aviso-env{margin:10px 0 0}
+.pa-aviso-env span{min-width:0}
+.pa-cab__veh{width:64px;height:42px;object-fit:contain;margin-right:8px;flex:none}
+.pa-peso button{padding:14px 4px}
+.pa-desglose{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font:var(--t-peq);color:var(--tinta-2);padding-bottom:12px;border-bottom:1px solid var(--linea)}
+.pa-desglose b{font-weight:500;color:var(--tinta);font-variant-numeric:tabular-nums;text-align:right}
+.pa-pedido-h img{width:56px;height:36px;object-fit:contain;flex:none}

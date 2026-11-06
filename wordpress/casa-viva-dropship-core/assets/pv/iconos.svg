@@ -56,4 +56,7 @@
 <symbol id="guardado" viewBox="0 0 24 24"><path d="M6.5 3.5h11v17L12 16.5l-5.5 4z"/></symbol>
 <symbol id="salir" viewBox="0 0 24 24"><path d="M14 4.5H6a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h8M10 12h10M16.5 8.5 20 12l-3.5 3.5"/></symbol>
 <symbol id="caja" viewBox="0 0 24 24"><path d="M3.5 8.5h17v11h-17zM2.5 5h19v3.5h-19zM10 12h4"/></symbol>
+<!-- v3 (6-nov-2026, D142): pistas pequeñas de la línea precio · pago -->
+<symbol id="mas-menos" viewBox="0 0 24 24"><path d="M12 3.5v8M8 7.5h8M8 18h8"/></symbol>
+<symbol id="abajo" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
 </svg>
