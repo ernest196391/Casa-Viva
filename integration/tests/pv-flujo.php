@@ -241,6 +241,90 @@ $temas = array_unique( array_map( static fn( $e ) => preg_replace( '/-[a-f0-9]{1
 pv_ok( count( CVD_Pv_Canal::$enviados ) > 5, 'se mandaron señales' );
 pv_ok( ! array_filter( $temas, static fn( $t ) => ! preg_match( '/^palla-[vc]\d+$/', $t ) ), 'solo temas palla-v / palla-c' );
 
+// ====================================================================================== v3 (D142)
+$TV = CVD_Triciclub_Db::t( 'viajes' );
+pv_ok( 5 <= (int) get_option( 'cvd_tc_db' ) && $wpdb->get_var( "SHOW COLUMNS FROM {$TV} LIKE 'adelanto_cup'" ) && $wpdb->get_var( 'SHOW COLUMNS FROM ' . CVD_Triciclub_Db::t( 'choferes' ) . " LIKE 'adelanta'" ), 'v3: tablas versión 5 (adelanto, adelanta)' );
+pv_ok( 'viaje' === $wpdb->get_var( $wpdb->prepare( "SELECT servicio FROM {$TV} WHERE uuid=%s", $V['uuid'] ) ) && 'paquete' === $wpdb->get_var( $wpdb->prepare( "SELECT servicio FROM {$TV} WHERE uuid=%s", $V3['uuid'] ) ), 'v3: las llamadas viejas guardan viaje / paquete' );
+pv_ok( 'Bicitaxi' === CVD_Pv_Tarifa::CLASES['tric_bici']['nombre'] && 'Taxi XL' === CVD_Pv_Tarifa::CLASES['taxi_xl']['nombre'], 'v3: nombres Bicitaxi y Taxi XL' );
+pv_req( 'POST', 'viajes/' . $d['viaje']['uuid'] . '/cancelar', array(), $H ); // libera al cliente (el envío del tope)
+
+// ---------- Viajar: las 7 clases de una vez, cada una con su ruta, de la más barata a la más cara
+list( $s, $qv ) = pv_req( 'GET', 'cotizar', array( 'grupo' => 'viajar', 'olat' => $O[0], 'olng' => $O[1], 'dlat' => $D[0], 'dlng' => $D[1] ), $H );
+$cl = array_column( $qv['clases'], 'clase' );
+pv_ok( 200 === $s && 7 === count( $cl ) && ! array_diff( CVD_Pv_Tarifa::VIAJAR, $cl ), 'v3: cotizar viajar da las 7 clases' );
+$js = array_column( $qv['clases'], 'justo' );
+$ord = $js; sort( $ord );
+pv_ok( $js === $ord, 'v3: de la más barata a la más cara (' . implode( ',', $js ) . ')' );
+$pf = array_column( $qv['clases'], 'perfil', 'clase' );
+pv_ok( 'driving' === $pf['taxi_basico'] && 'driving' === $pf['taxi_xl'] && 'cycling' === $pf['tric_electrico'] && 'cycling' === $pf['moto'], 'v3: taxi por calles de carro, el resto por el camino de bici' );
+pv_ok( array_key_exists( 'driving', $qv['lineas'] ) && array_key_exists( 'cycling', $qv['lineas'] ) && 'tric_electrico' === $qv['ultima'], 'v3: rutas de los dos perfiles y última clase usada' );
+$byc = array_column( $qv['clases'], null, 'clase' );
+pv_ok( null === $byc['taxi_xl']['llega'] && 0 === $byc['taxi_xl']['libres'] && 2 === $byc['tric_electrico']['libres'], 'v3: sin nadie cerca, «llega» vacío' );
+pv_ok( $byc['taxi_basico']['min'] >= 3000, 'v3: el taxi básico nunca baja de 3.000' );
+list( $s, $d ) = pv_req( 'POST', 'viajes', array( 'cid' => 'v3a', 'firma' => $byc['taxi_basico']['firma'], 'precio' => $byc['taxi_basico']['justo'], 'origen_texto' => 'Calle N', 'destino_texto' => 'Coppelia' ), $H );
+pv_ok( 200 === $s && 'viaje' === $d['viaje']['servicio'] && 'taxi_basico' === $d['viaje']['clase'], 'v3: pedir desde Viajar guarda «viaje»' );
+pv_req( 'POST', 'viajes/' . $d['viaje']['uuid'] . '/cancelar', array(), $H );
+list( , $qv ) = pv_req( 'GET', 'cotizar', array( 'grupo' => 'viajar', 'olat' => $O[0], 'olng' => $O[1], 'dlat' => $D[0], 'dlng' => $D[1] ), $H );
+pv_ok( 'tric_electrico' === $qv['ultima'], 'v3: un viaje cancelado no cuenta como el último usado' );
+
+// ---------- Carga: ayudante +500 en justo, mínimo y máximo; el peso no cambia el precio
+$d5 = $mk( '5350000205', 'Reinier Torres', 'carga', 'viaje,paquete,carga', 0.003 );
+update_option( 'cvd_tc_testers', array( $d1, $d2, $d3, $d4, $d5 ) );
+$cq = static function ( array $extra ) use ( $O, $D, $H ): array { list( , $x ) = pv_req( 'GET', 'cotizar', array( 'grupo' => 'mens', 'olat' => $O[0], 'olng' => $O[1], 'dlat' => $D[0], 'dlng' => $D[1] ) + $extra, $H ); return $x; };
+$c0 = $cq( array( 'servicio' => 'carga' ) )['clases'][0];
+$c1 = $cq( array( 'servicio' => 'carga', 'ayudante' => 1 ) )['clases'][0];
+pv_ok( 500 === $c1['justo'] - $c0['justo'] && 500 === $c1['min'] - $c0['min'] && 500 === $c1['max'] - $c0['max'] && 500 === $c1['extra'], 'v3: ayudante +500 CUP en justo, mínimo y máximo' );
+pv_ok( $c0['min'] >= 2000, 'v3: la carga cobra como triciclo de carga (mínimo 2.000)' );
+update_option( 'cvd_pv_ayudante_cup', 700 );
+pv_ok( 700 === $cq( array( 'servicio' => 'carga', 'ayudante' => 1 ) )['clases'][0]['extra'], 'v3: el ayudante sale de la opción cvd_pv_ayudante_cup' );
+delete_option( 'cvd_pv_ayudante_cup' );
+list( $s ) = pv_req( 'POST', 'viajes', array( 'cid' => 'v3c0', 'firma' => $c1['firma'], 'precio' => $c1['justo'], 'envio' => array( 'que' => 'Un refrigerador' ) ), $H );
+pv_ok( 400 === $s, 'v3: carga sin peso no se pide' );
+list( $s, $d ) = pv_req( 'POST', 'viajes', array( 'cid' => 'v3c', 'firma' => $c1['firma'], 'precio' => 1, 'forma_pago' => 'transferencia', 'envio' => array( 'que' => 'Un refrigerador y 2 sillas', 'peso' => 'medio' ) ), $H );
+pv_ok( 200 === $s && 'carga' === $d['viaje']['servicio'] && 'medio' === $d['viaje']['envio']['peso'] && 500 === $d['viaje']['envio']['ayudante'], 'v3: carga guardada con peso y ayudante' );
+pv_ok( $d['viaje']['oferta'] === $c1['min'] && $d['viaje']['min'] === $c1['min'] && $d['viaje']['max'] === $c1['max'], 'v3: la oferta nunca baja del mínimo con ayudante' );
+pv_ok( '5350000101' === $d['viaje']['envio']['telefono'], 'v3: en la carga recibe el mismo cliente si no dice otro' );
+$idc = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$TV} WHERE uuid=%s", $d['viaje']['uuid'] ) );
+list( , $h5 ) = pv_req( 'GET', 'chofer/hoy', array(), $P( $d5 ) );
+$pc = array_values( array_filter( $h5['pedidos'], static fn( $p ) => (int) $p['id'] === $idc ) );
+pv_ok( $pc && 'Carga · 50–150 kg · con ayudante' === $pc[0]['etiqueta'] && 'carga' === $pc[0]['servicio'], 'v3: el chofer de carga ve «Carga · 50–150 kg · con ayudante»' );
+list( , $h3 ) = pv_req( 'GET', 'chofer/hoy', array(), $P( $d3 ) );
+pv_ok( ! in_array( $idc, array_column( $h3['pedidos'], 'id' ), true ), 'v3: el mensajero de mochila no ve la carga' );
+list( $s, $sb ) = pv_req( 'POST', 'viajes/' . $d['viaje']['uuid'] . '/precio', array( 'precio' => 1 ), $H );
+pv_ok( 200 === $s && $sb['viaje']['oferta'] === $c1['min'], 'v3: bajar el precio de la carga se queda en el mínimo con ayudante' );
+pv_req( 'POST', 'viajes/' . $d['viaje']['uuid'] . '/cancelar', array(), $H );
+
+// ---------- Comida: adelanto con tope 5.000, cobrar ≥ adelanto, solo choferes con «Puedo adelantar»
+pv_ok( 5000 === CVD_Pv_Tarifa::comida_tope(), 'v3: tope por defecto 5.000 (opción cvd_pv_comida_tope)' );
+$cm = $cq( array( 'servicio' => 'comida' ) );
+pv_ok( 'comida' === $cm['servicio'] && $cm['clases'][0]['justo'] === $q['clases'][0]['justo'], 'v3: la comida cobra como el mensajero' );
+$cmf = $cm['clases'][0];
+list( $s, $x ) = pv_req( 'POST', 'viajes', array( 'cid' => 'v3m0', 'firma' => $cmf['firma'], 'precio' => $cmf['justo'], 'envio' => array( 'que' => '2 pizzas', 'adelanto_cup' => 5010 ) ), $H );
+pv_ok( 400 === $s && 'adelanto' === $x['code'], 'v3: tope de 5.000 CUP para adelantar' );
+list( $s, $d ) = pv_req( 'POST', 'viajes', array( 'cid' => 'v3m', 'firma' => $cmf['firma'], 'precio' => $cmf['justo'], 'forma_pago' => 'transferencia', 'envio' => array( 'que' => '2 pizzas familiares', 'recoge' => 'Pizzería Obispo', 'adelanto_cup' => 2400, 'cobrar_cup' => 0 ) ), $H );
+$VM = $d['viaje'] ?? array();
+pv_ok( 200 === $s && 'comida' === $VM['servicio'] && 2400 === $VM['envio']['adelanto'] && 2400 === $VM['envio']['cobrar'] && 'Pizzería Obispo' === $VM['envio']['recoge'], 'v3: comida con adelanto; al entregar se cobra al menos lo adelantado' );
+$idm = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$TV} WHERE uuid=%s", $VM['uuid'] ) );
+list( , $h3 ) = pv_req( 'GET', 'chofer/hoy', array(), $P( $d3 ) );
+pv_ok( ! in_array( $idm, array_column( $h3['pedidos'], 'id' ), true ) && false === $h3['ficha']['adelanta'], 'v3: sin «Puedo adelantar» no ve la comida con adelanto' );
+list( $s ) = pv_req( 'POST', 'chofer/disponible', array( 'on' => 1, 'lat' => $O[0] + 0.003, 'lng' => $O[1], 'adelanta' => 1 ), $P( $d3 ) );
+list( , $h3 ) = pv_req( 'GET', 'chofer/hoy', array(), $P( $d3 ) );
+$pm = array_values( array_filter( $h3['pedidos'], static fn( $p ) => (int) $p['id'] === $idm ) );
+pv_ok( 200 === $s && true === $h3['ficha']['adelanta'] && $pm && 'Comida · adelanta 2.400' === $pm[0]['etiqueta'], 'v3: con «Puedo adelantar» ve «Comida · adelanta 2.400»' );
+list( , $o ) = pv_req( 'POST', "chofer/pedidos/{$idm}/ofertar", array( 'pct' => 0 ), $P( $d3 ) );
+pv_ok( false === $o['elegido'], 'v3: sin «1.ª oferta» el «Acepto» espera' );
+list( $s, $pr ) = pv_req( 'POST', 'viajes/' . $VM['uuid'] . '/primera', array( 'on' => 1 ), $H );
+pv_ok( 200 === $s && 'asignado' === $pr['viaje']['estado'] && true === $pr['viaje']['primera'], 'v3: encender «Coger la 1.ª» en las ofertas coge el «Acepto» que ya estaba' );
+pv_req( 'POST', "chofer/viajes/{$idm}/estado", array( 'accion' => 'llegue' ), $P( $d3 ) );
+list( $s, $x ) = pv_req( 'POST', "chofer/viajes/{$idm}/estado", array( 'accion' => 'recogi' ), $P( $d3 ) );
+pv_ok( 400 === $s && 'recibo' === $x['code'], 'v3: no sale sin la foto del recibo' );
+list( , $ha ) = pv_req( 'GET', 'chofer/hoy', array(), $P( $d3 ) );
+pv_ok( 'comida' === $ha['activo']['servicio'] && 2400 === $ha['activo']['envio']['adelanto'] && false === $ha['activo']['envio']['recibo'] && 'Pizzería Obispo' === $ha['activo']['envio']['recoge'], 'v3: el chofer ve servicio, adelanto y sitio' );
+$wpdb->update( $TV, array( 'recibo_foto' => 'r-prueba.jpg' ), array( 'id' => $idm ) );
+list( $s ) = pv_req( 'POST', "chofer/viajes/{$idm}/estado", array( 'accion' => 'recogi' ), $P( $d3 ) );
+list( , $vv ) = pv_req( 'GET', 'viajes/' . $VM['uuid'], array(), $H );
+pv_ok( 200 === $s && 'recogido' === $vv['viaje']['estado'] && false !== strpos( $vv['viaje']['envio']['recibo'], 't=recibo' ), 'v3: con el recibo sale; el cliente ve el enlace de la foto del recibo' );
+
 // ---------- Viajes del cliente y semana del chofer
 list( , $mv ) = pv_req( 'GET', 'viajes', array(), $H );
 pv_ok( count( $mv['viajes'] ) >= 4, 'mis viajes' );
@@ -248,6 +332,6 @@ list( , $se ) = pv_req( 'GET', 'chofer/semana', array(), $P( $d2 ) );
 pv_ok( 1 === $se['viajes'] && $se['total'] === $V['oferta'] + 150, 'semana del chofer' );
 
 // ---------- Limpieza
-foreach ( array( $d1, $d2, $d3, $d4 ) as $u ) { $wpdb->delete( CVD_Triciclub_Db::t( 'choferes' ), array( 'user_id' => $u ) ); require_once ABSPATH . 'wp-admin/includes/user.php'; wp_delete_user( $u ); }
+foreach ( array( $d1, $d2, $d3, $d4, $d5 ) as $u ) { $wpdb->delete( CVD_Triciclub_Db::t( 'choferes' ), array( 'user_id' => $u ) ); require_once ABSPATH . 'wp-admin/includes/user.php'; wp_delete_user( $u ); }
 foreach ( array( 'viajes' => 'cliente_id', 'clientes' => 'id' ) as $tb => $col ) { $wpdb->delete( CVD_Triciclub_Db::t( $tb ), array( $col => (int) $cli->id ) ); }
 echo "OK Pa'llá transporte: " . $GLOBALS['pv_n'] . " comprobaciones\n";

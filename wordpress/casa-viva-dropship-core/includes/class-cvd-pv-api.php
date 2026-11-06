@@ -54,6 +54,7 @@ final class CVD_Pv_Api {
 		$r( 'viajes/(?P<uuid>[a-f0-9-]{36})', 'GET', 'ver', $c );
 		$r( 'viajes/(?P<uuid>[a-f0-9-]{36})/precio', 'POST', 'subir', $c );
 		$r( 'viajes/(?P<uuid>[a-f0-9-]{36})/elegir', 'POST', 'elegir', $c );
+		$r( 'viajes/(?P<uuid>[a-f0-9-]{36})/primera', 'POST', 'primera', $c ); // v3
 		$r( 'viajes/(?P<uuid>[a-f0-9-]{36})/cancelar', 'POST', 'cancelar', $c );
 		$r( 'viajes/(?P<uuid>[a-f0-9-]{36})/valorar', 'POST', 'valorar_cliente', $c );
 		$r( 'foto', 'GET', 'ver_foto', $open ); // firmada
@@ -259,30 +260,48 @@ final class CVD_Pv_Api {
 	}
 
 	/**
-	 * GET cotizar?grupo=taxi|tric|moto|mens&olat&olng&dlat&dlng[&tam] — por cada clase del grupo: precio justo, límites
-	 * de la oferta, minutos, cuántos libres cerca y cuánto tarda el más cercano; todo con la cotización firmada (10 min).
+	 * GET cotizar?grupo=viajar|taxi|tric|moto|mens&olat&olng&dlat&dlng[&tam][&servicio=paquete|comida|carga][&ayudante=1]
+	 * Por cada clase: precio justo, límites de la oferta, minutos, cuántos libres cerca y cuánto tarda el más cercano;
+	 * todo con la cotización firmada (10 min).
+	 * - v3 (D142) `grupo=viajar`: las 7 clases de Viajar de una vez, cada una con SU ruta (taxi por calles de carro, el resto
+	 *   por el camino corto de bici), de la más barata a la más cara, + `lineas` {driving, cycling} y `ultima` (la clase
+	 *   que usó el cliente la última vez; la 1.ª vez, el triciclo eléctrico).
+	 * - v3 `grupo=mens&servicio=carga`: triciclo de carga (precio tric_carga) + ayudante fijo si `ayudante=1`;
+	 *   `servicio=comida`: precio del mensajero (cabe en la mochila).
+	 * Los grupos de antes (taxi, tric, moto, mens sin servicio) contestan igual que siempre (móviles con la app vieja).
 	 */
 	public static function cotizar( WP_REST_Request $request ): WP_REST_Response {
 		$grupo = sanitize_key( (string) $request->get_param( 'grupo' ) );
-		if ( ! in_array( $grupo, array( 'taxi', 'tric', 'moto', 'mens' ), true ) ) { $grupo = 'tric'; }
+		if ( ! in_array( $grupo, array( 'viajar', 'taxi', 'tric', 'moto', 'mens' ), true ) ) { $grupo = 'tric'; }
 		$olat = self::coord( $request->get_param( 'olat' ), true );
 		$olng = self::coord( $request->get_param( 'olng' ), false );
 		$dlat = self::coord( $request->get_param( 'dlat' ), true );
 		$dlng = self::coord( $request->get_param( 'dlng' ), false );
 		if ( null === $olat || null === $olng || null === $dlat || null === $dlng ) { return self::fail( 'puntos', 'Falta dónde recoger o a dónde ir.' ); }
+		$serv = sanitize_key( (string) $request->get_param( 'servicio' ) );
+		$serv = 'mens' === $grupo ? ( in_array( $serv, array( 'paquete', 'comida', 'carga' ), true ) ? $serv : '' ) : ( 'viajar' === $grupo ? 'viaje' : '' );
 		$tam = sanitize_key( (string) $request->get_param( 'tam' ) );
 		$tam = isset( CVD_Pv_Tarifa::TAMANOS[ $tam ] ) ? $tam : 'mano';
-		$tray = self::trayecto( 'taxi' === $grupo ? 'driving' : 'cycling', $olat, $olng, $dlat, $dlng );
+		if ( 'carga' === $serv ) { $tam = 'grande'; }
+		if ( 'comida' === $serv ) { $tam = 'mochila'; }
+		$extra = 'carga' === $serv && rest_sanitize_boolean( $request->get_param( 'ayudante' ) ) ? CVD_Pv_Tarifa::ayudante() : 0;
+		// Ruta: de carro para el taxi, de bici para el resto. En «viajar» hacen falta las dos (cada clase con la suya).
+		$tray = array();
+		$perfiles = 'viajar' === $grupo ? array( 'driving', 'cycling' ) : array( 'taxi' === $grupo ? 'driving' : 'cycling' );
+		foreach ( $perfiles as $pf ) { $tray[ $pf ] = self::trayecto( $pf, $olat, $olng, $dlat, $dlng ); }
 		$recta = CVD_Triciclub_Precio::recta_m( $olat, $olng, $dlat, $dlng );
 		$noche = CVD_Pv_Tarifa::noche();
 		$libres = self::en_linea();
-		$clases = 'mens' === $grupo ? array( 'mensajero' ) : array_keys( array_filter( CVD_Pv_Tarifa::CLASES, static fn( array $c ): bool => $c['grupo'] === $grupo ) );
+		if ( 'viajar' === $grupo ) { $clases = CVD_Pv_Tarifa::VIAJAR; }
+		elseif ( 'mens' === $grupo ) { $clases = array( 'mensajero' ); }
+		else { $clases = array_keys( array_filter( CVD_Pv_Tarifa::CLASES, static fn( array $c ): bool => $c['grupo'] === $grupo ) ); }
 		$lista = array();
 		foreach ( $clases as $clase ) {
 			$precio_de = 'mensajero' === $clase && 'grande' === $tam ? 'tric_carga' : $clase;
-			$metros = CVD_Pv_Tarifa::metros_cobro( $precio_de, (int) $tray['metros'], $recta );
-			$justo = CVD_Pv_Tarifa::justo( $precio_de, $metros, $noche );
-			$lim = CVD_Pv_Tarifa::limites( $precio_de, $justo, $noche );
+			$pf = 'viajar' === $grupo ? self::perfil( $clase ) : $perfiles[0];
+			$metros = CVD_Pv_Tarifa::metros_cobro( $precio_de, (int) $tray[ $pf ]['metros'], $recta );
+			$justo = CVD_Pv_Tarifa::justo( $precio_de, $metros, $noche ) + $extra;
+			$lim = CVD_Pv_Tarifa::limites_extra( $precio_de, $justo, $noche, $extra );
 			$cerca = null;
 			$n = 0;
 			foreach ( $libres as $ch ) {
@@ -293,26 +312,53 @@ final class CVD_Pv_Api {
 				$cerca = null === $cerca ? $d : min( $cerca, $d );
 			}
 			$minutos = CVD_Pv_Tarifa::minutos( $precio_de, $metros );
+			$fq = array( 'clase' => $clase, 'olat' => $olat, 'olng' => $olng, 'dlat' => $dlat, 'dlng' => $dlng, 'metros' => $metros, 'minutos' => $minutos, 'justo' => $justo, 'noche' => $noche, 'tam' => 'mensajero' === $clase ? $tam : '' );
+			if ( '' !== $serv ) { $fq += array( 'serv' => $serv, 'extra' => $extra ); }
 			$lista[] = array(
 				'clase'   => $clase,
 				'justo'   => $justo,
 				'min'     => $lim[0],
 				'max'     => $lim[1],
+				'extra'   => $extra,
+				'perfil'  => $pf,
 				'km'      => round( $metros / 1000, 1 ),
 				'minutos' => $minutos,
 				'libres'  => $n,
 				'llega'   => null === $cerca ? null : CVD_Pv_Tarifa::minutos( $clase, (int) round( $cerca * 1.3 ) ),
-				'firma'   => CVD_Pv_Tarifa::firmar( array( 'clase' => $clase, 'olat' => $olat, 'olng' => $olng, 'dlat' => $dlat, 'dlng' => $dlng, 'metros' => $metros, 'minutos' => $minutos, 'justo' => $justo, 'noche' => $noche, 'tam' => 'mensajero' === $clase ? $tam : '' ) ),
+				'firma'   => CVD_Pv_Tarifa::firmar( $fq ),
 			);
 		}
-		return self::out( array( 'ok' => true, 'grupo' => $grupo, 'noche' => $noche, 'como' => $tray['como'], 'linea' => $tray['linea'] ?? null, 'clases' => $lista, 'vence' => time() + CVD_Pv_Tarifa::FIRMA_TTL ) );
+		$out = array( 'ok' => true, 'grupo' => $grupo, 'noche' => $noche, 'como' => $tray[ $perfiles[0] ]['como'], 'linea' => $tray[ $perfiles[ count( $perfiles ) - 1 ] ]['linea'] ?? null, 'clases' => $lista, 'vence' => time() + CVD_Pv_Tarifa::FIRMA_TTL );
+		if ( '' !== $serv ) { $out['servicio'] = $serv; }
+		if ( 'viajar' === $grupo ) {
+			usort( $out['clases'], static fn( array $a, array $b ): int => array( $a['justo'], array_search( $a['clase'], CVD_Pv_Tarifa::VIAJAR, true ) ) <=> array( $b['justo'], array_search( $b['clase'], CVD_Pv_Tarifa::VIAJAR, true ) ) );
+			$out['lineas'] = array( 'driving' => $tray['driving']['linea'] ?? null, 'cycling' => $tray['cycling']['linea'] ?? null );
+			$out['ultima'] = self::ultima_clase( (int) self::cliente( $request )->id );
+		}
+		return self::out( $out );
+	}
+
+	/** v3: la clase de Viajar que usó el cliente la última vez (un viaje que no se canceló); la 1.ª vez, el triciclo eléctrico. */
+	private static function ultima_clase( int $cliente_id ): string {
+		global $wpdb;
+		$in = "'" . implode( "','", CVD_Pv_Tarifa::VIAJAR ) . "'";
+		$c = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT clase FROM ' . self::t( 'viajes' ) . " WHERE cliente_id=%d AND clase IN ({$in}) AND estado<>'cancelado' ORDER BY id DESC LIMIT 1", $cliente_id ) );
+		return '' !== $c ? $c : 'tric_electrico';
+	}
+
+	/** Lo que el cliente puede ofrecer en este pedido (con el ayudante dentro si lo lleva). */
+	private static function lim_de( object $v ): array {
+		$precio_de = 'mensajero' === $v->clase && 'grande' === $v->envio_tam ? 'tric_carga' : (string) $v->clase;
+		return CVD_Pv_Tarifa::limites_extra( $precio_de, (int) $v->precio_justo, (bool) $v->noche, (int) ( $v->extra_cup ?? 0 ) );
 	}
 
 	// ================================================================== Pedir
 
 	/**
 	 * POST viajes {cid, firma, precio, primera, forma_pago, origen_texto, destino_texto, nota,
-	 *              envio?: {que, recibe_nombre, recibe_telefono, cobrar_cup}}
+	 *              envio?: {que, recibe_nombre, recibe_telefono, cobrar_cup,
+	 *                       v3: recoge (texto del sitio), adelanto_cup (comida, tope 5.000), peso (carga: poco|medio|mucho)}}
+	 * El servicio (viaje · paquete · comida · carga) y el ayudante vienen en la cotización firmada.
 	 */
 	public static function pedir( WP_REST_Request $request ): WP_REST_Response {
 		global $wpdb;
@@ -328,18 +374,40 @@ final class CVD_Pv_Api {
 		$clase = (string) $q['clase'];
 		$envio = 'mensajero' === $clase;
 		$precio_de = $envio && 'grande' === $q['tam'] ? 'tric_carga' : $clase;
-		$lim = CVD_Pv_Tarifa::limites( $precio_de, (int) $q['justo'], (bool) $q['noche'] );
+		$extra = $envio ? max( 0, (int) ( $q['extra'] ?? 0 ) ) : 0;
+		$lim = CVD_Pv_Tarifa::limites_extra( $precio_de, (int) $q['justo'], (bool) $q['noche'], $extra );
 		$oferta = CVD_Pv_Tarifa::ajustar( (int) $request->get_param( 'precio' ), $lim );
+		// v3: el servicio viene en la cotización firmada; las cotizaciones viejas (sin él) se leen como antes.
+		$serv = (string) ( $q['serv'] ?? '' );
+		if ( ! in_array( $serv, CVD_Pv_Tarifa::SERVICIOS, true ) || ( $envio xor 'viaje' !== $serv ) ) { $serv = $envio ? 'paquete' : ( 'tric_carga' === $clase ? 'carga' : 'viaje' ); }
 		$e = (array) $request->get_param( 'envio' );
-		if ( $envio && mb_strlen( self::txt( $e['que'] ?? '', 120 ) ) < 2 ) { return self::fail( 'envio', 'Escribe qué mandas.' ); }
-		if ( $envio && '' === CVD_Triciclub::telefono( $e['recibe_telefono'] ?? '' ) ) { return self::fail( 'envio', 'Falta el teléfono de quien recibe.' ); }
+		$que = self::txt( $e['que'] ?? '', 120 );
+		if ( $envio && mb_strlen( $que ) < 2 ) { return self::fail( 'envio', 'comida' === $serv ? 'Escribe qué comida es.' : ( 'carga' === $serv ? 'Escribe qué llevas.' : 'Escribe qué mandas.' ) ); }
+		// Comida y Carga: si no dice quién recibe, recibe el mismo cliente.
+		$rtel = CVD_Triciclub::telefono( $e['recibe_telefono'] ?? '' );
+		$rnom = self::txt( $e['recibe_nombre'] ?? '', 80 );
+		if ( $envio && '' === $rtel && in_array( $serv, array( 'comida', 'carga' ), true ) ) { $rtel = (string) $c->telefono; $rnom = '' !== $rnom ? $rnom : (string) $c->nombre; }
+		if ( $envio && '' === $rtel ) { return self::fail( 'envio', 'Falta el teléfono de quien recibe.' ); }
+		$peso = '';
+		if ( 'carga' === $serv ) {
+			$peso = sanitize_key( (string) ( $e['peso'] ?? '' ) );
+			if ( ! isset( CVD_Pv_Tarifa::PESOS[ $peso ] ) ) { return self::fail( 'envio', 'Di cuánto pesa más o menos. Más de 300 kg o una mudanza: escríbenos.' ); }
+		}
+		$cobrar = $envio ? max( 0, min( 500000, (int) ( $e['cobrar_cup'] ?? 0 ) ) ) : 0;
+		$adelanto = 0;
+		if ( 'comida' === $serv ) {
+			$adelanto = max( 0, (int) ( $e['adelanto_cup'] ?? 0 ) );
+			$tope = CVD_Pv_Tarifa::comida_tope();
+			if ( $adelanto > $tope ) { return self::fail( 'adelanto', 'El mensajero adelanta como mucho ' . number_format( $tope, 0, ',', '.' ) . ' CUP. Si es más, paga tú al restaurante por Transfermóvil.' ); }
+			$cobrar = max( $cobrar, $adelanto ); // lo que adelantó el mensajero vuelve a él al entregar
+		}
 		$now = self::now();
 		$row = array(
 			'uuid'            => wp_generate_uuid4(),
 			'cliente_id'      => (int) $c->id,
 			'cid'             => $cid,
 			'chofer_id'       => 0,
-			'servicio'        => $envio ? 'paquete' : ( 'tric_carga' === $clase ? 'carga' : 'viaje' ),
+			'servicio'        => $serv,
 			'clase'           => $clase,
 			'estado'          => 'buscando',
 			'origen_texto'    => self::txt( $request->get_param( 'origen_texto' ), 160 ),
@@ -358,12 +426,16 @@ final class CVD_Pv_Api {
 			'forma_pago'      => 'transferencia' === sanitize_key( (string) $request->get_param( 'forma_pago' ) ) ? 'transferencia' : 'efectivo',
 			'codigo'          => str_pad( (string) random_int( 0, 9999 ), 4, '0', STR_PAD_LEFT ),
 			'nota'            => self::txt( $request->get_param( 'nota' ), 200 ),
-			'envio_que'       => $envio ? self::txt( $e['que'] ?? '', 120 ) : '',
+			'envio_que'       => $envio ? $que : '',
 			'envio_tam'       => $envio ? (string) $q['tam'] : '',
-			'recibe_nombre'   => $envio ? self::txt( $e['recibe_nombre'] ?? '', 80 ) : '',
-			'recibe_telefono' => $envio ? CVD_Triciclub::telefono( $e['recibe_telefono'] ?? '' ) : '',
-			'cobrar_cup'      => $envio ? max( 0, min( 500000, (int) ( $e['cobrar_cup'] ?? 0 ) ) ) : 0,
+			'recibe_nombre'   => $envio ? $rnom : '',
+			'recibe_telefono' => $envio ? $rtel : '',
+			'cobrar_cup'      => $cobrar,
 			'entrega_codigo'  => $envio ? str_pad( (string) random_int( 0, 9999 ), 4, '0', STR_PAD_LEFT ) : '',
+			'recoge_texto'    => $envio ? self::txt( $e['recoge'] ?? '', 120 ) : '',
+			'adelanto_cup'    => $adelanto,
+			'peso'            => $peso,
+			'extra_cup'       => $extra,
 			'rev'             => 1,
 			'busca_desde'     => $now,
 			'created_at'      => $now,
@@ -376,7 +448,7 @@ final class CVD_Pv_Api {
 		$id = (int) $wpdb->insert_id;
 		$wpdb->update( $v, array( 'canal' => CVD_Pv_Canal::nuevo_tema( $id ) ), array( 'id' => $id ) );
 		$viaje = self::viaje( $id );
-		CVD_Triciclub_Db::evento( $id, 'cliente', (int) $c->id, 'pv_pedido', array( 'clase' => $clase, 'oferta' => $oferta, 'justo' => (int) $q['justo'] ) );
+		CVD_Triciclub_Db::evento( $id, 'cliente', (int) $c->id, 'pv_pedido', array( 'clase' => $clase, 'servicio' => $serv, 'oferta' => $oferta, 'justo' => (int) $q['justo'] ) );
 		self::avisar_choferes( $viaje, false );
 		return self::out( array( 'ok' => true, 'viaje' => self::vista_cliente( $viaje ) ) );
 	}
@@ -389,7 +461,8 @@ final class CVD_Pv_Api {
 			$lista[] = array( CVD_Triciclub_Precio::recta_m( (float) $ch->lat, (float) $ch->lng, (float) $viaje->origen_lat, (float) $viaje->origen_lng ), (int) $ch->user_id );
 		}
 		sort( $lista );
-		$titulo = ( 'paquete' === $viaje->servicio ? '📦 Envío' : '🚖 Pedido' ) . ( $subio ? ' · subió a ' : ' · ' ) . number_format( (int) $viaje->precio_oferta, 0, ',', '.' ) . ' CUP';
+		$ico = array( 'paquete' => '📦 Envío', 'comida' => '🍕 Comida', 'carga' => '📦 Carga' )[ (string) $viaje->servicio ] ?? '🚖 Pedido';
+		$titulo = $ico . ( $subio ? ' · subió a ' : ' · ' ) . number_format( (int) $viaje->precio_oferta, 0, ',', '.' ) . ' CUP';
 		$txt = self::corto( (string) $viaje->origen_texto ) . ' → ' . self::corto( (string) $viaje->destino_texto ) . ' · ' . round( (int) $viaje->distancia_m / 1000, 1 ) . ' km. Acepta o pide más.';
 		foreach ( array_slice( $lista, 0, self::AVISAR_MAX ) as $l ) {
 			CVD_Pv_Canal::senal( CVD_Pv_Canal::tema_chofer( $l[1] ), array( 't' => 'pedido', 'id' => (int) $viaje->id ) );
@@ -405,10 +478,21 @@ final class CVD_Pv_Api {
 
 	private static function corto( string $t ): string { return trim( explode( ',', $t )[0] ) ?: 'Punto en el mapa'; }
 
+	/** v3: lo que el chofer lee del pedido en una línea: «Comida · adelanta 2.400», «Carga · 50–150 kg · con ayudante». */
+	public static function etiqueta( object $v ): string {
+		$s = (string) $v->servicio;
+		if ( 'comida' === $s ) { return 'Comida' . ( (int) $v->adelanto_cup ? ' · adelanta ' . number_format( (int) $v->adelanto_cup, 0, ',', '.' ) : ' · ya pagada' ); }
+		if ( 'carga' === $s ) { return 'Carga' . ( isset( CVD_Pv_Tarifa::PESOS[ (string) $v->peso ] ) ? ' · ' . CVD_Pv_Tarifa::PESOS[ (string) $v->peso ] : '' ) . ( (int) $v->extra_cup ? ' · con ayudante' : '' ); }
+		if ( 'mensajero' === $v->clase ) { return 'Paquete'; }
+		return 'Pasaje';
+	}
+
 	/** ¿Ve este chofer este pedido? Clase, distancia (4 km; 8 km pasados 45 s) y, si es en efectivo, sin deuda al tope. */
 	private static function puede_ver( object $ch, object $viaje ): bool {
 		if ( (int) $ch->user_id === (int) $viaje->chofer_id ) { return false; }
 		if ( ! self::sirve( $ch, (string) $viaje->clase, (string) $viaje->envio_tam ) ) { return false; }
+		// v3: la comida que hay que pagar al recoger, solo a quien marcó «Puedo adelantar dinero».
+		if ( (int) ( $viaje->adelanto_cup ?? 0 ) > 0 && ! (int) ( $ch->adelanta ?? 0 ) ) { return false; }
 		$edad = time() - (int) strtotime( (string) ( $viaje->busca_desde ?: $viaje->created_at ) . ' UTC' );
 		$radio = $edad > 45 ? self::RADIO_2 : self::RADIO_1;
 		if ( CVD_Triciclub_Precio::recta_m( (float) $ch->lat, (float) $ch->lng, (float) $viaje->origen_lat, (float) $viaje->origen_lng ) > $radio ) { return false; }
@@ -521,8 +605,7 @@ final class CVD_Pv_Api {
 			if ( 'transferencia' === $v->forma_pago || $por_pagar ) { $ch = CVD_Triciclub::chofer_de( (int) $v->chofer_id ); $chofer['transferencia'] = $ch ? (string) $ch->transferencia : ''; }
 		}
 		$envio = 'mensajero' === $v->clase;
-		$precio_de = $envio && 'grande' === $v->envio_tam ? 'tric_carga' : (string) $v->clase;
-		$lim = CVD_Pv_Tarifa::limites( $precio_de, (int) $v->precio_justo, (bool) $v->noche );
+		$lim = self::lim_de( $v );
 		$espera = 'llego' === $v->estado ? CVD_Pv_Tarifa::espera( $v->llego_at, self::now() ) : (int) $v->espera_cup;
 		return array(
 			'uuid'          => (string) $v->uuid,
@@ -530,6 +613,7 @@ final class CVD_Pv_Api {
 			'rev'           => (int) $v->rev,
 			'canal'         => (string) $v->canal,
 			'clase'         => (string) $v->clase,
+			'servicio'      => (string) $v->servicio,
 			'grupo'         => CVD_Pv_Tarifa::grupo( (string) $v->clase ),
 			'origen'        => array( 'texto' => (string) $v->origen_texto, 'lat' => (float) $v->origen_lat, 'lng' => (float) $v->origen_lng ),
 			'destino'       => array( 'texto' => (string) $v->destino_texto, 'lat' => (float) $v->destino_lat, 'lng' => (float) $v->destino_lng ),
@@ -553,7 +637,8 @@ final class CVD_Pv_Api {
 			'pos'           => $pos = ( $activo ? self::posicion( $v ) : null ),
 			'linea'         => self::linea_viaje( $v ),
 			'viene'         => in_array( $v->estado, array( 'asignado', 'llego' ), true ) ? self::ruta_viene( $v, $pos ) : null,
-			'envio'         => $envio ? array( 'que' => (string) $v->envio_que, 'tam' => (string) $v->envio_tam, 'recibe' => (string) $v->recibe_nombre, 'telefono' => (string) $v->recibe_telefono, 'cobrar' => (int) $v->cobrar_cup, 'codigo' => (string) $v->entrega_codigo, 'foto' => '' !== (string) $v->entrega_foto ? self::foto_url( $v ) : '' ) : null,
+			'envio'         => $envio ? array( 'que' => (string) $v->envio_que, 'tam' => (string) $v->envio_tam, 'recibe' => (string) $v->recibe_nombre, 'telefono' => (string) $v->recibe_telefono, 'cobrar' => (int) $v->cobrar_cup, 'codigo' => (string) $v->entrega_codigo, 'foto' => '' !== (string) $v->entrega_foto ? self::foto_url( $v ) : '',
+				'recoge' => (string) $v->recoge_texto, 'adelanto' => (int) $v->adelanto_cup, 'recibo' => '' !== (string) $v->recibo_foto ? self::foto_url( $v, 'recibo' ) : '', 'peso' => (string) $v->peso, 'ayudante' => (int) $v->extra_cup ) : null,
 			'llego'         => self::iso( $v->llego_at ),
 			'recogido'      => self::iso( $v->recogido_at ),
 			'terminado'     => self::iso( $v->terminado_at ),
@@ -662,7 +747,7 @@ final class CVD_Pv_Api {
 		foreach ( $rows as $r ) {
 			$r = self::caducar( $r );
 			$ch = (int) $r->chofer_id ? self::chofer_publico( (int) $r->chofer_id ) : null;
-			$out[] = array( 'uuid' => (string) $r->uuid, 'estado' => (string) $r->estado, 'clase' => (string) $r->clase, 'grupo' => CVD_Pv_Tarifa::grupo( (string) $r->clase ), 'destino' => array( 'texto' => (string) $r->destino_texto, 'lat' => (float) $r->destino_lat, 'lng' => (float) $r->destino_lng ), 'origen' => array( 'texto' => (string) $r->origen_texto, 'lat' => (float) $r->origen_lat, 'lng' => (float) $r->origen_lng ), 'total' => (int) $r->precio + (int) $r->espera_cup, 'chofer' => $ch ? $ch['nombre'] : '', 'fecha' => self::iso( $r->created_at ), 'foto' => '' !== (string) $r->entrega_foto );
+			$out[] = array( 'uuid' => (string) $r->uuid, 'estado' => (string) $r->estado, 'clase' => (string) $r->clase, 'servicio' => (string) $r->servicio, 'que' => (string) $r->envio_que, 'grupo' => CVD_Pv_Tarifa::grupo( (string) $r->clase ), 'destino' => array( 'texto' => (string) $r->destino_texto, 'lat' => (float) $r->destino_lat, 'lng' => (float) $r->destino_lng ), 'origen' => array( 'texto' => (string) $r->origen_texto, 'lat' => (float) $r->origen_lat, 'lng' => (float) $r->origen_lng ), 'total' => (int) $r->precio + (int) $r->espera_cup, 'chofer' => $ch ? $ch['nombre'] : '', 'fecha' => self::iso( $r->created_at ), 'foto' => '' !== (string) $r->entrega_foto );
 		}
 		return self::out( array( 'ok' => true, 'viajes' => $out ) );
 	}
@@ -674,8 +759,7 @@ final class CVD_Pv_Api {
 		$v = self::por_uuid( (string) $request['uuid'] );
 		if ( ! $v || (int) $v->cliente_id !== (int) $c->id ) { return self::fail( 'no_existe', 'No encontramos ese viaje.', 404 ); }
 		if ( ! in_array( $v->estado, array( 'buscando', 'sin_chofer' ), true ) ) { return self::fail( 'tarde', 'Ya tienes chofer.', 409 ); }
-		$precio_de = 'mensajero' === $v->clase && 'grande' === $v->envio_tam ? 'tric_carga' : (string) $v->clase;
-		$p = CVD_Pv_Tarifa::ajustar( (int) $request->get_param( 'precio' ), CVD_Pv_Tarifa::limites( $precio_de, (int) $v->precio_justo, (bool) $v->noche ) );
+		$p = CVD_Pv_Tarifa::ajustar( (int) $request->get_param( 'precio' ), self::lim_de( $v ) );
 		$now = self::now();
 		// Volver a buscar desde ahora (4 min más). Las ofertas «Acepto» viejas quedan (son más baratas para el cliente).
 		$wpdb->query( $wpdb->prepare( 'UPDATE ' . self::t( 'viajes' ) . " SET precio_oferta=%d, precio=%d, estado='buscando', busca_desde=%s, updated_at=%s WHERE id=%d AND estado IN ('buscando','sin_chofer')", $p, $p, $now, $now, (int) $v->id ) );
@@ -683,6 +767,31 @@ final class CVD_Pv_Api {
 		$v = self::viaje( (int) $v->id );
 		self::tocar( $v, 'precio' );
 		self::avisar_choferes( $v, true );
+		return self::out( array( 'ok' => true, 'viaje' => self::vista_cliente( self::viaje( (int) $v->id ) ) ) );
+	}
+
+	/**
+	 * POST viajes/{uuid}/primera {on} — v3: «Coger la 1.ª que acepte» se enciende en la pantalla de ofertas. Si al encenderlo
+	 * ya hay un «Acepto» (a su precio) vivo, se queda con el viaje al momento (el más barato; si empatan, el que llega antes).
+	 */
+	public static function primera( WP_REST_Request $request ): WP_REST_Response {
+		global $wpdb;
+		$c = self::cliente( $request );
+		$v = self::por_uuid( (string) $request['uuid'] );
+		if ( ! $v || (int) $v->cliente_id !== (int) $c->id ) { return self::fail( 'no_existe', 'No encontramos ese viaje.', 404 ); }
+		$on = rest_sanitize_boolean( $request->get_param( 'on' ) );
+		if ( ! in_array( $v->estado, array( 'buscando', 'sin_chofer' ), true ) ) { return self::out( array( 'ok' => true, 'viaje' => self::vista_cliente( $v ) ) ); }
+		$wpdb->query( $wpdb->prepare( 'UPDATE ' . self::t( 'viajes' ) . ' SET primera=%d, updated_at=%s WHERE id=%d', $on ? 1 : 0, self::now(), (int) $v->id ) );
+		$v = self::viaje( (int) $v->id );
+		if ( $on && 'buscando' === $v->estado ) {
+			$oids = $wpdb->get_col( $wpdb->prepare( 'SELECT id FROM ' . self::t( 'ofertas' ) . " WHERE viaje_id=%d AND estado='activa' AND pct=0 AND vence_at>%s ORDER BY precio ASC, llega_min ASC", (int) $v->id, self::now() ) );
+			foreach ( array_map( 'intval', (array) $oids ) as $oid ) {
+				if ( '' === self::asignar( $v, $oid ) ) { break; }
+				$v = self::viaje( (int) $v->id );
+			}
+		}
+		$v = self::viaje( (int) $v->id );
+		if ( 'buscando' === $v->estado ) { self::tocar( $v, 'precio' ); }
 		return self::out( array( 'ok' => true, 'viaje' => self::vista_cliente( self::viaje( (int) $v->id ) ) ) );
 	}
 
@@ -795,6 +904,8 @@ final class CVD_Pv_Api {
 				'disponible' => (bool) (int) $ch->disponible,
 				'pasaje'     => in_array( 'viaje', explode( ',', (string) $ch->servicios ), true ),
 				'envios'     => in_array( 'paquete', explode( ',', (string) $ch->servicios ), true ),
+				'adelanta'   => (bool) (int) ( $ch->adelanta ?? 0 ), // v3: «Puedo adelantar dinero» (comida pagada al recoger)
+				'adelanta_tope' => CVD_Pv_Tarifa::comida_tope(),
 				'nota'       => $pub['nota'],
 				'viajes'     => (int) $ch->viajes_total,
 				'foto'       => $pub['foto'],
@@ -853,7 +964,9 @@ final class CVD_Pv_Api {
 		return array(
 			'id'       => (int) $r->id,
 			'clase'    => (string) $r->clase,
-			'envio'    => 'mensajero' === $r->clase ? array( 'que' => (string) $r->envio_que, 'tam' => (string) $r->envio_tam ) : null,
+			'servicio' => (string) $r->servicio,
+			'etiqueta' => self::etiqueta( $r ),
+			'envio'    => 'mensajero' === $r->clase ? array( 'que' => (string) $r->envio_que, 'tam' => (string) $r->envio_tam, 'recoge' => (string) $r->recoge_texto, 'adelanto' => (int) $r->adelanto_cup, 'cobrar' => (int) $r->cobrar_cup, 'peso' => (string) $r->peso, 'ayudante' => (int) $r->extra_cup ) : null,
 			'oferta'   => (int) $r->precio_oferta,
 			'contra'   => array_map( static fn( int $p ): array => array( 'pct' => $p, 'precio' => CVD_Pv_Tarifa::contra( (int) $r->precio_oferta, $p ) ), CVD_Pv_Tarifa::CONTRA ),
 			'origen'   => array( 'texto' => (string) $r->origen_texto, 'lat' => (float) $r->origen_lat, 'lng' => (float) $r->origen_lng ),
@@ -876,6 +989,8 @@ final class CVD_Pv_Api {
 			'id'         => (int) $v->id,
 			'estado'     => (string) $v->estado,
 			'clase'      => (string) $v->clase,
+			'servicio'   => (string) $v->servicio,
+			'etiqueta'   => self::etiqueta( $v ),
 			'origen'     => array( 'texto' => (string) $v->origen_texto, 'lat' => (float) $v->origen_lat, 'lng' => (float) $v->origen_lng ),
 			'destino'    => array( 'texto' => (string) $v->destino_texto, 'lat' => (float) $v->destino_lat, 'lng' => (float) $v->destino_lng ),
 			'km'         => round( (int) $v->distancia_m / 1000, 1 ),
@@ -886,7 +1001,8 @@ final class CVD_Pv_Api {
 			'forma_pago' => (string) $v->forma_pago,
 			'nota'       => (string) $v->nota,
 			'cliente'    => $cli ? array( 'nombre' => (string) $cli->nombre, 'telefono' => (string) $cli->telefono, 'nota' => null !== $cli->nota_media ? round( (float) $cli->nota_media, 1 ) : null, 'viajes' => (int) $cli->viajes_total ) : null,
-			'envio'      => $envio ? array( 'que' => (string) $v->envio_que, 'tam' => (string) $v->envio_tam, 'recibe' => (string) $v->recibe_nombre, 'telefono' => (string) $v->recibe_telefono, 'cobrar' => (int) $v->cobrar_cup, 'foto' => '' !== (string) $v->entrega_foto ) : null,
+			'envio'      => $envio ? array( 'que' => (string) $v->envio_que, 'tam' => (string) $v->envio_tam, 'recibe' => (string) $v->recibe_nombre, 'telefono' => (string) $v->recibe_telefono, 'cobrar' => (int) $v->cobrar_cup, 'foto' => '' !== (string) $v->entrega_foto,
+				'recoge' => (string) $v->recoge_texto, 'adelanto' => (int) $v->adelanto_cup, 'recibo' => '' !== (string) $v->recibo_foto, 'peso' => (string) $v->peso, 'ayudante' => (int) $v->extra_cup ) : null,
 			'llego'      => self::iso( $v->llego_at ),
 			'cobrado'    => null !== $v->cobrado_at,
 			'linea'      => self::linea_viaje( $v ),
@@ -915,6 +1031,7 @@ final class CVD_Pv_Api {
 			$serv = rest_sanitize_boolean( $val ) ? array_unique( array_merge( $serv, array( $s ) ) ) : array_diff( $serv, array( $s ) );
 		}
 		$set['servicios'] = implode( ',', array_values( array_filter( $serv ) ) );
+		if ( null !== $request->get_param( 'adelanta' ) ) { $set['adelanta'] = rest_sanitize_boolean( $request->get_param( 'adelanta' ) ) ? 1 : 0; } // v3
 		$wpdb->update( self::t( 'choferes' ), $set, array( 'user_id' => $u->ID ) );
 		return self::out( array( 'ok' => true, 'disponible' => $on ) );
 	}
@@ -1023,6 +1140,10 @@ final class CVD_Pv_Api {
 		if ( 'recogi' === $accion && ! $envio && ! hash_equals( (string) $v->codigo, $codigo ) ) {
 			return self::fail( 'codigo', 'Ese no es el código. Pídeselo al cliente: lo tiene en su app.' );
 		}
+		// v3 Comida: si el mensajero adelanta el dinero, antes de salir hace la foto del recibo.
+		if ( 'recogi' === $accion && (int) $v->adelanto_cup > 0 && '' === (string) $v->recibo_foto ) {
+			return self::fail( 'recibo', 'Haz la foto del recibo antes de salir.' );
+		}
 		if ( 'termine' === $accion && $envio ) {
 			if ( ! hash_equals( (string) $v->entrega_codigo, $codigo ) ) { return self::fail( 'codigo', 'Ese no es el código de entrega. Pídeselo a quien recibe.' ); }
 			if ( '' === (string) $v->entrega_foto ) { return self::fail( 'foto', 'Haz la foto de la entrega antes de terminar.' ); }
@@ -1073,18 +1194,26 @@ final class CVD_Pv_Api {
 		return $dir;
 	}
 
-	private static function firma_foto( string $uuid ): string { return substr( hash_hmac( 'sha256', 'pv-foto|' . $uuid, wp_salt( 'auth' ) ), 0, 24 ); }
+	private static function firma_foto( string $uuid, string $tipo = '' ): string { return substr( hash_hmac( 'sha256', 'pv-foto|' . $uuid . ( 'recibo' === $tipo ? '|recibo' : '' ), wp_salt( 'auth' ) ), 0, 24 ); }
 
-	private static function foto_url( object $v ): string {
-		return add_query_arg( array( 'v' => (string) $v->uuid, 'f' => self::firma_foto( (string) $v->uuid ) ), rest_url( self::NS . '/pv/foto' ) );
+	private static function foto_url( object $v, string $tipo = '' ): string {
+		$q = array( 'v' => (string) $v->uuid, 'f' => self::firma_foto( (string) $v->uuid, $tipo ) );
+		if ( 'recibo' === $tipo ) { $q['t'] = 'recibo'; }
+		return add_query_arg( $q, rest_url( self::NS . '/pv/foto' ) );
 	}
 
-	/** POST chofer/viajes/{id}/foto (multipart «foto») — la foto de la entrega, guardada de nuevo (sin EXIF ni GPS). */
+	/**
+	 * POST chofer/viajes/{id}/foto (multipart «foto» [, tipo=recibo]) — la foto de la entrega (al entregar) o, v3, la del
+	 * recibo de la comida que adelantó (al recoger). Se guarda de nuevo (sin EXIF ni GPS).
+	 */
 	public static function subir_foto( WP_REST_Request $request ): WP_REST_Response {
 		global $wpdb;
 		$u = self::user( $request );
 		$v = self::viaje_mio( $request, $u );
-		if ( ! $v || 'mensajero' !== $v->clase || 'recogido' !== $v->estado ) { return self::fail( 'tarde', 'La foto se hace al entregar.', 409 ); }
+		$recibo = 'recibo' === sanitize_key( (string) $request->get_param( 'tipo' ) );
+		if ( $recibo ) {
+			if ( ! $v || 'mensajero' !== $v->clase || ! in_array( $v->estado, array( 'asignado', 'llego' ), true ) ) { return self::fail( 'tarde', 'La foto del recibo se hace al recoger.', 409 ); }
+		} elseif ( ! $v || 'mensajero' !== $v->clase || 'recogido' !== $v->estado ) { return self::fail( 'tarde', 'La foto se hace al entregar.', 409 ); }
 		$files = $request->get_file_params();
 		$f = $files['foto'] ?? null;
 		if ( ! is_array( $f ) || UPLOAD_ERR_OK !== (int) ( $f['error'] ?? 1 ) || (int) $f['size'] > 6 * MB_IN_BYTES ) { return self::fail( 'foto', 'No llegó la foto. Prueba otra vez.' ); }
@@ -1094,19 +1223,21 @@ final class CVD_Pv_Api {
 		if ( is_wp_error( $ed ) ) { return self::fail( 'foto', 'No se pudo guardar la foto.', 500 ); }
 		$ed->resize( 1280, 1280, false );
 		$ed->set_quality( 80 );
-		$nombre = 'e' . (int) $v->id . '-' . bin2hex( random_bytes( 4 ) ) . '.jpg';
+		$nombre = ( $recibo ? 'r' : 'e' ) . (int) $v->id . '-' . bin2hex( random_bytes( 4 ) ) . '.jpg';
 		$res = $ed->save( self::carpeta() . '/' . $nombre, 'image/jpeg' );
 		if ( is_wp_error( $res ) ) { return self::fail( 'foto', 'No se pudo guardar la foto.', 500 ); }
-		$wpdb->update( self::t( 'viajes' ), array( 'entrega_foto' => $nombre, 'updated_at' => self::now() ), array( 'id' => (int) $v->id ) );
+		$wpdb->update( self::t( 'viajes' ), array( $recibo ? 'recibo_foto' : 'entrega_foto' => $nombre, 'updated_at' => self::now() ), array( 'id' => (int) $v->id ) );
+		if ( $recibo ) { self::tocar( self::viaje( (int) $v->id ), 'recibo' ); }
 		return self::out( array( 'ok' => true ) );
 	}
 
-	/** GET foto?v=uuid&f=firma — la foto de la entrega (solo con el enlace firmado que ve el cliente). */
+	/** GET foto?v=uuid&f=firma[&t=recibo] — la foto de la entrega o del recibo (solo con el enlace firmado que ve el cliente). */
 	public static function ver_foto( WP_REST_Request $request ) {
 		global $wpdb;
 		$uuid = (string) $request->get_param( 'v' );
-		if ( ! preg_match( '/^[a-f0-9-]{36}$/', $uuid ) || ! hash_equals( self::firma_foto( $uuid ), (string) $request->get_param( 'f' ) ) ) { return new WP_Error( 'pv_foto', 'No.', array( 'status' => 404 ) ); }
-		$nombre = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT entrega_foto FROM ' . self::t( 'viajes' ) . ' WHERE uuid=%s', $uuid ) );
+		$tipo = 'recibo' === (string) $request->get_param( 't' ) ? 'recibo' : '';
+		if ( ! preg_match( '/^[a-f0-9-]{36}$/', $uuid ) || ! hash_equals( self::firma_foto( $uuid, $tipo ), (string) $request->get_param( 'f' ) ) ) { return new WP_Error( 'pv_foto', 'No.', array( 'status' => 404 ) ); }
+		$nombre = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT ' . ( 'recibo' === $tipo ? 'recibo_foto' : 'entrega_foto' ) . ' FROM ' . self::t( 'viajes' ) . ' WHERE uuid=%s', $uuid ) );
 		$path = self::carpeta() . '/' . basename( $nombre );
 		if ( '' === $nombre || ! is_file( $path ) ) { return new WP_Error( 'pv_foto', 'No.', array( 'status' => 404 ) ); }
 		nocache_headers();
