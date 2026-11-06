@@ -301,7 +301,7 @@ html[data-tema="oscuro"] .pa-v img,html[data-tema="oscuro"] .pa-s4__img,html[dat
 .pa-s4 b{position:relative;z-index:1;display:block;font:600 19px/24px var(--letra);letter-spacing:-.015em}
 .pa-s4 > span{position:relative;z-index:1;display:block;font:var(--t-mini);color:var(--tinta-2)}
 .pa-s4__img{position:absolute;right:-4px;bottom:-2px;height:80px;width:auto;max-width:132px;object-fit:contain}
-.pa-s4__img--1{right:58px;bottom:24px;height:44px;max-width:none}        /* Viajar: el taxi, detrás y más pequeño */
+.pa-s4__img--1{right:60px;bottom:6px;height:42px;max-width:none}         /* Viajar: el taxi, detrás y más pequeño (6-nov: más abajo, no tapa «Taxi, triciclo, moto») */
 .pa-s4__img--2{right:-4px;bottom:-3px;height:76px}                       /* Viajar: el triciclo, delante */
 .pa-recientes{margin-top:6px}
 .pa-recientes .p-fila{min-height:52px}
