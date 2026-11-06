@@ -43,14 +43,15 @@ final class CVD_Photo_AI {
 	/**
 	 * Imagen con OpenAI a través del VPS (tope común). Sin $refs genera desde texto; con $refs (bytes de 1–2 fotos reales,
 	 * JPG/PNG/WebP de hasta 4 MB) edita a partir de ellas. $opts: calidad (baja|media|alta), tam (1024x1024|1024x1536|
-	 * 1536x1024|auto), modelo (de la lista con precio del VPS). → bytes de la imagen o WP_Error (429 = tope u ocupado).
+	 * 1536x1024|auto), modelo (de la lista con precio del VPS), fidelidad ('alta' = respeta más forma, color y etiquetas
+	 * de la foto real). → bytes de la imagen o WP_Error (429 = tope del día, subtope del panel 0,5 USD/día u ocupado).
 	 * Tarda 20–60 s. Para el rediseño del panel (fotos de estudio a partir de la foto del móvil).
 	 */
 	public static function vps_image( string $prompt, array $opts = array(), array $refs = array() ) {
 		$key = self::key( 'vps' );
 		if ( ! $key ) { return self::error( 'Pide al administrador que configure el servidor de imágenes.' ); }
 		$body = array( 'prompt' => $prompt, 'quien' => (string) wp_get_current_user()->user_login );
-		foreach ( array( 'calidad', 'tam', 'modelo' ) as $k ) { if ( ! empty( $opts[ $k ] ) ) { $body[ $k ] = (string) $opts[ $k ]; } }
+		foreach ( array( 'calidad', 'tam', 'modelo', 'fidelidad' ) as $k ) { if ( ! empty( $opts[ $k ] ) ) { $body[ $k ] = (string) $opts[ $k ]; } }
 		foreach ( array_slice( $refs, 0, 2 ) as $bytes ) {
 			$size = is_string( $bytes ) && strlen( $bytes ) <= 4 * MB_IN_BYTES ? @getimagesizefromstring( $bytes ) : false;
 			if ( ! $size || ! in_array( $size['mime'], array( 'image/png', 'image/jpeg', 'image/webp' ), true ) ) { return self::error( 'La foto de base debe ser JPG, PNG o WebP de hasta 4 MB.' ); }
