@@ -29,16 +29,37 @@ final class CVD_Pv_Tarifa {
 	 * m_min = metros por minuto en la ciudad (para «llega en» y «tardas»).
 	 */
 	public const CLASES = array(
-		'taxi_basico'    => array( 'grupo' => 'taxi', 'nombre' => 'Básico', 'plazas' => '4', 'img' => 'taxi-basico', 't' => array( 3000, 2, 200 ), 'm_min' => 400 ),
-		'taxi_clasico'   => array( 'grupo' => 'taxi', 'nombre' => 'Clásico', 'plazas' => '4', 'img' => 'taxi-clasico', 't' => array( 3500, 2, 400 ), 'm_min' => 380 ),
-		'taxi_xl'        => array( 'grupo' => 'taxi', 'nombre' => 'XL', 'plazas' => '7', 'img' => 'taxi-xl', 't' => array( 4500, 2, 400 ), 'm_min' => 380 ),
-		'tric_electrico' => array( 'grupo' => 'tric', 'nombre' => 'Eléctrico', 'plazas' => '4', 'img' => 'tric-electrico', 't' => array( 1500, 2, 300 ), 'm_min' => 250 ),
-		'tric_bici'      => array( 'grupo' => 'tric', 'nombre' => 'Bici', 'plazas' => '2', 'img' => 'tric-bici', 't' => array( 800, 2, 250 ), 'm_min' => 180 ),
-		'tric_xl'        => array( 'grupo' => 'tric', 'nombre' => 'Eléctrico XL', 'plazas' => '6–8', 'img' => 'tric-xl', 't' => array( 2200, 2, 400 ), 'm_min' => 230 ),
-		'tric_carga'     => array( 'grupo' => 'tric', 'nombre' => 'Carga', 'plazas' => '300 kg', 'img' => 'tric-carga', 't' => array( 2000, 3, 300 ), 'm_min' => 200 ),
-		'moto'           => array( 'grupo' => 'moto', 'nombre' => 'Moto', 'plazas' => '1', 'img' => 'moto', 't' => array( 800, 3, 230 ), 'm_min' => 400 ),
-		'mensajero'      => array( 'grupo' => 'mens', 'nombre' => 'Mensajero', 'plazas' => '', 'img' => 'mensajero', 't' => array( 1000, 3, 250 ), 'm_min' => 380 ),
+		'taxi_basico'    => array( 'grupo' => 'taxi', 'nombre' => 'Básico', 'largo' => 'Taxi básico', 'plazas' => '4', 'img' => 'taxi-basico', 't' => array( 3000, 2, 200 ), 'm_min' => 400 ),
+		'taxi_clasico'   => array( 'grupo' => 'taxi', 'nombre' => 'Clásico', 'largo' => 'Almendrón clásico', 'plazas' => '4', 'img' => 'taxi-clasico', 't' => array( 3500, 2, 400 ), 'm_min' => 380 ),
+		'taxi_xl'        => array( 'grupo' => 'taxi', 'nombre' => 'Taxi XL', 'largo' => 'Taxi XL', 'plazas' => '7', 'img' => 'taxi-xl', 't' => array( 4500, 2, 400 ), 'm_min' => 380 ),
+		'tric_electrico' => array( 'grupo' => 'tric', 'nombre' => 'Eléctrico', 'largo' => 'Triciclo eléctrico', 'plazas' => '4', 'img' => 'tric-electrico', 't' => array( 1500, 2, 300 ), 'm_min' => 250 ),
+		'tric_bici'      => array( 'grupo' => 'tric', 'nombre' => 'Bicitaxi', 'largo' => 'Bicitaxi', 'plazas' => '2', 'img' => 'tric-bici', 't' => array( 800, 2, 250 ), 'm_min' => 180 ),
+		'tric_xl'        => array( 'grupo' => 'tric', 'nombre' => 'Eléctrico XL', 'largo' => 'Triciclo eléctrico XL', 'plazas' => '6–8', 'img' => 'tric-xl', 't' => array( 2200, 2, 400 ), 'm_min' => 230 ),
+		'tric_carga'     => array( 'grupo' => 'tric', 'nombre' => 'Carga', 'largo' => 'Triciclo de carga', 'plazas' => '300 kg', 'img' => 'tric-carga', 't' => array( 2000, 3, 300 ), 'm_min' => 200 ),
+		'moto'           => array( 'grupo' => 'moto', 'nombre' => 'Moto', 'largo' => 'Moto', 'plazas' => '1', 'img' => 'moto', 't' => array( 800, 3, 230 ), 'm_min' => 400 ),
+		'mensajero'      => array( 'grupo' => 'mens', 'nombre' => 'Mensajero', 'largo' => 'Mensajero', 'plazas' => '', 'img' => 'mensajero', 't' => array( 1000, 3, 250 ), 'm_min' => 380 ),
 	);
+
+	/** v3 (D142): las 7 clases de «Viajar» (la fila de vehículos de la app). Carga y mensajero van por sus pantallas. */
+	public const VIAJAR = array( 'moto', 'tric_bici', 'tric_electrico', 'tric_xl', 'taxi_basico', 'taxi_clasico', 'taxi_xl' );
+
+	/** v3: el servicio de un pedido. */
+	public const SERVICIOS = array( 'viaje', 'paquete', 'comida', 'carga' );
+
+	/** v3 Carga: peso aproximado (solo se le enseña al chofer; NO cambia el precio). Más de 300 kg → «escríbenos». */
+	public const PESOS = array( 'poco' => 'Hasta 50 kg', 'medio' => '50–150 kg', 'mucho' => '150–300 kg' );
+
+	/** v3 Carga: precio fijo del ayudante para cargar (opción `cvd_pv_ayudante_cup`, 500 CUP por defecto). */
+	public static function ayudante(): int { return max( 0, min( 20000, (int) get_option( 'cvd_pv_ayudante_cup', 500 ) ) ); }
+
+	/** v3 Comida: lo más que un mensajero adelanta al recoger (opción `cvd_pv_comida_tope`, 5.000 CUP por defecto). */
+	public static function comida_tope(): int { return max( 0, min( 100000, (int) get_option( 'cvd_pv_comida_tope', 5000 ) ) ); }
+
+	/** Límites con un extra fijo (el ayudante): el extra se suma al mínimo y al máximo; $justo ya lo lleva dentro. */
+	public static function limites_extra( string $clase, int $justo, bool $noche, int $extra ): array {
+		$l = self::limites( $clase, max( 0, $justo - $extra ), $noche );
+		return array( $l[0] + $extra, $l[1] + $extra );
+	}
 
 	/** El tipo del alta del chofer → su clase. Un triciclo de motor de gasolina cobra como el eléctrico. */
 	public const TIPO_A_CLASE = array(
@@ -132,7 +153,7 @@ final class CVD_Pv_Tarifa {
 	/** Las clases para la app (nombre, plazas, imagen, grupo). */
 	public static function publicas(): array {
 		$out = array();
-		foreach ( self::CLASES as $id => $c ) { $out[ $id ] = array( 'id' => $id, 'grupo' => $c['grupo'], 'nombre' => $c['nombre'], 'plazas' => $c['plazas'], 'img' => $c['img'] ); }
+		foreach ( self::CLASES as $id => $c ) { $out[ $id ] = array( 'id' => $id, 'grupo' => $c['grupo'], 'nombre' => $c['nombre'], 'largo' => $c['largo'], 'plazas' => $c['plazas'], 'img' => $c['img'] ); }
 		return $out;
 	}
 
@@ -167,6 +188,8 @@ final class CVD_Pv_Tarifa {
 			'justo'   => (int) $q['justo'],
 			'noche'   => (int) (bool) $q['noche'],
 			'tam'     => (string) ( $q['tam'] ?? '' ),
+			'serv'    => (string) ( $q['serv'] ?? '' ),  // v3: viaje | paquete | comida | carga ('' = cotización vieja)
+			'extra'   => (int) ( $q['extra'] ?? 0 ),     // v3: ayudante de la Carga (ya va dentro de «justo»)
 			'vence'   => (int) $q['vence'],
 		);
 	}
