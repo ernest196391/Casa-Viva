@@ -27,7 +27,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class CVD_Triciclub_Alta {
 	public const ROL = 'cvd_tc_chofer';
-	public const FOTOS = array( 'perfil', 'triciclo', 'licencia', 'carne', 'selfie' );
+	public const FOTOS = array( 'perfil', 'triciclo', 'licencia', 'carne', 'selfie', 'lot' ); // 5-nov: + LOT (taxi)
 	public const ESTADOS = array( 'pendiente' => 'Rellenando sus datos', 'verificando' => 'Comprobando sus datos', 'revision' => 'Para que lo mires tú', 'aprobado' => 'Aprobado', 'suspendido' => 'Parado' );
 	public const MOTORES = array( 'pedal' => 'Pedal', 'electrico' => 'Eléctrico', 'gasolina' => 'Gasolina' );
 
@@ -39,7 +39,15 @@ final class CVD_Triciclub_Alta {
 		'motor'        => array( 'nombre' => 'Motor', 'sub' => 'Gasolina · 2–4 personas', 'motor' => 'gasolina', 'icono' => '<circle cx="6" cy="18" r="3.5"/><circle cx="26" cy="18" r="3.5"/><path d="M6 18l3-7h4l1-5h12v12M9 11h17"/><path d="M20 3s-2.5 3-2.5 4.5a2.5 2.5 0 0 0 5 0C22.5 6 20 3 20 3z"/>' ),
 		'moto'         => array( 'nombre' => 'Moto', 'sub' => '1 persona · rápido', 'motor' => '', 'icono' => '<circle cx="6" cy="17" r="3.5"/><circle cx="26" cy="17" r="3.5"/><path d="M6 17l5-7h6l3 4h6M13 10l-2-3H8M20 14l6 3"/>' ),
 		'carga'        => array( 'nombre' => 'Carga', 'sub' => 'Mudanzas y mercancía', 'motor' => '', 'icono' => '<circle cx="6" cy="18" r="3.5"/><circle cx="26" cy="18" r="3.5"/><path d="M6 18l4-9h3M13 14h17"/><rect x="15" y="5" width="14" height="9" rx="1"/>' ),
+		// 5-nov (Pa'llá transporte, D138): taxi, y mensajero de envíos. En taxi la licencia y la LOT son obligatorias.
+		'taxi_basico'  => array( 'nombre' => 'Taxi Básico', 'sub' => 'Carro moderno · 4 personas', 'motor' => 'gasolina', 'grupo' => 'taxi', 'icono' => '<circle cx="8" cy="18" r="3"/><circle cx="24" cy="18" r="3"/><path d="M3 18v-5l3-6h16l5 6h2v5M5 13h24M13 7v6"/>' ),
+		'taxi_clasico' => array( 'nombre' => 'Taxi Clásico', 'sub' => 'Almendrón · 4 personas', 'motor' => 'gasolina', 'grupo' => 'taxi', 'icono' => '<circle cx="8" cy="18" r="3"/><circle cx="24" cy="18" r="3"/><path d="M2 18v-4l4-1 3-6h12l4 6 5 1v4M9 13h14"/>' ),
+		'taxi_xl'      => array( 'nombre' => 'Taxi XL', 'sub' => 'Camioneta · 7 personas', 'motor' => 'gasolina', 'grupo' => 'taxi', 'icono' => '<circle cx="8" cy="18" r="3"/><circle cx="24" cy="18" r="3"/><path d="M2 18V6h20l6 6h2v6M2 12h28M11 6v6M17 6v6"/>' ),
+		'mensajero'    => array( 'nombre' => 'Mensajero', 'sub' => 'Moto o bici con caja · envíos', 'motor' => '', 'grupo' => 'mens', 'icono' => '<circle cx="6" cy="17" r="3.5"/><circle cx="26" cy="17" r="3.5"/><path d="M6 17l5-7h6l3 4h6M13 10l-2-3H8"/><rect x="3" y="3" width="10" height="7" rx="1"/>' ),
 	);
+
+	/** ¿Es un taxi? (licencia y LOT obligatorias). */
+	public static function es_taxi( string $tipo ): bool { return 'taxi' === ( self::TIPOS[ $tipo ]['grupo'] ?? '' ); }
 
 	public static function register(): void {
 		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
@@ -60,7 +68,11 @@ final class CVD_Triciclub_Alta {
 	/** Para la app (cliente y chofer): nombre, explicación y dibujo de cada tipo. */
 	public static function tipos_publicos(): array {
 		$out = array();
-		foreach ( self::TIPOS as $id => $t ) { $out[] = array( 'id' => $id, 'nombre' => $t['nombre'], 'sub' => $t['sub'], 'motor' => $t['motor'], 'icono' => $t['icono'] ); }
+		foreach ( self::TIPOS as $id => $t ) {
+			// 5-nov: taxi y mensajero solo salen en el alta cuando Pa'llá transporte está encendido (no en el Triciclub viejo).
+			if ( isset( $t['grupo'] ) && ( ! class_exists( 'CVD_Pv' ) || 'no' === CVD_Pv::mode() ) ) { continue; }
+			$out[] = array( 'id' => $id, 'nombre' => $t['nombre'], 'sub' => $t['sub'], 'motor' => $t['motor'], 'icono' => $t['icono'], 'grupo' => $t['grupo'] ?? 'tric' );
+		}
 		return $out;
 	}
 
@@ -233,9 +245,16 @@ final class CVD_Triciclub_Alta {
 		$s = explode( ',', (string) $ch->servicios );
 		$falta = array();
 		if ( mb_strlen( trim( (string) $u->display_name ) ) < 2 || preg_match( '/^Chofer \d+$/', (string) $u->display_name ) ) { $falta[] = 'tu nombre'; } // «Chofer 0004» = el que pone cuenta()
-		if ( ! isset( self::TIPOS[ (string) $ch->tipo ] ) ) { $falta[] = 'el tipo de triciclo'; }
-		if ( ! isset( self::MOTORES[ (string) $ch->motor ] ) ) { $falta[] = 'el motor'; }
-		if ( in_array( 'viaje', $s, true ) && (int) $ch->plazas < 1 ) { $falta[] = 'cuántas personas llevas'; }
+		$tipo = (string) $ch->tipo;
+		$nuevo = isset( self::TIPOS[ $tipo ]['grupo'] ); // 5-nov: taxi y mensajero no eligen motor
+		if ( ! isset( self::TIPOS[ $tipo ] ) ) { $falta[] = 'el tipo de vehículo'; }
+		if ( ! $nuevo && ! isset( self::MOTORES[ (string) $ch->motor ] ) ) { $falta[] = 'el motor'; }
+		if ( in_array( 'viaje', $s, true ) && 'mensajero' !== $tipo && (int) $ch->plazas < 1 ) { $falta[] = 'cuántas personas llevas'; }
+		if ( self::es_taxi( $tipo ) ) { // 5-nov (D138): en taxi, licencia y LOT obligatorias
+			if ( '' === trim( (string) $ch->chapa ) ) { $falta[] = 'la chapa del carro'; }
+			if ( empty( $f['licencia'] ) ) { $falta[] = 'la foto de tu licencia de conducción'; }
+			if ( empty( $f['lot'] ) ) { $falta[] = 'la foto de tu LOT'; }
+		}
 		if ( in_array( 'carga', $s, true ) && (int) $ch->carga_kg < 20 ) { $falta[] = 'cuántos kilos cargas'; }
 		if ( self::verificar_on() ) {
 			if ( empty( $f['carne'] ) ) { $falta[] = 'la foto de tu carné'; }
@@ -243,7 +262,7 @@ final class CVD_Triciclub_Alta {
 		} elseif ( empty( $f['perfil'] ) ) {
 			$falta[] = 'tu foto';
 		}
-		if ( empty( $f['triciclo'] ) ) { $falta[] = 'la foto del triciclo'; }
+		if ( empty( $f['triciclo'] ) ) { $falta[] = $nuevo ? 'la foto del vehículo' : 'la foto del triciclo'; }
 		return $falta;
 	}
 

@@ -213,7 +213,7 @@ final class CVD_Triciclub {
 	// ------------------------------------------------------------------ Código por WhatsApp (VivaBot lo manda)
 
 	/** Crea un código para ese teléfono. Devuelve '' o el motivo: phone | limit. */
-	public static function pedir_codigo( string $telefono, string $ip ): string {
+	public static function pedir_codigo( string $telefono, string $ip, int $cifras = 6, string $canal = 'whatsapp', string $app = 'tc' ): string {
 		global $wpdb;
 		$tel = self::telefono( $telefono );
 		if ( '' === $tel ) { return 'phone'; }
@@ -222,12 +222,15 @@ final class CVD_Triciclub {
 		$por_tel = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$t} WHERE telefono=%s AND created_at>%s", $tel, $hace1h ) );
 		$por_ip = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$t} WHERE ip=%s AND created_at>%s", $ip, $hace1h ) );
 		if ( $por_tel >= 3 || $por_ip >= 10 ) { return 'limit'; }
-		$codigo = str_pad( (string) random_int( 0, 999999 ), 6, '0', STR_PAD_LEFT );
+		$cifras = 4 === $cifras ? 4 : 6; // 5-nov (Pa'llá, diseño aprobado): 4 cifras, 5 intentos, 15 min, 3 por hora
+		$codigo = str_pad( (string) random_int( 0, ( 10 ** $cifras ) - 1 ), $cifras, '0', STR_PAD_LEFT );
 		$now = CVD_Triciclub_Db::now();
 		$wpdb->insert( $t, array(
 			'telefono'    => $tel,
 			'codigo'      => $codigo,
 			'codigo_hash' => hash_hmac( 'sha256', $tel . '|' . $codigo, self::key() ),
+			'canal'       => 'sms' === $canal ? 'sms' : 'whatsapp',
+			'app'         => 'pv' === $app ? 'pv' : 'tc',
 			'ip'          => substr( $ip, 0, 45 ),
 			'vence_at'    => gmdate( 'Y-m-d H:i:s', time() + 15 * MINUTE_IN_SECONDS ),
 			'created_at'  => $now,
@@ -248,16 +251,27 @@ final class CVD_Triciclub {
 		return $ok ? '' : 'wrong';
 	}
 
+	public static function texto_codigo( string $codigo, string $app ): string {
+		return 'pv' === $app
+			? 'Pa\'llá: tu código es ' . $codigo . '. Vence en 15 minutos. No se lo des a nadie.'
+			: 'Triciclub: tu código es ' . $codigo . '. Vence en 15 minutos. No se lo des a nadie.';
+	}
+
 	/** GET /bot/triciclub/codigos — los códigos por mandar (uno a uno por WhatsApp; nunca en masa). */
 	public static function bot_codigos( WP_REST_Request $request ): WP_REST_Response {
 		global $wpdb;
 		$t = CVD_Triciclub_Db::t( 'codigos' );
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, telefono, codigo FROM {$t} WHERE enviado_at IS NULL AND usado_at IS NULL AND codigo<>'' AND vence_at>%s ORDER BY id ASC LIMIT 20", CVD_Triciclub_Db::now() ) );
+		// 5-nov: solo los de WhatsApp (los de SMS los manda la pasarela de SMS, CVD_Pv::sms_pendientes).
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, telefono, codigo, app FROM {$t} WHERE enviado_at IS NULL AND usado_at IS NULL AND codigo<>'' AND canal='whatsapp' AND vence_at>%s ORDER BY id ASC LIMIT 20", CVD_Triciclub_Db::now() ) );
 		$out = array();
 		foreach ( $rows as $r ) {
-			$out[] = array( 'id' => (int) $r->id, 'phone' => (string) $r->telefono, 'text' => 'Triciclub: tu código es ' . $r->codigo . '. Vence en 15 minutos. No se lo des a nadie.' );
+			$out[] = array( 'id' => (int) $r->id, 'phone' => (string) $r->telefono, 'text' => self::texto_codigo( (string) $r->codigo, (string) $r->app ) );
 		}
-		$res = rest_ensure_response( array( 'ok' => true, 'mode' => self::mode(), 'codigos' => $out ) );
+		// El bot pregunta cada 15 s si Triciclub o Pa'llá están abiertos (y cada 5 min si los dos están cerrados).
+		$orden = array( 'no' => 0, 'prueba' => 1, 'si' => 2 );
+		$modo = self::mode();
+		if ( class_exists( 'CVD_Pv' ) && $orden[ CVD_Pv::mode() ] > $orden[ $modo ] ) { $modo = CVD_Pv::mode(); } // el más abierto de los dos
+		$res = rest_ensure_response( array( 'ok' => true, 'mode' => $modo, 'codigos' => $out ) );
 		$res->header( 'Cache-Control', 'no-store' );
 		return $res;
 	}
@@ -298,6 +312,8 @@ final class CVD_Triciclub {
 		if ( 'manifest' === $kind ) { self::manifest(); }
 		if ( 'chofer' === $kind ) { self::page_chofer(); }
 		if ( 'admin' === $kind ) { CVD_Triciclub_Alta::pagina_admin(); }
+		// 5-nov (D138): con Pa'llá transporte encendido, el cliente de Triciclub va a la app nueva (triciclos dentro).
+		if ( 'app' === $kind && class_exists( 'CVD_Pv' ) && 'no' !== CVD_Pv::mode() ) { wp_redirect( home_url( '/palla/ir/' ), 302 ); exit; }
 		self::page();
 	}
 
@@ -359,7 +375,7 @@ final class CVD_Triciclub {
 		nocache_headers();
 		header( 'Content-Type: text/html; charset=utf-8' );
 		header( 'Referrer-Policy: no-referrer' );
-		$cfg = array_merge( self::config(), array( 'palla' => home_url( '/palla/' ), 'franjas' => CVD_Triciclub_Precio::franjas() ) );
+		$cfg = array_merge( self::config(), array( 'palla' => home_url( '/palla/' ), 'franjas' => CVD_Triciclub_Precio::franjas(), 'pvChofer' => class_exists( 'CVD_Pv' ) && 'no' !== CVD_Pv::mode() ? home_url( '/palla/chofer/' ) : '' ) );
 		$body = 'no' === self::mode()
 			? '<main class="pl-closed"><div class="pl-logo" aria-hidden="true">P</div><h1>Triciclub todavía no está abierto</h1><p>Sigue con Pa\'llá como siempre.</p><a class="pl-btn pl-btn--secondary" href="' . esc_url( home_url( '/palla/' ) ) . '">Volver a Pa\'llá</a></main>'
 			: '<div id="app" aria-live="polite"><main class="pl-closed pl-loading" role="status"><div class="pl-logo" aria-hidden="true">P</div><div class="pl-bar" aria-hidden="true"></div><p class="pl-dots">Cargando Triciclub</p></main></div>'

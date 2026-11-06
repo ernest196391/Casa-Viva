@@ -443,7 +443,9 @@ final class CVD_Palla {
 		echo "self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>Promise.race([Promise.all([SHELL].concat(FILES).map(u=>c.add(u).catch(()=>null))),new Promise(ok=>setTimeout(ok,10000))])).catch(()=>null))});\n";
 		echo "self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k.startsWith('palla-')&&k!==CACHE&&k!==DATA).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});\n";
 		echo "self.addEventListener('fetch',e=>{const r=e.request,u=new URL(r.url);if(r.method!=='GET'||u.origin!==location.origin)return;\n";
-		echo "if(r.mode==='navigate'){e.respondWith(fetch(r).then(res=>{if(res.ok){const cp=res.clone();caches.open(CACHE).then(c=>c.put(SHELL,cp))}return res}).catch(()=>caches.match(SHELL)));return}\n";
+		// 5-nov (Pa'llá transporte): solo /palla/ se guarda como «la app»; el cliente (/palla/ir/) y el chofer (/palla/chofer/)
+		// tienen su propio service worker, y abrir su enlace en este teléfono no debe pisar la app del mensajero sin señal.
+		echo "if(r.mode==='navigate'){const sp=new URL(SHELL).pathname,mia=u.pathname===sp||u.pathname+'/'===sp;e.respondWith(fetch(r).then(res=>{if(res.ok&&mia){const cp=res.clone();caches.open(CACHE).then(c=>c.put(SHELL,cp))}return res}).catch(()=>caches.match(SHELL)));return}\n";
 		echo "if(u.href.split('?')[0]===HOY.split('?')[0]){e.respondWith(fetch(r).then(res=>{if(res.ok){const cp=res.clone();caches.open(DATA).then(c=>c.put(HOY,cp))}return res}).catch(()=>caches.open(DATA).then(c=>c.match(HOY)).then(x=>{if(!x)throw new Error('sin datos');return x.text().then(t=>new Response(t,{status:200,headers:{'Content-Type':'application/json','X-Palla-Offline':'1'}}))})));return}\n";
 		echo "if(u.pathname.indexOf('/assets/palla/')!==-1){e.respondWith(caches.match(r).then(x=>x||fetch(r).then(res=>{if(res.ok){const cp=res.clone();caches.open(CACHE).then(c=>c.put(r,cp))}return res})))}});\n";
 		// 3.14.69.1: avisos push (CVD_Palla_Push). Llega una señal sin datos; se pide el último aviso de este teléfono (cookie) y

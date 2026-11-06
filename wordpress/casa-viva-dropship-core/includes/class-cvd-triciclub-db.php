@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  * - Un viaje NO es un pedido de WooCommerce.
  */
 final class CVD_Triciclub_Db {
-	public const VERSION = 3; // 2 (4-nov): alta — tipo, motor, carga_kg, enviado_at, revisado_at, motivo · 3: verificación — verif, carne_hash
+	public const VERSION = 5; // 2 (4-nov): alta — tipo, motor, carga_kg, enviado_at, revisado_at, motivo · 3: verificación — verif, carne_hash · 4 (5-nov, Pa'llá transporte D138–D140): ofertas, cuenta, viajes con precio mixto · 5 (6-nov, Pa'llá v3 D142): servicio comida/carga — adelanto, recibo, peso, ayudante; chofer «puedo adelantar»
 	private const VERSION_OPTION = 'cvd_tc_db';
 
 	public static function t( string $name ): string {
@@ -57,6 +57,8 @@ final class CVD_Triciclub_Db {
   verif longtext NULL,
   carne_hash varchar(64) NOT NULL DEFAULT '',
   numero varchar(12) NOT NULL DEFAULT '',
+  chapa varchar(16) NOT NULL DEFAULT '',
+  color varchar(20) NOT NULL DEFAULT '',
   descripcion varchar(80) NOT NULL DEFAULT '',
   plazas tinyint unsigned NOT NULL DEFAULT 0,
   servicios varchar(40) NOT NULL DEFAULT 'viaje,paquete,carga',
@@ -71,6 +73,7 @@ final class CVD_Triciclub_Db {
   precio_km_despues int unsigned NOT NULL DEFAULT 150,
   extras varchar(400) NOT NULL DEFAULT '',
   disponible tinyint(1) NOT NULL DEFAULT 0,
+  adelanta tinyint(1) NOT NULL DEFAULT 0,
   lat decimal(9,6) NULL,
   lng decimal(9,6) NULL,
   ubicado_at datetime NULL,
@@ -112,6 +115,28 @@ final class CVD_Triciclub_Db {
   nota varchar(200) NOT NULL DEFAULT '',
   recibe_nombre varchar(80) NOT NULL DEFAULT '',
   recibe_telefono varchar(20) NOT NULL DEFAULT '',
+  clase varchar(16) NOT NULL DEFAULT '',
+  precio_justo int unsigned NOT NULL DEFAULT 0,
+  precio_oferta int unsigned NOT NULL DEFAULT 0,
+  primera tinyint(1) NOT NULL DEFAULT 0,
+  noche tinyint(1) NOT NULL DEFAULT 0,
+  espera_cup int unsigned NOT NULL DEFAULT 0,
+  comision_pct tinyint unsigned NOT NULL DEFAULT 0,
+  comision_cup int unsigned NOT NULL DEFAULT 0,
+  oferta_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  canal varchar(48) NOT NULL DEFAULT '',
+  rev int unsigned NOT NULL DEFAULT 0,
+  busca_desde datetime NULL,
+  envio_que varchar(120) NOT NULL DEFAULT '',
+  envio_tam varchar(10) NOT NULL DEFAULT '',
+  cobrar_cup int unsigned NOT NULL DEFAULT 0,
+  entrega_codigo char(4) NOT NULL DEFAULT '',
+  entrega_foto varchar(160) NOT NULL DEFAULT '',
+  recoge_texto varchar(120) NOT NULL DEFAULT '',
+  adelanto_cup int unsigned NOT NULL DEFAULT 0,
+  recibo_foto varchar(160) NOT NULL DEFAULT '',
+  peso varchar(8) NOT NULL DEFAULT '',
+  extra_cup int unsigned NOT NULL DEFAULT 0,
   respondido_at datetime NULL,
   llego_at datetime NULL,
   recogido_at datetime NULL,
@@ -126,7 +151,42 @@ final class CVD_Triciclub_Db {
   UNIQUE KEY cliente_cid (cliente_id,cid),
   KEY estado_fecha (estado,created_at),
   KEY chofer_estado (chofer_id,estado),
-  KEY cliente_fecha (cliente_id,created_at)
+  KEY cliente_fecha (cliente_id,created_at),
+  KEY buscando (estado,clase,created_at)
+) {$c};" );
+		// 4 (5-nov, Pa'llá transporte): cada «Acepto» o «+10/+20/+30 %» de un chofer a un pedido.
+		dbDelta( 'CREATE TABLE ' . self::t( 'ofertas' ) . " (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  viaje_id bigint(20) unsigned NOT NULL,
+  chofer_id bigint(20) unsigned NOT NULL,
+  precio int unsigned NOT NULL,
+  pct tinyint unsigned NOT NULL DEFAULT 0,
+  llega_min smallint unsigned NOT NULL DEFAULT 0,
+  lejos_m int unsigned NOT NULL DEFAULT 0,
+  estado varchar(10) NOT NULL DEFAULT 'activa',
+  vence_at datetime NOT NULL,
+  created_at datetime NOT NULL,
+  updated_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  UNIQUE KEY viaje_chofer (viaje_id,chofer_id),
+  KEY chofer_estado (chofer_id,estado)
+) {$c};" );
+		// 4: lo que debe cada chofer (comisión de cada viaje, en +) y lo que paga (en −). Saldo = SUM(cup) sin los rechazados.
+		dbDelta( 'CREATE TABLE ' . self::t( 'cuenta' ) . " (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  chofer_id bigint(20) unsigned NOT NULL,
+  viaje_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  tipo varchar(10) NOT NULL,
+  cup int NOT NULL,
+  ref varchar(60) NOT NULL DEFAULT '',
+  estado varchar(10) NOT NULL DEFAULT 'ok',
+  por bigint(20) unsigned NOT NULL DEFAULT 0,
+  created_at datetime NOT NULL,
+  updated_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  KEY viaje (viaje_id),
+  KEY chofer_fecha (chofer_id,created_at),
+  KEY estado (estado)
 ) {$c};" );
 		dbDelta( 'CREATE TABLE ' . self::t( 'ubicaciones' ) . " (
   id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -172,6 +232,8 @@ final class CVD_Triciclub_Db {
   ip varchar(45) NOT NULL DEFAULT '',
   enviado_at datetime NULL,
   usado_at datetime NULL,
+  canal varchar(10) NOT NULL DEFAULT 'whatsapp',
+  app varchar(6) NOT NULL DEFAULT 'tc',
   vence_at datetime NOT NULL,
   created_at datetime NOT NULL,
   PRIMARY KEY  (id),
