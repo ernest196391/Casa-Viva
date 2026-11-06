@@ -270,6 +270,9 @@
 		var pad = { top: cfg.arriba == null ? 90 : cfg.arriba, bottom: abajo + 30, left: 40, right: 40 };
 		if (cfg.zoom || pts.length === 1) { map.jumpTo({ center: pts[0], zoom: cfg.zoom || 16, padding: { top: 0, bottom: abajo, left: 0, right: 0 } }); return; }
 		var b = new gl.LngLatBounds(pts[0], pts[0]); pts.forEach(function (p) { b.extend(p); });
+		// MapLibre SUMA la padding que dejó el jumpTo de arriba (inicio: la hoja, ~400 px) a la de fitBounds: en Viajar no cabía
+		// («Map cannot fit…») y la ruta salía cortada. Se borra antes de encuadrar (revisión 7-nov).
+		map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
 		map.fitBounds(b, { padding: pad, maxZoom: 16.2, duration: quieto ? 0 : 450 });
 	}
 	// Cuando el mapa llega tarde: se pasa la escena actual al mapa (el plano se oculta solo por CSS).
