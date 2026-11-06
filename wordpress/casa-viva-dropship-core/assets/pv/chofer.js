@@ -2,7 +2,9 @@
  * Pantallas del diseño v2 aprobado (prototipo/app.js, «ch-…») con los datos reales de la API casa-viva/v1/pv/chofer/…
  * Mismo enlace que Pa'llá: localStorage «palla.k» → cabecera X-Palla-Token (también vale #k=… en la URL).
  * En vivo: tema callado del chofer por ntfy (PU.enVivo(hoy.tema)) + pregunta a la web. Posición cada 30 s en línea y
- * cada 10 s con viaje. Suena y vibra con cada pedido nuevo. */
+ * cada 10 s con viaje. Suena y vibra con cada pedido nuevo.
+ * v3 (6-nov, D142): etiquetas del pedido («Comida · adelanta 2.400», «Carga · 50–150 kg · con ayudante»), foto del recibo
+ * al recoger la comida que adelanta y el interruptor «Puedo adelantar dinero». Las pantallas no cambian. */
 (function () {
 	'use strict';
 	var C = window.PV || {}, U = window.PU;
@@ -156,7 +158,9 @@
 		html: function () {
 			var f = H.ficha, on = f.disponible, g = grupoDe(f.clase), n = (H.pedidos || []).length, cu = H.cuenta || {};
 			var op = function (id, b, s, v) { return '<div class="pa-op"><div><b>' + b + '</b><span>' + s + '</span></div><button type="button" class="p-interruptor" role="switch" aria-checked="' + v + '" data-op="' + id + '" aria-label="' + b + '"></button></div>'; };
-			var ops = (g !== 'mens' ? op('pasaje', 'Pasaje', esc(f.tipo) + (f.plazas ? ' · ' + f.plazas + ' plazas' : ''), f.pasaje) : '') + (g === 'tric' || g === 'moto' ? op('envios', 'Envíos', g === 'moto' || f.clase === 'tric_bici' ? 'En la mano o mochila' : 'Lo que quepa en el triciclo', f.envios) : '');
+			var ops = (g !== 'mens' ? op('pasaje', 'Pasaje', esc(f.tipo) + (f.plazas ? ' · ' + f.plazas + ' plazas' : ''), f.pasaje) : '') + (g === 'tric' || g === 'moto' ? op('envios', 'Envíos', g === 'moto' || f.clase === 'tric_bici' ? 'En la mano o mochila' : 'Lo que quepa en el triciclo', f.envios) : '')
+				// v3: solo quien lo marca ve la comida que hay que pagar al recoger (y le vuelve al entregar).
+				+ (g === 'mens' || f.envios ? op('adelanta', 'Puedo adelantar dinero', 'Comida pagada al recoger · hasta ' + cup(f.adelanta_tope || 5000), !!f.adelanta) : '');
 			return '<div class="pa-llena">' + cabChofer('Hola, ' + esc(nombreCorto(H.nombre))) + '<div class="pa-cuerpo">'
 				+ '<div class="pa-total"><div><p class="p-mini">Hoy</p><span class="p-precio">' + cupG(H.hoy.cup) + '</span></div><a class="p-btn p-btn--suave p-btn--chico" href="#ch-ganancias">' + H.hoy.viajes + (H.hoy.viajes === 1 ? ' viaje' : ' viajes') + ico('sigue', 'p-ico--16') + '</a></div>'
 				+ '<button type="button" class="pa-conectar ' + (on ? 'is-on' : '') + '" id="con" aria-pressed="' + on + '">' + ico('encender') + '<span>' + (on ? 'En línea' : 'Conectarme') + '</span></button>'
@@ -178,6 +182,7 @@
 						H.ficha.disponible = !!x.data.disponible;
 						if (extra && 'pasaje' in extra) { H.ficha.pasaje = !!extra.pasaje; }
 						if (extra && 'envios' in extra) { H.ficha.envios = !!extra.envios; }
+						if (extra && 'adelanta' in extra) { H.ficha.adelanta = !!extra.adelanta; }
 						guardarH(); seguirGps(); mostrar(true); cargar();
 					});
 				};
@@ -199,7 +204,9 @@
 		var bots = (p.contra || []).map(function (c) { return '<button type="button" class="' + (c.pct ? '' : 'acepto') + '" data-pct="' + c.pct + '">' + (c.pct ? miles(c.precio) + '<small>+' + c.pct + ' %</small>' : 'Acepto<small>' + miles(c.precio) + '</small>') + '</button>'; }).join('');
 		var mia = p.mia && p.mia.estado === 'activa';
 		return '<article class="pa-pedido' + (mia ? ' is-enviado' : '') + '" data-id="' + p.id + '" data-firma="' + esc(firma(p)) + '" data-hasta="' + esc(mia ? p.mia.vence : p.hasta) + '" data-total="' + (mia ? 60 : 240) + '">'
-			+ '<div class="arriba"><div><span class="p-precio" style="font-size:30px">' + cupG(p.oferta) + '</span><div class="p-peq">' + quien + '</div></div><span class="p-sello">' + (env ? 'Envío' : 'Pasaje') + '</span></div>'
+			+ '<div class="arriba"><div><span class="p-precio" style="font-size:30px">' + cupG(p.oferta) + '</span><div class="p-peq">' + quien + '</div></div><span class="p-sello">' + (env ? ({ comida: 'Comida', carga: 'Carga' }[p.servicio] || 'Envío') : 'Pasaje') + '</span></div>'
+			// v3: «Comida · adelanta 2.400», «Carga · 50–150 kg · con ayudante» (lo manda el servidor)
+			+ (p.etiqueta && p.etiqueta !== 'Pasaje' && p.etiqueta !== 'Paquete' ? '<p class="p-aviso' + (env && env.adelanto ? ' p-aviso--aviso' : '') + '" style="margin:8px 0 0">' + ico(p.servicio === 'carga' ? 'caja' : 'efectivo') + '<span><b>' + esc(p.etiqueta) + '</b>' + (env && env.recoge ? ' · en ' + esc(env.recoge) : '') + '</span></p>' : '')
 			+ '<div class="od"><span class="pm-pin"></span><b>' + esc(corto(p.origen.texto)) + '</b><small>A ' + metros(p.lejos_m) + ' de ti</small><span class="pm-pin pm-pin--destino"></span><b>' + esc(corto(p.destino.texto)) + '</b><small>Viaje de ' + U.km(p.km) + ' km</small></div>'
 			+ (p.nota ? '<p class="p-aviso">' + ico('nota') + '«' + esc(p.nota) + '»</p>' : '')
 			+ '<div class="pa-contra">' + bots + '</div>'
@@ -336,14 +343,19 @@
 		mapa: escenaViaje,
 		html: function () {
 			var v = H.activo, cli = v.cliente || { nombre: 'Cliente' }, n = esc(nombreCorto(cli.nombre)), llegue = v.estado === 'llego', env = v.envio;
+			// v3: la etiqueta del pedido y, en la comida que adelanta, cuánto paga y la foto del recibo (sin foto no sale).
+			var etq = v.etiqueta && v.etiqueta !== 'Pasaje' && v.etiqueta !== 'Paquete' ? '<p class="p-aviso' + (env && env.adelanto ? ' p-aviso--aviso' : '') + '" style="margin:10px 0 4px">' + ico(v.servicio === 'carga' ? 'caja' : 'efectivo') + '<span><b>' + esc(v.etiqueta) + '</b>' + (env && env.recoge ? ' · en ' + esc(env.recoge) : '') + (env && env.adelanto ? '. Te lo devuelven al entregar.' : '') + '</span></p>' : '';
+			var adel = env && env.adelanto;
+			var recibo = adel ? '<label class="p-btn p-btn--suave p-btn--ancho" style="margin-top:12px">' + ico('camara', 'p-ico--20') + '<span id="recibo-t">' + (env.recibo ? 'Foto del recibo hecha · otra' : 'Foto del recibo (' + cup(env.adelanto) + ')') + '</span><input type="file" id="recibo" accept="image/*" capture="environment" hidden></label>' : '';
 			var abajo = !llegue
 				? filaPersona(cli.nombre, cli.nota, (env ? 'Manda: ' + esc(env.que) : 'Pasajero') + (cli.viajes ? ' · ' + cli.viajes + ' viajes' : ''), cli.telefono) + '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="llegue" style="margin-top:14px">Llegué</button>'
-				: (env ? filaPersona(cli.nombre, cli.nota, 'Manda: ' + esc(env.que), cli.telefono) + '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="recogi" style="margin-top:14px">' + ico('check', 'p-ico--20') + 'Recogí el paquete</button>'
+				: (env ? filaPersona(cli.nombre, cli.nota, 'Manda: ' + esc(env.que), cli.telefono) + recibo + '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="recogi" style="margin-top:14px"' + (adel && !env.recibo ? ' disabled' : '') + '>' + ico('check', 'p-ico--20') + ({ comida: 'Recogí la comida', carga: 'Cargado' }[v.servicio] || 'Recogí el paquete') + '</button>'
 					: cajasCodigo('Pide el código a ' + n) + '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="recogi" disabled>' + ico('check', 'p-ico--20') + 'Recogí a ' + n + '</button>');
 			return '<div class="pa-arriba"><span></span><a class="pa-pastilla" href="' + navegar(v) + '">' + ico('navegar', 'p-ico--16') + 'Navegar</a></div>'
 				+ '<section class="pa-hoja"><div class="p-hoja__asa"></div>'
 				+ eta(llegue ? 'Ya llegaste' : 'Recoge a ' + n + ' · <span id="eta-min">…</span>', esc(corto(v.origen.texto)), v.total, 'Fijo · ' + nombrePago(v.forma_pago).toLowerCase())
 				+ (llegue ? '<p class="p-peq" id="espera" style="margin:6px 0 0">' + esperaTxt(v) + '</p>' : '')
+				+ etq
 				+ (v.nota ? '<p class="p-aviso" style="margin:10px 0 4px">' + ico('nota') + '«' + esc(v.nota) + '»</p>' : '')
 				+ abajo
 				+ '<p class="p-aviso p-aviso--error" id="err" hidden></p>'
@@ -352,8 +364,19 @@
 		init: function (r) {
 			var v = H.activo;
 			var l = $('#llegue', r); if (l) { l.onclick = function () { accion(r, 'llegue', null, this).then(function (w) { if (w) { U.tostada('Le avisamos a ' + nombreCorto(w.cliente && w.cliente.nombre)); } }); }; }
-			var rc = $('#recogi', r);
+			var rc = $('#recogi', r), fr = $('#recibo', r);
 			engancharCajas(r, function (c) { if (rc) { rc.disabled = c.length !== 4; } });
+			if (fr) { // v3: foto del recibo de la comida (mismo camino que la foto de la entrega, con tipo=recibo)
+				fr.onchange = function () {
+					var f = fr.files && fr.files[0]; if (!f) { return; }
+					$('#recibo-t', r).textContent = 'Subiendo la foto…';
+					var fd = new FormData(); fd.append('foto', f); fd.append('tipo', 'recibo');
+					api('chofer/viajes/' + v.id + '/foto', fd).then(function (x) {
+						if (!x.data.ok) { $('#recibo-t', r).textContent = 'Foto del recibo'; avisoErr(r, x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No llegó la foto.')); return; }
+						v.envio.recibo = true; guardarH(); $('#recibo-t', r).textContent = 'Foto del recibo hecha · otra'; U.tostada('Foto del recibo guardada'); if (rc) { rc.disabled = false; }
+					});
+				};
+			}
 			if (rc) { rc.onclick = function () { var c = $('#cod', r); accion(r, 'recogi', c ? { codigo: c.value } : null, this); }; }
 			$('#soltar', r).onclick = function () { hojaSoltar(r); };
 			if (v.estado === 'llego') { I(function () { var e = $('#espera', r); if (e) { e.textContent = esperaTxt(v); } }, 1000); }
@@ -372,7 +395,8 @@
 				return '<div class="pa-arriba"><span></span><a class="pa-pastilla" href="' + navegar(v) + '">' + ico('navegar', 'p-ico--16') + 'Navegar</a></div>'
 					+ '<section class="pa-hoja"><div class="p-hoja__asa"></div>'
 					+ eta('Entregar a ' + rn + ' · ' + U.km(v.km) + ' km', esc(corto(v.destino.texto)), v.total, nombrePago(v.forma_pago))
-					+ (env.cobrar ? '<p class="p-aviso p-aviso--aviso" style="margin:10px 0 4px">' + ico('efectivo') + '<span>Cobra a ' + rn + ' <b>' + cup(env.cobrar) + '</b> al entregar.</span></p>' : '')
+					+ (v.etiqueta && v.etiqueta !== 'Paquete' ? '<p class="p-aviso" style="margin:10px 0 4px">' + ico(v.servicio === 'carga' ? 'caja' : 'efectivo') + '<span><b>' + esc(v.etiqueta) + '</b></span></p>' : '')
+					+ (env.cobrar ? '<p class="p-aviso p-aviso--aviso" style="margin:10px 0 4px">' + ico('efectivo') + '<span>Cobra a ' + rn + ' <b>' + cup(env.cobrar) + '</b> al entregar' + (v.servicio === 'comida' ? ' (la comida' + (env.adelanto ? ' que pagaste' : '') + ') + el envío' : '') + '.</span></p>' : '')
 					+ filaPersona(env.recibe || 'Quien recibe', false, 'Recibe · ' + esc(env.que), env.telefono)
 					+ '<label class="p-btn p-btn--suave p-btn--ancho" style="margin-top:12px">' + ico('camara', 'p-ico--20') + '<span id="foto-t">' + (env.foto ? 'Foto hecha · otra' : 'Hacer la foto de la entrega') + '</span><input type="file" id="foto" accept="image/*" capture="environment" hidden></label>'
 					+ cajasCodigo('Pide el código a ' + rn)
