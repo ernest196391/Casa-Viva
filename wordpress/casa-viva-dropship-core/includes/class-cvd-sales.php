@@ -420,6 +420,11 @@ final class CVD_Sales {
 		// 3.14.142 (Nana 4 y 5-nov, #6064 #6067 #6086): el mensajero ya tenía el paquete o ya entregó, pero la tienda no marcó
 		// «Entregado al mensajero» y el pedido seguía en «Listo para salir»: «Dinero recibido» salía y luego no se dejaba
 		// («Ese cambio de estado no está permitido»), y había que ir al teléfono. Ahora Core pone solo los pasos que faltan.
+		// 3.14.153 (Félix #6086, 7-nov): la operación quedó «Entregado» a mano (corrección del 4-nov) pero el pedido seguía
+		// en espera: «Dinero recibido» salía y luego no se dejaba. Sin pedido completado, se cobra como «Con mensajero».
+		if ( 'delivered' === $next && 'delivered' === $current && ! $order->has_status( 'completed' ) && 'pickup' !== $fulfillment ) {
+			$current = 'with_courier';
+		}
 		if ( 'delivered' === $next && 'pickup' !== $fulfillment && in_array( $current, array( 'new', 'confirmed', 'preparing', 'ready' ), true ) ) {
 			$caught = self::catch_up_for_cash( $order, $current );
 			if ( is_wp_error( $caught ) ) { return $caught; }
