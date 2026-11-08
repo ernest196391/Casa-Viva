@@ -261,3 +261,5 @@ Aplicado8nov: bridge d8c57d5 publicado como cambio de un archivo, hash verificad
 
 ## Fecha original de caja1.1.6 (8nov2026)
 Bridge valida cashReceivedAt UTC antes deguardar; conserva atoriginal ysynced_at separado; calcula cashReceivedToday/cashReceivedDay America/Havana. CashDay acepta fechaexplicita decaja aun sinumbralde24h y guarda fechaoriginaltambienenrecogidas. Sinfechaclienteantiguo noimprovisa respuesta; no cambianrutasdecomision/cierre existentes. 22testsPHP de medianoche/DST/fechainvalida/reintentos,11receiptOnly,19eventosPASS. Solo cambios de bridge ycashday, no despliegue depluginentero desdeesta rama. Noejecutar cobros reales para probar. CompaniaPOS incluye1258yfecha, instalacionpendiente9nov.
+
+Desplegado f7525a7 en2archivosPHP conbackup /root/supervisor/backups/cash-date-20261108T222023Z; Edgev4ycliente1.1.6 preparadoNEXOc6b2ef7. PruebalecturaenwebUTC8nov04:50->dia7novcorrecta. Lecturasfinancieras6324/6325preservadas yreplaysseguros. InstaladoryredireccionHTTPSverificadosdesdePCdelpropietario. Falta instalarentienda9nov; no afirmarrecorridorealcompletosin esaprueba.
