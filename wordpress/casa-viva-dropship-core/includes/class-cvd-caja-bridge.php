@@ -191,6 +191,24 @@ final class CVD_Caja_Bridge {
 		$charge_id = substr( sanitize_text_field( (string) ( $p['chargeId'] ?? '' ) ), 0, 80 );
 		if ( '' === $charge_id ) { return new WP_Error( 'cvd_caja_charge_id', 'Falta el identificador del cobro.', array( 'status' => 422 ) ); }
 		$previous = $order->get_meta( self::CHARGE_META, true );
+		// Recepcion conciliada sin cierre: acusar el mismo ingreso local, sin aprobar
+		// comisiones ni ejecutar de nuevo el cobro. Solo un proceso administrativo
+		// autorizado puede guardar receipt_only; nunca se acepta desde el request.
+		if ( is_array( $previous ) && true === ( $previous['receipt_only'] ?? false ) ) {
+			$same = ( $previous['id'] ?? '' ) === $charge_id
+				&& ( $previous['method'] ?? '' ) === (string) ( $p['collectionMethod'] ?? '' )
+				&& is_numeric( $p['collectedUsd'] ?? null ) && is_numeric( $p['collectedCup'] ?? null )
+				&& (int) round( (float) $p['collectedUsd'] * 100 ) === ( $previous['usd_minor'] ?? null )
+				&& (int) round( (float) $p['collectedCup'] * 100 ) === ( $previous['cup_minor'] ?? null );
+			$received = 'cash_returned' === $order->get_meta( '_cvd_delivery_status', true ) && 'returned' === $order->get_meta( '_cvd_cash_status', true );
+			$closed = $order->has_status( 'completed' ) && 'closed' === $order->get_meta( '_cvd_delivery_status', true ) && 'verified' === $order->get_meta( '_cvd_cash_status', true );
+			if ( ! $same || ! ( $received || $closed ) ) {
+				// No usar already_charged/not_chargeable: la caja los interpreta como
+				// motivo para revertir un ingreso. Aqui corresponde revision, no salida.
+				return new WP_Error( 'cvd_caja_receipt_conflict', 'Este ingreso ya tiene una conciliacion. Revisa su referencia e importe; no vuelvas a cobrarlo.', array( 'status' => 409 ) );
+			}
+			return self::no_cache( array( 'ok' => true, 'repeated' => true, 'receiptOnly' => true, 'message' => 'Dinero recibido en tienda. Comisiones conservadas sin cambios.' ) );
+		}
 		if ( is_array( $previous ) && ( $previous['id'] ?? '' ) === $charge_id && $order->has_status( 'completed' ) ) {
 			return self::no_cache( array( 'ok' => true, 'repeated' => true, 'message' => 'Ya estaba cobrado con este mismo cobro de la caja.' ) );
 		}

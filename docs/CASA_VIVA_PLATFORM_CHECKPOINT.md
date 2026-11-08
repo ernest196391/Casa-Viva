@@ -244,3 +244,14 @@ Al retomar el proyecto:
 3. ejecutar solamente la próxima acción aprobada;
 4. actualizar estado, evidencia, costo y próxima compuerta;
 5. no avanzar de fase por inferencia ni por CI verde.
+
+
+## Recepcion de caja6324/6325 sin cerrar comisiones (8-nov-2026)
+
+Ernesto autoriza reconocer los110USD ya registrados en NEXO, conservando comisiones. Base a3a761d; bridge vivo coincide SHA256e50bc2f9e0cf219e04d7257466d3c45d0bc1996c1193a28af954d02af3242cfa. Un solo archivo desplegable cambia; no reemplazar plugin completo desde esta rama.
+
+La conciliacion administrativa reutiliza CVD_Order_Transition_Service deliverycash_returned/paymentreturned, con idempotencia por charge_id, evento original y fecha original. No completa Woo ni invoca atomic_closeout. Antes/despues protege todos los campos de comisiones/cobro, lineas, total y ledger del mensajero; caja y cierre remoto se comparan enteros.
+
+Bridge reconoce recibo interno receipt_only y mismo charge_id/metodo/importes sinmutacion. Referencias o importes distintos producen conflicto de revision que no activa las reversiones de caja. El request no puede crear receipt_only. Runner CLI exige manifest privado exacto y comparacion previa. Nunca ejecutar sin autorizacion/documentos/copia; no incluir manifest privado en git.
+
+11 pruebas de reintentos/conflictos/compatibilidad PASS y19escenarios del historial canonico PASS, PHP lint PASS. Preflight real PASS. Despliegue/aplicacion se registra en NOTAS-SERVIDOR y backup privado /root/supervisor/receipt6324-prepared.json; no confundir estos tests con aplicacion. Pendiente independiente: protocolo general de fecha del cobro y texto POS que dice cerrado en vez de recibido; no desplegar un cashReceivedToday=yes automatico.
