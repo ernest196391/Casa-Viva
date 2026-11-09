@@ -124,5 +124,34 @@ check( 'mixto: 0 USD no', CVD_Payout_Math::quote( $dany, array(), 'mixed', 540.0
 check( 'mixto: deuda mayor que el CUP', CVD_Payout_Math::quote( $dany, array( array( 'amount' => 900, 'currency' => 'CUP' ) ), 'mixed', 540.0, 40.0 )['ok'], false );
 check( 'mixto: sin tasa no', CVD_Payout_Math::quote( array( array( 'id' => 9, 'usd' => 10.0, 'cup' => 0.0, 'rate' => 0.0 ) ), array(), 'mixed', 540.0, 5.0 )['ok'], false );
 
+// 3.14.156 (Lennys 9-nov): la comisión en CUP se paga al tipo elToque, SIN los +10 de la tienda.
+$since = strtotime( '2026-10-20T04:00:00+00:00' ); // 20-oct 00:00 en Cuba (D86: entra el +10)
+$nov9 = strtotime( '2026-11-09T13:50:05+00:00' );
+check( 'toque 930 → venta 940 → paga 930 (lo mandó el bot)', CVD_Payout_Math::pay_rate( 940.0, 930.0, $nov9, $since, 10.0 ), 930.0 );
+check( 'sin pago_cup: venta 940 − 10 = 930', CVD_Payout_Math::pay_rate( 940.0, null, $nov9, $since, 10.0 ), 930.0 );
+check( '8-nov: venta 945 → paga 935', CVD_Payout_Math::pay_rate( 945.0, null, strtotime( '2026-11-08T13:50:04+00:00' ), $since, 10.0 ), 935.0 );
+check( 'venta del 18-oct (antes del +10): 810 tal cual', CVD_Payout_Math::pay_rate( 810.0, null, strtotime( '2026-10-18T13:52:17+00:00' ), $since, 10.0 ), 810.0 );
+check( 'tasa del 20-oct (toque 805 + 10 = 815) → 805', CVD_Payout_Math::pay_rate( 815.0, null, strtotime( '2026-10-20T13:18:34+00:00' ), $since, 10.0 ), 805.0 );
+check( 'pago_cup más alto que la venta no vale → venta − 10', CVD_Payout_Math::pay_rate( 940.0, 960.0, $nov9, $since, 10.0 ), 930.0 );
+check( 'margen 0 = como antes', CVD_Payout_Math::pay_rate( 940.0, null, $nov9, $since, 0.0 ), 940.0 );
+check( 'sin tasa de venta = 0', CVD_Payout_Math::pay_rate( 0.0, null, $nov9, $since, 10.0 ), 0.0 );
+// Una línea al tipo elToque: 4 USD × 930 = 3.720 CUP (con +10 eran 3.760).
+check( 'línea 4 USD al toque', CVD_Payout_Math::line( 4, CVD_Payout_Math::pay_rate( 940.0, 930.0, $nov9, $since, 10.0 ) )['cup'], 3720.0 );
+
+// Pagos pendientes (pedidos con +10, aún sin pagar): se recalculan al pagar; solo bajan.
+$p81 = array( array( 'id' => 5746, 'usd' => 5.0, 'rate' => 865.0, 'cup' => 4325.0 ), array( 'id' => 5985, 'usd' => 4.0, 'rate' => 875.0, 'cup' => 3500.0 ) );
+$r81 = CVD_Payout_Math::requote_lines( $p81, array( 5746 => 855.0, 5985 => 865.0 ) );
+$q81 = CVD_Payout_Math::quote( $r81, array(), 'transfer', 945.0 );
+check( '#81 transferencia 7.825 → 7.735 (9 USD × 10 menos)', $q81['pay'], 7735.0 );
+check( '#81 guarda la tasa de venta de antes', array_column( $r81, 'rate_venta' ), array( 865.0, 875.0 ) );
+$r75 = CVD_Payout_Math::requote_lines( array( array( 'id' => 4203, 'usd' => 5.0, 'rate' => 810.0, 'cup' => 4050.0 ) ), array( 4203 => 810.0 ) );
+check( '#75 venta del 18-oct: no cambia (4.050)', CVD_Payout_Math::quote( $r75, array(), 'transfer', 935.0 )['pay'], 4050.0 );
+check( 'nunca sube lo pedido', CVD_Payout_Math::requote_lines( array( array( 'id' => 1, 'usd' => 2.0, 'rate' => 900.0, 'cup' => 1800.0 ) ), array( 1 => 950.0 ) )[0]['cup'], 1800.0 );
+check( 'sin tasa nueva: igual', CVD_Payout_Math::requote_lines( array( array( 'id' => 1, 'usd' => 2.0, 'rate' => 900.0, 'cup' => 1800.0 ) ), array() )[0]['rate'], 900.0 );
+$cash = CVD_Payout_Math::quote( CVD_Payout_Math::requote_lines( array( array( 'id' => 7, 'usd' => 3.0, 'rate' => 940.0, 'cup' => 2820.0 ) ), array( 7 => 930.0 ) ), array(), 'cash_cup', 940.0 );
+check( 'efectivo CUP 3 USD: 2.820 → 2.790', $cash['pay'], 2790.0 );
+$mix = CVD_Payout_Math::quote( CVD_Payout_Math::requote_lines( $p81, array( 5746 => 855.0, 5985 => 865.0 ) ), array(), 'mixed', 945.0, 5.0 );
+check( 'mixto: 5 USD + el resto (4 USD) al toque', array( $mix['pay'], $mix['pay_cup'] ), array( 5.0, 3438.0 ) );
+
 echo ( $fails ? "FALLARON {$fails} de {$count}\n" : "OK: {$count} pruebas de cuentas de pagos\n" );
 exit( $fails ? 1 : 0 );

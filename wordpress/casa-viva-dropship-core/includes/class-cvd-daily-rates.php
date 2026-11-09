@@ -25,6 +25,17 @@ final class CVD_Daily_Rates {
 	 */
 	public const TRANSFER_FACTOR_OPTION = 'cvd_cup_transfer_factor';
 	public const DEFAULT_TRANSFER_FACTOR = 1.2;
+	/**
+	 * 3.14.156 (Lennys 9-nov, orden de Ernesto): la comisión de la gestora en CUP se PAGA al tipo elToque, sin los +10.
+	 * `pago_cup` = elToque del día (lo manda el bot junto a `cup`). Si no llega con `cup`, se borra y vale `cup` − margen.
+	 * Margen: opción `cvd_pago_cup_margen` (0 a 100; por defecto 10; 0 = pagar como antes). Las ventas cuya tasa es de
+	 * antes del 20-oct (cuando entró el +10, D86) se pagan con su tasa tal cual.
+	 */
+	public const PAY_MARGIN_OPTION = 'cvd_pago_cup_margen';
+	public const DEFAULT_PAY_MARGIN = 10.0;
+	public const PAY_MARGIN_SINCE = '2026-10-20T04:00:00+00:00'; // 20-oct 00:00 en Cuba
+	// pago_cup nunca más alto que cup ni más de esto por debajo (un número mal leído no baja el pago de nadie).
+	private const PAY_MAX_GAP = 100;
 	// Campo => [mínimo, máximo]: fuera de rango se ignora (un número mal leído no pisa la tasa buena).
 	private const FIELDS = array(
 		'cup'        => array( 50, 5000 ),
@@ -32,6 +43,7 @@ final class CVD_Daily_Rates {
 		'clasica'    => array( 0.8, 2 ),
 		'zelle'      => array( 0.8, 2 ),
 		'paypal_pct' => array( 0, 30 ),
+		'pago_cup'   => array( 50, 5000 ), // 3.14.156
 	);
 
 	/**
@@ -51,6 +63,8 @@ final class CVD_Daily_Rates {
 		if ( ! $rates['cup'] || $rates['cup'] <= 0 ) { return; }
 		$order->update_meta_data( '_cvd_cup_rate', (float) $rates['cup'] );
 		$order->update_meta_data( '_cvd_cup_rate_at', gmdate( 'c', $rates['updated_at'] ?: time() ) );
+		$pay = self::pay_rate( $rates ); // 3.14.156: y la de PAGAR la comisión (elToque, sin los +10)
+		if ( $pay ) { $order->update_meta_data( '_cvd_pago_cup_rate', $pay ); }
 		$order->save();
 	}
 
@@ -58,6 +72,48 @@ final class CVD_Daily_Rates {
 	public static function order_rate( WC_Order $order ): ?float {
 		$rate = (float) $order->get_meta( '_cvd_cup_rate', true );
 		return $rate > 0 ? $rate : null;
+	}
+
+	/** 3.14.156: margen que NO va a la gestora (los +10). Opción cvd_pago_cup_margen (0–100) o 10. */
+	public static function pay_margin(): float {
+		$raw = get_option( self::PAY_MARGIN_OPTION, '' );
+		return is_numeric( $raw ) && (float) $raw >= 0 && (float) $raw <= 100 ? (float) $raw : self::DEFAULT_PAY_MARGIN;
+	}
+
+	/** 3.14.156: momento desde el que la tasa de venta lleva los +10 (20-oct, D86). */
+	public static function pay_margin_since(): int {
+		return (int) strtotime( self::PAY_MARGIN_SINCE );
+	}
+
+	/**
+	 * 3.14.156: tasa de HOY para pagar comisiones en CUP = elToque: `pago_cup` si el bot lo mandó con la `cup` de hoy y
+	 * es válido; si no, `cup` − margen. null si no hay tasa.
+	 */
+	public static function pay_rate( ?array $rates = null ): ?float {
+		$rates = $rates ?? self::get();
+		$cup = (float) ( $rates['cup'] ?? 0 );
+		if ( $cup <= 0 ) { return null; }
+		if ( ! class_exists( 'CVD_Payout_Math' ) ) { require_once __DIR__ . '/class-cvd-payout-math.php'; }
+		$margin = self::pay_margin(); // 0 = pagar como antes (con la tasa de venta)
+		$saved = $margin > 0 && isset( $rates['pago_cup'] ) && is_numeric( $rates['pago_cup'] ) ? (float) $rates['pago_cup'] : null;
+		$pay = CVD_Payout_Math::pay_rate( $cup, $saved, time(), 0, $margin );
+		return $pay > 0 ? $pay : null;
+	}
+
+	/**
+	 * 3.14.156: tasa para PAGAR la comisión de este pedido en CUP (elToque del día de la venta), o null si el pedido no
+	 * guardó tasa. La del pedido si la guardó; si no, la de venta − 10 cuando es del 20-oct o después; si no, la de venta.
+	 */
+	public static function order_pay_rate( WC_Order $order ): ?float {
+		$sale = self::order_rate( $order );
+		if ( null === $sale ) { return null; }
+		if ( ! class_exists( 'CVD_Payout_Math' ) ) { require_once __DIR__ . '/class-cvd-payout-math.php'; }
+		$margin = self::pay_margin(); // 0 = pagar como antes (con la tasa de venta)
+		$saved = $margin > 0 ? (float) $order->get_meta( '_cvd_pago_cup_rate', true ) : 0.0;
+		$ts = (int) strtotime( (string) $order->get_meta( '_cvd_cup_rate_at', true ) );
+		if ( ! $ts ) { $created = $order->get_date_created(); $ts = $created ? $created->getTimestamp() : time(); }
+		$pay = CVD_Payout_Math::pay_rate( $sale, $saved > 0 ? $saved : null, $ts, self::pay_margin_since(), $margin );
+		return $pay > 0 ? $pay : null;
 	}
 
 	/** "12-oct": día (hora de Cuba) de la tasa guardada en el pedido, o '' si no la tiene. */
@@ -100,6 +156,8 @@ final class CVD_Daily_Rates {
 			'paypalPct'  => $r['paypal_pct'],
 			'cupTransfer'       => self::cup_transfer( $r['cup'] ),
 			'cupTransferFactor' => self::transfer_factor(),
+			'pagoCup'    => self::pay_rate( $r ), // 3.14.156: tasa para pagar comisiones en CUP (elToque, sin los +10)
+			'pagoCupSent' => $r['pago_cup'], // la que mandó el bot (null = se usa cup − margen)
 			'updatedAt'  => $r['updated_at'] ? gmdate( 'c', $r['updated_at'] ) : null,
 			'updatedTs'  => $r['updated_at'],
 			'source'     => $r['source'],
@@ -115,6 +173,7 @@ final class CVD_Daily_Rates {
 	 */
 	public static function save( array $input, string $source, string $sent_at = '' ) {
 		if ( isset( $input['paypalPct'] ) && ! isset( $input['paypal_pct'] ) ) { $input['paypal_pct'] = $input['paypalPct']; }
+		if ( isset( $input['pagoCup'] ) && ! isset( $input['pago_cup'] ) ) { $input['pago_cup'] = $input['pagoCup']; } // 3.14.156
 		$current = self::get();
 		$sent_ts = '' !== $sent_at ? (int) strtotime( $sent_at ) : 0;
 		if ( 'bot' === $source && $sent_ts && $sent_ts <= $current['bot_sent_at'] ) {
@@ -131,6 +190,21 @@ final class CVD_Daily_Rates {
 			$value = round( $value, 4 );
 			if ( $value !== $current[ $field ] ) { $changed[ $field ] = array( $current[ $field ], $value ); }
 			$next[ $field ] = $value;
+		}
+		// 3.14.156: pago_cup (elToque) va con la cup de ese momento. Llega una cup nueva sin pago_cup → se borra (se paga
+		// cup − margen). pago_cup más alta que cup o más de PAY_MAX_GAP por debajo → se ignora.
+		if ( isset( $given['cup'] ) && ! isset( $given['pago_cup'] ) && null !== $current['pago_cup'] && ! in_array( 'cup', $ignored, true ) ) {
+			$changed['pago_cup'] = array( $current['pago_cup'], null );
+			$next['pago_cup'] = null;
+		}
+		if ( isset( $given['pago_cup'] ) && ! in_array( 'pago_cup', $ignored, true ) ) {
+			$pay = (float) $next['pago_cup']; $cup = (float) ( $next['cup'] ?? 0 );
+			if ( $cup <= 0 || $pay > $cup || $pay < $cup - self::PAY_MAX_GAP ) {
+				$ignored[] = 'pago_cup';
+				unset( $changed['pago_cup'] );
+				$next['pago_cup'] = isset( $given['cup'] ) ? null : $current['pago_cup'];
+				if ( null === $next['pago_cup'] && null !== $current['pago_cup'] ) { $changed['pago_cup'] = array( $current['pago_cup'], null ); }
+			}
 		}
 		if ( count( $ignored ) === count( $given ) ) { return new WP_Error( 'cvd_rates_invalid', 'Ninguna tasa es válida: ' . implode( ', ', $ignored ) . '.', array( 'status' => 422 ) ); }
 		$next['updated_at'] = time();
