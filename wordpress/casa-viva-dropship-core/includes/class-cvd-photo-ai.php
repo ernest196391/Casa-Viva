@@ -70,6 +70,34 @@ final class CVD_Photo_AI {
 		return $bytes ? $bytes : self::error( 'El servidor de imágenes devolvió una imagen vacía.', 502 );
 	}
 
+	/**
+	 * 9-nov-2026 · Recorte GRATIS del producto en el VPS (no cuenta en el tope). $bytes = foto real (JPG, PNG o WebP,
+	 * ≤ 8 MB). → array( 'png' => bytes del producto con fondo TRANSPARENTE recortado a su tamaño, 'fiable' => bool,
+	 * 'motivos' => string[], 'medidas' => array ) o WP_Error (429 = otro recorte en marcha). Tarda ~7–25 s.
+	 * Si 'fiable' es false (no quitó el fondo, producto cortado en la foto, bordes difusos) → usar vps_image().
+	 * Ojo: piezas finas sobre fondo claro pueden borrarse sin que salga en 'motivos'; lo confirma Zayri en la bandeja.
+	 * El panel pone el PNG sobre blanco puro (HERO) y lo pasa a WebP.
+	 */
+	public static function vps_recorte( string $bytes ) {
+		$key = self::key( 'vps' );
+		if ( ! $key ) { return self::error( 'Pide al administrador que configure el servidor de imágenes.' ); }
+		$size = strlen( $bytes ) <= 8 * MB_IN_BYTES ? @getimagesizefromstring( $bytes ) : false;
+		if ( ! $size || ! in_array( $size['mime'], array( 'image/png', 'image/jpeg', 'image/webp' ), true ) ) { return self::error( 'La foto debe ser JPG, PNG o WebP de hasta 8 MB.' ); }
+		$url = defined( 'CVD_PHOTO_AI_VPS_RECORTE_URL' ) ? (string) CVD_PHOTO_AI_VPS_RECORTE_URL : str_replace( '/imagen/panel', '/imagen/recorte', self::VPS_URL );
+		$body = array( 'mime' => $size['mime'], 'foto_b64' => base64_encode( $bytes ), 'quien' => (string) wp_get_current_user()->user_login );
+		$response = wp_safe_remote_post( $url, array( 'timeout' => 150, 'redirection' => 0, 'limit_response_size' => 24 * MB_IN_BYTES, 'headers' => array( 'Content-Type' => 'application/json', 'X-Imagen-Key' => $key ), 'body' => wp_json_encode( $body ) ) );
+		if ( is_wp_error( $response ) ) { return self::error( 'El servidor de imágenes no respondió a tiempo. Espera un minuto antes de repetir.', 502 ); }
+		$status = (int) wp_remote_retrieve_response_code( $response );
+		$data = json_decode( wp_remote_retrieve_body( $response ), true );
+		if ( 200 !== $status || empty( $data['ok'] ) || empty( $data['png_b64'] ) ) {
+			$msg = is_array( $data ) && ! empty( $data['error'] ) ? (string) $data['error'] : 'No se pudo recortar la foto (HTTP ' . $status . ').';
+			return self::error( $msg, in_array( $status, array( 400, 429 ), true ) ? $status : 502 );
+		}
+		$png = base64_decode( (string) $data['png_b64'], true );
+		if ( ! $png ) { return self::error( 'El recorte llegó vacío.', 502 ); }
+		return array( 'png' => $png, 'fiable' => ! empty( $data['fiable'] ), 'motivos' => array_map( 'strval', (array) ( $data['motivos'] ?? array() ) ), 'medidas' => (array) ( $data['medidas'] ?? array() ) );
+	}
+
 	public static function settings(): void {
 		if ( ! current_user_can( 'manage_options' ) ) { return; }
 		echo '<div class="wrap"><h1>IA para fotos</h1><p>Para la cuota gratuita, usa una cuenta Workers Free y un token con permiso Workers AI en esa cuenta. Cada clave de pago habilita ese proveedor para Zayri.</p>';
