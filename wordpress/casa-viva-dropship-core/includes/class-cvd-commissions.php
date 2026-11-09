@@ -187,7 +187,8 @@ final class CVD_Commissions {
 	 * tiene tasa (pedidos viejos: solo USD) o la comisión no está en USD. No cambia ningún importe guardado.
 	 */
 	public static function commission_cup( WC_Order $order ): ?int {
-		$rate = class_exists( 'CVD_Daily_Rates' ) ? CVD_Daily_Rates::order_rate( $order ) : null;
+		// 3.14.156 (Lennys 9-nov): la comisión en CUP va al tipo elToque de ese día, sin los +10 de la tienda.
+		$rate = class_exists( 'CVD_Daily_Rates' ) ? CVD_Daily_Rates::order_pay_rate( $order ) : null;
 		$currency = strtoupper( (string) ( $order->get_meta( '_cvd_commission_currency', true ) ?: $order->get_currency() ) );
 		if ( null === $rate || 'USD' !== $currency ) { return null; }
 		// Sobre los USD en centavos que ve la gestora (5,00 USD), no sobre los 4 decimales guardados.
@@ -197,7 +198,7 @@ final class CVD_Commissions {
 	/** 3.13.64: «3.900 CUP a 780, tasa del 12-oct» para poner junto a los USD; '' si no hay tasa guardada o la comisión es 0. */
 	public static function commission_cup_text( WC_Order $order ): string {
 		$cup = self::commission_cup( $order );
-		$rate = class_exists( 'CVD_Daily_Rates' ) ? CVD_Daily_Rates::order_rate( $order ) : null;
+		$rate = class_exists( 'CVD_Daily_Rates' ) ? CVD_Daily_Rates::order_pay_rate( $order ) : null; // 3.14.156
 		if ( ! $cup || $cup <= 0 || null === $rate ) { return ''; }
 		$day = CVD_Daily_Rates::order_rate_day( $order );
 		return CVD_Daily_Rates::format_cup( $cup ) . ' a ' . CVD_Daily_Rates::format_rate( $rate ) . ( '' !== $day ? ', tasa del ' . $day : '' );

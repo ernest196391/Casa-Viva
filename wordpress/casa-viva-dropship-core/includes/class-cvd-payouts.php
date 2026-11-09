@@ -55,16 +55,51 @@ final class CVD_Payouts {
 	/**
 	 * Tasa CUP del día de la venta: la que guardó el pedido (3.13.64); si es un pedido viejo sin tasa, la que había ese
 	 * día según el registro de la tasa; si tampoco, 0 (no se adivina).
-	 * @return array{rate: float, day: string, source: string}
+	 * 3.14.156 (Lennys 9-nov): 'rate' es la tasa para PAGAR = elToque de ese día, sin los +10 de la tienda
+	 * (CVD_Daily_Rates::order_pay_rate); 'sale' es la de venta, solo para enseñarla.
+	 * @return array{rate: float, sale: float, day: string, source: string}
 	 */
 	public static function rate_info( WC_Order $order ): array {
 		$saved = class_exists( 'CVD_Daily_Rates' ) ? CVD_Daily_Rates::order_rate( $order ) : null;
-		if ( null !== $saved ) { return array( 'rate' => $saved, 'day' => CVD_Daily_Rates::order_rate_day( $order ), 'source' => 'venta' ); }
+		if ( null !== $saved ) {
+			$pay = CVD_Daily_Rates::order_pay_rate( $order );
+			return array( 'rate' => null !== $pay ? $pay : $saved, 'sale' => $saved, 'day' => CVD_Daily_Rates::order_rate_day( $order ), 'source' => 'venta' );
+		}
 		$created = $order->get_date_created();
 		$ts = $created ? $created->getTimestamp() : time();
 		$log = get_option( 'cvd_daily_rates_log', array() );
 		$rate = CVD_Payout_Math::rate_from_log( is_array( $log ) ? $log : array(), $ts );
-		return array( 'rate' => (float) $rate, 'day' => self::day( $ts ), 'source' => null === $rate ? 'falta' : 'registro' );
+		$pay = null !== $rate && class_exists( 'CVD_Daily_Rates' ) ? CVD_Payout_Math::pay_rate( (float) $rate, null, $ts, CVD_Daily_Rates::pay_margin_since(), CVD_Daily_Rates::pay_margin() ) : (float) $rate;
+		return array( 'rate' => (float) $pay, 'sale' => (float) $rate, 'day' => self::day( $ts ), 'source' => null === $rate ? 'falta' : 'registro' );
+	}
+
+	/**
+	 * 3.14.156: un pago pedido ANTES de la regla elToque y aún sin pagar, con la tasa para pagar de cada pedido (solo
+	 * baja; nunca sube). null si no cambia nada o no aplica (efectivo USD, sin detalle, ya pagado o rechazado). No
+	 * guarda nada: lo enseña view() y lo guarda transition() en el momento de pagar.
+	 * @return array{lines: array, quote: array, from: float, to: float}|null
+	 */
+	public static function requote( array $payout, ?array $details = null ): ?array {
+		if ( ! in_array( (string) ( $payout['status'] ?? '' ), array( 'requested', 'approved' ), true ) ) { return null; }
+		$method = sanitize_key( (string) ( $payout['pay_method'] ?? '' ) );
+		if ( ! in_array( $method, array( 'transfer', 'cash_cup', 'mixed' ), true ) || ! class_exists( 'CVD_Daily_Rates' ) || CVD_Daily_Rates::pay_margin() <= 0 ) { return null; }
+		$details = $details ?? json_decode( (string) ( $payout['details'] ?? '' ), true );
+		if ( ! is_array( $details ) || empty( $details['lines'] ) || ! is_array( $details['quote'] ?? null ) ) { return null; }
+		$rates = array();
+		foreach ( (array) $details['lines'] as $line ) {
+			$id = (int) ( $line['id'] ?? 0 );
+			if ( ! $id || ( class_exists( 'CVD_Programa' ) && CVD_Programa::is_payout_line( $id ) ) ) { continue; } // red y bono: como se pidieron
+			$order = wc_get_order( $id );
+			if ( $order instanceof WC_Order ) { $rates[ $id ] = self::rate_info( $order )['rate']; }
+		}
+		$lines = CVD_Payout_Math::requote_lines( (array) $details['lines'], $rates );
+		$old = (array) $details['quote'];
+		$quote = CVD_Payout_Math::quote( $lines, (array) ( $details['debts'] ?? array() ), $method, (float) ( $details['today'] ?? 0 ), 'mixed' === $method ? (float) ( $old['pay'] ?? 0 ) : 0.0 );
+		if ( ! $quote['ok'] ) { return null; } // no se adivina: se queda lo pedido
+		$from = 'mixed' === $method ? (float) ( $old['pay_cup'] ?? 0 ) : (float) $payout['amount'];
+		$to = 'mixed' === $method ? (float) $quote['pay_cup'] : (float) $quote['pay'];
+		if ( $to >= $from - 0.004 ) { return null; }
+		return array( 'lines' => $lines, 'quote' => $quote, 'from' => $from, 'to' => $to );
 	}
 
 	/** «12-oct» en hora de Cuba. */
@@ -162,10 +197,13 @@ final class CVD_Payouts {
 			}
 			$debts = array();
 		}
+		// 3.14.156: pedido antes de la regla elToque y sin pagar → se enseña (y se paga) ya sin los +10.
+		$requote = is_array( $details ) && isset( $details['lines'] ) ? self::requote( $payout, $details ) : null;
+		if ( $requote ) { $lines = $requote['lines']; $details['quote'] = $requote['quote']; }
 		$usd = round( array_sum( array_map( static fn( $l ): float => (float) ( $l['usd'] ?? 0 ), $lines ) ), 2 );
 		$cup = round( array_sum( array_map( static fn( $l ): float => (float) ( $l['cup'] ?? 0 ), $lines ) ), 2 );
 		$missing = (bool) array_filter( $lines, static fn( $l ): bool => (float) ( $l['rate'] ?? 0 ) <= 0 );
-		$pay = (float) $payout['amount'];
+		$pay = $requote && 'mixed' !== $kind ? (float) $requote['quote']['pay'] : (float) $payout['amount'];
 		$currency = strtoupper( (string) $payout['currency'] );
 		// Pagos de antes en USD por transferencia: Lennys transfiere CUP, con la tasa de cada venta.
 		if ( $legacy && 'transfer' === $kind && 'USD' === $currency && ! $missing && $cup > 0 && abs( $usd - $pay ) < 0.01 ) { $pay = $cup; $currency = 'CUP'; }
@@ -189,6 +227,8 @@ final class CVD_Payouts {
 			'requested_at' => (string) $payout['requested_at'], 'paid_at' => (string) $payout['paid_at'],
 			'received_at' => (string) ( $payout['received_at'] ?? '' ), 'paid_by' => absint( $payout['paid_by'] ),
 			'cash' => in_array( $kind, array( 'cash_cup', 'cash_usd', 'mixed' ), true ),
+			// 3.14.156: lo que decía el pedido con los +10 (para explicar por qué ahora es menos); null si no cambió.
+			'requoted_from' => $requote ? (float) $requote['from'] : null,
 		);
 	}
 
@@ -229,7 +269,7 @@ final class CVD_Payouts {
 			<div class="cvp-card cvp-balance">
 				<small>Disponible para cobrar</small>
 				<strong><?php echo esc_html( CVD_Payout_Math::usd( $usd ) ); ?></strong>
-				<?php if ( $usd > 0 ) : ?><span>≈ <?php echo esc_html( CVD_Payout_Math::cup( $cup ) ); ?><?php echo $missing ? ' (un pedido sin tasa)' : ''; ?> · con la tasa del día de cada venta</span><?php else : ?><span>Aún no tienes comisiones listas. Salen aquí cuando el pedido se entrega.</span><?php endif; ?>
+				<?php if ( $usd > 0 ) : ?><span>≈ <?php echo esc_html( CVD_Payout_Math::cup( $cup ) ); ?><?php echo $missing ? ' (un pedido sin tasa)' : ''; ?> · al tipo elToque del día de cada venta</span><?php else : ?><span>Aún no tienes comisiones listas. Salen aquí cuando el pedido se entrega.</span><?php endif; ?>
 				<?php if ( $debts ) : ?><p class="cvp-debt">Debes a la tienda <b><?php echo esc_html( self::debts_text( $debt_cup, $debt_usd ) ); ?></b>. Se descuenta al cobrar; el resto sigue sumando.</p><?php endif; ?>
 			</div>
 			<?php if ( $lines ) : ?>
@@ -307,7 +347,7 @@ final class CVD_Payouts {
 		return implode( ', ', $parts );
 	}
 
-	/** «× 790 (12-oct) = 11.060 CUP». */
+	/** «× 790 (12-oct) = 11.060 CUP». 3.14.156: la tasa es la de pagar (elToque, sin los +10). */
 	public static function rate_text( array $line ): string {
 		if ( (float) ( $line['rate'] ?? 0 ) <= 0 ) { return 'sin tasa guardada'; }
 		$rate = str_replace( ' CUP', '', CVD_Payout_Math::cup( (float) $line['rate'] ) );
@@ -703,6 +743,15 @@ final class CVD_Payouts {
 			$data = array( 'status' => $next, 'updated_at' => current_time( 'mysql', true ) );
 			if ( 'approved' === $next ) { $data['approved_at'] = current_time( 'mysql', true ); $data['approved_by'] = get_current_user_id(); }
 			if ( 'paid' === $next ) { $data['paid_at'] = current_time( 'mysql', true ); $data['paid_by'] = get_current_user_id(); $data['reference'] = $reference; $data['proof_attachment_id'] = $proof; }
+			// 3.14.156 (Lennys 9-nov): un pago pedido con los +10 se paga (y queda guardado) al tipo elToque. Lo de antes
+			// queda en details.antes_toque y en el historial (cvd_payout_events). Solo al pagar; nada pagado se toca.
+			$requote = 'paid' === $next ? self::requote( $payout ) : null;
+			if ( $requote ) {
+				$old_details = (array) json_decode( (string) $payout['details'], true );
+				$data['details'] = wp_json_encode( array_merge( $old_details, array( 'lines' => $requote['lines'], 'quote' => $requote['quote'], 'antes_toque' => array( 'amount' => (float) $payout['amount'], 'commission_cup' => (float) $payout['commission_cup'], 'quote' => $old_details['quote'] ?? null, 'at' => gmdate( 'c' ), 'regla' => 'elToque sin +10 (3.14.156)' ) ) ) );
+				if ( 'mixed' !== $payout['pay_method'] ) { $data['amount'] = (float) $requote['quote']['pay']; } // en mixto amount es la parte en USD
+				$data['commission_cup'] = (float) $requote['quote']['cup'];
+			}
 			$updated = $wpdb->update( $table, $data, array( 'id' => $payout_id, 'status' => $payout['status'] ) );
 			if ( 1 !== $updated ) { throw new RuntimeException( 'La liquidación cambió mientras se procesaba.' ); }
 
@@ -733,7 +782,7 @@ final class CVD_Payouts {
 
 			if ( $programa && 'rejected' === $next ) { CVD_Programa::release_payout( $payout_id ); }
 			if ( $programa && 'paid' === $next ) { CVD_Programa::settle_payout( $payout_id, $reference, get_current_user_id() ); }
-			if ( ! self::event( $payout_id, $action, $payout['status'], $next, array( 'reference' => $reference, 'proof' => $proof ) ) ) {
+			if ( ! self::event( $payout_id, $action, $payout['status'], $next, array_merge( array( 'reference' => $reference, 'proof' => $proof ), $requote ? array( 'toque' => array( 'from' => $requote['from'], 'to' => $requote['to'] ) ) : array() ) ) ) {
 				throw new RuntimeException( 'No se pudo registrar el historial de la liquidación.' );
 			}
 			$ledger_table = $wpdb->prefix . 'cvd_owner_financial_ledger';

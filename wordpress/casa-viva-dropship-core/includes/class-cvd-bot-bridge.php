@@ -65,7 +65,8 @@ final class CVD_Bot_Bridge {
 	 */
 	public static function rates( WP_REST_Request $request ) {
 		$params = (array) $request->get_json_params();
-		$result = CVD_Daily_Rates::save( array_intersect_key( $params, array_flip( array( 'cup', 'eur', 'clasica', 'zelle', 'paypal_pct', 'paypalPct' ) ) ), 'bot', sanitize_text_field( (string) ( $params['sentAt'] ?? '' ) ) );
+		// 3.14.156: pago_cup (o pagoCup) = elToque del día, para pagar comisiones en CUP sin los +10. Opcional.
+		$result = CVD_Daily_Rates::save( array_intersect_key( $params, array_flip( array( 'cup', 'eur', 'clasica', 'zelle', 'paypal_pct', 'paypalPct', 'pago_cup', 'pagoCup' ) ) ), 'bot', sanitize_text_field( (string) ( $params['sentAt'] ?? '' ) ) );
 		if ( is_wp_error( $result ) ) { return $result; }
 		return self::no_cache( $result );
 	}

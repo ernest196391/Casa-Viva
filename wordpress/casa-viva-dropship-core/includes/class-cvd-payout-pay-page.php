@@ -148,8 +148,9 @@ final class CVD_Payout_Pay_Page {
 		$h .= '<h1>Pagar a ' . esc_html( $v['name'] ) . '</h1>';
 		$h .= '<div class="total"><small>' . esc_html( $label ) . '</small><strong>' . esc_html( $v['pay_text'] ) . '</strong>';
 		$sub = array();
-		if ( 'mixed' === $v['kind'] ) { $sub[] = '= ' . CVD_Payout_Math::usd( $v['usd'] ) . ' de comisión: ' . CVD_Payout_Math::usd( $v['pay'] ) . ' en dólares y el resto en CUP con la tasa de cada venta'; } // 3.14.68
-		elseif ( 'USD' !== $v['currency'] ) { $sub[] = '= ' . CVD_Payout_Math::usd( $v['usd'] ) . ' de comisión'; } elseif ( $v['cup'] > 0 && ! $v['missing_rate'] ) { $sub[] = '≈ ' . CVD_Payout_Math::cup( $v['cup'] ) . ' con la tasa de cada venta'; }
+		if ( 'mixed' === $v['kind'] ) { $sub[] = '= ' . CVD_Payout_Math::usd( $v['usd'] ) . ' de comisión: ' . CVD_Payout_Math::usd( $v['pay'] ) . ' en dólares y el resto en CUP al tipo elToque de cada venta'; } // 3.14.68
+		elseif ( 'USD' !== $v['currency'] ) { $sub[] = '= ' . CVD_Payout_Math::usd( $v['usd'] ) . ' de comisión al tipo elToque de cada venta'; } elseif ( $v['cup'] > 0 && ! $v['missing_rate'] ) { $sub[] = '≈ ' . CVD_Payout_Math::cup( $v['cup'] ) . ' al tipo elToque de cada venta'; }
+		if ( null !== ( $v['requoted_from'] ?? null ) ) { $sub[] = 'sin los +10 de la tienda (el aviso decía ' . CVD_Payout_Math::cup( (float) $v['requoted_from'] ) . ')'; } // 3.14.156
 		$sub[] = $n . ( 1 === $n ? ' pedido' : ' pedidos' );
 		if ( $v['deduction'] > 0 ) { $sub[] = 'ya restada la deuda de ' . CVD_Payout_Math::money( $v['deduction'], $v['deduction_currency'] ); }
 		$h .= '<span>' . esc_html( implode( ' · ', $sub ) ) . '</span></div>';

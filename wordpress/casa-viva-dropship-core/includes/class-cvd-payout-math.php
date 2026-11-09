@@ -5,6 +5,7 @@
  *
  * Reglas (decisiones de Ernesto, no se cambian aquí):
  *  - La comisión es en USD. En CUP va con la tasa del DÍA DE CADA VENTA (cada pedido con la suya).
+ *    3.14.156 (Lennys 9-nov): esa tasa es el tipo elToque de ese día, SIN los +10 de la tienda (pay_rate()).
  *  - Retiro parcial: la gestora elige cuánto retira; se toman pedidos enteros, del más viejo al más nuevo.
  *  - Las deudas de la gestora con la tienda se descuentan completas del retiro (en CUP o USD). Si una deuda está en
  *    otra moneda que el pago, se convierte con la tasa de HOY (la deuda es de hoy, no de una venta).
@@ -25,6 +26,21 @@ final class CVD_Payout_Math {
 	public static function line( float $usd, float $rate ): array {
 		$usd = round( $usd, 2 );
 		return array( 'usd' => $usd, 'rate' => $rate, 'cup' => $rate > 0 ? round( $usd * $rate, 2 ) : 0.0 );
+	}
+
+	/**
+	 * 3.14.156 (Lennys 9-nov, orden de Ernesto): la comisión en CUP se PAGA al tipo elToque, sin los +10 de la tienda
+	 * (los +10 son margen para comprar, no para la gestora). Tasa para pagar una venta:
+	 *  - la que guardó el pedido para pagar (_cvd_pago_cup_rate = elToque que mandó el bot) si es válida (> 0 y no más
+	 *    alta que la de venta);
+	 *  - si no, la de venta − $margin cuando esa tasa es del día en que entró la regla del +10 o después ($since_ts);
+	 *  - si no (ventas de antes del +10), la de venta tal cual. 0 si no hay tasa de venta.
+	 */
+	public static function pay_rate( float $sale_rate, ?float $saved_pay, int $rate_ts, int $since_ts, float $margin ): float {
+		if ( null !== $saved_pay && $saved_pay > 0 && ( $sale_rate <= 0 || $saved_pay <= $sale_rate ) ) { return $saved_pay; }
+		if ( $sale_rate <= 0 ) { return 0.0; }
+		if ( $margin > 0 && $rate_ts >= $since_ts && $sale_rate - $margin > 0 ) { return round( $sale_rate - $margin, 4 ); }
+		return $sale_rate;
 	}
 
 	/**
@@ -51,6 +67,27 @@ final class CVD_Payout_Math {
 		$first = $changes[0];
 		if ( is_numeric( $first['from'] ) && (float) $first['from'] > 0 ) { return (float) $first['from']; }
 		return is_numeric( $first['to'] ) && (float) $first['to'] > 0 ? (float) $first['to'] : null;
+	}
+
+	/**
+	 * 3.14.156: líneas de un pago ya pedido y aún sin pagar, con la tasa para pagar de cada pedido ($pay_rates: id =>
+	 * tasa). Solo BAJA una tasa (nunca sube lo que se pidió); guarda la de antes en 'rate_venta'. Lo demás, igual.
+	 */
+	public static function requote_lines( array $lines, array $pay_rates ): array {
+		$out = array();
+		foreach ( $lines as $line ) {
+			$id = (int) ( $line['id'] ?? 0 );
+			$old = (float) ( $line['rate'] ?? 0 );
+			$new = isset( $pay_rates[ $id ] ) ? (float) $pay_rates[ $id ] : 0.0;
+			if ( $new > 0 && $old > 0 && $new < $old - 0.00001 ) {
+				$calc = self::line( (float) $line['usd'], $new );
+				$line['rate_venta'] = $old;
+				$line['rate'] = $calc['rate'];
+				$line['cup'] = $calc['cup'];
+			}
+			$out[] = $line;
+		}
+		return $out;
 	}
 
 	/**

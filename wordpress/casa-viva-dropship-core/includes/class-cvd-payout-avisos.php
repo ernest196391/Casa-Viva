@@ -110,7 +110,7 @@ final class CVD_Payout_Avisos {
 	private static function summary( array $view ): string {
 		$n = count( $view['lines'] );
 		$text = CVD_Payout_Math::usd( $view['usd'] ) . ' de ' . $n . ( 1 === $n ? ' pedido' : ' pedidos' );
-		if ( 'USD' !== $view['currency'] ) { $text .= ', con la tasa de cada venta'; }
+		if ( 'USD' !== $view['currency'] ) { $text .= ', al tipo elToque de cada venta'; } // 3.14.156: sin los +10
 		if ( $view['deduction'] > 0 ) { $text .= '; ya restada la deuda de ' . CVD_Payout_Math::money( $view['deduction'], $view['deduction_currency'] ); }
 		return '(' . $text . ')';
 	}
