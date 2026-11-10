@@ -60,6 +60,7 @@ final class CVD_Pv_Api {
 		$r( 'foto', 'GET', 'ver_foto', $open ); // firmada
 		// Chofer
 		$r( 'chofer/hoy', 'GET', 'chofer_hoy', $d );
+		$r( 'chofer/app', 'GET', 'chofer_app', $d ); // 10-nov: la app Android «Pa'llá Chofer» pide aquí su tema de avisos
 		$r( 'chofer/disponible', 'POST', 'chofer_disponible', $d );
 		$r( 'chofer/posicion', 'POST', 'chofer_posicion', $d );
 		$r( 'chofer/pedidos/(?P<id>\d+)/ofertar', 'POST', 'ofertar', $d );
@@ -1122,6 +1123,25 @@ final class CVD_Pv_Api {
 			if ( '' !== (string) $v->canal ) { CVD_Pv_Canal::senal( (string) $v->canal, array( 't' => 'pos', 'lat' => round( $lat, 6 ), 'lng' => round( $lng, 6 ) ) ); }
 		}
 		return self::out( array( 'ok' => true, 'viaje' => $v ? (int) $v->id : 0 ) );
+	}
+
+	/**
+	 * GET chofer/app — 10-nov (Ernesto: app de chofer aparte, con la bocina de los mensajeros): el tema de ntfy donde
+	 * `CVD_Palla_Push::avisar` le manda «🚖 Pedido», «✅ ¡Te eligieron!» y «El cliente canceló». La app lo escucha con un
+	 * servicio en primer plano y suena con la pantalla apagada (la web no puede). Mismo tema que usaría la app de mensajeros.
+	 */
+	public static function chofer_app( WP_REST_Request $request ): WP_REST_Response {
+		$u = self::user( $request );
+		$ch = self::ficha( $u );
+		if ( ! $ch || 'aprobado' !== $ch->estado ) { return self::out( array( 'ok' => false, 'result' => 'no_aprobado' ) ); }
+		$url = (string) get_option( 'cvd_palla_ntfy_url', '' );
+		if ( 0 !== strpos( $url, 'https://' ) ) { return self::out( array( 'ok' => false, 'result' => 'no_server' ) ); }
+		$topic = (string) get_user_meta( $u->ID, CVD_Palla_Push::NTFY_TOPIC, true );
+		if ( '' === $topic ) {
+			$topic = 'palla-' . $u->ID . '-' . bin2hex( random_bytes( 8 ) );
+			update_user_meta( $u->ID, CVD_Palla_Push::NTFY_TOPIC, $topic );
+		}
+		return self::out( array( 'ok' => true, 'url' => untrailingslashit( $url ), 'topic' => $topic ) );
 	}
 
 	/** POST chofer/pedidos/{id}/ofertar {pct: 0|10|20|30} */

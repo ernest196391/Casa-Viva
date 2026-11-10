@@ -25,7 +25,7 @@ import android.webkit.WebViewClient;
  *  - el enlace personal de WhatsApp abre la app (assetlinks), y los enlaces de fuera (Llamar, Ir, WhatsApp) salen fuera.
  */
 public class MainActivity extends Activity {
-    static final String HOME = "https://casaviva.company/palla/";
+    static final String HOME = BuildConfig.HOME; // mensajero: /palla/ · chofer (10-nov): /palla/chofer/
     private static final int REQ_NOTIF = 1, REQ_GEO = 2;
 
     private WebView web;
@@ -179,8 +179,15 @@ public class MainActivity extends Activity {
             long u = (long) until;
             if (on == Prefs.available(ctx) && u == Prefs.availableUntil(ctx)) { return; }
             Prefs.setAvailable(ctx, on, u);
-            runOnUiThread(() -> AvisosService.availability(ctx));
+            runOnUiThread(() -> {
+                if (BuildConfig.CHOFER && on) { askLocation(); } // chofer: en línea manda su posición aunque no mire el móvil
+                AvisosService.availability(ctx);
+            });
         }
+
+        /** 10-nov: «Probar el sonido» en Mi perfil (el chofer comprueba que su teléfono no calla la app). */
+        @JavascriptInterface
+        public void probarSonido() { AvisosService.startSiren(ctx); }
 
         @JavascriptInterface
         public String status() {

@@ -118,6 +118,11 @@ pv_ok( 200 === $s && ! empty( $d['token'] ), 'entrar con el código' );
 // ---------- Choferes de prueba (otro chofer no probador no entra)
 list( $s, $d ) = pv_req( 'GET', 'chofer/hoy', array(), $P( $d1 ) );
 pv_ok( 200 === $s && 'aprobado' === $d['estado'] && 'tric_electrico' === $d['ficha']['clase'], 'chofer/hoy del chofer 1' );
+// 10-nov: la app Android «Pa'llá Chofer» pide su tema de avisos (el mismo donde CVD_Palla_Push::avisar le manda los pedidos)
+list( $s, $ap ) = pv_req( 'GET', 'chofer/app', array(), $P( $d1 ) );
+pv_ok( 200 === $s && true === $ap['ok'] && 0 === strpos( $ap['topic'], 'palla-' . $d1 . '-' ) && $ap['topic'] === get_user_meta( $d1, CVD_Palla_Push::NTFY_TOPIC, true ), 'app del chofer: su tema de avisos' );
+list( , $ap2 ) = pv_req( 'GET', 'chofer/app', array(), $P( $d1 ) );
+pv_ok( $ap2['topic'] === $ap['topic'], 'app del chofer: el tema no cambia' );
 
 // ---------- Cotizar
 list( $s, $q ) = pv_req( 'GET', 'cotizar', array( 'grupo' => 'tric', 'olat' => $O[0], 'olng' => $O[1], 'dlat' => $D[0], 'dlng' => $D[1] ), $H );

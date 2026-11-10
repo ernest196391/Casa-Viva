@@ -182,10 +182,11 @@ final class CVD_Palla {
 		$path = (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
 		if ( '/.well-known/assetlinks.json' !== $path ) { return; }
 		$sha = strtoupper( preg_replace( '/[^0-9A-Fa-f:]/', '', (string) get_option( 'cvd_palla_app_sha256', '' ) ) );
-		$list = '' === $sha ? array() : array( array(
+		// 10-nov: también «Pa'llá Chofer» (company.casaviva.palla.chofer, misma firma): su enlace /palla/chofer/#k=… abre la app.
+		$list = '' === $sha ? array() : array_map( static fn( string $pkg ): array => array(
 			'relation' => array( 'delegate_permission/common.handle_all_urls' ),
-			'target'   => array( 'namespace' => 'android_app', 'package_name' => 'company.casaviva.palla', 'sha256_cert_fingerprints' => array( $sha ) ),
-		) );
+			'target'   => array( 'namespace' => 'android_app', 'package_name' => $pkg, 'sha256_cert_fingerprints' => array( $sha ) ),
+		), array( 'company.casaviva.palla', 'company.casaviva.palla.chofer' ) );
 		if ( ! defined( 'DONOTCACHEPAGE' ) ) { define( 'DONOTCACHEPAGE', true ); }
 		header( 'Content-Type: application/json' );
 		header( 'Cache-Control: public, max-age=3600' );

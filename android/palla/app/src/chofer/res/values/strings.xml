@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 10-nov: la app de los choferes de Pa'llá transporte (mismo código que la de mensajeros). -->
+<resources>
+    <string name="app_name">Pa\'llá Chofer</string>
+</resources>

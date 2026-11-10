@@ -48,7 +48,19 @@
 	function nombrePago(p) { return p === 'transferencia' ? 'Transfermóvil' : 'Efectivo'; }
 	function dist(a, b) { var x = (b[0] - a[0]) * Math.cos((a[1] + b[1]) * Math.PI / 360), y = b[1] - a[1]; return Math.sqrt(x * x + y * y) * 111320; }
 	function largo(c) { var l = 0; for (var i = 1; i < c.length; i++) { l += dist(c[i - 1], c[i]); } return l; }
-	function guardarH() { LS.set('ch.hoy', H ? JSON.stringify(H) : null); }
+	function guardarH() { LS.set('ch.hoy', H ? JSON.stringify(H) : null); appSync(); }
+	// 10-nov: dentro de la app Android «Pa'llá Chofer» (puente window.PallaApp) la web le dice su enlace, si está En línea y
+	// si lleva un viaje: la app suena con la pantalla apagada y manda la posición en segundo plano (la web no puede).
+	var APP = window.PallaApp && typeof window.PallaApp.setToken === 'function' ? window.PallaApp : null, appYa = {};
+	function appSync() {
+		if (!APP || !K) { return; }
+		try {
+			if (appYa.k !== K) { appYa.k = K; APP.setToken(K); }
+			var on = !!(H && H.ficha && H.ficha.disponible), act = !!(H && H.activo);
+			if (appYa.on !== on) { appYa.on = on; APP.setAvailable(on, 0); }
+			if (appYa.act !== act && APP.setActive) { appYa.act = act; APP.setActive(act); }
+		} catch (e) { }
+	}
 
 	// Sonido del pedido nuevo (WebAudio, sin archivos). El navegador lo deja sonar tras el primer toque en la pantalla.
 	var ac = null;
@@ -550,8 +562,10 @@
 				+ '<p class="pa-etq">Papeles</p>' + (f.papeles || []).map(doc).join('')
 				+ '<a class="p-fila" href="#ch-deuda" style="border-top:1px solid var(--linea);margin-top:12px"><span class="p-fila__ico">' + ico('moneda') + '</span><span class="p-fila__txt"><b>Lo que debo a Pa\'llá</b></span>' + ico('sigue', 'p-ico--20') + '</a>'
 				+ '<a class="p-fila" href="' + esc(C.alta) + '"><span class="p-fila__ico">' + ico('editar') + '</span><span class="p-fila__txt"><b>Cambiar mis papeles</b></span>' + ico('sigue', 'p-ico--20') + '</a>'
+				+ (APP && APP.probarSonido ? '<button type="button" class="p-fila" id="probar" style="width:100%;border:0;background:none;font:inherit;text-align:left"><span class="p-fila__ico">' + ico('campana') + '</span><span class="p-fila__txt"><b>Probar el sonido</b><span>Suena como un pedido nuevo. Tócalo para callarlo.</span></span></button>' : '')
 				+ '</div></div>';
-		}
+		},
+		init: function (r) { var b = $('#probar', r); if (b) { b.onclick = function () { try { APP.probarSonido(); } catch (e) { } }; } }
 	};
 
 	// =====================================================================================

@@ -35,6 +35,28 @@ android {
         }
     }
 
+    // 10-nov (Ernesto): dos apps del mismo código. «mensajero» = la Pa'llá 1.4 de los mensajeros de Casa Viva, SIN cambios
+    // (mismo applicationId, versión y web /palla/). «chofer» = «Pa'llá Chofer» de Pa'llá transporte: abre /palla/chofer/,
+    // suena con la bocina de siempre aunque la pantalla esté apagada y manda su posición en segundo plano.
+    flavorDimensions += "app"
+    productFlavors {
+        create("mensajero") {
+            dimension = "app"
+            manifestPlaceholders["linkPrefix"] = "/palla"
+            buildConfigField("boolean", "CHOFER", "false")
+            buildConfigField("String", "HOME", "\"https://casaviva.company/palla/\"")
+        }
+        create("chofer") {
+            dimension = "app"
+            applicationId = "company.casaviva.palla.chofer"
+            versionCode = 1
+            versionName = "1.0"
+            manifestPlaceholders["linkPrefix"] = "/palla/chofer"
+            buildConfigField("boolean", "CHOFER", "true")
+            buildConfigField("String", "HOME", "\"https://casaviva.company/palla/chofer/\"")
+        }
+    }
+
     buildFeatures { buildConfig = true }
 
     // Sin la revisión «lint» al compilar: baja cientos de MB y en este ordenador se corta la descarga.
