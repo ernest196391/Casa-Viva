@@ -441,7 +441,8 @@ $viaje6 = static function ( string $cid ) use ( $cot6, $H6, $P, $d6, $TV, $wpdb 
 	$id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$TV} WHERE uuid=%s", $d['viaje']['uuid'] ) );
 	pv_ok( $id > 0, 'auditoría: pedido ' . $cid . ' ' . wp_json_encode( $d ) );
 	list( , $o ) = pv_req( 'POST', "chofer/pedidos/{$id}/ofertar", array( 'pct' => 0 ), $P( $d6 ) );
-	pv_ok( ! empty( $o['oferta']['id'] ), 'auditoría: oferta ' . $cid . ' ' . wp_json_encode( $o ) );
+	$fd = CVD_Triciclub::chofer_de( $d6 );
+	pv_ok( ! empty( $o['oferta']['id'] ), 'auditoría: oferta ' . $cid . ' ' . wp_json_encode( $o ) . ' saldo=' . CVD_Pv_Cuenta::saldo( $d6 ) . ' tope=' . get_option( 'cvd_pv_tope' ) . ' lat=' . $fd->lat . ' lng=' . $fd->lng . ' v=' . wp_json_encode( $wpdb->get_row( $wpdb->prepare( "SELECT origen_lat, origen_lng, forma_pago, clase, chofer_id FROM {$TV} WHERE id=%d", $id ) ) ) );
 	list( , $e ) = pv_req( 'POST', 'viajes/' . $d['viaje']['uuid'] . '/elegir', array( 'oferta' => $o['oferta']['id'] ), $H6 );
 	pv_ok( 'asignado' === ( $e['viaje']['estado'] ?? '' ), 'auditoría: elegir ' . $cid . ' ' . wp_json_encode( $e['message'] ?? '' ) );
 	return array( $id, $d['viaje']['uuid'], $e['viaje']['codigo'] ?? '' );
