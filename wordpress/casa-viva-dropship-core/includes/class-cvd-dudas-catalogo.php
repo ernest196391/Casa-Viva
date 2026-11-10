@@ -320,8 +320,13 @@ final class CVD_Dudas_Catalogo {
 		if ( 'hecha' === $d['estado'] ) { return new WP_Error( 'conflict', 'Esta duda ya está contestada.', array( 'status' => 409, 'duda' => self::publica( $d ) ) ); }
 		if ( 'marcha' === $d['estado'] ) { return new WP_Error( 'conflict', 'Está en marcha. Espera el resultado.', array( 'status' => 409, 'duda' => self::publica( $d ) ) ); }
 		if ( 'explicar' === $resp && '' === trim( $in['texto'] ) && empty( $in['audio'] ) ) { return new WP_Error( 'respuesta', 'Graba una nota de voz o escribe la explicación.', array( 'status' => 422 ) ); }
+		// One answer per card at a time (a «pedir foto» may wait for the image ladder; a lock older than 400 s is a crashed request).
 		$lock = 'cvd_duda_' . md5( $id );
-		if ( ! add_option( $lock, time(), '', false ) ) { return new WP_Error( 'busy', 'Esta duda se está guardando. Espera un momento.', array( 'status' => 409 ) ); }
+		if ( ! add_option( $lock, time(), '', false ) ) {
+			if ( time() - (int) get_option( $lock ) < 400 ) { return new WP_Error( 'busy', 'Esta duda se está guardando. Espera un momento.', array( 'status' => 409 ) ); }
+			delete_option( $lock );
+			if ( ! add_option( $lock, time(), '', false ) ) { return new WP_Error( 'busy', 'Esta duda se está guardando. Espera un momento.', array( 'status' => 409 ) ); }
+		}
 		try {
 			$e = self::efecto( $d, $in );
 			if ( is_wp_error( $e ) ) { return $e; }

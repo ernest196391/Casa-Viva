@@ -286,6 +286,11 @@ $s = wc_get_product( 3 ); $pan = $uploads . '/pan.jpg'; file_put_contents( $pan,
 $r = CVD_Content_Studio::crear( req( array( 'id' => 3, 'pieza' => 'life' ) ) );
 check( 'ok' === code( $r ) && 'life' === $r['opcion']['pieza'] && 'ia' === $r['escalon'] && ! $r['publicada'] && str_contains( $GLOBALS['vps']['prompt'], 'Huevo sin aceite' ) && str_contains( $GLOBALS['vps']['prompt'], 'person' ), 'LIFESTYLE: scene with a person from the matrix, kept as option, never on the web' );
 
+check( array() === CVD_Content_Studio::products( req( array( 'id' => 3 ) ) )['opciones'][0]['cambio'], 'a saved option of an unchanged ficha is current' );
+$s = wc_get_product( 3 ); $s->set_name( 'Sartén HotChef 28 cm' ); $s->save();
+$life = CVD_Content_Studio::products( req( array( 'id' => 3 ) ) )['opciones'][0];
+check( array( 'texto' ) === $life['cambio'] && ! isset( $life['texto_v'] ), '«opción vieja»: the option says the text changed since it was made' );
+
 /* 12. List with filters and counts. */
 $l = CVD_Content_Studio::products( req( array( 'filtro' => 'hero' ) ) );
 check( isset( $l['counts']['nohero'], $l['counts']['piezas'], $l['counts']['draft'], $l['counts']['revisar'] ) && count( $l['items'] ) === $l['counts']['nohero'] && 'nohero' === $l['filtro'], 'filtro=hero lists products without HERO with the count' );

@@ -336,6 +336,20 @@ final class CVD_Content_Studio {
 		return $out;
 	}
 
+	/**
+	 * Options as the phone sees them. «cambio» works like review_changed of the private preview: foto = the starting photo is
+	 * no longer on the product, texto = name, texts or matrix changed since the option was made. Never applied by itself.
+	 */
+	private static function opciones_vistas( WC_Product $p ): array {
+		$fotos = array_map( 'intval', array_merge( array( $p->get_image_id() ), (array) $p->get_gallery_image_ids() ) ); $texto = self::text_version( $p );
+		return array_map( static function ( $o ) use ( $fotos, $texto ) {
+			$o['cambio'] = array_keys( array_filter( array( 'foto' => ! empty( $o['base'] ) && ! in_array( (int) $o['base'], $fotos, true ),
+				'texto' => ! empty( $o['texto_v'] ) && $o['texto_v'] !== $texto ) ) );
+			unset( $o['texto_v'] );
+			return $o;
+		}, self::opciones( $p->get_id() ) );
+	}
+
 	private static function opcion( int $id, string $pieza, string $opcion ): ?array {
 		foreach ( self::opciones( $id, true ) as $o ) { if ( '' !== $opcion && $o['id'] === $opcion && $o['pieza'] === $pieza ) { return $o; } }
 		return null;
@@ -868,7 +882,7 @@ final class CVD_Content_Studio {
 			$fallos = array_values( array_filter( $hecho['escalones'], static fn( $e ) => ! $e['ok'] ) );
 			$opcion = self::guardar_opcion( $id, array( 'pieza' => $pieza, 'escalon' => $hecho['escalon'], 'coste' => $hecho['coste'], 'ancho' => $hecho['ancho'], 'cortado' => $hecho['cortado'],
 				'fallo' => implode( ' · ', array_column( $fallos, 'motivo' ) ), 'escalones' => $hecho['escalones'], 'antes' => (string) ( $bases[0]['url'] ?? '' ),
-				'base' => (int) ( $bases[0]['att'] ?? 0 ), 'segundos' => (int) round( microtime( true ) - $t0 ) ), $hecho['bytes'] );
+				'base' => (int) ( $bases[0]['att'] ?? 0 ), 'texto_v' => self::text_version( $p ), 'segundos' => (int) round( microtime( true ) - $t0 ) ), $hecho['bytes'] );
 			if ( is_wp_error( $opcion ) ) { return $opcion; }
 		} finally { delete_option( self::IMAGEN_LOCK ); }
 		$publicada = false; $aviso = 'Opción lista para comparar.';
@@ -983,7 +997,7 @@ final class CVD_Content_Studio {
 		$antes = $p->get_meta( self::HERO_ANTES );
 		return array( 'id' => $p->get_id(), 'name' => $p->get_name(), 'description' => $p->get_description(),
 			// v2: prioridad (top · nuevo · anuncios), las 3 piezas, opciones guardadas, fotos de partida y lo que falta de fotos.
-			'prioridad' => $lista['prios'], 'prio' => $lista['prios'][0] ?? '', 'prios' => $lista['prios'], 'piezas' => self::piezas( $id ), 'opciones' => self::opciones( $id ), 'fotos' => self::fotos( $p ),
+			'prioridad' => $lista['prios'], 'prio' => $lista['prios'][0] ?? '', 'prios' => $lista['prios'], 'piezas' => self::piezas( $id ), 'opciones' => self::opciones_vistas( $p ), 'fotos' => self::fotos( $p ),
 			'falta_hero' => $lista['nohero'], 'faltan_piezas' => $lista['faltan'], 'falta_fotos' => $lista['texto'], 'hero_en_web' => $lista['en_web'], 'hero_revisar' => $lista['revisar'],
 			'restaurable' => is_array( $antes ) && (int) ( $antes['att'] ?? 0 ) === (int) $p->get_image_id() && (int) $p->get_image_id() > 0,
 			'short' => $p->get_short_description(), 'status' => $p->get_status(),
