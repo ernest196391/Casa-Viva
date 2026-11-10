@@ -58,6 +58,9 @@ public class AvisosService extends Service {
     private static final long ALARM_MS = 30_000L;       // 1.2 (Ernesto): la bocina suena como mucho 30 s
     private static final long FRESH_S = 10 * 60L;       // al reconectar, solo suenan los avisos de los últimos 10 min
 
+    // 10-nov (prueba en el Redmi de Ernesto, reloj 1 h adelantado): un aviso recién llegado se tiraba por «viejo». La edad
+    // se mide con la hora del SERVIDOR de avisos (cabecera Date al conectar), no con el reloj del teléfono.
+    private volatile long skewMs;
     private volatile boolean running;
     private volatile HttpURLConnection conn;
     private Thread worker;
@@ -487,6 +490,8 @@ public class AvisosService extends Service {
                 c.setReadTimeout(120_000); // ntfy manda un latido cada 45 s: si en 2 min no llega nada, la conexión está muerta
                 c.setRequestProperty("Accept", "application/x-ndjson");
                 if (c.getResponseCode() != 200) { throw new IllegalStateException("HTTP " + c.getResponseCode()); }
+                long serverNow = c.getHeaderFieldDate("Date", 0);
+                if (serverNow > 0) { skewMs = serverNow - System.currentTimeMillis(); }
                 Prefs.setStatus(this, "conectado");
                 wait = 5_000;
                 try (BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream(), StandardCharsets.UTF_8))) {
@@ -511,7 +516,7 @@ public class AvisosService extends Service {
             JSONObject e = new JSONObject(line);
             if (!"message".equals(e.optString("event"))) { return; }
             Prefs.setLastId(this, e.optString("id"));
-            if (System.currentTimeMillis() / 1000 - e.optLong("time") > FRESH_S) { return; } // viejo (estaba sin señal): no suena
+            if ((System.currentTimeMillis() + skewMs) / 1000 - e.optLong("time") > FRESH_S) { return; } // viejo (estaba sin señal): no suena
             // 1.2: Core dice qué es en los tags (offer, assigned, lost, cancelled, changed, prueba; «o<id>» = la carrera).
             java.util.Set<String> tags = new java.util.HashSet<>();
             org.json.JSONArray t = e.optJSONArray("tags");
