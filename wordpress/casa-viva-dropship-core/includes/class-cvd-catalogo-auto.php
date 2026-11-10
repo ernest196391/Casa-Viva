@@ -15,6 +15,10 @@ defined( 'ABSPATH' ) || exit;
  *   POST /bot/catalogo/deshacer                         vuelve al texto de antes
  *   POST /bot/catalogo/foto-real                        sube una foto real de la biblioteca del equipo a la galería
  *   GET  /bot/catalogo/revision-enlace                  enlace firmado (7 días) de la página ✓/✗ para Lennys
+ *   GET  /bot/catalogo/versiones?id=                    3.14.165: historial (máx. 10 versiones) de un producto
+ *   POST /bot/catalogo/restaurar {id, version, quien}   3.14.165: vuelve a una versión (y guarda la actual antes)
+ *   aplicar acepta además `atributos` [{nombre, valores[], visible}] (solo los propios; nunca los de variaciones)
+ *   y `agente` (quién hizo el cambio, para el historial).
  *
  * Nunca toca precio, stock, comisión, pedidos ni usuarios. El bloque «Características y medidas» de la tienda
  * (CVD_Ficha_Estado) se conserva siempre al final de la descripción.
@@ -33,6 +37,9 @@ final class CVD_Catalogo_Auto {
 	public const META_FIJO   = '_cvd_texto_fijo';
 	public const META_REAL   = '_cvd_foto_real';
 	public const META_REALID = '_cvd_foto_real_id';
+	// 3.14.165 (D152/D153, orquestador del catálogo): historial de versiones para restaurar en un clic.
+	public const META_VERSIONES = '_cvd_pi_versiones';
+	public const MAX_VERSIONES  = 10;
 	public const PARAM       = 'cvd_revision_fichas';
 	private const NS         = 'casa-viva/v1';
 	private const TTL        = 604800; // 7 días
@@ -121,6 +128,8 @@ final class CVD_Catalogo_Auto {
 		register_rest_route( self::NS, '/bot/catalogo/foto-real', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'foto_real' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/catalogo/revision-enlace', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'revision_enlace' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/catalogo/informe', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'informe' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/catalogo/versiones', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'versiones' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/catalogo/restaurar', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'restaurar' ), 'permission_callback' => $auth ) );
 	}
 
 	/**
@@ -181,6 +190,10 @@ final class CVD_Catalogo_Auto {
 	private static function json( array $data, int $status = 200 ): WP_REST_Response {
 		$r = new WP_REST_Response( $data, $status );
 		$r->header( 'Cache-Control', 'no-store' );
+		// 3.14.165: LiteSpeed ignoraba no-store y servía a cualquiera, sin clave, la respuesta de una consulta del bot
+		// (comprobado con /bot/catalogo/versiones). Estas rutas nunca se guardan en caché.
+		$r->header( 'X-LiteSpeed-Cache-Control', 'no-cache' );
+		do_action( 'litespeed_control_set_nocache', 'cvd catalogo bot' );
 		return $r;
 	}
 
@@ -282,7 +295,97 @@ final class CVD_Catalogo_Auto {
 			'corta' => (string) $p->get_short_description(), 'larga' => (string) $p->get_description(),
 			'seo_title' => (string) $p->get_meta( '_cvd_seo_title', true ), 'meta_description' => (string) $p->get_meta( '_cvd_meta_description', true ),
 			'galeria' => array_merge( array( (int) $p->get_image_id() ), array_map( 'intval', $p->get_gallery_image_ids() ) ), 'alts' => $alts,
+			'atributos' => self::own_attributes( $p ),
 		);
+	}
+
+	/**
+	 * 3.14.165: atributos propios del producto que el catálogo puede escribir (color, material, medidas…): los que NO son
+	 * de taxonomía ni se usan para variaciones. Los de las variaciones (talla, color de cada variante) nunca se tocan.
+	 */
+	private static function own_attributes( WC_Product $p ): array {
+		$out = array();
+		foreach ( $p->get_attributes() as $a ) {
+			if ( $a instanceof WC_Product_Attribute && ! $a->is_taxonomy() && ! $a->get_variation() ) {
+				$out[] = array( 'nombre' => $a->get_name(), 'valores' => array_values( array_map( 'strval', $a->get_options() ) ), 'visible' => (bool) $a->get_visible() );
+			}
+		}
+		return $out;
+	}
+
+	/** Pone los atributos propios (lista completa); conserva los de taxonomía y los de variaciones tal cual. */
+	private static function set_own_attributes( WC_Product $p, array $lista ): void {
+		$keep = array();
+		foreach ( $p->get_attributes() as $k => $a ) {
+			if ( $a instanceof WC_Product_Attribute && ( $a->is_taxonomy() || $a->get_variation() ) ) { $keep[ $k ] = $a; }
+		}
+		$pos = count( $keep );
+		foreach ( $lista as $row ) {
+			$nombre = mb_substr( trim( sanitize_text_field( (string) ( $row['nombre'] ?? '' ) ) ), 0, 40 );
+			$valores = array_values( array_filter( array_map( static fn( $v ) => mb_substr( trim( sanitize_text_field( (string) $v ) ), 0, 80 ), (array) ( $row['valores'] ?? array() ) ) ) );
+			$slug = sanitize_title( $nombre );
+			if ( '' === $nombre || ! $valores || isset( $keep[ $slug ] ) ) { continue; }
+			$a = new WC_Product_Attribute();
+			$a->set_name( $nombre );
+			$a->set_options( array_slice( $valores, 0, 12 ) );
+			$a->set_visible( ! isset( $row['visible'] ) || (bool) $row['visible'] );
+			$a->set_variation( false );
+			$a->set_position( $pos++ );
+			$keep[ $slug ] = $a;
+		}
+		$p->set_attributes( $keep );
+	}
+
+	/** Guarda la versión actual del producto en el historial (máx. 10) y devuelve su número. */
+	private static function guardar_version( WC_Product $p, string $quien, string $motivo ): int {
+		$hist = json_decode( (string) $p->get_meta( self::META_VERSIONES, true ), true );
+		$hist = is_array( $hist ) ? $hist : array();
+		$n = $hist ? (int) end( $hist )['v'] + 1 : 1;
+		$hist[] = array( 'v' => $n, 'quien' => mb_substr( sanitize_text_field( $quien ), 0, 60 ), 'motivo' => mb_substr( sanitize_text_field( $motivo ), 0, 120 ) ) + self::snapshot( $p );
+		$p->update_meta_data( self::META_VERSIONES, wp_json_encode( array_slice( $hist, -self::MAX_VERSIONES ), JSON_UNESCAPED_UNICODE ) );
+		return $n;
+	}
+
+	/** GET /bot/catalogo/versiones?id= — lista corta del historial (sin los textos largos). */
+	public static function versiones( WP_REST_Request $request ): WP_REST_Response {
+		$p = wc_get_product( absint( $request->get_param( 'id' ) ) );
+		if ( ! $p ) { return self::json( array( 'ok' => false, 'error' => 'No existe.' ), 404 ); }
+		$hist = json_decode( (string) $p->get_meta( self::META_VERSIONES, true ), true ) ?: array();
+		$out = array_map( static fn( $h ) => array( 'v' => $h['v'], 'at' => $h['at'], 'quien' => $h['quien'] ?? '', 'motivo' => $h['motivo'] ?? '', 'nombre' => $h['nombre'] ?? '' ), (array) $hist );
+		return self::json( array( 'ok' => true, 'id' => $p->get_id(), 'versiones' => array_reverse( $out ) ) );
+	}
+
+	/**
+	 * POST /bot/catalogo/restaurar {id, version, quien} — vuelve a esa versión: textos, título y texto de Google, alt,
+	 * atributos propios y el orden de fotos (solo si esas fotos siguen existiendo). Antes guarda la actual como otra
+	 * versión, así que restaurar también se puede deshacer. Precio, stock, SKU, URL y comisión no se tocan.
+	 */
+	public static function restaurar( WP_REST_Request $request ): WP_REST_Response {
+		$d = (array) $request->get_json_params();
+		$p = wc_get_product( absint( $d['id'] ?? 0 ) );
+		if ( ! $p ) { return self::json( array( 'ok' => false, 'error' => 'No existe.' ), 404 ); }
+		$hist = json_decode( (string) $p->get_meta( self::META_VERSIONES, true ), true ) ?: array();
+		$want = absint( $d['version'] ?? 0 );
+		$b = null;
+		foreach ( (array) $hist as $h ) { if ( (int) $h['v'] === $want ) { $b = $h; } }
+		if ( ! $b ) { return self::json( array( 'ok' => false, 'error' => 'Esa versión no está en el historial.' ), 404 ); }
+		$nueva = self::guardar_version( $p, (string) ( $d['quien'] ?? 'restaurar' ), 'antes de restaurar la versión ' . $want );
+		$p->set_name( (string) $b['nombre'] );
+		$p->set_short_description( (string) $b['corta'] );
+		$p->set_description( (string) $b['larga'] );
+		$p->update_meta_data( '_cvd_seo_title', (string) $b['seo_title'] );
+		$p->update_meta_data( '_cvd_meta_description', (string) $b['meta_description'] );
+		if ( isset( $b['atributos'] ) ) { self::set_own_attributes( $p, (array) $b['atributos'] ); }
+		$fotos = array_values( array_filter( array_map( 'absint', (array) ( $b['galeria'] ?? array() ) ), static fn( $aid ) => $aid && 'attachment' === get_post_type( $aid ) ) );
+		if ( $fotos && count( $fotos ) === count( array_filter( (array) ( $b['galeria'] ?? array() ) ) ) ) {
+			$p->set_image_id( array_shift( $fotos ) );
+			$p->set_gallery_image_ids( $fotos );
+		}
+		$p->update_meta_data( self::META_AT, current_time( 'mysql' ) );
+		$p->save();
+		foreach ( (array) ( $b['alts'] ?? array() ) as $aid => $alt ) { if ( 'attachment' === get_post_type( absint( $aid ) ) ) { update_post_meta( absint( $aid ), '_wp_attachment_image_alt', (string) $alt ); } }
+		self::purge( $p->get_id() );
+		return self::json( array( 'ok' => true, 'id' => $p->get_id(), 'restaurada' => $want, 'guardada_antes_como' => $nueva ) );
 	}
 
 	private static function purge( int $id ): void {
@@ -306,8 +409,10 @@ final class CVD_Catalogo_Auto {
 		if ( mb_strlen( self::plain( $corta ) ) > 320 ) { $err[] = 'descripción corta demasiado larga'; }
 		if ( mb_strlen( $seo ) > 70 ) { $err[] = 'título SEO de más de 70'; }
 		if ( mb_strlen( $meta ) > 170 ) { $err[] = 'meta description de más de 170'; }
+		$atributos = isset( $d['atributos'] ) && is_array( $d['atributos'] ) ? $d['atributos'] : null;
+		$attr_txt = $atributos ? implode( ' ', array_map( static fn( $r ) => ( $r['nombre'] ?? '' ) . ' ' . implode( ' ', (array) ( $r['valores'] ?? array() ) ), $atributos ) ) : '';
 		if ( class_exists( 'CVD_Fichas' ) ) {
-			$frase = CVD_Fichas::frase_prohibida( $nombre . ' ' . $corta . ' ' . $larga . ' ' . $meta );
+			$frase = CVD_Fichas::frase_prohibida( $nombre . ' ' . $corta . ' ' . $larga . ' ' . $meta . ' ' . $attr_txt );
 			if ( '' !== $frase ) { $err[] = 'frase prohibida: ' . $frase; }
 		}
 		if ( $err ) { return self::json( array( 'ok' => false, 'error' => implode( '; ', $err ) ), 422 ); }
@@ -315,6 +420,8 @@ final class CVD_Catalogo_Auto {
 		$before = self::snapshot( $p );
 		if ( '' === (string) $p->get_meta( self::META_ORIG, true ) ) { $p->update_meta_data( self::META_ORIG, wp_json_encode( $before, JSON_UNESCAPED_UNICODE ) ); }
 		$p->update_meta_data( self::META_BACKUP, wp_json_encode( $before, JSON_UNESCAPED_UNICODE ) );
+		$version = self::guardar_version( $p, (string) ( $d['agente'] ?? $d['modelo'] ?? 'catalogo' ), 'antes de aplicar la ficha' );
+		if ( null !== $atributos ) { self::set_own_attributes( $p, $atributos ); }
 
 		$market = self::is_market( $p );
 		if ( '' !== $nombre ) { $p->set_name( $nombre ); }
@@ -339,7 +446,7 @@ final class CVD_Catalogo_Auto {
 			if ( $aid && in_array( $aid, $gallery, true ) && '' !== trim( (string) $alt ) ) { update_post_meta( $aid, '_wp_attachment_image_alt', mb_substr( sanitize_text_field( (string) $alt ), 0, 125 ) ); }
 		}
 		self::purge( $p->get_id() );
-		return self::json( array( 'ok' => true, 'id' => $p->get_id(), 'url' => get_permalink( $p->get_id() ), 'antes' => $before ) );
+		return self::json( array( 'ok' => true, 'id' => $p->get_id(), 'url' => get_permalink( $p->get_id() ), 'antes' => $before, 'version_antes' => $version ) );
 	}
 
 	/** Vuelve al texto de antes (la última copia) — lo usa la ✗ de Lennys con «volver a lo de antes». */
