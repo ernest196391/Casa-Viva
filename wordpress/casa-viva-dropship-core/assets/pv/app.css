@@ -369,3 +369,8 @@ button.pa-celda:active{background:var(--fondo-2)}
 .pa-desde > span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pa-pedido-h{gap:12px}
 .pa-recibe{border:0;width:100%;background:none;text-align:left;font:inherit;color:inherit}
+/* 10-nov: «¿Quién viaja?» en la hoja de Viajar (pedir para otra persona) y el botón «Reintentar» si el precio no llega */
+.pa-quien{display:flex;align-items:center;gap:8px;min-height:40px;margin:4px 0 6px;padding:0 12px;border-radius:12px;background:var(--fondo-2);color:var(--tinta);text-decoration:none;font:500 14px/18px var(--letra)}
+.pa-quien > span:first-of-type{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pa-quien__cambiar{color:var(--tinta);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.pa-reint{display:flex;flex-direction:column;gap:10px;width:100%;padding:4px 0}

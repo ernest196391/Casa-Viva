@@ -200,7 +200,7 @@
 	function firma(p) { return p.id + '|' + p.oferta + '|' + (p.mia ? p.mia.estado + p.mia.precio : ''); }
 	function tarjeta(p) {
 		var cli = p.cliente || { nombre: 'Cliente' }, env = p.envio;
-		var quien = esc(cli.nombre) + ' ' + (cli.nota != null ? '★ ' + String(cli.nota).replace('.', ',') : '· nuevo') + (env ? ' · ' + esc((TAM[env.tam] || '').toLowerCase()) + ' · ' + esc(env.que) : (cli.viajes ? ' · ' + cli.viajes + ' viajes' : '')) + (p.forma_pago === 'transferencia' ? ' · Transfermóvil' : '');
+		var quien = esc(cli.nombre) + (p.pide ? ' (lo pide ' + esc(p.pide) + ')' : '') + ' ' + (cli.nota != null ? '★ ' + String(cli.nota).replace('.', ',') : '· nuevo') + (env ? ' · ' + esc((TAM[env.tam] || '').toLowerCase()) + ' · ' + esc(env.que) : (cli.viajes ? ' · ' + cli.viajes + ' viajes' : '')) + (p.forma_pago === 'transferencia' ? ' · Transfermóvil' : '');
 		var bots = (p.contra || []).map(function (c) { return '<button type="button" class="' + (c.pct ? '' : 'acepto') + '" data-pct="' + c.pct + '">' + (c.pct ? miles(c.precio) + '<small>+' + c.pct + ' %</small>' : 'Acepto<small>' + miles(c.precio) + '</small>') + '</button>'; }).join('');
 		var mia = p.mia && p.mia.estado === 'activa';
 		return '<article class="pa-pedido' + (mia ? ' is-enviado' : '') + '" data-id="' + p.id + '" data-firma="' + esc(firma(p)) + '" data-hasta="' + esc(mia ? p.mia.vence : p.hasta) + '" data-total="' + (mia ? 60 : 240) + '">'
@@ -348,7 +348,7 @@
 			var adel = env && env.adelanto;
 			var recibo = adel ? '<label class="p-btn p-btn--suave p-btn--ancho" style="margin-top:12px">' + ico('camara', 'p-ico--20') + '<span id="recibo-t">' + (env.recibo ? 'Foto del recibo hecha · otra' : 'Foto del recibo (' + cup(env.adelanto) + ')') + '</span><input type="file" id="recibo" accept="image/*" capture="environment" hidden></label>' : '';
 			var abajo = !llegue
-				? filaPersona(cli.nombre, cli.nota, (env ? 'Manda: ' + esc(env.que) : 'Pasajero') + (cli.viajes ? ' · ' + cli.viajes + ' viajes' : ''), cli.telefono) + '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="llegue" style="margin-top:14px">Llegué</button>'
+				? filaPersona(cli.nombre, cli.nota, (env ? 'Manda: ' + esc(env.que) : 'Pasajero' + (v.pide ? ' · lo pidió ' + esc(v.pide) : '')) + (cli.viajes ? ' · ' + cli.viajes + ' viajes' : ''), cli.telefono) + '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="llegue" style="margin-top:14px">Llegué</button>'
 				: (env ? filaPersona(cli.nombre, cli.nota, 'Manda: ' + esc(env.que), cli.telefono) + recibo + '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="recogi" style="margin-top:14px"' + (adel && !env.recibo ? ' disabled' : '') + '>' + ico('check', 'p-ico--20') + ({ comida: 'Recogí la comida', carga: 'Cargado' }[v.servicio] || 'Recogí el paquete') + '</button>'
 					: cajasCodigo('Pide el código a ' + n) + '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="recogi" disabled>' + ico('check', 'p-ico--20') + 'Recogí a ' + n + '</button>');
 			return '<div class="pa-arriba"><span></span><a class="pa-pastilla" href="' + navegar(v) + '">' + ico('navegar', 'p-ico--16') + 'Navegar</a></div>'

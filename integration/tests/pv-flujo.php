@@ -358,7 +358,61 @@ pv_ok( count( $mv['viajes'] ) >= 4, 'mis viajes' );
 list( , $se ) = pv_req( 'GET', 'chofer/semana', array(), $P( $d2 ) );
 pv_ok( 1 === $se['viajes'] && $se['total'] === $V['oferta'] + 150, 'semana del chofer' );
 
+// ---------- 10-nov: Viajar «para otra persona» (Ernesto: el bot le escribe a quien viaja; paga al llegar)
+$d6 = $mk( '5350000206', 'Reinier Pozo', 'electrico', 'viaje', 0.001 );
+update_option( 'cvd_tc_testers', array( $d1, $d2, $d3, $d4, $d5, $d6 ) );
+update_option( 'cvd_tc_clientes_prueba', array( '5350000101', '5350000105', '5350000106' ) );
+$cli6 = CVD_Triciclub::crear_cliente( '5350000105', 'Marta Gil', true );
+$H6 = array( 'X-TC-Token' => CVD_Triciclub::token_cliente( $cli6 ) );
+$TC = CVD_Triciclub_Db::t( 'codigos' );
+$cot6 = static function () use ( $H6, $O, $D ): array {
+	list( , $q ) = pv_req( 'GET', 'cotizar', array( 'grupo' => 'tric', 'olat' => $O[0], 'olng' => $O[1], 'dlat' => $D[0], 'dlng' => $D[1] ), $H6 );
+	return array_values( array_filter( $q['clases'], static fn( $c ) => 'tric_electrico' === $c['clase'] ) )[0];
+};
+$el6 = $cot6();
+list( $s, $x ) = pv_req( 'POST', 'viajes', array( 'cid' => 'p0', 'firma' => $el6['firma'], 'precio' => $el6['justo'], 'pasajero' => array( 'nombre' => 'Ana Pérez', 'telefono' => '1234' ) ), $H6 );
+pv_ok( 400 === $s && 'pasajero' === $x['code'], 'para otro: móvil malo de quien viaja' );
+list( $s, $x ) = pv_req( 'POST', 'viajes', array( 'cid' => 'p0b', 'firma' => $el6['firma'], 'precio' => $el6['justo'], 'pasajero' => array( 'nombre' => '', 'telefono' => '50000106' ) ), $H6 );
+pv_ok( 400 === $s && 'pasajero' === $x['code'], 'para otro: falta el nombre' );
+list( $s, $d ) = pv_req( 'POST', 'viajes', array( 'cid' => 'p1', 'firma' => $el6['firma'], 'precio' => $el6['justo'], 'origen_texto' => 'Calle N e/ 23 y 25, Vedado', 'destino_texto' => 'Coppelia', 'pasajero' => array( 'nombre' => 'Ana Pérez', 'telefono' => '50000106' ) ), $H6 );
+$VP = $d['viaje'] ?? array();
+pv_ok( 200 === $s && 'Ana Pérez' === ( $VP['pasajero']['nombre'] ?? '' ) && '5350000106' === $VP['pasajero']['telefono'], 'para otro: el pedido guarda a quien viaja' );
+$idp = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$TV} WHERE uuid=%s", $VP['uuid'] ) );
+list( , $h6 ) = pv_req( 'GET', 'chofer/hoy', array(), $P( $d6 ) );
+$pp = array_values( array_filter( $h6['pedidos'], static fn( $p ) => (int) $p['id'] === $idp ) );
+pv_ok( $pp && 'Ana' === $pp[0]['cliente']['nombre'] && 'Marta' === $pp[0]['pide'] && ! isset( $pp[0]['cliente']['telefono'] ), 'para otro: el chofer ve «Ana (lo pide Marta)» sin teléfono antes de cogerlo' );
+list( , $o6 ) = pv_req( 'POST', "chofer/pedidos/{$idp}/ofertar", array( 'pct' => 0 ), $P( $d6 ) );
+$antes = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$TC} WHERE app='pva'" );
+list( $s, $e6 ) = pv_req( 'POST', 'viajes/' . $VP['uuid'] . '/elegir', array( 'oferta' => $o6['oferta']['id'] ), $H6 );
+pv_ok( 200 === $s && 'asignado' === $e6['viaje']['estado'], 'para otro: eligió chofer' );
+$av = $wpdb->get_row( "SELECT * FROM {$TC} WHERE app='pva' ORDER BY id DESC LIMIT 1" );
+pv_ok( $antes + 1 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$TC} WHERE app='pva'" ) && '5350000106' === $av->telefono && 'whatsapp' === $av->canal, 'para otro: WhatsApp a quien viaja en la cola del bot' );
+pv_ok( false !== strpos( $av->texto, 'Hola Ana' ) && false !== strpos( $av->texto, 'Marta te pidió' ) && false !== strpos( $av->texto, 'Código para subir: ' . $e6['viaje']['codigo'] ) && false !== strpos( $av->texto, 'Reinier P.' ), 'para otro: el mensaje lleva quién lo pidió, chofer y código' );
+$bot = CVD_Triciclub::bot_codigos( new WP_REST_Request( 'GET' ) )->get_data();
+$bt = array_values( array_filter( $bot['codigos'], static fn( $c ) => (int) $c['id'] === (int) $av->id ) );
+pv_ok( $bt && $bt[0]['text'] === $av->texto && '5350000106' === $bt[0]['phone'], 'para otro: el bot lo recoge con su texto (sin cambiar el bot)' );
+pv_ok( 'expired' === CVD_Triciclub::comprobar_codigo( '5350000106', $e6['viaje']['codigo'] ), 'para otro: el aviso no sirve para entrar' );
+list( , $ha6 ) = pv_req( 'GET', 'chofer/hoy', array(), $P( $d6 ) );
+pv_ok( '5350000106' === $ha6['activo']['cliente']['telefono'] && 'Ana Pérez' === $ha6['activo']['cliente']['nombre'] && 'Marta' === $ha6['activo']['pide'], 'para otro: el chofer llama a Ana y sabe que lo pidió Marta' );
+list( $s ) = pv_req( 'POST', 'viajes/' . $VP['uuid'] . '/cancelar', array( 'motivo' => '' ), $H6 );
+$av2 = $wpdb->get_row( "SELECT * FROM {$TC} WHERE app='pva' ORDER BY id DESC LIMIT 1" );
+pv_ok( 200 === $s && (int) $av2->id > (int) $av->id && false !== strpos( $av2->texto, 'canceló' ), 'para otro: si cancela, a Ana le llega que ya no espere' );
+// En prueba, a un móvil que no es de prueba no se le escribe (una cuenta con teléfono recibe WhatsApp real).
+$el6 = $cot6();
+list( , $d ) = pv_req( 'POST', 'viajes', array( 'cid' => 'p2', 'firma' => $el6['firma'], 'precio' => $el6['justo'], 'pasajero' => array( 'nombre' => 'Pedro Real', 'telefono' => '59990000' ) ), $H6 );
+$idp2 = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$TV} WHERE uuid=%s", $d['viaje']['uuid'] ) );
+list( , $o6 ) = pv_req( 'POST', "chofer/pedidos/{$idp2}/ofertar", array( 'pct' => 0 ), $P( $d6 ) );
+list( $s ) = pv_req( 'POST', 'viajes/' . $d['viaje']['uuid'] . '/elegir', array( 'oferta' => $o6['oferta']['id'] ), $H6 );
+pv_ok( 200 === $s && 0 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$TC} WHERE telefono='5359990000'" ), 'para otro: en prueba no se escribe a un móvil que no es de prueba' );
+pv_req( 'POST', 'viajes/' . $d['viaje']['uuid'] . '/cancelar', array( 'motivo' => '' ), $H6 );
+list( , $d ) = pv_req( 'POST', 'viajes', array( 'cid' => 'p3', 'firma' => $cot6()['firma'], 'precio' => $el6['justo'], 'pasajero' => array( 'nombre' => 'Marta', 'telefono' => '50000105' ) ), $H6 );
+pv_ok( null === $d['viaje']['pasajero'], 'para otro: si pone su propio móvil, viaja él' );
+pv_req( 'POST', 'viajes/' . $d['viaje']['uuid'] . '/cancelar', array( 'motivo' => '' ), $H6 );
+$wpdb->query( "DELETE FROM {$TC} WHERE app='pva'" );
+
 // ---------- Limpieza
-foreach ( array( $d1, $d2, $d3, $d4, $d5 ) as $u ) { $wpdb->delete( CVD_Triciclub_Db::t( 'choferes' ), array( 'user_id' => $u ) ); require_once ABSPATH . 'wp-admin/includes/user.php'; wp_delete_user( $u ); }
+$wpdb->delete( CVD_Triciclub_Db::t( 'viajes' ), array( 'cliente_id' => (int) $cli6->id ) );
+$wpdb->delete( CVD_Triciclub_Db::t( 'clientes' ), array( 'id' => (int) $cli6->id ) );
+foreach ( array( $d1, $d2, $d3, $d4, $d5, $d6 ) as $u ) { $wpdb->delete( CVD_Triciclub_Db::t( 'choferes' ), array( 'user_id' => $u ) ); require_once ABSPATH . 'wp-admin/includes/user.php'; wp_delete_user( $u ); }
 foreach ( array( 'viajes' => 'cliente_id', 'clientes' => 'id' ) as $tb => $col ) { $wpdb->delete( CVD_Triciclub_Db::t( $tb ), array( $col => (int) $cli->id ) ); }
 echo "OK Pa'llá transporte: " . $GLOBALS['pv_n'] . " comprobaciones\n";

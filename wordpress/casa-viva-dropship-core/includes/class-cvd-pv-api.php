@@ -401,6 +401,16 @@ final class CVD_Pv_Api {
 			if ( $adelanto > $tope ) { return self::fail( 'adelanto', 'El mensajero adelanta como mucho ' . number_format( $tope, 0, ',', '.' ) . ' CUP. Si es más, paga tú al restaurante por Transfermóvil.' ); }
 			$cobrar = max( $cobrar, $adelanto ); // lo que adelantó el mensajero vuelve a él al entregar
 		}
+		// 10-nov: Viajar «para otra persona» — nombre y móvil de quien viaja (se guardan en recibe_*: el chofer la llama
+		// a ella y el bot le manda por WhatsApp el código, el chofer y la chapa cuando hay chofer). Paga quien viaja, al llegar.
+		$pas = $envio ? array() : (array) $request->get_param( 'pasajero' );
+		$ptel = $envio ? '' : CVD_Triciclub::telefono( $pas['telefono'] ?? '' );
+		$pnom = $envio ? '' : self::txt( $pas['nombre'] ?? '', 80 );
+		if ( ! $envio && ( '' !== trim( (string) ( $pas['telefono'] ?? '' ) ) || '' !== $pnom ) ) {
+			if ( mb_strlen( $pnom ) < 2 ) { return self::fail( 'pasajero', 'Escribe el nombre de quien viaja.' ); }
+			if ( '' === $ptel ) { return self::fail( 'pasajero', 'El móvil de quien viaja: 8 números, empieza por 5.' ); }
+			if ( $ptel === (string) $c->telefono ) { $ptel = ''; $pnom = ''; } // es el mismo cliente: viaja él
+		}
 		$now = self::now();
 		$row = array(
 			'uuid'            => wp_generate_uuid4(),
@@ -428,8 +438,8 @@ final class CVD_Pv_Api {
 			'nota'            => self::txt( $request->get_param( 'nota' ), 200 ),
 			'envio_que'       => $envio ? $que : '',
 			'envio_tam'       => $envio ? (string) $q['tam'] : '',
-			'recibe_nombre'   => $envio ? $rnom : '',
-			'recibe_telefono' => $envio ? $rtel : '',
+			'recibe_nombre'   => $envio ? $rnom : $pnom,
+			'recibe_telefono' => $envio ? $rtel : $ptel,
 			'cobrar_cup'      => $cobrar,
 			'entrega_codigo'  => $envio ? str_pad( (string) random_int( 0, 9999 ), 4, '0', STR_PAD_LEFT ) : '',
 			'recoge_texto'    => $envio ? self::txt( $e['recoge'] ?? '', 120 ) : '',
@@ -631,6 +641,7 @@ final class CVD_Pv_Api {
 			'forma_pago'    => (string) $v->forma_pago,
 			'codigo'        => $envio ? '' : (string) $v->codigo,
 			'nota'          => (string) $v->nota,
+			'pasajero'      => self::pasajero( $v ),
 			'chofer'        => $chofer,
 			'ofertas'       => 'buscando' === $v->estado ? self::ofertas_de( $v ) : array(),
 			'busca_hasta'   => 'buscando' === $v->estado ? gmdate( 'c', (int) strtotime( (string) ( $v->busca_desde ?: $v->created_at ) . ' UTC' ) + self::BUSCA_SEG ) : null,
@@ -846,7 +857,45 @@ final class CVD_Pv_Api {
 		CVD_Pv_Canal::senal( CVD_Pv_Canal::tema_chofer( (int) $o->chofer_id ), array( 't' => 'elegido', 'id' => (int) $v->id ) );
 		self::aviso( (int) $o->chofer_id, 'pv_elegido', '✅ ¡Te eligieron! ' . number_format( (int) $o->precio, 0, ',', '.' ) . ' CUP', 'Ve a recoger en ' . self::corto( (string) $v->origen_texto ) . '.', array( 'pv', 'elegido' ) );
 		foreach ( array_map( 'intval', (array) $perdieron ) as $uid ) { CVD_Pv_Canal::senal( CVD_Pv_Canal::tema_chofer( $uid ), array( 't' => 'perdio', 'id' => (int) $v->id ) ); }
+		self::avisar_pasajero( $v, 'asignado' );
 		return '';
+	}
+
+	/** 10-nov: quien viaja cuando el cliente pidió para otra persona (null = viaja el cliente; los envíos nunca). */
+	private static function pasajero( object $v ): ?array {
+		if ( 'mensajero' === $v->clase || '' === (string) $v->recibe_telefono ) { return null; }
+		return array( 'nombre' => (string) $v->recibe_nombre, 'telefono' => (string) $v->recibe_telefono );
+	}
+
+	private static function nombre1( string $n ): string { return trim( (string) explode( ' ', trim( $n ) )[0] ); }
+
+	/**
+	 * 10-nov (Ernesto: «le escribe el bot»): WhatsApp a quien viaja — al tener chofer (quién, carro, chapa, código, precio)
+	 * y si el cliente cancela después. En prueba solo a los teléfonos de prueba (una cuenta con teléfono recibe WhatsApp real).
+	 */
+	private static function avisar_pasajero( object $v, string $que ): void {
+		$p = self::pasajero( $v );
+		if ( ! $p ) { return; }
+		if ( 'si' !== CVD_Pv::mode() && ! in_array( $p['telefono'], CVD_Triciclub::clientes_prueba(), true ) ) {
+			CVD_Triciclub_Db::evento( (int) $v->id, 'sistema', 0, 'pv_pasajero_sin_aviso', array( 'que' => $que, 'por' => 'prueba' ) );
+			return;
+		}
+		$cli = CVD_Triciclub::cliente( (int) $v->cliente_id );
+		$quien = $cli ? self::nombre1( (string) $cli->nombre ) : '';
+		$nom = self::nombre1( $p['nombre'] );
+		if ( 'cancelado' === $que ) {
+			$txt = 'Hola ' . $nom . '. ' . ( '' !== $quien ? $quien : 'Quien te pidió el viaje' ) . " canceló el Pa'llá. Ya no tienes que esperar.";
+		} else {
+			$ch = self::chofer_publico( (int) $v->chofer_id );
+			$veh = $ch ? trim( $ch['tipo'] . ( '' !== $ch['color'] ? ' ' . $ch['color'] : '' ) . ( '' !== $ch['chapa'] ? ', chapa ' . $ch['chapa'] : '' ) ) : '';
+			$txt = 'Hola ' . $nom . ' 👋 ' . ( '' !== $quien ? $quien : 'Alguien' ) . " te pidió un Pa'llá.\n"
+				. '🚗 Te recoge ' . ( $ch ? $ch['nombre'] : 'tu chofer' ) . ( '' !== $veh ? ' (' . $veh . ')' : '' ) . ".\n"
+				. '📍 En: ' . self::corto( (string) $v->origen_texto ) . "\n"
+				. '🔑 Código para subir: ' . $v->codigo . " (díselo al chofer)\n"
+				. '💵 Pagas al llegar: ' . number_format( (int) $v->precio, 0, ',', '.' ) . ' CUP';
+		}
+		$ok = CVD_Triciclub::aviso_whatsapp( $p['telefono'], $txt, (string) $v->codigo );
+		CVD_Triciclub_Db::evento( (int) $v->id, 'sistema', 0, 'pv_pasajero_aviso', array( 'que' => $que, 'ok' => $ok ) );
 	}
 
 	private static function ocupado( int $user_id ): bool {
@@ -871,6 +920,7 @@ final class CVD_Pv_Api {
 		if ( (int) $v->chofer_id && in_array( $v->estado, self::ACTIVOS, true ) ) {
 			CVD_Pv_Canal::senal( CVD_Pv_Canal::tema_chofer( (int) $v->chofer_id ), array( 't' => 'cancelado', 'id' => (int) $v->id ) );
 			self::aviso( (int) $v->chofer_id, 'pv_cancelado', 'El cliente canceló', 'Ya no hace falta que vayas a ' . self::corto( (string) $v->origen_texto ) . '.', array( 'pv', 'cancelled' ) );
+			self::avisar_pasajero( $v2, 'cancelado' );
 		}
 		return self::out( array( 'ok' => true, 'viaje' => self::vista_cliente( self::viaje( (int) $v->id ) ) ) );
 	}
@@ -985,7 +1035,8 @@ final class CVD_Pv_Api {
 			'lejos_m'  => $lejos,
 			'forma_pago' => (string) $r->forma_pago,
 			'nota'     => (string) $r->nota,
-			'cliente'  => $cli ? array( 'nombre' => trim( explode( ' ', (string) $cli->nombre )[0] ) ?: 'Cliente', 'nota' => null !== $cli->nota_media ? round( (float) $cli->nota_media, 1 ) : null, 'viajes' => (int) $cli->viajes_total ) : null,
+			'cliente'  => $cli ? array( 'nombre' => ( self::pasajero( $r ) ? self::nombre1( (string) $r->recibe_nombre ) : trim( explode( ' ', (string) $cli->nombre )[0] ) ) ?: 'Cliente', 'nota' => null !== $cli->nota_media ? round( (float) $cli->nota_media, 1 ) : null, 'viajes' => (int) $cli->viajes_total ) : null,
+			'pide'     => self::pasajero( $r ) && $cli ? self::nombre1( (string) $cli->nombre ) : '', // 10-nov: lo pidió otra persona
 			'hasta'    => gmdate( 'c', (int) strtotime( (string) ( $r->busca_desde ?: $r->created_at ) . ' UTC' ) + self::BUSCA_SEG ),
 		);
 	}
@@ -1010,7 +1061,9 @@ final class CVD_Pv_Api {
 			'total'      => (int) $v->precio + $espera,
 			'forma_pago' => (string) $v->forma_pago,
 			'nota'       => (string) $v->nota,
-			'cliente'    => $cli ? array( 'nombre' => (string) $cli->nombre, 'telefono' => (string) $cli->telefono, 'nota' => null !== $cli->nota_media ? round( (float) $cli->nota_media, 1 ) : null, 'viajes' => (int) $cli->viajes_total ) : null,
+			// 10-nov: si pidió para otra persona, el chofer ve y llama a quien viaja (y sabe quién lo pidió).
+			'cliente'    => $cli ? ( self::pasajero( $v ) ? array( 'nombre' => (string) $v->recibe_nombre, 'telefono' => (string) $v->recibe_telefono, 'nota' => null, 'viajes' => 0 ) : array( 'nombre' => (string) $cli->nombre, 'telefono' => (string) $cli->telefono, 'nota' => null !== $cli->nota_media ? round( (float) $cli->nota_media, 1 ) : null, 'viajes' => (int) $cli->viajes_total ) ) : null,
+			'pide'       => self::pasajero( $v ) && $cli ? self::nombre1( (string) $cli->nombre ) : '',
 			'envio'      => $envio ? array( 'que' => (string) $v->envio_que, 'tam' => (string) $v->envio_tam, 'recibe' => (string) $v->recibe_nombre, 'telefono' => (string) $v->recibe_telefono, 'cobrar' => (int) $v->cobrar_cup, 'foto' => '' !== (string) $v->entrega_foto,
 				'recoge' => (string) $v->recoge_texto, 'adelanto' => (int) $v->adelanto_cup, 'recibo' => '' !== (string) $v->recibo_foto, 'peso' => (string) $v->peso, 'ayudante' => (int) $v->extra_cup ) : null,
 			'llego'      => self::iso( $v->llego_at ),

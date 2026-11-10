@@ -219,8 +219,8 @@ final class CVD_Triciclub {
 		if ( '' === $tel ) { return 'phone'; }
 		$t = CVD_Triciclub_Db::t( 'codigos' );
 		$hace1h = gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS );
-		$por_tel = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$t} WHERE telefono=%s AND created_at>%s", $tel, $hace1h ) );
-		$por_ip = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$t} WHERE ip=%s AND created_at>%s", $ip, $hace1h ) );
+		$por_tel = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$t} WHERE telefono=%s AND created_at>%s AND app<>'pva'", $tel, $hace1h ) );
+		$por_ip = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$t} WHERE ip=%s AND created_at>%s AND app<>'pva'", $ip, $hace1h ) );
 		if ( $por_tel >= 3 || $por_ip >= 10 ) { return 'limit'; }
 		$cifras = 4 === $cifras ? 4 : 6; // 5-nov (Pa'llá, diseño aprobado): 4 cifras, 5 intentos, 15 min, 3 por hora
 		$codigo = str_pad( (string) random_int( 0, ( 10 ** $cifras ) - 1 ), $cifras, '0', STR_PAD_LEFT );
@@ -243,12 +243,34 @@ final class CVD_Triciclub {
 		global $wpdb;
 		$tel = self::telefono( $telefono );
 		$t = CVD_Triciclub_Db::t( 'codigos' );
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$t} WHERE telefono=%s AND usado_at IS NULL ORDER BY id DESC LIMIT 1", $tel ) );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$t} WHERE telefono=%s AND usado_at IS NULL AND app<>'pva' ORDER BY id DESC LIMIT 1", $tel ) );
 		if ( ! $row || $row->vence_at < CVD_Triciclub_Db::now() ) { return 'expired'; }
 		if ( (int) $row->intentos >= 5 ) { return 'tries'; }
 		$ok = hash_equals( (string) $row->codigo_hash, hash_hmac( 'sha256', $tel . '|' . preg_replace( '/\D+/', '', $codigo ), self::key() ) );
 		$wpdb->update( $t, $ok ? array( 'usado_at' => CVD_Triciclub_Db::now(), 'codigo' => '' ) : array( 'intentos' => (int) $row->intentos + 1 ), array( 'id' => (int) $row->id ) );
 		return $ok ? '' : 'wrong';
+	}
+
+	/**
+	 * 10-nov (Pa'llá «para otra persona»): un aviso de WhatsApp a quien viaja (código para subir, chofer, chapa).
+	 * Va por la misma cola que los códigos (el bot no cambia): app «pva», el texto entero en `texto`, vence en 30 min.
+	 * No cuenta para el límite de códigos ni sirve para entrar.
+	 */
+	public static function aviso_whatsapp( string $telefono, string $texto, string $codigo ): bool {
+		global $wpdb;
+		$tel = self::telefono( $telefono );
+		if ( '' === $tel || '' === trim( $texto ) ) { return false; }
+		return (bool) $wpdb->insert( CVD_Triciclub_Db::t( 'codigos' ), array(
+			'telefono'    => $tel,
+			'codigo'      => substr( (string) preg_replace( '/\D+/', '', $codigo ), 0, 6 ) ?: '0',
+			'codigo_hash' => hash( 'sha256', wp_generate_password( 32, false ) ),
+			'canal'       => 'whatsapp',
+			'app'         => 'pva',
+			'texto'       => mb_substr( $texto, 0, 600 ),
+			'ip'          => '',
+			'vence_at'    => gmdate( 'Y-m-d H:i:s', time() + 30 * MINUTE_IN_SECONDS ),
+			'created_at'  => CVD_Triciclub_Db::now(),
+		) );
 	}
 
 	public static function texto_codigo( string $codigo, string $app ): string {
@@ -262,10 +284,10 @@ final class CVD_Triciclub {
 		global $wpdb;
 		$t = CVD_Triciclub_Db::t( 'codigos' );
 		// 5-nov: solo los de WhatsApp (los de SMS los manda la pasarela de SMS, CVD_Pv::sms_pendientes).
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, telefono, codigo, app FROM {$t} WHERE enviado_at IS NULL AND usado_at IS NULL AND codigo<>'' AND canal='whatsapp' AND vence_at>%s ORDER BY id ASC LIMIT 20", CVD_Triciclub_Db::now() ) );
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, telefono, codigo, app, texto FROM {$t} WHERE enviado_at IS NULL AND usado_at IS NULL AND codigo<>'' AND canal='whatsapp' AND vence_at>%s ORDER BY id ASC LIMIT 20", CVD_Triciclub_Db::now() ) );
 		$out = array();
 		foreach ( $rows as $r ) {
-			$out[] = array( 'id' => (int) $r->id, 'phone' => (string) $r->telefono, 'text' => self::texto_codigo( (string) $r->codigo, (string) $r->app ) );
+			$out[] = array( 'id' => (int) $r->id, 'phone' => (string) $r->telefono, 'text' => '' !== (string) $r->texto ? (string) $r->texto : self::texto_codigo( (string) $r->codigo, (string) $r->app ) );
 		}
 		// El bot pregunta cada 15 s si Triciclub o Pa'llá están abiertos (y cada 5 min si los dos están cerrados).
 		$orden = array( 'no' => 0, 'prueba' => 1, 'si' => 2 );

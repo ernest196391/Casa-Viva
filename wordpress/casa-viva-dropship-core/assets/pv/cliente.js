@@ -29,8 +29,8 @@
 	if (mk) { LS.set('k', mk[1]); if (history.replaceState) { history.replaceState(null, '', location.pathname); } }
 	var K = LS.get('k') || '';
 
-	function api(path, body, metodo) {
-		return U.api(path, body, { 'X-TC-Token': K }, metodo).then(function (r) {
+	function api(path, body, metodo, intentos) {
+		return U.api(path, body, { 'X-TC-Token': K }, metodo, intentos).then(function (r) {
 			if (r.status === 401 && K) { K = ''; LS.set('k', null); ir('entrar'); }
 			else if (r.status === 403 && /^pv_(closed|not_tester|blocked)$/.test(r.data.code || '')) { S.cerrado = r.data.message; ir('cerrado'); }
 			return r;
@@ -41,10 +41,11 @@
 	// ---------- Estado (lo del camino se guarda en el móvil) ----------
 	// modo (v3): viajar | paquete | comida | carga. envio: lo de Paquete, Comida (sitio, adelanto, cobrar, quién recibe) y Carga (peso, ayudante).
 	var ENVIO0 = { que: '', tam: 'mano', recibe: '', tel: '', cobrar: false, cobrarCup: 0, nota: '', recoge: '', paga: false, pagaCup: 0, otro: false, peso: 'medio', ayuda: false };
-	var S = { svc: 'tric', modo: 'viajar', grupo: 'tric', clase: '', origen: null, destino: null, nota: '', precio: 0, primera: false, pago: 'efectivo', para: 'destino', envio: ENVIO0 };
+	var PAS0 = { otro: false, nombre: '', tel: '' }; // 10-nov: Viajar «para otra persona»
+	var S = { svc: 'tric', modo: 'viajar', grupo: 'tric', clase: '', origen: null, destino: null, nota: '', precio: 0, primera: false, pago: 'efectivo', para: 'destino', envio: ENVIO0, pas: PAS0, recAtras: 'viajar' };
 	(function () { var g = LS.json('s'); if (g) { Object.keys(S).forEach(function (k) { if (g[k] != null) { S[k] = g[k]; } }); } S.primera = false; Object.keys(ENVIO0).forEach(function (k) { if (S.envio[k] == null) { S.envio[k] = ENVIO0[k]; } }); })();
 	S.yo = LS.json('yo'); S.recientes = LS.json('recientes') || []; S.viaje = LS.json('viaje'); S.cot = null; S.estrellas = 0; S.ocultas = {};
-	function guardar() { LS.set('s', JSON.stringify({ svc: S.svc, modo: S.modo, grupo: S.grupo, clase: S.clase, origen: S.origen, destino: S.destino, nota: S.nota, precio: S.precio, pago: S.pago, para: S.para, envio: S.envio })); }
+	function guardar() { LS.set('s', JSON.stringify({ svc: S.svc, modo: S.modo, grupo: S.grupo, clase: S.clase, origen: S.origen, destino: S.destino, nota: S.nota, precio: S.precio, pago: S.pago, para: S.para, envio: S.envio, pas: S.pas, recAtras: S.recAtras })); }
 	function ponerViaje(v) { S.viaje = v; LS.set('viaje', v ? JSON.stringify(v) : null); }
 
 	// ---------- Utilidades ----------
@@ -75,7 +76,7 @@
 			navigator.geolocation.getCurrentPosition(function (p) { if (!hecho) { hecho = true; ok([p.coords.longitude, p.coords.latitude]); } }, function () { if (!hecho) { hecho = true; ok(null); } }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
 		});
 	}
-	function lugarDe(p) { return api('donde?' + qs({ lat: p[1].toFixed(6), lng: p[0].toFixed(6) })).then(function (r) { return { texto: (r.data && r.data.texto) || 'Punto en el mapa', barrio: (r.data && r.data.barrio) || '', lat: p[1], lng: p[0] }; }); }
+	function lugarDe(p) { return api('donde?' + qs({ lat: p[1].toFixed(6), lng: p[0].toFixed(6) }), null, 'GET', 3).then(function (r) { return { texto: (r.data && r.data.texto) || 'Punto en el mapa', barrio: (r.data && r.data.barrio) || '', lat: p[1], lng: p[0] }; }); }
 	function filaLugar(attrs, icono, n, d, fin) {
 		return '<button type="button" class="p-fila" ' + attrs + '><span class="p-fila__ico">' + ico(icono) + '</span><span class="p-fila__txt"><b>' + n + '</b>' + (d ? '<span>' + d + '</span>' : '') + '</span>' + (fin ? '<span class="p-fila__fin">' + fin + '</span>' : '') + '</button>';
 	}
@@ -214,7 +215,7 @@
 	};
 	function pintarCercanos() {
 		if (!S.origen) { return; }
-		api('cercanos?' + qs({ lat: S.origen.lat, lng: S.origen.lng })).then(function (x) {
+		api('cercanos?' + qs({ lat: S.origen.lat, lng: S.origen.lng }), null, 'GET', 2).then(function (x) {
 			var pts = (x.data && x.data.puntos) || [];
 			cercanosCache = pts.map(function (p, i) { var a = Math.random() * Math.PI * 2; return ['c' + i, U.veh(p.img, 'arriba'), [[p.lng, p.lat], [p.lng + Math.cos(a) * 0.0002, p.lat + Math.sin(a) * 0.0002]], 0]; });
 			if (actual === 'inicio') { escenaActual(); }
@@ -241,7 +242,10 @@
 		if (para === 'envio-o' || para === 'envio-d') { ir(pantallaEnvio()); return; }
 		if (c === 'origen' && !S.destino) { ir('inicio'); return; } // «Desde…» del inicio: cambia el origen y vuelve
 		if (!S.origen) { S.para = 'origen'; guardar(); mostrar(true); return; }
-		ir('viajar'); // v3: la recogida ya no es un paso (el GPS pone el origen; «Desde…» para cambiarlo)
+		// 10-nov (Ernesto, «como La Nave»): al elegir el destino, se confirma la recogida en el mapa (mueves el mapa y
+		// «Recoger aquí»); después, los precios. Si se cambia la recogida desde «Desde…», va directo a los precios.
+		if (c === 'destino') { S.recAtras = 'destino'; guardar(); ir('recogida'); return; }
+		ir('viajar');
 	}
 	function pantallaEnvio() { return S.modo === 'comida' || S.modo === 'carga' ? S.modo : 'envio'; }
 	SCR.destino = {
@@ -283,7 +287,7 @@
 			var buscar = function () {
 				var txt = q.value.trim(), mio = ++n;
 				if (txt.length < 2) { base(); return; }
-				api('sugerir?' + qs({ texto: txt, lat: cerca ? cerca[1] : '', lng: cerca ? cerca[0] : '' })).then(function (x) {
+				api('sugerir?' + qs({ texto: txt, lat: cerca ? cerca[1] : '', lng: cerca ? cerca[0] : '' }), null, 'GET', 2).then(function (x) {
 					if (mio !== n) { return; }
 					lista = (x.data && x.data.sugerencias) || [];
 					if (!lista.length) { sug.innerHTML = '<p class="p-aviso">' + ico('info') + (x.status === 0 ? 'Sin señal. Prueba otra vez.' : 'No lo encontramos. Prueba con calle y entrecalles, o fíjalo en el mapa.') + '</p>'; return; }
@@ -357,17 +361,19 @@
 		mapa: function () { return { ver: [ptoOrigen()], zoom: 17, arriba: 0, listo: true }; },
 		html: function () {
 			if (!S.origen || !S.destino) { return ''; }
-			return '<div class="pa-arriba">' + volverR('viajar') + '<span class="pa-pastilla">Mueve el mapa</span></div>'
+			return '<div class="pa-arriba">' + volverR(S.recAtras === 'destino' ? 'destino' : 'viajar') + '<span class="pa-pastilla">Mueve el mapa</span></div>'
 				+ pinCentro(150)
 				+ '<section class="pa-hoja"><div class="p-hoja__asa"></div><p class="p-h2" style="margin:0">¿Te recogemos aquí?</p>'
 				+ '<p class="p-peq" style="margin:2px 0 14px" id="dir">' + esc(S.origen.texto) + '</p>'
 				+ '<label class="p-campo" style="margin-bottom:12px">' + ico('nota', 'p-ico--20') + '<input id="nota" maxlength="200" value="' + esc(S.nota) + '" placeholder="Nota para el chofer" aria-label="Nota para el chofer"></label>'
-				+ '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="ok">Recoger aquí</button></section>';
+				+ '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="ok">Recoger aquí</button>'
+				+ '<a class="p-btn p-btn--texto p-btn--ancho" href="#destino" id="otra">Escribir otra dirección</a></section>';
 		},
 		init: function (r) {
 			if (!S.origen || !S.destino) { S.para = S.origen ? 'destino' : 'origen'; ir('destino'); return; }
+			$('#otra', r).onclick = function () { S.para = 'origen'; guardar(); };
 			$('#nota', r).addEventListener('input', function () { S.nota = this.value; guardar(); });
-			$('#ok', r).onclick = function () { S.nota = $('#nota', r).value.trim(); guardar(); ir('viajar'); };
+			$('#ok', r).onclick = function () { S.nota = $('#nota', r).value.trim(); S.recAtras = 'viajar'; guardar(); ir('viajar'); };
 		},
 		listo: function (r) {
 			escucharCentro(function (l) {
@@ -379,6 +385,59 @@
 		}
 	};
 
+	// ---------- 10-nov: ¿Quién viaja? (pedir para otra persona; el bot le manda el código por WhatsApp) ----------
+	function filaQuien() {
+		var p = S.pas || PAS0;
+		return '<a class="pa-quien" href="#pasajero">' + ico('usuario', 'p-ico--20') + '<span>' + (p.otro && p.nombre ? 'Viaja <b>' + esc(nombreCorto(p.nombre)) + '</b>' : 'Viajo yo') + '</span><span class="pa-quien__cambiar">Cambiar</span></a>';
+	}
+	function codigoSubir(v, ch) {
+		if (!v.pasajero) { return '<div class="pa-codigo"><span>Código al subir</span><b>' + esc(v.codigo) + '</b></div>'; }
+		var n = nombreCorto(v.pasajero.nombre);
+		var txt = 'Hola ' + n + ', te pedí un Pa\'llá. Te recoge ' + ((ch && ch.nombre) || 'el chofer') + (ch && ch.chapa ? ' (chapa ' + ch.chapa + ')' : '') + '. Código para subir: ' + v.codigo + '. Pagas al llegar: ' + miles(v.precio) + ' CUP.';
+		return '<div class="pa-codigo"><span>Código de ' + esc(n) + '</span><b>' + esc(v.codigo) + '</b><a class="p-btn p-btn--suave p-btn--chico" href="' + waLink(v.pasajero.telefono, txt) + '">' + ico('whatsapp', 'p-ico--16') + 'Mandar</a></div>'
+			+ '<p class="p-peq" style="margin:4px 0 0">Ya se lo mandamos por WhatsApp. Paga ' + esc(n) + ' al llegar.</p>';
+	}
+	SCR.pasajero = {
+		html: function () {
+			var p = S.pas || PAS0, yo = S.yo || {};
+			var contactos = !!(navigator.contacts && navigator.contacts.select);
+			return '<div class="pa-llena"><div class="pa-cab">' + volver('viajar') + '<h1>¿Quién viaja?</h1></div><div class="pa-cuerpo">'
+				+ '<div class="pa-seg" data-seg="otro"><button type="button" data-v="0" aria-pressed="' + !p.otro + '">Yo' + (yo.nombre ? ' (' + esc(nombreCorto(yo.nombre)) + ')' : '') + '</button><button type="button" data-v="1" aria-pressed="' + !!p.otro + '">Otra persona</button></div>'
+				+ '<div id="otroDatos" style="display:' + (p.otro ? '' : 'none') + '">'
+				+ '<div><label class="pa-etq" for="pn">Nombre de quien viaja</label><label class="p-campo">' + ico('usuario', 'p-ico--20') + '<input id="pn" maxlength="80" autocomplete="off" value="' + esc(p.nombre) + '"></label></div>'
+				+ '<div style="margin-top:12px"><label class="pa-etq" for="pt">Su móvil</label><div class="pa-tel"><span class="pref">+53</span><label class="p-campo"><input id="pt" inputmode="tel" maxlength="12" autocomplete="off" value="' + esc(p.tel) + '"></label></div></div>'
+				+ (contactos ? '<button type="button" class="p-btn p-btn--suave p-btn--ancho" id="agenda" style="margin-top:12px">' + ico('personas', 'p-ico--20') + 'Elegir de mis contactos</button>' : '')
+				+ '<p class="p-aviso" style="margin-top:12px">' + ico('whatsapp') + '<span>Le mandamos por WhatsApp el código para subir, el chofer y la chapa. Paga al llegar.</span></p>'
+				+ '</div><p class="p-aviso p-aviso--error" id="err" hidden></p>'
+				+ '</div><div class="pa-pie"><button type="button" class="p-btn p-btn--marca p-btn--ancho" id="listo">Listo</button></div></div>';
+		},
+		init: function (r) {
+			var p = { otro: !!(S.pas && S.pas.otro), nombre: (S.pas && S.pas.nombre) || '', tel: (S.pas && S.pas.tel) || '' };
+			engancharSeg(r, function (k, si) { p.otro = si; $('#otroDatos', r).style.display = si ? '' : 'none'; $('#err', r).hidden = true; if (si) { $('#pn', r).focus(); } });
+			var ag = $('#agenda', r);
+			if (ag) {
+				ag.onclick = function () {
+					navigator.contacts.select(['name', 'tel'], { multiple: false }).then(function (l) {
+						var c = l && l[0]; if (!c) { return; }
+						if (c.name && c.name[0]) { $('#pn', r).value = c.name[0]; }
+						var t = ((c.tel || [])[0] || '').replace(/\D+/g, ''); if (t.length > 8 && t.slice(-8).charAt(0) === '5') { t = t.slice(-8); }
+						if (t) { $('#pt', r).value = t; }
+					}).catch(function () { });
+				};
+			}
+			$('#listo', r).onclick = function () {
+				if (p.otro) {
+					p.nombre = $('#pn', r).value.trim(); p.tel = $('#pt', r).value.replace(/\D+/g, '');
+					var t = p.tel.length === 10 && p.tel.indexOf('53') === 0 ? p.tel.slice(2) : p.tel;
+					var m = p.nombre.length < 2 ? 'Escribe el nombre de quien viaja.' : (t.length !== 8 || t.charAt(0) !== '5') ? 'Su móvil: 8 números, empieza por 5.' : '';
+					if (m) { var err = $('#err', r); err.hidden = false; err.innerHTML = ico('alerta') + '<span>' + m + '</span>'; return; }
+					p.tel = t;
+				}
+				S.pas = p.otro ? p : PAS0; guardar(); ir('viajar');
+			};
+		}
+	};
+
 	// ---------- Tipo y precio ----------
 	// m = { grupo: 'viajar' | 'mens', tam, servicio: paquete|comida|carga, ayudante: 0|1 } (v3; las cotizaciones se guardan por clave)
 	function claveCot(m) { return [m.grupo, m.tam || '', m.servicio || '', m.ayudante ? 1 : 0, S.origen && S.origen.lat, S.origen && S.origen.lng, S.destino && S.destino.lat, S.destino && S.destino.lng].join('|'); }
@@ -386,10 +445,16 @@
 	function cotizar(m) {
 		if (cotVale(m)) { return Promise.resolve(S.cot); }
 		var k = claveCot(m);
-		return api('cotizar?' + qs({ grupo: m.grupo, olat: S.origen.lat, olng: S.origen.lng, dlat: S.destino.lat, dlng: S.destino.lng, tam: m.tam || '', servicio: m.servicio || '', ayudante: m.ayudante ? 1 : '' })).then(function (x) {
-			if (!x.data.ok) { return { error: x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No se pudo calcular el precio.') }; }
+		return api('cotizar?' + qs({ grupo: m.grupo, olat: S.origen.lat, olng: S.origen.lng, dlat: S.destino.lat, dlng: S.destino.lng, tam: m.tam || '', servicio: m.servicio || '', ayudante: m.ayudante ? 1 : '' }), null, 'GET', 3).then(function (x) {
+			if (!x.data.ok) { return { error: x.status === 0 ? 'No hay señal ahora mismo.' : (x.data.message || 'No se pudo calcular el precio.') }; }
 			x.data.k = k; S.cot = x.data; return S.cot;
 		});
+	}
+	// 10-nov: si el precio no llega (red móvil), un botón grande para volver a intentarlo sin salir de la pantalla.
+	function errReintentar(el, msg) {
+		el.innerHTML = '<div class="pa-reint"><p class="p-aviso p-aviso--error">' + ico('alerta') + '<span>' + esc(msg) + '</span></p>'
+			+ '<button type="button" class="p-btn p-btn--marca p-btn--ancho" data-reint>Reintentar</button></div>';
+		$('[data-reint]', el).onclick = function () { this.disabled = true; this.textContent = 'Probando…'; mostrar(true); };
 	}
 	function claseCot() { var l = (S.cot && S.cot.clases) || []; return l.filter(function (c) { return c.clase === S.clase; })[0] || l[0] || null; }
 	// Ruta SIEMPRE por calles (la calcula el servidor). En Viajar cada clase tiene la suya (taxi por calles de carro, el
@@ -467,6 +532,7 @@
 			return '<div class="pa-arriba">' + volverR('destino') + '</div>'
 				+ '<section class="pa-hoja pa-hoja--viajar"><div class="p-hoja__asa"></div>'
 				+ '<div class="pa-od2"><a href="#recogida"><span class="pm-pin pm-pin--yo"></span><span>Desde ' + esc(corto(S.origen.texto)) + '</span></a><a href="#destino" id="a-dest"><span class="pm-pin pm-pin--destino"></span><b>' + esc(corto(S.destino.texto)) + '</b></a></div>'
+				+ filaQuien()
 				+ '<div class="pa-carr" role="listbox" aria-label="Vehículos" id="carr">' + esqueleto() + '</div>'
 				+ '<p class="pa-resumen-l" id="res"></p>'
 				+ '<div id="bloque"></div></section>';
@@ -477,7 +543,7 @@
 			$('#a-dest', r).onclick = function () { S.para = 'destino'; guardar(); };
 			cotizar({ grupo: 'viajar' }).then(function (cq) {
 				if (actual !== 'viajar') { return; }
-				if (cq.error) { $('#carr', r).innerHTML = '<p class="p-aviso p-aviso--error">' + ico('alerta') + esc(cq.error) + '</p>'; return; }
+				if (cq.error) { errReintentar($('#carr', r), cq.error); return; }
 				var l = cq.clases;
 				// Sale marcado el último vehículo que usó el cliente (1.ª vez: Triciclo eléctrico), o el que ya tocó.
 				if (!l.some(function (c) { return c.clase === S.clase; })) { S.clase = cq.ultima || 'tric_electrico'; S.precio = 0; guardar(); }
@@ -494,7 +560,7 @@
 					alPintar: function () { var q = claseCot(), k = CLASES[q.clase] || {}; $('#res', r).textContent = (k.largo || k.nombre) + (k.plazas ? ' · ' + k.plazas + (/kg/.test(k.plazas) ? '' : (k.plazas === '1' ? ' plaza' : ' plazas')) : '') + ' · ' + q.minutos + ' min de viaje' + (q.llega == null ? ' · nadie cerca ahora' : ''); },
 					alPedir: function (p) {
 						var q = claseCot();
-						pedir({ grupo: 'viajar', nombre: nombreDe(q.clase) }, { cid: cid(), firma: q.firma, precio: p, primera: 0, forma_pago: S.pago, origen_texto: S.origen.texto, destino_texto: S.destino.texto, nota: S.nota });
+						pedir({ grupo: 'viajar', nombre: nombreDe(q.clase) }, { cid: cid(), firma: q.firma, precio: p, primera: 0, forma_pago: S.pago, origen_texto: S.origen.texto, destino_texto: S.destino.texto, nota: S.nota, pasajero: S.pas && S.pas.otro ? { nombre: S.pas.nombre, telefono: S.pas.tel } : null });
 					}
 				};
 				var bloque = bloquePrecio($('#bloque', r), cfg);
@@ -534,7 +600,7 @@
 		return api('viajes', p.body).then(function (x) {
 			if (x.status === 0) { if (actual !== 'sinconexion') { ir('sinconexion'); } reintento = setTimeout(enviarPend, 8000); return; }
 			if (x.data.ok) {
-				LS.set('pend', null); S.precio = 0; guardar(); ponerViaje(x.data.viaje); seguir();
+				LS.set('pend', null); S.precio = 0; S.pas = PAS0; guardar(); ponerViaje(x.data.viaje); seguir();
 				if (actual === 'sinconexion') { var b = $('.pa-banda'); if (b) { b.classList.add('is-bien'); b.innerHTML = ico('check', 'p-ico--20') + '<span>Volvió la señal. Enviamos tu pedido.</span>'; } }
 				ir(pantallaDe(x.data.viaje)); return;
 			}
@@ -804,7 +870,7 @@
 						+ eta(llego ? 'Tu chofer llegó' : 'Tu ' + PALABRA[g] + ' viene', llego ? '' : 'Calculando…', v.precio, 'Fijo · ' + nombrePago(v.forma_pago).toLowerCase())
 						+ U.barra(imgDe(v.clase), '')
 						+ filaChofer(ch, subChofer(ch, v))
-						+ '<div class="pa-codigo"><span>Código al subir</span><b>' + esc(v.codigo) + '</b></div>'
+						+ codigoSubir(v, ch)
 						+ '<button type="button" class="p-btn p-btn--texto pa-cancelar" id="cancelar">Cancelar</button></section>';
 				}
 				return arribaViaje() + '<section class="pa-hoja"><div class="p-hoja__asa"></div>'
@@ -1135,7 +1201,7 @@
 			var e = S.envio, modo = S.modo === 'comida' || S.modo === 'carga' ? S.modo : 'paquete', meta = metaEnvio();
 			cotizar(meta).then(function (cq) {
 				if (actual !== 'envio-precio') { return; }
-				if (cq.error) { $('#cuerpo', r).innerHTML = '<p class="p-aviso p-aviso--error">' + ico('alerta') + esc(cq.error) + '</p>'; return; }
+				if (cq.error) { errReintentar($('#cuerpo', r), cq.error); return; }
 				var q = cq.clases[0], carga = modo === 'carga' || (modo === 'paquete' && e.tam === 'grande'); S.clase = 'mensajero';
 				var img = modo === 'comida' ? 'comida' : (carga ? 'tric-carga' : 'mensajero'), quien = quienRecibe(e);
 				var sub = modo === 'comida' ? (e.otro ? 'Para ' + esc(nombreCorto(quien.n)) : 'Para ti') : (modo === 'carga' ? (e.ayuda ? 'Con ayudante' : 'Cargas tú') : 'Para ' + esc(nombreCorto(e.recibe)));
@@ -1221,7 +1287,7 @@
 		if (antes && antes.estado !== nuevo.estado) {
 			if (nuevo.estado === 'asignado' && antes.estado === 'buscando' && nuevo.primera) { U.tostada('Cogimos la 1.ª oferta: ' + cup(nuevo.precio)); vibrar([80, 60, 80]); }
 			else if (nuevo.estado === 'asignado' && (antes.estado === 'buscando' || antes.estado === 'sin_chofer')) { vibrar([80, 60, 80]); }
-			if (nuevo.estado === 'llego') { U.tostada(e ? 'Tu mensajero llegó a recoger.' : 'Tu chofer llegó. Dile el código ' + nuevo.codigo + '.'); vibrar([200, 100, 200]); }
+			if (nuevo.estado === 'llego') { U.tostada(e ? 'Tu mensajero llegó a recoger.' : (nuevo.pasajero ? 'El chofer llegó a recoger a ' + nombreCorto(nuevo.pasajero.nombre) + '.' : 'Tu chofer llegó. Dile el código ' + nuevo.codigo + '.')); vibrar([200, 100, 200]); }
 			if (nuevo.estado === 'buscando' && (antes.estado === 'asignado' || antes.estado === 'llego')) { U.tostada('Tu chofer no puede ir. Buscamos otro.', 'info'); vibrar(200); tramo = null; }
 			if (nuevo.estado === 'cancelado') { U.tostada('El viaje se canceló.', 'info'); ponerViaje(null); dejar(); ir('inicio'); return; }
 		}
@@ -1262,7 +1328,7 @@
 			if (cfg.listo && s.listo) { PMapa.iniciar(mapaEl, TEMA).then(function () { if (actual === id) { s.listo(pant); } }); }
 		}
 		if (s.init) { s.init(pant); }
-		var titulos = { inicio: '', entrar: 'Entrar', codigo: 'Código', destino: 'Destino', fijar: 'Fijar en el mapa', recogida: 'Recogida', tipo: 'Viajar', precio: 'Viajar', viajar: 'Viajar', comida: 'Comida', carga: 'Carga', buscando: 'Buscando', viene: 'Tu chofer viene', viaje: 'En viaje', llegada: 'Pagar', viajes: 'Mis pedidos', perfil: 'Perfil', envio: 'Paquete', 'envio-recibe': 'Quién recibe', 'envio-precio': 'Precio', 'envio-seguimiento': 'Envío', 'envio-entregado': 'Entregado', sinconexion: 'Sin señal' };
+		var titulos = { inicio: '', entrar: 'Entrar', codigo: 'Código', destino: 'Destino', fijar: 'Fijar en el mapa', recogida: 'Recogida', pasajero: 'Quién viaja', tipo: 'Viajar', precio: 'Viajar', viajar: 'Viajar', comida: 'Comida', carga: 'Carga', buscando: 'Buscando', viene: 'Tu chofer viene', viaje: 'En viaje', llegada: 'Pagar', viajes: 'Mis pedidos', perfil: 'Perfil', envio: 'Paquete', 'envio-recibe': 'Quién recibe', 'envio-precio': 'Precio', 'envio-seguimiento': 'Envío', 'envio-entregado': 'Entregado', sinconexion: 'Sin señal' };
 		document.title = (titulos[id] ? titulos[id] + ' · ' : '') + 'Pa\'llá';
 		if (!mismo) { pant.scrollTop = 0; }
 	}

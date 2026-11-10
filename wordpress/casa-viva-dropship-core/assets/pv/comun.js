@@ -36,14 +36,29 @@
 		json: function (k) { try { return JSON.parse(LS.get(k) || 'null'); } catch (e) { return null; } }
 	};
 
-	/* Llamada a la API: nunca se queda colgada (15 s), y dice si no hubo red (status 0). */
-	function api(path, body, cabeceras, metodo) {
+	/* Llamada a la API: nunca se queda colgada (15 s), y dice si no hubo red (status 0).
+	 * 10-nov (prueba en el Redmi con 4G Nauta): en la red móvil cubana a veces una petición se queda sin respuesta
+	 * aunque el servidor contesta en 0,2 s. Las consultas que solo leen (cotizar, sugerir, donde, cercanos) pasan
+	 * `intentos` = 3: cada intento corta a los 8 s y se repite tras 1 s y 2 s (máximo ~27 s). Lo que cambia algo
+	 * (pedir, elegir, cancelar…) NO se repite solo. */
+	function api(path, body, cabeceras, metodo, intentos) {
+		var n = Math.max(1, intentos || 1);
+		if (n === 1 || body || (metodo && metodo !== 'GET')) { return api1(path, body, cabeceras, metodo, 15000); }
+		var prueba = function (k) {
+			return api1(path, null, cabeceras, 'GET', 8000).then(function (r) {
+				if (r.status !== 0 || k >= n) { return r; }
+				return new Promise(function (ok) { setTimeout(ok, 1000 * k); }).then(function () { return prueba(k + 1); });
+			});
+		};
+		return prueba(1);
+	}
+	function api1(path, body, cabeceras, metodo, ms) {
 		var h = { 'Accept': 'application/json' };
 		Object.keys(cabeceras || {}).forEach(function (k) { if (cabeceras[k]) { h[k] = cabeceras[k]; } });
 		var esForm = typeof FormData !== 'undefined' && body instanceof FormData;
 		if (body && !esForm) { h['Content-Type'] = 'application/json'; }
 		var ctrl = window.AbortController ? new AbortController() : null;
-		var corte = setTimeout(function () { if (ctrl) { ctrl.abort(); } }, 15000);
+		var corte = setTimeout(function () { if (ctrl) { ctrl.abort(); } }, ms);
 		return fetch(C.api + path, { method: metodo || (body ? 'POST' : 'GET'), headers: h, body: body ? (esForm ? body : JSON.stringify(body)) : undefined, cache: 'no-store', credentials: 'omit', signal: ctrl ? ctrl.signal : undefined })
 			.then(function (r) {
 				clearTimeout(corte);
