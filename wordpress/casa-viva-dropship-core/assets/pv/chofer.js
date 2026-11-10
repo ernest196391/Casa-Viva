@@ -333,7 +333,9 @@
 			if (x.data.suelto) { H.activo = null; guardarH(); U.tostada('Soltaste el viaje. Lo coge otro chofer.', 'info'); ir('ch-conectar'); return null; }
 			var w = x.data.viaje;
 			if (w.estado === 'terminado') { H.activo = null; S.cobrar = w; LS.set('ch.cobrar', JSON.stringify(w)); guardarH(); tramo = null; ir('ch-cobrar'); return w; }
-			H.activo = w; guardarH(); mostrar(true); return w;
+			// 10-nov (Redmi): tras «Recogí» se repintaba la pantalla de la URL (#ch-recoger, con «Llegué») 2–3 s hasta la
+			// siguiente consulta. Ahora va directo a la que toca (Llevando a…).
+			H.activo = w; guardarH(); var d = pantallaDe(); if (actual !== d) { ir(d); } else { mostrar(true); } return w;
 		});
 	}
 	function hojaSoltar(r) {

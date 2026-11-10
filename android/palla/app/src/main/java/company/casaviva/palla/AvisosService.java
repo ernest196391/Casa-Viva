@@ -530,7 +530,9 @@ public class AvisosService extends Service {
             boolean loud = !(tags.contains("lost") || tags.contains("cancelled") || tags.contains("changed"));
             if (tags.contains("offer") && !Prefs.available(this)) { return; } // 1.3: desconectado, las carreras libres no suenan
             if (tags.contains("pedido") && !Prefs.available(this)) { return; } // 10-nov (chofer): desconectado, los pedidos no suenan
-            alarm(e.optString("title", "Pa'llá"), e.optString("message", ""), e.optString("click", ""), loud, order);
+            String click = e.optString("click", "");
+            if (BuildConfig.CHOFER && tags.contains("pedido")) { click = MainActivity.HOME + "#ch-pedidos"; } // 10-nov: el aviso abre «Pedidos cerca»
+            alarm(e.optString("title", "Pa'llá"), e.optString("message", ""), click, loud, order);
         } catch (Exception ignored) { }
     }
 
