@@ -78,9 +78,70 @@ public class MainActivity extends Activity {
         if (intent.getData() != null || intent.hasExtra("open")) { web.loadUrl(urlFrom(intent)); }
     }
 
+    // ------------------------------------------------------------------ 10-nov (chofer): permisos para que suene
+    private boolean permisoAbierto, permisoAhoraNo, notifPedida, geoPedida; // pedidas una vez por apertura: si dice que no, no se repite en bucle
+
+    /**
+     * Prueba en el Redmi de Ernesto (MIUI): la app estaba «En línea» pero sin permiso de avisos, sin «Inicio automático» y
+     * con ahorro de batería: así Android la calla o la cierra. Al conectarse (y al volver a la app) se le guía, de uno en
+     * uno: 1) avisos, 2) ubicación, 3) batería sin restricciones, 4) en Xiaomi, «Inicio automático». «Ahora no» lo deja
+     * hasta la próxima vez que abra la app.
+     */
+    private void checkPermisos() {
+        if (!BuildConfig.CHOFER || permisoAbierto || permisoAhoraNo || isFinishing() || !Prefs.available(this)) { return; }
+        android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED && !notifPedida) {
+            notifPedida = true;
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
+            return;
+        }
+        if (nm != null && !nm.areNotificationsEnabled()) {
+            Intent i = Build.VERSION.SDK_INT >= 26
+                ? new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName())
+                : new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()));
+            pedir("1 de 3 · Permite los avisos", "Sin avisos no te enteras de los pedidos. En la pantalla que se abre, activa «Permitir notificaciones».", i);
+            return;
+        }
+        if (!hasGeo() && !geoPedida) { geoPedida = true; askLocation(); return; }
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        if (Build.VERSION.SDK_INT >= 23 && pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+            pedir("2 de 3 · Que no se duerma", "Para que el pedido te suene con la pantalla apagada, Android no debe dormir Pa'llá Chofer. Toca «Permitir» en la pantalla que se abre.",
+                new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName())));
+            return;
+        }
+        if (isXiaomi() && !Prefs.autostartAsked(this)) {
+            Prefs.setAutostartAsked(this);
+            Intent i = new Intent().setComponent(new android.content.ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"));
+            if (getPackageManager().resolveActivity(i, 0) == null) { i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())); }
+            pedir("3 de 3 · Inicio automático", "En los Xiaomi y Redmi: busca «Pa'llá Chofer» en la lista y activa el interruptor. Así vuelve a escuchar pedidos aunque se cierre o reinicies el teléfono.", i);
+        }
+    }
+
+    private static boolean isXiaomi() {
+        String m = (Build.MANUFACTURER + " " + Build.BRAND).toLowerCase(java.util.Locale.ROOT);
+        return m.contains("xiaomi") || m.contains("redmi") || m.contains("poco");
+    }
+
+    private void pedir(String titulo, String texto, Intent abrir) {
+        permisoAbierto = true;
+        new android.app.AlertDialog.Builder(this)
+            .setTitle(titulo)
+            .setMessage(texto)
+            .setCancelable(false)
+            .setPositiveButton("Abrir", (d, w) -> {
+                permisoAbierto = false;
+                try { startActivity(abrir); } catch (Exception e) {
+                    try { startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))); } catch (Exception ignored) { }
+                }
+            })
+            .setNegativeButton("Ahora no", (d, w) -> { permisoAbierto = false; permisoAhoraNo = true; })
+            .show();
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        if (BuildConfig.CHOFER) { checkPermisos(); } // 10-nov: al volver de Ajustes, el paso siguiente
         AvisosService.stopAlarm(this); // al abrir la app, la bocina se calla
         if (Prefs.needsService(this)) { AvisosService.start(this); } // 1.3: solo si está disponible o en una carrera
     }
@@ -125,6 +186,7 @@ public class MainActivity extends Activity {
             geoCallback = null;
         }
         if (code == REQ_GEO && hasGeo() && Prefs.active(this)) { AvisosService.track(this, true); } // 1.1: ya puede seguir el recorrido
+        if (BuildConfig.CHOFER && (code == REQ_NOTIF || code == REQ_GEO)) { checkPermisos(); } // 10-nov: el siguiente paso
     }
 
     private boolean hasGeo() {
@@ -159,7 +221,7 @@ public class MainActivity extends Activity {
             boolean changed = !token.trim().equals(Prefs.token(ctx));
             Prefs.setToken(ctx, token);
             if (changed || !Prefs.ready(ctx)) { new Thread(() -> AvisosService.configure(ctx), "palla-config").start(); }
-            runOnUiThread(MainActivity.this::askBattery);
+            if (!BuildConfig.CHOFER) { runOnUiThread(MainActivity.this::askBattery); }
         }
 
         /** 1.1: la web dice si hay carreras abiertas → la app manda (o deja de mandar) el recorrido. */
@@ -180,7 +242,7 @@ public class MainActivity extends Activity {
             if (on == Prefs.available(ctx) && u == Prefs.availableUntil(ctx)) { return; }
             Prefs.setAvailable(ctx, on, u);
             runOnUiThread(() -> {
-                if (BuildConfig.CHOFER && on) { askLocation(); } // chofer: en línea manda su posición aunque no mire el móvil
+                if (BuildConfig.CHOFER && on) { permisoAhoraNo = false; checkPermisos(); } // chofer: en línea → que suene y mande su posición
                 AvisosService.availability(ctx);
             });
         }
