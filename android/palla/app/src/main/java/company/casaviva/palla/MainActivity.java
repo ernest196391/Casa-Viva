@@ -68,7 +68,13 @@ public class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
         }
-        if (state != null) { web.restoreState(state); } else { web.loadUrl(urlFrom(getIntent())); }
+        // 10-nov (Redmi): si Android cerró la app y la reabre desde un aviso, antes se restauraba la página vieja y se
+        // ignoraba a dónde llevaba el aviso. Ahora, si el aviso trae dirección, se abre esa.
+        if (state != null) {
+            web.restoreState(state);
+            Intent in = getIntent();
+            if (in != null && (in.getData() != null || in.hasExtra("open"))) { web.loadUrl(urlFrom(in)); in.removeExtra("open"); in.setData(null); }
+        } else { web.loadUrl(urlFrom(getIntent())); }
     }
 
     @Override
