@@ -76,7 +76,8 @@
 			navigator.geolocation.getCurrentPosition(function (p) { if (!hecho) { hecho = true; ok([p.coords.longitude, p.coords.latitude]); } }, function () { if (!hecho) { hecho = true; ok(null); } }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
 		});
 	}
-	function lugarDe(p) { return api('donde?' + qs({ lat: p[1].toFixed(6), lng: p[0].toFixed(6) }), null, 'GET', 3).then(function (r) { return { texto: (r.data && r.data.texto) || 'Punto en el mapa', barrio: (r.data && r.data.barrio) || '', lat: p[1], lng: p[0] }; }); }
+	// 10-nov: el servidor pega el punto a la calle más cercana (lat/lng ya en la calle; `pegado` si lo movió).
+	function lugarDe(p) { return api('donde?' + qs({ lat: p[1].toFixed(6), lng: p[0].toFixed(6) }), null, 'GET', 3).then(function (r) { var d = r.data || {}; return { texto: d.texto || 'Punto en el mapa', barrio: d.barrio || '', lat: d.lat != null ? +d.lat : p[1], lng: d.lng != null ? +d.lng : p[0], pegado: !!d.pegado }; }); }
 	function filaLugar(attrs, icono, n, d, fin) {
 		return '<button type="button" class="p-fila" ' + attrs + '><span class="p-fila__ico">' + ico(icono) + '</span><span class="p-fila__txt"><b>' + n + '</b>' + (d ? '<span>' + d + '</span>' : '') + '</span>' + (fin ? '<span class="p-fila__fin">' + fin + '</span>' : '') + '</button>';
 	}
@@ -318,15 +319,22 @@
 	function pinCentro(arriba) { return '<div class="pa-pin-centro" style="top:calc(50% - ' + (arriba || 120) + 'px)"><span class="cabeza"></span><span class="palo"></span><span class="suelo"></span></div>'; }
 	function escucharCentro(alSoltar) {
 		var m = PMapa.mapa(); if (!m) { return false; }
-		var pc = $('.pa-pin-centro'), n = 0;
+		var pc = $('.pa-pin-centro'), n = 0, saltando = false;
 		var a = function () { if (pc) { pc.classList.add('is-mueve'); } };
 		var b = function () {
 			if (pc) { pc.classList.remove('is-mueve'); }
+			if (saltando) { saltando = false; return; } // fue el salto a la calle: la dirección ya está
 			var el = $('.pa-pin-centro'); if (!el) { return; }
 			var r = el.getBoundingClientRect(), mr = mapaEl.getBoundingClientRect();
-			var ll = m.unproject([r.left + r.width / 2 - mr.left, r.bottom - mr.top]), mio = ++n;
+			var punta = [r.left + r.width / 2 - mr.left, r.bottom - mr.top];
+			var ll = m.unproject(punta), mio = ++n;
 			alSoltar(null);
-			lugarDe([ll.lng, ll.lat]).then(function (l) { if (mio === n) { alSoltar(l); } });
+			lugarDe([ll.lng, ll.lat]).then(function (l) {
+				if (mio !== n) { return; }
+				// 10-nov (Ernesto): el alfiler no se queda dentro de un edificio: el mapa se mueve para que caiga en la calle.
+				if (l.pegado) { var q = m.project([l.lng, l.lat]), dx = q.x - punta[0], dy = q.y - punta[1]; if (Math.abs(dx) > 3 || Math.abs(dy) > 3) { saltando = true; m.panBy([dx, dy], { duration: 300 }); } }
+				alSoltar(l);
+			});
 		};
 		m.on('movestart', a); m.on('moveend', b);
 		timers.push({ off: function () { m.off('movestart', a); m.off('moveend', b); } });

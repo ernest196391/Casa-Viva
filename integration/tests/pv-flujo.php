@@ -70,6 +70,19 @@ $t = CVD_Pv_Api::trayecto( 'cycling', 23.1300, -82.3900, 23.1250, -82.3850 );
 remove_filter( 'pre_http_request', $f, 10 );
 pv_ok( 800 === $t['metros'], 'ruta de bici más corta: se queda la de bici (' . $t['metros'] . ' m)' );
 
+// ---------- 10-nov (Ernesto): el alfiler se pega a la calle (no se queda dentro de un edificio)
+$calle = static function ( $pre, $args, $url ) {
+	if ( false === strpos( (string) $url, '/route/v1/driving/' ) || false === strpos( (string) $url, 'overview=false' ) ) { return $pre; }
+	$w = array( 'location' => array( -82.381382, 23.140689 ), 'name' => 'Calle N', 'distance' => 15.6 );
+	return array( 'headers' => array(), 'body' => wp_json_encode( array( 'code' => 'Ok', 'routes' => array(), 'waypoints' => array( $w, $w ) ) ), 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array(), 'filename' => null );
+};
+$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '%transient%cvd_pv_calle_%'" );
+add_filter( 'pre_http_request', $calle, 10, 3 );
+$pc = CVD_Pv_Api::pegar_calle( 23.14060, -82.38150 );
+remove_filter( 'pre_http_request', $calle, 10 );
+pv_ok( abs( $pc[0] - 23.140689 ) < 1e-6 && abs( $pc[1] + 82.381382 ) < 1e-6 && 'Calle N' === $pc[2] && true === $pc[3], 'alfiler: se pega a la calle más cercana (Calle N, 15 m)' );
+pv_ok( CVD_Pv_Api::pegar_calle( 23.14060, -82.38150 ) === $pc, 'alfiler: la segunda vez sale de la caché' );
+
 // ---------- Mapa (revisión 7-nov): MapLibre suma la padding guardada por el jumpTo del inicio a la de fitBounds y en Viajar
 // la ruta no cabía. mapa.js debe borrar la padding guardada justo antes de encuadrar.
 $mjs = (string) file_get_contents( CVD_DIR . 'assets/pv/mapa.js' );
@@ -149,6 +162,9 @@ pv_ok( 0 === count( $h4['pedidos'] ), 'el taxi no ve un pedido de triciclo' );
 
 // ---------- Ofertas
 $id = (int) $h1['pedidos'][0]['id'];
+// 10-nov: el aviso del pedido lleva «v<id>» (el botón Aceptar del aviso de la app manda «Acepto» a ese pedido)
+$ev = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . CVD_Triciclub_Db::t( 'viajes' ) . ' WHERE id=%d', $id ) );
+pv_ok( 1 === (int) $ev, 'el pedido que ve el chofer existe (para el Aceptar del aviso)' );
 list( $s, $o1 ) = pv_req( 'POST', "chofer/pedidos/{$id}/ofertar", array( 'pct' => 10 ), $P( $d1 ) );
 pv_ok( 200 === $s && $o1['oferta']['precio'] === CVD_Pv_Tarifa::contra( $V['oferta'], 10 ), 'chofer 1 pide +10 %' );
 list( $s, $o2 ) = pv_req( 'POST', "chofer/pedidos/{$id}/ofertar", array( 'pct' => 0 ), $P( $d2 ) );

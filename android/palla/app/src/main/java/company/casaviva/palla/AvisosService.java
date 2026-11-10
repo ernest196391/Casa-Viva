@@ -44,6 +44,7 @@ public class AvisosService extends Service {
     private static final String ACTION_STOP = "company.casaviva.palla.PARAR";
     private static final String ACTION_SILENCE = "company.casaviva.palla.SILENCIAR"; // 1.2: calla, pero el aviso se queda
     private static final String ACTION_OFF = "company.casaviva.palla.DESCONECTAR";   // 1.4: «Desconectarme» desde el aviso fijo
+    private static final String ACTION_NO = "company.casaviva.palla.RECHAZAR";       // 10-nov (chofer): «Rechazar» quita el aviso
     private static final String DISP_URL = BuildConfig.CHOFER ? "https://casaviva.company/wp-json/casa-viva/v1/pv/chofer/disponible" : "https://casaviva.company/wp-json/casa-viva/v1/palla/disponible";
     private static android.media.MediaPlayer siren;
     // 1.2 (29-oct, Ernesto: «se quedó más de 1 min vibrando y no sabía cómo apagarlo»): la vibración se para con el MISMO
@@ -433,6 +434,7 @@ public class AvisosService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && (ACTION_STOP.equals(intent.getAction()) || ACTION_SILENCE.equals(intent.getAction()))) { stopSiren(this); } // quitó el aviso o tocó «Silenciar»
+        if (intent != null && ACTION_NO.equals(intent.getAction())) { stopAlarm(this); } // 10-nov: «Rechazar»: se calla y se quita el aviso
         if (intent != null && ACTION_OFF.equals(intent.getAction())) { // 1.4: «Desconectarme» desde la barra de arriba
             stopAlarm(this);
             Prefs.setAvailable(this, false, 0);
@@ -523,6 +525,8 @@ public class AvisosService extends Service {
             for (int i = 0; t != null && i < t.length(); i++) { tags.add(t.optString(i)); }
             String order = "";
             for (String s : tags) { if (s.matches("o\\d+")) { order = s; } }
+            String viaje = ""; // 10-nov (chofer): «v<id>» = el pedido de Pa'llá transporte (para el botón Aceptar)
+            for (String s : tags) { if (s.matches("v\\d+")) { viaje = s.substring(1); } }
             if (tags.contains("cerrada")) { // otro la cogió: si es la que suena, se calla y se quita
                 if (!order.isEmpty() && order.equals(alarmOrder)) { stopAlarm(this); alarmOrder = ""; }
                 return;
@@ -531,8 +535,9 @@ public class AvisosService extends Service {
             if (tags.contains("offer") && !Prefs.available(this)) { return; } // 1.3: desconectado, las carreras libres no suenan
             if (tags.contains("pedido") && !Prefs.available(this)) { return; } // 10-nov (chofer): desconectado, los pedidos no suenan
             String click = e.optString("click", "");
-            if (BuildConfig.CHOFER && tags.contains("pedido")) { click = MainActivity.HOME + "#ch-pedidos"; } // 10-nov: el aviso abre «Pedidos cerca»
-            alarm(e.optString("title", "Pa'llá"), e.optString("message", ""), click, loud, order);
+            boolean pedido = BuildConfig.CHOFER && tags.contains("pedido");
+            if (pedido) { click = MainActivity.HOME + "#ch-pedidos"; } // 10-nov: el aviso abre «Pedidos cerca»
+            alarm(e.optString("title", "Pa'llá"), e.optString("message", ""), click, loud, order, pedido ? viaje : "");
         } catch (Exception ignored) { }
     }
 
@@ -540,7 +545,7 @@ public class AvisosService extends Service {
      * El aviso: se ve arriba (sin sonido del canal) con «Silenciar», y la bocina suena aparte (carrera libre, asignada o
      * prueba) hasta 30 s. Lo demás (ya no es tuya, se canceló, cambió) solo vibra una vez.
      */
-    private void alarm(String title, String text, String click, boolean loud, String order) {
+    private void alarm(String title, String text, String click, boolean loud, String order, String viaje) {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm == null) { return; }
         Intent stop = new Intent(this, AvisosService.class).setAction(ACTION_STOP);
@@ -554,11 +559,23 @@ public class AvisosService extends Service {
             .setCategory(Notification.CATEGORY_ALARM)
             .setContentIntent(openApp(click, 1))
             .setDeleteIntent(onDismiss);
-        if (loud) {
+        if (loud && !viaje.isEmpty()) {
+            // 10-nov (Ernesto): pedido de Pa'llá → Aceptar (al precio del cliente, y abre la app) · Rechazar · Silenciar.
+            Intent si = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra("open", MainActivity.HOME + "#ch-pedidos").putExtra("aceptar", viaje);
+            PendingIntent onYes = PendingIntent.getActivity(this, 6, si, flags);
+            Intent no = new Intent(this, AvisosService.class).setAction(ACTION_NO);
+            PendingIntent onNo = Build.VERSION.SDK_INT >= 26 ? PendingIntent.getForegroundService(this, 7, no, flags) : PendingIntent.getService(this, 7, no, flags);
+            Intent silence = new Intent(this, AvisosService.class).setAction(ACTION_SILENCE);
+            PendingIntent onSilence = Build.VERSION.SDK_INT >= 26 ? PendingIntent.getForegroundService(this, 3, silence, flags) : PendingIntent.getService(this, 3, silence, flags);
+            b.addAction(new Notification.Action.Builder(null, "Aceptar", onYes).build());
+            b.addAction(new Notification.Action.Builder(null, "Rechazar", onNo).build());
+            b.addAction(new Notification.Action.Builder(null, "Silenciar", onSilence).build());
+        } else if (loud) {
             Intent silence = new Intent(this, AvisosService.class).setAction(ACTION_SILENCE);
             PendingIntent onSilence = Build.VERSION.SDK_INT >= 26 ? PendingIntent.getForegroundService(this, 3, silence, flags) : PendingIntent.getService(this, 3, silence, flags);
             b.addAction(new Notification.Action.Builder(null, "🔇 Silenciar", onSilence).build());
-            b.addAction(new Notification.Action.Builder(null, BuildConfig.CHOFER ? "Ver pedido" : "Ver carrera", openApp(click, 4)).build());
+            if (!BuildConfig.CHOFER) { b.addAction(new Notification.Action.Builder(null, "Ver carrera", openApp(click, 4)).build()); } // chofer: tocar el aviso ya lleva al viaje
         }
         if (Build.VERSION.SDK_INT < 26) { b.setPriority(Notification.PRIORITY_MAX); }
         nm.notify(ID_NEW, b.build());

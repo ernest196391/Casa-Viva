@@ -205,7 +205,42 @@ final class CVD_Pv_Api {
 	}
 
 	// Direcciones: las mismas de Triciclub (15.110 lugares de La Habana + calles).
-	public static function donde( WP_REST_Request $request ): WP_REST_Response { return CVD_Triciclub_Api::donde( $request ); }
+	/**
+	 * GET donde?lat&lng — 10-nov (Ernesto: «que el alfiler se pueda poner solamente en las calles, no en los edificios;
+	 * si no, el chofer se confunde»): el punto se pega a la calle más cercana por donde pasa un carro (como Uber/Yandex)
+	 * y la dirección se busca ahí. Devuelve también `lat`, `lng` (ya en la calle) y `pegado`.
+	 */
+	public static function donde( WP_REST_Request $request ): WP_REST_Response {
+		$lat = self::coord( $request->get_param( 'lat' ), true );
+		$lng = self::coord( $request->get_param( 'lng' ), false );
+		if ( null === $lat || null === $lng ) { return CVD_Triciclub_Api::donde( $request ); }
+		$c = self::pegar_calle( $lat, $lng );
+		$d = CVD_Triciclub_Geo::donde( $c[0], $c[1] );
+		return self::out( array( 'ok' => true, 'texto' => $d ? $d['texto'] : ( '' !== $c[2] ? $c[2] : 'Punto en el mapa' ), 'barrio' => $d ? $d['barrio'] : '', 'conocido' => (bool) $d,
+			'lat' => round( $c[0], 6 ), 'lng' => round( $c[1], 6 ), 'pegado' => $c[3] ) );
+	}
+
+	/**
+	 * [lat, lng, nombre de la calle, ¿se movió?]: el punto de la calle más cercana. Truco sin servicio nuevo: una ruta de
+	 * carro del punto a sí mismo; OSRM devuelve en `waypoints` el punto ya sobre la calle y su nombre. 1 día en caché
+	 * (~1 m). Si el motor no contesta o la calle está a más de 150 m, se queda donde lo puso.
+	 */
+	public static function pegar_calle( float $lat, float $lng ): array {
+		$key = 'cvd_pv_calle_' . md5( number_format( $lat, 5, '.', '' ) . ',' . number_format( $lng, 5, '.', '' ) );
+		$hit = get_transient( $key );
+		if ( is_array( $hit ) ) { return $hit; }
+		$out = array( $lat, $lng, '', false );
+		if ( defined( 'CVD_PV_SIN_RED' ) && ! has_filter( 'pre_http_request' ) ) { return $out; }
+		$api = rtrim( (string) get_option( 'cvd_tc_ruta_api', 'https://179-236-242-212.sslip.io' ), '/' );
+		$res = wp_remote_get( $api . '/route/v1/driving/' . $lng . ',' . $lat . ';' . $lng . ',' . $lat . '?overview=false', array( 'timeout' => 4, 'redirection' => 0 ) );
+		$data = is_wp_error( $res ) ? null : json_decode( (string) wp_remote_retrieve_body( $res ), true );
+		$w = is_array( $data ) && 'Ok' === ( $data['code'] ?? '' ) ? ( $data['waypoints'][0] ?? null ) : null;
+		if ( is_array( $w ) && isset( $w['location'][0], $w['location'][1] ) && (float) ( $w['distance'] ?? 999 ) <= 150 ) {
+			$out = array( (float) $w['location'][1], (float) $w['location'][0], (string) ( $w['name'] ?? '' ), (float) ( $w['distance'] ?? 0 ) > 3 );
+			set_transient( $key, $out, DAY_IN_SECONDS );
+		}
+		return $out;
+	}
 	public static function sugerir( WP_REST_Request $request ): WP_REST_Response { return CVD_Triciclub_Api::sugerir( $request ); }
 	public static function lugar( WP_REST_Request $request ): WP_REST_Response { return CVD_Triciclub_Api::lugar( $request ); }
 
@@ -474,10 +509,11 @@ final class CVD_Pv_Api {
 		sort( $lista );
 		$ico = array( 'paquete' => '📦 Envío', 'comida' => '🍕 Comida', 'carga' => '📦 Carga' )[ (string) $viaje->servicio ] ?? '🚖 Pedido';
 		$titulo = $ico . ( $subio ? ' · subió a ' : ' · ' ) . number_format( (int) $viaje->precio_oferta, 0, ',', '.' ) . ' CUP';
-		$txt = self::corto( (string) $viaje->origen_texto ) . ' → ' . self::corto( (string) $viaje->destino_texto ) . ' · ' . round( (int) $viaje->distancia_m / 1000, 1 ) . ' km. Acepta o pide más.';
+		// 10-nov (Ernesto): el aviso trae botones Aceptar · Rechazar · Silenciar; el texto, solo de dónde a dónde.
+		$txt = self::corto( (string) $viaje->origen_texto ) . ' → ' . self::corto( (string) $viaje->destino_texto ) . ' · ' . number_format( (int) $viaje->distancia_m / 1000, 1, ',', '' ) . ' km';
 		foreach ( array_slice( $lista, 0, self::AVISAR_MAX ) as $l ) {
 			CVD_Pv_Canal::senal( CVD_Pv_Canal::tema_chofer( $l[1] ), array( 't' => 'pedido', 'id' => (int) $viaje->id ) );
-			if ( ! $subio ) { self::aviso( $l[1], 'pv_pedido', $titulo, $txt, array( 'pv', 'pedido' ) ); }
+			if ( ! $subio ) { self::aviso( $l[1], 'pv_pedido', $titulo, $txt, array( 'pv', 'pedido', 'v' . (int) $viaje->id ) ); } // «v<id>»: el botón Aceptar del aviso
 		}
 	}
 
@@ -856,7 +892,7 @@ final class CVD_Pv_Api {
 		$v = self::viaje( (int) $v->id );
 		self::tocar( $v, 'asignado' );
 		CVD_Pv_Canal::senal( CVD_Pv_Canal::tema_chofer( (int) $o->chofer_id ), array( 't' => 'elegido', 'id' => (int) $v->id ) );
-		self::aviso( (int) $o->chofer_id, 'pv_elegido', '✅ ¡Te eligieron! ' . number_format( (int) $o->precio, 0, ',', '.' ) . ' CUP', 'Ve a recoger en ' . self::corto( (string) $v->origen_texto ) . '.', array( 'pv', 'elegido' ) );
+		self::aviso( (int) $o->chofer_id, 'pv_elegido', '✅ ¡Te eligieron! ' . number_format( (int) $o->precio, 0, ',', '.' ) . ' CUP', 'Ve a recoger en ' . self::corto( (string) $v->origen_texto ) . '.', array( 'pv', 'elegido', 'v' . (int) $v->id ) );
 		foreach ( array_map( 'intval', (array) $perdieron ) as $uid ) { CVD_Pv_Canal::senal( CVD_Pv_Canal::tema_chofer( $uid ), array( 't' => 'perdio', 'id' => (int) $v->id ) ); }
 		self::avisar_pasajero( $v, 'asignado' );
 		return '';

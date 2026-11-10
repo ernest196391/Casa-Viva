@@ -70,17 +70,49 @@ public class MainActivity extends Activity {
         }
         // 10-nov (Redmi): si Android cerró la app y la reabre desde un aviso, antes se restauraba la página vieja y se
         // ignoraba a dónde llevaba el aviso. Ahora, si el aviso trae dirección, se abre esa.
-        if (state != null) {
+        if (BuildConfig.CHOFER && getIntent() != null && getIntent().hasExtra("aceptar")) { web.loadUrl(HOME); aceptarDesdeAviso(getIntent()); }
+        else if (state != null) {
             web.restoreState(state);
             Intent in = getIntent();
             if (in != null && (in.getData() != null || in.hasExtra("open"))) { web.loadUrl(urlFrom(in)); in.removeExtra("open"); in.setData(null); }
         } else { web.loadUrl(urlFrom(getIntent())); }
     }
 
+    /**
+     * 10-nov (chofer): «Aceptar» desde el aviso → «Acepto» al precio del cliente (POST pv/chofer/pedidos/{id}/ofertar
+     * {pct:0}) y luego se abre «Pedidos cerca», donde se ve «Enviaste… Esperando» o si ya lo cogió otro.
+     */
+    private void aceptarDesdeAviso(Intent in) {
+        String id = in == null ? null : in.getStringExtra("aceptar");
+        if (id == null || !id.matches("\\d+")) { return; }
+        in.removeExtra("aceptar");
+        AvisosService.stopAlarm(this);
+        final String url = urlFrom(in), token = Prefs.token(this);
+        new Thread(() -> {
+            java.net.HttpURLConnection h = null;
+            try {
+                h = (java.net.HttpURLConnection) new java.net.URL("https://casaviva.company/wp-json/casa-viva/v1/pv/chofer/pedidos/" + id + "/ofertar").openConnection();
+                h.setConnectTimeout(10_000);
+                h.setReadTimeout(15_000);
+                h.setDoOutput(true);
+                h.setRequestMethod("POST");
+                h.setRequestProperty("Content-Type", "application/json");
+                h.setRequestProperty("X-Palla-Token", token);
+                h.getOutputStream().write("{\"pct\":0}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                h.getResponseCode();
+            } catch (Exception ignored) {
+            } finally {
+                if (h != null) { h.disconnect(); }
+            }
+            runOnUiThread(() -> web.loadUrl(url)); // la lista ya trae su oferta (o «lo cogió otro»)
+        }, "palla-aceptar").start();
+    }
+
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        if (BuildConfig.CHOFER && intent.hasExtra("aceptar")) { aceptarDesdeAviso(intent); return; }
         if (intent.getData() != null || intent.hasExtra("open")) { web.loadUrl(urlFrom(intent)); }
     }
 
