@@ -435,6 +435,7 @@ $wpdb->query( "DELETE FROM {$TC} WHERE app='pva'" );
 
 // ---------- 10-nov: arreglos de la auditoría
 $TCH = CVD_Triciclub_Db::t( 'choferes' );
+update_option( 'cvd_pv_tope', 0 ); // sin tope de deuda en este bloque (una prueba de antes lo deja en 50)
 $viaje6 = static function ( string $cid ) use ( $cot6, $H6, $P, $d6, $TV, $wpdb ): array {
 	$q = $cot6();
 	list( , $d ) = pv_req( 'POST', 'viajes', array( 'cid' => $cid, 'firma' => $q['firma'], 'precio' => $q['justo'] ), $H6 );
@@ -462,15 +463,16 @@ list( $s, $x ) = pv_req( 'POST', 'viajes/' . $ua . '/llegue', array(), $H6 );
 pv_ok( 200 === $s && 'terminado' === $x['viaje']['estado'], 'auditoría: el cliente cierra con «Ya llegué» si el chofer no toca Terminé' );
 pv_req( 'POST', "chofer/viajes/{$ia}/estado", array( 'accion' => 'cobrado' ), $P( $d6 ) );
 update_option( 'cvd_pv_comision_pct', 8 );
+$saldo0 = CVD_Pv_Cuenta::saldo( $d6 );
 list( $ib, $ub, $cb ) = $viaje6( 'b1' );
 pv_req( 'POST', "chofer/viajes/{$ib}/estado", array( 'accion' => 'llegue' ), $P( $d6 ) );
 pv_req( 'POST', "chofer/viajes/{$ib}/estado", array( 'accion' => 'recogi', 'codigo' => $cb ), $P( $d6 ) );
 $wpdb->update( $TV, array( 'recogido_at' => gmdate( 'Y-m-d H:i:s', time() - 3 * HOUR_IN_SECONDS ) ), array( 'id' => $ib ) );
 list( , $vb ) = pv_req( 'GET', 'viajes/' . $ub, array(), $H6 );
 pv_ok( 'terminado' === $vb['viaje']['estado'], 'auditoría: un viaje colgado en «recogido» se cierra solo' );
-pv_ok( CVD_Pv_Cuenta::saldo( $d6 ) > 0, 'auditoría: el cierre solo apunta la comisión (8 %)' );
+pv_ok( CVD_Pv_Cuenta::saldo( $d6 ) > $saldo0, 'auditoría: el cierre solo apunta la comisión (8 %)' );
 list( $s ) = pv_req( 'POST', "chofer/viajes/{$ib}/estado", array( 'accion' => 'nopago' ), $P( $d6 ) );
-pv_ok( 200 === $s && 0 === CVD_Pv_Cuenta::saldo( $d6 ), 'auditoría: «No me pagó» deja esa comisión en revisión (no es deuda)' );
+pv_ok( 200 === $s && $saldo0 === CVD_Pv_Cuenta::saldo( $d6 ), 'auditoría: «No me pagó» deja esa comisión en revisión (no es deuda)' );
 update_option( 'cvd_pv_comision_pct', 0 );
 list( $s ) = pv_req( 'POST', 'yo', array( 'lugares' => array( 'casa' => array( 'texto' => 'Calle N e/ 23 y 25', 'lat' => 23.14069, 'lng' => -82.38138 ) ) ), $H6 );
 $lg = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT lugares FROM ' . CVD_Triciclub_Db::t( 'clientes' ) . ' WHERE id=%d', (int) $cli6->id ) );
