@@ -228,7 +228,9 @@ final class CVD_Order_Transition_Service {
 		if('operation'===$domain){return $is_admin||$is_staff;} if('delivery'!==$domain){return false;}
 		// Relevo: volver a «oferta abierta» desde asignada/aceptada/va a recoger solo lo hace el propio
 		// mensajero asignado y solo por la puerta del bot (messenger_release); la tienda no ve ese botón.
-		if('offered'===$to&&'unassigned'!==$from){return !empty($context['messenger_release'])&&in_array($from,array('assigned','accepted','to_store'),true)&&in_array('cvd_messenger',(array)$actor->roles,true)&&$actor->ID===absint($order->get_meta('_cvd_messenger_user_id',true));}
+		// 3.14.160 (cadena de mensajeros): el reloj, la gestora o la administración se la quitan al que la tiene. Solo por
+		// CVD_Cadena_Mensajeros (chain_system) y con el administrador del sistema como actor.
+		if('offered'===$to&&'unassigned'!==$from){if(!empty($context['chain_system'])){return $is_admin&&in_array($from,array('assigned','accepted','to_store'),true);}return !empty($context['messenger_release'])&&in_array($from,array('assigned','accepted','to_store'),true)&&in_array('cvd_messenger',(array)$actor->roles,true)&&$actor->ID===absint($order->get_meta('_cvd_messenger_user_id',true));}
 		// 3.13.55: el mensajero asignado dice que ya tiene el paquete (WhatsApp o «Ya lo recogí» en su área) y queda
 		// «Entregado al mensajero» sin esperar a la dependienta. Solo por CVD_Delivery::messenger_confirms_pickup
 		// (messenger_pickup) y nunca en un pedido de prueba.

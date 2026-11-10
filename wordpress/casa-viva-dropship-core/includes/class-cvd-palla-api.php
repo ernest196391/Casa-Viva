@@ -61,6 +61,7 @@ final class CVD_Palla_Api {
 		if ( is_wp_error( $user ) ) { return $user; }
 		// 3.14.69.1: lo que toca el mensajero queda a su nombre (historial y avisos: no se le avisa de lo que hizo él).
 		wp_set_current_user( $user->ID );
+		if ( class_exists( 'CVD_Cadena_Mensajeros' ) ) { CVD_Cadena_Mensajeros::seen( $user->ID ); } // 3.14.160: «conectó hoy» en el selector de la gestora
 		return true;
 	}
 
