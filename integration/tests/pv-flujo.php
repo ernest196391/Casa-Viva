@@ -474,7 +474,11 @@ pv_ok( CVD_Pv_Cuenta::saldo( $d6 ) > $saldo0, 'auditoría: el cierre solo apunta
 list( $s ) = pv_req( 'POST', "chofer/viajes/{$ib}/estado", array( 'accion' => 'nopago' ), $P( $d6 ) );
 pv_ok( 200 === $s && $saldo0 === CVD_Pv_Cuenta::saldo( $d6 ), 'auditoría: «No me pagó» deja esa comisión en revisión (no es deuda)' );
 update_option( 'cvd_pv_comision_pct', 0 );
-list( $s ) = pv_req( 'POST', 'yo', array( 'lugares' => array( 'casa' => array( 'texto' => 'Calle N e/ 23 y 25', 'lat' => 23.14069, 'lng' => -82.38138 ) ) ), $H6 );
+$rq = new WP_REST_Request( 'POST', '/casa-viva/v1/pv/yo' ); // yo_guardar lee JSON (como la app)
+$rq->set_header( 'X-TC-Token', $H6['X-TC-Token'] );
+$rq->set_header( 'Content-Type', 'application/json' );
+$rq->set_body( wp_json_encode( array( 'lugares' => array( 'casa' => array( 'texto' => 'Calle N e/ 23 y 25', 'lat' => 23.14069, 'lng' => -82.38138 ) ) ) ) );
+$s = rest_do_request( $rq )->get_status();
 $lg = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT lugares FROM ' . CVD_Triciclub_Db::t( 'clientes' ) . ' WHERE id=%d', (int) $cli6->id ) );
 pv_ok( 200 === $s && false !== strpos( $lg, 'Calle N' ) && false === get_option( 'cvd_pv_lugares_' . (int) $cli6->id ), 'auditoría: Casa y Trabajo en la tabla de clientes' );
 list( , $yo6 ) = pv_req( 'GET', 'yo', array(), $H6 );
