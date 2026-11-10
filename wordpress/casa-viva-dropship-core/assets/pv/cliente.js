@@ -202,7 +202,7 @@
 				};
 			});
 			$('#desde', r).onclick = function () { S.para = 'origen'; guardar(); ir('destino'); };
-			$$('[data-rec]', r).forEach(function (b) { b.onclick = function () { var x = S.recientes[+b.dataset.rec]; S.modo = 'viajar'; S.svc = 'viajar'; S.destino = { texto: x.texto, lat: x.lat, lng: x.lng }; S.precio = 0; S.cot = null; guardar(); ir(S.origen ? 'viajar' : 'destino'); }; });
+			$$('[data-rec]', r).forEach(function (b) { b.onclick = function () { var x = S.recientes[+b.dataset.rec]; S.modo = 'viajar'; S.svc = 'viajar'; S.destino = { texto: x.texto, lat: x.lat, lng: x.lng }; S.precio = 0; S.cot = null; if (S.origen) { S.recAtras = 'inicio'; guardar(); ir('recogida'); } else { guardar(); ir('destino'); } }; });
 			if (!S.origen || Date.now() - (S.origenT || 0) > 600000) {
 				gps().then(function (p) {
 					if (!p) { var d = $('#desde-t'); if (d && !S.origen) { d.textContent = 'Toca para decir dónde estás'; } return; }
@@ -361,7 +361,7 @@
 		mapa: function () { return { ver: [ptoOrigen()], zoom: 17, arriba: 0, listo: true }; },
 		html: function () {
 			if (!S.origen || !S.destino) { return ''; }
-			return '<div class="pa-arriba">' + volverR(S.recAtras === 'destino' ? 'destino' : 'viajar') + '<span class="pa-pastilla">Mueve el mapa</span></div>'
+			return '<div class="pa-arriba">' + volverR(S.recAtras || 'viajar') + '<span class="pa-pastilla">Mueve el mapa</span></div>'
 				+ pinCentro(150)
 				+ '<section class="pa-hoja"><div class="p-hoja__asa"></div><p class="p-h2" style="margin:0">¿Te recogemos aquí?</p>'
 				+ '<p class="p-peq" style="margin:2px 0 14px" id="dir">' + esc(S.origen.texto) + '</p>'
@@ -980,7 +980,7 @@
 						var x = (LS.json('viajes') || [])[+a.dataset.rep]; if (!x) { return; }
 						S.origen = x.origen; S.destino = x.destino; S.precio = 0; S.cot = null;
 						if (x.clase === 'mensajero') { S.svc = 'mens'; S.modo = servDe(x); guardar(); ir(pantallaEnvio()); return; }
-						S.modo = 'viajar'; S.svc = 'viajar'; S.clase = x.clase; guardar(); ir('viajar');
+						S.modo = 'viajar'; S.svc = 'viajar'; S.clase = x.clase; S.recAtras = 'viajes'; guardar(); ir('recogida');
 					};
 				});
 			};
