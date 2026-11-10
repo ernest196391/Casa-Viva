@@ -439,8 +439,11 @@ $viaje6 = static function ( string $cid ) use ( $cot6, $H6, $P, $d6, $TV, $wpdb 
 	$q = $cot6();
 	list( , $d ) = pv_req( 'POST', 'viajes', array( 'cid' => $cid, 'firma' => $q['firma'], 'precio' => $q['justo'] ), $H6 );
 	$id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$TV} WHERE uuid=%s", $d['viaje']['uuid'] ) );
+	pv_ok( $id > 0, 'auditoría: pedido ' . $cid . ' ' . wp_json_encode( $d ) );
 	list( , $o ) = pv_req( 'POST', "chofer/pedidos/{$id}/ofertar", array( 'pct' => 0 ), $P( $d6 ) );
+	pv_ok( ! empty( $o['oferta']['id'] ), 'auditoría: oferta ' . $cid . ' ' . wp_json_encode( $o ) );
 	list( , $e ) = pv_req( 'POST', 'viajes/' . $d['viaje']['uuid'] . '/elegir', array( 'oferta' => $o['oferta']['id'] ), $H6 );
+	pv_ok( 'asignado' === ( $e['viaje']['estado'] ?? '' ), 'auditoría: elegir ' . $cid . ' ' . wp_json_encode( $e['message'] ?? '' ) );
 	return array( $id, $d['viaje']['uuid'], $e['viaje']['codigo'] ?? '' );
 };
 list( $ia, $ua, $ca ) = $viaje6( 'a1' );

@@ -755,6 +755,7 @@ final class CVD_Pv_Api {
 		$c = self::cliente( $request );
 		$v = self::por_uuid( (string) $request['uuid'] );
 		if ( ! $v || (int) $v->cliente_id !== (int) $c->id ) { return self::fail( 'no_existe', 'No encontramos ese viaje.', 404 ); }
+		$v = self::caducar( $v ); // 10-nov: también aquí (es lo que el cliente pregunta cada pocos segundos)
 		$rev = $request->get_param( 'rev' );
 		// En «buscando» las ofertas caducan solas (sin tocar rev), y en «llego» corre la espera: ahí siempre todo.
 		if ( null !== $rev && (int) $rev === (int) $v->rev && ! in_array( $v->estado, array( 'buscando', 'llego' ), true ) ) {
