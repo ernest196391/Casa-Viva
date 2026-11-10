@@ -395,7 +395,7 @@
 		var n = nombreCorto(v.pasajero.nombre);
 		var txt = 'Hola ' + n + ', te pedí un Pa\'llá. Te recoge ' + ((ch && ch.nombre) || 'el chofer') + (ch && ch.chapa ? ' (chapa ' + ch.chapa + ')' : '') + '. Código para subir: ' + v.codigo + '. Pagas al llegar: ' + miles(v.precio) + ' CUP.';
 		return '<div class="pa-codigo"><span>Código de ' + esc(n) + '</span><b>' + esc(v.codigo) + '</b><a class="p-btn p-btn--suave p-btn--chico" href="' + waLink(v.pasajero.telefono, txt) + '">' + ico('whatsapp', 'p-ico--16') + 'Mandar</a></div>'
-			+ '<p class="p-peq" style="margin:4px 0 0">Ya se lo mandamos por WhatsApp. Paga ' + esc(n) + ' al llegar.</p>';
+			+ '<p class="p-peq" style="margin:4px 0 0">' + (v.pasajero.avisado ? 'Ya se lo mandamos por WhatsApp.' : 'Mándaselo con el botón.') + ' Paga ' + esc(n) + ' al llegar.</p>';
 	}
 	SCR.pasajero = {
 		html: function () {
@@ -782,7 +782,7 @@
 	function escenaTramo(v) {
 		var rec = v.estado === 'recogido', img = U.veh(imgDe(v.clase), 'arriba');
 		var fin = rec ? [v.destino.lng, v.destino.lat] : [v.origen.lng, v.origen.lat];
-		var et = rec ? esc(corto(v.destino.texto)) : (esEnvio(v) ? 'Recogida' : 'Tú');
+		var et = rec ? esc(corto(v.destino.texto)) : (esEnvio(v) ? 'Recogida' : (v.pasajero ? esc(nombreCorto(v.pasajero.nombre)) : 'Tú'));
 		if (!deEsteTramo(v)) {
 			var pins = [[rec ? 'destino' : 'origen', fin, et]], cond = [];
 			if (v.pos) { cond.push(['chofer', img, [[v.pos.lng, v.pos.lat], [v.pos.lng + 0.0001, v.pos.lat]], 0]); }
@@ -867,7 +867,7 @@
 				}
 				if (paso === 'viene') {
 					return arribaViaje() + '<section class="pa-hoja"><div class="p-hoja__asa"></div>'
-						+ eta(llego ? 'Tu chofer llegó' : 'Tu ' + PALABRA[g] + ' viene', llego ? '' : 'Calculando…', v.precio, 'Fijo · ' + nombrePago(v.forma_pago).toLowerCase())
+						+ eta(v.pasajero ? (llego ? 'El chofer llegó por ' + esc(nombreCorto(v.pasajero.nombre)) : 'Va a recoger a ' + esc(nombreCorto(v.pasajero.nombre))) : (llego ? 'Tu chofer llegó' : 'Tu ' + PALABRA[g] + ' viene'), llego ? '' : 'Calculando…', v.precio, 'Fijo · ' + nombrePago(v.forma_pago).toLowerCase())
 						+ U.barra(imgDe(v.clase), '')
 						+ filaChofer(ch, subChofer(ch, v))
 						+ codigoSubir(v, ch)
@@ -926,8 +926,8 @@
 			var v = S.viaje, ch = v.chofer || {}, q = esc(nombreCorto(ch.nombre));
 			S.pagoFin = S.pagoFin || v.forma_pago;
 			return '<div class="pa-llena"><div class="pa-cuerpo" style="padding-top:32px">'
-				+ '<div class="pa-hecho">' + ico('check', 'p-ico--20') + '<div><p class="p-h2" style="margin:0">Llegaste a ' + esc(corto(v.destino.texto)) + '</p><p class="p-peq" style="margin:0">' + (v.terminado ? U.hhmm(new Date(v.terminado)) : U.hora(0)) + ' · ' + U.km(v.km) + ' km con ' + esc(ch.nombre || '') + '</p></div></div>'
-				+ monto('A pagar a ' + q + (v.espera ? ' · ' + cup(v.precio) + ' + ' + cup(v.espera) + ' de espera' : ' · lo acordado'), v.total)
+				+ '<div class="pa-hecho">' + ico('check', 'p-ico--20') + '<div><p class="p-h2" style="margin:0">' + (v.pasajero ? esc(nombreCorto(v.pasajero.nombre)) + ' llegó a ' : 'Llegaste a ') + esc(corto(v.destino.texto)) + '</p><p class="p-peq" style="margin:0">' + (v.terminado ? U.hhmm(new Date(v.terminado)) : U.hora(0)) + ' · ' + U.km(v.km) + ' km con ' + esc(ch.nombre || '') + '</p></div></div>'
+				+ monto((v.pasajero ? 'Paga ' + esc(nombreCorto(v.pasajero.nombre)) + ' a ' : 'A pagar a ') + q + (v.espera ? ' · ' + cup(v.precio) + ' + ' + cup(v.espera) + ' de espera' : ' · lo acordado'), v.total)
 				+ bloquePago(v)
 				+ (v.valorado ? '' : '<div><p class="pa-etq" style="text-align:center">¿Qué tal el viaje?</p>' + U.estrellas(S.estrellas) + '</div>'
 					+ '<div id="tras" class="pa-tras"' + (S.estrellas ? '' : ' hidden') + '><div class="pa-chips" style="justify-content:center"><button type="button" class="p-chip" data-etq="puntual">Puntual</button><button type="button" class="p-chip" data-etq="amable">Amable</button><button type="button" class="p-chip" data-etq="buen_vehiculo">Buen vehículo</button><button type="button" class="p-chip" data-etq="manejo_bien">Manejó bien</button></div>'

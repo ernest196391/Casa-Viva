@@ -864,7 +864,14 @@ final class CVD_Pv_Api {
 	/** 10-nov: quien viaja cuando el cliente pidió para otra persona (null = viaja el cliente; los envíos nunca). */
 	private static function pasajero( object $v ): ?array {
 		if ( 'mensajero' === $v->clase || '' === (string) $v->recibe_telefono ) { return null; }
-		return array( 'nombre' => (string) $v->recibe_nombre, 'telefono' => (string) $v->recibe_telefono );
+		return array( 'nombre' => (string) $v->recibe_nombre, 'telefono' => (string) $v->recibe_telefono, 'avisado' => self::pasajero_avisado( (int) $v->id ) );
+	}
+
+	/** Si el bot ya tiene en cola el WhatsApp a quien viaja (en prueba, a un móvil que no es de prueba no se le escribe). */
+	private static function pasajero_avisado( int $viaje_id ): bool {
+		global $wpdb;
+		$d = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT datos FROM ' . self::t( 'eventos' ) . " WHERE viaje_id=%d AND tipo='pv_pasajero_aviso' ORDER BY id DESC LIMIT 1", $viaje_id ) );
+		return '' !== $d && ! empty( json_decode( $d, true )['ok'] );
 	}
 
 	private static function nombre1( string $n ): string { return trim( (string) explode( ' ', trim( $n ) )[0] ); }

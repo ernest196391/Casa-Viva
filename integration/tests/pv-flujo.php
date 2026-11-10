@@ -384,7 +384,7 @@ pv_ok( $pp && 'Ana' === $pp[0]['cliente']['nombre'] && 'Marta' === $pp[0]['pide'
 list( , $o6 ) = pv_req( 'POST', "chofer/pedidos/{$idp}/ofertar", array( 'pct' => 0 ), $P( $d6 ) );
 $antes = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$TC} WHERE app='pva'" );
 list( $s, $e6 ) = pv_req( 'POST', 'viajes/' . $VP['uuid'] . '/elegir', array( 'oferta' => $o6['oferta']['id'] ), $H6 );
-pv_ok( 200 === $s && 'asignado' === $e6['viaje']['estado'], 'para otro: eligió chofer' );
+pv_ok( 200 === $s && 'asignado' === $e6['viaje']['estado'] && true === $e6['viaje']['pasajero']['avisado'], 'para otro: eligió chofer y el cliente ve que se avisó a Ana' );
 $av = $wpdb->get_row( "SELECT * FROM {$TC} WHERE app='pva' ORDER BY id DESC LIMIT 1" );
 pv_ok( $antes + 1 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$TC} WHERE app='pva'" ) && '5350000106' === $av->telefono && 'whatsapp' === $av->canal, 'para otro: WhatsApp a quien viaja en la cola del bot' );
 pv_ok( false !== strpos( $av->texto, 'Hola Ana' ) && false !== strpos( $av->texto, 'Marta te pidió' ) && false !== strpos( $av->texto, 'Código para subir: ' . $e6['viaje']['codigo'] ) && false !== strpos( $av->texto, 'Reinier P.' ), 'para otro: el mensaje lleva quién lo pidió, chofer y código' );
@@ -404,6 +404,8 @@ $idp2 = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$TV} WHERE uuid=%
 list( , $o6 ) = pv_req( 'POST', "chofer/pedidos/{$idp2}/ofertar", array( 'pct' => 0 ), $P( $d6 ) );
 list( $s ) = pv_req( 'POST', 'viajes/' . $d['viaje']['uuid'] . '/elegir', array( 'oferta' => $o6['oferta']['id'] ), $H6 );
 pv_ok( 200 === $s && 0 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$TC} WHERE telefono='5359990000'" ), 'para otro: en prueba no se escribe a un móvil que no es de prueba' );
+list( , $vv6 ) = pv_req( 'GET', 'viajes/' . $d['viaje']['uuid'], array(), $H6 );
+pv_ok( false === $vv6['viaje']['pasajero']['avisado'], 'para otro: el cliente ve que NO se avisó (y lo manda él)' );
 pv_req( 'POST', 'viajes/' . $d['viaje']['uuid'] . '/cancelar', array( 'motivo' => '' ), $H6 );
 list( , $d ) = pv_req( 'POST', 'viajes', array( 'cid' => 'p3', 'firma' => $cot6()['firma'], 'precio' => $el6['justo'], 'pasajero' => array( 'nombre' => 'Marta', 'telefono' => '50000105' ) ), $H6 );
 pv_ok( null === $d['viaje']['pasajero'], 'para otro: si pone su propio móvil, viaja él' );
