@@ -60,6 +60,7 @@ require_once CVD_DIR . 'includes/class-cvd-gestora-estudio.php';
 require_once CVD_DIR . 'includes/class-cvd-taller-core.php'; // 3.14.91: «Taller de fotos» (texto sin inventar)
 require_once CVD_DIR . 'includes/class-cvd-gestora-taller.php';
 require_once CVD_DIR . 'includes/class-cvd-content-studio.php';
+require_once CVD_DIR . 'includes/class-cvd-dudas-catalogo.php'; // panel v2: bandeja «Dudas del catálogo» (10-nov)
 require_once CVD_DIR . 'includes/class-cvd-photo-ai.php';
 CVD_Photo_AI::register();
 require_once CVD_DIR . 'includes/class-cvd-seller-store.php';
