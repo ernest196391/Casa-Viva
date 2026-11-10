@@ -221,7 +221,8 @@ final class CVD_Triciclub {
 		$hace1h = gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS );
 		$por_tel = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$t} WHERE telefono=%s AND created_at>%s AND app<>'pva'", $tel, $hace1h ) );
 		$por_ip = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$t} WHERE ip=%s AND created_at>%s AND app<>'pva'", $ip, $hace1h ) );
-		if ( $por_tel >= 3 || $por_ip >= 10 ) { return 'limit'; }
+		// 10-nov (auditoría): en ETECSA muchos móviles salen por la misma IP; el límite que cuenta es el del teléfono.
+		if ( $por_tel >= 3 || $por_ip >= 100 ) { return 'limit'; }
 		$cifras = 4 === $cifras ? 4 : 6; // 5-nov (Pa'llá, diseño aprobado): 4 cifras, 5 intentos, 15 min, 3 por hora
 		$codigo = str_pad( (string) random_int( 0, ( 10 ** $cifras ) - 1 ), $cifras, '0', STR_PAD_LEFT );
 		$now = CVD_Triciclub_Db::now();

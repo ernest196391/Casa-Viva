@@ -10,7 +10,7 @@
 	'use strict';
 	var GL = 'https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/';
 	var PMT = 'https://cdn.jsdelivr.net/npm/pmtiles@4.3.0/dist/pmtiles.js';
-	var SRV = 'https://179-236-242-212.sslip.io';
+	var SRV = (window.PV && window.PV.srv) || 'https://179-236-242-212.sslip.io'; // 10-nov: la da el servidor (opción cvd_tc_ruta_api)
 	var TILES = SRV + '/mapa/cuba-20261031.pmtiles';
 	var RUTA = SRV + '/route/v1/driving/';
 	var NS = 'http://www.w3.org/2000/svg';

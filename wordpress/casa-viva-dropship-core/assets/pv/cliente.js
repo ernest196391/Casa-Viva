@@ -415,7 +415,7 @@
 				+ '<div><label class="pa-etq" for="pn">Nombre de quien viaja</label><label class="p-campo">' + ico('usuario', 'p-ico--20') + '<input id="pn" maxlength="80" autocomplete="off" value="' + esc(p.nombre) + '"></label></div>'
 				+ '<div style="margin-top:12px"><label class="pa-etq" for="pt">Su móvil</label><div class="pa-tel"><span class="pref">+53</span><label class="p-campo"><input id="pt" inputmode="tel" maxlength="12" autocomplete="off" value="' + esc(p.tel) + '"></label></div></div>'
 				+ (contactos ? '<button type="button" class="p-btn p-btn--suave p-btn--ancho" id="agenda" style="margin-top:12px">' + ico('personas', 'p-ico--20') + 'Elegir de mis contactos</button>' : '')
-				+ '<p class="p-aviso" style="margin-top:12px">' + ico('whatsapp') + '<span>Le mandamos por WhatsApp el código para subir, el chofer y la chapa. Paga al llegar.</span></p>'
+				+ '<p class="p-aviso" style="margin-top:12px">' + ico('whatsapp') + '<span>Le mandamos el código por WhatsApp. Paga al llegar.</span></p>'
 				+ '</div><p class="p-aviso p-aviso--error" id="err" hidden></p>'
 				+ '</div><div class="pa-pie"><button type="button" class="p-btn p-btn--marca p-btn--ancho" id="listo">Listo</button></div></div>';
 		},
@@ -564,8 +564,8 @@
 				var cfg = {
 					q: claseCot(),
 					llega: function () { var q = claseCot(); return q.llega == null ? '—' : q.llega + ' min'; },
-					boton: function (p) { return 'Pedir ' + esc(nombreDe(S.clase)) + ' · ' + cup(p); },
-					alPintar: function () { var q = claseCot(), k = CLASES[q.clase] || {}; $('#res', r).textContent = (k.largo || k.nombre) + (k.plazas ? ' · ' + k.plazas + (/kg/.test(k.plazas) ? '' : (k.plazas === '1' ? ' plaza' : ' plazas')) : '') + ' · ' + q.minutos + ' min de viaje' + (q.llega == null ? ' · nadie cerca ahora' : ''); },
+					boton: function () { return 'Pedir ' + esc(nombreDe(S.clase)); }, // 10-nov (auditoría): el precio ya sale 2 veces encima
+					alPintar: function () { var q = claseCot(), k = CLASES[q.clase] || {}; $('#res', r).textContent = (k.plazas ? k.plazas + (/kg/.test(k.plazas) ? '' : (k.plazas === '1' ? ' plaza' : ' plazas')) + ' · ' : '') + q.minutos + ' min'; }, // 10-nov: el nombre ya está en la tarjeta y «nadie cerca» en «Llega —»
 					alPedir: function (p) {
 						var q = claseCot();
 						pedir({ grupo: 'viajar', nombre: nombreDe(q.clase) }, { cid: cid(), firma: q.firma, precio: p, primera: 0, forma_pago: S.pago, origen_texto: S.origen.texto, destino_texto: S.destino.texto, nota: S.nota, pasajero: S.pas && S.pas.otro ? { nombre: S.pas.nombre, telefono: S.pas.tel } : null });
@@ -670,7 +670,7 @@
 				+ '<section class="pa-hoja" style="max-height:74%"><div class="p-hoja__asa"></div>'
 				+ '<div class="pa-tuya"><div><p class="p-mini" style="margin:0 0 4px">Tu oferta · ' + esc(nombreServ(v)) + '</p><b id="tuya">' + cup(v.oferta) + '</b></div><button type="button" class="p-btn p-btn--suave p-btn--chico" id="subir">' + ico('mas', 'p-ico--16') + '10 %</button></div>'
 				// v3: «Coger la 1.ª oferta» vive aquí (donde importa). Al encenderlo, si ya hay un «Acepto», se coge al momento.
-				+ '<div class="pa-op" style="border-top:0;border-bottom:1px solid var(--linea)"><b>Coger la 1.ª que acepte</b><button type="button" class="p-interruptor" role="switch" aria-checked="' + !!v.primera + '" id="primera" aria-label="Coger la primera oferta que acepte mi precio"></button></div>'
+				+ '<div class="pa-op" style="border-top:0;border-bottom:1px solid var(--linea)"><b>Aceptar al primero</b><button type="button" class="p-interruptor" role="switch" aria-checked="' + !!v.primera + '" id="primera" aria-label="Coger la primera oferta que acepte mi precio"></button></div>'
 				+ '<div class="pa-ofertas" id="ofertas"></div><div id="esq">' + esqueleto() + esqueleto() + '</div></section>';
 		},
 		init: function (r) {
@@ -715,9 +715,9 @@
 				el.className = 'p-oferta'; el.dataset.id = o.id; el.dataset.p = o.precio; el.dataset.m = o.llega; el.dataset.vence = o.vence;
 				el.innerHTML = caraO(o.chofer)
 					+ '<div class="p-oferta__q">' + esc(o.chofer.nombre) + ' ' + U.estr(o.chofer.nota) + '</div>'
-					+ '<div class="p-oferta__precio">' + miles(o.precio) + '<small>' + (o.pct ? '+' + o.pct + ' %' : 'tu precio') + '</small></div>'
+					+ '<div class="p-oferta__precio">' + miles(o.precio) + (o.pct ? '<small>+' + o.pct + ' %</small>' : '') + '</div>'
 					+ '<div class="p-oferta__s">' + esc(o.chofer.tipo) + (o.chofer.color ? ' ' + esc(o.chofer.color.toLowerCase()) : '') + ' · ' + o.llega + ' min</div>'
-					+ '<button type="button" class="p-btn p-btn--suave" data-si>Aceptar ' + miles(o.precio) + '</button>'
+					+ '<button type="button" class="p-btn p-btn--suave" data-si>Aceptar</button>'
 					+ '<i class="p-oferta__tiempo" aria-hidden="true" style="transform:scaleX(' + Math.max(0, Math.min(1, U.seg(o.vence) / 60)).toFixed(3) + ')"></i>';
 				cont.insertBefore(el, cont.firstChild);
 				vibrar(40);
@@ -736,8 +736,8 @@
 			if (v.estado === 'sin_chofer') {
 				var mas = Math.min(v.max, arriba10(v.oferta * 1.1));
 				esq.innerHTML = '<p class="p-aviso" style="margin:12px 0">' + ico('info') + 'Nadie aceptó todavía.</p>'
-					+ (mas > v.oferta ? '<button type="button" class="p-btn p-btn--marca p-btn--ancho" data-otra="' + mas + '">Subir a ' + cup(mas) + ' y buscar</button>' : '')
-					+ '<button type="button" class="p-btn p-btn--texto p-btn--ancho" data-otra="' + v.oferta + '">Buscar otra vez a ' + cup(v.oferta) + '</button>';
+					+ (mas > v.oferta ? '<button type="button" class="p-btn p-btn--marca p-btn--ancho" data-otra="' + mas + '">Subir a ' + miles(mas) + '</button>' : '')
+					+ '<button type="button" class="p-btn p-btn--texto p-btn--ancho" data-otra="' + v.oferta + '">Buscar otra vez</button>';
 				$$('[data-otra]', esq).forEach(function (b) { b.onclick = function () { b.disabled = true; api('viajes/' + v.uuid + '/precio', { precio: +b.dataset.otra }).then(function (x) { if (x.data.ok) { cambio(x.data.viaje); } else { b.disabled = false; U.tostada(x.data.message || 'No se pudo.', 'alerta'); } }); }; });
 			} else {
 				var faltan = n >= 3 ? 0 : (n >= 2 ? 1 : 2); // esqueletos mientras llegan ofertas
@@ -810,9 +810,10 @@
 		U.pintarBarra(r, k, 'chofer');
 		var eta = $('#eta', r), llega = $('[data-llega]', r);
 		if (v.estado === 'llego' || !eta) { return; }
-		if (v.estado === 'recogido') { if (m != null) { eta.textContent = (esEnvio(v) ? 'Llega a las ' : 'Llegas a las ') + U.hora(m); if (llega) { llega.textContent = U.km(v.km) + ' km'; } } return; }
+		// 10-nov (auditoría): minutos, nunca la hora del reloj (el del móvil suele estar mal y confunde).
+		if (v.estado === 'recogido') { if (m != null) { eta.textContent = (esEnvio(v) ? 'Llega en ' : 'Llegas en ') + Math.max(1, m) + ' min'; if (llega) { llega.textContent = U.km(v.km) + ' km'; } } return; }
 		eta.textContent = m == null ? 'Viene hacia ti' : (m <= 0 ? 'Llegando' : (esEnvio(v) ? 'Recoge en ' : 'Llega en ') + m + ' min');
-		if (llega) { llega.textContent = m == null ? '' : 'Llega ' + U.hora(m); }
+		if (llega) { llega.textContent = ''; }
 	}
 	function filaChofer(ch, sub) {
 		var tel = ch.telefono ? U.tel53(ch.telefono) : '';
@@ -882,12 +883,15 @@
 						+ '<button type="button" class="p-btn p-btn--texto pa-cancelar" id="cancelar">Cancelar</button></section>';
 				}
 				return arribaViaje() + '<section class="pa-hoja"><div class="p-hoja__asa"></div>'
-					+ eta('Camino a ' + esc(corto(v.destino.texto)), 'Llegas a las ' + U.hora(v.minutos), v.total, v.espera ? 'Incluye ' + cup(v.espera) + ' de espera' : 'Fijo · no cambia')
+					+ eta('Camino a ' + esc(corto(v.destino.texto)), 'Llegas en ' + Math.max(1, v.minutos) + ' min', v.total, v.espera ? 'Incluye ' + cup(v.espera) + ' de espera' : 'Fijo')
+					+ '<button type="button" class="p-btn p-btn--texto pa-cancelar" id="yallegue">Ya llegué</button>'
 					+ U.barra(imgDe(v.clase), U.km(v.km) + ' km')
 					+ filaChofer(ch, subChofer(ch, v)) + '</section>';
 			},
 			init: function (r) {
 				engancharViaje(r);
+				var yl = $('#yallegue', r); // 10-nov (auditoría): si el chofer no toca «Terminé», el cliente cierra el viaje
+				if (yl) { yl.onclick = function () { var b = this; b.disabled = true; api('viajes/' + S.viaje.uuid + '/llegue', {}).then(function (x) { b.disabled = false; if (x.data.viaje) { cambio(x.data.viaje); } else { U.tostada(x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No se pudo.'), 'alerta'); } }); }; }
 				var c = $('#cancelar', r); if (c) { c.onclick = function () { cancelar(this); }; }
 				var self = this;
 				prepararTramo(S.viaje).then(function () { if (actual && SCR[actual] === self && S.viaje) { escenaActual(); moverBarra(r, S.viaje); } });
@@ -935,11 +939,11 @@
 			S.pagoFin = S.pagoFin || v.forma_pago;
 			return '<div class="pa-llena"><div class="pa-cuerpo" style="padding-top:32px">'
 				+ '<div class="pa-hecho">' + ico('check', 'p-ico--20') + '<div><p class="p-h2" style="margin:0">' + (v.pasajero ? esc(nombreCorto(v.pasajero.nombre)) + ' llegó a ' : 'Llegaste a ') + esc(corto(v.destino.texto)) + '</p><p class="p-peq" style="margin:0">' + (v.terminado ? U.hhmm(new Date(v.terminado)) : U.hora(0)) + ' · ' + U.km(v.km) + ' km con ' + esc(ch.nombre || '') + '</p></div></div>'
-				+ monto((v.pasajero ? 'Paga ' + esc(nombreCorto(v.pasajero.nombre)) + ' a ' : 'A pagar a ') + q + (v.espera ? ' · ' + cup(v.precio) + ' + ' + cup(v.espera) + ' de espera' : ' · lo acordado'), v.total)
+				+ monto((v.pasajero ? 'Paga ' + esc(nombreCorto(v.pasajero.nombre)) + ' a ' : 'A pagar a ') + q + (v.espera ? ' · ' + cup(v.precio) + ' + ' + cup(v.espera) + ' de espera' : ''), v.total)
 				+ bloquePago(v)
 				+ (v.valorado ? '' : '<div><p class="pa-etq" style="text-align:center">¿Qué tal el viaje?</p>' + U.estrellas(S.estrellas) + '</div>'
 					+ '<div id="tras" class="pa-tras"' + (S.estrellas ? '' : ' hidden') + '><div class="pa-chips" style="justify-content:center"><button type="button" class="p-chip" data-etq="puntual">Puntual</button><button type="button" class="p-chip" data-etq="amable">Amable</button><button type="button" class="p-chip" data-etq="buen_vehiculo">Buen vehículo</button><button type="button" class="p-chip" data-etq="manejo_bien">Manejó bien</button></div>'
-					+ '<p class="pa-etq" style="text-align:center;margin-top:16px">Propina para ' + q + '</p><div class="pa-chips" style="justify-content:center"><button type="button" class="p-chip" data-prop="10">+10</button><button type="button" class="p-chip" data-prop="20">+20</button><button type="button" class="p-chip" data-prop="50">+50</button><button type="button" class="p-chip" data-prop="0" aria-pressed="true">Nada</button></div></div>')
+					+ '</div>') // 10-nov (auditoría): sin propina (el chofer nunca la veía)
 				+ '</div><div class="pa-pie"><button type="button" class="p-btn p-btn--marca p-btn--ancho" id="listo">Listo</button></div></div>';
 		},
 		init: function (r) {
@@ -1011,7 +1015,7 @@
 			var t = x.clase === 'mensajero' ? (x.que ? x.que + ' a ' : (sv === 'paquete' ? 'Envío a ' : SV[sv] + ' a ')) + corto(x.destino.texto) : corto(x.destino.texto);
 			h += '<button type="button" class="p-fila pa-viaje pa-pedido-h" data-rep="' + i + '"><img src="' + U.veh(imgServ(x)) + '" alt="" width="56" height="34"><span class="p-fila__txt"><b>' + esc(t) + '</b><span>' + esc(SV[sv] || nombreDe(x.clase)) + ' · ' + cuando + (x.chofer ? ' · ' + esc(nombreCorto(x.chofer)) : '') + (x.foto ? ' · con foto' : '') + estado + '</span></span><span class="p-fila__fin">' + (x.estado === 'terminado' ? cup(x.total) : '') + '</span></button>';
 		});
-		return h + '<p class="p-aviso" style="margin-top:20px">' + ico('guardado') + 'Se ven aunque no haya señal.</p>';
+		return h + '<p class="p-aviso" style="margin-top:20px">' + ico('guardado') + '</p>';
 	}
 
 	// ---------- Perfil ----------
@@ -1024,7 +1028,7 @@
 				+ '<div class="pa-yo"><span class="p-cara" style="width:48px;height:48px;font-size:16px">' + esc(U.iniciales(yo.nombre)) + '</span><div><p class="p-h2" style="margin:0">' + esc(yo.nombre || '') + '</p><p class="p-peq" style="margin:0">' + esc(U.telBonito(yo.telefono || LS.get('tel'))) + (yo.nota != null ? ' · ★ ' + String(yo.nota).replace('.', ',') : '') + '</p></div></div>'
 				+ '<p class="pa-etq">Mis lugares</p>' + fila('data-lugar="casa"', 'casa', 'Casa', lug.casa ? esc(lug.casa.texto) : 'Toca para ponerla') + fila('data-lugar="trabajo"', 'trabajo', 'Trabajo', lug.trabajo ? esc(lug.trabajo.texto) : 'Toca para ponerlo')
 				+ '<p class="pa-etq">Seguridad</p>' + fila('id="ayuda"', 'escudo', 'Ayuda en un viaje', 'Policía 106 y Pa\'llá')
-				+ '<p class="pa-etq">Pantalla</p><div class="pa-seg" style="grid-template-columns:1.4fr 1fr 1fr">' + op('auto', 'De noche') + op('claro', 'Claro') + op('oscuro', 'Oscuro') + '</div>'
+				+ '<p class="pa-etq">Pantalla</p><div class="pa-seg" style="grid-template-columns:1.4fr 1fr 1fr">' + op('auto', 'Auto') + op('claro', 'Claro') + op('oscuro', 'Oscuro') + '</div>'
 				+ '<p class="pa-etq">Más</p>' + fila('id="pago"', S.pago === 'transferencia' ? 'transfer' : 'efectivo', 'Pago preferido', nombrePago()) + '<a class="p-fila" href="#viajes"><span class="p-fila__ico">' + ico('lista') + '</span><span class="p-fila__txt"><b>Mis viajes</b></span></a>'
 				+ '<button type="button" class="p-fila" id="salir" style="color:var(--error)"><span class="p-fila__ico" style="color:var(--error)">' + ico('salir') + '</span><span class="p-fila__txt"><b>Salir</b></span></button>'
 				+ '</div></div>';
@@ -1128,7 +1132,7 @@
 				+ '<div><label class="pa-etq" for="que">¿Qué es?</label><label class="p-campo"><input id="que" maxlength="120" value="' + esc(e.que) + '" placeholder="Ej.: 2 pizzas, ya encargadas"></label></div>'
 				+ '<div><p class="pa-etq">¿El mensajero la paga al recoger?</p>' + seg('paga', 'No, ya está pagada', 'Sí, la paga', e.paga) + '</div>'
 				+ campoCup('pagaN', e.pagaCup, e.paga, 'Cuánto paga al recoger')
-				+ '<p class="p-peq" id="tope" style="margin:-8px 0 0;display:' + (e.paga ? '' : 'none') + '">Hasta ' + cup(TOPE_COMIDA) + '. Si es más, paga tú al restaurante por Transfermóvil.</p>'
+				+ '<p class="p-peq" id="tope" style="margin:-8px 0 0;display:' + (e.paga ? '' : 'none') + '">Máximo ' + cup(TOPE_COMIDA) + '.</p>'
 				+ '<div><p class="pa-etq">¿Cobrar al entregar?</p>' + seg('cobrar', 'No', 'Sí, cobrar', e.cobrar || e.paga) + '</div>'
 				+ '<p class="p-aviso" id="cobraT" style="display:' + (e.paga ? 'flex' : 'none') + '">' + ico('efectivo') + '<span>Cobra la comida + el envío</span></p>'
 				+ campoCup('cobraN', e.cobrarCup, e.cobrar && !e.paga, 'Cuánto cobrar al entregar')
@@ -1273,7 +1277,8 @@
 	function programar() {
 		clearTimeout(poll);
 		var v = S.viaje; if (!v || ACTIVOS.indexOf(v.estado) < 0) { return; }
-		var ms = document.hidden ? 30000 : (v.estado === 'buscando' || v.estado === 'sin_chofer' ? 4000 : 15000);
+		if (v.estado === 'sin_chofer') { return; } // 10-nov (auditoría): «Nadie aceptó» ya no pregunta sin fin; sube o busca otra vez
+		var ms = document.hidden ? 30000 : (v.estado === 'buscando' ? 4000 : 15000);
 		poll = setTimeout(function () { refrescar().then(programar); }, ms);
 	}
 	function refrescar() {

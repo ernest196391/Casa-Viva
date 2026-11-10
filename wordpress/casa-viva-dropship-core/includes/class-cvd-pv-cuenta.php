@@ -27,7 +27,13 @@ final class CVD_Pv_Cuenta {
 	/** Saldo: + debe, − a su favor. Los pagos rechazados no cuentan. */
 	public static function saldo( int $chofer_id ): int {
 		global $wpdb;
-		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COALESCE(SUM(cup),0) FROM ' . CVD_Triciclub_Db::t( 'cuenta' ) . " WHERE chofer_id=%d AND estado<>'rechazado'", $chofer_id ) );
+		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COALESCE(SUM(cup),0) FROM ' . CVD_Triciclub_Db::t( 'cuenta' ) . " WHERE chofer_id=%d AND estado NOT IN ('rechazado','revision')", $chofer_id ) );
+	}
+
+	/** 10-nov (auditoría): «No me pagó» → la comisión de ese viaje queda «en revisión» (no cuenta como deuda). */
+	public static function revision( int $viaje_id ): void {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( 'UPDATE ' . CVD_Triciclub_Db::t( 'cuenta' ) . " SET estado='revision', updated_at=%s WHERE viaje_id=%d AND tipo='comision' AND estado='ok'", CVD_Triciclub_Db::now(), $viaje_id ) );
 	}
 
 	/** ¿Se le pausan los viajes en efectivo? */

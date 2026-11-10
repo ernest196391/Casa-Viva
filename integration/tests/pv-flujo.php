@@ -433,6 +433,47 @@ pv_ok( null === $d['viaje']['pasajero'], 'para otro: si pone su propio móvil, v
 pv_req( 'POST', 'viajes/' . $d['viaje']['uuid'] . '/cancelar', array( 'motivo' => '' ), $H6 );
 $wpdb->query( "DELETE FROM {$TC} WHERE app='pva'" );
 
+// ---------- 10-nov: arreglos de la auditoría
+$TCH = CVD_Triciclub_Db::t( 'choferes' );
+$viaje6 = static function ( string $cid ) use ( $cot6, $H6, $P, $d6, $TV, $wpdb ): array {
+	$q = $cot6();
+	list( , $d ) = pv_req( 'POST', 'viajes', array( 'cid' => $cid, 'firma' => $q['firma'], 'precio' => $q['justo'] ), $H6 );
+	$id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$TV} WHERE uuid=%s", $d['viaje']['uuid'] ) );
+	list( , $o ) = pv_req( 'POST', "chofer/pedidos/{$id}/ofertar", array( 'pct' => 0 ), $P( $d6 ) );
+	list( , $e ) = pv_req( 'POST', 'viajes/' . $d['viaje']['uuid'] . '/elegir', array( 'oferta' => $o['oferta']['id'] ), $H6 );
+	return array( $id, $d['viaje']['uuid'], $e['viaje']['codigo'] ?? '' );
+};
+list( $ia, $ua, $ca ) = $viaje6( 'a1' );
+$wpdb->update( $TCH, array( 'lat' => $O[0] + 0.02, 'ubicado_at' => CVD_Triciclub_Db::now() ), array( 'user_id' => $d6 ) ); // a ~2,2 km
+list( $s, $x ) = pv_req( 'POST', "chofer/viajes/{$ia}/estado", array( 'accion' => 'llegue' ), $P( $d6 ) );
+pv_ok( 409 === $s && 'lejos' === $x['code'], 'auditoría: «Llegué» desde lejos no vale' );
+$wpdb->update( $TCH, array( 'lat' => $O[0] + 0.001 ), array( 'user_id' => $d6 ) );
+list( $s ) = pv_req( 'POST', "chofer/viajes/{$ia}/estado", array( 'accion' => 'llegue' ), $P( $d6 ) );
+list( $s2 ) = pv_req( 'POST', "chofer/viajes/{$ia}/estado", array( 'accion' => 'recogi', 'codigo' => $ca ), $P( $d6 ) );
+pv_ok( 200 === $s && 200 === $s2, 'auditoría: cerca sí (llegué y recogí)' );
+list( $s, $x ) = pv_req( 'POST', 'viajes/' . $ua . '/llegue', array(), $H6 );
+pv_ok( 409 === $s && 'pronto' === $x['code'], 'auditoría: «Ya llegué» del cliente no vale nada más subir' );
+$wpdb->update( $TV, array( 'recogido_at' => gmdate( 'Y-m-d H:i:s', time() - 600 ) ), array( 'id' => $ia ) );
+list( $s, $x ) = pv_req( 'POST', 'viajes/' . $ua . '/llegue', array(), $H6 );
+pv_ok( 200 === $s && 'terminado' === $x['viaje']['estado'], 'auditoría: el cliente cierra con «Ya llegué» si el chofer no toca Terminé' );
+pv_req( 'POST', "chofer/viajes/{$ia}/estado", array( 'accion' => 'cobrado' ), $P( $d6 ) );
+update_option( 'cvd_pv_comision_pct', 8 );
+list( $ib, $ub, $cb ) = $viaje6( 'b1' );
+pv_req( 'POST', "chofer/viajes/{$ib}/estado", array( 'accion' => 'llegue' ), $P( $d6 ) );
+pv_req( 'POST', "chofer/viajes/{$ib}/estado", array( 'accion' => 'recogi', 'codigo' => $cb ), $P( $d6 ) );
+$wpdb->update( $TV, array( 'recogido_at' => gmdate( 'Y-m-d H:i:s', time() - 3 * HOUR_IN_SECONDS ) ), array( 'id' => $ib ) );
+list( , $vb ) = pv_req( 'GET', 'viajes/' . $ub, array(), $H6 );
+pv_ok( 'terminado' === $vb['viaje']['estado'], 'auditoría: un viaje colgado en «recogido» se cierra solo' );
+pv_ok( CVD_Pv_Cuenta::saldo( $d6 ) > 0, 'auditoría: el cierre solo apunta la comisión (8 %)' );
+list( $s ) = pv_req( 'POST', "chofer/viajes/{$ib}/estado", array( 'accion' => 'nopago' ), $P( $d6 ) );
+pv_ok( 200 === $s && 0 === CVD_Pv_Cuenta::saldo( $d6 ), 'auditoría: «No me pagó» deja esa comisión en revisión (no es deuda)' );
+update_option( 'cvd_pv_comision_pct', 0 );
+list( $s ) = pv_req( 'POST', 'yo', array( 'lugares' => array( 'casa' => array( 'texto' => 'Calle N e/ 23 y 25', 'lat' => 23.14069, 'lng' => -82.38138 ) ) ), $H6 );
+$lg = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT lugares FROM ' . CVD_Triciclub_Db::t( 'clientes' ) . ' WHERE id=%d', (int) $cli6->id ) );
+pv_ok( 200 === $s && false !== strpos( $lg, 'Calle N' ) && false === get_option( 'cvd_pv_lugares_' . (int) $cli6->id ), 'auditoría: Casa y Trabajo en la tabla de clientes' );
+list( , $yo6 ) = pv_req( 'GET', 'yo', array(), $H6 );
+pv_ok( 'Calle N e/ 23 y 25' === ( $yo6['yo']['lugares']['casa']['texto'] ?? '' ), 'auditoría: y se leen de ahí' );
+
 // ---------- Limpieza
 $wpdb->delete( CVD_Triciclub_Db::t( 'viajes' ), array( 'cliente_id' => (int) $cli6->id ) );
 $wpdb->delete( CVD_Triciclub_Db::t( 'clientes' ), array( 'id' => (int) $cli6->id ) );

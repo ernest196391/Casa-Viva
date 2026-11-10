@@ -81,6 +81,7 @@
 	// Pantalla encendida mientras está en línea (si el móvil lo deja).
 	var luz = null;
 	function pantallaEncendida(si) {
+		if (window.PallaApp && window.PallaApp.setToken) { return; } // 10-nov (auditoría): en la app no hace falta (y gasta batería)
 		try {
 			if (si && !luz && navigator.wakeLock) { navigator.wakeLock.request('screen').then(function (l) { luz = l; l.addEventListener('release', function () { luz = null; }); }).catch(function () { }); }
 			if (!si && luz) { luz.release(); luz = null; }
@@ -108,6 +109,7 @@
 	function mandarPos() {
 		clearTimeout(envio); envio = 0;
 		if (!H || !H.ficha || !(H.ficha.disponible || H.activo)) { return; }
+		if (window.PallaApp && window.PallaApp.setToken && !document.hidden) { envio = setTimeout(mandarPos, 60000); return; } // 10-nov: en la app la manda el servicio (una sola fuente)
 		var sig = function () { envio = setTimeout(mandarPos, H && H.activo ? 10000 : 30000); };
 		if (!S.pos) { sig(); return; }
 		api('chofer/posicion', { lat: S.pos.lat.toFixed(6), lng: S.pos.lng.toFixed(6), precision: S.pos.prec }).then(sig, sig);
@@ -170,9 +172,9 @@
 		html: function () {
 			var f = H.ficha, on = f.disponible, g = grupoDe(f.clase), n = (H.pedidos || []).length, cu = H.cuenta || {};
 			var op = function (id, b, s, v) { return '<div class="pa-op"><div><b>' + b + '</b><span>' + s + '</span></div><button type="button" class="p-interruptor" role="switch" aria-checked="' + v + '" data-op="' + id + '" aria-label="' + b + '"></button></div>'; };
-			var ops = (g !== 'mens' ? op('pasaje', 'Pasaje', esc(f.tipo) + (f.plazas ? ' · ' + f.plazas + ' plazas' : ''), f.pasaje) : '') + (g === 'tric' || g === 'moto' ? op('envios', 'Envíos', g === 'moto' || f.clase === 'tric_bici' ? 'En la mano o mochila' : 'Lo que quepa en el triciclo', f.envios) : '')
+			var ops = (g !== 'mens' ? op('pasaje', 'Pasaje', esc(f.tipo) + (f.plazas ? ' · ' + f.plazas + ' plazas' : ''), f.pasaje) : '') + (g === 'tric' || g === 'moto' ? op('envios', 'Envíos', g === 'moto' || f.clase === 'tric_bici' ? 'En la mano o mochila' : '', f.envios) : '')
 				// v3: solo quien lo marca ve la comida que hay que pagar al recoger (y le vuelve al entregar).
-				+ (g === 'mens' || f.envios ? op('adelanta', 'Puedo adelantar dinero', 'Comida pagada al recoger · hasta ' + cup(f.adelanta_tope || 5000), !!f.adelanta) : '');
+				+ (g === 'mens' || f.envios ? op('adelanta', 'Puedo adelantar dinero', 'Hasta ' + cup(f.adelanta_tope || 5000), !!f.adelanta) : '');
 			return '<div class="pa-llena">' + cabChofer('Hola, ' + esc(nombreCorto(H.nombre))) + '<div class="pa-cuerpo">'
 				+ '<div class="pa-total"><div><p class="p-mini">Hoy</p><span class="p-precio">' + cupG(H.hoy.cup) + '</span></div><a class="p-btn p-btn--suave p-btn--chico" href="#ch-ganancias">' + H.hoy.viajes + (H.hoy.viajes === 1 ? ' viaje' : ' viajes') + ico('sigue', 'p-ico--16') + '</a></div>'
 				+ '<button type="button" class="pa-conectar ' + (on ? 'is-on' : '') + '" id="con" aria-pressed="' + on + '">' + ico('encender') + '<span>' + (on ? 'En línea' : 'Conectarme') + '</span></button>'
@@ -212,7 +214,7 @@
 	function firma(p) { return p.id + '|' + p.oferta + '|' + (p.mia ? p.mia.estado + p.mia.precio : ''); }
 	function tarjeta(p) {
 		var cli = p.cliente || { nombre: 'Cliente' }, env = p.envio;
-		var quien = esc(cli.nombre) + (p.pide ? ' (lo pide ' + esc(p.pide) + ')' : '') + ' ' + (cli.nota != null ? '★ ' + String(cli.nota).replace('.', ',') : '· nuevo') + (env ? ' · ' + esc((TAM[env.tam] || '').toLowerCase()) + ' · ' + esc(env.que) : (cli.viajes ? ' · ' + cli.viajes + ' viajes' : '')) + (p.forma_pago === 'transferencia' ? ' · Transfermóvil' : '');
+		var quien = esc(cli.nombre) + (p.pide ? ' (lo pide ' + esc(p.pide) + ')' : '') + ' ' + (cli.nota != null ? '★ ' + String(cli.nota).replace('.', ',') : (cli.viajes ? '' : '· nuevo')) + (env ? ' · ' + esc((TAM[env.tam] || '').toLowerCase()) + ' · ' + esc(env.que) : (cli.viajes ? ' · ' + cli.viajes + ' viajes' : '')) + (p.forma_pago === 'transferencia' ? ' · Transfermóvil' : '');
 		var bots = (p.contra || []).map(function (c) { return '<button type="button" class="' + (c.pct ? '' : 'acepto') + '" data-pct="' + c.pct + '">' + (c.pct ? miles(c.precio) + '<small>+' + c.pct + ' %</small>' : 'Acepto<small>' + miles(c.precio) + '</small>') + '</button>'; }).join('');
 		var mia = p.mia && p.mia.estado === 'activa';
 		return '<article class="pa-pedido' + (mia ? ' is-enviado' : '') + '" data-id="' + p.id + '" data-firma="' + esc(firma(p)) + '" data-hasta="' + esc(mia ? p.mia.vence : p.hasta) + '" data-total="' + (mia ? 60 : 240) + '">'
@@ -323,7 +325,15 @@
 		var v = H.activo, cuerpo = { accion: a };
 		Object.keys(extra || {}).forEach(function (k) { cuerpo[k] = extra[k]; });
 		if (b) { b.disabled = true; }
-		return api('chofer/viajes/' + v.id + '/estado', cuerpo).then(function (x) {
+		// 10-nov (auditoría): sin señal, Llegué/Recogí/Terminé se repiten solos (3 veces, cada 4 s); el servidor ignora el repetido.
+		var intento = function (k) {
+			return api('chofer/viajes/' + v.id + '/estado', cuerpo).then(function (x) {
+				if (x.status !== 0 || k >= 3) { return x; }
+				U.tostada('Sin señal. Lo repito…', 'alerta');
+				return new Promise(function (ok) { setTimeout(ok, 4000); }).then(function () { return intento(k + 1); });
+			});
+		};
+		return intento(1).then(function (x) {
 			if (b) { b.disabled = false; }
 			if (!x.data.ok) {
 				avisoErr(r, x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No se pudo.'));
@@ -360,7 +370,7 @@
 			// v3: la etiqueta del pedido y, en la comida que adelanta, cuánto paga y la foto del recibo (sin foto no sale).
 			var etq = v.etiqueta && v.etiqueta !== 'Pasaje' && v.etiqueta !== 'Paquete' ? '<p class="p-aviso' + (env && env.adelanto ? ' p-aviso--aviso' : '') + '" style="margin:10px 0 4px">' + ico(v.servicio === 'carga' ? 'caja' : 'efectivo') + '<span><b>' + esc(v.etiqueta) + '</b>' + (env && env.recoge ? ' · en ' + esc(env.recoge) : '') + (env && env.adelanto ? '. Te lo devuelven al entregar.' : '') + '</span></p>' : '';
 			var adel = env && env.adelanto;
-			var recibo = adel ? '<label class="p-btn p-btn--suave p-btn--ancho" style="margin-top:12px">' + ico('camara', 'p-ico--20') + '<span id="recibo-t">' + (env.recibo ? 'Foto del recibo hecha · otra' : 'Foto del recibo (' + cup(env.adelanto) + ')') + '</span><input type="file" id="recibo" accept="image/*" capture="environment" hidden></label>' : '';
+			var recibo = adel ? '<label class="p-btn p-btn--suave p-btn--ancho" style="margin-top:12px">' + ico('camara', 'p-ico--20') + '<span id="recibo-t">' + (env.recibo ? 'Recibo ✓ · repetir' : 'Foto del recibo (' + cup(env.adelanto) + ')') + '</span><input type="file" id="recibo" accept="image/*" capture="environment" hidden></label>' : '';
 			var abajo = !llegue
 				? filaPersona(cli.nombre, cli.nota, (env ? 'Manda: ' + esc(env.que) : 'Pasajero' + (v.pide ? ' · lo pidió ' + esc(v.pide) : '')) + (cli.viajes ? ' · ' + cli.viajes + ' viajes' : ''), cli.telefono) + '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="llegue" style="margin-top:14px">Llegué</button>'
 				: (env ? filaPersona(cli.nombre, cli.nota, 'Manda: ' + esc(env.que), cli.telefono) + recibo + '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="recogi" style="margin-top:14px"' + (adel && !env.recibo ? ' disabled' : '') + '>' + ico('check', 'p-ico--20') + ({ comida: 'Recogí la comida', carga: 'Cargado' }[v.servicio] || 'Recogí el paquete') + '</button>'
@@ -373,7 +383,7 @@
 				+ (v.nota ? '<p class="p-aviso" style="margin:10px 0 4px">' + ico('nota') + '«' + esc(v.nota) + '»</p>' : '')
 				+ abajo
 				+ '<p class="p-aviso p-aviso--error" id="err" hidden></p>'
-				+ '<button type="button" class="p-btn p-btn--texto pa-cancelar" id="soltar">No puedo ir</button></section>';
+				+ '<button type="button" class="p-btn p-btn--texto pa-cancelar" id="soltar">' + (llegue ? 'Soltar viaje' : 'No puedo ir') + '</button></section>';
 		},
 		init: function (r) {
 			var v = H.activo;
@@ -387,7 +397,7 @@
 					var fd = new FormData(); fd.append('foto', f); fd.append('tipo', 'recibo');
 					api('chofer/viajes/' + v.id + '/foto', fd).then(function (x) {
 						if (!x.data.ok) { $('#recibo-t', r).textContent = 'Foto del recibo'; avisoErr(r, x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No llegó la foto.')); return; }
-						v.envio.recibo = true; guardarH(); $('#recibo-t', r).textContent = 'Foto del recibo hecha · otra'; U.tostada('Foto del recibo guardada'); if (rc) { rc.disabled = false; }
+						v.envio.recibo = true; guardarH(); $('#recibo-t', r).textContent = 'Recibo ✓ · repetir'; U.tostada('Foto del recibo guardada'); if (rc) { rc.disabled = false; }
 					});
 				};
 			}
@@ -410,9 +420,9 @@
 					+ '<section class="pa-hoja"><div class="p-hoja__asa"></div>'
 					+ eta('Entregar a ' + rn + ' · ' + U.km(v.km) + ' km', esc(corto(v.destino.texto)), v.total, nombrePago(v.forma_pago))
 					+ (v.etiqueta && v.etiqueta !== 'Paquete' ? '<p class="p-aviso" style="margin:10px 0 4px">' + ico(v.servicio === 'carga' ? 'caja' : 'efectivo') + '<span><b>' + esc(v.etiqueta) + '</b></span></p>' : '')
-					+ (env.cobrar ? '<p class="p-aviso p-aviso--aviso" style="margin:10px 0 4px">' + ico('efectivo') + '<span>Cobra a ' + rn + ' <b>' + cup(env.cobrar) + '</b> al entregar' + (v.servicio === 'comida' ? ' (la comida' + (env.adelanto ? ' que pagaste' : '') + ') + el envío' : '') + '.</span></p>' : '')
+					+ (env.cobrar ? '<p class="p-aviso p-aviso--aviso" style="margin:10px 0 4px">' + ico('efectivo') + '<span>Cobra <b>' + miles(env.cobrar) + '</b>' + (v.servicio === 'comida' ? ' + envío' : '') + '</span></p>' : '')
 					+ filaPersona(env.recibe || 'Quien recibe', false, 'Recibe · ' + esc(env.que), env.telefono)
-					+ '<label class="p-btn p-btn--suave p-btn--ancho" style="margin-top:12px">' + ico('camara', 'p-ico--20') + '<span id="foto-t">' + (env.foto ? 'Foto hecha · otra' : 'Hacer la foto de la entrega') + '</span><input type="file" id="foto" accept="image/*" capture="environment" hidden></label>'
+					+ '<label class="p-btn p-btn--suave p-btn--ancho" style="margin-top:12px">' + ico('camara', 'p-ico--20') + '<span id="foto-t">' + (env.foto ? 'Foto ✓ · repetir' : 'Foto de entrega') + '</span><input type="file" id="foto" accept="image/*" capture="environment" hidden></label>'
 					+ cajasCodigo('Pide el código a ' + rn)
 					+ '<p class="p-aviso p-aviso--error" id="err" hidden></p>'
 					+ '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="fin" disabled>' + ico('check', 'p-ico--20') + 'Entregado</button></section>';
@@ -433,8 +443,8 @@
 					$('#foto-t', r).textContent = 'Subiendo la foto…';
 					var fd = new FormData(); fd.append('foto', f);
 					api('chofer/viajes/' + v.id + '/foto', fd).then(function (x) {
-						if (!x.data.ok) { $('#foto-t', r).textContent = 'Hacer la foto de la entrega'; avisoErr(r, x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No llegó la foto.')); return; }
-						v.envio.foto = true; guardarH(); $('#foto-t', r).textContent = 'Foto hecha · otra'; U.tostada('Foto guardada'); listo();
+						if (!x.data.ok) { $('#foto-t', r).textContent = 'Foto de entrega'; avisoErr(r, x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No llegó la foto.')); return; }
+						v.envio.foto = true; guardarH(); $('#foto-t', r).textContent = 'Foto ✓ · repetir'; U.tostada('Foto guardada'); listo();
 					});
 				};
 			}
@@ -452,20 +462,20 @@
 			return '<div class="pa-llena">' + cabChofer('Cobrar') + '<div class="pa-cuerpo">'
 				+ monto('Cobra a ' + n + ' · ' + nombrePago(v.forma_pago).toLowerCase(), v.total)
 				+ (v.espera ? '<p class="p-peq" style="text-align:center;margin:-8px 0 0">' + cup(v.precio) + ' + ' + cup(v.espera) + ' de espera</p>' : '')
-				+ '<p class="p-peq" style="text-align:center;margin:-8px 0 0">Si paga por Transfermóvil, espera el SMS del banco.</p>'
+				+ (v.forma_pago === 'transferencia' ? '<p class="p-peq" style="text-align:center;margin:-8px 0 0">Espera el SMS del banco.</p>' : '')
 				+ (v.envio && v.envio.cobrar ? '<p class="p-aviso">' + ico('info') + '<span>Los ' + cup(v.envio.cobrar) + ' que cobraste al entregar son de ' + n + '.</span></p>' : '')
 				+ '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="cob">' + ico('check', 'p-ico--20') + 'Cobrado</button>'
-				+ (v.valorado ? '' : '<div><p class="pa-etq" style="text-align:center">¿Qué tal ' + n + '?</p>' + U.estrellas(5) + '</div>'
-					+ '<div class="pa-chips" style="justify-content:center"><button type="button" class="p-chip" data-etq="puntual" aria-pressed="true">Puntual</button><button type="button" class="p-chip" data-etq="amable">Amable</button><button type="button" class="p-chip" data-etq="problema">Problema</button></div>')
+				+ (v.valorado ? '' : '<div><p class="pa-etq" style="text-align:center">¿Qué tal ' + n + '?</p>' + U.estrellas(0) + '</div>'
+					+ '<div class="pa-chips" style="justify-content:center"><button type="button" class="p-chip" data-etq="puntual">Puntual</button><button type="button" class="p-chip" data-etq="amable">Amable</button><button type="button" class="p-chip" data-etq="problema">Problema</button></div>')
 				+ '<p class="p-aviso p-aviso--error" id="err" hidden></p>'
 				+ '<button type="button" class="p-btn p-btn--texto" style="align-self:center" id="nopago">No me pagó</button></div></div>';
 		},
 		init: function (r) {
-			var v = S.cobrar, est = 5;
+			var v = S.cobrar, est = 0; // 10-nov (auditoría): sin 5★ por defecto
 			U.engancharEstrellas(r, function (n) { est = n; });
 			$$('[data-etq]', r).forEach(function (c) { c.onclick = function () { c.setAttribute('aria-pressed', c.getAttribute('aria-pressed') !== 'true'); }; });
 			var terminar = function (txt, icono, a) { S.cobrar = null; LS.set('ch.cobrar', null); U.tostada(txt, icono); ir(a); cargar(); };
-			var valorar = function () { if (v.valorado) { return Promise.resolve(); } return api('chofer/viajes/' + v.id + '/valorar', { estrellas: est, etiquetas: $$('[data-etq][aria-pressed="true"]', r).map(function (x) { return x.dataset.etq; }) }); };
+			var valorar = function () { if (v.valorado || !est) { return Promise.resolve(); } return api('chofer/viajes/' + v.id + '/valorar', { estrellas: est, etiquetas: $$('[data-etq][aria-pressed="true"]', r).map(function (x) { return x.dataset.etq; }) }); };
 			$('#cob', r).onclick = function () {
 				var b = this; b.disabled = true;
 				api('chofer/viajes/' + v.id + '/estado', { accion: 'cobrado' }).then(function (x) {
@@ -477,7 +487,7 @@
 				var b = this; b.disabled = true;
 				api('chofer/viajes/' + v.id + '/estado', { accion: 'nopago' }).then(function (x) {
 					if (!x.data.ok) { b.disabled = false; avisoErr(r, x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No se pudo.')); return; }
-					valorar().then(function () { terminar('Avisamos a Pa\'llá. Te llamamos.', 'info', 'ch-conectar'); });
+					terminar('Avisamos a Pa\'llá. Te llamamos.', 'info', 'ch-conectar'); // 10-nov: «No me pagó» no valora
 				});
 			};
 		}

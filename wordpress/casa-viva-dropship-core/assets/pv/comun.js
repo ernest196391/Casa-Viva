@@ -114,7 +114,7 @@
 	function ruta(a, b, bici) {
 		var k = (bici ? 'b' : 'c') + a.map(function (v) { return v.toFixed(4); }).join(',') + ';' + b.map(function (v) { return v.toFixed(4); }).join(',');
 		if (rutas[k]) { return Promise.resolve(rutas[k]); }
-		var u = 'https://179-236-242-212.sslip.io/route/v1/' + (bici ? 'cycling' : 'driving') + '/' + a[0].toFixed(6) + ',' + a[1].toFixed(6) + ';' + b[0].toFixed(6) + ',' + b[1].toFixed(6) + '?overview=full&geometries=geojson';
+		var u = (C.srv || 'https://179-236-242-212.sslip.io') + '/route/v1/' + (bici ? 'cycling' : 'driving') + '/' + a[0].toFixed(6) + ',' + a[1].toFixed(6) + ';' + b[0].toFixed(6) + ',' + b[1].toFixed(6) + '?overview=full&geometries=geojson';
 		return Promise.race([
 			fetch(u, { credentials: 'omit' }).then(function (r) { return r.json(); }).then(function (d) { var c = d && d.routes && d.routes[0] && d.routes[0].geometry && d.routes[0].geometry.coordinates; if (c && c.length > 1) { rutas[k] = c; return c; } return null; }),
 			new Promise(function (ok) { setTimeout(function () { ok(null); }, 5000); })

@@ -137,13 +137,13 @@ public class MainActivity extends Activity {
             Intent i = Build.VERSION.SDK_INT >= 26
                 ? new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName())
                 : new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()));
-            pedir("1 de 3 · Permite los avisos", "Sin avisos no te enteras de los pedidos. En la pantalla que se abre, activa «Permitir notificaciones».", i);
+            pedir("Permite los avisos", "Activa «Permitir notificaciones».", i);
             return;
         }
         if (!hasGeo() && !geoPedida) { geoPedida = true; askLocation(); return; }
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
         if (Build.VERSION.SDK_INT >= 23 && pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
-            pedir("2 de 3 · Que no se duerma", "Para que el pedido te suene con la pantalla apagada, Android no debe dormir Pa'llá Chofer. Toca «Permitir» en la pantalla que se abre.",
+            pedir("Que no se duerma", "Para que suene con la pantalla apagada: toca «Permitir» o «Sin restricciones».",
                 new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName())));
             return;
         }
@@ -151,7 +151,7 @@ public class MainActivity extends Activity {
             Prefs.setAutostartAsked(this);
             Intent i = new Intent().setComponent(new android.content.ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"));
             if (getPackageManager().resolveActivity(i, 0) == null) { i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())); }
-            pedir("3 de 3 · Inicio automático", "En los Xiaomi y Redmi: busca «Pa'llá Chofer» en la lista y activa el interruptor. Así vuelve a escuchar pedidos aunque se cierre o reinicies el teléfono.", i);
+            pedir("Inicio automático", "Busca «Pa'llá Chofer» y actívalo.", i);
         }
     }
 
@@ -176,9 +176,17 @@ public class MainActivity extends Activity {
             .show();
     }
 
+    /** 10-nov (auditoría): fuera de la pantalla, la web no sigue preguntando ni usando el GPS (el servicio avisa y manda la posición). */
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (BuildConfig.CHOFER && web != null) { web.onPause(); web.pauseTimers(); }
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        if (BuildConfig.CHOFER && web != null) { web.resumeTimers(); web.onResume(); }
         if (BuildConfig.CHOFER) { checkPermisos(); } // 10-nov: al volver de Ajustes, el paso siguiente
         AvisosService.stopAlarm(this); // al abrir la app, la bocina se calla
         if (Prefs.needsService(this)) { AvisosService.start(this); } // 1.3: solo si está disponible o en una carrera

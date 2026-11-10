@@ -527,8 +527,9 @@ public class AvisosService extends Service {
             for (String s : tags) { if (s.matches("o\\d+")) { order = s; } }
             String viaje = ""; // 10-nov (chofer): «v<id>» = el pedido de Pa'llá transporte (para el botón Aceptar)
             for (String s : tags) { if (s.matches("v\\d+")) { viaje = s.substring(1); } }
-            if (tags.contains("cerrada")) { // otro la cogió: si es la que suena, se calla y se quita
-                if (!order.isEmpty() && order.equals(alarmOrder)) { stopAlarm(this); alarmOrder = ""; }
+            String key = !order.isEmpty() ? order : (viaje.isEmpty() ? "" : "v" + viaje); // 10-nov: «v<id>» en Pa'llá transporte
+            if (tags.contains("cerrada")) { // otro la cogió (o se canceló): si es la que suena, se calla y se quita
+                if (!key.isEmpty() && key.equals(alarmOrder)) { stopAlarm(this); alarmOrder = ""; }
                 return;
             }
             boolean loud = !(tags.contains("lost") || tags.contains("cancelled") || tags.contains("changed"));
@@ -537,7 +538,7 @@ public class AvisosService extends Service {
             String click = e.optString("click", "");
             boolean pedido = BuildConfig.CHOFER && tags.contains("pedido");
             if (pedido) { click = MainActivity.HOME + "#ch-pedidos"; } // 10-nov: el aviso abre «Pedidos cerca»
-            alarm(e.optString("title", "Pa'llá"), e.optString("message", ""), click, loud, order, pedido ? viaje : "");
+            alarm(e.optString("title", "Pa'llá"), e.optString("message", ""), click, loud, key, pedido ? viaje : "");
         } catch (Exception ignored) { }
     }
 

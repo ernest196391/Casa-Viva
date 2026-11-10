@@ -57,6 +57,7 @@ final class CVD_Pv_Api {
 		$r( 'viajes/(?P<uuid>[a-f0-9-]{36})/primera', 'POST', 'primera', $c ); // v3
 		$r( 'viajes/(?P<uuid>[a-f0-9-]{36})/cancelar', 'POST', 'cancelar', $c );
 		$r( 'viajes/(?P<uuid>[a-f0-9-]{36})/valorar', 'POST', 'valorar_cliente', $c );
+		$r( 'viajes/(?P<uuid>[a-f0-9-]{36})/llegue', 'POST', 'llegue_cliente', $c ); // 10-nov: «Ya llegué» si el chofer no toca Terminé
 		$r( 'foto', 'GET', 'ver_foto', $open ); // firmada
 		// Chofer
 		$r( 'chofer/hoy', 'GET', 'chofer_hoy', $d );
@@ -163,7 +164,8 @@ final class CVD_Pv_Api {
 	}
 
 	private static function yo_de( object $c ): array {
-		$lugares = json_decode( (string) get_option( 'cvd_pv_lugares_' . (int) $c->id, '' ), true );
+		$crudo = (string) ( $c->lugares ?? '' ); // 10-nov (auditoría): en la tabla de clientes; antes, una opción por cliente
+		$lugares = json_decode( '' !== $crudo ? $crudo : (string) get_option( 'cvd_pv_lugares_' . (int) $c->id, '' ), true );
 		return array(
 			'nombre'   => (string) $c->nombre,
 			'telefono' => (string) $c->telefono,
@@ -199,7 +201,8 @@ final class CVD_Pv_Api {
 				$lng = is_array( $v ) ? self::coord( $v['lng'] ?? null, false ) : null;
 				if ( null !== $lat && null !== $lng ) { $l[ $k ] = array( 'texto' => self::txt( $v['texto'] ?? '', 160 ), 'lat' => $lat, 'lng' => $lng ); }
 			}
-			update_option( 'cvd_pv_lugares_' . (int) $c->id, wp_json_encode( $l ), false );
+			$wpdb->update( self::t( 'clientes' ), array( 'lugares' => wp_json_encode( $l ), 'updated_at' => self::now() ), array( 'id' => (int) $c->id ) );
+			delete_option( 'cvd_pv_lugares_' . (int) $c->id );
 		}
 		return self::out( array( 'ok' => true, 'yo' => self::yo_de( CVD_Triciclub::cliente( (int) $c->id ) ) ) );
 	}
@@ -232,7 +235,7 @@ final class CVD_Pv_Api {
 		$out = array( $lat, $lng, '', false );
 		if ( defined( 'CVD_PV_SIN_RED' ) && ! has_filter( 'pre_http_request' ) ) { return $out; }
 		$api = rtrim( (string) get_option( 'cvd_tc_ruta_api', 'https://179-236-242-212.sslip.io' ), '/' );
-		$res = wp_remote_get( $api . '/route/v1/driving/' . $lng . ',' . $lat . ';' . $lng . ',' . $lat . '?overview=false', array( 'timeout' => 4, 'redirection' => 0 ) );
+		$res = wp_remote_get( $api . '/route/v1/driving/' . $lng . ',' . $lat . ';' . $lng . ',' . $lat . '?overview=false', array( 'timeout' => 2, 'redirection' => 0 ) );
 		$data = is_wp_error( $res ) ? null : json_decode( (string) wp_remote_retrieve_body( $res ), true );
 		$w = is_array( $data ) && 'Ok' === ( $data['code'] ?? '' ) ? ( $data['waypoints'][0] ?? null ) : null;
 		if ( is_array( $w ) && isset( $w['location'][0], $w['location'][1] ) && (float) ( $w['distance'] ?? 999 ) <= 150 ) {
@@ -263,14 +266,22 @@ final class CVD_Pv_Api {
 	}
 
 	/** Choferes en línea (aprobados, con posición reciente, sin viaje en marcha). En prueba: solo los probadores. */
-	private static function en_linea(): array {
+	private static function en_linea( ?float $lat = null, ?float $lng = null ): array {
 		global $wpdb;
 		$t = self::t( 'choferes' );
 		$v = self::t( 'viajes' );
+		// 10-nov (auditoría): con un punto, solo los de un cuadro de ~9 km alrededor (el radio mayor es 8 km) y los más
+		// cercanos primero; así con muchos choferes no se pierden los de cerca por el tope.
+		$caja = '';
+		$orden = '';
+		if ( null !== $lat && null !== $lng ) {
+			$caja = $wpdb->prepare( ' AND c.lat BETWEEN %f AND %f AND c.lng BETWEEN %f AND %f', $lat - 0.08, $lat + 0.08, $lng - 0.085, $lng + 0.085 );
+			$orden = $wpdb->prepare( ' ORDER BY (c.lat-%f)*(c.lat-%f)+(c.lng-%f)*(c.lng-%f)', $lat, $lat, $lng, $lng );
+		}
 		$rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT c.* FROM {$t} c WHERE c.estado='aprobado' AND c.disponible=1 AND c.ubicado_at>%s AND c.lat IS NOT NULL
+			"SELECT c.* FROM {$t} c WHERE c.estado='aprobado' AND c.disponible=1 AND c.ubicado_at>%s AND c.lat IS NOT NULL{$caja}
 			AND NOT EXISTS (SELECT 1 FROM {$v} x WHERE x.chofer_id=c.user_id AND x.estado IN ('asignado','llego','recogido'))
-			LIMIT 300", gmdate( 'Y-m-d H:i:s', time() - self::VIVO ) ) );
+			{$orden} LIMIT 300", gmdate( 'Y-m-d H:i:s', time() - self::VIVO ) ) );
 		if ( 'prueba' === CVD_Pv::mode() ) {
 			$testers = CVD_Triciclub::testers();
 			$rows = array_values( array_filter( $rows, static fn( object $r ): bool => in_array( (int) $r->user_id, $testers, true ) ) );
@@ -285,11 +296,12 @@ final class CVD_Pv_Api {
 		$grupo = sanitize_key( (string) $request->get_param( 'grupo' ) );
 		if ( null === $lat || null === $lng ) { return self::out( array( 'ok' => true, 'puntos' => array() ) ); }
 		$out = array();
-		foreach ( self::en_linea() as $ch ) {
+		foreach ( self::en_linea( $lat, $lng ) as $ch ) {
 			$cl = self::clase_de( $ch );
 			if ( '' !== $grupo && CVD_Pv_Tarifa::grupo( $cl ) !== $grupo && ! ( 'mens' === $grupo && self::sirve( $ch, 'mensajero' ) ) ) { continue; }
 			if ( CVD_Triciclub_Precio::recta_m( (float) $ch->lat, (float) $ch->lng, $lat, $lng ) > 5000 ) { continue; }
-			$out[] = array( 'lat' => round( (float) $ch->lat + wp_rand( -4, 4 ) / 10000, 5 ), 'lng' => round( (float) $ch->lng + wp_rand( -4, 4 ) / 10000, 5 ), 'img' => CVD_Pv_Tarifa::CLASES[ $cl ]['img'] );
+			// 10-nov (auditoría): ±200 m (antes ±45 m): se ve que hay choferes cerca, no dónde está cada uno.
+			$out[] = array( 'lat' => round( (float) $ch->lat + wp_rand( -18, 18 ) / 10000, 5 ), 'lng' => round( (float) $ch->lng + wp_rand( -18, 18 ) / 10000, 5 ), 'img' => CVD_Pv_Tarifa::CLASES[ $cl ]['img'] );
 			if ( count( $out ) >= 20 ) { break; }
 		}
 		return self::out( array( 'ok' => true, 'puntos' => $out ) );
@@ -327,7 +339,7 @@ final class CVD_Pv_Api {
 		foreach ( $perfiles as $pf ) { $tray[ $pf ] = self::trayecto( $pf, $olat, $olng, $dlat, $dlng ); }
 		$recta = CVD_Triciclub_Precio::recta_m( $olat, $olng, $dlat, $dlng );
 		$noche = CVD_Pv_Tarifa::noche();
-		$libres = self::en_linea();
+		$libres = self::en_linea( $olat, $olng );
 		if ( 'viajar' === $grupo ) { $clases = CVD_Pv_Tarifa::VIAJAR; }
 		elseif ( 'mens' === $grupo ) { $clases = array( 'mensajero' ); }
 		else { $clases = array_keys( array_filter( CVD_Pv_Tarifa::CLASES, static fn( array $c ): bool => $c['grupo'] === $grupo ) ); }
@@ -502,7 +514,7 @@ final class CVD_Pv_Api {
 	/** Suena a los choferes que pueden llevarlo (los más cercanos primero). $subio = el cliente subió el precio. */
 	private static function avisar_choferes( object $viaje, bool $subio ): void {
 		$lista = array();
-		foreach ( self::en_linea() as $ch ) {
+		foreach ( self::en_linea( (float) $viaje->origen_lat, (float) $viaje->origen_lng ) as $ch ) {
 			if ( ! self::puede_ver( $ch, $viaje ) ) { continue; }
 			$lista[] = array( CVD_Triciclub_Precio::recta_m( (float) $ch->lat, (float) $ch->lng, (float) $viaje->origen_lat, (float) $viaje->origen_lng ), (int) $ch->user_id );
 		}
@@ -543,7 +555,12 @@ final class CVD_Pv_Api {
 		$edad = time() - (int) strtotime( (string) ( $viaje->busca_desde ?: $viaje->created_at ) . ' UTC' );
 		$radio = $edad > 45 ? self::RADIO_2 : self::RADIO_1;
 		if ( CVD_Triciclub_Precio::recta_m( (float) $ch->lat, (float) $ch->lng, (float) $viaje->origen_lat, (float) $viaje->origen_lng ) > $radio ) { return false; }
-		if ( 'efectivo' === $viaje->forma_pago && CVD_Pv_Cuenta::pausa_efectivo( (int) $ch->user_id, CVD_Pv_Tarifa::grupo( self::clase_de( $ch ) ) ) ) { return false; }
+		if ( 'efectivo' === $viaje->forma_pago ) { // 10-nov (auditoría): la deuda, una consulta por chofer y petición (no una por pedido)
+			static $pausa = array();
+			$k = (int) $ch->user_id . '|' . CVD_Pv_Tarifa::grupo( self::clase_de( $ch ) );
+			if ( ! isset( $pausa[ $k ] ) ) { $pausa[ $k ] = CVD_Pv_Cuenta::pausa_efectivo( (int) $ch->user_id, CVD_Pv_Tarifa::grupo( self::clase_de( $ch ) ) ); }
+			if ( $pausa[ $k ] ) { return false; }
+		}
 		return true;
 	}
 
@@ -563,6 +580,12 @@ final class CVD_Pv_Api {
 
 	/** «buscando» de más de 4 min → «sin_chofer». */
 	private static function caducar( object $v ): object {
+		// 10-nov (auditoría): si el chofer no toca «Terminé» (sin batería, se le olvidó), el viaje se cierra solo pasados
+		// minutos × 3 + 30 min desde que recogió; si no, el cliente no podía pedir otro ni cancelar.
+		if ( 'recogido' === $v->estado && $v->recogido_at ) {
+			$limite = (int) strtotime( (string) $v->recogido_at . ' UTC' ) + ( max( 5, (int) $v->minutos ) * 3 + 30 ) * 60;
+			return time() > $limite ? self::terminar( $v, 'sistema', 0 ) : $v;
+		}
 		if ( 'buscando' !== $v->estado ) { return $v; }
 		$desde = (int) strtotime( (string) ( $v->busca_desde ?: $v->created_at ) . ' UTC' );
 		if ( $desde > time() - self::BUSCA_SEG ) { return $v; }
@@ -575,6 +598,32 @@ final class CVD_Pv_Api {
 		}
 		$v->estado = 'sin_chofer';
 		return $v;
+	}
+
+	/** Recogido → terminado (el chofer con «Terminé», el cliente con «Ya llegué» o el sistema si se quedó colgado). */
+	private static function terminar( object $v, string $actor, int $actor_id ): object {
+		global $wpdb;
+		$now = self::now();
+		list( $pct, $cup ) = CVD_Pv_Cuenta::apuntar( $v, (int) $v->precio + (int) $v->espera_cup );
+		$n = $wpdb->update( self::t( 'viajes' ), array( 'estado' => 'terminado', 'terminado_at' => $now, 'updated_at' => $now, 'comision_pct' => $pct, 'comision_cup' => $cup ), array( 'id' => (int) $v->id, 'estado' => 'recogido' ) );
+		if ( ! $n ) { return self::viaje( (int) $v->id ) ?: $v; }
+		CVD_Triciclub_Db::evento( (int) $v->id, $actor, $actor_id, 'chofer' === $actor ? 'termine' : 'pv_terminado_' . $actor );
+		$wpdb->query( $wpdb->prepare( 'UPDATE ' . self::t( 'choferes' ) . ' SET viajes_total=viajes_total+1 WHERE user_id=%d', (int) $v->chofer_id ) );
+		$wpdb->query( $wpdb->prepare( 'UPDATE ' . self::t( 'clientes' ) . ' SET viajes_total=viajes_total+1 WHERE id=%d', (int) $v->cliente_id ) );
+		$v2 = self::viaje( (int) $v->id );
+		self::tocar( $v2, 'terminado' );
+		return $v2;
+	}
+
+	/** POST viajes/{uuid}/llegue — 10-nov: el cliente dice «Ya llegué» (pasados 2 min de recoger) si el chofer no toca Terminé. */
+	public static function llegue_cliente( WP_REST_Request $request ): WP_REST_Response {
+		$c = self::cliente( $request );
+		$v = self::por_uuid( (string) $request['uuid'] );
+		if ( ! $v || (int) $v->cliente_id !== (int) $c->id ) { return self::fail( 'no_existe', 'No encontramos ese viaje.', 404 ); }
+		if ( 'terminado' === $v->estado ) { return self::out( array( 'ok' => true, 'viaje' => self::vista_cliente( $v ) ) ); }
+		if ( 'recogido' !== $v->estado ) { return self::fail( 'tarde', 'Todavía no has subido.', 409 ); }
+		if ( (int) strtotime( (string) $v->recogido_at . ' UTC' ) > time() - 120 ) { return self::fail( 'pronto', 'Acabas de subir. Avisa al llegar.', 409 ); }
+		return self::out( array( 'ok' => true, 'viaje' => self::vista_cliente( self::terminar( $v, 'cliente', (int) $c->id ) ) ) );
 	}
 
 	private static function activo_cliente( int $cliente_id ): ?object {
@@ -645,7 +694,7 @@ final class CVD_Pv_Api {
 		$activo = in_array( $v->estado, self::ACTIVOS, true );
 		$chofer = (int) $v->chofer_id ? self::chofer_publico( (int) $v->chofer_id ) : null;
 		// Al terminar y hasta que cobre, el cliente sigue viendo cómo pagarle (puede cambiar a Transfermóvil en la llegada).
-		$por_pagar = 'terminado' === $v->estado && null === $v->cobrado_at;
+		$por_pagar = 'terminado' === $v->estado && null === $v->cobrado_at && ( ! $v->terminado_at || (int) strtotime( (string) $v->terminado_at . ' UTC' ) > time() - 2 * HOUR_IN_SECONDS ); // 10-nov: no para siempre
 		if ( $chofer && ( $activo || $por_pagar ) ) {
 			$tel = preg_replace( '/\D+/', '', (string) ( get_user_meta( (int) $v->chofer_id, '_cvd_whatsapp', true ) ?: get_user_meta( (int) $v->chofer_id, 'billing_phone', true ) ) );
 			$chofer['telefono'] = 8 === strlen( $tel ) ? '53' . $tel : $tel;
@@ -764,8 +813,8 @@ final class CVD_Pv_Api {
 		if ( is_array( $hit ) ) { return $hit; }
 		$api = rtrim( (string) get_option( 'cvd_tc_ruta_api', 'https://179-236-242-212.sslip.io' ), '/' );
 		$url = $api . '/route/v1/cycling/' . $olng . ',' . $olat . ';' . $dlng . ',' . $dlat . '?overview=full&geometries=geojson';
-		for ( $i = 0; $i < 2; $i++ ) {
-			$res = wp_remote_get( $url, array( 'timeout' => 5, 'redirection' => 0 ) );
+		for ( $i = 0; $i < 1; $i++ ) { // 10-nov (auditoría): 1 intento de 2 s (no ocupar Hostinger si el VPS va lento)
+			$res = wp_remote_get( $url, array( 'timeout' => 2, 'redirection' => 0 ) );
 			$data = is_wp_error( $res ) ? null : json_decode( (string) wp_remote_retrieve_body( $res ), true );
 			$route = is_array( $data ) && 'Ok' === ( $data['code'] ?? '' ) ? ( $data['routes'][0] ?? null ) : null;
 			if ( is_array( $route ) && (float) ( $route['distance'] ?? 0 ) > 0 ) {
@@ -871,12 +920,19 @@ final class CVD_Pv_Api {
 		$o = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::t( 'ofertas' ) . ' WHERE id=%d AND viaje_id=%d', $oferta_id, (int) $v->id ) );
 		if ( ! $o || 'activa' !== $o->estado || $o->vence_at < self::now() ) { return 'Esa oferta ya no vale. Elige otra.'; }
 		if ( 'buscando' !== $v->estado ) { return 'Este pedido ya no está buscando chofer.'; }
-		if ( self::ocupado( (int) $o->chofer_id ) ) {
+		// 10-nov (auditoría): con candado por chofer, dos clientes que lo eligen en el mismo segundo no se lo quedan los
+		// dos; y no se puede elegir a un chofer que ya se desconectó.
+		$lock = 'cvd_pv_ch_' . (int) $o->chofer_id;
+		$wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock ) );
+		$fch = CVD_Triciclub::chofer_de( (int) $o->chofer_id );
+		if ( self::ocupado( (int) $o->chofer_id ) || ! $fch || ! (int) $fch->disponible ) {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) );
 			$wpdb->update( self::t( 'ofertas' ), array( 'estado' => 'retirada', 'updated_at' => self::now() ), array( 'id' => (int) $o->id ) );
-			return 'Ese chofer acaba de coger otro viaje. Elige otra oferta.';
+			return $fch && ! (int) $fch->disponible ? 'Ese chofer se desconectó. Elige otra oferta.' : 'Ese chofer acaba de coger otro viaje. Elige otra oferta.';
 		}
 		$now = self::now();
 		$n = $wpdb->query( $wpdb->prepare( 'UPDATE ' . self::t( 'viajes' ) . " SET estado='asignado', chofer_id=%d, precio=%d, oferta_id=%d, respondido_at=%s, updated_at=%s WHERE id=%d AND estado='buscando'", (int) $o->chofer_id, (int) $o->precio, (int) $o->id, $now, $now, (int) $v->id ) );
+		$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) );
 		if ( ! $n ) { return 'Este pedido ya cambió.'; }
 		$of = self::t( 'ofertas' );
 		$wpdb->query( $wpdb->prepare( "UPDATE {$of} SET estado='elegida', updated_at=%s WHERE id=%d", $now, (int) $o->id ) );
@@ -895,7 +951,20 @@ final class CVD_Pv_Api {
 		self::aviso( (int) $o->chofer_id, 'pv_elegido', '✅ ¡Te eligieron! ' . number_format( (int) $o->precio, 0, ',', '.' ) . ' CUP', 'Ve a recoger en ' . self::corto( (string) $v->origen_texto ) . '.', array( 'pv', 'elegido', 'v' . (int) $v->id ) );
 		foreach ( array_map( 'intval', (array) $perdieron ) as $uid ) { CVD_Pv_Canal::senal( CVD_Pv_Canal::tema_chofer( $uid ), array( 't' => 'perdio', 'id' => (int) $v->id ) ); }
 		self::avisar_pasajero( $v, 'asignado' );
+		self::cerrar_avisos( $v );
 		return '';
+	}
+
+	/** 10-nov (auditoría): a los choferes cerca, «ese pedido ya no está»: su app calla la bocina y quita el aviso. */
+	private static function cerrar_avisos( object $v ): void {
+		if ( ! class_exists( 'CVD_Palla_Push' ) || ! method_exists( 'CVD_Palla_Push', 'cerrar' ) ) { return; }
+		$n = 0;
+		foreach ( self::en_linea( (float) $v->origen_lat, (float) $v->origen_lng ) as $ch ) {
+			if ( (int) $ch->user_id === (int) $v->chofer_id ) { continue; }
+			if ( CVD_Triciclub_Precio::recta_m( (float) $ch->lat, (float) $ch->lng, (float) $v->origen_lat, (float) $v->origen_lng ) > self::RADIO_2 ) { continue; }
+			try { CVD_Palla_Push::cerrar( (int) $ch->user_id, array( 'pv', 'cerrada', 'v' . (int) $v->id ) ); } catch ( Throwable $e ) { unset( $e ); }
+			if ( ++$n >= self::AVISAR_MAX ) { break; }
+		}
 	}
 
 	/** 10-nov: quien viaja cuando el cliente pidió para otra persona (null = viaja el cliente; los envíos nunca). */
@@ -961,6 +1030,7 @@ final class CVD_Pv_Api {
 		CVD_Triciclub_Db::evento( (int) $v->id, 'cliente', (int) $c->id, 'cancelado', array( 'antes' => $v->estado ) );
 		$v2 = self::viaje( (int) $v->id );
 		self::tocar( $v2, 'cancelado' );
+		if ( 'buscando' === $v->estado ) { self::cerrar_avisos( $v2 ); }
 		if ( (int) $v->chofer_id && in_array( $v->estado, self::ACTIVOS, true ) ) {
 			CVD_Pv_Canal::senal( CVD_Pv_Canal::tema_chofer( (int) $v->chofer_id ), array( 't' => 'cancelado', 'id' => (int) $v->id ) );
 			self::aviso( (int) $v->chofer_id, 'pv_cancelado', 'El cliente canceló', 'Ya no hace falta que vayas a ' . self::corto( (string) $v->origen_texto ) . '.', array( 'pv', 'cancelled' ) );
@@ -1044,7 +1114,9 @@ final class CVD_Pv_Api {
 		global $wpdb;
 		$v = self::t( 'viajes' );
 		$desde = gmdate( 'Y-m-d H:i:s', time() - self::BUSCA_SEG );
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$v} WHERE estado='buscando' AND clase<>'' AND busca_desde>%s ORDER BY id DESC LIMIT 60", $desde ) );
+		// 10-nov (auditoría): solo los de un cuadro de ~9 km alrededor del chofer (antes los 60 más nuevos de toda la ciudad).
+		$caja = null !== $ch->lat ? $wpdb->prepare( ' AND origen_lat BETWEEN %f AND %f AND origen_lng BETWEEN %f AND %f', (float) $ch->lat - 0.08, (float) $ch->lat + 0.08, (float) $ch->lng - 0.085, (float) $ch->lng + 0.085 ) : '';
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$v} WHERE estado='buscando' AND clase<>'' AND busca_desde>%s{$caja} ORDER BY id DESC LIMIT 60", $desde ) );
 		$mias = array();
 		foreach ( $wpdb->get_results( $wpdb->prepare( 'SELECT viaje_id, precio, pct, estado, vence_at FROM ' . self::t( 'ofertas' ) . ' WHERE chofer_id=%d AND created_at>%s', (int) $ch->user_id, $desde ) ) as $o ) { $mias[ (int) $o->viaje_id ] = $o; }
 		$out = array();
@@ -1201,7 +1273,11 @@ final class CVD_Pv_Api {
 		if ( $ya && in_array( $ya->estado, array( 'perdio', 'elegida' ), true ) ) { return self::fail( 'tarde', 'Este pedido ya se decidió.', 409 ); }
 		$datos = array( 'precio' => $precio, 'pct' => $pct, 'llega_min' => CVD_Pv_Tarifa::minutos( self::clase_de( $ch ), (int) round( $lejos * 1.3 ) ), 'lejos_m' => $lejos, 'estado' => 'activa', 'vence_at' => gmdate( 'Y-m-d H:i:s', time() + self::OFERTA_SEG ), 'updated_at' => $now );
 		if ( $ya ) { $wpdb->update( $of, $datos, array( 'id' => (int) $ya->id ) ); $oid = (int) $ya->id; }
-		else { $wpdb->insert( $of, $datos + array( 'viaje_id' => (int) $v->id, 'chofer_id' => $u->ID, 'created_at' => $now ) ); $oid = (int) $wpdb->insert_id; }
+		else {
+			$wpdb->insert( $of, $datos + array( 'viaje_id' => (int) $v->id, 'chofer_id' => $u->ID, 'created_at' => $now ) );
+			$oid = (int) $wpdb->insert_id;
+			if ( ! $oid ) { $oid = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$of} WHERE viaje_id=%d AND chofer_id=%d ORDER BY id DESC LIMIT 1", (int) $v->id, $u->ID ) ); } // 10-nov: dos toques rápidos
+		}
 		CVD_Triciclub_Db::evento( (int) $v->id, 'chofer', $u->ID, 'pv_oferta', array( 'precio' => $precio, 'pct' => $pct ) );
 		// «Coger la 1.ª oferta»: el primer «Acepto» (a su precio) se queda con el viaje al momento.
 		if ( (int) $v->primera && 0 === $pct && '' === self::asignar( $v, $oid ) ) {
@@ -1247,6 +1323,7 @@ final class CVD_Pv_Api {
 			}
 			if ( 'nopago' === $accion ) {
 				CVD_Triciclub_Db::evento( (int) $v->id, 'chofer', $u->ID, 'pv_no_pago' );
+				CVD_Pv_Cuenta::revision( (int) $v->id ); // 10-nov (auditoría): no debe comisión de lo que no cobró (hasta revisar)
 				$correo = (string) get_option( 'cvd_pv_correo', get_option( 'admin_email' ) );
 				if ( is_email( $correo ) ) { wp_mail( $correo, 'Pa\'llá: un cliente no pagó (viaje ' . (int) $v->id . ')', 'El chofer ' . $u->display_name . ' dice que el cliente no le pagó ' . ( (int) $v->precio + (int) $v->espera_cup ) . ' CUP. Míralo en /triciclub/admin.' ); }
 			}
@@ -1262,9 +1339,18 @@ final class CVD_Pv_Api {
 		list( $desde, $hacia, $col ) = $pasos[ $accion ];
 		if ( $v->estado === $hacia ) { return self::out( array( 'ok' => true, 'viaje' => self::vista_chofer( $v ) ) ); } // repetido
 		if ( ! in_array( $v->estado, $desde, true ) ) { return self::fail( 'tarde', 'cancelado' === $v->estado ? 'El cliente canceló el viaje.' : 'Ese paso ya no toca.', 409 ); }
+		// 10-nov (auditoría): «Llegué» solo cerca de la recogida (si su posición es de los últimos 3 min); si no, la espera
+		// de 50 CUP/min empezaría a contar desde lejos.
+		if ( 'llegue' === $accion ) {
+			$fch = self::ficha( $u );
+			if ( $fch && null !== $fch->lat && $fch->ubicado_at && (int) strtotime( (string) $fch->ubicado_at . ' UTC' ) > time() - 180 ) {
+				$lejos = CVD_Triciclub_Precio::recta_m( (float) $fch->lat, (float) $fch->lng, (float) $v->origen_lat, (float) $v->origen_lng );
+				if ( $lejos > 400 ) { return self::fail( 'lejos', 'Estás a ' . ( $lejos >= 1000 ? number_format( $lejos / 1000, 1, ',', '' ) . ' km' : $lejos . ' m' ) . '. Toca «Llegué» al llegar.', 409 ); }
+			}
+		}
 		$codigo = preg_replace( '/\D+/', '', (string) $request->get_param( 'codigo' ) );
 		if ( 'recogi' === $accion && ! $envio && ! hash_equals( (string) $v->codigo, $codigo ) ) {
-			return self::fail( 'codigo', 'Ese no es el código. Pídeselo al cliente: lo tiene en su app.' );
+			return self::fail( 'codigo', 'Código mal. Pídeselo al cliente.' );
 		}
 		// v3 Comida: si el mensajero adelanta el dinero, antes de salir hace la foto del recibo.
 		if ( 'recogi' === $accion && (int) $v->adelanto_cup > 0 && '' === (string) $v->recibo_foto ) {
@@ -1273,6 +1359,11 @@ final class CVD_Pv_Api {
 		if ( 'termine' === $accion && $envio ) {
 			if ( ! hash_equals( (string) $v->entrega_codigo, $codigo ) ) { return self::fail( 'codigo', 'Ese no es el código de entrega. Pídeselo a quien recibe.' ); }
 			if ( '' === (string) $v->entrega_foto ) { return self::fail( 'foto', 'Haz la foto de la entrega antes de terminar.' ); }
+		}
+		if ( 'termine' === $accion ) {
+			$v2 = self::terminar( $v, 'chofer', $u->ID );
+			if ( 'terminado' !== $v2->estado ) { return self::fail( 'tarde', 'El viaje cambió. Mira otra vez.', 409 ); }
+			return self::out( array( 'ok' => true, 'viaje' => self::vista_chofer( $v2 ) ) );
 		}
 		$set = array( 'estado' => $hacia, $col => $now, 'updated_at' => $now );
 		if ( 'recogi' === $accion ) { $set['espera_cup'] = CVD_Pv_Tarifa::espera( $v->llego_at, $now ); }
@@ -1300,6 +1391,8 @@ final class CVD_Pv_Api {
 		$n = $wpdb->query( $wpdb->prepare( 'UPDATE ' . self::t( 'viajes' ) . " SET estado='buscando', chofer_id=0, oferta_id=0, precio=precio_oferta, llego_at=NULL, respondido_at=NULL, busca_desde=%s, updated_at=%s WHERE id=%d AND chofer_id=%d AND estado=%s", $now, $now, (int) $v->id, $u->ID, $v->estado ) );
 		if ( ! $n ) { return self::fail( 'tarde', 'El viaje cambió. Mira otra vez.', 409 ); }
 		$wpdb->query( $wpdb->prepare( 'UPDATE ' . self::t( 'ofertas' ) . " SET estado='retirada', updated_at=%s WHERE viaje_id=%d AND chofer_id=%d", $now, (int) $v->id, $u->ID ) );
+		// 10-nov (auditoría): los que perdieron antes vuelven a ver el pedido y pueden ofertar otra vez.
+		$wpdb->query( $wpdb->prepare( 'UPDATE ' . self::t( 'ofertas' ) . " SET estado='caducada', updated_at=%s WHERE viaje_id=%d AND estado='perdio'", $now, (int) $v->id ) );
 		CVD_Triciclub_Db::evento( (int) $v->id, 'chofer', $u->ID, 'pv_suelto', array( 'motivo' => $motivo ) );
 		$v2 = self::viaje( (int) $v->id );
 		self::tocar( $v2, 'suelto' );

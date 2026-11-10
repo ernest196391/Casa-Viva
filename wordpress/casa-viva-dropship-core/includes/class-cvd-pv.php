@@ -114,6 +114,7 @@ final class CVD_Pv {
 			'alta'     => home_url( '/palla/triciclub' ),
 			'cliente'  => home_url( '/palla/ir/' ),
 			'ntfy'     => CVD_Pv_Canal::url(),
+			'srv'      => untrailingslashit( (string) get_option( 'cvd_tc_ruta_api', 'https://179-236-242-212.sslip.io' ) ), // 10-nov (auditoría): mapa y rutas, sin dirección fija en el móvil
 			'telefono' => preg_replace( '/\D+/', '', (string) get_option( 'cvd_tc_telefono', CVD_Triciclub::TELEFONO ) ),
 			'clases'   => CVD_Pv_Tarifa::publicas(),
 			'tamanos'  => CVD_Pv_Tarifa::TAMANOS,

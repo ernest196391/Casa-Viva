@@ -175,6 +175,9 @@ final class CVD_Palla_Push {
 	 * pasa por Google. Solo a quien tiene tema (user meta `_cvd_palla_ntfy_topic`, secreto y de solo lectura en ntfy);
 	 * publica el usuario `core` con su token (`cvd_palla_ntfy_token`). Sin esperar respuesta: no frena el guardado.
 	 */
+	/** 10-nov (Pa'llá transporte): «ese pedido ya no está» (otro lo cogió o se canceló): la app calla la bocina y quita el aviso. Sin web push. */
+	public static function cerrar( int $user_id, array $tags ): void { self::ntfy( $user_id, 'cerrada', '-', '', $tags ); }
+
 	private static function ntfy( int $user_id, string $title, string $message, string $click, array $tags = array() ): bool {
 		$topic = (string) get_user_meta( $user_id, self::NTFY_TOPIC, true );
 		$url = (string) get_option( 'cvd_palla_ntfy_url', '' );

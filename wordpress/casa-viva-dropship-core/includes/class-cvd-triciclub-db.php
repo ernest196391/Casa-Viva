@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  * - Un viaje NO es un pedido de WooCommerce.
  */
 final class CVD_Triciclub_Db {
-	public const VERSION = 6; // 6 (10-nov, Pa'llá «para otra persona»): codigos.texto — avisos de WhatsApp al pasajero · 2 (4-nov): alta — tipo, motor, carga_kg, enviado_at, revisado_at, motivo · 3: verificación — verif, carne_hash · 4 (5-nov, Pa'llá transporte D138–D140): ofertas, cuenta, viajes con precio mixto · 5 (6-nov, Pa'llá v3 D142): servicio comida/carga — adelanto, recibo, peso, ayudante; chofer «puedo adelantar»
+	public const VERSION = 7; // 7 (10-nov, auditoría): clientes.lugares (Casa/Trabajo, antes una opción por cliente) · 6 (10-nov, Pa'llá «para otra persona»): codigos.texto — avisos de WhatsApp al pasajero · 2 (4-nov): alta — tipo, motor, carga_kg, enviado_at, revisado_at, motivo · 3: verificación — verif, carne_hash · 4 (5-nov, Pa'llá transporte D138–D140): ofertas, cuenta, viajes con precio mixto · 5 (6-nov, Pa'llá v3 D142): servicio comida/carga — adelanto, recibo, peso, ayudante; chofer «puedo adelantar»
 	private const VERSION_OPTION = 'cvd_tc_db';
 
 	public static function t( string $name ): string {
@@ -38,6 +38,7 @@ final class CVD_Triciclub_Db {
   bloqueado tinyint(1) NOT NULL DEFAULT 0,
   nota_media decimal(3,2) NULL,
   viajes_total int unsigned NOT NULL DEFAULT 0,
+  lugares text NULL,
   created_at datetime NOT NULL,
   updated_at datetime NOT NULL,
   PRIMARY KEY  (id),
