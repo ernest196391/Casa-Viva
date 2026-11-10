@@ -513,6 +513,7 @@ final class CVD_Pv_Api {
 
 	/** Suena a los choferes que pueden llevarlo (los más cercanos primero). $subio = el cliente subió el precio. */
 	private static function avisar_choferes( object $viaje, bool $subio ): void {
+		self::$pausa = array();
 		$lista = array();
 		foreach ( self::en_linea( (float) $viaje->origen_lat, (float) $viaje->origen_lng ) as $ch ) {
 			if ( ! self::puede_ver( $ch, $viaje ) ) { continue; }
@@ -547,6 +548,9 @@ final class CVD_Pv_Api {
 	}
 
 	/** ¿Ve este chofer este pedido? Clase, distancia (4 km; 8 km pasados 45 s) y, si es en efectivo, sin deuda al tope. */
+	/** ¿Pausado por deuda? (por chofer y grupo) — se vacía al empezar cada lista de pedidos o aviso. */
+	private static array $pausa = array();
+
 	private static function puede_ver( object $ch, object $viaje ): bool {
 		if ( (int) $ch->user_id === (int) $viaje->chofer_id ) { return false; }
 		if ( ! self::sirve( $ch, (string) $viaje->clase, (string) $viaje->envio_tam ) ) { return false; }
@@ -556,10 +560,9 @@ final class CVD_Pv_Api {
 		$radio = $edad > 45 ? self::RADIO_2 : self::RADIO_1;
 		if ( CVD_Triciclub_Precio::recta_m( (float) $ch->lat, (float) $ch->lng, (float) $viaje->origen_lat, (float) $viaje->origen_lng ) > $radio ) { return false; }
 		if ( 'efectivo' === $viaje->forma_pago ) { // 10-nov (auditoría): la deuda, una consulta por chofer y petición (no una por pedido)
-			static $pausa = array();
 			$k = (int) $ch->user_id . '|' . CVD_Pv_Tarifa::grupo( self::clase_de( $ch ) );
-			if ( ! isset( $pausa[ $k ] ) ) { $pausa[ $k ] = CVD_Pv_Cuenta::pausa_efectivo( (int) $ch->user_id, CVD_Pv_Tarifa::grupo( self::clase_de( $ch ) ) ); }
-			if ( $pausa[ $k ] ) { return false; }
+			if ( ! isset( self::$pausa[ $k ] ) ) { self::$pausa[ $k ] = CVD_Pv_Cuenta::pausa_efectivo( (int) $ch->user_id, CVD_Pv_Tarifa::grupo( self::clase_de( $ch ) ) ); }
+			if ( self::$pausa[ $k ] ) { return false; }
 		}
 		return true;
 	}
@@ -1112,6 +1115,7 @@ final class CVD_Pv_Api {
 	/** Los pedidos que este chofer puede ver ahora, con su oferta si ya hizo una. */
 	private static function pedidos_para( object $ch ): array {
 		global $wpdb;
+		self::$pausa = array();
 		$v = self::t( 'viajes' );
 		$desde = gmdate( 'Y-m-d H:i:s', time() - self::BUSCA_SEG );
 		// 10-nov (auditoría): solo los de un cuadro de ~9 km alrededor del chofer (antes los 60 más nuevos de toda la ciudad).
