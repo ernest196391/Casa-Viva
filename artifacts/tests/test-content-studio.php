@@ -22,6 +22,14 @@ function do_action( ...$args ) {}
 function add_option( $k, $v, $deprecated = '', $autoload = false ) { if ( isset( $GLOBALS['options'][$k] ) ) { return false; } $GLOBALS['options'][$k] = $v; return true; }
 function delete_option( $k ) { unset( $GLOBALS['options'][$k] ); }
 function get_user_meta( $id, $k, $single ) { return $GLOBALS['user_meta'][$id][$k] ?? ''; }
+// v2 (panel de Zayri): prioridad (más vendidos, nuevos) y filtros. Sin ventas ni fecha reciente en este contrato.
+define( 'DAY_IN_SECONDS', 86400 );
+function get_posts( $args ) { return array(); }
+function get_post_time( $format, $gmt, $id ) { return time() - 100 * DAY_IN_SECONDS; }
+function apply_filters( $tag, $value ) { return $value; }
+function is_wp_error( $v ) { return $v instanceof WP_Error; }
+function get_option( $k, $default = false ) { return $GLOBALS['options'][$k] ?? $default; }
+function update_post_meta( $id, $k, $v ) { return true; }
 function update_user_meta( $id, $k, $v ) { $GLOBALS['user_meta'][$id][$k] = $v; }
 class WP_Error { public function __construct( public $code, public $message, public $data = array() ) {} }
 class WP_REST_Request {

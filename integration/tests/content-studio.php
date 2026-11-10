@@ -133,3 +133,94 @@ $stats = studio_call( 'GET', 'products', array( 'id' => $p->get_id() ) )->get_da
 studio_assert( $ad['code'] === $stats['code'] && 1 === $stats['mensajes'] && 1 === $stats['pedidos'] && str_contains( $stats['total'], '25' ), 'the ad shows one person who wrote and one order from that phone' );
 $route = rest_do_request( new WP_REST_Request( 'POST', '/casa-viva/v1/bot/anuncio/mensaje' ) );
 studio_assert( $route->get_status() >= 400, 'the bot route needs the bot key' );
+
+// v2 (10-nov): HERO by steps with the VPS simulated ONLY in this disposable process (filters), automatic publication
+// (D152) with copy «antes» and restore, real WooCommerce data untouched, and the inbox through the real REST routes.
+$v2_png = static function ( int $w, int $h ): string {
+	$im = imagecreatetruecolor( $w, $h ); imagealphablending( $im, false ); imagesavealpha( $im, true );
+	imagefilledrectangle( $im, 0, 0, $w - 1, $h - 1, imagecolorallocatealpha( $im, 0, 0, 0, 127 ) );
+	imagefilledrectangle( $im, 2, 2, $w - 3, $h - 3, imagecolorallocatealpha( $im, 30, 60, 90, 0 ) );
+	ob_start(); imagepng( $im ); return (string) ob_get_clean();
+};
+$v2_jpg = static function ( int $w, int $h ): string {
+	$im = imagecreatetruecolor( $w, $h ); imagefilledrectangle( $im, 0, 0, $w - 1, $h - 1, 0xF6F6F6 );
+	imagefilledrectangle( $im, (int) ( $w * 0.2 ), (int) ( $h * 0.2 ), (int) ( $w * 0.8 ), (int) ( $h * 0.8 ), 0x203040 );
+	ob_start(); imagejpeg( $im, null, 90 ); return (string) ob_get_clean();
+};
+$v2_mode = array( 'recorte' => 'fiable', 'ia' => 0 );
+$v2_recorte = static function () use ( &$v2_mode, $v2_png ) {
+	return static function ( string $bytes ) use ( &$v2_mode, $v2_png ) {
+		return array( 'png' => $v2_png( 900, 500 ), 'fiable' => 'fiable' === $v2_mode['recorte'], 'motivos' => 'fiable' === $v2_mode['recorte'] ? array() : array( 'Borró las barras finas' ), 'medidas' => array() );
+	};
+};
+$v2_motor = static function () use ( &$v2_mode, $v2_jpg ) {
+	return static function ( string $prompt, array $opts, array $refs ) use ( &$v2_mode, $v2_jpg ) {
+		$v2_mode['ia']++;
+		return '1536x1024' === $opts['tam'] ? $v2_jpg( 1536, 1024 ) : $v2_jpg( 1024, 1536 );
+	};
+};
+add_filter( 'cvd_content_recorte', $v2_recorte );
+add_filter( 'cvd_content_motor', $v2_motor );
+wp_set_current_user( $id );
+$up = wp_upload_bits( 'cv-v2-real-' . wp_generate_password( 6, false ) . '.jpg', null, $v2_jpg( 1200, 800 ) );
+$real = wp_insert_attachment( array( 'post_mime_type' => 'image/jpeg', 'post_title' => 'Foto real', 'post_status' => 'inherit' ), $up['file'] );
+require_once ABSPATH . 'wp-admin/includes/image.php'; wp_update_attachment_metadata( $real, wp_generate_attachment_metadata( $real, $up['file'] ) );
+$hp = new WC_Product_Simple(); $hp->set_name( 'HERO integración' ); $hp->set_description( '<p>Metal.</p>' ); $hp->set_regular_price( '30' ); $hp->set_manage_stock( true ); $hp->set_stock_quantity( 5 );
+$hp->set_sku( 'CV-V2-' . wp_generate_uuid4() ); $hp->set_image_id( $real ); $hp->update_meta_data( '_cvd_commission_type', 'percent' ); $hp->update_meta_data( '_cvd_commission_value', '10' ); $hp->set_status( 'publish' ); $hp->save();
+$commerce = static function ( int $pid ): array {
+	clean_post_cache( $pid ); $q = wc_get_product( $pid );
+	return array( $q->get_price(), $q->get_regular_price(), $q->get_stock_quantity(), $q->get_sku(), $q->get_slug(), $q->get_permalink(), $q->get_status(), $q->get_meta( '_cvd_commission_type' ), $q->get_meta( '_cvd_commission_value' ) );
+};
+$before = $commerce( $hp->get_id() );
+$r = studio_call( 'POST', 'crear', array( 'id' => $hp->get_id(), 'pieza' => 'hero' ) );
+$d = $r->get_data();
+studio_assert( 200 === $r->get_status() && 'recorte' === $d['escalon'] && 0.0 === (float) $d['coste'] && $d['publicada'] && 0 === $v2_mode['ia'], 'v2: free cut-out → white HERO published by itself, nothing paid' );
+clean_post_cache( $hp->get_id() ); $hero = (int) wc_get_product( $hp->get_id() )->get_image_id();
+$meta = wp_get_attachment_metadata( $hero );
+studio_assert( $hero !== $real && 'image/webp' === get_post_mime_type( $hero ) && 1600 === (int) ( $meta['width'] ?? 0 ) && 1600 === (int) ( $meta['height'] ?? 0 ), 'v2: the web HERO is a WebP 1600×1600 attachment' );
+studio_assert( in_array( $real, wc_get_product( $hp->get_id() )->get_gallery_image_ids(), true ) && $before === $commerce( $hp->get_id() ), 'v2: real photo kept in the gallery; price, stock, SKU, URL and commission untouched' );
+$r = studio_call( 'POST', 'restaurar', array( 'id' => $hp->get_id() ) );
+clean_post_cache( $hp->get_id() );
+studio_assert( 200 === $r->get_status() && $real === (int) wc_get_product( $hp->get_id() )->get_image_id() && $before === $commerce( $hp->get_id() ), 'v2: restaurar puts back the previous photo in one touch' );
+$v2_mode['recorte'] = 'nofiable';
+$r = studio_call( 'POST', 'crear', array( 'id' => $hp->get_id(), 'pieza' => 'hero' ) ); $d = $r->get_data();
+studio_assert( 200 === $r->get_status() && 'ia' === $d['escalon'] && 'Borró las barras finas' === $d['escalones'][0]['motivo'] && 1 === $v2_mode['ia'] && 0.15 === (float) $d['gasto']['hoy'], 'v2: cut-out not fiable → paid IA, cost counted for today' );
+update_option( 'cvd_content_gasto', array( 'dia' => wp_date( 'Y-m-d' ), 'usd' => 0.45 ), false );
+studio_assert( 429 === studio_call( 'POST', 'crear', array( 'id' => $hp->get_id(), 'pieza' => 'hero' ) )->get_status(), 'v2: daily cap blocks paid images' );
+$v2_mode['recorte'] = 'fiable';
+studio_assert( 200 === studio_call( 'POST', 'crear', array( 'id' => $hp->get_id(), 'pieza' => 'hero' ) )->get_status(), 'v2: the free cut-out is never blocked by the cap' );
+delete_option( 'cvd_content_gasto' );
+$item = studio_call( 'GET', 'products', array( 'id' => $hp->get_id() ) )->get_data();
+$opt = $item['opciones'][0]['id'];
+$r = studio_call( 'POST', 'pieza', array( 'id' => $hp->get_id(), 'pieza' => 'hero', 'estado' => 'revision', 'opcion' => $opt ) );
+studio_assert( 200 === $r->get_status() && preg_match( '/^D\d+$/', (string) $r->get_data()['duda'] ), 'v2: «Revisión» sends the option to the inbox' );
+$list = studio_call( 'GET', 'dudas', array( 'estado' => 'pendiente' ) );
+$card = $list->get_data()['dudas'][0];
+studio_assert( 200 === $list->get_status() && $list->get_data()['activa'] && 'foto' === $card['tipo'] && 'HERO' === $card['pieza'], 'v2: the inbox lists the card through REST' );
+$answer = static function ( string $duda, array $body ) {
+	$q = new WP_REST_Request( 'POST', '/casa-viva/v1/contenido/dudas/' . $duda . '/respuesta' ); $q->set_body_params( $body ); return rest_do_request( $q );
+};
+studio_assert( 409 === $answer( $card['id'], array( 'respuesta' => 'aprobada', 'version' => 'vieja' ) )->get_status(), 'v2: an outdated answer gets 409' );
+$r = $answer( $card['id'], array( 'respuesta' => 'aprobada', 'version' => $card['version'] ) );
+clean_post_cache( $hp->get_id() );
+studio_assert( 200 === $r->get_status() && 'hecha' === $r->get_data()['estado'] && 'web' === $r->get_data()['destino'] && 'aprobada' === studio_call( 'GET', 'products', array( 'id' => $hp->get_id() ) )->get_data()['piezas']['hero']['estado'], 'v2: approving the card puts that HERO on the web' );
+studio_assert( $before === $commerce( $hp->get_id() ), 'v2: commerce still untouched after every HERO' );
+// The VPS side, with the bot key.
+update_option( 'cvd_vivabot_key_hash', hash( 'sha256', 'integration-bot-key' ) );
+$bot = static function ( string $method, string $path, array $json = array(), bool $key = true ) {
+	$q = new WP_REST_Request( $method, '/casa-viva/v1/bot/' . $path );
+	if ( $key ) { $q->set_header( 'X-VivaBot-Key', 'integration-bot-key' ); }
+	if ( 'GET' === $method ) { $q->set_query_params( $json ); } else { $q->set_header( 'content-type', 'application/json' ); $q->set_body( wp_json_encode( $json ) ); }
+	return rest_do_request( $q );
+};
+studio_assert( $bot( 'GET', 'dudas/respuestas', array(), false )->get_status() >= 400 && $bot( 'POST', 'dudas', array( 'tipo' => 'regla', 'regla' => 'x' ), false )->get_status() >= 400, 'v2: the bot inbox routes need the bot key' );
+$r = $bot( 'POST', 'dudas', array( 'dudas' => array( array( 'ref' => 'integ-dato', 'tipo' => 'dato', 'producto' => array( 'id' => $hp->get_id() ), 'dato' => 'Medida', 'despues' => array( 'valor' => '30 cm' ) ),
+	array( 'ref' => 'integ-regla', 'tipo' => 'regla', 'regla' => 'Mango a la derecha' ) ) ) );
+studio_assert( 200 === $r->get_status() && 2 === count( $r->get_data()['dudas'] ), 'v2: the VPS creates cards' );
+$dato = $r->get_data()['dudas'][0];
+$r = $answer( $dato['id'], array( 'respuesta' => 'corregir', 'valor' => '32 cm', 'version' => $dato['version'] ) );
+studio_assert( 200 === $r->get_status() && 'hecha' === $r->get_data()['estado'], 'v2: a corrected fact is applied' );
+$out = $bot( 'GET', 'dudas/respuestas', array( 'desde' => 0 ) )->get_data();
+studio_assert( in_array( 'crm_knowledge', array_column( $out['respuestas'], 'destino' ), true ) && '32 cm' === end( $out['respuestas'] )['valor'] && $out['cursor'] > 0, 'v2: the VPS reads what to apply, with a cursor' );
+remove_filter( 'cvd_content_recorte', $v2_recorte ); remove_filter( 'cvd_content_motor', $v2_motor );
+echo "Panel v2 server integration passed.\n";
