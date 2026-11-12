@@ -21,6 +21,7 @@ SSH = ['ssh','-o','BatchMode=yes','-o','ConnectTimeout=10','-o','StrictHostKeyCh
        '-i','/root/.ssh/casa-viva-web','-p','65002','u824654880@88.223.85.72']
 STORE = 'domains/casaviva.company/control-private'
 STATE = ROOT / 'control-os-imported.json'
+DECISION_STATE = ROOT / 'control-os-decisions-imported.json'
 VALID_ID = re.compile(r'^[a-f0-9]{32}$')
 
 
@@ -104,6 +105,66 @@ def read_portal_requests():
             continue
         rows.append(row)
     return rows
+
+
+
+def read_portal_decisions():
+    command = "php -r '$p=\"" + STORE + "/decisions.jsonl\";if(is_file($p)){$f=fopen($p,\"rb\");flock($f,LOCK_SH);fpassthru($f);flock($f,LOCK_UN);fclose($f);}'"
+    response = subprocess.run(SSH + [command], capture_output=True, text=True, timeout=25, check=True)
+    rows = []
+    for line in response.stdout.splitlines():
+        try:
+            row = json.loads(line)
+        except Exception:
+            continue
+        rid = str(row.get('id',''))
+        approval_id = row.get('approval_id')
+        decision = row.get('decision')
+        if (row.get('actor_wp_id') != 1 or row.get('kind') != 'decision'
+                or not VALID_ID.fullmatch(rid)
+                or not isinstance(approval_id, int) or approval_id <= 0
+                or decision not in ('approve','reject')):
+            continue
+        rows.append(row)
+    return rows
+
+
+def read_decision_state():
+    if not DECISION_STATE.exists():
+        return set()
+    try:
+        data = json.loads(DECISION_STATE.read_text())
+        return {str(x) for x in data if VALID_ID.fullmatch(str(x))}
+    except Exception:
+        return set()
+
+
+def save_decision_state(ids):
+    tmp = DECISION_STATE.with_suffix('.json.tmp')
+    tmp.write_text(json.dumps(sorted(ids)[-5000:]))
+    tmp.chmod(0o600)
+    tmp.replace(DECISION_STATE)
+
+
+def ingest_decisions(rows, known):
+    added = 0
+    for row in rows:
+        rid = row['id']
+        if rid in known:
+            continue
+        result = api('POST', 'rpc/ops_decide_approval', {
+            'p_public_id': row['approval_id'],
+            'p_decision': row['decision'],
+            'p_actor_role': 'owner',
+            'p_actor_ref': 'ernesto',
+            'p_note': 'Decisión desde /control/ · request ' + rid,
+        })
+        if not isinstance(result, list) or not result:
+            raise RuntimeError('Supabase no devolvió confirmación para decisión ' + rid)
+        known.add(rid)
+        added += 1
+        save_decision_state(known)
+    return added
 
 
 def ingest(rows, known):
@@ -292,6 +353,9 @@ def main():
         rows = read_portal_requests()
         known = read_state()
         added = ingest(rows, known)
+        decisions = read_portal_decisions()
+        known_decisions = read_decision_state()
+        decisions_added = ingest_decisions(decisions, known_decisions)
         state = snapshot()
         push_snapshot(state)
         print(json.dumps({
@@ -299,6 +363,9 @@ def main():
             'portal_requests': len(rows),
             'imported_now': added,
             'known': len(known),
+            'decision_requests': len(decisions),
+            'decisions_imported_now': decisions_added,
+            'known_decisions': len(known_decisions),
             'open_tasks': len(state['tasks']),
             'open_errors': len(state['findings']),
         }, ensure_ascii=False))
