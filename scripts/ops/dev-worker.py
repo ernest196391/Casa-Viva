@@ -190,12 +190,11 @@ def validate_diff(work: Path, allowed_paths: list[str]):
     if rc:
         raise RuntimeError(names)
     changed = [x.strip() for x in names.splitlines() if x.strip()]
-    if not changed:
-        # New untracked files do not appear in git diff.
-        rc, others = run(["git", "ls-files", "--others", "--exclude-standard"], cwd=str(work), timeout=20)
-        if rc:
-            raise RuntimeError(others)
-        changed = [x.strip() for x in others.splitlines() if x.strip()]
+    # Untracked files never appear in git diff; include them even when tracked files changed too.
+    rc, others = run(["git", "ls-files", "--others", "--exclude-standard"], cwd=str(work), timeout=20)
+    if rc:
+        raise RuntimeError(others)
+    changed = sorted(set(changed + [x.strip() for x in others.splitlines() if x.strip()]))
     if not changed or len(changed) > 12:
         raise ValueError("cantidad de archivos cambiados fuera de límite")
     for path in changed:
@@ -303,7 +302,12 @@ def process_claim(claim: dict):
         risk = task.get("risk") or "guarded"
         auto = bool(claim.get("auto_merge")) and risk in ("safe", "guarded")
         message = f"Control OS task #{task['public_id']} [risk={risk}] [base={base_sha}] [auto_merge={1 if auto else 0}]"
-        rc, out = run(["git", "commit", "-m", message], cwd=str(work), timeout=45)
+        rc, out = run([
+            "git",
+            "-c", "user.name=Casa Viva Control OS",
+            "-c", "user.email=control-os@local.invalid",
+            "commit", "-m", message
+        ], cwd=str(work), timeout=45)
         if rc:
             raise RuntimeError("commit falló: " + out)
         rc, work_sha = run(["git", "rev-parse", "HEAD"], cwd=str(work), timeout=20)
