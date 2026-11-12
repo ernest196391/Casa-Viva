@@ -262,17 +262,20 @@ def action_vivabot_git_status(args):
         return {"returncode": 2, "output": "/root/vivabot no es un checkout Git"}
     branch = run(["git", "branch", "--show-current"], timeout=20, cwd=str(repo))
     head = run(["git", "rev-parse", "HEAD"], timeout=20, cwd=str(repo))
-    status = run(["git", "status", "--porcelain"], timeout=20, cwd=str(repo))
+    tracked = run(["git", "status", "--porcelain", "--untracked-files=no"], timeout=20, cwd=str(repo))
+    untracked = run(["git", "ls-files", "--others", "--exclude-standard"], timeout=20, cwd=str(repo))
     return {
-        "returncode": 0 if branch["returncode"] == head["returncode"] == status["returncode"] == 0 else 1,
+        "returncode": 0 if branch["returncode"] == head["returncode"] == tracked["returncode"] == untracked["returncode"] == 0 else 1,
         "output": json.dumps({
+            "bridge_version": BRIDGE_VERSION,
             "branch": branch["output"].strip(),
             "head": head["output"].strip(),
-            "clean": not bool(status["output"].strip()),
-            "status": status["output"][:12000],
+            "tracked_clean": not bool(tracked["output"].strip()),
+            "tracked_status": tracked["output"][:12000],
+            "untracked_count": len([x for x in untracked["output"].splitlines() if x.strip()]),
+            "untracked_preview": untracked["output"][:12000],
         }, ensure_ascii=False),
     }
-
 
 def _pm2_vivabot_online():
     p = run(["pm2", "jlist"], timeout=30)
@@ -305,13 +308,13 @@ def action_deploy_vivabot(args):
     if not (repo / ".git").exists():
         return {"returncode": 2, "output": "/root/vivabot no es un checkout Git"}
 
-    status = run(["git", "status", "--porcelain"], timeout=20, cwd=str(repo))
+    status = run(["git", "status", "--porcelain", "--untracked-files=no"], timeout=20, cwd=str(repo))
     if status["returncode"] != 0:
         return status
     if status["output"].strip():
         return {
             "returncode": 3,
-            "output": "DESPLIEGUE BLOQUEADO: hay cambios locales en /root/vivabot. No se tocó nada.\n"
+            "output": "DESPLIEGUE BLOQUEADO: hay cambios TRACKED locales en /root/vivabot. No se tocó nada.\n"
                       + status["output"][:12000],
         }
 
@@ -328,6 +331,21 @@ def action_deploy_vivabot(args):
     exists = run(["git", "cat-file", "-e", f"{sha}^{{commit}}"], timeout=20, cwd=str(repo))
     if exists["returncode"] != 0:
         return {"returncode": 5, "output": f"SHA {sha} no existe después de git fetch"}
+
+    # Los respaldos/temporales locales no bloquean, salvo que el SHA objetivo vaya a escribir exactamente esa ruta.
+    untracked = run(["git", "ls-files", "--others", "--exclude-standard"], timeout=20, cwd=str(repo))
+    target_paths = run(["git", "ls-tree", "-r", "--name-only", sha], timeout=30, cwd=str(repo))
+    if untracked["returncode"] != 0 or target_paths["returncode"] != 0:
+        return {"returncode": 5, "output": "No pude comprobar conflictos con archivos locales no versionados"}
+    local_only = {x.strip() for x in untracked["output"].splitlines() if x.strip()}
+    target = {x.strip() for x in target_paths["output"].splitlines() if x.strip()}
+    conflicts = sorted(local_only.intersection(target))
+    if conflicts:
+        return {
+            "returncode": 5,
+            "output": "DESPLIEGUE BLOQUEADO: archivos locales no versionados chocan con el SHA objetivo:\n"
+                      + "\n".join(conflicts[:100]),
+        }
 
     on_main = run(["git", "merge-base", "--is-ancestor", sha, "origin/main"], timeout=20, cwd=str(repo))
     if on_main["returncode"] != 0:
@@ -403,6 +421,64 @@ def action_deploy_vivabot(args):
     }
 
 
+
+def action_bridge_status(args):
+    return {
+        "returncode": 0,
+        "output": json.dumps({
+            "bridge_version": BRIDGE_VERSION,
+            "path": str(Path(__file__).resolve()),
+            "actions": sorted(ACTIONS.keys()) if "ACTIONS" in globals() else [],
+        }, ensure_ascii=False),
+    }
+
+
+def action_update_bridge(args):
+    """Update this bridge only from a full Casa-Viva main commit SHA."""
+    import re
+
+    sha = str((args or {}).get("sha", "")).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        return {"returncode": 2, "output": "args.sha debe ser un SHA Git completo"}
+
+    url = f"https://raw.githubusercontent.com/ernest196391/Casa-Viva/{sha}/scripts/ops/cv-ops-bridge.py"
+    target = Path(__file__).resolve()
+    tmp = target.with_name(target.name + ".next")
+
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            body = resp.read()
+        if len(body) < 5000 or b"Casa Viva Ops Bridge" not in body or b"def main(" not in body:
+            return {"returncode": 3, "output": "El archivo remoto no parece un bridge válido"}
+        tmp.write_bytes(body)
+        os.chmod(tmp, 0o700)
+        checked = run(["python3", "-m", "py_compile", str(tmp)], timeout=30)
+        if checked["returncode"] != 0:
+            tmp.unlink(missing_ok=True)
+            return {"returncode": 4, "output": "El bridge nuevo no compila:\\n" + checked["output"]}
+        backup = target.with_name(target.name + ".prev")
+        if target.exists():
+            backup.write_bytes(target.read_bytes())
+            os.chmod(backup, 0o700)
+        os.replace(tmp, target)
+        return {
+            "returncode": 0,
+            "output": json.dumps({
+                "updated": True,
+                "sha": sha,
+                "target": str(target),
+                "backup": str(backup),
+                "note": "El siguiente ciclo del cron usará la nueva versión.",
+            }, ensure_ascii=False),
+        }
+    except Exception as exc:
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return {"returncode": 5, "output": f"No pude actualizar el bridge: {exc}"}
+
+
 def action_ai_audit(args):
     cmd = [
         "bash", "-lc",
@@ -434,6 +510,8 @@ ACTIONS = {
     "bot_access_audit": action_bot_access_audit,
     "vivabot_git_status": action_vivabot_git_status,
     "deploy_vivabot": action_deploy_vivabot,
+    "bridge_status": action_bridge_status,
+    "update_bridge": action_update_bridge,
     "ai_audit": action_ai_audit,
     "catalog_sync_status": action_catalog_sync_status,
 }
