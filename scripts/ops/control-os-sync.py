@@ -131,13 +131,134 @@ def query(path):
 
 
 def snapshot():
-    tasks = query('ops_tasks?select=public_id,title,status,priority,risk,result,error,created_at,started_at,finished_at,source&order=created_at.desc&limit=60')
+    now = datetime.datetime.now(datetime.timezone.utc)
+    tasks = query(
+        'ops_tasks?select=id,public_id,thread_id,title,status,priority,risk,result,error,created_at,started_at,finished_at,source,requested_by_name,approval_required'
+        '&order=created_at.desc&limit=120'
+    )
     open_tasks = [x for x in tasks if x.get('status') not in ('done','cancelled','superseded')]
-    findings = []
-    for x in open_tasks:
-        if x.get('source') != 'crm_errores':
-            continue
-        findings.append({
+    rank = {'p0': 0, 'p1': 1, 'p2': 2, 'p3': 3}
+    open_tasks.sort(key=lambda x: (rank.get(x.get('priority'), 9), x.get('created_at') or ''))
+
+    threads = query(
+        'ops_threads?select=id,source,source_ref,subject,summary,status,priority,owner_role,owner_ref,last_activity_at'
+        '&status=eq.active&order=last_activity_at.desc&limit=100'
+    )
+    approvals = query(
+        'ops_approvals?select=public_id,task_id,requested_for_role,warning,impact,proposed_change,status,created_at'
+        '&status=eq.pending&order=created_at.asc&limit=40'
+    )
+    task_by_uuid = {str(x.get('id')): x for x in tasks}
+
+    def task_summary(x):
+        result = x.get('result')
+        if isinstance(result, dict):
+            return str(result.get('summary') or result.get('note') or result.get('goal') or '')
+        return ''
+
+    task_cards = [{
+        'id': x.get('public_id'),
+        'title': x.get('title') or 'Tarea',
+        'status': x.get('status'),
+        'priority': x.get('priority'),
+        'risk': x.get('risk'),
+        'source': x.get('source'),
+        'summary': task_summary(x),
+        'detail': x.get('error') or '',
+        'requested_by': x.get('requested_by_name') or '',
+        'approval_required': bool(x.get('approval_required')),
+        'at': x.get('finished_at') or x.get('started_at') or x.get('created_at'),
+    } for x in open_tasks[:60]]
+
+    decisions = []
+    for a in approvals:
+        t = task_by_uuid.get(str(a.get('task_id')), {})
+        decisions.append({
+            'approval_id': a.get('public_id'),
+            'task_id': t.get('public_id'),
+            'title': t.get('title') or 'Decisión pendiente',
+            'warning': a.get('warning') or '',
+            'impact': a.get('impact') or {},
+            'proposed_change': a.get('proposed_change') or {},
+            'created_at': a.get('created_at'),
+        })
+
+    lennys_sources = {'legacy-crm-supervisor','whatsapp-lennys-live','whatsapp-lennys'}
+    lennys = [{
+        'id': x.get('source_ref'),
+        'subject': x.get('subject') or 'Asunto de Lennys',
+        'summary': x.get('summary') or '',
+        'priority': x.get('priority'),
+        'last_activity_at': x.get('last_activity_at'),
+    } for x in threads if x.get('source') in lennys_sources][:20]
+
+    errors = [x for x in open_tasks if x.get('source') == 'crm_errores']
+    attention = [x for x in open_tasks if x.get('priority') in ('p0','p1')]
+
+    events_raw = query(
+        'ops_events?select=id,event_type,actor_type,actor_ref,detail,created_at'
+        '&order=created_at.desc&limit=30'
+    )
+    activity = [{
+        'at': x.get('created_at'),
+        'provider': x.get('actor_ref') or x.get('actor_type') or 'Control OS',
+        'title': str(x.get('event_type') or 'evento').replace('_',' '),
+        'detail': x.get('detail') or {},
+    } for x in events_raw]
+
+    processes = json.loads(subprocess.check_output(['pm2','jlist'], text=True, timeout=10))
+    bot = next((p for p in processes if p.get('name') == 'vivabot'), {})
+    bot_status = bot.get('pm2_env', {}).get('status', 'unknown')
+
+    bridge_active = subprocess.run(
+        ['systemctl','is-active','cv-ops-bridge.service'],
+        capture_output=True,text=True,timeout=10
+    ).stdout.strip()
+    bridge_enabled = subprocess.run(
+        ['systemctl','is-enabled','cv-ops-bridge.service'],
+        capture_output=True,text=True,timeout=10
+    ).stdout.strip()
+    try:
+        bridge_text = Path('/root/supervisor/cv-ops-bridge.py').read_text(errors='ignore')
+        m = re.search(r'BRIDGE_VERSION\s*=\s*"([^"]+)"', bridge_text)
+        bridge_version = m.group(1) if m else 'unknown'
+    except Exception:
+        bridge_version = 'unknown'
+    try:
+        vivabot_sha = subprocess.check_output(
+            ['git','-C','/root/vivabot','rev-parse','--short','HEAD'],
+            text=True,timeout=10
+        ).strip()
+    except Exception:
+        vivabot_sha = 'unknown'
+
+    system_ok = bot_status == 'online' and bridge_active == 'active'
+    return {
+        'at': now.isoformat(),
+        'summary': {
+            'attention': len(attention),
+            'decisions': len(decisions),
+            'lennys': len(lennys),
+            'errors': len(errors),
+            'open_tasks': len(open_tasks),
+        },
+        'today': task_cards[:10],
+        'tasks': task_cards,
+        'decisions': decisions,
+        'lennys': lennys,
+        'system': {
+            'ok': system_ok,
+            'vivabot': {'status': bot_status, 'sha': vivabot_sha},
+            'bridge': {'status': bridge_active, 'enabled': bridge_enabled, 'version': bridge_version, 'poll_seconds': 3},
+            'control_sync': {'status': 'online', 'at': now.isoformat()},
+        },
+        'activity': activity,
+        # Compatibility with the old UI until C3 web files are deployed.
+        'owner': 'control-os',
+        'supervisor': {'at': now.isoformat(), 'event': 'running'},
+        'health': {'state': 'ok' if system_ok else 'degraded', 'at': now.isoformat(), 'error': None if system_ok else 'Revisar servicios del Control OS'},
+        'bot': {'status': bot_status},
+        'findings': [{
             'id': 'ops-' + str(x.get('public_id')),
             'priority': x.get('priority'),
             'title': x.get('title'),
@@ -145,40 +266,13 @@ def snapshot():
             'status': 'pending',
             'order_id': None,
             'question': None,
-        })
-    task_cards = []
-    for x in open_tasks[:40]:
-        result = x.get('result')
-        if isinstance(result, dict):
-            summary = result.get('summary') or result.get('note') or ''
-        else:
-            summary = ''
-        task_cards.append({
-            'title': '#' + str(x.get('public_id')) + ' · ' + str(x.get('title') or 'Tarea'),
-            'status': x.get('status'),
-            'summary': summary,
-            'detail': x.get('error') or '',
-            'at': x.get('finished_at') or x.get('started_at') or x.get('created_at'),
-        })
-    events_raw = query('ops_events?select=id,event_type,actor_type,actor_ref,detail,created_at&order=created_at.desc&limit=20')
-    events = [{
-        'at': x.get('created_at'),
-        'provider': 'Control OS',
-        'title': str(x.get('event_type') or 'Evento').replace('_',' '),
-        'detail': json.dumps(x.get('detail') or {}, ensure_ascii=False)[:300],
-    } for x in events_raw]
-
-    processes = json.loads(subprocess.check_output(['pm2','jlist'], text=True, timeout=10))
-    bot = next((p for p in processes if p.get('name') == 'vivabot'), {})
-    return {
-        'at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        'owner': 'control-os',
-        'supervisor': {'at': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'event': 'running'},
-        'health': {'state': 'ok', 'at': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'error': None},
-        'bot': {'status': bot.get('pm2_env', {}).get('status', 'unknown')},
-        'findings': findings[:20],
-        'tasks': task_cards,
-        'events': events,
+        } for x in errors[:20]],
+        'events': [{
+            'at': x.get('at'),
+            'provider': x.get('provider'),
+            'title': x.get('title'),
+            'detail': json.dumps(x.get('detail') or {}, ensure_ascii=False)[:300],
+        } for x in activity],
     }
 
 
