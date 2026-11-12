@@ -229,6 +229,31 @@ echo json_encode($out,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
     )
 
 
+
+def action_cv_order(args):
+    try:
+        order_id = int((args or {}).get("id", 0))
+    except (TypeError, ValueError):
+        order_id = 0
+    if order_id <= 0:
+        return {"returncode": 2, "output": "args.id inválido"}
+    return run(["bash", "-lc", f"cv pedido {order_id}"], timeout=60)
+
+
+def action_bot_access_audit(args):
+    cmd = [
+        "bash", "-lc",
+        "cd /root/vivabot && "
+        "echo '=== CODIGO ==='; "
+        "grep -RIn --exclude-dir=node_modules -E 'mi acceso|accessLink|clerk/access|bot/partners|secure_access|gestora.*access' src scripts 2>/dev/null | head -n 160; "
+        "echo '=== LOGS ==='; "
+        "for f in /root/.pm2/logs/vivabot-out.log /root/.pm2/logs/vivabot-error.log; do "
+        "echo ---$f---; [ -f $f ] && tail -n 1200 $f | grep -Ei 'mi acceso|5356885368|access|error|partner' | tail -n 220; "
+        "done"
+    ]
+    return run(cmd, timeout=60)
+
+
 def action_ai_audit(args):
     cmd = [
         "bash", "-lc",
@@ -256,6 +281,8 @@ ACTIONS = {
     "wp_version": action_wp_version,
     "wp_catalog_search": action_wp_catalog_search,
     "wp_product": action_wp_product,
+    "cv_order": action_cv_order,
+    "bot_access_audit": action_bot_access_audit,
     "ai_audit": action_ai_audit,
     "catalog_sync_status": action_catalog_sync_status,
 }
