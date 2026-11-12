@@ -1,9 +1,8 @@
-name: Instantánea de catálogo BizneCubano
+name: LEGACY · Instantánea BizneCubano (solo recuperación manual)
 
+# Casa Viva dejó BizneCubano el 2026-10-11. No ejecutar automáticamente.
+# Se conserva únicamente como herramienta de reversión/diagnóstico manual.
 on:
-  # Cada hora: NEXO Business importa esta instantánea a los :50 (solo lectura).
-  schedule:
-    - cron: '5 * * * *'
   workflow_dispatch:
     inputs:
       discovery:
@@ -11,9 +10,6 @@ on:
         required: false
         default: '0'
         type: string
-  push:
-    branches: ['cv-catalog-sync-*']
-    paths: ['scripts/catalog/**', '.github/workflows/catalog-source-snapshot.yml']
 
 permissions:
   contents: write
