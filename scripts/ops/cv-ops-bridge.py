@@ -32,7 +32,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "3.7.0"
+BRIDGE_VERSION = "3.8.0"
 
 
 def load_env_files() -> dict[str, str]:
@@ -824,12 +824,116 @@ def action_dev_claude_probe(args):
         return {"returncode": 2, "output": "Claude CLI no está instalado"}
     p = run([
         "/usr/bin/claude", "-p",
+        "Responde exactamente con la palabra OK. No uses herramientas.",
         "--max-turns", "1",
         "--output-format", "json",
-        "--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch",
-        "Responde exactamente con la palabra OK. No uses herramientas."
+        "--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch"
     ], timeout=90, cwd="/tmp")
     return p
+
+
+
+def action_update_dev_worker(args):
+    """Install the Dev Worker only from an approved Casa-Viva SHA."""
+    import re
+
+    sha = str((args or {}).get("sha", "")).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        return {"returncode": 2, "output": "args.sha debe ser un SHA Git completo"}
+
+    url = f"https://raw.githubusercontent.com/ernest196391/Casa-Viva/{sha}/scripts/ops/dev-worker.py"
+    target = Path("/root/supervisor/dev-worker.py")
+    tmp = target.with_name(target.name + ".next")
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            body = resp.read()
+        if len(body) < 5000 or b"Casa Viva Control OS Dev Worker" not in body or b"def main(" not in body:
+            return {"returncode": 3, "output": "El archivo remoto no parece el Dev Worker esperado"}
+        tmp.write_bytes(body)
+        os.chmod(tmp, 0o700)
+        checked = run(["python3", "-m", "py_compile", str(tmp)], timeout=30)
+        if checked["returncode"] != 0:
+            tmp.unlink(missing_ok=True)
+            return {"returncode": 4, "output": "El Dev Worker nuevo no compila:\n" + checked["output"]}
+        backup = target.with_name(target.name + ".prev")
+        if target.exists():
+            backup.write_bytes(target.read_bytes())
+            os.chmod(backup, 0o700)
+        os.replace(tmp, target)
+        return {
+            "returncode": 0,
+            "output": json.dumps({
+                "updated": True,
+                "sha": sha,
+                "target": str(target),
+                "backup": str(backup),
+            }, ensure_ascii=False),
+        }
+    except Exception as exc:
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return {"returncode": 5, "output": f"No pude actualizar Dev Worker: {exc}"}
+
+
+def action_install_dev_worker_service(args):
+    """Persistent Dev Worker loop; script itself claims at most one safe task per pass."""
+    worker = Path("/root/supervisor/dev-worker.py")
+    if not worker.exists():
+        return {"returncode": 2, "output": "Falta /root/supervisor/dev-worker.py"}
+
+    unit = """[Unit]
+Description=Casa Viva Control OS Dev Worker
+After=network-online.target cv-ops-bridge.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/bin/bash -lc 'while true; do /usr/bin/python3 /root/supervisor/dev-worker.py; sleep 10; done'
+Restart=always
+RestartSec=4
+Nice=8
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
+"""
+    path = Path("/etc/systemd/system/cv-dev-worker.service")
+    path.write_text(unit)
+    os.chmod(path, 0o644)
+    a = run(["systemctl", "daemon-reload"], timeout=30)
+    if a["returncode"] != 0:
+        return a
+    b = run(["systemctl", "enable", "--now", "cv-dev-worker.service"], timeout=45)
+    if b["returncode"] != 0:
+        return b
+    time.sleep(2)
+    s = run(["systemctl", "is-active", "cv-dev-worker.service"], timeout=20)
+    return {
+        "returncode": 0 if s["output"].strip() == "active" else 1,
+        "output": json.dumps({
+            "installed": True,
+            "active": s["output"].strip(),
+            "unit": str(path),
+            "poll_seconds": 10,
+        }, ensure_ascii=False),
+    }
+
+
+def action_dev_worker_status(args):
+    p = run(["systemctl", "is-active", "cv-dev-worker.service"], timeout=20)
+    q = run(["systemctl", "is-enabled", "cv-dev-worker.service"], timeout=20)
+    tail = run(["journalctl", "-u", "cv-dev-worker.service", "-n", "20", "--no-pager"], timeout=20)
+    return {
+        "returncode": 0 if p["output"].strip() == "active" else 1,
+        "output": json.dumps({
+            "active": p["output"].strip(),
+            "enabled": q["output"].strip(),
+            "journal": tail["output"][-6000:],
+        }, ensure_ascii=False),
+    }
 
 
 def action_ai_audit(args):
@@ -874,6 +978,9 @@ ACTIONS = {
     "dev_environment_audit": action_dev_environment_audit,
     "dev_push_probe": action_dev_push_probe,
     "dev_claude_probe": action_dev_claude_probe,
+    "update_dev_worker": action_update_dev_worker,
+    "install_dev_worker_service": action_install_dev_worker_service,
+    "dev_worker_status": action_dev_worker_status,
     "ai_audit": action_ai_audit,
     "catalog_sync_status": action_catalog_sync_status,
 }
