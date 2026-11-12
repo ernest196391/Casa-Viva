@@ -183,6 +183,52 @@ def action_wp_catalog_search(args):
     )
 
 
+
+def action_wp_product(args):
+    try:
+        product_id = int((args or {}).get("id", 0))
+    except (TypeError, ValueError):
+        product_id = 0
+    if product_id <= 0:
+        return {"returncode": 2, "output": "args.id inválido"}
+    import base64
+    php = r"""
+$id=(int)getenv('CVID');
+$p=wc_get_product($id);
+if(!$p){fwrite(STDERR,"producto no encontrado\n");exit(2);}
+$one=function($x){
+  $attrs=[];
+  foreach($x->get_attributes() as $k=>$a){
+    if($a instanceof WC_Product_Attribute){
+      $attrs[$k]=['name'=>$a->get_name(),'options'=>$a->get_options(),'variation'=>$a->get_variation(),'taxonomy'=>$a->is_taxonomy()];
+    } else {$attrs[$k]=$a;}
+  }
+  return [
+    'id'=>$x->get_id(),'type'=>$x->get_type(),'parent_id'=>$x->get_parent_id(),
+    'name'=>$x->get_name(),'status'=>$x->get_status(),'sku'=>$x->get_sku('edit'),
+    'price'=>$x->get_price('edit'),'regular_price'=>$x->get_regular_price('edit'),
+    'manage_stock'=>$x->managing_stock(),'stock_quantity'=>$x->get_stock_quantity(),
+    'stock_status'=>$x->get_stock_status(),'attributes'=>$attrs,
+    'variation_attributes'=>$x->is_type('variation')?$x->get_variation_attributes(false):[],
+    'retired'=>$x->get_meta('_cvd_retired',true),'hold'=>$x->get_meta('_cvd_hold',true)
+  ];
+};
+$out=['product'=>$one($p),'children'=>[]];
+if($p->is_type('variable')){
+  foreach($p->get_children() as $cid){
+    $v=wc_get_product($cid);
+    if($v)$out['children'][]=$one($v);
+  }
+}
+echo json_encode($out,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+"""
+    php64 = base64.b64encode(php.encode()).decode()
+    return wp_remote(
+        f"CVID={product_id} wp eval \"$(printf %s {php64} | base64 -d)\"",
+        timeout=60,
+    )
+
+
 def action_ai_audit(args):
     cmd = [
         "bash", "-lc",
@@ -209,6 +255,7 @@ ACTIONS = {
     "wp_plugins": action_wp_plugins,
     "wp_version": action_wp_version,
     "wp_catalog_search": action_wp_catalog_search,
+    "wp_product": action_wp_product,
     "ai_audit": action_ai_audit,
     "catalog_sync_status": action_catalog_sync_status,
 }
