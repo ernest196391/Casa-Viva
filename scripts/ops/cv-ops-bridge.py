@@ -32,7 +32,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "3.6.0"
+BRIDGE_VERSION = "3.7.0"
 
 
 def load_env_files() -> dict[str, str]:
@@ -817,6 +817,21 @@ def action_dev_push_probe(args):
     return {"returncode": 0, "output": json.dumps(out, ensure_ascii=False)}
 
 
+
+def action_dev_claude_probe(args):
+    """Minimal non-interactive Claude probe; no tools and no filesystem writes requested."""
+    if not Path("/usr/bin/claude").exists():
+        return {"returncode": 2, "output": "Claude CLI no está instalado"}
+    p = run([
+        "/usr/bin/claude", "-p",
+        "--max-turns", "1",
+        "--output-format", "json",
+        "--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch",
+        "Responde exactamente con la palabra OK. No uses herramientas."
+    ], timeout=90, cwd="/tmp")
+    return p
+
+
 def action_ai_audit(args):
     cmd = [
         "bash", "-lc",
@@ -858,6 +873,7 @@ ACTIONS = {
     "install_control_sync_service": action_install_control_sync_service,
     "dev_environment_audit": action_dev_environment_audit,
     "dev_push_probe": action_dev_push_probe,
+    "dev_claude_probe": action_dev_claude_probe,
     "ai_audit": action_ai_audit,
     "catalog_sync_status": action_catalog_sync_status,
 }
