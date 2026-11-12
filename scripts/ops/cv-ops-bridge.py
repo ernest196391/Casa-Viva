@@ -52,7 +52,7 @@ def find_supabase(env: dict[str, str]) -> tuple[str, str]:
         "SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL", "VIVABOT_SUPABASE_URL",
     ]
     key_candidates = [
-        "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY", "SUPABASE_SECRET_KEY",
         "SERVICE_ROLE_KEY", "VIVABOT_SUPABASE_SERVICE_ROLE_KEY",
     ]
     url = next((env.get(k) for k in url_candidates if env.get(k)), None)
