@@ -217,20 +217,28 @@ final class CVD_Order_Edit {
 			if ( 'cancelled' === ( $step['to'] ?? '' ) && ! in_array( (string) ( $step['from'] ?? '' ), array( '', 'cancelled', 'delivered' ), true ) ) { $operation = sanitize_key( (string) $step['from'] ); break; }
 		}
 		$who = self::who( $user_id );
+		$previous_delivery = CVD_Order_Transition_Service::delivery_before_cancel( $order );
+		$restore_messenger = ! self::is_pickup( $order ) && 'unassigned' !== $previous_delivery && absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
 		// WooCommerce descuenta otra vez las existencias al pasar a «En espera» (al cancelar las devolvió).
 		$order->update_status( 'on-hold', sprintf( 'Pedido REACTIVADO por %s. Motivo: %s.', $who, $reason ) );
 		$fresh = wc_get_order( $order_id );
 		CVD_Order_Transition_Service::reopen_after_cancel( $fresh, $operation, $user_id );
-		foreach ( array( '_cvd_messenger_user_id', '_cvd_messenger_earning_status', '_cvd_delivery_accepted_at', '_cvd_to_store_at', '_cvd_bot_eta', '_cvd_bot_eta_at', '_cvd_direct_assignment' ) as $key ) { $fresh->delete_meta_data( $key ); }
+		if ( $restore_messenger ) {
+			$fresh->update_meta_data( '_cvd_messenger_earning_status', 'pending' );
+		} else {
+			foreach ( array( '_cvd_messenger_user_id', '_cvd_messenger_earning_status', '_cvd_delivery_accepted_at', '_cvd_to_store_at', '_cvd_bot_eta', '_cvd_bot_eta_at', '_cvd_direct_assignment' ) as $key ) { $fresh->delete_meta_data( $key ); }
+		}
 		$fresh->update_meta_data( '_cvd_reactivated_at', current_time( 'mysql', true ) );
 		$fresh->update_meta_data( '_cvd_reactivated_by', $user_id );
 		$fresh->save();
 		if ( class_exists( 'CVD_Commissions' ) && method_exists( 'CVD_Commissions', 'reopen' ) ) { CVD_Commissions::reopen( $order_id ); }
 		$fresh = wc_get_order( $order_id );
 		$delivery = ! self::is_pickup( $fresh );
-		if ( $delivery && 'ready' === $operation && class_exists( 'CVD_Delivery' ) ) { CVD_Delivery::dispatch_new_order( $order_id ); }
+		if ( $delivery && ! $restore_messenger && 'ready' === $operation && class_exists( 'CVD_Delivery' ) ) { CVD_Delivery::dispatch_new_order( $order_id ); }
 		$message = 'Pedido #' . $fresh->get_order_number() . ' reactivado: está «En espera», las existencias se descontaron otra vez y la comisión vuelve a pendiente.';
-		$message .= $delivery ? ( 'ready' === $operation ? ' Sale otra vez al grupo de mensajeros.' : ' Cuando esté listo, sale al grupo de mensajeros.' ) : ' Sigue de recogida en tienda.';
+		if ( $delivery && $restore_messenger ) { $message .= ' Conserva el mensajero y la etapa que tenía antes de cancelar.'; }
+		elseif ( $delivery ) { $message .= 'ready' === $operation ? ' Sale otra vez al grupo de mensajeros.' : ' Cuando esté listo, sale al grupo de mensajeros.'; }
+		else { $message .= ' Sigue de recogida en tienda.'; }
 		return array( 'ok' => true, 'message' => $message );
 	}
 
