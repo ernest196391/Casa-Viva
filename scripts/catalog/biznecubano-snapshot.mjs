@@ -1,4 +1,4 @@
-// Instantánea de solo lectura del catálogo público de Casa Viva en BizneCubano
+// Diagnóstico manual 2026-11-12: disparo seguro de snapshot, sin cambios funcionales.\n// Instantánea de solo lectura del catálogo público de Casa Viva en BizneCubano
 // y del catálogo WooCommerce público de casavivadecuba.com (Store API).
 // No inicia sesión, no añade al carrito y no envía formularios.
 import fs from 'node:fs';
