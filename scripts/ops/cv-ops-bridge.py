@@ -1,0 +1,278 @@
+#!/usr/bin/env python3
+"""Casa Viva Ops Bridge (read-only v1).
+
+Polls a private Supabase queue and executes only a fixed allowlist of diagnostic
+actions. It never executes arbitrary shell supplied by the queue.
+
+Expected runtime: root VPS (VivaBot/supervisor host).
+"""
+from __future__ import annotations
+
+import fcntl
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+LOCK = "/tmp/cv-ops-bridge.lock"
+ENV_FILES = [Path("/root/vivabot/.env"), Path("/root/supervisor/.env")]
+WP_PATH = "/home/u824654880/domains/casaviva.company/public_html"
+WP_SSH = [
+    "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=12",
+    "-o", "StrictHostKeyChecking=yes",
+    "-i", "/root/.ssh/casa-viva-web", "-p", "65002",
+    "u824654880@88.223.85.72",
+]
+MAX_OUTPUT = 50000
+
+
+def load_env_files() -> dict[str, str]:
+    env = dict(os.environ)
+    for path in ENV_FILES:
+        if not path.exists():
+            continue
+        for raw in path.read_text(errors="replace").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip("'").strip('"')
+            env.setdefault(key, value)
+    return env
+
+
+def find_supabase(env: dict[str, str]) -> tuple[str, str]:
+    url_candidates = [
+        "SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL", "VIVABOT_SUPABASE_URL",
+    ]
+    key_candidates = [
+        "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEY",
+        "SERVICE_ROLE_KEY", "VIVABOT_SUPABASE_SERVICE_ROLE_KEY",
+    ]
+    url = next((env.get(k) for k in url_candidates if env.get(k)), None)
+    key = next((env.get(k) for k in key_candidates if env.get(k)), None)
+
+    if not url:
+        for k, v in env.items():
+            if "SUPABASE" in k.upper() and k.upper().endswith("_URL") and v.startswith("http"):
+                url = v
+                break
+    if not key:
+        for k, v in env.items():
+            ku = k.upper()
+            if ("SUPABASE" in ku or "SERVICE_ROLE" in ku) and ("SECRET" in ku or "SERVICE_ROLE" in ku):
+                if len(v) > 20:
+                    key = v
+                    break
+
+    if not url or not key:
+        raise RuntimeError("No encontré URL/clave privilegiada de Supabase en los env permitidos")
+    return url.rstrip("/"), key
+
+
+def api_request(base: str, key: str, method: str, path: str, body=None, prefer=None):
+    data = None if body is None else json.dumps(body).encode()
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+    if prefer:
+        headers["Prefer"] = prefer
+    req = urllib.request.Request(base + path, data=data, headers=headers, method=method)
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        payload = resp.read()
+        return json.loads(payload.decode() or "null") if payload else None
+
+
+def run(cmd: list[str], timeout=45, cwd=None) -> dict:
+    p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+    out = (p.stdout or "") + (("\nSTDERR:\n" + p.stderr) if p.stderr else "")
+    return {"returncode": p.returncode, "output": out[:MAX_OUTPUT]}
+
+
+def wp_remote(command: str, timeout=45) -> dict:
+    # command is static and built only by allowlisted actions below.
+    return run(WP_SSH + [f"cd {WP_PATH} && {command}"], timeout=timeout)
+
+
+def action_health(args):
+    return run(["/usr/local/bin/cv", "salud", "--ahora"], timeout=60)
+
+
+def action_errors_open(args):
+    return run(["/usr/local/bin/cv", "errores", "abiertos"], timeout=60)
+
+
+def action_pm2_status(args):
+    p = run(["pm2", "jlist"], timeout=30)
+    if p["returncode"] != 0:
+        return p
+    try:
+        rows = json.loads(p["output"])
+        slim = []
+        for row in rows:
+            env = row.get("pm2_env", {})
+            slim.append({
+                "name": row.get("name"),
+                "status": env.get("status"),
+                "restart_time": env.get("restart_time"),
+                "pm_uptime": env.get("pm_uptime"),
+            })
+        return {"returncode": 0, "output": json.dumps(slim, ensure_ascii=False)}
+    except Exception:
+        return p
+
+
+def action_supervisor_status(args):
+    root = Path("/root/supervisor")
+    data = {}
+    for name in ("active-supervisor", "codex-status.json", "codex-health.json"):
+        path = root / name
+        if path.exists():
+            data[name] = path.read_text(errors="replace")[:10000]
+    return {"returncode": 0, "output": json.dumps(data, ensure_ascii=False)}
+
+
+def action_wp_version(args):
+    return wp_remote("wp core version")
+
+
+def action_wp_plugins(args):
+    return wp_remote("wp plugin list --fields=name,status,version,update --format=json")
+
+
+def action_wp_status(args):
+    command = (
+        "printf 'CORE='; wp core version; "
+        "printf 'SITE='; wp option get siteurl; "
+        "printf 'PLUGIN='; wp plugin get casa-viva-dropship-core "
+        "--fields=name,status,version --format=json"
+    )
+    return wp_remote(command)
+
+
+def action_wp_catalog_search(args):
+    q = str((args or {}).get("q", "")).strip()
+    if not q or len(q) > 80 or any(ord(c) < 32 for c in q):
+        return {"returncode": 2, "output": "args.q inválido"}
+    # Base64 keeps the user query out of shell syntax. PHP code is fixed.
+    import base64
+    q64 = base64.b64encode(q.encode()).decode()
+    php = (
+        "$q=base64_decode(getenv('CVQ'));"
+        "$ids=get_posts(['post_type'=>'product','post_status'=>['publish','draft','private'],"
+        "'posts_per_page'=>20,'s'=>$q,'fields'=>'ids']);"
+        "$o=[];foreach($ids as $id){$p=wc_get_product($id);if(!$p)continue;"
+        "$o[]=['id'=>$id,'name'=>$p->get_name(),'status'=>$p->get_status(),"
+        "'sku'=>$p->get_sku(),'price'=>$p->get_price(),'stock_status'=>$p->get_stock_status(),"
+        "'stock_qty'=>$p->get_stock_quantity()];}"
+        "echo json_encode($o,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);"
+    )
+    return wp_remote(f"CVQ={q64} wp eval {json.dumps(php)}", timeout=60)
+
+
+def action_ai_audit(args):
+    cmd = [
+        "bash", "-lc",
+        "crontab -l | grep -Ein 'claude|codex|anthropic|supervisor|catalogo-fichas|revision-errores|arrancar-sesion' || true",
+    ]
+    return run(cmd, timeout=30)
+
+
+def action_catalog_sync_status(args):
+    cmd = [
+        "bash", "-lc",
+        "for f in /root/supervisor/logs/catalogo-fichas.log /root/supervisor/control-sync.log; "
+        "do echo ===$f===; [ -f $f ] && tail -n 80 $f; done",
+    ]
+    return run(cmd, timeout=30)
+
+
+ACTIONS = {
+    "health": action_health,
+    "errors_open": action_errors_open,
+    "supervisor_status": action_supervisor_status,
+    "pm2_status": action_pm2_status,
+    "wp_status": action_wp_status,
+    "wp_plugins": action_wp_plugins,
+    "wp_version": action_wp_version,
+    "wp_catalog_search": action_wp_catalog_search,
+    "ai_audit": action_ai_audit,
+    "catalog_sync_status": action_catalog_sync_status,
+}
+
+
+def patch(base, key, task_id: int, payload: dict, queued_only=False):
+    filt = f"id=eq.{task_id}"
+    if queued_only:
+        filt += "&status=eq.queued"
+    return api_request(
+        base, key, "PATCH",
+        f"/rest/v1/crm_ops_bridge?{filt}",
+        payload,
+        prefer="return=representation",
+    )
+
+
+def main():
+    os.umask(0o077)
+    Path(LOCK).touch(mode=0o600, exist_ok=True)
+    with open(LOCK, "r+") as guard:
+        try:
+            fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return 0
+
+        env = load_env_files()
+        base, key = find_supabase(env)
+        rows = api_request(
+            base, key, "GET",
+            "/rest/v1/crm_ops_bridge?status=eq.queued&select=id,action,args&order=created_at.asc&limit=1",
+        )
+        if not rows:
+            return 0
+
+        task = rows[0]
+        task_id = int(task["id"])
+        action = str(task["action"])
+        claimed = patch(base, key, task_id, {"status": "running", "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, True)
+        if not claimed:
+            return 0
+
+        fn = ACTIONS.get(action)
+        if fn is None:
+            patch(base, key, task_id, {
+                "status": "blocked",
+                "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "error": "Acción no permitida por el worker",
+            })
+            return 0
+
+        try:
+            result = fn(task.get("args") or {})
+            ok = int(result.get("returncode", 1)) == 0
+            patch(base, key, task_id, {
+                "status": "done" if ok else "failed",
+                "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "result": result,
+                "error": None if ok else "La acción devolvió código distinto de cero",
+            })
+        except Exception as exc:
+            patch(base, key, task_id, {
+                "status": "failed",
+                "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "error": f"{type(exc).__name__}: {exc}"[:2000],
+            })
+        return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
