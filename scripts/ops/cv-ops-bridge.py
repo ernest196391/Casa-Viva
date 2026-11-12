@@ -32,7 +32,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "3.5.0"
+BRIDGE_VERSION = "3.6.0"
 
 
 def load_env_files() -> dict[str, str]:
@@ -786,6 +786,37 @@ def action_dev_environment_audit(args):
     }
 
 
+
+def action_dev_push_probe(args):
+    """Dry-run Git push auth for allowlisted repos. Does not create remote refs."""
+    repos = {
+        "vivabot": "/root/vivabot",
+        "casa-viva": "/root/Casa-Viva",
+        "nexo": "/root/ernesto-rondon-nexo",
+    }
+    out = {}
+    for name, repo in repos.items():
+        path = Path(repo)
+        if not (path / ".git").exists():
+            out[name] = {"exists": False, "push_dry_run_ok": False}
+            continue
+        head = run(["git", "-C", repo, "rev-parse", "HEAD"], timeout=20)
+        if head["returncode"] != 0:
+            out[name] = {"exists": True, "push_dry_run_ok": False, "error": head["output"][:1000]}
+            continue
+        probe_ref = f"refs/heads/control-os/probe-{name}"
+        p = run(
+            ["git", "-C", repo, "push", "--dry-run", "origin", f"{head['output'].strip()}:{probe_ref}"],
+            timeout=45,
+        )
+        out[name] = {
+            "exists": True,
+            "push_dry_run_ok": p["returncode"] == 0,
+            "detail": p["output"][:1800],
+        }
+    return {"returncode": 0, "output": json.dumps(out, ensure_ascii=False)}
+
+
 def action_ai_audit(args):
     cmd = [
         "bash", "-lc",
@@ -826,6 +857,7 @@ ACTIONS = {
     "control_sync_service_status": action_control_sync_service_status,
     "install_control_sync_service": action_install_control_sync_service,
     "dev_environment_audit": action_dev_environment_audit,
+    "dev_push_probe": action_dev_push_probe,
     "ai_audit": action_ai_audit,
     "catalog_sync_status": action_catalog_sync_status,
 }
