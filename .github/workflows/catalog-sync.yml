@@ -1,9 +1,8 @@
-name: Sincronizar catálogo BizneCubano
+name: LEGACY · Sincronización BizneCubano (solo recuperación manual)
 
+# Casa Viva dejó BizneCubano el 2026-10-11. No ejecutar automáticamente.
+# Se conserva únicamente para una reversión manual explícita.
 on:
-  # Cada hora, después de la instantánea de :05 (tarda ~11 min): la web sigue a BizneCubano sola (2026-10-08).
-  schedule:
-    - cron: '25 * * * *'
   workflow_dispatch:
     inputs:
       mode:
