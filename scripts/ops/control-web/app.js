@@ -22,7 +22,11 @@ function decisionCard(x){
   top.append(el('h3','Tarea #'+(x.task_id||'—')+' · '+(x.title||'Decisión')),pill('Requiere decisión','warning'));a.append(top);
   if(x.warning)a.append(el('p',x.warning,'card-copy'));
   const impact=x.impact&&typeof x.impact==='object'?Object.values(x.impact).filter(v=>typeof v==='string').join(' · '):'';
-  if(impact)a.append(el('small',impact,'impact'));a.append(el('div',stamp(x.created_at),'meta'));return a;
+  if(impact)a.append(el('small',impact,'impact'));
+  const actions=el('div','', 'decision-actions');
+  const approve=el('button','Aprobar','approve-btn');approve.type='button';approve.dataset.decision='approve';approve.dataset.approval=String(x.approval_id||'');
+  const reject=el('button','Rechazar','reject-btn');reject.type='button';reject.dataset.decision='reject';reject.dataset.approval=String(x.approval_id||'');
+  actions.append(approve,reject);a.append(actions,el('p','', 'decision-feedback'),el('div',stamp(x.created_at),'meta'));return a;
 }
 function lennysCard(x){
   const a=el('article','', 'card priority-'+(x.priority||'p2'));const top=el('div','', 'card-top');
@@ -65,6 +69,22 @@ async function refresh(){
 $('refresh').addEventListener('click',refresh);
 document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('selected',x===b));document.querySelectorAll('.view').forEach(v=>v.hidden=v.id!==b.dataset.tab);}));
 document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click',()=>{state.filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('selected',x===b));renderTasks();}));
+
+$('decisions-list').addEventListener('click',async e=>{
+  const btn=e.target.closest('[data-decision]');if(!btn)return;
+  const card=btn.closest('.card');const feedback=card.querySelector('.decision-feedback');
+  const approval=Number(btn.dataset.approval);const decision=btn.dataset.decision;
+  if(!approval||!['approve','reject'].includes(decision))return;
+  card.querySelectorAll('[data-decision]').forEach(x=>x.disabled=true);
+  feedback.textContent=decision==='approve'?'Guardando aprobación…':'Guardando rechazo…';
+  try{
+    const r=await fetch('./?action=decision',{method:'POST',headers:{'Content-Type':'application/json','X-CV-Nonce':document.querySelector('meta[name=cv-nonce]').content},body:JSON.stringify({approval_id:approval,decision})});
+    const b=await r.json();if(!r.ok||!b.success)throw Error(b.data?.message||'No se pudo guardar la decisión.');
+    feedback.textContent='✓ '+b.data.message+' Se aplicará en el siguiente ciclo.';
+    setTimeout(refresh,12000);
+  }catch(err){feedback.textContent=err.message;card.querySelectorAll('[data-decision]').forEach(x=>x.disabled=false);}
+});
+
 $('task-form').addEventListener('submit',async e=>{
   e.preventDefault();const btn=e.currentTarget.querySelector('button');btn.disabled=true;$('task-feedback').textContent='Guardando…';
   try{const r=await fetch('./?action=task',{method:'POST',headers:{'Content-Type':'application/json','X-CV-Nonce':document.querySelector('meta[name=cv-nonce]').content},body:JSON.stringify({text:$('task-text').value})});const b=await r.json();if(!r.ok||!b.success)throw Error(b.data?.message||'No se pudo guardar.');$('task-feedback').textContent='✓ '+b.data.message;$('task-text').value='';setTimeout(refresh,4000);}catch(err){$('task-feedback').textContent=err.message;}finally{btn.disabled=false;}
