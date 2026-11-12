@@ -30,7 +30,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "3.0.0"
+BRIDGE_VERSION = "3.1.0"
 
 
 def load_env_files() -> dict[str, str]:
@@ -480,6 +480,61 @@ def action_update_bridge(args):
         return {"returncode": 5, "output": f"No pude actualizar el bridge: {exc}"}
 
 
+
+def action_bridge_service_status(args):
+    p = run(["systemctl", "is-active", "cv-ops-bridge.service"], timeout=20)
+    q = run(["systemctl", "is-enabled", "cv-ops-bridge.service"], timeout=20)
+    return {
+        "returncode": 0 if p["output"].strip() == "active" else 1,
+        "output": json.dumps({
+            "active": p["output"].strip(),
+            "enabled": q["output"].strip(),
+        }, ensure_ascii=False),
+    }
+
+
+def action_install_bridge_service(args):
+    """Install persistent 3-second worker. Cron may remain as fallback; flock prevents overlap."""
+    unit = """[Unit]
+Description=Casa Viva Ops Bridge persistent worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/bin/bash -lc 'while true; do /usr/bin/python3 /root/supervisor/cv-ops-bridge.py; sleep 3; done'
+Restart=always
+RestartSec=2
+Nice=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
+"""
+    path = Path("/etc/systemd/system/cv-ops-bridge.service")
+    path.write_text(unit)
+    os.chmod(path, 0o644)
+    a = run(["systemctl", "daemon-reload"], timeout=30)
+    if a["returncode"] != 0:
+        return a
+    b = run(["systemctl", "enable", "--now", "cv-ops-bridge.service"], timeout=45)
+    if b["returncode"] != 0:
+        return b
+    time.sleep(2)
+    c = run(["systemctl", "is-active", "cv-ops-bridge.service"], timeout=20)
+    return {
+        "returncode": 0 if c["output"].strip() == "active" else 1,
+        "output": json.dumps({
+            "installed": True,
+            "active": c["output"].strip(),
+            "unit": str(path),
+            "poll_seconds": 3,
+            "cron_fallback_kept": True,
+        }, ensure_ascii=False),
+    }
+
+
 def action_ai_audit(args):
     cmd = [
         "bash", "-lc",
@@ -513,6 +568,8 @@ ACTIONS = {
     "deploy_vivabot": action_deploy_vivabot,
     "bridge_status": action_bridge_status,
     "update_bridge": action_update_bridge,
+    "bridge_service_status": action_bridge_service_status,
+    "install_bridge_service": action_install_bridge_service,
     "ai_audit": action_ai_audit,
     "catalog_sync_status": action_catalog_sync_status,
 }
