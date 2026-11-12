@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Casa Viva Ops Bridge v2.
+"""Casa Viva Ops Bridge v3.
 
 Polls a private Supabase queue and executes only a fixed allowlist of operations.
 It never executes arbitrary shell supplied by the queue. Write actions are narrow,
@@ -30,6 +30,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
+BRIDGE_VERSION = "3.0.0"
 
 
 def load_env_files() -> dict[str, str]:
