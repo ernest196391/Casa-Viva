@@ -33,7 +33,7 @@ jobs:
           node artifacts/tests/test-canonical-order-reader-history-truncation-1a.mjs
 
       - name: Validar Ops Bridge Python
-        run: python3 -m py_compile scripts/ops/cv-ops-bridge.py
+        run: python3 -m py_compile scripts/ops/cv-ops-bridge.py scripts/ops/control-os-sync.py
 
       - name: Validar panel de contenido y protección de fotos
         run: |
