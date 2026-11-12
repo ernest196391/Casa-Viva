@@ -239,3 +239,21 @@ $messenger=CVD_Order_Transition_Service::transition(459,'delivery','handed_over'
 cvt_check($messenger['success'],'el mensajero sigue pudiendo marcar su ruta como siempre');
 
 echo "FASE 1C.4: pruebas unitarias completadas.\n";
+
+
+// #162: reactivar conserva una asignación real, pero no resucita una oferta vieja al grupo.
+$order=cvt_reset();
+$order->meta['_cvd_operation_status']='cancelled';
+$order->meta['_cvd_delivery_status']='cancelled';
+$order->meta['_cvd_messenger_user_id']=20;
+$order->meta['_cvd_delivery_history']=array(array('from'=>'accepted','to'=>'cancelled','actor_user_id'=>11,'at'=>'2026-11-01 10:00:00','data'=>array()));
+CVD_Order_Transition_Service::reopen_after_cancel($order,'ready',11);
+cvt_check('ready'===$order->get_meta('_cvd_operation_status',true)&&'accepted'===$order->get_meta('_cvd_delivery_status',true)&&20===absint($order->get_meta('_cvd_messenger_user_id',true)),'#162 reactivación restaura mensajero y etapa asignada');
+
+$order=cvt_reset();
+$order->meta['_cvd_operation_status']='cancelled';
+$order->meta['_cvd_delivery_status']='cancelled';
+$order->meta['_cvd_messenger_user_id']=20;
+$order->meta['_cvd_delivery_history']=array(array('from'=>'offered','to'=>'cancelled','actor_user_id'=>11,'at'=>'2026-11-01 10:00:00','data'=>array()));
+CVD_Order_Transition_Service::reopen_after_cancel($order,'ready',11);
+cvt_check('unassigned'===$order->get_meta('_cvd_delivery_status',true),'#162 reactivación no resucita una oferta vieja al grupo');
