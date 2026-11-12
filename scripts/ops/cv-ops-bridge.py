@@ -10,11 +10,13 @@ Expected runtime: root VPS (VivaBot/supervisor host).
 from __future__ import annotations
 
 import fcntl
+import io
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
+import tarfile
 import time
 import urllib.error
 import urllib.parse
@@ -30,7 +32,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "3.2.0"
+BRIDGE_VERSION = "3.3.0"
 
 
 def load_env_files() -> dict[str, str]:
@@ -583,6 +585,86 @@ def action_update_control_sync(args):
         return {"returncode": 5, "output": f"No pude actualizar control-sync: {exc}"}
 
 
+
+def action_deploy_control_web(args):
+    """Deploy the three allowlisted /control/ web files from an approved Casa-Viva SHA."""
+    import re
+
+    sha = str((args or {}).get("sha", "")).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        return {"returncode": 2, "output": "args.sha debe ser un SHA Git completo"}
+
+    names = ("index.php", "app.js", "style.css")
+    files = {}
+    try:
+        for name in names:
+            url = f"https://raw.githubusercontent.com/ernest196391/Casa-Viva/{sha}/scripts/ops/control-web/{name}"
+            with urllib.request.urlopen(url, timeout=30) as resp:
+                body = resp.read()
+            if not body or len(body) > 300000:
+                return {"returncode": 3, "output": f"{name} vacío o demasiado grande"}
+            files[name] = body
+    except Exception as exc:
+        return {"returncode": 4, "output": f"No pude obtener los archivos del SHA: {exc}"}
+
+    if b"Casa Viva Control OS" not in files["index.php"]:
+        return {"returncode": 5, "output": "index.php no contiene la firma esperada de Control OS"}
+    if b"function render" not in files["app.js"] or b"--green" not in files["style.css"]:
+        return {"returncode": 5, "output": "app.js/style.css no parecen la interfaz Control OS esperada"}
+
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as archive:
+        for name in names:
+            info = tarfile.TarInfo(name=name)
+            info.size = len(files[name])
+            info.mode = 0o644
+            archive.addfile(info, io.BytesIO(files[name]))
+    payload = buf.getvalue()
+
+    short = sha[:12]
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    base = "/home/u824654880/domains/casaviva.company/public_html"
+    domain = "/home/u824654880/domains/casaviva.company"
+    nxt = f"{base}/control-next-{short}"
+    current = f"{base}/control"
+    backup = f"{domain}/control-backups/control-{stamp}-{short}"
+
+    script = (
+        "set -e; "
+        f"BASE={base}; DOMAIN={domain}; NEXT={nxt}; CURRENT={current}; BACKUP={backup}; "
+        "mkdir -p \"$DOMAIN/control-backups\"; rm -rf \"$NEXT\"; mkdir -p \"$NEXT\"; "
+        "tar -xzf - -C \"$NEXT\"; "
+        "php -l \"$NEXT/index.php\" >/tmp/cv-control-php-lint.txt; "
+        "test -s \"$NEXT/app.js\"; test -s \"$NEXT/style.css\"; "
+        "moved=0; "
+        "rollback(){ if [ \"$moved\" = 1 ] && [ ! -d \"$CURRENT\" ] && [ -d \"$BACKUP\" ]; then mv \"$BACKUP\" \"$CURRENT\"; fi; }; "
+        "trap rollback EXIT; "
+        "if [ -d \"$CURRENT\" ]; then mv \"$CURRENT\" \"$BACKUP\"; moved=1; fi; "
+        "mv \"$NEXT\" \"$CURRENT\"; moved=2; "
+        "chmod 755 \"$CURRENT\"; chmod 644 \"$CURRENT\"/*; "
+        "trap - EXIT; "
+        "php -l \"$CURRENT/index.php\"; "
+        "grep -q 'Casa Viva Control OS' \"$CURRENT/index.php\"; "
+        "printf 'BACKUP=%s\\n' \"$BACKUP\"; "
+        "sha256sum \"$CURRENT/index.php\" \"$CURRENT/app.js\" \"$CURRENT/style.css\""
+    )
+    try:
+        p = subprocess.run(
+            WP_SSH + [script],
+            input=payload,
+            capture_output=True,
+            timeout=60,
+        )
+        out = (p.stdout or b"").decode(errors="replace")
+        err = (p.stderr or b"").decode(errors="replace")
+        return {
+            "returncode": p.returncode,
+            "output": (out + (("\nSTDERR:\n" + err) if err else ""))[:MAX_OUTPUT],
+        }
+    except Exception as exc:
+        return {"returncode": 6, "output": f"Falló el despliegue de Control OS: {exc}"}
+
+
 def action_ai_audit(args):
     cmd = [
         "bash", "-lc",
@@ -619,6 +701,7 @@ ACTIONS = {
     "bridge_service_status": action_bridge_service_status,
     "install_bridge_service": action_install_bridge_service,
     "update_control_sync": action_update_control_sync,
+    "deploy_control_web": action_deploy_control_web,
     "ai_audit": action_ai_audit,
     "catalog_sync_status": action_catalog_sync_status,
 }
