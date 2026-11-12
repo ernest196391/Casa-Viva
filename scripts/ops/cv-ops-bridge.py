@@ -32,7 +32,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "3.4.0"
+BRIDGE_VERSION = "3.5.0"
 
 
 def load_env_files() -> dict[str, str]:
@@ -720,6 +720,72 @@ WantedBy=multi-user.target
     }
 
 
+
+def action_dev_environment_audit(args):
+    """Read-only audit of tools/repos needed by the future Dev Worker. Never prints credentials."""
+    import shutil
+    import re
+
+    def safe_remote(repo):
+        p = run(["git", "-C", repo, "remote", "get-url", "origin"], timeout=20)
+        raw = p["output"].strip()
+        if not raw:
+            return None
+        # Redact embedded credentials/tokens.
+        raw = re.sub(r"https://[^/@]+@", "https://***@", raw)
+        raw = re.sub(r"https://[^:]+:[^@]+@", "https://***:***@", raw)
+        return raw[:500]
+
+    def repo_info(repo):
+        path = Path(repo)
+        if not (path / ".git").exists():
+            return {"exists": False}
+        head = run(["git", "-C", repo, "rev-parse", "HEAD"], timeout=20)
+        branch = run(["git", "-C", repo, "branch", "--show-current"], timeout=20)
+        tracked = run(["git", "-C", repo, "status", "--porcelain", "--untracked-files=no"], timeout=20)
+        return {
+            "exists": True,
+            "head": head["output"].strip(),
+            "branch": branch["output"].strip(),
+            "tracked_clean": not bool(tracked["output"].strip()),
+            "remote": safe_remote(repo),
+        }
+
+    tools = {}
+    for name in ("git", "gh", "node", "npm", "python3", "php", "codex", "claude"):
+        path = shutil.which(name)
+        tools[name] = {"present": bool(path), "path": path}
+
+    gh = {"present": bool(shutil.which("gh")), "authenticated": False}
+    if gh["present"]:
+        p = run(["gh", "auth", "status"], timeout=20)
+        txt = re.sub(r"(token:\s*).+", r"\1***", p["output"], flags=re.I)
+        txt = re.sub(r"(oauth_token:\s*).+", r"\1***", txt, flags=re.I)
+        gh.update({"authenticated": p["returncode"] == 0, "status": txt[:4000]})
+
+    # Do not push. ls-remote only proves read/auth path is usable.
+    push_probe = {}
+    for repo in ("/root/vivabot",):
+        if (Path(repo) / ".git").exists():
+            p = run(["git", "-C", repo, "ls-remote", "--heads", "origin", "main"], timeout=30)
+            push_probe[repo] = {"remote_read_ok": p["returncode"] == 0}
+
+    return {
+        "returncode": 0,
+        "output": json.dumps({
+            "bridge_version": BRIDGE_VERSION,
+            "tools": tools,
+            "gh": gh,
+            "repos": {
+                "vivabot": repo_info("/root/vivabot"),
+                "casa_viva": repo_info("/root/Casa-Viva"),
+                "nexo": repo_info("/root/ernesto-rondon-nexo"),
+            },
+            "remote_probe": push_probe,
+        }, ensure_ascii=False),
+    }
+
+
 def action_ai_audit(args):
     cmd = [
         "bash", "-lc",
@@ -759,6 +825,7 @@ ACTIONS = {
     "deploy_control_web": action_deploy_control_web,
     "control_sync_service_status": action_control_sync_service_status,
     "install_control_sync_service": action_install_control_sync_service,
+    "dev_environment_audit": action_dev_environment_audit,
     "ai_audit": action_ai_audit,
     "catalog_sync_status": action_catalog_sync_status,
 }
