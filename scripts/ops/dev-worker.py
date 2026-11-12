@@ -165,7 +165,78 @@ def prepare_worktree(repo_name: str, task_public_id: int, title: str):
     return repo, work, branch, base_sha
 
 
+def _safe_target(work: Path, rel: str) -> Path:
+    path = safe_rel_path(rel)
+    current = work
+    for part in PurePosixPath(path).parts[:-1]:
+        current = current / part
+        if current.exists() and current.is_symlink():
+            raise ValueError("ruta pasa por symlink")
+    target = work / path
+    if target.exists() and target.is_symlink():
+        raise ValueError("target symlink no permitido")
+    return target
+
+
+def structured_edit(work: Path, packet: dict):
+    operations = packet.get("operations") or []
+    prefixes = packet.get("allow_paths") or []
+    if not isinstance(operations, list) or not 1 <= len(operations) <= 8:
+        raise ValueError("structured patch requiere 1..8 operaciones")
+    if not isinstance(prefixes, list) or not prefixes:
+        raise ValueError("structured patch requiere allow_paths")
+
+    changed = []
+    for op in operations:
+        if not isinstance(op, dict):
+            raise ValueError("operación inválida")
+        kind = op.get("op")
+        path = safe_rel_path(op.get("path", ""))
+        if not path_allowed(path, prefixes):
+            raise ValueError(f"ruta fuera de allow_paths: {path}")
+        target = _safe_target(work, path)
+
+        if kind == "create_file":
+            if target.exists():
+                raise ValueError(f"create_file ya existe: {path}")
+            content = str(op.get("content", ""))
+            if not content or len(content) > 120000:
+                raise ValueError(f"contenido inválido: {path}")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+
+        elif kind == "replace_file":
+            if not target.is_file():
+                raise ValueError(f"replace_file no existe: {path}")
+            content = str(op.get("content", ""))
+            if len(content) > 120000:
+                raise ValueError(f"contenido demasiado grande: {path}")
+            target.write_text(content, encoding="utf-8")
+
+        elif kind == "text_replace":
+            if not target.is_file():
+                raise ValueError(f"text_replace no existe: {path}")
+            old = str(op.get("old", ""))
+            new = str(op.get("new", ""))
+            expected = int(op.get("expected_count", 1))
+            if not old or not 1 <= expected <= 5:
+                raise ValueError(f"text_replace inválido: {path}")
+            before = target.read_text(encoding="utf-8")
+            count = before.count(old)
+            if count != expected:
+                raise ValueError(f"{path}: esperaba {expected} coincidencia(s), encontré {count}")
+            target.write_text(before.replace(old, new), encoding="utf-8")
+
+        else:
+            raise ValueError(f"op no permitida: {kind}")
+        changed.append(path)
+    return sorted(set(changed))
+
+
 def deterministic_edit(task: dict, work: Path, packet: dict):
+    if packet.get("patch_format") == "structured-v1":
+        return structured_edit(work, packet)
+
     spec = packet.get("deterministic") or {}
     operation = spec.get("operation")
     if operation != "write_smoke_file":
@@ -179,7 +250,7 @@ def deterministic_edit(task: dict, work: Path, packet: dict):
     content = str(spec.get("content", ""))
     if not content or len(content) > 12000:
         raise ValueError("contenido smoke inválido")
-    target = work / path
+    target = _safe_target(work, path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
     return [path]
