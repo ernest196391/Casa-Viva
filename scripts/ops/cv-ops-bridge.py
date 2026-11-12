@@ -104,11 +104,11 @@ def wp_remote(command: str, timeout=45) -> dict:
 
 
 def action_health(args):
-    return run(["/usr/local/bin/cv", "salud", "--ahora"], timeout=60)
+    return run(["bash", "-lc", "cv salud --ahora"], timeout=60)
 
 
 def action_errors_open(args):
-    return run(["/usr/local/bin/cv", "errores", "abiertos"], timeout=60)
+    return run(["bash", "-lc", "cv errores abiertos"], timeout=60)
 
 
 def action_pm2_status(args):
@@ -176,7 +176,11 @@ def action_wp_catalog_search(args):
         "'stock_qty'=>$p->get_stock_quantity()];}"
         "echo json_encode($o,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);"
     )
-    return wp_remote(f"CVQ={q64} wp eval {json.dumps(php)}", timeout=60)
+    php64 = base64.b64encode(php.encode()).decode()
+    return wp_remote(
+        f"CVQ={q64} wp eval \"$(printf %s {php64} | base64 -d)\"",
+        timeout=60,
+    )
 
 
 def action_ai_audit(args):
