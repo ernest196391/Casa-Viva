@@ -47,6 +47,31 @@ if ($action === 'task') {
     if (!$ok) { wp_send_json_error(['message' => 'No se pudo guardar la instrucción.'], 503); }
     wp_send_json_success(['id' => $request['id'], 'message' => 'Guardado en Control OS.']);
 }
+if ($action === 'decision') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') { wp_send_json_error(['message' => 'Método no permitido.'], 405); }
+    if (!wp_verify_nonce((string) ($_SERVER['HTTP_X_CV_NONCE'] ?? ''), 'cv-control')) {
+        wp_send_json_error(['message' => 'La sesión venció. Recarga la página.'], 403);
+    }
+    $raw = file_get_contents('php://input', false, null, 0, 2001);
+    if ($raw === false || strlen($raw) > 2000) { wp_send_json_error(['message' => 'Solicitud inválida.'], 400); }
+    $input = json_decode($raw, true);
+    $approvalId = is_array($input) ? (int) ($input['approval_id'] ?? 0) : 0;
+    $decision = is_array($input) && is_string($input['decision'] ?? null) ? $input['decision'] : '';
+    if ($approvalId <= 0 || !in_array($decision, ['approve','reject'], true)) {
+        wp_send_json_error(['message' => 'Decisión inválida.'], 400);
+    }
+    if (!is_dir($store)) { wp_send_json_error(['message' => 'El servidor todavía no está preparado.'], 503); }
+    $request = ['id' => bin2hex(random_bytes(16)), 'at' => gmdate('c'), 'actor_wp_id' => 1,
+                'kind' => 'decision', 'approval_id' => $approvalId, 'decision' => $decision];
+    $file = fopen($store . '/decisions.jsonl', 'ab');
+    if ($file === false || !flock($file, LOCK_EX)) { wp_send_json_error(['message' => 'No se pudo guardar la decisión.'], 503); }
+    $line = json_encode($request, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n";
+    $ok = fwrite($file, $line) === strlen($line);
+    fflush($file); flock($file, LOCK_UN); fclose($file);
+    @chmod($store . '/decisions.jsonl', 0600);
+    if (!$ok) { wp_send_json_error(['message' => 'No se pudo guardar la decisión.'], 503); }
+    wp_send_json_success(['id' => $request['id'], 'message' => 'Decisión guardada.']);
+}
 if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 404); }
 ?><!doctype html>
 <html lang="es">
