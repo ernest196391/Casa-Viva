@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Casa Viva Ops Bridge (read-only v1).
+"""Casa Viva Ops Bridge v2.
 
-Polls a private Supabase queue and executes only a fixed allowlist of diagnostic
-actions. It never executes arbitrary shell supplied by the queue.
+Polls a private Supabase queue and executes only a fixed allowlist of operations.
+It never executes arbitrary shell supplied by the queue. Write actions are narrow,
+preconditioned and reversible.
 
 Expected runtime: root VPS (VivaBot/supervisor host).
 """
@@ -254,6 +255,154 @@ def action_bot_access_audit(args):
     return run(cmd, timeout=60)
 
 
+
+def action_vivabot_git_status(args):
+    repo = Path("/root/vivabot")
+    if not (repo / ".git").exists():
+        return {"returncode": 2, "output": "/root/vivabot no es un checkout Git"}
+    branch = run(["git", "branch", "--show-current"], timeout=20, cwd=str(repo))
+    head = run(["git", "rev-parse", "HEAD"], timeout=20, cwd=str(repo))
+    status = run(["git", "status", "--porcelain"], timeout=20, cwd=str(repo))
+    return {
+        "returncode": 0 if branch["returncode"] == head["returncode"] == status["returncode"] == 0 else 1,
+        "output": json.dumps({
+            "branch": branch["output"].strip(),
+            "head": head["output"].strip(),
+            "clean": not bool(status["output"].strip()),
+            "status": status["output"][:12000],
+        }, ensure_ascii=False),
+    }
+
+
+def _pm2_vivabot_online():
+    p = run(["pm2", "jlist"], timeout=30)
+    if p["returncode"] != 0:
+        return False, p["output"]
+    try:
+        rows = json.loads(p["output"])
+        row = next((x for x in rows if x.get("name") == "vivabot"), None)
+        if not row:
+            return False, "vivabot no aparece en PM2"
+        env = row.get("pm2_env", {})
+        return env.get("status") == "online", json.dumps({
+            "status": env.get("status"),
+            "restart_time": env.get("restart_time"),
+            "pm_uptime": env.get("pm_uptime"),
+        }, ensure_ascii=False)
+    except Exception as exc:
+        return False, f"No pude interpretar PM2: {exc}"
+
+
+def action_deploy_vivabot(args):
+    """Fast-forward VivaBot to an approved main SHA, test, reload PM2 and rollback on failure."""
+    import re
+
+    sha = str((args or {}).get("sha", "")).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        return {"returncode": 2, "output": "args.sha debe ser un SHA Git completo de 40 caracteres"}
+
+    repo = Path("/root/vivabot")
+    if not (repo / ".git").exists():
+        return {"returncode": 2, "output": "/root/vivabot no es un checkout Git"}
+
+    status = run(["git", "status", "--porcelain"], timeout=20, cwd=str(repo))
+    if status["returncode"] != 0:
+        return status
+    if status["output"].strip():
+        return {
+            "returncode": 3,
+            "output": "DESPLIEGUE BLOQUEADO: hay cambios locales en /root/vivabot. No se tocó nada.\n"
+                      + status["output"][:12000],
+        }
+
+    old = run(["git", "rev-parse", "HEAD"], timeout=20, cwd=str(repo))
+    branch = run(["git", "branch", "--show-current"], timeout=20, cwd=str(repo))
+    if old["returncode"] or branch["returncode"]:
+        return {"returncode": 4, "output": (old["output"] + "\n" + branch["output"])[:MAX_OUTPUT]}
+    old_sha = old["output"].strip()
+
+    fetched = run(["git", "fetch", "origin", "main"], timeout=90, cwd=str(repo))
+    if fetched["returncode"] != 0:
+        return fetched
+
+    exists = run(["git", "cat-file", "-e", f"{sha}^{{commit}}"], timeout=20, cwd=str(repo))
+    if exists["returncode"] != 0:
+        return {"returncode": 5, "output": f"SHA {sha} no existe después de git fetch"}
+
+    on_main = run(["git", "merge-base", "--is-ancestor", sha, "origin/main"], timeout=20, cwd=str(repo))
+    if on_main["returncode"] != 0:
+        return {"returncode": 6, "output": f"SHA {sha} no pertenece a origin/main; bloqueado"}
+
+    forward = run(["git", "merge-base", "--is-ancestor", old_sha, sha], timeout=20, cwd=str(repo))
+    if forward["returncode"] != 0:
+        return {
+            "returncode": 7,
+            "output": f"DESPLIEGUE BLOQUEADO: producción {old_sha} no es ancestro de {sha}. Hay divergencia; no se fuerza.",
+        }
+
+    if old_sha == sha:
+        online, pm = _pm2_vivabot_online()
+        return {
+            "returncode": 0 if online else 8,
+            "output": json.dumps({
+                "changed": False, "sha": sha, "branch": branch["output"].strip(),
+                "pm2": pm, "note": "VivaBot ya estaba en ese SHA",
+            }, ensure_ascii=False),
+        }
+
+    merged = run(["git", "merge", "--ff-only", sha], timeout=45, cwd=str(repo))
+    if merged["returncode"] != 0:
+        return merged
+
+    syntax = run(["node", "--check", "src/index.js"], timeout=45, cwd=str(repo))
+    focused = run(["npm", "run", "test:owner-change"], timeout=120, cwd=str(repo))
+    if syntax["returncode"] != 0 or focused["returncode"] != 0:
+        run(["git", "reset", "--hard", old_sha], timeout=45, cwd=str(repo))
+        return {
+            "returncode": 9,
+            "output": "PRUEBAS FALLARON; código devuelto al SHA anterior antes de recargar PM2.\n"
+                      + syntax["output"] + "\n" + focused["output"],
+        }
+
+    reload_result = run(["pm2", "reload", "vivabot", "--update-env"], timeout=45)
+    if reload_result["returncode"] != 0:
+        run(["git", "reset", "--hard", old_sha], timeout=45, cwd=str(repo))
+        run(["pm2", "reload", "vivabot", "--update-env"], timeout=45)
+        return {
+            "returncode": 10,
+            "output": "PM2 no pudo recargar el nuevo código. Se restauró el SHA anterior.\n"
+                      + reload_result["output"],
+        }
+
+    time.sleep(5)
+    online, pm = _pm2_vivabot_online()
+    if not online:
+        rollback_git = run(["git", "reset", "--hard", old_sha], timeout=45, cwd=str(repo))
+        rollback_pm2 = run(["pm2", "reload", "vivabot", "--update-env"], timeout=45)
+        return {
+            "returncode": 11,
+            "output": "HEALTH CHECK FALLÓ. Rollback automático ejecutado.\n"
+                      + "PM2 nuevo: " + pm + "\n"
+                      + "Rollback Git: " + rollback_git["output"] + "\n"
+                      + "Rollback PM2: " + rollback_pm2["output"],
+        }
+
+    final = run(["git", "rev-parse", "HEAD"], timeout=20, cwd=str(repo))
+    return {
+        "returncode": 0,
+        "output": json.dumps({
+            "changed": True,
+            "old_sha": old_sha,
+            "new_sha": final["output"].strip(),
+            "requested_sha": sha,
+            "branch": branch["output"].strip(),
+            "tests": "node --check src/index.js + npm run test:owner-change",
+            "pm2": pm,
+            "rollback_sha": old_sha,
+        }, ensure_ascii=False),
+    }
+
+
 def action_ai_audit(args):
     cmd = [
         "bash", "-lc",
@@ -283,6 +432,8 @@ ACTIONS = {
     "wp_product": action_wp_product,
     "cv_order": action_cv_order,
     "bot_access_audit": action_bot_access_audit,
+    "vivabot_git_status": action_vivabot_git_status,
+    "deploy_vivabot": action_deploy_vivabot,
     "ai_audit": action_ai_audit,
     "catalog_sync_status": action_catalog_sync_status,
 }
