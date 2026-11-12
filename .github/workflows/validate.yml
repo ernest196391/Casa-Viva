@@ -34,7 +34,7 @@ jobs:
 
       - name: Validar Ops Bridge Python
         run: |
-          python3 -m py_compile scripts/ops/cv-ops-bridge.py scripts/ops/control-os-sync.py
+          python3 -m py_compile scripts/ops/cv-ops-bridge.py scripts/ops/control-os-sync.py scripts/ops/dev-worker.py
           php -l scripts/ops/control-web/index.php
           node --check scripts/ops/control-web/app.js
 
