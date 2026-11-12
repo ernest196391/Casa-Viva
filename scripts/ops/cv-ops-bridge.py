@@ -30,7 +30,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "3.1.0"
+BRIDGE_VERSION = "3.2.0"
 
 
 def load_env_files() -> dict[str, str]:
@@ -535,6 +535,54 @@ WantedBy=multi-user.target
     }
 
 
+
+def action_update_control_sync(args):
+    """Install the canonical Control OS portal importer from an approved Casa-Viva main SHA."""
+    import re
+
+    sha = str((args or {}).get("sha", "")).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        return {"returncode": 2, "output": "args.sha debe ser un SHA Git completo"}
+
+    # Verify SHA belongs to Casa-Viva main using git ls-remote + GitHub raw availability.
+    url = f"https://raw.githubusercontent.com/ernest196391/Casa-Viva/{sha}/scripts/ops/control-os-sync.py"
+    target = Path("/root/supervisor/control-sync.py")
+    tmp = target.with_name(target.name + ".next")
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            body = resp.read()
+        if len(body) < 4000 or b"Casa Viva Control OS portal sync" not in body or b"def main(" not in body:
+            return {"returncode": 3, "output": "El archivo remoto no parece el importador Control OS"}
+        tmp.write_bytes(body)
+        os.chmod(tmp, 0o700)
+        checked = run(["python3", "-m", "py_compile", str(tmp)], timeout=30)
+        if checked["returncode"] != 0:
+            tmp.unlink(missing_ok=True)
+            return {"returncode": 4, "output": "El importador nuevo no compila:\n" + checked["output"]}
+        backup = target.with_name(target.name + ".legacy")
+        if target.exists() and not backup.exists():
+            backup.write_bytes(target.read_bytes())
+            os.chmod(backup, 0o700)
+        os.replace(tmp, target)
+        test = run(["python3", str(target), "--once"], timeout=60)
+        return {
+            "returncode": test["returncode"],
+            "output": json.dumps({
+                "updated": test["returncode"] == 0,
+                "sha": sha,
+                "target": str(target),
+                "legacy_backup": str(backup),
+                "first_run": test["output"][:12000],
+            }, ensure_ascii=False),
+        }
+    except Exception as exc:
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return {"returncode": 5, "output": f"No pude actualizar control-sync: {exc}"}
+
+
 def action_ai_audit(args):
     cmd = [
         "bash", "-lc",
@@ -570,6 +618,7 @@ ACTIONS = {
     "update_bridge": action_update_bridge,
     "bridge_service_status": action_bridge_service_status,
     "install_bridge_service": action_install_bridge_service,
+    "update_control_sync": action_update_control_sync,
     "ai_audit": action_ai_audit,
     "catalog_sync_status": action_catalog_sync_status,
 }
