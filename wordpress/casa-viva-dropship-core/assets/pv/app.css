@@ -1,0 +1,377 @@
+/* Pa'llá · prototipo v2 (piezas propias de las pantallas; lo común está en ../tokens.css) */
+html,body{height:100%}
+body{background:var(--fondo);overflow:hidden}
+#marco{position:relative;width:100%;height:100%;overflow:hidden;background:var(--fondo)}
+
+/* En el ordenador: un móvil de 390×844 en el centro y la lista de pantallas al lado */
+@media (min-width:760px){
+  body{background:#E9E8E3;display:flex;align-items:center;justify-content:center;gap:40px}
+  html[data-tema="oscuro"] body{background:#050506}
+  #marco{width:390px;height:844px;max-height:calc(100vh - 32px);border-radius:44px;box-shadow:0 0 0 10px #0E0E0E,0 30px 80px rgba(0,0,0,.3)}
+  #menu{display:block}
+}
+html.lienzo body{background:var(--fondo)!important;display:block}
+html.lienzo #marco{width:100%;height:100%;max-height:none;border-radius:0;box-shadow:none}
+html.lienzo #menu{display:none!important}
+
+#menu{display:none;width:240px;max-height:calc(100vh - 40px);overflow:auto;font:var(--t-peq);color:var(--tinta)}
+#menu h3{font:var(--t-mini);color:var(--tinta-2);margin:18px 0 6px}
+#menu a{display:block;padding:6px 10px;border-radius:8px;color:var(--tinta);text-decoration:none}
+#menu a.is-on{background:var(--tinta);color:var(--fondo)}
+#menu .marca{font:600 22px/1 var(--letra);letter-spacing:-.02em}
+
+/* Capa del mapa: fondo suave con calles dibujadas mientras carga (o si no carga) */
+#mapa{position:absolute;inset:0;background:#F3F2EE url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cg fill='none' stroke='%23FFFFFF' stroke-width='6'%3E%3Cpath d='M-20 60 260 20M-20 150 260 110M-20 230 260 200M40-20 70 260M150-20 170 260'/%3E%3C/g%3E%3Cg fill='none' stroke='%23FFFFFF' stroke-width='2.5'%3E%3Cpath d='M-20 105 260 65M100-20 120 260M200-20 215 260M-20 190 260 155'/%3E%3C/g%3E%3C/svg%3E")}
+html[data-tema="oscuro"] #mapa{background:#141518 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cg fill='none' stroke='%2324262B' stroke-width='6'%3E%3Cpath d='M-20 60 260 20M-20 150 260 110M-20 230 260 200M40-20 70 260M150-20 170 260'/%3E%3C/g%3E%3Cg fill='none' stroke='%231F2025' stroke-width='2.5'%3E%3Cpath d='M-20 105 260 65M100-20 120 260M200-20 215 260M-20 190 260 155'/%3E%3C/g%3E%3C/svg%3E")}
+#mapa .maplibregl-canvas{opacity:0;transition:opacity 240ms var(--curva)}
+#mapa.is-listo .maplibregl-canvas{opacity:1}
+#mapa .maplibregl-ctrl-attrib{font-size:9px;background:transparent!important;opacity:.6}
+#mapa .maplibregl-ctrl-attrib-button{display:none}
+.sin-mapa #mapa{display:none}
+
+/* Plano de reserva (SVG propio): se ve al momento; si llega el mapa de verdad, se oculta */
+.pm-plano{position:absolute;inset:0;background:#F3F2EE;overflow:hidden;pointer-events:none}
+html[data-tema="oscuro"] .pm-plano{background:#141518}
+.pm-plano__svg{position:absolute;inset:0;display:block}
+.pm-c{stroke:#FFFFFF;stroke-width:3;stroke-linecap:round}
+.pm-c--g{stroke-width:7}
+html[data-tema="oscuro"] .pm-c{stroke:#202227}
+.pm-ruta__b{fill:none;stroke:#FFFFFF;stroke-width:9;stroke-linecap:round;stroke-linejoin:round}
+.pm-ruta__l{fill:none;stroke:#0E0E0E;stroke-width:4.5;stroke-linecap:round;stroke-linejoin:round}
+html[data-tema="oscuro"] .pm-ruta__b{stroke:#0F0F10}
+html[data-tema="oscuro"] .pm-ruta__l{stroke:#F3F3EF}
+.pm-capas{position:absolute;inset:0}
+.pm-capas .pm-marca{position:absolute;left:0;top:0;width:0;height:0}
+.pm-capas .pm-marca > .pm-pin,.pm-capas .pm-veh img{position:absolute;left:0;top:0;transform:translate(-50%,-50%)}
+.pm-capas .pm-etq{left:16px;top:0}
+.pm-capas .pm-izq .pm-etq{left:auto;right:16px}
+#mapa.is-listo .pm-plano{display:none}
+.sin-red .pm-plano{display:none}
+
+/* Marcas del mapa */
+.pm-marca{line-height:0}
+.pm-veh img{display:block;width:20px;height:40px;filter:drop-shadow(0 1px 1px rgba(0,0,0,.25))}
+.pm-pin{display:block;width:16px;height:16px;border-radius:50%;background:var(--tinta);box-shadow:0 0 0 3px var(--fondo);position:relative}
+.pm-pin::after{content:"";position:absolute;inset:5px;border-radius:50%;background:var(--fondo)}
+.pm-pin--destino{border-radius:4px}
+.pm-pin--destino::after{border-radius:1px}
+.pm-pin--yo{width:16px;height:16px;background:#2C5BC7;box-shadow:0 0 0 3px #fff,0 0 0 12px rgba(44,91,199,.16)}
+.pm-pin--yo::after{display:none}
+.pm-etq{position:absolute;left:22px;top:50%;transform:translateY(-50%);white-space:nowrap;background:var(--fondo);color:var(--tinta);font:500 12px/1 var(--letra);padding:7px 10px;border-radius:999px;box-shadow:var(--s-flota)}
+
+/* Pantalla */
+#pant{position:absolute;inset:0;z-index:2;pointer-events:none}
+#pant > *{pointer-events:auto}
+.pa-llena{position:absolute;inset:0;background:var(--fondo);overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;animation:p-aparece var(--m2) var(--curva) both}
+.pa-cuerpo{flex:1;padding:8px 20px 24px;display:flex;flex-direction:column;gap:20px}
+.pa-pie{position:sticky;bottom:0;padding:12px 20px calc(16px + env(safe-area-inset-bottom));background:var(--fondo);display:flex;flex-direction:column;gap:4px}
+.pa-cab{display:flex;align-items:center;gap:4px;min-height:60px;padding:6px 10px 0;position:sticky;top:0;background:var(--fondo);z-index:3}
+.pa-cab h1{font:var(--t-h2);letter-spacing:-.01em;margin:0;flex:1}
+.pa-volver{width:48px;height:48px;border-radius:50%;border:0;background:transparent;color:var(--tinta);display:grid;place-items:center;flex:none;text-decoration:none}
+.pa-volver:active{background:var(--fondo-2)}
+.pa-etq{display:block;font:var(--t-mini);color:var(--tinta-2);margin:12px 0 8px}
+.pa-cuerpo > div > .pa-etq:first-child,.pa-cuerpo > .pa-etq:first-child{margin-top:0}
+.pa-enlace{align-self:center;display:inline-flex;align-items:center;min-height:44px;padding:0 12px;font:var(--t-peq);color:var(--tinta-2);text-decoration:underline;text-underline-offset:3px}
+
+/* Botones flotantes sobre el mapa (llevan sombra) */
+.pa-arriba{position:absolute;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;z-index:3;pointer-events:none}
+.pa-arriba > *{pointer-events:auto}
+.pa-arriba__der{display:flex;gap:8px;margin-left:auto}
+.pa-pastilla{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:999px;border:0;background:var(--fondo);color:var(--tinta);box-shadow:var(--s-flota);font:500 14px/1 var(--letra);text-decoration:none}
+.pa-ayuda .p-ico{color:var(--error)}
+
+/* Hoja inferior del prototipo */
+.pa-hoja{position:absolute;left:0;right:0;bottom:0;z-index:4;max-height:78%;overflow-y:auto;overscroll-behavior:contain;background:var(--fondo);border-radius:var(--r) var(--r) 0 0;box-shadow:var(--s3);padding:8px 16px calc(16px + env(safe-area-inset-bottom));animation:p-sube var(--m3) var(--curva) both}
+.pa-hoja .p-hoja__asa{margin-bottom:12px}
+.pa-sobre{position:absolute;inset:0;z-index:10}
+.pa-velo{position:absolute;inset:0;background:var(--velo);animation:p-aparece var(--m2) both}
+
+/* Carga */
+.pa-carga{position:absolute;inset:0;background:#0E0E0E;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px}
+.pa-carga svg{width:88px;height:88px}
+.pa-carga .pc-p{transform-origin:50% 60%;animation:pc-p 240ms var(--curva) both}
+.pa-carga .pc-ruta{stroke-dasharray:140;stroke-dashoffset:140;animation:pc-ruta 240ms 220ms var(--curva) forwards}
+.pa-carga .pc-punto{opacity:0;animation:p-aparece 120ms 440ms forwards}
+.pa-carga b{font:600 26px/1 var(--letra);color:#fff;letter-spacing:-.02em;opacity:0;animation:p-entra 240ms 360ms var(--curva) forwards}
+@keyframes pc-p{from{opacity:0;transform:scale(.86)}to{opacity:1;transform:none}}
+@keyframes pc-ruta{to{stroke-dashoffset:0}}
+
+/* Inicio */
+.pa-servicios{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.pa-serv{display:flex;flex-direction:column;align-items:flex-start;gap:12px;min-height:72px;padding:12px;border-radius:var(--r);border:0;background:var(--fondo-2);color:var(--tinta);text-align:left;font:500 14px/1 var(--letra);transition:box-shadow var(--m2) var(--curva),transform var(--m1) var(--curva)}
+.pa-serv:active{transform:scale(.97)}
+.pa-serv[data-s="taxi"] .p-ico{color:var(--taxi)}
+.pa-serv[data-s="tric"] .p-ico{color:var(--tric)}
+.pa-serv[data-s="mens"] .p-ico{color:var(--mens)}
+.pa-serv[aria-pressed="true"]{background:var(--fondo);box-shadow:inset 0 0 0 1.5px var(--tinta);font-weight:600}
+.pa-buscar{text-decoration:none;display:flex;align-items:center;gap:12px;width:100%;min-height:60px;padding:0 14px 0 10px;border-radius:var(--r);background:var(--fondo-2);color:var(--tinta)}
+.pa-buscar i{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--amarillo);color:#0E0E0E;flex:none}
+.pa-buscar b{display:block;font:600 17px/22px var(--letra)}
+.pa-buscar span{display:block;font:var(--t-peq);color:var(--tinta-2)}
+.pa-fila-chips{display:flex;gap:8px;overflow-x:auto;margin:12px -16px 4px;padding:0 16px;scrollbar-width:none}
+.pa-fila-chips::-webkit-scrollbar{display:none}
+
+/* Destino */
+.pa-od{position:relative;display:flex;flex-direction:column;gap:8px;padding-left:28px}
+.pa-od::before{content:"";position:absolute;left:8px;top:28px;bottom:28px;width:1.5px;background:var(--linea-fuerte)}
+.pa-od .pm-pin{position:absolute;left:1px;top:21px;width:14px;height:14px}
+.pa-od .pm-pin--destino{top:auto;bottom:21px}
+.pa-od .pm-pin--yo{box-shadow:0 0 0 3px var(--fondo)}
+.pa-od .pm-pin::after{inset:4px}
+.pa-od .p-campo{min-height:52px}
+.pa-od .p-campo input{height:48px;font-size:16px}
+.p-campo.is-foco{border-color:var(--tinta);background:var(--fondo)}
+.pa-resaltar{font-style:normal;font-weight:600;display:inline!important;color:inherit!important;font-size:inherit!important}
+.pa-fijo{position:sticky;bottom:0;background:var(--fondo);border-top:1px solid var(--linea);padding:4px 20px calc(8px + env(safe-area-inset-bottom))}
+
+/* Pin central (fijar / recogida) */
+.pa-pin-centro{position:absolute;left:50%;top:calc(50% - 120px);transform:translate(-50%,-100%);z-index:2;pointer-events:none;display:flex;flex-direction:column;align-items:center}
+.pa-pin-centro .cabeza{width:30px;height:30px;border-radius:50%;background:var(--tinta);display:grid;place-items:center;transition:transform var(--m2) var(--curva)}
+.pa-pin-centro .cabeza::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--fondo)}
+.pa-pin-centro .palo{width:2px;height:14px;background:var(--tinta);border-radius:2px}
+.pa-pin-centro .suelo{width:8px;height:3px;border-radius:50%;background:rgba(0,0,0,.25);margin-top:-1px}
+.pa-pin-centro.is-mueve .cabeza{transform:translateY(-8px)}
+
+/* Tipos */
+.p-pest{margin:0 0 6px}
+.pa-tipos{display:flex;flex-direction:column;margin:0 -8px 12px}
+.pa-tipo{display:grid;grid-template-columns:72px 1fr auto;align-items:center;gap:12px;width:100%;min-height:64px;padding:6px 12px 6px 8px;border-radius:var(--r);border:0;background:transparent;color:var(--tinta);text-align:left;transition:background-color var(--m2) var(--curva)}
+.pa-tipo img{width:72px;height:auto;display:block}
+.pa-tipo b{display:block;font:600 16px/20px var(--letra)}
+.pa-tipo > span > span{display:flex;align-items:center;gap:4px;font:var(--t-peq);color:var(--tinta-2);margin-top:2px}
+.pa-tipo .p-ico--16{width:14px;height:14px}
+.pa-tipo .pr{font:600 17px/1 var(--letra);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.pa-tipo .pr small{font:500 12px/1 var(--letra);color:var(--tinta-2);margin-left:3px}
+.pa-tipo[aria-pressed="true"]{background:var(--fondo-2)}
+html[data-tema="oscuro"] .pa-tipo img,html[data-tema="oscuro"] .pa-resumen img{filter:drop-shadow(0 0 1px rgba(255,255,255,.25))}
+
+/* Precio */
+.pa-resumen{display:flex;align-items:center;gap:12px}
+.pa-resumen > div{flex:1;min-width:0}
+.pa-resumen b{display:block;font:600 16px/20px var(--letra)}
+.pa-resumen span{display:block;font:var(--t-peq);color:var(--tinta-2)}
+.pa-precio{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:20px 0 12px}
+.pa-pm{width:52px;height:52px}
+.pa-precio-n{text-align:center;flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.pa-precio-n > span:last-child{font:var(--t-peq);color:var(--tinta-2)}
+.pa-op{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:4px 0;border:0;border-top:1px solid var(--linea);background:none;color:var(--tinta);text-align:left}
+.pa-op > b{flex:1;font:500 15px/20px var(--letra)}
+.pa-op > div{flex:1}
+.pa-op > div b{display:block;font:500 15px/20px var(--letra)}
+.pa-op > div span{display:block;font:var(--t-peq);color:var(--tinta-2)}
+.pa-op > .p-ico{color:var(--tinta-2)}
+
+/* Buscando y ofertas */
+.pa-radar{position:absolute;left:50%;top:30%;width:0;height:0;z-index:1;pointer-events:none}
+.pa-radar i{position:absolute;left:-80px;top:-80px;width:160px;height:160px;border-radius:50%;border:1.5px solid var(--tinta);opacity:0;animation:radar 2.4s cubic-bezier(.2,.6,.3,1) infinite}
+.pa-radar i:nth-child(2){animation-delay:.8s}.pa-radar i:nth-child(3){animation-delay:1.6s}
+@keyframes radar{0%{transform:scale(.15);opacity:.5}100%{transform:scale(1.3);opacity:0}}
+.pa-ofertas{display:flex;flex-direction:column}
+.pa-ofertas:not(:empty) + #esq:not(:empty){border-top:1px solid var(--linea)}
+.pa-esq-oferta{display:grid;grid-template-columns:32px 1fr auto;gap:12px;align-items:center;padding:18px 0}
+.pa-esq-oferta + .pa-esq-oferta{border-top:1px solid var(--linea)}
+.pa-tuya{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 0 12px;border-bottom:1px solid var(--linea)}
+.pa-tuya b{font:600 22px/1 var(--letra);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.pa-tuya .p-btn{white-space:nowrap;flex:none}
+.pa-estr{display:inline-flex;align-items:center;gap:2px;font-weight:500;color:var(--tinta-2)}
+.pa-estr .p-ico{width:13px;height:13px;color:var(--tinta)}
+
+/* Chofer que viene / viaje */
+.pa-eta{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.pa-eta > div:first-child{flex:1;min-width:0}
+.pa-eta > div:last-child{flex:none;text-align:right}
+.pa-eta .p-mini{margin:0 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pa-eta b{display:block;font:var(--t-h1);letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pa-eta .pa-eta__pr{font:600 17px/22px var(--letra);letter-spacing:0;font-variant-numeric:tabular-nums}
+.pa-eta span{display:block;font:var(--t-peq);color:var(--tinta-2)}
+.pa-chofer{display:flex;align-items:center;gap:12px;padding:16px 0 14px;margin-top:16px;border-top:1px solid var(--linea)}
+.pa-chofer__q{flex:1;min-width:0}
+.pa-chofer__q b{display:block;font:600 16px/21px var(--letra);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pa-chofer__q > span{display:block;font:var(--t-peq);color:var(--tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pa-codigo{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;border-top:1px solid var(--linea);font:var(--t-cuerpo);color:var(--tinta-2)}
+.pa-codigo b{font:600 22px/1 var(--letra);letter-spacing:.16em;color:var(--tinta);font-variant-numeric:tabular-nums}
+.pa-cancelar{display:flex;margin:4px auto 0;color:var(--tinta-2)}
+.pa-etapas{list-style:none;margin:0 0 16px;padding:0;display:grid;grid-template-columns:repeat(3,1fr);font:var(--t-mini);color:var(--tinta-3)}
+.pa-etapas li{position:relative;padding-top:14px}
+.pa-etapas li::before{content:"";position:absolute;left:0;top:0;width:8px;height:8px;border-radius:50%;background:var(--fondo-3);z-index:1}
+.pa-etapas li::after{content:"";position:absolute;left:8px;right:4px;top:3.5px;height:1px;background:var(--linea-fuerte)}
+.pa-etapas li:last-child::after{display:none}
+.pa-etapas .is-hecho,.pa-etapas .is-ahora{color:var(--tinta-2)}
+.pa-etapas .is-hecho::before{background:var(--tinta-2)}
+.pa-etapas .is-ahora{color:var(--tinta);font-weight:600}
+.pa-etapas .is-ahora::before{background:var(--tinta);box-shadow:0 0 0 3px var(--fondo-3)}
+
+/* Pagar y valorar */
+.pa-hecho{display:flex;align-items:center;gap:12px}
+.pa-hecho > .p-ico{flex:none;width:32px;height:32px;padding:6px;border-radius:50%;background:var(--bien-suave);color:var(--bien);stroke-width:2.2}
+.pa-monto{text-align:center;padding:4px 0}
+.pa-monto .p-mini{margin:0 0 6px}
+.pa-monto .p-precio{font-size:44px;line-height:48px}
+.pa-monto .p-precio small{font-size:17px}
+.pa-total{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.pa-tm{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0}
+.pa-tm b{display:block;font:600 20px/1.2 var(--letra);letter-spacing:.04em}
+.pa-estrellas{display:flex;justify-content:center;gap:4px}
+.pa-estrellas button{width:48px;height:48px;border:0;background:none;color:var(--linea-fuerte);padding:7px;transition:transform var(--m1) var(--curva),color var(--m1)}
+.pa-estrellas button.is-on{color:var(--tinta)}
+.pa-estrellas button:active{transform:scale(.88)}
+.pa-estrellas svg{width:100%;height:100%}
+.pa-chips{display:flex;flex-wrap:wrap;gap:8px}
+.pa-tras{animation:p-entra var(--m3) var(--curva) both}
+.pa-tras[hidden]{display:none}
+
+/* Varias */
+.pa-cajas{display:flex;gap:10px;justify-content:center}
+.pa-cajas span{width:56px;height:64px;border-radius:var(--r);background:var(--fondo-2);display:grid;place-items:center;font:600 28px/1 var(--letra);font-variant-numeric:tabular-nums;border:1.5px solid transparent}
+.pa-cajas span.is-act{border-color:var(--tinta);background:var(--fondo)}
+.pa-tel{display:flex;gap:8px}
+.pa-tel .pref{display:grid;place-items:center;min-width:68px;border-radius:var(--r);background:var(--fondo-2);font:500 17px/1 var(--letra)}
+.pa-tel .p-campo{flex:1;min-width:0} /* 10-nov (Redmi): sin min-width el móvil se salía por la derecha */
+.pa-tel .p-campo input{min-width:0;width:100%}
+.pa-banda{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--tinta);color:var(--fondo);font:500 14px/1.3 var(--letra);animation:p-entra var(--m3) var(--curva) both;transition:background-color var(--m3)}
+.pa-banda.is-bien{background:var(--bien);color:#fff}
+.pa-dos{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 4px}
+.pa-tostada{position:absolute;left:16px;right:16px;top:16px;z-index:9;display:flex;align-items:center;gap:10px;padding:14px 16px;border-radius:var(--r);background:var(--tinta);color:var(--fondo);font:500 14px/1.3 var(--letra);box-shadow:var(--s-flota);animation:p-entra var(--m3) var(--curva) both}
+.pa-yo{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+.pa-pasos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.pa-pasos li{position:relative;display:flex;gap:14px;padding:0 0 18px}
+.pa-pasos li::before{content:"";position:absolute;left:13px;top:28px;bottom:2px;width:1.5px;background:var(--linea)}
+.pa-pasos li:last-child::before{display:none}
+.pa-pasos .n{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--fondo-2);color:var(--tinta-2);font:600 13px/1 var(--letra);z-index:1}
+.pa-pasos .is-hecho .n{background:var(--tinta);color:var(--fondo)}
+.pa-pasos .is-ahora .n{background:var(--fondo);color:var(--tinta);box-shadow:inset 0 0 0 1.5px var(--tinta)}
+.pa-pasos b{display:block;font:500 15px/20px var(--letra)}
+.pa-pasos span{display:block;font:var(--t-peq);color:var(--tinta-2)}
+.pa-foto{border-radius:var(--r);overflow:hidden;background:var(--fondo-2);aspect-ratio:4/3;display:block;width:100%}
+.pa-barras{display:flex;align-items:flex-end;gap:8px;height:110px;padding-top:12px}
+.pa-barras div{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end}
+.pa-barras i{display:block;width:100%;border-radius:6px 6px 2px 2px;background:var(--fondo-3)}
+.pa-barras .is-hoy i{background:var(--tinta)}
+.pa-barras span{font:500 11px/1 var(--letra);color:var(--tinta-2)}
+.pa-medidor{height:6px;border-radius:3px;background:var(--fondo-3);overflow:hidden;position:relative}
+.pa-medidor i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--tinta)}
+.pa-conectar{width:152px;height:152px;border-radius:50%;border:0;margin:0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;font:600 17px/1 var(--letra);background:var(--fondo-2);color:var(--tinta);transition:background-color var(--m2) var(--curva)}
+.pa-conectar svg{width:32px;height:32px}
+.pa-conectar.is-on{background:var(--tinta);color:var(--fondo);box-shadow:0 0 0 8px var(--fondo-2)}
+.pa-conectar.is-on svg{color:var(--bien)}
+html[data-tema="oscuro"] .pa-conectar.is-on svg{color:#18794A}
+.pa-pedido{display:flex;flex-direction:column;gap:12px;padding:16px 0 20px;position:relative;animation:p-entra var(--m3) var(--curva) backwards}
+.pa-pedido + .pa-pedido{border-top:1px solid var(--linea)}
+.pa-pedido .arriba{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.pa-pedido .od{display:grid;grid-template-columns:14px 1fr;gap:2px 10px;font:var(--t-cuerpo)}
+.pa-pedido .od b{font-weight:500}
+.pa-pedido .od .pm-pin{width:12px;height:12px;margin-top:5px;box-shadow:0 0 0 2px var(--fondo)}
+.pa-pedido .od .pm-pin::after{inset:3.5px}
+.pa-pedido .od small{grid-column:2;font:var(--t-peq);color:var(--tinta-2);margin:-2px 0 4px}
+.pa-pedido .p-oferta__tiempo{bottom:8px}
+.pa-contra{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:6px}
+.pa-contra button{min-height:52px;border-radius:var(--r);border:0;background:var(--fondo-2);color:var(--tinta);font:600 15px/1 var(--letra);font-variant-numeric:tabular-nums;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.pa-contra button small{font:500 11px/1 var(--letra);color:var(--tinta-2)}
+.pa-contra .acepto{background:var(--tinta);color:var(--fondo)}
+.pa-contra .acepto small{color:var(--fondo);opacity:.7}
+.pa-pedido.is-enviado .pa-contra{opacity:.35;pointer-events:none}
+.pa-pedido.is-perdido{opacity:.45}
+.pa-tamano{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pa-tamano button{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 6px;border-radius:var(--r);border:0;background:var(--fondo-2);color:var(--tinta);text-align:center}
+.pa-tamano b{font:500 14px/1.2 var(--letra)}
+.pa-tamano span{font:var(--t-mini);color:var(--tinta-2)}
+.pa-tamano button[aria-pressed="true"]{background:var(--fondo);box-shadow:inset 0 0 0 1.5px var(--tinta)}
+.pa-seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:var(--r);background:var(--fondo-2)}
+.pa-seg button{min-height:42px;border-radius:10px;border:0;background:transparent;font:500 15px/1 var(--letra);color:var(--tinta-2)}
+.pa-seg button[aria-pressed="true"]{background:var(--fondo);color:var(--tinta);font-weight:600}
+html[data-tema="oscuro"] .pa-seg button[aria-pressed="true"]{background:var(--fondo-3)}
+.sin-red #mapa .maplibregl-canvas{opacity:0!important}
+.sin-red #mapa .maplibregl-marker{display:none}
+html[data-tema="oscuro"] .pm-veh img{filter:drop-shadow(0 0 1.5px rgba(255,255,255,.55)) drop-shadow(0 1px 2px rgba(0,0,0,.6))}
+
+
+/* ======================================================================================
+   v3 (5-nov-2026): inicio con 4 servicios, lista de vehículos con precio, línea precio · pago · llega y la pista del precio
+   ====================================================================================== */
+
+/* Vehículos 3D: en oscuro, un filo claro para que no se pierdan */
+html[data-tema="oscuro"] .pa-v img,html[data-tema="oscuro"] .pa-s4__img,html[data-tema="oscuro"] .pa-heroe img,html[data-tema="oscuro"] .pa-cab__veh,html[data-tema="oscuro"] .pa-pedido-h img{filter:drop-shadow(0 0 1px rgba(255,255,255,.22))}
+
+/* Inicio: de dónde (pastilla sobre el mapa) + 4 servicios grandes + 2 recientes */
+.pa-desde{min-width:0;max-width:calc(100% - 60px);gap:10px}
+.pa-desde .pm-pin--yo{width:10px;height:10px;flex:none;box-shadow:0 0 0 2px #fff,0 0 0 6px rgba(44,91,199,.18)}
+.pa-hoja--inicio{padding-bottom:calc(8px + env(safe-area-inset-bottom))}
+.pa-svc4{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pa-s4{position:relative;display:block;height:124px;padding:14px 14px 0;border-radius:var(--r);background:var(--fondo-2);color:var(--tinta);text-decoration:none;overflow:hidden;transition:transform var(--m1) var(--curva)}
+.pa-s4:active{transform:scale(.97)}
+.pa-s4 b{position:relative;z-index:1;display:block;font:600 19px/24px var(--letra);letter-spacing:-.015em}
+.pa-s4 > span{position:relative;z-index:1;display:block;font:var(--t-mini);color:var(--tinta-2)}
+.pa-s4__img{position:absolute;right:-4px;bottom:-2px;height:80px;width:auto;max-width:132px;object-fit:contain}
+.pa-s4__img--1{right:60px;bottom:6px;height:42px;max-width:none}         /* Viajar: el taxi, detrás y más pequeño (6-nov: más abajo, no tapa «Taxi, triciclo, moto») */
+.pa-s4__img--2{right:-4px;bottom:-3px;height:76px}                       /* Viajar: el triciclo, delante */
+.pa-recientes{margin-top:6px}
+.pa-recientes .p-fila{min-height:52px}
+
+/* Viajar: origen → destino en 2 líneas (como La Nave) */
+.pa-od2{position:relative;display:flex;flex-direction:column}
+.pa-od2::before{content:"";position:absolute;left:5.25px;top:16px;bottom:16px;width:1.5px;background:var(--linea-fuerte)}
+.pa-od2 a{position:relative;display:block;min-height:30px;padding:6px 0 6px 24px;color:var(--tinta-2);text-decoration:none;font:500 14px/18px var(--letra);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pa-od2 b{font:600 15px/18px var(--letra);color:var(--tinta)}
+.pa-od2 .pm-pin{position:absolute;left:0;top:50%;width:12px;height:12px;margin-top:-6px}
+.pa-od2 .pm-pin::after{inset:3.5px}
+.pa-od2 .pm-pin--yo{box-shadow:0 0 0 2px var(--fondo)}
+
+/* Viajar: fila de vehículos 3D con su precio. El elegido, más grande y sobre gris (como La Nave). */
+.pa-carr{display:flex;gap:2px;overflow-x:auto;scroll-snap-type:x proximity;scroll-behavior:smooth;margin:6px -16px 0;padding:6px 16px 2px;scrollbar-width:none}
+.pa-carr::-webkit-scrollbar{display:none}
+.pa-v{flex:none;width:96px;display:flex;flex-direction:column;align-items:center;padding:6px 2px 10px;border:0;border-radius:var(--r);background:transparent;color:var(--tinta);scroll-snap-align:start;transition:background-color var(--m2) var(--curva)}
+.pa-v img{display:block;width:86px;height:52px;object-fit:contain;transition:transform var(--m2) var(--curva)}
+.pa-v b{margin-top:6px;font:500 13px/16px var(--letra);white-space:nowrap}
+.pa-v span{font:600 15px/20px var(--letra);font-variant-numeric:tabular-nums}
+.pa-v[aria-selected="true"]{background:var(--fondo-2)}
+.pa-v[aria-selected="true"] img{transform:scale(1.16) translateY(-3px)}
+.pa-v[aria-selected="true"] b{font-weight:600}
+.pa-v.is-nadie > *{opacity:.4}
+.pa-resumen-l{margin:8px 0 0;font:var(--t-peq);color:var(--tinta-2);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* La línea precio · pago · llega (la «clave» de La Nave, más limpia) */
+.pa-linea{display:grid;grid-template-columns:1.3fr 1fr .8fr;margin:10px 0 12px;border-top:1px solid var(--linea);border-bottom:1px solid var(--linea)}
+.pa-celda{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:62px;padding:6px 4px;border:0;background:none;color:var(--tinta);text-align:center;transition:background-color var(--m1)}
+.pa-celda + .pa-celda{box-shadow:inset 1px 0 0 var(--linea)}
+button.pa-celda:active{background:var(--fondo-2)}
+.pa-celda b{font:600 17px/22px var(--letra);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pa-celda b small{font:500 12px/1 var(--letra);color:var(--tinta-2);margin-left:3px}
+.pa-celda span{display:inline-flex;align-items:center;gap:3px;font:var(--t-mini);color:var(--tinta-2);white-space:nowrap}
+.pa-mm{width:12px;height:12px;stroke-width:2.2}
+/* Manera B: el número se subraya con puntos (se puede tocar) y lleva un «±» pequeño */
+.pa-celda--pr.is-toca b{text-decoration:underline dotted var(--tinta-3);text-decoration-thickness:1.5px;text-underline-offset:5px}
+.pa-celda--pr.is-late{animation:pa-late 1.8s var(--curva) 1;border-radius:var(--r)}
+@keyframes pa-late{0%,100%{box-shadow:inset 0 0 0 0 transparent}25%,60%{box-shadow:inset 0 0 0 1.5px var(--tinta)}}
+.pa-linea.is-edita{grid-template-columns:auto 1fr auto;align-items:center;gap:12px;padding:8px 0;animation:p-aparece var(--m2) both}
+.pa-edita-n{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:none;color:var(--tinta);padding:0}
+.pa-edita-n b{font:600 30px/34px var(--letra);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.pa-edita-n b small{font:500 14px/1 var(--letra);color:var(--tinta-2);margin-left:4px;letter-spacing:0}
+.pa-edita-n span{font:var(--t-mini);color:var(--tinta-2)}
+/* Manera A: enlace discreto debajo de la línea */
+.pa-otro{display:block;margin:-6px auto 6px;min-height:36px;padding:0 12px;border:0;background:none;font:var(--t-peq);color:var(--tinta-2);text-decoration:underline;text-underline-offset:3px}
+.pa-atajos{display:flex;gap:8px;justify-content:center;margin:0 0 16px}
+
+/* Precio de Paquete, Comida y Carga: el vehículo 3D grande y la misma línea */
+.pa-heroe{display:flex;align-items:center;gap:14px}
+.pa-heroe img{width:108px;height:72px;object-fit:contain;flex:none}
+.pa-heroe > div{min-width:0}
+.pa-heroe b{display:block;font:600 18px/24px var(--letra);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pa-heroe span{display:block;font:var(--t-peq);color:var(--tinta-2)}
+.pa-aviso-env{margin:10px 0 0}
+.pa-aviso-env span{min-width:0}
+.pa-cab__veh{width:64px;height:42px;object-fit:contain;margin-right:8px;flex:none}
+.pa-peso button{padding:14px 4px}
+.pa-desglose{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font:var(--t-peq);color:var(--tinta-2);padding-bottom:12px;border-bottom:1px solid var(--linea)}
+.pa-desglose b{font-weight:500;color:var(--tinta);font-variant-numeric:tabular-nums;text-align:right}
+.pa-pedido-h img{width:56px;height:36px;object-fit:contain;flex:none}
+/* v3 en la app: los 4 servicios son botones; las filas de «Mis pedidos» llevan su vehículo 3D */
+.pa-s4{border:0;width:100%;text-align:left;font:inherit;cursor:pointer;display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-start} /* 6-nov (Redmi): un <button> centra el texto en vertical y el vehículo lo tapaba: texto arriba */
+.pa-desde{border:0;font:inherit;cursor:pointer}
+.pa-desde > span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pa-pedido-h{gap:12px}
+.pa-recibe{border:0;width:100%;background:none;text-align:left;font:inherit;color:inherit}
+/* 10-nov: «¿Quién viaja?» en la hoja de Viajar (pedir para otra persona) y el botón «Reintentar» si el precio no llega */
+.pa-quien{display:flex;align-items:center;gap:8px;min-height:40px;margin:4px 0 6px;padding:0 12px;border-radius:12px;background:var(--fondo-2);color:var(--tinta);text-decoration:none;font:500 14px/18px var(--letra)}
+.pa-quien > span:first-of-type{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pa-quien__cambiar{color:var(--tinta);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.pa-reint{display:flex;flex-direction:column;gap:10px;width:100%;padding:4px 0}

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.156
+ * Version: 3.14.167
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.156' );
+define( 'CVD_VERSION', '3.14.167' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -71,6 +71,7 @@ require_once CVD_DIR . 'includes/class-cvd-contabilidad.php'; // 3.14.125: costo
 require_once CVD_DIR . 'includes/class-cvd-delivery-when.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-stock.php';
 require_once CVD_DIR . 'includes/class-cvd-direct-dispatch.php';
+require_once CVD_DIR . 'includes/class-cvd-cadena-mensajeros.php'; // 3.14.160: cadena de mensajeros (1.º, 2.º, reloj 10/20, sin freno)
 require_once CVD_DIR . 'includes/class-cvd-messenger-cash.php';
 require_once CVD_DIR . 'includes/class-cvd-cash-day.php'; // 3.14.76: «¿Lo recibiste hoy?» con el dinero de entregas viejas (Ernesto 28-oct)
 require_once CVD_DIR . "includes/class-cvd-cierre-math.php";
@@ -79,6 +80,7 @@ require_once CVD_DIR . 'includes/class-cvd-tablero.php'; // 3.14.98: tablero ún
 require_once CVD_DIR . 'includes/class-cvd-fichas.php';
 require_once CVD_DIR . 'includes/class-cvd-aprende.php';
 require_once CVD_DIR . 'includes/class-cvd-order-edit.php';
+require_once CVD_DIR . 'includes/class-cvd-gestora-pedidos.php'; // 3.14.116: la gestora cambia, cancela o recupera SUS pedidos (Ernesto 3-nov, #6062)
 require_once CVD_DIR . 'includes/class-cvd-reserva.php'; // 3.14.72: reserva de una recogida («guardar hasta mañana») dentro del pedido (Pilar 3, Ernesto 28-oct).
 require_once CVD_DIR . 'includes/class-cvd-order-avisos.php';
 require_once CVD_DIR . 'includes/class-cvd-costs.php';
@@ -98,7 +100,9 @@ require_once CVD_DIR . 'includes/class-cvd-triciclub-precio.php'; // 3.14.117: e
 require_once CVD_DIR . 'includes/class-cvd-triciclub.php'; // 3.14.117: /triciclub/ (cliente) y /palla/triciclub (chofer). Nace apagado: cvd_tc = no.
 require_once CVD_DIR . 'includes/class-cvd-triciclub-api.php'; // 3.14.117: casa-viva/v1/triciclub/…
 require_once CVD_DIR . 'includes/class-cvd-triciclub-alta.php'; // 3.14.130: alta de choferes (cualquiera, se aprueba solo) y panel /triciclub/admin
+require_once CVD_DIR . 'includes/class-cvd-resenas-bot.php'; // 3.14.141: /bot/resenas (reseñas reales pedidas por VivaBot, Ernesto 4-nov)
 require_once CVD_DIR . 'includes/class-cvd-triciclub-geo.php'; // 3.14.118: direcciones como La Nave (GPS → «Calle 23 e/ L y M», sugerencias)
+require_once CVD_DIR . 'includes/class-cvd-pv-cargar.php'; // 3.14.144: Pa'llá transporte (taxi + triciclo + moto + mensajero, precio mixto; D138–D141). Nace apagado: cvd_pv = no.
 require_once CVD_DIR . 'includes/class-cvd-order-seq.php'; // 3.14.69.11: Nº propio del pedido que nunca salta (Lennys #581).
 require_once CVD_DIR . 'includes/class-cvd-ficha-contesta.php'; // 3.14.65: «Ficha que contesta» — datos de la tienda y preguntas atadas al producto (D107, mejora 7 del diagnóstico)
 require_once CVD_DIR . 'includes/class-cvd-catalogo-auto.php'; // 3.14.84: catálogo al estándar (D124): fichas del bot, candado de bajo pedido, fotos reales y revisión ✓/✗ de Lennys
@@ -152,9 +156,11 @@ add_action(
 			CVD_Vale_Chat::register(); // 3.14.67: /bot/vale/* para el «VALE» por chat de VivaBot.
 			CVD_Vale_Check::register(); // 3.14.75: /bot/vale/revisar y /vale/revisar (Pilar 4).
 			CVD_Direct_Dispatch::register();
+			CVD_Cadena_Mensajeros::register(); // 3.14.160 (Ernesto 10-nov, caso #6411): un pedido no se queda esperando al mensajero asignado.
 			CVD_Messenger_Cash::register();
 			CVD_Fichas::register();
 			CVD_Aprende::register(); // 3.13.77: «Aprende» (tutoriales) en el área de la gestora y del mensajero.
+			CVD_Gestora_Pedidos::register(); // 3.14.116: /gestora/pedido/{id}/cambiar|cancelar|recuperar (nivel 1 del plan del Vigía, 3-nov).
 			CVD_Order_Edit::register(); // 3.13.97: cancelar con motivo y cambiar pedidos desde /ventas/ y el panel (Ernesto, 14-oct).
 			CVD_Reserva::register(); // 3.14.72: reserva visible para la tienda, frena la cancelación y avisa una vez al vencer.
 			CVD_Order_Avisos::register(); // 3.13.98: el bot avisa por WhatsApp al cancelar o cambiar un pedido (Ernesto, 14-oct).
@@ -174,6 +180,7 @@ add_action(
 			CVD_Triciclub::register(); // 3.14.117: Triciclub (interruptor cvd_tc: no | prueba | si; D129–D130).
 			CVD_Triciclub_Api::register();
 			CVD_Triciclub_Alta::register();
+			CVD_Resenas_Bot::register(); // 3.14.141: VivaBot pide UNA reseña real tras la entrega (solo clientes directos) y la guarda con permiso.
 			CVD_Order_Seq::register(); // 3.14.69.11: «Nº 292 · 8.º de hoy» (el #número no cambia).
 			CVD_Ficha_Contesta::register(); // 3.14.65: «Datos de la tienda» y «Preguntar a la tienda» en la ficha; la tienda contesta con enlace firmado (opción cvd_ficha_contesta = no|datos|si).
 			CVD_Catalogo_Auto::register(); // 3.14.84 (D124)

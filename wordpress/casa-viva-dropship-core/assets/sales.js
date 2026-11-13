@@ -109,6 +109,8 @@
   }
   function extraButtons(order) {
     return reservaButton(order) + changeButton(order) + (order.canEdit ? '<button type="button" class="cvd-sale-extra" data-edit-order="' + order.id + '">Cambiar pedido</button>' : "")
+      // 3.14.116 (Ernesto 3-nov): pasar productos a un pedido nuevo para otro cliente (mismo vendedor, mismo total).
+      + (order.canEdit ? '<button type="button" class="cvd-sale-extra" data-split-order="' + order.id + '">Dividir pedido</button>' : "")
       + (order.canCancel ? '<button type="button" class="cvd-sale-extra is-warning" data-cancel-order="' + order.id + '" data-number="' + escapeText(order.number) + '"' + (order.cancelNeedsReturn ? ' data-needs-return="1"' : "") + '>Cancelar pedido</button>' : "")
       // 3.14.104 (Ernesto 1-nov): un pedido cancelado por error (hasta 7 días) se puede reactivar.
       + (order.canReactivate ? '<button type="button" class="cvd-sale-extra" data-reactivate-order="' + order.id + '" data-number="' + escapeText(order.number) + '">Reactivar pedido</button>' : "");
@@ -304,6 +306,8 @@
     }
     var editBtn = event.target.closest("[data-edit-order]");
     if (editBtn) { openEdit(editBtn.dataset.editOrder); return; }
+    var splitBtn = event.target.closest("[data-split-order]");
+    if (splitBtn) { openSplit(splitBtn.dataset.splitOrder); return; }
     var button = event.target.closest(".cvd-sale-action"); if (!button) return;
     var status = button.dataset.status;
     if (status === "delivered") {
@@ -432,6 +436,70 @@
     finally { submit.disabled = false; }
   });
 
+  // ---------- Dividir pedido (3.14.116, Ernesto 3-nov; caso #6062 → #6102) ----------
+  // Pasa productos elegidos a un pedido NUEVO con otro cliente y otra dirección. Mismo vendedor y mismos precios;
+  // el total de los dos es el de antes; existencias y caja quedan igual; sin aviso al cliente. Core valida todo.
+  var splitDialog = document.createElement("dialog");
+  splitDialog.id = "cvd-split-dialog";
+  list.parentNode.appendChild(splitDialog);
+  var splitState = null;
+  function splitRequestId() { try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (ignore) {} return "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
+  async function openSplit(id) {
+    message.className = ""; message.textContent = "Abriendo el pedido…";
+    var d;
+    try { d = await api(cvdSales.url + "/" + id + "/edit", { method: "GET" }); }
+    catch (error) { message.className = "is-error"; message.textContent = error.message; return; }
+    message.textContent = "";
+    if (!d.editable) { message.className = "is-error"; message.textContent = d.why || "Este pedido ya no se puede dividir."; return; }
+    var units = d.lines.reduce(function (n, l) { return n + Number(l.qty || 0); }, 0);
+    if (units < 2) { message.className = "is-error"; message.textContent = "Este pedido tiene un solo producto: no hay nada que dividir. Para otro cliente, usa «Cambiar pedido»."; return; }
+    splitState = { id: d.id, number: d.number, currency: d.currency, total: d.total, lines: d.lines, request: splitRequestId() };
+    var windows = [["", "A cualquier hora"], ["morning", "Por la mañana"], ["afternoon", "Por la tarde"]];
+    splitDialog.innerHTML = '<form method="dialog" id="cvd-split-form"><h2>Dividir pedido #' + escapeText(d.number) + '</h2>'
+      + '<p class="cvd-edit-hint">Elige qué pasa a un pedido NUEVO para otro cliente. Mismo vendedor y mismos precios; los dos juntos suman lo mismo que ahora. Las existencias y la caja no cambian. <b>Sin aviso al cliente.</b></p>'
+      + (d.messenger ? '<p class="cvd-edit-warn">Este pedido ya lo tiene <b>' + escapeText(d.messenger.name) + '</b>. Avísale de lo que ya no lleva.</p>' : '')
+      + '<h3>¿Qué pasa al pedido nuevo?</h3>' + d.lines.map(function (l) { return '<p class="cvd-edit-line"><span>' + escapeText(l.name) + ' <small>(tiene ' + l.qty + ' · ' + escapeText(l.unit) + ' ' + escapeText(d.currency) + ' c/u)</small></span><input type="number" min="0" max="' + l.qty + '" inputmode="numeric" data-split-line="' + l.itemId + '" data-unit="' + l.unit + '" value="0" aria-label="Unidades que pasan"></p>'; }).join("")
+      + '<p class="cvd-edit-hint" data-split-sum></p>'
+      + '<h3>Cliente del pedido nuevo</h3>'
+      + '<div class="cvd-edit-two">' + editField("Nombre", "firstName", "", ' required maxlength="60"') + editField("Apellidos", "lastName", "", ' maxlength="60"') + '</div>'
+      + editField("Teléfono", "phone", "", ' inputmode="tel" maxlength="30"' + (d.pickup ? "" : " required"))
+      + (d.pickup ? '<p class="cvd-edit-hint">Recogida en tienda, como el pedido de antes.</p>'
+        : editField("Dirección", "address", "", ' required maxlength="200"')
+          + '<div class="cvd-edit-two">' + editField("Municipio", "municipality", "", ' maxlength="60" placeholder="Igual que el pedido de antes"') + editField("Reparto", "locality", d.locality, ' maxlength="80"') + '</div>'
+          + '<p class="cvd-edit-hint">La mensajería del pedido nuevo se calcula con su municipio y reparto.</p>'
+          + '<div class="cvd-edit-two"><label>Día de entrega<input type="date" name="deliveryDate" value="' + escapeText(d.date) + '" min="' + escapeText(d.minDate) + '" max="' + escapeText(d.maxDate) + '"></label><label>Franja<select name="deliveryWindow">' + windows.map(function (w) { return '<option value="' + w[0] + '">' + w[1] + "</option>"; }).join("") + '</select></label></div>')
+      + '<label>Nota del pedido nuevo<textarea name="note" rows="2" maxlength="500"></textarea></label>'
+      + '<p data-split-msg role="status" class="is-error"></p>'
+      + '<div class="cvd-edit-buttons"><button value="cancel" formnovalidate>Volver</button><button id="cvd-split-submit" value="default">Dividir</button></div></form>';
+    splitDialog.showModal();
+  }
+  function splitMoves() { return Array.prototype.map.call(splitDialog.querySelectorAll("[data-split-line]"), function (i) { return { itemId: Number(i.dataset.splitLine), qty: Math.max(0, parseInt(i.value, 10) || 0), unit: Number(i.dataset.unit) }; }).filter(function (m) { return m.qty > 0; }); }
+  function splitMoney(n) { return (Math.round(n * 100) / 100).toFixed(2) + " " + (splitState ? splitState.currency : "USD"); }
+  splitDialog.addEventListener("input", function (event) {
+    if (!event.target.closest("[data-split-line]") || !splitState) return;
+    var moved = splitMoves().reduce(function (t, m) { return t + m.qty * m.unit; }, 0);
+    splitDialog.querySelector("[data-split-sum]").textContent = moved ? "Pedido nuevo: " + splitMoney(moved) + " · #" + splitState.number + " queda en " + splitMoney(splitState.total - moved) + " · Juntos: " + splitMoney(splitState.total) : "";
+  });
+  splitDialog.addEventListener("submit", async function (event) {
+    if (event.submitter && event.submitter.value === "cancel") return;
+    event.preventDefault();
+    var f = event.target, msg = splitDialog.querySelector("[data-split-msg]"), submit = document.getElementById("cvd-split-submit");
+    var moves = splitMoves();
+    msg.textContent = "";
+    if (!moves.length) { msg.textContent = "Pon cuántas unidades pasan al pedido nuevo."; return; }
+    var to = { firstName: f.elements.firstName.value, lastName: f.elements.lastName.value, phone: f.elements.phone.value, note: f.elements.note.value };
+    if (f.elements.address) { to.address = f.elements.address.value; to.municipality = f.elements.municipality.value; to.locality = f.elements.locality.value; to.deliveryDate = f.elements.deliveryDate.value; to.deliveryWindow = f.elements.deliveryWindow.value; }
+    var moved = moves.reduce(function (t, m) { return t + m.qty * m.unit; }, 0);
+    if (!window.confirm("¿Dividir el pedido #" + splitState.number + "?\n\n• Pedido nuevo para " + to.firstName + ": " + splitMoney(moved) + "\n• #" + splitState.number + " queda en " + splitMoney(splitState.total - moved) + "\n• Juntos: " + splitMoney(splitState.total) + " (igual que ahora)\n\nNo se avisa al cliente.")) return;
+    submit.disabled = true;
+    try {
+      var r = await api(cvdSales.url + "/" + splitState.id + "/split", { method: "POST", body: JSON.stringify({ requestId: splitState.request, lines: moves.map(function (m) { return { itemId: m.itemId, qty: m.qty }; }), to: to }) });
+      splitDialog.close(); await load();
+      message.className = ""; message.textContent = r.message || "Pedido dividido.";
+    } catch (error) { msg.textContent = error.message; }
+    finally { submit.disabled = false; }
+  });
+
   document.getElementById("cvd-money-form").addEventListener("submit", async function (event) {
     if (event.submitter && event.submitter.value === "cancel") return;
     event.preventDefault(); var submit = document.getElementById("cvd-money-submit"); submit.disabled = true;
@@ -439,11 +507,20 @@
     var moneyUrl = cvdSales.url + "/" + document.getElementById("cvd-money-order").value + "/status";
     var moneyBody = { status: "delivered", collectionMethod: document.getElementById("cvd-money-method").value, collectedUsd: document.getElementById("cvd-money-usd").value, collectedCup: document.getElementById("cvd-money-cup").value, collectionNote: document.getElementById("cvd-money-note").value, collectionAccount: moneyAccount ? moneyAccount.value : "", collectionReference: moneyReference ? moneyReference.value : "", collectionCardLabel: document.getElementById("cvd-money-card-label").value, collectionCardLast4: document.getElementById("cvd-money-card-last4").value, collectionSaveCard: document.getElementById("cvd-money-save-card").checked, moneyConfirmed: document.getElementById("cvd-money-confirmed").checked, handoverConfirmed: pickup ? document.getElementById("cvd-handover-confirmed").checked : false };
     // 3.14.76 (Ernesto 28-oct): si Core pregunta «¿Lo recibiste hoy?» (entrega de otro día), se contesta y se reenvía.
+    // 3.14.140 (Nana 4-nov, #6086 #6067 #6064 #6077): si cash-day.js no cargó, la pregunta salía como error rojo y el
+    // pedido no se cerraba nunca. Ahora se contesta igual con las ventanas del móvil.
+    function askCashDayPlain(d) {
+      d = d || {};
+      var why = d.delivered_day ? "Este pedido se entregó el " + d.delivered_day + "." : "";
+      if (window.confirm("¿Lo recibiste hoy?\n" + why + "\n\nAceptar = sí, entró hoy · Cancelar = no, entró otro día")) return { cashReceivedToday: "yes", cashReceivedDay: d.today || "" };
+      var day = window.prompt("¿Qué día entró el dinero a la tienda? (AAAA-MM-DD)", d.delivered_day || "");
+      return day === null ? null : { cashReceivedToday: "no", cashReceivedDay: String(day).trim() };
+    }
     try {
       try { await api(moneyUrl, { method: "POST", body: JSON.stringify(moneyBody) }); }
       catch (asked) {
-        if (!window.cvdCashDay || asked.code !== window.cvdCashDay.code) throw asked;
-        var reply = await window.cvdCashDay.ask(asked.data && asked.data.data);
+        if (asked.code !== "cvd_cash_day_question") throw asked;
+        var reply = window.cvdCashDay ? await window.cvdCashDay.ask(asked.data && asked.data.data) : askCashDayPlain(asked.data && asked.data.data);
         if (!reply) { message.className = ""; message.textContent = "No se guardó: falta decir si el dinero entró hoy."; return; }
         await api(moneyUrl, { method: "POST", body: JSON.stringify(Object.assign({}, moneyBody, reply)) });
       }

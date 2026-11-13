@@ -304,6 +304,7 @@ final class CVD_Vale_Chat {
 					$item->save();
 				}
 			}
+			$order->update_meta_data( '_cvd_pricing_gestora_user_id', $gestora->ID ); // 3.14.167: sin esto la subida de la gestora salía 0 (#6459, Lennys 12-nov)
 			$name = trim( sanitize_text_field( (string) ( $customer['name'] ?? '' ) ) );
 			$parts = '' !== $name ? preg_split( '/\s+/', $name, 2 ) : array( '', '' );
 			$order->set_billing_first_name( $parts[0] ?? '' ); $order->set_billing_last_name( $parts[1] ?? '' );

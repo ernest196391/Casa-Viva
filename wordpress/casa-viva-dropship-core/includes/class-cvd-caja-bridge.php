@@ -191,6 +191,24 @@ final class CVD_Caja_Bridge {
 		$charge_id = substr( sanitize_text_field( (string) ( $p['chargeId'] ?? '' ) ), 0, 80 );
 		if ( '' === $charge_id ) { return new WP_Error( 'cvd_caja_charge_id', 'Falta el identificador del cobro.', array( 'status' => 422 ) ); }
 		$previous = $order->get_meta( self::CHARGE_META, true );
+		// Recepcion conciliada sin cierre: acusar el mismo ingreso local, sin aprobar
+		// comisiones ni ejecutar de nuevo el cobro. Solo un proceso administrativo
+		// autorizado puede guardar receipt_only; nunca se acepta desde el request.
+		if ( is_array( $previous ) && true === ( $previous['receipt_only'] ?? false ) ) {
+			$same = ( $previous['id'] ?? '' ) === $charge_id
+				&& ( $previous['method'] ?? '' ) === (string) ( $p['collectionMethod'] ?? '' )
+				&& is_numeric( $p['collectedUsd'] ?? null ) && is_numeric( $p['collectedCup'] ?? null )
+				&& (int) round( (float) $p['collectedUsd'] * 100 ) === ( $previous['usd_minor'] ?? null )
+				&& (int) round( (float) $p['collectedCup'] * 100 ) === ( $previous['cup_minor'] ?? null );
+			$received = 'cash_returned' === $order->get_meta( '_cvd_delivery_status', true ) && 'returned' === $order->get_meta( '_cvd_cash_status', true );
+			$closed = $order->has_status( 'completed' ) && 'closed' === $order->get_meta( '_cvd_delivery_status', true ) && 'verified' === $order->get_meta( '_cvd_cash_status', true );
+			if ( ! $same || ! ( $received || $closed ) ) {
+				// No usar already_charged/not_chargeable: la caja los interpreta como
+				// motivo para revertir un ingreso. Aqui corresponde revision, no salida.
+				return new WP_Error( 'cvd_caja_receipt_conflict', 'Este ingreso ya tiene una conciliacion. Revisa su referencia e importe; no vuelvas a cobrarlo.', array( 'status' => 409 ) );
+			}
+			return self::no_cache( array( 'ok' => true, 'repeated' => true, 'receiptOnly' => true, 'message' => 'Dinero recibido en tienda. Comisiones conservadas sin cambios.' ) );
+		}
 		if ( is_array( $previous ) && ( $previous['id'] ?? '' ) === $charge_id && $order->has_status( 'completed' ) ) {
 			return self::no_cache( array( 'ok' => true, 'repeated' => true, 'message' => 'Ya estaba cobrado con este mismo cobro de la caja.' ) );
 		}
@@ -202,6 +220,8 @@ final class CVD_Caja_Bridge {
 		if ( '' === $kind ) {
 			return new WP_Error( 'cvd_not_chargeable', 'Este pedido no está listo para cobrar en la tienda (cancelado, sin entregar o con incidencia).', array( 'status' => 409 ) );
 		}
+		$receipt_date = CVD_Cash_Day::from_receipt_timestamp( $p['cashReceivedAt'] ?? null );
+		if ( is_wp_error( $receipt_date ) ) { return $receipt_date; }
 		$actor = absint( get_option( 'cvd_panel_actor_user_id', 0 ) );
 		$name = substr( sanitize_text_field( (string) ( $p['clerkName'] ?? '' ) ), 0, 80 );
 		$clerk = self::clerk( absint( $p['clerkWooId'] ?? 0 ), (string) ( $p['clerkPhone'] ?? '' ) );
@@ -211,7 +231,7 @@ final class CVD_Caja_Bridge {
 		}
 		$device = substr( sanitize_text_field( (string) ( $p['device'] ?? '' ) ), 0, 60 );
 		// Se marca ANTES de cerrar: el «debería haber» del cajón no cuenta este pedido dos veces.
-		$order->update_meta_data( self::CHARGE_META, array( 'id' => $charge_id, 'by' => $name, 'clerk' => $clerk ? $clerk->ID : 0, 'device' => $device, 'at' => current_time( 'mysql', true ) ) );
+		$order->update_meta_data( self::CHARGE_META, array( 'id' => $charge_id, 'by' => $name, 'clerk' => $clerk ? $clerk->ID : 0, 'device' => $device, 'at' => $receipt_date['at'] ?? current_time( 'mysql', true ), 'synced_at' => current_time( 'mysql', true ) ) );
 		$order->save();
 
 		// 3.14.44: recogida aún Nueva/Confirmada/Preparando → se pasa a «Listo» en esta misma petición, con la dependienta
@@ -241,6 +261,7 @@ final class CVD_Caja_Bridge {
 			'handoverConfirmed' => true,
 			'idempotencyKey' => 'caja:' . $charge_id,
 		);
+		if ( $receipt_date ) { $params['cashReceivedAt'] = $p['cashReceivedAt']; $params['cashReceivedToday'] = $receipt_date['answer']; $params['cashReceivedDay'] = $receipt_date['day']; }
 		foreach ( $params as $key => $value ) { $inner->set_param( $key, $value ); }
 		$response = rest_do_request( $inner );
 		$fresh = wc_get_order( $order->get_id() );
@@ -249,6 +270,8 @@ final class CVD_Caja_Bridge {
 			$error = $response->is_error() ? $response->as_error() : new WP_Error( 'cvd_caja_not_closed', 'No se pudo cerrar el pedido.', array( 'status' => 409 ) );
 			return $error;
 		}
+		// Recogidas no pasan por Cash_Day::check: conservar tambien su fecha offline.
+		if ( $receipt_date ) { $fresh->update_meta_data( CVD_Cash_Day::ANSWER, $receipt_date['answer'] ); $fresh->update_meta_data( CVD_Cash_Day::DAY, $receipt_date['day'] ); $fresh->save(); }
 		$fresh->add_order_note( sprintf( 'Cobrado en la caja NEXO%s por %s%s.', '' !== $device ? ' (' . $device . ')' : '', '' !== $name ? $name : 'la tienda', $clerk ? '' : ' (firmado por el panel: no encontré su usuaria en la web)' ) );
 		$data = (array) $response->get_data();
 		return self::no_cache( array( 'ok' => true, 'message' => (string) ( $data['message'] ?? 'Pedido cobrado.' ), 'signedBy' => $clerk ? $clerk->display_name : 'panel' ) );

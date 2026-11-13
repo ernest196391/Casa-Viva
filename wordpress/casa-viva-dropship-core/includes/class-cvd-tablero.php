@@ -347,7 +347,9 @@ final class CVD_Tablero {
 	/** La regla de atraso para el bot: sin datos de clientes, solo pedido, qué falta, mensajero y horas. */
 	public static function rest_atrasos(): WP_REST_Response {
 		$core = self::core_data();
-		$response = new WP_REST_Response( array( 'ok' => true, 'generado' => gmdate( 'c', $core['at'] ), 'umbrales' => self::config()['umbrales'], 'atrasos' => $core['atrasos'], 'calle' => $core['calle'] ), 200 );
+		$response = new WP_REST_Response( array( 'ok' => true, 'generado' => gmdate( 'c', $core['at'] ), 'umbrales' => self::config()['umbrales'], 'atrasos' => $core['atrasos'], 'calle' => $core['calle'],
+			// 3.14.145 (Ernesto 5-nov): fichas de «Nueva mercancía» guardadas en borrador → «ficha lista para revisar» en el resumen de las 17:00 de Lennys.
+			'fichas' => class_exists( 'CVD_Content_Studio' ) ? CVD_Content_Studio::fichas_para_revisar() : array() ), 200 );
 		$response->header( 'Cache-Control', 'no-store' );
 		return $response;
 	}

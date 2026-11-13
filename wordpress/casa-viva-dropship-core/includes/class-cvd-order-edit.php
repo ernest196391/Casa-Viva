@@ -42,6 +42,8 @@ final class CVD_Order_Edit {
 		) );
 		// 3.14.42 (Lennys 20-oct): poner o cambiar el vuelto que lleva el mensajero, también con el pedido ya en la calle.
 		register_rest_route( 'casa-viva/v1', '/sales/(?P<id>\d+)/change', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'change_request' ), 'permission_callback' => $can ) );
+		// 3.14.116 (Ernesto 3-nov, caso #6062 → #6102): dividir un pedido en dos (otro cliente y otra dirección), solo la tienda.
+		register_rest_route( 'casa-viva/v1', '/sales/(?P<id>\d+)/split', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'split_request' ), 'permission_callback' => $can ) );
 		register_rest_route( 'casa-viva/v1', '/sales/products', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'products_request' ), 'permission_callback' => $can ) );
 		register_rest_route( 'casa-viva/v1', '/sales/extras', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'extras_request' ), 'permission_callback' => $can ) );
 	}
@@ -52,7 +54,21 @@ final class CVD_Order_Edit {
 	}
 
 	private static function user_can_manage( int $user_id ): bool {
+		if ( $user_id > 0 && self::$gestora_actor === $user_id ) { return true; } // 3.14.116: la gestora, sobre SU pedido (ya comprobado en CVD_Gestora_Pedidos)
 		return $user_id > 0 && ( user_can( $user_id, 'manage_woocommerce' ) || user_can( $user_id, 'cvd_manage_sales' ) );
+	}
+
+	/**
+	 * 3.14.116 (Ernesto 3-nov): la gestora usa edit/cancel/reactivate sobre SUS pedidos (nivel 1 del plan del Vigía).
+	 * Solo CVD_Gestora_Pedidos lo llama, DESPUÉS de comprobar que el pedido es suyo, sin recoger, sin prepago, sin
+	 * reserva y con la comisión sin pagar. Mientras dura $fn, esa gestora cuenta como quien puede cambiar pedidos.
+	 */
+	private static int $gestora_actor = 0;
+
+	public static function as_gestora( int $user_id, callable $fn ) {
+		$previous = self::$gestora_actor;
+		self::$gestora_actor = $user_id;
+		try { return $fn(); } finally { self::$gestora_actor = $previous; }
 	}
 
 	/** Etapa del reparto tal cual (sin la marca de incidencia). */
@@ -108,6 +124,7 @@ final class CVD_Order_Edit {
 		$user = get_userdata( $user_id );
 		$name = $user ? $user->display_name : 'usuario #' . $user_id;
 		if ( class_exists( 'CVD_Panel_Bridge' ) && CVD_Panel_Bridge::via_panel() ) { $by = CVD_Panel_Bridge::current_by(); return $name . ' (panel' . ( '' !== $by ? ' · ' . $by : '' ) . ')'; }
+		if ( $user_id > 0 && self::$gestora_actor === $user_id ) { return $name . ' (gestora, desde su área)'; } // 3.14.116
 		$role = $user && user_can( $user, 'manage_woocommerce' ) ? 'administración' : ( $user && in_array( 'cvd_operator', (array) $user->roles, true ) ? 'operador' : 'dependienta' );
 		return $name . ' (' . $role . ')';
 	}
@@ -217,28 +234,20 @@ final class CVD_Order_Edit {
 			if ( 'cancelled' === ( $step['to'] ?? '' ) && ! in_array( (string) ( $step['from'] ?? '' ), array( '', 'cancelled', 'delivered' ), true ) ) { $operation = sanitize_key( (string) $step['from'] ); break; }
 		}
 		$who = self::who( $user_id );
-		$previous_delivery = CVD_Order_Transition_Service::delivery_before_cancel( $order );
-		$restore_messenger = ! self::is_pickup( $order ) && 'unassigned' !== $previous_delivery && absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
 		// WooCommerce descuenta otra vez las existencias al pasar a «En espera» (al cancelar las devolvió).
 		$order->update_status( 'on-hold', sprintf( 'Pedido REACTIVADO por %s. Motivo: %s.', $who, $reason ) );
 		$fresh = wc_get_order( $order_id );
 		CVD_Order_Transition_Service::reopen_after_cancel( $fresh, $operation, $user_id );
-		if ( $restore_messenger ) {
-			$fresh->update_meta_data( '_cvd_messenger_earning_status', 'pending' );
-		} else {
-			foreach ( array( '_cvd_messenger_user_id', '_cvd_messenger_earning_status', '_cvd_delivery_accepted_at', '_cvd_to_store_at', '_cvd_bot_eta', '_cvd_bot_eta_at', '_cvd_direct_assignment' ) as $key ) { $fresh->delete_meta_data( $key ); }
-		}
+		foreach ( array( '_cvd_messenger_user_id', '_cvd_messenger_earning_status', '_cvd_delivery_accepted_at', '_cvd_to_store_at', '_cvd_bot_eta', '_cvd_bot_eta_at', '_cvd_direct_assignment' ) as $key ) { $fresh->delete_meta_data( $key ); }
 		$fresh->update_meta_data( '_cvd_reactivated_at', current_time( 'mysql', true ) );
 		$fresh->update_meta_data( '_cvd_reactivated_by', $user_id );
 		$fresh->save();
 		if ( class_exists( 'CVD_Commissions' ) && method_exists( 'CVD_Commissions', 'reopen' ) ) { CVD_Commissions::reopen( $order_id ); }
 		$fresh = wc_get_order( $order_id );
 		$delivery = ! self::is_pickup( $fresh );
-		if ( $delivery && ! $restore_messenger && 'ready' === $operation && class_exists( 'CVD_Delivery' ) ) { CVD_Delivery::dispatch_new_order( $order_id ); }
+		if ( $delivery && 'ready' === $operation && class_exists( 'CVD_Delivery' ) ) { CVD_Delivery::dispatch_new_order( $order_id ); }
 		$message = 'Pedido #' . $fresh->get_order_number() . ' reactivado: está «En espera», las existencias se descontaron otra vez y la comisión vuelve a pendiente.';
-		if ( $delivery && $restore_messenger ) { $message .= ' Conserva el mensajero y la etapa que tenía antes de cancelar.'; }
-		elseif ( $delivery ) { $message .= 'ready' === $operation ? ' Sale otra vez al grupo de mensajeros.' : ' Cuando esté listo, sale al grupo de mensajeros.'; }
-		else { $message .= ' Sigue de recogida en tienda.'; }
+		$message .= $delivery ? ( 'ready' === $operation ? ' Sale otra vez al grupo de mensajeros.' : ' Cuando esté listo, sale al grupo de mensajeros.' ) : ' Sigue de recogida en tienda.';
 		return array( 'ok' => true, 'message' => $message );
 	}
 
@@ -317,7 +326,7 @@ final class CVD_Order_Edit {
 		if ( $before == $list ) { return array( 'ok' => true, 'change' => $list, 'message' => 'El vuelto ya era ' . $label( $list ) . '.' ); }
 		$order->update_meta_data( '_cvd_change_required', $list );
 		$who = '' !== $by ? $by : ( get_userdata( $user_id ) ? get_userdata( $user_id )->display_name : 'la tienda' );
-		$order->add_order_note( sprintf( 'Vuelto (%s): antes %s → ahora %s. Lo cambió %s.', 'caja' === $source ? 'caja' : ( 'panel' === $source ? 'panel' : 'Ventas' ), $label( $before ), $label( $list ), $who ) );
+		$order->add_order_note( sprintf( 'Vuelto (%s): antes %s → ahora %s. Lo cambió %s.', 'caja' === $source ? 'caja' : ( 'panel' === $source ? 'panel' : ( 'bot' === $source ? 'WhatsApp' : 'Ventas' ) ), $label( $before ), $label( $list ), $who ) );
 		$order->save();
 		return array( 'ok' => true, 'change' => $list, 'message' => 'Vuelto del pedido #' . $order->get_order_number() . ': ' . $label( $list ) . '. Avísale al mensajero.' );
 	}
@@ -544,6 +553,270 @@ final class CVD_Order_Edit {
 		$admin = current_user_can( 'manage_woocommerce' );
 		$rows = self::extras( $admin ? 0 : get_current_user_id(), 35 );
 		return rest_ensure_response( array( 'admin' => $admin, 'rows' => $rows, 'staffTotal' => round( array_sum( array_column( $rows, 'staff' ) ), 2 ) ) );
+	}
+
+	// ---------- Dividir (3.14.116, Ernesto 3-nov; caso #6062 → #6102) ----------
+
+	/**
+	 * Pasa líneas elegidas del pedido A a un pedido NUEVO B con otro cliente y otra dirección. Solo la tienda.
+	 * - Dinero: cada línea pasa con SU precio y su comisión; A + B = el total de antes. Si pasa una línea entera, su
+	 *   comisión se conserva tal cual; si pasa solo una parte, esa línea recalcula su comisión en los dos pedidos.
+	 * - Existencias: lo que A ya había descontado vuelve a la tienda y B lo descuenta otra vez = la tienda queda igual.
+	 *   Caja (NEXO): A deja su cola de cambios (+) y B sale como venta web normal (−) = la caja queda igual.
+	 *   B lleva la fecha de venta de A: los resúmenes del día no cuentan esa venta dos veces.
+	 * - Sin avisos al cliente: B se crea sin correo ni avisos; de A solo se apunta el cambio si es de gestora
+	 *   (mensajero y gestora; al cliente de una gestora el bot nunca le escribe, ver CVD_Order_Avisos).
+	 * - B empieza «Nuevo» y sin mensajero: sale al reparto cuando la tienda pulse «Listo», como cualquier pedido.
+	 * $moves: [{itemId, qty}]. $to: firstName, lastName, phone, address, municipality, locality, deliveryDate, deliveryWindow, note.
+	 * Devuelve array( ok, message, newOrderId, newNumber, totals, commission ) o WP_Error. Si algo no vale, nada cambia.
+	 */
+	public static function split( int $order_id, array $moves, array $to, int $user_id, string $request_id = '' ) {
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof WC_Order || 'shop_order' !== $order->get_type() ) { return new WP_Error( 'cvd_split_order', 'Pedido no encontrado.', array( 'status' => 404 ) ); }
+		if ( self::$gestora_actor ) { return new WP_Error( 'cvd_split_staff', 'Dividir un pedido lo hace la tienda.', array( 'status' => 403 ) ); }
+		$request_id = substr( (string) preg_replace( '/[^a-zA-Z0-9-]/', '', $request_id ), 0, 64 );
+		$done = $order->get_meta( '_cvd_split_requests', true );
+		if ( '' !== $request_id && is_array( $done ) && isset( $done[ $request_id ] ) ) { // la misma orden repetida (doble toque): no se divide dos veces
+			$child = wc_get_order( absint( $done[ $request_id ] ) );
+			return array( 'ok' => true, 'replayed' => true, 'newOrderId' => $child ? $child->get_id() : 0, 'newNumber' => $child ? $child->get_order_number() : '', 'message' => 'Ya estaba dividido: el pedido nuevo es el #' . ( $child ? $child->get_order_number() : '' ) . '.' );
+		}
+		$block = self::edit_block( $order, $user_id );
+		if ( '' !== $block ) { return new WP_Error( 'cvd_split_blocked', $block, array( 'status' => 409 ) ); }
+		$why = self::split_block( $order );
+		if ( '' !== $why ) { return new WP_Error( 'cvd_split_blocked', $why, array( 'status' => 409 ) ); }
+
+		// 1. Validar todo antes de tocar nada.
+		$current = array();
+		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) { $current[ $item_id ] = (int) $item->get_quantity(); }
+		$plan = self::split_plan( $current, $moves );
+		if ( is_string( $plan ) ) { return new WP_Error( 'cvd_split_lines', $plan, array( 'status' => 422 ) ); }
+		foreach ( $plan as $item_id => $qty ) {
+			$item = $order->get_item( $item_id, false );
+			if ( ! $item instanceof WC_Order_Item_Product || ! $item->get_product() ) { return new WP_Error( 'cvd_split_product', 'Un producto de este pedido ya no existe: no se puede dividir aquí.', array( 'status' => 409 ) ); }
+			$reduced = (int) $item->get_meta( '_reduced_stock', true );
+			if ( $reduced > 0 && $reduced !== (int) $item->get_quantity() ) { return new WP_Error( 'cvd_split_stock', 'Las existencias de «' . $item->get_name() . '» no cuadran en este pedido: no se divide. Habla con Lennys.', array( 'status' => 409 ) ); }
+		}
+		$pickup = self::is_pickup( $order );
+		$test = ( class_exists( 'CVD_Delivery' ) && CVD_Delivery::is_test_order( $order ) ) || '' !== (string) $order->get_meta( '_cvd_ensayo', true );
+		$clean = static fn( string $key ): string => trim( (string) preg_replace( '/\s+/', ' ', sanitize_text_field( (string) ( $to[ $key ] ?? '' ) ) ) );
+		$first = mb_substr( $clean( 'firstName' ), 0, 60 );
+		$last = mb_substr( $clean( 'lastName' ), 0, 60 );
+		$phone = (string) preg_replace( '/[^0-9+ ]/', '', $clean( 'phone' ) );
+		$address = mb_substr( $clean( 'address' ), 0, 200 );
+		if ( '' === $first ) { return new WP_Error( 'cvd_split_name', 'Escribe el nombre del otro cliente.', array( 'status' => 422 ) ); }
+		// Un pedido de ensayo nunca lleva teléfono (así no sale ningún WhatsApp); los reales lo necesitan para el mensajero.
+		if ( $test ) { $phone = ''; }
+		elseif ( ! $pickup && strlen( (string) preg_replace( '/\D/', '', $phone ) ) < 8 ) { return new WP_Error( 'cvd_split_phone', 'Escribe el teléfono del otro cliente (al menos 8 números).', array( 'status' => 422 ) ); }
+		if ( ! $pickup && '' === $address ) { return new WP_Error( 'cvd_split_address', 'Escribe la dirección del otro cliente.', array( 'status' => 422 ) ); }
+		$municipality = $clean( 'municipality' ) ?: (string) $order->get_billing_city();
+		$locality = $clean( 'locality' ) ?: (string) $order->get_meta( '_cvd_locality', true );
+		$date = ''; $window = '';
+		if ( ! $pickup ) {
+			$raw = trim( (string) ( $to['deliveryDate'] ?? '' ) );
+			$date = '' === $raw ? '' : CVD_Delivery_When::normalize( $raw );
+			if ( '' !== $raw && '' === $date ) { return new WP_Error( 'cvd_split_date', 'Elige un día de entrega entre hoy y dentro de ' . CVD_Delivery_When::MAX_DAYS . ' días (o déjalo vacío: lo antes posible).', array( 'status' => 422 ) ); }
+			$window = sanitize_key( (string) ( $to['deliveryWindow'] ?? '' ) );
+			if ( ! in_array( $window, self::WINDOWS, true ) ) { return new WP_Error( 'cvd_split_window', 'Elige mañana, tarde o cualquier hora.', array( 'status' => 422 ) ); }
+		}
+		$note = mb_substr( sanitize_textarea_field( (string) ( $to['note'] ?? '' ) ), 0, 500 );
+		// Una sola división a la vez por pedido (dos dependientas pulsando a la vez).
+		$lock = 'cvd_split_lock_' . $order_id;
+		if ( ! add_option( $lock, time(), '', 'no' ) ) {
+			if ( time() - (int) get_option( $lock ) < 60 ) { return new WP_Error( 'cvd_split_busy', 'Otra persona está dividiendo este pedido ahora mismo. Espera un momento y actualiza.', array( 'status' => 409 ) ); }
+			update_option( $lock, time(), false );
+		}
+		try {
+			return self::split_apply( $order, $plan, compact( 'first', 'last', 'phone', 'address', 'municipality', 'locality', 'date', 'window', 'note', 'pickup' ), $user_id, $request_id );
+		} finally {
+			delete_option( $lock );
+		}
+	}
+
+	/** '' = se puede dividir (además de edit_block); si no, el motivo en palabras de la tienda. */
+	public static function split_block( WC_Order $order ): string {
+		$payment = class_exists( 'CVD_Cuban_Checkout' ) ? CVD_Cuban_Checkout::order_payment( $order ) : null;
+		if ( $payment && ! empty( $payment['prepaid'] ) ) { return 'Este pedido se pagó por adelantado: no se divide aquí. Habla con Lennys.'; }
+		if ( class_exists( 'CVD_Payment_Obligations' ) && CVD_Payment_Obligations::for_order( $order ) ) { return 'Este pedido tiene la mensajería repartida entre cliente y gestora: no se divide aquí. Habla con Lennys.'; }
+		if ( class_exists( 'CVD_Reserva' ) && CVD_Reserva::active( $order ) ) { return 'Este pedido tiene una reserva: no se divide.'; }
+		if ( (float) $order->get_total_refunded() > 0 || $order->get_meta( '_cvd_return', true ) ) { return 'Este pedido tiene una devolución o un reembolso: no se divide.'; }
+		$commission = sanitize_key( (string) $order->get_meta( '_cvd_commission_status', true ) );
+		if ( in_array( $commission, array( 'approved', 'paid' ), true ) || absint( $order->get_meta( '_cvd_payout_id', true ) ) ) { return 'La comisión de este pedido ya está aprobada o pagada: no se divide.'; }
+		return '';
+	}
+
+	/**
+	 * Cuenta pura (sin WordPress): $current [itemId => cantidad], $moves [{itemId, qty}] → [itemId => cantidad que pasa]
+	 * o el motivo (texto) si no vale. El pedido de antes tiene que quedarse con algo.
+	 */
+	public static function split_plan( array $current, array $moves ) {
+		$plan = array();
+		foreach ( $moves as $m ) {
+			$id = is_array( $m ) && is_numeric( $m['itemId'] ?? null ) ? (int) $m['itemId'] : 0;
+			$qty = is_array( $m ) && is_numeric( $m['qty'] ?? null ) ? (int) $m['qty'] : 0;
+			if ( $id <= 0 || $qty <= 0 ) { continue; }
+			if ( ! isset( $current[ $id ] ) ) { return 'Uno de los productos elegidos no está en este pedido.'; }
+			$plan[ $id ] = ( $plan[ $id ] ?? 0 ) + $qty;
+			if ( $plan[ $id ] > $current[ $id ] ) { return 'No puedes pasar más unidades de las que tiene el pedido.'; }
+		}
+		if ( ! $plan ) { return 'Elige qué productos pasan al pedido nuevo.'; }
+		if ( array_sum( $current ) - array_sum( $plan ) < 1 ) { return 'El pedido de antes no puede quedar vacío. Si todo es para el otro cliente, cambia los datos del cliente con «Cambiar pedido».'; }
+		return $plan;
+	}
+
+	/** Metadatos del pedido A que pasan a B: quién vendió y con qué precios, forma de pago y marcas de prueba. */
+	private const SPLIT_COPY_META = array(
+		'_cvd_owner_user_id', '_cvd_owner_type', '_cvd_owner_display_name', '_cvd_pricing_gestora_user_id', '_cvd_pricing_snapshot_at',
+		'_cvd_referral_code', '_cvd_referred_at', '_cvd_attribution_locked', '_cvd_attribution_source', '_cvd_commission_risk',
+		'gestora_id', 'gestora_nombre', 'gestora_codigo', 'referido', 'referido_fecha',
+		'_cvd_fulfillment_type', '_cvd_payment_kind', '_cvd_payment_factor', '_cvd_payment_currency', '_cvd_payment_estimated', '_cvd_cup_rate', '_cvd_cup_rate_at',
+		'_nexo_marketplace_order', '_nexo_marketplace_version', '_cvd_test_order', '_cvd_ensayo',
+	);
+	/** En la línea que pasa NO se copia lo descontado (lo pone B al descontar) ni las secuencias de existencias. */
+	private const SPLIT_SKIP_ITEM_META = array( '_reduced_stock', '_restock_refunded_items', '_cvd_stock_reduction_sequence', '_cvd_stock_restore_sequence' );
+
+	private static function split_apply( WC_Order $order, array $plan, array $to, int $user_id, string $request_id ) {
+		require_once WC_ABSPATH . 'includes/admin/wc-admin-functions.php'; // wc_maybe_adjust_line_item_product_stock
+		$before_total = (float) $order->get_total();
+		$before_commission = (float) $order->get_meta( '_cvd_commission_amount', true );
+		$snapshot = class_exists( 'CVD_Order_Avisos' ) ? CVD_Order_Avisos::snapshot( $order ) : array();
+		$messenger = self::messenger_to_warn( $order );
+		// Sin correos: ni al cliente nuevo ni el de «pedido nuevo» (la tienda es quien lo está creando).
+		$no_mail = static fn(): bool => false;
+		$mails = array( 'woocommerce_email_enabled_new_order', 'woocommerce_email_enabled_customer_on_hold_order', 'woocommerce_email_enabled_customer_processing_order', 'woocommerce_email_enabled_customer_pending_order' );
+		foreach ( $mails as $hook ) { add_filter( $hook, $no_mail, 999 ); }
+		$child = null;
+		try {
+			// 2. Pedido nuevo B (pendiente mientras se arma; luego el mismo estado que A).
+			$child = new WC_Order();
+			$child->set_created_via( 'casa-viva-split' );
+			$child->set_currency( $order->get_currency() );
+			$child->set_prices_include_tax( $order->get_prices_include_tax() );
+			$child->set_payment_method( $order->get_payment_method() );
+			$child->set_payment_method_title( $order->get_payment_method_title() );
+			$child->set_billing_first_name( $to['first'] );
+			$child->set_billing_last_name( $to['last'] );
+			$child->set_billing_phone( $to['phone'] );
+			$child->set_billing_country( $order->get_billing_country() ?: 'CU' );
+			$child->set_billing_city( $to['municipality'] );
+			if ( ! $to['pickup'] ) {
+				$child->set_billing_address_1( $to['address'] ); $child->set_shipping_address_1( $to['address'] );
+				$child->set_shipping_city( $to['municipality'] ); $child->set_shipping_country( $order->get_shipping_country() ?: 'CU' );
+			}
+			if ( '' !== $to['note'] ) { $child->set_customer_note( $to['note'] ); }
+			if ( $order->get_date_created() ) { $child->set_date_created( $order->get_date_created()->getTimestamp() ); }
+			foreach ( self::SPLIT_COPY_META as $key ) {
+				$value = $order->get_meta( $key, true );
+				if ( '' !== $value && null !== $value ) { $child->update_meta_data( $key, $value ); }
+			}
+			$child->update_meta_data( '_cvd_split_from', $order->get_id() );
+			$child->update_meta_data( '_cvd_split_by', $user_id );
+			$child->update_meta_data( '_cvd_staff_new_order_notified', current_time( 'mysql', true ) ); // la tienda ya lo sabe: sin aviso de «pedido nuevo»
+			if ( ! $to['pickup'] ) {
+				$child->update_meta_data( '_cvd_locality', $to['locality'] );
+				$child->update_meta_data( '_cvd_delivery_date', $to['date'] );
+				$child->update_meta_data( '_cvd_delivery_window', $to['window'] );
+				$quote = class_exists( 'CVD_Shipping_Rates' ) ? CVD_Shipping_Rates::quote( $to['municipality'], $to['locality'] ) : array();
+				$child->update_meta_data( '_cvd_shipping_fee_cup', absint( $quote['fee'] ?? 0 ) );
+				$child->update_meta_data( '_cvd_shipping_rate_status', sanitize_key( (string) ( $quote['status'] ?? 'pending' ) ) );
+				$child->update_meta_data( '_cvd_shipping_rate_label', sanitize_text_field( (string) ( $quote['label'] ?? '' ) ) );
+			}
+			$child->save();
+			if ( ! $child->get_id() ) { throw new RuntimeException( 'No se pudo crear el pedido nuevo.' ); }
+
+			// 3. Las líneas: a B con su precio y sus datos; A se queda con lo demás.
+			$moved = array(); $caja = array(); $reduce = array();
+			foreach ( $plan as $item_id => $qty ) {
+				$item = $order->get_item( $item_id, false );
+				$all = (int) $item->get_quantity() === $qty;
+				$unit_sub = (float) $item->get_subtotal() / max( 1, (int) $item->get_quantity() );
+				$unit_tot = (float) $item->get_total() / max( 1, (int) $item->get_quantity() );
+				$copy = new WC_Order_Item_Product();
+				$copy->set_props( array(
+					'name' => $item->get_name(), 'product_id' => $item->get_product_id(), 'variation_id' => $item->get_variation_id(),
+					'quantity' => $qty, 'tax_class' => $item->get_tax_class(),
+					'subtotal' => $all ? $item->get_subtotal() : $unit_sub * $qty, 'total' => $all ? $item->get_total() : $unit_tot * $qty,
+				) );
+				foreach ( $item->get_meta_data() as $meta ) {
+					if ( in_array( $meta->key, self::SPLIT_SKIP_ITEM_META, true ) ) { continue; }
+					if ( '_cvd_commission_snapshot' === $meta->key && ! $all ) { continue; } // parte de una línea: su comisión se recalcula
+					$copy->add_meta_data( $meta->key, $meta->value, false );
+				}
+				$child->add_item( $copy );
+				$reduced = (int) $item->get_meta( '_reduced_stock', true );
+				if ( $reduced > 0 ) { $reduce[] = $copy; $caja[] = array( 'itemId' => $item->get_id(), 'wooId' => $item->get_variation_id() ?: $item->get_product_id(), 'delta' => $qty ); }
+				$moved[] = $qty . '× ' . $item->get_name() . ' (' . wc_format_decimal( $all ? (float) $item->get_total() : $unit_tot * $qty, 2 ) . ' ' . $order->get_currency() . ')';
+				// A: quitar la línea o bajar su cantidad, devolviendo a la tienda lo que pasa a B (igual que edit()).
+				if ( $all ) {
+					wc_maybe_adjust_line_item_product_stock( $item, 0 );
+					$order->remove_item( $item->get_id() );
+				} else {
+					$left = (int) $item->get_quantity() - $qty;
+					$item->set_quantity( $left ); $item->set_subtotal( $unit_sub * $left ); $item->set_total( $unit_tot * $left );
+					$item->delete_meta_data( '_cvd_commission_snapshot' );
+					$item->save();
+					wc_maybe_adjust_line_item_product_stock( $item );
+				}
+			}
+			$child->calculate_totals( false );
+			$child->save();
+			// B descuenta lo que A devolvió (y queda marcado como descontado: WooCommerce no lo vuelve a descontar al cambiar de estado).
+			foreach ( $reduce as $copy ) { wc_maybe_adjust_line_item_product_stock( $copy ); }
+			$status = $order->get_status();
+			if ( 'pending' !== $status ) { $child = wc_get_order( $child->get_id() ); $child->set_status( $status ); $child->save(); }
+			if ( class_exists( 'CVD_Delivery' ) && ! $to['pickup'] ) { CVD_Delivery::initialize_order( wc_get_order( $child->get_id() ) ); }
+			if ( class_exists( 'CVD_Sales' ) ) { CVD_Sales::initialize_order( wc_get_order( $child->get_id() ) ); }
+
+			// 4. A: totales, cola para la caja, enlace con B.
+			$order->calculate_totals( false );
+			if ( $caja ) { self::queue_caja_edits( $order, $caja ); }
+			$children = $order->get_meta( '_cvd_split_children', true );
+			$children = is_array( $children ) ? $children : array();
+			$children[] = $child->get_id();
+			$order->update_meta_data( '_cvd_split_children', array_values( array_unique( array_map( 'absint', $children ) ) ) );
+			if ( '' !== $request_id ) {
+				$done = $order->get_meta( '_cvd_split_requests', true );
+				$done = is_array( $done ) ? $done : array();
+				$done[ $request_id ] = $child->get_id();
+				$order->update_meta_data( '_cvd_split_requests', array_slice( $done, -20, null, true ) );
+			}
+			$order->save();
+		} catch ( Throwable $error ) {
+			foreach ( $mails as $hook ) { remove_filter( $hook, $no_mail, 999 ); }
+			return new WP_Error( 'cvd_split_failed', 'No se pudo dividir el pedido: ' . $error->getMessage() . ' Revisa los dos pedidos con Lennys.', array( 'status' => 500 ) );
+		}
+		foreach ( $mails as $hook ) { remove_filter( $hook, $no_mail, 999 ); }
+		if ( class_exists( 'CVD_Commissions' ) ) { CVD_Commissions::mark_pending( $order->get_id() ); CVD_Commissions::mark_pending( $child->get_id() ); }
+		$a = wc_get_order( $order->get_id() );
+		$b = wc_get_order( $child->get_id() );
+		$cur = $a->get_currency();
+		$money = static fn( float $v ): string => wc_format_decimal( $v, 2 );
+		$who = self::who( $user_id );
+		$b_name = trim( $b->get_billing_first_name() . ' ' . $b->get_billing_last_name() );
+		$a->add_order_note( sprintf( 'Pedido DIVIDIDO por %s: pasaron al pedido nuevo #%s (para %s%s): %s. Este pedido: %s → %s %s. Los dos juntos: %s %s, igual que antes. Sin aviso al cliente.%s',
+			$who, $b->get_order_number(), $b_name, $to['pickup'] || '' === $to['locality'] ? '' : ', ' . $to['locality'], implode( '; ', $moved ), $money( $before_total ), $money( (float) $a->get_total() ), $cur,
+			$money( (float) $a->get_total() + (float) $b->get_total() ), $cur, $messenger ? ' Ya lo tenía asignado ' . $messenger['name'] . ': hay que avisarle.' : '' ) );
+		$a->save();
+		$b->add_order_note( sprintf( 'Pedido creado al DIVIDIR el #%s (lo hizo %s): %s. Mismo vendedor, mismos precios y misma forma de pago; la comisión va por línea. Sale al reparto cuando la tienda pulse «Listo».', $a->get_order_number(), $who, implode( '; ', $moved ) ) );
+		$b->save();
+		if ( class_exists( 'CVD_Order_Avisos' ) && self::is_gestora_order( $a ) ) { CVD_Order_Avisos::record_edit( wc_get_order( $a->get_id() ), $snapshot, $user_id, 'split', $messenger ); }
+		$a = wc_get_order( $a->get_id() );
+		$b = wc_get_order( $b->get_id() );
+		$after_commission = (float) $a->get_meta( '_cvd_commission_amount', true ) + (float) $b->get_meta( '_cvd_commission_amount', true );
+		$message = 'Listo: el pedido #' . $a->get_order_number() . ' queda en ' . $money( (float) $a->get_total() ) . ' ' . $cur . ' y el nuevo #' . $b->get_order_number() . ' (' . $b_name . ') en ' . $money( (float) $b->get_total() ) . ' ' . $cur . '. Juntos: ' . $money( (float) $a->get_total() + (float) $b->get_total() ) . ' ' . $cur . ', igual que antes. El nuevo sale al reparto cuando pulses «Listo».';
+		if ( $messenger ) { $message .= ' El #' . $a->get_order_number() . ' ya lo tenía ' . $messenger['name'] . ( self::is_gestora_order( $a ) ? ': el bot le avisa del cambio.' : ': avísale tú del cambio.' ); }
+		return array(
+			'ok' => true, 'message' => $message, 'newOrderId' => $b->get_id(), 'newNumber' => $b->get_order_number(),
+			'totals' => array( 'before' => $before_total, 'order' => (float) $a->get_total(), 'newOrder' => (float) $b->get_total() ),
+			// La comisión solo la ve administración (a las dependientas no se les enseña: CVD_Staff_Privacy).
+			'commission' => user_can( $user_id, 'manage_woocommerce' ) ? array( 'before' => $before_commission, 'after' => round( $after_commission, 4 ) ) : null,
+		);
+	}
+
+	public static function split_request( WP_REST_Request $request ) {
+		$params = (array) $request->get_json_params();
+		$result = self::split( absint( $request['id'] ), (array) ( $params['lines'] ?? array() ), (array) ( $params['to'] ?? array() ), get_current_user_id(), (string) ( $params['requestId'] ?? '' ) );
+		if ( is_wp_error( $result ) ) { return $result; }
+		return rest_ensure_response( $result );
 	}
 
 	// ---------- Precio de la gestora ----------

@@ -76,6 +76,8 @@ final class CVD_Direct_Dispatch {
 
 	/** Celda «Mensajero que lo lleva» de la tabla de ventas de la gestora. */
 	public static function gestora_cell( WC_Order $order ): string {
+		// 3.14.160: con la cadena encendida, 1.º, 2.º, «también al grupo» y «Pasar al grupo ya» (también después de asignado).
+		if ( class_exists( 'CVD_Cadena_Mensajeros' ) && CVD_Cadena_Mensajeros::on() ) { return CVD_Cadena_Mensajeros::gestora_cell( $order ); }
 		static $messengers = null;
 		$assigned = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
 		if ( $assigned ) { return esc_html( $assigned->display_name ) . ( self::is_direct( $order ) ? ' <small>(lo elegiste tú)</small>' : '' ); }
@@ -94,6 +96,7 @@ final class CVD_Direct_Dispatch {
 
 	/** Aviso tras guardar el mensajero elegido (se muestra arriba de «Tus ventas»). */
 	public static function gestora_notice(): string {
+		if ( isset( $_GET['cadena'] ) && class_exists( 'CVD_Cadena_Mensajeros' ) ) { return CVD_Cadena_Mensajeros::gestora_notice(); } // 3.14.160
 		if ( ! isset( $_GET['mensajero'] ) ) { return ''; }
 		$result = sanitize_key( wp_unslash( $_GET['mensajero'] ) );
 		$messages = array(

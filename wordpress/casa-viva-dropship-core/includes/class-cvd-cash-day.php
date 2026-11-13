@@ -49,6 +49,21 @@ final class CVD_Cash_Day {
 		return $reasons;
 	}
 
+	/** Fecha UTC original guardada por la caja autenticada, no la hora del reintento. */
+	public static function from_receipt_timestamp( $raw, ?int $now = null ) {
+		if ( null === $raw || '' === $raw ) { return null; } // clientes anteriores
+		$now = $now ?? time();
+		if ( ! is_string( $raw ) || ! preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/D', $raw ) ) {
+			return new WP_Error( 'cvd_caja_receipt_date', 'Fecha del ingreso no válida. Revisa el reloj de la caja.', array( 'status' => 422 ) );
+		}
+		try { $date = new DateTimeImmutable( $raw ); } catch ( Throwable $e ) { $date = null; }
+		if ( ! $date || $date->format( 'Y-m-d\TH:i:s' ) !== substr( $raw, 0, 19 ) || $date->getTimestamp() < 1577836800 || $date->getTimestamp() > $now ) {
+			return new WP_Error( 'cvd_caja_receipt_date', 'Fecha del ingreso no válida. Revisa el reloj de la caja.', array( 'status' => 422 ) );
+		}
+		$day = self::day( $date->getTimestamp() );
+		return array( 'answer' => $day === self::day( $now ) ? 'yes' : 'no', 'day' => $day, 'at' => $date->format( 'Y-m-d H:i:s' ) );
+	}
+
 	/** La respuesta que trae la petición (cashReceivedToday = yes|no, cashReceivedDay = AAAA-MM-DD) o null. */
 	public static function answer_from( WP_REST_Request $request, ?int $now = null ): ?array {
 		$answer = sanitize_key( (string) $request->get_param( 'cashReceivedToday' ) );
@@ -66,8 +81,9 @@ final class CVD_Cash_Day {
 	 */
 	public static function check( WC_Order $order, WP_REST_Request $request, int $user_id ) {
 		$reasons = self::reasons( $order, $user_id );
-		if ( ! $reasons ) { return array(); }
 		$answer = self::answer_from( $request );
+		// Incluso antes de 24h, un ingreso offline puede pertenecer al dia anterior.
+		if ( ! $reasons ) { return $request->get_param( 'cashReceivedAt' ) && $answer ? array( 'reasons' => array() ) + $answer : array(); }
 		if ( null === $answer ) {
 			return new WP_Error( self::ERROR, '¿Lo recibiste hoy?', array(
 				'status' => 428, 'order_id' => $order->get_id(), 'reasons' => $reasons,
@@ -86,9 +102,10 @@ final class CVD_Cash_Day {
 			$order->update_meta_data( '_cvd_cash_day_reason', implode( ',', $check['reasons'] ) );
 			$order->update_meta_data( '_cvd_cash_day_by', $user_id );
 			$order->update_meta_data( '_cvd_cash_day_at', gmdate( 'Y-m-d H:i:s', $now ) );
-			$order->add_order_note( 'yes' === $check['answer']
+			if ( empty( $check['reasons'] ) ) { $order->add_order_note( 'Fecha original del ingreso en caja: ' . $check['day'] . '.' ); }
+			else { $order->add_order_note( 'yes' === $check['answer']
 				? 'Dinero de una entrega de otro día: quien lo registró dijo que lo recibió hoy.'
-				: sprintf( 'Dinero de una entrega de otro día: quien lo registró dijo que lo recibió %s. No cuenta en el cajón de hoy.', $check['day'] ? 'el ' . $check['day'] : 'otro día' ) );
+				: sprintf( 'Dinero de una entrega de otro día: quien lo registró dijo que lo recibió %s. No cuenta en el cajón de hoy.', $check['day'] ? 'el ' . $check['day'] : 'otro día' ) ); }
 		}
 		$delivered = self::delivered_ts( $order );
 		if ( $user_id && $delivered && self::day( $delivered ) < self::day( $now ) ) {

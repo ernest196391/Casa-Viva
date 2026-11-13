@@ -18,6 +18,16 @@
 	var FOTOS = C.verificar
 		? [['carne', 'Tu carné', 'por delante, que se lea', 'environment'], ['selfie', 'Tu cara (selfie)', 'de frente, sin gafas ni gorra', 'user'], ['triciclo', 'Tu triciclo', 'de frente o de lado', 'environment'], ['licencia', 'Licencia', 'si la tienes', 'environment']]
 		: [['perfil', 'Tu foto', 'tu cara, de frente', 'user'], ['triciclo', 'Tu triciclo', 'de frente o de lado', ''], ['licencia', 'Licencia', 'si la tienes', '']];
+	// 5-nov (Pa'llá transporte): taxi y mensajero. El taxi pide además la LOT y la licencia es obligatoria.
+	function grupoDe(tipo) { var t = TIPOS.filter(function (x) { return x.id === tipo; })[0]; return t ? (t.grupo || 'tric') : ''; }
+	function fotosDe(tipo) {
+		var g = grupoDe(tipo);
+		return FOTOS.map(function (p) {
+			if (p[0] === 'triciclo' && g && g !== 'tric') { return ['triciclo', g === 'taxi' ? 'Tu carro' : 'Tu moto o bici', 'de lado, entero', p[3]]; }
+			if (p[0] === 'licencia' && g === 'taxi') { return ['licencia', 'Licencia', 'obligatoria en taxi', p[3]]; }
+			return p;
+		}).concat(g === 'taxi' ? [['lot', 'Tu LOT', 'obligatoria en taxi', 'environment']] : []);
+	}
 	var S = { token: '', hoy: null, blocked: null, toast: '', busy: false, hoja: '', form: null, sucio: false, offline: false, gps: null, terminado: null, subiendo: {} };
 	var T = { poll: 0, gps: 0, toast: 0, tick: 0 };
 	var mapa = null, mapaEl = null;
@@ -61,7 +71,7 @@
 	}
 	function formDe(h) {
 		var f = h.ficha || {}, p = h.perfil || {};
-		return { nombre: f.propio && /^Chofer \d+$/.test(f.nombre || '') ? '' : (f.nombre || ''), tipo: f.tipo || '', motor: f.motor || '', carga_kg: f.carga_kg || '', numero: f.numero || '', descripcion: f.descripcion || '', plazas: f.plazas || '', servicios: f.servicios || ['viaje', 'paquete', 'carga'], lot_numero: f.lot_numero || '', lot_vence: f.lot_vence || '', licencia_cat: f.licencia_cat || '', transferencia: f.transferencia || '', precio_km: p.precio_km || 300, km_tramo: p.km_tramo || 5, precio_km_despues: p.precio_km_despues || 150, extras: p.extras || {} };
+		return { nombre: f.propio && /^Chofer \d+$/.test(f.nombre || '') ? '' : (f.nombre || ''), tipo: f.tipo || '', motor: f.motor || '', carga_kg: f.carga_kg || '', numero: f.numero || '', descripcion: f.descripcion || '', plazas: f.plazas || '', servicios: f.servicios || ['viaje', 'paquete', 'carga'], lot_numero: f.lot_numero || '', lot_vence: f.lot_vence || '', chapa: f.chapa || '', color: f.color || '', licencia_cat: f.licencia_cat || '', transferencia: f.transferencia || '', precio_km: p.precio_km || 300, km_tramo: p.km_tramo || 5, precio_km_despues: p.precio_km_despues || 150, extras: p.extras || {} };
 	}
 
 	// ------------------------------------------------------------ Datos
@@ -74,6 +84,8 @@
 				var era = S.hoy && S.hoy.ficha && S.hoy.ficha.estado, es = res.data.ficha && res.data.ficha.estado;
 				if (era === 'verificando' && es && es !== 'verificando') { S.hoja = ''; S.sucio = false; toast(es === 'aprobado' ? '✅ ¡Aprobado! Toca «Conectarme» para recibir viajes.' : (es === 'revision' ? 'Una persona mirará tus datos. Te avisamos.' : 'Hay algo que corregir: míralo arriba.')); }
 				S.hoy = res.data;
+				// 5-nov: con Pa'llá transporte encendido, el chofer aprobado trabaja en la app nueva (/palla/chofer/).
+				if (C.pvChofer && res.data.pv && es === 'aprobado' && !res.data.activo) { location.replace(C.pvChofer); return; }
 				if (!S.form || !S.sucio) {
 					S.form = formDe(res.data);
 					var bo = borrador(), fe = res.data.ficha && res.data.ficha.estado;
@@ -153,7 +165,7 @@
 	// página), la foto se ve al momento con aviso si está oscura o movida, y se sube con barra de % y reintento sin repetirla.
 	// Si el móvil no deja usar la cámara aquí, un <input> fijo fuera de la pantalla que se repinta (no se pierde).
 	var FOTO = {}; // cual → { local: url de la vista previa, estado: subiendo|lista|error, pct, blob, aviso, msg }
-	function datoFoto(cual) { return FOTOS.filter(function (p) { return p[0] === cual; })[0] || [cual, cual, '', '']; }
+	function datoFoto(cual) { return fotosDe(S.form && S.form.tipo).filter(function (p) { return p[0] === cual; })[0] || [cual, cual, '', '']; }
 	function calidad(canvas) { // en el móvil, gratis: luz media y nitidez (varianza del laplaciano) en 160 px
 		try {
 			var w = 160, h = Math.max(1, Math.round(canvas.height * 160 / canvas.width)), c = document.createElement('canvas');
@@ -527,15 +539,23 @@
 		if (est !== 'aprobado' && (fi.propio || !fi.nombre)) { x += '<label class="tc-field"><span>Tu nombre</span><input class="tc-input" data-f="nombre" maxlength="60" autocomplete="name" value="' + esc(f.nombre) + '"></label>'; }
 		x += '<p class="tc-strong" style="margin:4px 0 0">¿Qué tienes?</p><div class="tc-tipos">';
 		TIPOS.forEach(function (t) { var on = f.tipo === t.id; x += '<button type="button" class="tc-tipo' + (on ? ' tc-tipo--sel' : '') + '" data-act="tipo" data-id="' + t.id + '" aria-pressed="' + on + '">' + iconoTipo(t, 40, on ? '#fff' : '#087a3d') + '<b>' + esc(t.nombre) + '</b><small>' + esc(t.sub) + '</small></button>'; });
-		x += '</div><p class="tc-strong" style="margin:4px 0 0">Motor</p><div class="tc-elige">';
-		MOTORES.forEach(function (m) { x += '<button type="button" class="tc-elige__b' + (f.motor === m[0] ? ' tc-elige__b--sel' : '') + '" data-act="motor" data-id="' + m[0] + '">' + m[1] + '</button>'; });
-		x += '</div><p class="tc-strong" style="margin:4px 0 0">¿Qué haces?</p><div class="tc-elige">';
+		var gr = grupoDe(f.tipo);
+		x += '</div>';
+		if (gr === 'taxi') { // 5-nov (Pa'llá): chapa y color del carro; licencia y LOT obligatorias (fotos abajo)
+			x += '<div class="tc-dos-campos"><label class="tc-field"><span>Chapa del carro</span><input class="tc-input" data-f="chapa" maxlength="16" value="' + esc(f.chapa) + '" placeholder="P123456"></label><label class="tc-field"><span>Color</span><input class="tc-input" data-f="color" maxlength="20" value="' + esc(f.color) + '"></label></div>';
+		}
+		if (!gr || gr === 'tric') {
+			x += '<p class="tc-strong" style="margin:4px 0 0">Motor</p><div class="tc-elige">';
+			MOTORES.forEach(function (m) { x += '<button type="button" class="tc-elige__b' + (f.motor === m[0] ? ' tc-elige__b--sel' : '') + '" data-act="motor" data-id="' + m[0] + '">' + m[1] + '</button>'; });
+			x += '</div>';
+		}
+		x += '<p class="tc-strong" style="margin:4px 0 0">¿Qué haces?</p><div class="tc-elige">';
 		USOS.forEach(function (u) { x += '<button type="button" class="tc-elige__b' + (uso === u[0] ? ' tc-elige__b--sel' : '') + '" data-act="uso" data-id="' + u[0] + '">' + u[1] + '</button>'; });
 		x += '</div><div class="tc-dos-campos">'
 			+ (uso !== 'carga' ? '<label class="tc-field"><span>¿Cuántas personas llevas?</span><input class="tc-input" inputmode="numeric" data-f="plazas" value="' + esc(f.plazas) + '"></label>' : '')
 			+ (uso === 'carga' || uso === 'dos' ? '<label class="tc-field"><span>¿Cuántos kilos cargas?</span><input class="tc-input" inputmode="numeric" data-f="carga_kg" value="' + esc(f.carga_kg) + '"></label>' : '') + '</div>';
 		x += '<p class="tc-strong" style="margin:4px 0 0">Fotos</p><div class="tc-fotos">';
-		FOTOS.forEach(function (p) { x += htmlFoto(p, fotos[p[0]]); });
+		fotosDe(f.tipo).forEach(function (p) { x += htmlFoto(p, fotos[p[0]]); });
 		x += '</div>';
 		if (est !== 'aprobado' && fi.faltan && fi.faltan.length && fi.enviado) { x += '<p class="tc-small">Falta: ' + esc(fi.faltan.join(', ')) + '.</p>'; }
 		return x;

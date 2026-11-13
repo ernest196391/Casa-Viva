@@ -746,15 +746,26 @@ final class CVD_Panel_Bridge {
 		$p = (array) $request->get_json_params();
 		$sell = ! empty( $p['sell'] );
 		$by = self::by( $p );
+		// 3.14.162 («se muestra solo al reponer», Ernesto 10-nov): motivo al ocultar ('agotado' = Se acabó, 'manual' = A
+		// propósito) y auto = lo muestra el puente porque llegó mercancía (qty = cuántas). La liquidación (_cvd_no_reponer)
+		// es siempre «A propósito»: con auto no se muestra y vuelve skipped = no_reponer (el puente la deja oculta en la caja).
+		$reason = in_array( (string) ( $p['reason'] ?? '' ), array( 'agotado', 'manual' ), true ) ? (string) $p['reason'] : '';
+		$auto = ! empty( $p['auto'] );
+		$qty = absint( $p['qty'] ?? 0 );
 		$done = array();
 		$parents = array();
 		foreach ( array_slice( array_unique( array_map( 'absint', (array) ( $p['items'] ?? array() ) ) ), 0, 300 ) as $id ) {
 			$product = $id ? wc_get_product( $id ) : null;
 			// Los artículos «bajo pedido» del mercado los publica VivaBot: aquí no se tocan.
 			if ( ! $product || '' !== (string) $product->get_meta( '_cvd_market_item_id' ) ) { $done[] = array( 'wooId' => $id, 'ok' => false ); continue; }
-			$sell ? self::put_on_sale( $product ) : self::retire( $product, $by );
+			$liquidacion = self::no_reponer( $product );
+			if ( $sell && $auto && $liquidacion ) { $done[] = array( 'wooId' => $id, 'ok' => false, 'skipped' => 'no_reponer' ); continue; }
+			$sell ? self::put_on_sale( $product ) : self::retire( $product, $by, $liquidacion ? 'manual' : $reason );
 			if ( $product->is_type( 'variation' ) ) { $parents[ $product->get_parent_id() ] = true; }
-			self::log_product( $sell ? 'vuelve a la venta' : 'retirado (dejar de vender)', $id, $product->get_name(), $by );
+			$action = $sell
+				? ( $auto ? 'vuelve a la venta solo: llegaron ' . $qty : 'vuelve a la venta' )
+				: 'retirado (dejar de vender)' . ( 'agotado' === ( $liquidacion ? 'manual' : $reason ) ? ' · se acabó: vuelve solo al llegar mercancía' : ( '' !== $reason || $liquidacion ? ' · a propósito' : '' ) );
+			self::log_product( $action, $id, $product->get_name(), $by );
 			$done[] = array( 'wooId' => $id, 'ok' => true, 'status' => get_post_status( $id ) );
 		}
 		foreach ( array_keys( $parents ) as $parent_id ) {
@@ -764,14 +775,27 @@ final class CVD_Panel_Bridge {
 		return self::no_cache( array( 'items' => $done ) );
 	}
 
-	private static function retire( WC_Product $product, string $by ): void {
+	/** Liquidación: el producto (o su padre, si es un diseño) no se vuelve a comprar (CVD_Costs::NO_REPONER). */
+	private static function no_reponer( WC_Product $product ): bool {
+		$on = static fn( $value ): bool => ! in_array( (string) $value, array( '', '0', 'no' ), true );
+		if ( $on( $product->get_meta( '_cvd_no_reponer' ) ) ) { return true; }
+		$parent = $product->is_type( 'variation' ) ? wc_get_product( $product->get_parent_id() ) : null;
+		return $parent && $on( $parent->get_meta( '_cvd_no_reponer' ) );
+	}
+
+	private static function retire( WC_Product $product, string $by, string $reason = '' ): void {
 		$variation = $product->is_type( 'variation' );
 		if ( '' === (string) $product->get_meta( '_cvd_retired' ) ) {
-			$product->update_meta_data( '_cvd_retired', wp_json_encode( array(
+			$saved = array(
 				'at' => gmdate( 'c' ), 'by' => $by, 'status' => $product->get_status(),
 				'visibility' => $variation ? '' : $product->get_catalog_visibility(),
 				'hold' => '' !== (string) $product->get_meta( '_cvd_hold' ),
-			) ) );
+			);
+			if ( '' !== $reason ) { $saved['reason'] = $reason; }
+			$product->update_meta_data( '_cvd_retired', wp_json_encode( $saved ) );
+		} elseif ( '' !== $reason ) {
+			$old = json_decode( (string) $product->get_meta( '_cvd_retired' ), true );
+			if ( is_array( $old ) && ( $old['reason'] ?? '' ) !== $reason ) { $old['reason'] = $reason; $product->update_meta_data( '_cvd_retired', wp_json_encode( $old ) ); }
 		}
 		$product->set_status( 'private' );
 		if ( ! $variation ) {

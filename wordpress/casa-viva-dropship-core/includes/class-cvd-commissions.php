@@ -484,6 +484,8 @@ final class CVD_Commissions {
 			$line_margin = ( $base_unit > 0 && $pricing_gestora_id === $owner_user_id ) ? max( 0, $line - ( $base_unit * $quantity ) ) : 0;
 
 			$snapshot = $item->get_meta( '_cvd_commission_snapshot', true );
+			// 3.14.167 (Lennys 11-nov, #6051): si se cambió la cantidad y la comisión no está cerrada, la foto se rehace.
+			if ( ! $locked && is_array( $snapshot ) && isset( $snapshot['quantity'] ) && (int) $snapshot['quantity'] !== $quantity ) { $snapshot = null; }
 			$is_extra = is_array( $item->get_meta( self::EXTRA_META, true ) ) && $item->get_meta( self::EXTRA_META, true );
 			// 3.14.45: si el pedido entra o sale de la regla del equipo/tienda (p. ej. se cambió el cliente), la foto se rehace.
 			if ( ! $locked && is_array( $snapshot ) && ( '' !== $staff_zero ) !== ! empty( $snapshot['staff_zero'] ) ) { $snapshot = null; }

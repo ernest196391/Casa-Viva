@@ -66,7 +66,7 @@ final class CVD_Payout_Pay_Page {
 	 */
 	public static function access( array $payout, bool $owner_ok = false ): array {
 		$deny = array( 'ok' => false, 'actor' => 0, 'name' => '', 'via' => '', 'token' => '' );
-		$cash = in_array( sanitize_key( (string) $payout['pay_method'] ), array( 'cash_cup', 'cash_usd' ), true ) || ( '' === (string) $payout['pay_method'] && 'cash' === $payout['method'] );
+		$cash = in_array( sanitize_key( (string) $payout['pay_method'] ), array( 'cash_cup', 'cash_usd', 'mixed' ), true ) /* 3.14.167: «mixed» = dos importes en efectivo; no pide captura (Lennys 11-nov) */ || ( '' === (string) $payout['pay_method'] && 'cash' === $payout['method'] );
 		if ( is_user_logged_in() ) {
 			$user = wp_get_current_user();
 			// Las dependientas solo ven los pagos en efectivo (las transferencias, con la tarjeta, las paga Lennys).
