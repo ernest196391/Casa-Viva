@@ -116,6 +116,10 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
     </div>
     <div class="section-head"><div><span class="eyebrow">PRIMERO</span><h2>Decisiones tuyas</h2></div><span id="decision-count" class="count">0</span></div>
     <div id="decisions-list" class="stack"></div>
+    <div id="blocked-reviews-section" hidden>
+      <div class="section-head"><div><span class="eyebrow">REVISIÓN INTERNA</span><h2>Revisiones sin aprobación formal</h2></div><span id="blocked-reviews-count" class="count">0</span></div>
+      <div id="blocked-reviews-list" class="stack"></div>
+    </div>
     <div class="section-head"><div><span class="eyebrow">PRIORIDAD</span><h2>Lo que merece atención</h2></div></div>
     <div id="today-list" class="stack"></div>
   </section>
