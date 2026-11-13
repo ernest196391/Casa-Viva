@@ -28,6 +28,14 @@ function decisionCard(x){
   const reject=el('button','Rechazar','reject-btn');reject.type='button';reject.dataset.decision='reject';reject.dataset.approval=String(x.approval_id||'');
   actions.append(approve,reject);a.append(actions,el('p','', 'decision-feedback'),el('div',stamp(x.created_at),'meta'));return a;
 }
+function blockedReviewCard(x){
+  const a=el('article','', 'card decision');
+  const top=el('div','', 'card-top');
+  top.append(el('h3','Tarea #'+(x.task_id||'—')+' · '+(x.title||'Revisión')),pill('Sin aprobación formal','warning'));
+  a.append(top,el('p',x.warning||'Falta crear la solicitud de aprobación.','card-copy'));
+  a.append(el('div',stamp(x.created_at),'meta'));
+  return a;
+}
 function lennysCard(x){
   const a=el('article','', 'card priority-'+(x.priority||'p2'));const top=el('div','', 'card-top');
   top.append(el('h3',x.subject||'Asunto de Lennys'),pill(String(x.priority||'p2').toUpperCase(),x.priority||''));a.append(top);
