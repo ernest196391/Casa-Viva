@@ -367,6 +367,9 @@ final class CVD_Bot_Bridge {
 		foreach ( $orders as $order ) {
 			if ( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { continue; }
 			if ( '' !== CVD_Delivery::blocks_dispatch( $order ) ) { continue; } // 3.13.54/3.13.71: prueba, sin mensajería o no activo: nunca se anuncia en el grupo
+			// 3.14.160: pasa de un mensajero a otro (cadena): no se anuncia en el grupo (2 min de margen por si algo falla).
+			$handoff = (string) $order->get_meta( '_cvd_chain_handoff', true );
+			if ( '' !== $handoff && time() - (int) strtotime( $handoff . ' UTC' ) < 120 ) { continue; }
 			$offered_at = (string) $order->get_meta( '_cvd_delivery_offered_at', true );
 			$announced_at = (string) $order->get_meta( '_cvd_bot_announced_at', true );
 			$offers[] = array(
@@ -450,6 +453,8 @@ final class CVD_Bot_Bridge {
 			$assigned_at = (string) $order->get_meta( '_cvd_direct_assigned_at', true );
 			$announced_at = (string) $order->get_meta( '_cvd_bot_direct_announced_at', true );
 			if ( '' !== $announced_at && $announced_at >= $assigned_at ) { continue; } // ambas 'Y-m-d H:i:s' UTC
+			// 3.14.160 (cadena): el vale de un cambio de mensajero sale cuando lleva 60 s estable (nunca «sí es tuya» y luego «ya no»).
+			if ( absint( $order->get_meta( '_cvd_chain_hold_until', true ) ) > time() ) { continue; }
 			$messenger = get_userdata( absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) );
 			if ( ! $messenger ) { continue; }
 			$list[] = array(
@@ -594,6 +599,14 @@ final class CVD_Bot_Bridge {
 	 */
 	public static function claim_by_messenger( WC_Order $order, WP_User $messenger, string $source ): array {
 		$palla = 'palla' === $source;
+		// 3.14.160 (cadena): «Yo» sobre una carrera asignada sin aceptar. El que la tiene la acepta; el 2.º abierto a la vez
+		// a los 10 min la gana; cualquier otro, «taken».
+		if ( class_exists( 'CVD_Cadena_Mensajeros' ) ) {
+			$chain = CVD_Cadena_Mensajeros::claim_assigned( $order, $messenger );
+			if ( false === $chain ) { return array( 'result' => 'taken' ); }
+			if ( true === $chain ) { $fresh = wc_get_order( $order->get_id() ); return array( 'result' => 'won', 'messenger' => $messenger->display_name, 'voucher' => self::voucher( $fresh ), 'chain' => 'backup' ); }
+			$order = wc_get_order( $order->get_id() ) ?: $order;
+		}
 		$current_owner = absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
 		if ( $current_owner === $messenger->ID ) { return array( 'result' => 'yours', 'voucher' => self::voucher( $order ) ); }
 		if ( $current_owner || 'offered' !== CVD_Delivery::status( $order ) || '' !== CVD_Delivery::blocks_dispatch( $order ) ) { return array( 'result' => 'taken' ); }
@@ -660,6 +673,8 @@ final class CVD_Bot_Bridge {
 				return true;
 			},
 			'atomic_mutation'   => static function ( WC_Order $locked, $from, $to, $actor, string $at ) use ( $messenger, $how ): void {
+				// 3.14.160: se apunta la suelta y, si hay 2.º, queda marcada para pasarle a él (antes de borrar nada).
+				if ( class_exists( 'CVD_Cadena_Mensajeros' ) ) { CVD_Cadena_Mensajeros::on_release( $locked, $messenger, $at ); }
 				$locked->delete_meta_data( '_cvd_messenger_user_id' );
 				$locked->delete_meta_data( '_cvd_direct_assignment' ); // ya no es directa: sale al grupo como cualquier oferta
 				$locked->delete_meta_data( '_cvd_delivery_accepted_at' );
@@ -681,7 +696,10 @@ final class CVD_Bot_Bridge {
 			},
 		) );
 		if ( empty( $result['success'] ) ) { return array( 'result' => 'error', 'code' => $result['error_code'] ?? '' ); }
-		return array( 'result' => 'released', 'messenger' => $messenger->display_name );
+		// 3.14.160 (cadena, sin freno): pasa al instante al 2.º (passedTo = su nombre; el vale le llega por /bot/dispatch/direct).
+		// passedTo vacío: quedó en el grupo como siempre.
+		$passed = class_exists( 'CVD_Cadena_Mensajeros' ) ? CVD_Cadena_Mensajeros::after_release( $order->get_id(), $messenger ) : '';
+		return array( 'result' => 'released', 'messenger' => $messenger->display_name, 'passedTo' => $passed );
 	}
 
 	/**

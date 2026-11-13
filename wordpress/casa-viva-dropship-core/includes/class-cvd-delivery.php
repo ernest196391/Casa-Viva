@@ -412,6 +412,12 @@ final class CVD_Delivery {
 		$preferred_id = class_exists( 'CVD_Direct_Dispatch' ) ? absint( $order->get_meta( CVD_Direct_Dispatch::PREFERRED_META, true ) ) : 0;
 		if ( ! $preferred_id || 'unassigned' !== self::status( $order ) || absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { return self::publish_offer( $order ); }
 		$messenger = CVD_Direct_Dispatch::preferred_messenger( $order );
+		// 3.14.160: «en los dos» (la gestora lo marcó): sale al grupo y a su mensajero se le avisa por privado; gana el primero.
+		if ( $messenger && class_exists( 'CVD_Cadena_Mensajeros' ) && CVD_Cadena_Mensajeros::on() && CVD_Cadena_Mensajeros::group_too( $order ) ) {
+			$published = self::publish_offer( $order );
+			if ( $published ) { CVD_Cadena_Mensajeros::invite_priority( $order->get_id() ); }
+			return $published;
+		}
 		if ( $messenger && self::assign_direct( $order, $messenger ) ) { return true; }
 		$fresh = wc_get_order( $order->get_id() );
 		if ( ! $fresh ) { return false; }
@@ -440,6 +446,7 @@ final class CVD_Delivery {
 				$locked->update_meta_data( '_cvd_direct_assignment', 1 );
 				$locked->update_meta_data( '_cvd_direct_assigned_at', $at );
 				$locked->delete_meta_data( '_cvd_bot_direct_announced_at' );
+				if ( class_exists( 'CVD_Cadena_Mensajeros' ) ) { CVD_Cadena_Mensajeros::start_clock( $locked, 'first', $at ); } // 3.14.160: reloj 10/20 min
 				$locked->add_order_note( 'Entrega asignada directamente a ' . $messenger->display_name . ' (lo pidió ' . $requested_by . '). No se publicó en el grupo de mensajeros.' );
 			},
 			'after_commit' => static function ( WC_Order $saved, array $transition ) use ( $messenger ): void {

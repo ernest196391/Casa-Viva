@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Casa Viva Dropship Core
  * Description: Atribución permanente, comisiones, proveedores y cierre de pedidos por WhatsApp para WooCommerce.
- * Version: 3.14.156
+ * Version: 3.14.160
  * Author: Casa Viva
  * Requires at least: 6.5
  * Requires PHP: 8.1
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'CVD_VERSION', '3.14.156' );
+define( 'CVD_VERSION', '3.14.160' );
 define( 'CVD_FILE', __FILE__ );
 define( 'CVD_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CVD_URL', plugin_dir_url( __FILE__ ) );
@@ -71,6 +71,7 @@ require_once CVD_DIR . 'includes/class-cvd-contabilidad.php'; // 3.14.125: costo
 require_once CVD_DIR . 'includes/class-cvd-delivery-when.php';
 require_once CVD_DIR . 'includes/class-cvd-gestora-stock.php';
 require_once CVD_DIR . 'includes/class-cvd-direct-dispatch.php';
+require_once CVD_DIR . 'includes/class-cvd-cadena-mensajeros.php'; // 3.14.160: cadena de mensajeros (1.º, 2.º, reloj 10/20, sin freno)
 require_once CVD_DIR . 'includes/class-cvd-messenger-cash.php';
 require_once CVD_DIR . 'includes/class-cvd-cash-day.php'; // 3.14.76: «¿Lo recibiste hoy?» con el dinero de entregas viejas (Ernesto 28-oct)
 require_once CVD_DIR . "includes/class-cvd-cierre-math.php";
@@ -152,6 +153,7 @@ add_action(
 			CVD_Vale_Chat::register(); // 3.14.67: /bot/vale/* para el «VALE» por chat de VivaBot.
 			CVD_Vale_Check::register(); // 3.14.75: /bot/vale/revisar y /vale/revisar (Pilar 4).
 			CVD_Direct_Dispatch::register();
+			CVD_Cadena_Mensajeros::register(); // 3.14.160 (Ernesto 10-nov, caso #6411): un pedido no se queda esperando al mensajero asignado.
 			CVD_Messenger_Cash::register();
 			CVD_Fichas::register();
 			CVD_Aprende::register(); // 3.13.77: «Aprende» (tutoriales) en el área de la gestora y del mensajero.
