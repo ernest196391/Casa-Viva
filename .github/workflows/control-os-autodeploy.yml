@@ -11,9 +11,9 @@ permissions:
 
 jobs:
   guard:
-    # SAFETY STOP: producción está por delante de Git (live 3.14.167 vs repo 3.14.156).
-    # Se reactivará después de reconciliar el Core vivo hacia Git.
-    if: ${{ false }}
+    # Solo evalúa cambios que llegaron a main desde una tarea Control OS segura/guarded.
+    # El deploy reutilizable vuelve a comprobar CI, versión, SHA, smoke y rollback.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     outputs:
       deploy: ${{ steps.check.outputs.deploy }}
