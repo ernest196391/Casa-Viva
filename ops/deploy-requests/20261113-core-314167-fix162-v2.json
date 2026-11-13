@@ -1,0 +1,12 @@
+{
+  "expected_sha": "04f15c2b0a2c152390e8dceb2ab3db19edfb8dd5",
+  "requested_by": "Casa Viva Control OS",
+  "reason": "Segundo intento del deploy reconciliado 3.14.167 + fix #162. El primer intento no tocó producción; falló por parsing de CVD_VERSION en el workflow, ya corregido.",
+  "evidence": {
+    "reconciliation_pr": 191,
+    "full_ci_run": 43439273750,
+    "first_deploy_run": 43441491738,
+    "workflow_fix_commit": "b60bb49b2e50aad9431fd415e55a496422719c87",
+    "rollback": "deploy-prototype.yml automatic rollback"
+  }
+}
