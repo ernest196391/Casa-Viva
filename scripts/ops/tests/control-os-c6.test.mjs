@@ -59,7 +59,6 @@ test('C8 VPS diagnostic is explicitly allowlisted and read-only', () => {
 });
 
 // C8: the chat diagnostic must not be an arbitrary command execution path.
-const bridge = fs.readFileSync(new URL('../cv-ops-bridge.py', import.meta.url), 'utf8');
 test('owner_ingest_audit is explicitly read-only and allowlisted', () => {
   const start = bridge.indexOf('def action_owner_ingest_audit(args):');
   const end = bridge.indexOf('def action_ai_audit(args):', start);
