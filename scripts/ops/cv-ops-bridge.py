@@ -32,7 +32,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "4.1.0"
+BRIDGE_VERSION = "4.1.1"
 
 
 def load_env_files() -> dict[str, str]:
@@ -1260,11 +1260,27 @@ def action_deploy_casa_viva(args):
     main_sha = run(["git", "-C", str(repo), "rev-parse", "origin/main"], timeout=20)
     if main_sha["returncode"] != 0:
         return main_sha
-    if main_sha["output"].strip() != sha:
-        return {
-            "returncode": 3,
-            "output": f"SHA bloqueado: solicitado {sha}, origin/main {main_sha['output'].strip()}",
-        }
+    current_main = main_sha["output"].strip()
+    if current_main != sha:
+        ancestor = run(["git", "-C", str(repo), "merge-base", "--is-ancestor", sha, "origin/main"], timeout=20)
+        if ancestor["returncode"] != 0:
+            return {
+                "returncode": 3,
+                "output": f"SHA bloqueado: {sha} no es ancestro de origin/main {current_main}",
+            }
+        plugin_path = "wordpress/casa-viva-dropship-core"
+        requested_tree = run(["git", "-C", str(repo), "rev-parse", f"{sha}:{plugin_path}"], timeout=20)
+        current_tree = run(["git", "-C", str(repo), "rev-parse", f"{current_main}:{plugin_path}"], timeout=20)
+        if requested_tree["returncode"] != 0 or current_tree["returncode"] != 0:
+            return {"returncode": 3, "output": "No pude comparar el árbol del plugin antes del deploy"}
+        if requested_tree["output"].strip() != current_tree["output"].strip():
+            return {
+                "returncode": 3,
+                "output": (
+                    f"SHA bloqueado: origin/main avanzó de {sha} a {current_main} "
+                    "y el árbol del plugin Casa Viva también cambió."
+                ),
+            }
 
     auth = run(["gh", "auth", "status"], timeout=30)
     if auth["returncode"] != 0:
