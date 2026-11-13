@@ -60,6 +60,12 @@ jobs:
             printf '%s\n' '{"state":"invalid_wp_response"}' > /tmp/aserezon-evidence/result.json
             exit 1
           fi
+      - name: Inspeccionar imágenes de origen (solo lectura)
+        if: always()
+        shell: bash
+        run: |
+          python3 scripts/catalog/audit-aserezon-media.py
+          cp aserezon-source-images.json /tmp/aserezon-evidence/source-images.json
       - name: Guardar informe en rama evidence/aserezon-audit
         if: always()
         shell: bash
@@ -69,12 +75,15 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/aserezon-report
           cp /tmp/aserezon-evidence/result.json /tmp/aserezon-report/result.json
+          if [ -f /tmp/aserezon-evidence/source-images.json ]; then
+            cp /tmp/aserezon-evidence/source-images.json /tmp/aserezon-report/source-images.json
+          fi
           printf '%s\n' "${GITHUB_SHA}" > /tmp/aserezon-report/source_sha.txt
           cd /tmp/aserezon-report
           git init -q -b audit-result
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add result.json source_sha.txt
+          git add result.json source_sha.txt source-images.json
           git commit -qm "Audit Aserezon WooCommerce (read-only) ${GITHUB_RUN_ID}"
           git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/evidence/aserezon-audit
       - name: Informe como artefacto
