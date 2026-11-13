@@ -56,7 +56,7 @@ jobs:
             printf '%s\n' '{"state":"wp_cli_failed"}' > /tmp/aserezon-evidence/result.json
             exit 1
           fi
-          if ! sed -n '/^{/,$p' /tmp/aserezon-evidence/raw.txt | jq -e '.status=="ok" and (.products|length)==4' > /tmp/aserezon-evidence/result.json; then
+          if ! sed -n '/^{/,$p' /tmp/aserezon-evidence/raw.txt | jq -e 'select(.status=="ok" and (.products|length)==4)' > /tmp/aserezon-evidence/result.json; then
             printf '%s\n' '{"state":"invalid_wp_response"}' > /tmp/aserezon-evidence/result.json
             exit 1
           fi
