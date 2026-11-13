@@ -53,7 +53,7 @@ jobs:
             exit 5
           }
 
-          runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=$sha&branch=main&event=push&per_page=50")"
+          runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=$sha&branch=main&per_page=50")"
           successful="$(jq -r '[.workflow_runs[] | select(.name == "Validar aplicación" and .conclusion == "success")] | length' <<<"$runs")"
           test "$successful" -ge 1 || { echo "No successful full CI for $sha" >&2; exit 6; }
 
