@@ -27,6 +27,7 @@ MAX_LOG = 30000
 REPOS = {
     "vivabot": Path("/root/vivabot"),
     "nexo": Path("/root/ernesto-rondon-nexo"),
+    "casa-viva": Path("/root/Casa-Viva"),
 }
 TEST_PROFILES = {
     "vivabot": [
@@ -36,6 +37,12 @@ TEST_PROFILES = {
         ["npm", "run", "lint"],
         ["npm", "test"],
         ["npm", "run", "typecheck"],
+    ],
+    "casa-viva": [
+        ["npm", "run", "lint"],
+        ["npm", "run", "typecheck"],
+        ["npm", "run", "build"],
+        ["npm", "run", "test:order-center"],
     ],
 }
 
@@ -335,6 +342,31 @@ def run_tests(repo_name: str, work: Path):
             logs.append("$ python3 -m py_compile worker/app.py\n" + out)
             if rc:
                 return False, "\n".join(logs)
+    elif repo_name == "casa-viva":
+        rc, out = run(["npm", "install", "--no-audit", "--no-fund"], cwd=str(work), timeout=300)
+        logs.append("$ npm install\n" + out)
+        if rc:
+            return False, "\n".join(logs)
+        for cmd in TEST_PROFILES["casa-viva"]:
+            rc, out = run(cmd, cwd=str(work), timeout=360)
+            logs.append("$ " + " ".join(cmd) + "\n" + out)
+            if rc:
+                return False, "\n".join(logs)
+        for rel in ("scripts/ops/cv-ops-bridge.py", "scripts/ops/control-os-sync.py", "scripts/ops/dev-worker.py"):
+            target = work / rel
+            if target.exists():
+                rc, out = run(["python3", "-m", "py_compile", str(target)], cwd=str(work), timeout=60)
+                logs.append("$ python3 -m py_compile " + rel + "\n" + out)
+                if rc:
+                    return False, "\n".join(logs)
+        for cmd in (
+            ["php", "artifacts/tests/test-panel-bajo-pedido.php"],
+            ["node", "artifacts/tests/test-inventory-integrity-5c.mjs"],
+        ):
+            rc, out = run(cmd, cwd=str(work), timeout=120)
+            logs.append("$ " + " ".join(cmd) + "\n" + out)
+            if rc:
+                return False, "\n".join(logs)
     else:
         return False, "repo no habilitado"
     return True, "\n".join(logs)[-MAX_LOG:]
@@ -478,6 +510,19 @@ def nexo_deploy_health(expected_sha: str):
     return ok, results
 
 
+def casa_viva_deploy_health(expected_sha: str):
+    cmd = [
+        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=12",
+        "-o", "StrictHostKeyChecking=yes",
+        "-i", "/root/.ssh/casa-viva-web", "-p", "65002",
+        "u824654880@88.223.85.72",
+        "cat /home/u824654880/domains/casaviva.company/public_html/wp-content/plugins/casa-viva-dropship-core/.cvd-deployed-sha 2>/dev/null || true",
+    ]
+    rc, out = run(cmd, timeout=30)
+    deployed = out.strip().splitlines()[0] if out.strip() else None
+    return rc == 0 and deployed == expected_sha, {"deployed_sha": deployed, "expected_sha": expected_sha}
+
+
 def monitor_runs():
     rows = api("GET", "ops_dev_runs?select=*&status=in.(pushed,deploy_queued,deploying)&order=updated_at.asc&limit=20") or []
     for row in rows:
@@ -512,6 +557,12 @@ def monitor_runs():
                         "summary": "GitHub Gate pasó; Render auto-deploy detectado. Esperando health con SHA exacto.",
                     })
                     event(task, "dev_ci_gate_passed", {"run_id": row["id"], "work_sha": row["work_sha"], "deploy": "render-auto"})
+                elif repo_name == "casa-viva":
+                    patch_table("ops_dev_runs", row["id"], {
+                        "status": "deploying",
+                        "summary": "Gate de rama pasó; esperando CI completo de main + deploy GitHub→Hostinger + SHA desplegado.",
+                    })
+                    event(task, "dev_ci_gate_passed", {"run_id": row["id"], "work_sha": row["work_sha"], "deploy": "github-hostinger"})
             elif not row.get("auto_merge"):
                 # Validated branch intentionally awaits a final approval.
                 patch_table("ops_dev_runs", row["id"], {"status": "waiting_approval"})
@@ -539,6 +590,33 @@ def monitor_runs():
                 age = time.time() - (time.mktime(time.strptime(started[:19], "%Y-%m-%dT%H:%M:%S")) if started else time.time())
                 if age > 1200:
                     err = "Render no confirmó el SHA esperado en 20 minutos: " + json.dumps(health, ensure_ascii=False)
+                    patch_table("ops_dev_runs", row["id"], {"status": "failed", "error": err, "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+                    patch_table("ops_tasks", task["id"], {"status": "failed", "error": err, "claim_expires_at": None})
+                    event(task, "dev_deploy_failed", {"run_id": row["id"], "work_sha": row["work_sha"], "health": health})
+
+        elif row["status"] == "deploying" and repo_name == "casa-viva" and not row.get("deploy_bridge_id"):
+            healthy, health = casa_viva_deploy_health(row["work_sha"])
+            if healthy:
+                patch_table("ops_dev_runs", row["id"], {
+                    "status": "done",
+                    "summary": "CI completo + deploy GitHub→Hostinger verificados por SHA desplegado.",
+                    "logs": json.dumps({"hostinger_health": health}, ensure_ascii=False),
+                    "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                })
+                patch_table("ops_tasks", task["id"], {
+                    "status": "done",
+                    "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "claimed_by": None,
+                    "claimed_at": None,
+                    "claim_expires_at": None,
+                    "error": None,
+                })
+                event(task, "dev_deployed", {"run_id": row["id"], "work_sha": row["work_sha"], "deploy": "github-hostinger", "health": health})
+            else:
+                started = row.get("started_at")
+                age = time.time() - (time.mktime(time.strptime(started[:19], "%Y-%m-%dT%H:%M:%S")) if started else time.time())
+                if age > 3600:
+                    err = "Hostinger no confirmó el SHA esperado en 60 minutos: " + json.dumps(health, ensure_ascii=False)
                     patch_table("ops_dev_runs", row["id"], {"status": "failed", "error": err, "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
                     patch_table("ops_tasks", task["id"], {"status": "failed", "error": err, "claim_expires_at": None})
                     event(task, "dev_deploy_failed", {"run_id": row["id"], "work_sha": row["work_sha"], "health": health})
