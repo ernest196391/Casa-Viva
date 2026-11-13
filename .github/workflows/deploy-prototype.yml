@@ -41,6 +41,21 @@ jobs:
           git fetch origin main --depth=200
           git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
 
+      - name: Bloquear SHA obsoleto si el plugin cambió después
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=250
+          current_main="$(git rev-parse origin/main)"
+          plugin='wordpress/casa-viva-dropship-core'
+          requested_tree="$(git rev-parse "$DEPLOY_SHA:$plugin")"
+          current_tree="$(git rev-parse "$current_main:$plugin")"
+          test "$requested_tree" = "$current_tree" || {
+            echo "Deploy bloqueado: el plugin cambió después del SHA certificado $DEPLOY_SHA (main actual $current_main)." >&2
+            exit 4
+          }
+          echo "Plugin tree OK: $requested_tree"
+
       - name: Verificar CI post-merge exitoso
         shell: bash
         env:
