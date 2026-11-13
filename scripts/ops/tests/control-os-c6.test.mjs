@@ -1,9 +1,8 @@
-// Regression tests for owner conversation display. Run: node --test scripts/ops/tests/control-os-c6.test.cjs
+// Regression tests for owner conversation display. Run: node --test scripts/ops/tests/control-os-c6.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import path from 'node:path';
 
 const js = fs.readFileSync(new URL('../control-web/app.js', import.meta.url), 'utf8');
 const match = js.match(/function isBriefContext\(x\)\{[\s\S]*?\n\}/);
@@ -30,4 +29,17 @@ test('no automatic approval actions exist on blocked review cards', () => {
   assert.ok(body.includes('Sin aprobación formal'));
   assert.ok(!body.includes('data-decision'));
   assert.ok(!body.includes('approve-btn'));
+});
+
+// C7: prevent false orphan financial reviews if Supabase returns a capped page.
+const sync = fs.readFileSync(new URL('../control-os-sync.py', import.meta.url), 'utf8');
+test('pending approval audit must fail closed when query is truncated', () => {
+  assert.match(sync, /status=eq\.pending&order=created_at\.asc&limit=500/);
+  assert.match(sync, /approval_page_truncated = len\(approvals\) >= 500/);
+  assert.match(sync, /if not approval_page_truncated else \[\]/);
+  assert.match(sync, /'reviews_audit_incomplete': approval_page_truncated or waiting_page_truncated/);
+});
+test('panel must show an incomplete audit warning', () => {
+  assert.match(js, /reviews_audit_incomplete/);
+  assert.match(js, /No se pudieron comprobar todas las aprobaciones/);
 });
