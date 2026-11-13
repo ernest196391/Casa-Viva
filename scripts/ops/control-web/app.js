@@ -53,6 +53,10 @@ function render(data){
   $('error').hidden=Number.isFinite(age)&&age<=180;if(!$('error').hidden)$('error').textContent='El estado lleva más de 3 minutos sin actualizarse.';
   const s=data.summary||{};$('m-attention').textContent=s.attention??0;$('m-decisions').textContent=s.decisions??0;$('m-lennys').textContent=s.lennys??0;$('m-errors').textContent=s.errors??0;
   const decisions=Array.isArray(data.decisions)?data.decisions:[];$('decision-count').textContent=decisions.length;$('decisions-list').replaceChildren(...decisions.map(decisionCard));if(!decisions.length)empty($('decisions-list'),'No tienes decisiones pendientes ahora.');
+  const blocked=Array.isArray(data.reviews_blocked)?data.reviews_blocked:[];
+  $('blocked-reviews-section').hidden=!blocked.length;
+  $('blocked-reviews-count').textContent=blocked.length;
+  $('blocked-reviews-list').replaceChildren(...blocked.map(blockedReviewCard));
   const today=Array.isArray(data.today)?data.today:[];$('today-list').replaceChildren(...today.map(taskCard));if(!today.length)empty($('today-list'),'No hay trabajo prioritario abierto.');
   renderTasks();
   const l=Array.isArray(data.lennys)?data.lennys:[];$('lennys-count').textContent=l.length;$('lennys-list').replaceChildren(...l.map(lennysCard));if(!l.length)empty($('lennys-list'),'No hay asuntos activos de Lennys.');
