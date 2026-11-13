@@ -1,0 +1,111 @@
+name: Control OS Dev Gate
+
+on:
+  push:
+    branches:
+      - 'control-os/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: control-os-casa-viva-main
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact task branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate Control OS commit contract
+        id: contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="${GITHUB_REF_NAME}"
+          [[ "$branch" =~ ^control-os/task-([0-9]+)-[a-z0-9-]+$ ]] || exit 2
+          task_id="${BASH_REMATCH[1]}"
+          msg="$(git log -1 --pretty=%B)"
+          echo "$msg" | grep -Eq "^Control OS task #$task_id "
+          risk="$(printf '%s' "$msg" | sed -n 's/.*\[risk=\([^]]*\)\].*/\1/p')"
+          base="$(printf '%s' "$msg" | sed -n 's/.*\[base=\([0-9a-f]\{40\}\)\].*/\1/p')"
+          auto="$(printf '%s' "$msg" | sed -n 's/.*\[auto_merge=\([01]\)\].*/\1/p')"
+          [[ "$risk" =~ ^(safe|guarded|sensitive|critical)$ ]]
+          [[ "$base" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$auto" =~ ^[01]$ ]]
+          if [[ "$auto" == "1" && "$risk" != "safe" && "$risk" != "guarded" ]]; then exit 3; fi
+          git fetch origin main
+          [[ "$(git rev-parse origin/main)" == "$base" ]] || { echo "main moved" >&2; exit 4; }
+          [[ "$(git rev-list --count "$base"..HEAD)" == "1" ]] || exit 5
+
+          mapfile -t changed < <(git diff --name-only "$base"..HEAD)
+          (("${#changed[@]}" > 0 && "${#changed[@]}" <= 20)) || exit 6
+          for path in "${changed[@]}"; do
+            case "$path" in
+              app/*|artifacts/*|integration/*|scripts/*|tests/*|wordpress/*|docs/*) ;;
+              *) echo "Path not allowed: $path" >&2; exit 7 ;;
+            esac
+          done
+          if printf '%s\n' "${changed[@]}" | grep -Eq '^\.github/|(^|/)\.env|package(-lock)?\.json$'; then
+            echo "Protected path changed" >&2; exit 8
+          fi
+          lines="$(git diff --numstat "$base"..HEAD | awk '{a+=$1; d+=$2} END {print a+d+0}')"
+          (( lines <= 1800 )) || exit 9
+          git diff --check "$base"..HEAD
+          echo "task_id=$task_id" >> "$GITHUB_OUTPUT"
+          echo "risk=$risk" >> "$GITHUB_OUTPUT"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "auto=$auto" >> "$GITHUB_OUTPUT"
+
+      - name: PHP/Python/JS syntax for changed operational files
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r path; do
+            case "$path" in
+              *.php) php -l "$path" ;;
+              *.py) python3 -m py_compile "$path" ;;
+              *.js|*.mjs) node --check "$path" ;;
+            esac
+          done < <(git diff --name-only "${{ steps.contract.outputs.base }}"..HEAD)
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Key order contracts
+        run: |
+          npm run test:order-center
+          php artifacts/tests/test-panel-bajo-pedido.php
+          node artifacts/tests/test-inventory-integrity-5c.mjs
+
+      - name: Fast-forward main after branch gate
+        if: steps.contract.outputs.auto == '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          expected="${{ steps.contract.outputs.base }}"
+          [[ "$(git rev-parse origin/main)" == "$expected" ]] || exit 10
+          git push origin HEAD:main
+
+      - name: Sensitive change remains on branch
+        if: steps.contract.outputs.auto != '1'
+        run: echo "Validated branch retained for explicit final approval."
