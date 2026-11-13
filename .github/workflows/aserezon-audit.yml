@@ -1,4 +1,5 @@
 name: Aserezon · auditoría de WooCommerce (solo lectura)
+# Repeat audit after original source photos applied on 2026-11-13
 
 on:
   push:
