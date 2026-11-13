@@ -87,7 +87,7 @@ jobs:
             cp dry-run-output.txt raw-output.txt
             cp dry-run-report.json report.json
           fi
-          jq -r '"::notice title=Aserezon borradores::modo=\\(.mode), creados=\\(.created|length), omitidos=\\(.skipped|length), errores=\\(.errors|length)"' report.json
+          jq -r '"::notice title=Aserezon borradores::modo=\(.mode), creados=\(.created|length), omitidos=\(.skipped|length), errores=\(.errors|length)"' report.json
       - name: Guardar informe
         if: always()
         uses: actions/upload-artifact@v4
