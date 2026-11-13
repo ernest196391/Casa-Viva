@@ -32,7 +32,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "3.8.0"
+BRIDGE_VERSION = "3.9.0"
 
 
 def load_env_files() -> dict[str, str]:
@@ -936,6 +936,67 @@ def action_dev_worker_status(args):
     }
 
 
+def action_core_drift_audit(args):
+    """Compare production Core files with the Git checkout by SHA-256. Read-only."""
+    import hashlib
+    import re
+
+    root = Path('/root/Casa-Viva/wordpress/casa-viva-dropship-core')
+    local = {}
+    if root.exists():
+        for path in root.rglob('*'):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(root).as_posix()
+            if rel in ('.cvd-deployed-sha', '.cvd-deployed-archive-sha256') or rel.endswith('.log'):
+                continue
+            local[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
+
+    command = (
+        "cd /home/u824654880/domains/casaviva.company/public_html/wp-content/plugins/casa-viva-dropship-core && "
+        "find . -type f ! -name '.cvd-deployed-sha' ! -name '.cvd-deployed-archive-sha256' ! -name '*.log' -print0 "
+        "| sort -z | xargs -0 sha256sum"
+    )
+    remote_run = run(WP_SSH + [command], timeout=90)
+    if remote_run['returncode'] != 0:
+        return remote_run
+    remote = {}
+    for line in remote_run['output'].splitlines():
+        if len(line) < 67:
+            continue
+        h = line[:64]
+        rel = line[66:].strip()
+        if rel.startswith('./'):
+            rel = rel[2:]
+        if re.fullmatch(r'[0-9a-f]{64}', h) and rel:
+            remote[rel] = h
+
+    changed = sorted(k for k in (set(local) & set(remote)) if local[k] != remote[k])
+    only_live = sorted(set(remote) - set(local))
+    only_git = sorted(set(local) - set(remote))
+    live_version = wp_remote('wp plugin get casa-viva-dropship-core --field=version')
+    git_version = None
+    main_file = root / 'casa-viva-dropship-core.php'
+    if main_file.exists():
+        m = re.search(r"define\(\s*'CVD_VERSION'\s*,\s*'([^']+)'\s*\)", main_file.read_text(errors='replace'))
+        git_version = m.group(1) if m else None
+
+    return {
+        'returncode': 0,
+        'output': json.dumps({
+            'git_version': git_version,
+            'live_version': live_version['output'].strip(),
+            'git_files': len(local),
+            'live_files': len(remote),
+            'changed_count': len(changed),
+            'only_live_count': len(only_live),
+            'only_git_count': len(only_git),
+            'changed': changed[:400],
+            'only_live': only_live[:400],
+            'only_git': only_git[:400],
+        }, ensure_ascii=False),
+    }
+
 def action_ai_audit(args):
     cmd = [
         "bash", "-lc",
@@ -981,6 +1042,7 @@ ACTIONS = {
     "update_dev_worker": action_update_dev_worker,
     "install_dev_worker_service": action_install_dev_worker_service,
     "dev_worker_status": action_dev_worker_status,
+    "core_drift_audit": action_core_drift_audit,
     "ai_audit": action_ai_audit,
     "catalog_sync_status": action_catalog_sync_status,
 }
