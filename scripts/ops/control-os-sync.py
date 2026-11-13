@@ -209,6 +209,12 @@ def snapshot():
         'ops_approvals?select=public_id,task_id,requested_for_role,warning,impact,proposed_change,status,created_at'
         '&status=eq.pending&order=created_at.asc&limit=40'
     )
+    # Do not rely on the latest 120 tasks for financial approval safety:
+    # older waiting tasks must remain visible until formally resolved.
+    waiting_approval_tasks = query(
+        'ops_tasks?select=id,public_id,title,status,risk,created_at'
+        '&status=eq.waiting_approval&order=created_at.asc&limit=500'
+    )
     task_by_uuid = {str(x.get('id')): x for x in tasks}
 
     def task_summary(x):
@@ -243,7 +249,7 @@ def snapshot():
         'status': x.get('status'),
         'risk': x.get('risk'),
         'created_at': x.get('created_at'),
-    } for x in tasks
+    } for x in waiting_approval_tasks
       if x.get('status') == 'waiting_approval'
       and str(x.get('id')) not in pending_approval_task_ids]
 
