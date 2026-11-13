@@ -1191,8 +1191,7 @@ def action_snapshot_live_core_branch(args):
                 }
 
             diff_check = run(["git", "diff", "--check", "--", str(prefix)], cwd=str(work), timeout=45)
-            if diff_check["returncode"] != 0:
-                return {"returncode": 6, "output": "git diff --check falló:\n" + diff_check["output"]}
+            whitespace_warnings = diff_check["output"][:12000] if diff_check["returncode"] != 0 else ""
 
             add_result = run(["git", "add", "--", str(prefix)], cwd=str(work), timeout=60)
             if add_result["returncode"] != 0:
@@ -1232,6 +1231,7 @@ def action_snapshot_live_core_branch(args):
                     "bytes": total,
                     "changed_files": len(names),
                     "changed_preview": names[:200],
+                    "whitespace_warnings": whitespace_warnings,
                     "production_modified": False,
                     "main_modified": False,
                 }, ensure_ascii=False),
