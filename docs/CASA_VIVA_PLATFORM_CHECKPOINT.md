@@ -244,3 +244,14 @@ Al retomar el proyecto:
 3. ejecutar solamente la próxima acción aprobada;
 4. actualizar estado, evidencia, costo y próxima compuerta;
 5. no avanzar de fase por inferencia ni por CI verde.
+
+## PREPARE — Aserezon: borradores de catálogo externo (2026-11-13)
+
+- Solicitud de Ernesto: primer piloto 30 repuestos con costo del proveedor, precio Casa Viva, comisiones fijas por tramo, cuatro imágenes por SKU (foto real autorizada + tres complementarias fieles), ficha SEO y verificación antes de publicar.
+- PR de preparación: #192, rama `prep/aserezon-30-productos-20261113`.
+- Estado verificado: **4 fichas iniciales en manifiesto JSON**, textos SEO preliminares, importador WP-CLI idempotente que crea exclusivamente borradores ocultos sin existencias disponibles y sin modificar SKU existentes, y workflow manual `aserezon-drafts.yml` para ejecución vía Hostinger SSH/WP-CLI (`dry-run` o `apply`).
+- Autorización de fotografías comunicada por Ernesto; la correspondencia exacta y la disponibilidad de archivos originales aún deben verificarse. Fotos IA ilustrativas no certifican compatibilidad.
+- **NO SE HA EJECUTADO** el workflow en Hostinger ni se ha demostrado creación de borradores WooCommerce, fotografías cargadas ni publicación comercial.
+- Precios propuestos, no acuerdos con Aserezon. La aceptación del sistema de cobro, liquidación, stock y reservas sigue sin confirmar.
+- Bloqueo técnico: conector WordPress.com no expone `casaviva.company`; alternativa canónica existente GitHub Actions → SSH Hostinger → WP-CLI. Hacer primero `dry-run` remoto, inspeccionar reporte, y solo entonces crear borradores sin publicar.
+- Proteger Casa Viva Core: no modificar dinero, stock, pedidos, productos actuales, sincronización legada ni desplegar plugin multitienda con este PR.
