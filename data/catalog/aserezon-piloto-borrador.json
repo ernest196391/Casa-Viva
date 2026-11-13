@@ -4,7 +4,7 @@
   "updated_at": "2026-11-13",
   "supplier": "Aserezon",
   "authority": "WooCommerce en casaviva.company",
-  "source_permission": "PENDIENTE: autorización escrita de uso de fotos, fichas y anuncios",
+  "source_permission": "Ernesto afirma autorización expresa de Aserezon para usar fotografías en Casa Viva y publicidad. Falta registrar evidencia/alcance del permiso.",
   "price_terms": "PENDIENTE: aceptación de cobro del precio Casa Viva y liquidación semanal de diferencia",
   "rules": {
     "free_reservation_hours_proposed": 24,
@@ -27,8 +27,32 @@
       "status": "draft",
       "stock": "unverified",
       "image_url": null,
-      "photo_rights": "pending",
-      "seo_description": "Referencia técnica sujeta a comprobación con Aserezon; confirmar modelo y código de la pieza antes de reservar. Disponibilidad y precio final sujetos a confirmación."
+      "photo_rights": "autorización comunicada por Ernesto; evidencia pendiente",
+      "seo_description": "Pastillas de freno delanteras para Lada 2101–2107, juego de 4 unidades. Código de fabricante 2101-3501090-01. Peso informado por Aserezon: 0,83 kg. Comprueba la referencia y la compatibilidad con tu vehículo antes de reservar. Disponibilidad y precio sujetos a confirmación del proveedor.",
+      "seo_title": "Pastillas de freno delanteras Lada 2101-2107 | Juego 4 uds",
+      "meta_description": "Juego de cuatro pastillas de freno delanteras para Lada 2101–2107, referencia 2101-3501090-01. Consulta disponibilidad y compatibilidad en Casa Viva.",
+      "image_plan": [
+        {
+          "slot": 1,
+          "kind": "real",
+          "status": "pendiente de descargar y comprobar correspondencia exacta"
+        },
+        {
+          "slot": 2,
+          "kind": "diagram",
+          "status": "pendiente de revisión técnica"
+        },
+        {
+          "slot": 3,
+          "kind": "lifestyle",
+          "status": "pendiente de imagen fiel a pieza original"
+        },
+        {
+          "slot": 4,
+          "kind": "features",
+          "status": "pendiente de revisión de datos"
+        }
+      ]
     },
     {
       "sku": "AS-2101-1106010-10",
@@ -42,8 +66,32 @@
       "status": "draft",
       "stock": "unverified",
       "image_url": null,
-      "photo_rights": "pending",
-      "seo_description": "Referencia técnica sujeta a comprobación con Aserezon; confirmar modelo y código de la pieza antes de reservar. Disponibilidad y precio final sujetos a confirmación."
+      "photo_rights": "autorización comunicada por Ernesto; evidencia pendiente",
+      "seo_description": "Bomba de gasolina anunciada para vehículos Lada 2101–2107. Código de fabricante 2101-1106010-10. Peso informado por Aserezon: 0,569 kg. Antes de comprar, confirma el código de tu bomba y consulta la compatibilidad específica con el proveedor. Reserva gratuita sujeta a confirmación.",
+      "seo_title": "Bomba de gasolina Lada 2101-2107 | Ref. 2101-1106010-10",
+      "meta_description": "Bomba de gasolina para Lada 2101–2107. Código 2101-1106010-10, pieza bajo confirmación de existencias y compatibilidad.",
+      "image_plan": [
+        {
+          "slot": 1,
+          "kind": "real",
+          "status": "pendiente de descargar y comprobar correspondencia exacta"
+        },
+        {
+          "slot": 2,
+          "kind": "diagram",
+          "status": "pendiente de revisión técnica"
+        },
+        {
+          "slot": 3,
+          "kind": "lifestyle",
+          "status": "pendiente de imagen fiel a pieza original"
+        },
+        {
+          "slot": 4,
+          "kind": "features",
+          "status": "pendiente de revisión de datos"
+        }
+      ]
     },
     {
       "sku": "AS-2101-1601130-01",
@@ -57,8 +105,32 @@
       "status": "draft",
       "stock": "unverified",
       "image_url": null,
-      "photo_rights": "pending",
-      "seo_description": "Referencia técnica sujeta a comprobación con Aserezon; confirmar modelo y código de la pieza antes de reservar. Disponibilidad y precio final sujetos a confirmación."
+      "photo_rights": "autorización comunicada por Ernesto; evidencia pendiente",
+      "seo_description": "Disco de embrague anunciado para Lada 2101–2107. Código de fabricante 2101-1601130-01. Unidad individual; peso declarado por Aserezon: 1,076 kg. Confirma la referencia del embrague antes de reservar. Producto sujeto a disponibilidad y precio final confirmado.",
+      "seo_title": "Disco de embrague Lada 2101-2107 | Ref. 2101-1601130-01",
+      "meta_description": "Disco de embrague para Lada 2101–2107. Código 2101-1601130-01. Consulta precio, disponibilidad y compatibilidad técnica.",
+      "image_plan": [
+        {
+          "slot": 1,
+          "kind": "real",
+          "status": "pendiente de descargar y comprobar correspondencia exacta"
+        },
+        {
+          "slot": 2,
+          "kind": "diagram",
+          "status": "pendiente de revisión técnica"
+        },
+        {
+          "slot": 3,
+          "kind": "lifestyle",
+          "status": "pendiente de imagen fiel a pieza original"
+        },
+        {
+          "slot": 4,
+          "kind": "features",
+          "status": "pendiente de revisión de datos"
+        }
+      ]
     },
     {
       "sku": "AS-2101-1011010-01",
@@ -72,14 +144,38 @@
       "status": "draft",
       "stock": "unverified",
       "image_url": null,
-      "photo_rights": "pending",
-      "seo_description": "Referencia técnica sujeta a comprobación con Aserezon; confirmar modelo y código de la pieza antes de reservar. Disponibilidad y precio final sujetos a confirmación."
+      "photo_rights": "autorización comunicada por Ernesto; evidencia pendiente",
+      "seo_description": "Bomba de aceite anunciada para vehículos Lada 2101–2107. Código de fabricante 2101-1011010-01. Unidad individual; peso declarado por Aserezon: 1,167 kg. Verifica la referencia de tu motor y solicita confirmación técnica del proveedor antes de reservar.",
+      "seo_title": "Bomba de aceite Lada 2101-2107 | Ref. 2101-1011010-01",
+      "meta_description": "Bomba de aceite para Lada 2101–2107, referencia 2101-1011010-01. Confirma código, existencias y condiciones de recogida.",
+      "image_plan": [
+        {
+          "slot": 1,
+          "kind": "real",
+          "status": "pendiente de descargar y comprobar correspondencia exacta"
+        },
+        {
+          "slot": 2,
+          "kind": "diagram",
+          "status": "pendiente de revisión técnica"
+        },
+        {
+          "slot": 3,
+          "kind": "lifestyle",
+          "status": "pendiente de imagen fiel a pieza original"
+        },
+        {
+          "slot": 4,
+          "kind": "features",
+          "status": "pendiente de revisión de datos"
+        }
+      ]
     }
   ],
   "notes": [
-    "Precios indicativos con otros costos variables supuestos de USD 1 por venta, antes de gastos generales e impuestos.",
-    "Nunca copiar imágenes ni contenido protegido hasta autorización escrita.",
-    "No activar checkout ni stock de productos sin confirmación del proveedor.",
+    "No activar checkout ni stock sin confirmación del proveedor y prueba del circuito de pagos.",
+    "Autorización de fotos manifestada por Ernesto, falta evidencia accesible de imágenes originales y revisión técnica.",
+    "Los precios son propuestas y no una tarifa ya acordada con Aserezon.",
     "No cambiar productos ni precios existentes de Casa Viva."
   ]
 }
