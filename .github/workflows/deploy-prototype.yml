@@ -94,7 +94,8 @@ jobs:
           SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
         run: |
           set -euo pipefail
-          repo_version="$(php -r '$s=file_get_contents("wordpress/casa-viva-dropship-core/casa-viva-dropship-core.php"); if(!preg_match("/define\\( \\'CVD_VERSION\\', \\'([^\\']+)\\' \\);/", $s, $m)){fwrite(STDERR,"No CVD_VERSION\n");exit(2);} echo $m[1];')"
+                    repo_version="$(sed -n "s/.*CVD_VERSION', '\\([^']*\\)'.*/\\1/p" wordpress/casa-viva-dropship-core/casa-viva-dropship-core.php | head -n1)"
+          test -n "$repo_version" || { echo "No CVD_VERSION" >&2; exit 2; }
           live_version="$(ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cd '$WP_PATH' && wp plugin get '$PLUGIN_SLUG' --field=version")"
           php -r '[$live,$repo]=[$argv[1],$argv[2]]; if(version_compare($repo,$live,"<")){fwrite(STDERR,"Downgrade bloqueado: repo $repo < live $live\n"); exit(3);} echo "Version OK: repo $repo >= live $live\n";' "$live_version" "$repo_version"
 
