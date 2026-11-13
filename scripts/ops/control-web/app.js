@@ -36,9 +36,14 @@ function blockedReviewCard(x){
   a.append(el('div',stamp(x.created_at),'meta'));
   return a;
 }
+function isBriefContext(x){
+  const v=String(x.summary||x.subject||'').trim();
+  return /^(?:hola(?:,?\s+s[ií])?|ok(?:\s+entiendo)?|ah+|cu[aá]l|qu[eé]\s+hiciste|solo\s+los\s+pedidos|como\s+lo\s+tenemos\s+todos)[.!?\s]*$/i.test(v);
+}
 function lennysCard(x){
+  const brief=isBriefContext(x);
   const a=el('article','', 'card priority-'+(x.priority||'p2'));const top=el('div','', 'card-top');
-  top.append(el('h3',x.subject||'Asunto de Lennys'),pill(String(x.priority||'p2').toUpperCase(),x.priority||''));a.append(top);
+  top.append(el('h3',x.subject||'Asunto de Lennys'),pill(brief?'Fragmento de contexto':String(x.priority||'p2').toUpperCase(),brief?'warning':x.priority||''));a.append(top);
   if(x.summary)a.append(el('p',x.summary,'card-copy'));a.append(el('div',stamp(x.last_activity_at),'meta'));return a;
 }
 function activityCard(x){
@@ -59,7 +64,9 @@ function render(data){
   $('blocked-reviews-list').replaceChildren(...blocked.map(blockedReviewCard));
   const today=Array.isArray(data.today)?data.today:[];$('today-list').replaceChildren(...today.map(taskCard));if(!today.length)empty($('today-list'),'No hay trabajo prioritario abierto.');
   renderTasks();
-  const l=Array.isArray(data.lennys)?data.lennys:[];$('lennys-count').textContent=l.length;$('lennys-list').replaceChildren(...l.map(lennysCard));if(!l.length)empty($('lennys-list'),'No hay asuntos activos de Lennys.');
+  const l=Array.isArray(data.lennys)?data.lennys:[];
+  const ordered=[...l.filter(x=>!isBriefContext(x)),...l.filter(isBriefContext)];
+  $('lennys-count').textContent=l.length;$('lennys-list').replaceChildren(...ordered.map(lennysCard));if(!l.length)empty($('lennys-list'),'No hay asuntos activos de Lennys.');
   const sys=data.system||{};$('system-badge').textContent=sys.ok?'Operativo':'Revisar';$('system-badge').classList.toggle('bad',!sys.ok);
   const grid=$('system-grid');grid.replaceChildren();
   const rows=[['VivaBot',sys.vivabot?.status||'desconocido',sys.vivabot?.sha?'SHA '+sys.vivabot.sha:''],['Control Agent',sys.bridge?.status||'desconocido',sys.bridge?.version?'v'+sys.bridge.version+' · cada '+(sys.bridge.poll_seconds||'?')+' s':''],['Centro móvil',sys.control_sync?.status||'desconocido',sys.control_sync?.at?stamp(sys.control_sync.at):'']];
