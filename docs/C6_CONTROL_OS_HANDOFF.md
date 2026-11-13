@@ -23,3 +23,10 @@ La base de datos contiene tareas de `whatsapp-lennys-live` creadas a partir de m
 - No aprobar comisiones, movimientos financieros o cambios de reglas de negocio.
 - No usar eventos `bridge_running` como prueba de que la interfaz web funciona.
 - No confundir la aprobación de CI con despliegue efectivo en Hostinger/VPS.
+
+## C7 — Integridad de auditoría de aprobaciones
+- Consulta de aprobaciones pendientes ampliada de 40 a 500 registros.
+- Si la consulta alcanza 500 filas, el panel declara la auditoría incompleta y no muestra supuestas revisiones huérfanas basadas en una comparación parcial.
+- Si la consulta de tareas en espera alcanza 500 filas, también se advierte que la auditoría está incompleta.
+- Validación de GitHub del commit `fbde73c2acd9fe4023321d6af9975413fc01f448`: las tres suites principales terminaron con éxito.
+- **Límite conocido**: la paginación total no está implementada; la señal de incompletitud es una barrera conservadora, no una auditoría exhaustiva.
