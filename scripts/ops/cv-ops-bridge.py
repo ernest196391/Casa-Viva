@@ -32,7 +32,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "3.9.0"
+BRIDGE_VERSION = "4.0.0"
 
 
 def load_env_files() -> dict[str, str]:
@@ -1058,6 +1058,189 @@ def action_dev_agent_status(args):
     return {"returncode": 0, "output": json.dumps(out, ensure_ascii=False)}
 
 
+
+def action_snapshot_live_core_branch(args):
+    """Capture the live Casa Viva Core plugin into a review branch. Never modifies production or main."""
+    import hashlib
+    import re
+    import shutil
+    import tempfile
+
+    repo = Path("/root/Casa-Viva")
+    prefix = Path("wordpress/casa-viva-dropship-core")
+    if not (repo / ".git").exists():
+        return {"returncode": 2, "output": "/root/Casa-Viva no es un checkout Git"}
+
+    fetched = run(["git", "-C", str(repo), "fetch", "origin", "main"], timeout=90)
+    if fetched["returncode"] != 0:
+        return fetched
+    base = run(["git", "-C", str(repo), "rev-parse", "origin/main"], timeout=20)
+    if base["returncode"] != 0:
+        return base
+    base_sha = base["output"].strip()
+
+    live_version_result = wp_remote("wp plugin get casa-viva-dropship-core --field=version")
+    if live_version_result["returncode"] != 0:
+        return live_version_result
+    live_version = live_version_result["output"].strip()
+    safe_version = re.sub(r"[^0-9A-Za-z._-]+", "-", live_version)[:40] or "unknown"
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+    branch = f"control-os/live-core-{safe_version}-{stamp}"
+
+    with tempfile.TemporaryDirectory(prefix="cv-live-core-") as tmp:
+        tmp_path = Path(tmp)
+        live_dir = tmp_path / "live"
+        live_dir.mkdir(parents=True)
+
+        remote_plugin = "/home/u824654880/domains/casaviva.company/public_html/wp-content/plugins/casa-viva-dropship-core"
+        remote_cmd = (
+            f"cd {remote_plugin} && "
+            "tar -czf - "
+            "--exclude='.cvd-deployed-sha' "
+            "--exclude='.cvd-deployed-archive-sha256' "
+            "--exclude='*.log' "
+            "--exclude='*.bak' "
+            "--exclude='*.tmp' "
+            "."
+        )
+        p = subprocess.Popen(WP_SSH + [remote_cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        extracted = subprocess.run(
+            ["tar", "-xzf", "-", "-C", str(live_dir)],
+            stdin=p.stdout, capture_output=True, timeout=120,
+        )
+        if p.stdout:
+            p.stdout.close()
+        err = p.stderr.read().decode(errors="replace") if p.stderr else ""
+        rc = p.wait(timeout=20)
+        if rc != 0 or extracted.returncode != 0:
+            return {
+                "returncode": 3,
+                "output": "No pude capturar Core vivo.\n" + err + "\n" + extracted.stderr.decode(errors="replace"),
+            }
+
+        files = [x for x in live_dir.rglob("*") if x.is_file()]
+        if not 1 <= len(files) <= 800:
+            return {"returncode": 4, "output": f"Cantidad de archivos inesperada: {len(files)}"}
+        total = sum(x.stat().st_size for x in files)
+        if total > 120 * 1024 * 1024:
+            return {"returncode": 4, "output": f"Snapshot demasiado grande: {total} bytes"}
+
+        forbidden_names = {
+            ".env", "wp-config.php", "id_rsa", "id_ed25519", "authorized_keys",
+            "credentials.json", "service-account.json", "auth.json",
+        }
+        forbidden_suffixes = (".pem", ".key", ".p12", ".pfx", ".sqlite", ".sqlite3")
+        suspicious = []
+        token_rx = re.compile(
+            rb"(BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY|"
+            rb"SUPABASE_SERVICE_ROLE_KEY\s*=|"
+            rb"ANTHROPIC_API_KEY\s*=|OPENAI_API_KEY\s*=|"
+            rb"AWS_SECRET_ACCESS_KEY\s*=|"
+            rb"sk-[A-Za-z0-9_-]{24,})"
+        )
+        for path in files:
+            rel = path.relative_to(live_dir).as_posix()
+            if path.name in forbidden_names or path.name.lower().endswith(forbidden_suffixes):
+                suspicious.append(rel)
+                continue
+            if path.stat().st_size <= 2 * 1024 * 1024:
+                try:
+                    if token_rx.search(path.read_bytes()):
+                        suspicious.append(rel + " [token-pattern]")
+                except Exception:
+                    pass
+        if suspicious:
+            return {
+                "returncode": 5,
+                "output": "Snapshot bloqueado por posibles secretos:\n" + "\n".join(suspicious[:100]),
+            }
+
+        work = Path("/root/control-os-dev") / f"live-core-{stamp}"
+        if work.exists():
+            shutil.rmtree(work, ignore_errors=True)
+        created = run(
+            ["git", "-C", str(repo), "worktree", "add", "--detach", str(work), base_sha],
+            timeout=60,
+        )
+        if created["returncode"] != 0:
+            return created
+        try:
+            switched = run(["git", "switch", "-c", branch], cwd=str(work), timeout=30)
+            if switched["returncode"] != 0:
+                return switched
+
+            target = work / prefix
+            if target.exists():
+                shutil.rmtree(target)
+            shutil.copytree(live_dir, target)
+
+            status = run(["git", "status", "--short", "--", str(prefix)], cwd=str(work), timeout=30)
+            if status["returncode"] != 0:
+                return status
+            if not status["output"].strip():
+                return {
+                    "returncode": 0,
+                    "output": json.dumps({
+                        "changed": False,
+                        "base_sha": base_sha,
+                        "live_version": live_version,
+                        "files": len(files),
+                        "bytes": total,
+                        "note": "Producción ya coincide con origin/main",
+                    }, ensure_ascii=False),
+                }
+
+            diff_check = run(["git", "diff", "--check", "--", str(prefix)], cwd=str(work), timeout=45)
+            if diff_check["returncode"] != 0:
+                return {"returncode": 6, "output": "git diff --check falló:\n" + diff_check["output"]}
+
+            add_result = run(["git", "add", "--", str(prefix)], cwd=str(work), timeout=60)
+            if add_result["returncode"] != 0:
+                return add_result
+            commit = run([
+                "git",
+                "-c", "user.name=Casa Viva Control OS",
+                "-c", "user.email=control-os@local.invalid",
+                "commit", "-m",
+                f"Snapshot live Core {live_version} for reconciliation",
+            ], cwd=str(work), timeout=90)
+            if commit["returncode"] != 0:
+                return commit
+            sha = run(["git", "rev-parse", "HEAD"], cwd=str(work), timeout=20)
+            if sha["returncode"] != 0:
+                return sha
+            work_sha = sha["output"].strip()
+
+            push = run(["git", "push", "-u", "origin", branch], cwd=str(work), timeout=120)
+            if push["returncode"] != 0:
+                return {"returncode": 7, "output": "push falló:\n" + push["output"]}
+
+            changed_files = run(
+                ["git", "diff", "--name-only", f"{base_sha}..{work_sha}", "--", str(prefix)],
+                cwd=str(work), timeout=30,
+            )
+            names = [x.strip() for x in changed_files["output"].splitlines() if x.strip()]
+            return {
+                "returncode": 0,
+                "output": json.dumps({
+                    "changed": True,
+                    "branch": branch,
+                    "base_sha": base_sha,
+                    "snapshot_sha": work_sha,
+                    "live_version": live_version,
+                    "files": len(files),
+                    "bytes": total,
+                    "changed_files": len(names),
+                    "changed_preview": names[:200],
+                    "production_modified": False,
+                    "main_modified": False,
+                }, ensure_ascii=False),
+            }
+        finally:
+            run(["git", "-C", str(repo), "worktree", "remove", "--force", str(work)], timeout=90)
+            run(["git", "-C", str(repo), "branch", "-D", branch], timeout=30)
+
+
 def action_ai_audit(args):
     cmd = [
         "bash", "-lc",
@@ -1105,6 +1288,7 @@ ACTIONS = {
     "install_dev_worker_service": action_install_dev_worker_service,
     "dev_worker_status": action_dev_worker_status,
     "core_drift_audit": action_core_drift_audit,
+    "snapshot_live_core_branch": action_snapshot_live_core_branch,
     "ai_audit": action_ai_audit,
     "catalog_sync_status": action_catalog_sync_status,
 }
