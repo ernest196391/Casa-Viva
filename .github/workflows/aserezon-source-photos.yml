@@ -1,0 +1,118 @@
+name: Aserezon · fotos originales en borradores ocultos
+
+on:
+  push:
+    branches:
+      - feature/aserezon-first-photos-20261113
+      - main
+    paths:
+      - .github/workflows/aserezon-source-photos.yml
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run o apply"
+        required: true
+        default: dry-run
+        type: choice
+        options: [dry-run, apply]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cvd-aserezon-original-photos
+  cancel-in-progress: false
+
+env:
+  WP_PATH: /home/u824654880/domains/casaviva.company/public_html
+
+jobs:
+  photos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar código, manifiesto y calidad original verificada
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l scripts/catalog/apply-aserezon-source-photos.php
+          git fetch --depth=1 origin evidence/aserezon-audit
+          git show FETCH_HEAD:photo-quality.json > photo-quality.json
+          jq -e --slurpfile m data/catalog/aserezon-source-media-candidates.json --slurpfile q photo-quality.json '
+            $m[0].photos as $p | $q[0].photos as $qphotos |
+            ($p|length)==4 and ($qphotos|length)==4 and
+            all($p[]; . as $a |
+              any($qphotos[]; .sku==$a.sku and .source_url==$a.url
+                and .status=="ok" and .screening=="candidate_white"
+                and .width>=500 and .height>=500))
+          ' -n >/dev/null
+      - name: Preparar SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$SSH_HOST"
+          test -n "$SSH_PORT"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+      - name: Comprobar y aplicar imágenes solo en borradores elegibles
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          MODE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'apply' || inputs.mode || 'dry-run' }}
+        run: |
+          set -euo pipefail
+          test "$MODE" = "apply" || test "$MODE" = "dry-run"
+          scp -P "$SSH_PORT" data/catalog/aserezon-source-media-candidates.json "$SSH_USER@$SSH_HOST:/tmp/cvd-aserezon-media.json"
+          scp -P "$SSH_PORT" scripts/catalog/apply-aserezon-source-photos.php "$SSH_USER@$SSH_HOST:/tmp/cvd-apply-aserezon-source-photos.php"
+          ssh -o ServerAliveInterval=30 -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "cd '$WP_PATH' && CVD_ASEREZON_MEDIA_FILE=/tmp/cvd-aserezon-media.json CVD_ASEREZON_MEDIA_MODE=dry-run wp eval-file /tmp/cvd-apply-aserezon-source-photos.php" > raw-dry-run.txt
+          sed -n '/^{/,$p' raw-dry-run.txt > dry-run.json
+          jq -e '.mode=="dry-run" and (.errors|length)==0' dry-run.json >/dev/null
+          if [ "$MODE" = "apply" ]; then
+            ssh -o ServerAliveInterval=30 -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+              "cd '$WP_PATH' && CVD_ASEREZON_MEDIA_FILE=/tmp/cvd-aserezon-media.json CVD_ASEREZON_MEDIA_MODE=apply wp eval-file /tmp/cvd-apply-aserezon-source-photos.php" > raw-apply.txt
+            sed -n '/^{/,$p' raw-apply.txt > report.json
+            jq -e '.mode=="apply" and (.errors|length)==0' report.json >/dev/null
+          else
+            cp dry-run.json report.json
+          fi
+      - name: Registrar informe en evidencia, sin datos personales
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/cvd-aserezon-media-evidence
+          if [ -f report.json ]; then
+            cp report.json /tmp/cvd-aserezon-media-evidence/result.json
+          else
+            printf '%s\n' '{"state":"failed_before_report"}' > /tmp/cvd-aserezon-media-evidence/result.json
+          fi
+          printf '%s\n' "$GITHUB_SHA" > /tmp/cvd-aserezon-media-evidence/source_sha.txt
+          cd /tmp/cvd-aserezon-media-evidence
+          git init -q -b media-report
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Aserezon media evidence $GITHUB_RUN_ID"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/evidence/aserezon-media
+      - name: Artefacto de revisión
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aserezon-media-${{ github.run_id }}
+          path: |
+            report.json
+            dry-run.json
+          if-no-files-found: ignore
