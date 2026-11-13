@@ -1,0 +1,15 @@
+{
+  "expected_sha": "a15ad1f7c256bf0e80bf886dde3fbfd29ce457dc",
+  "requested_by": "Casa Viva Control OS",
+  "reason": "Deploy Core 3.14.168 catalog reconciliation after full CI success. Reconciles only non-financial metadata (name, safe SKU, parent variation options); prices, stock, commissions and visibility are explicitly guarded out.",
+  "evidence": {
+    "task": 20,
+    "full_ci_run": 43444107691,
+    "nexo_ci_run": 43444033322,
+    "source_corrections": {
+      "cv-6500": "SKU corrected in NEXO to nx-171",
+      "bc-bc-109793": "name corrected in NEXO to Protector de colchón Queen Cisne Blanco"
+    },
+    "rollback": "deploy-prototype.yml automatic rollback"
+  }
+}
