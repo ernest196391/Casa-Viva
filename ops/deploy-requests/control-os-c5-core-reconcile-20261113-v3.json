@@ -1,0 +1,5 @@
+{
+  "expected_sha": "c5e1604fd6fa2dd8de946cb6fd19ed45f42a51d9",
+  "requested_by": "Casa Viva Control OS task #69",
+  "reason": "Final retry after making both deploy guards accept successful Validate aplicación regardless of trigger event. Certified SHA remains ancestor of main and plugin tree unchanged."
+}
