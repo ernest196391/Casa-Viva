@@ -471,18 +471,23 @@ final class CVD_Panel_Bridge {
 				$product->set_name( $name );
 				$changed[] = 'name';
 			}
+			$sku_conflict = 0;
 			if ( '' !== $sku && $product->get_sku() !== $sku ) {
 				$owner = wc_get_product_id_by_sku( $sku );
 				if ( ! $owner || (int) $owner === $id ) {
 					$product->set_sku( $sku );
 					$changed[] = 'sku';
+				} else {
+					$sku_conflict = (int) $owner;
 				}
 			}
 			if ( $changed ) { $product->save(); }
 
 			$parent_id = $product->is_type( 'variation' ) ? (int) $product->get_parent_id() : 0;
 			if ( $parent_id ) { $parents[ $parent_id ] = true; }
-			$done[] = array( 'wooId' => $id, 'ok' => true, 'changed' => $changed );
+			$row = array( 'wooId' => $id, 'ok' => true, 'changed' => $changed );
+			if ( $sku_conflict ) { $row['skuConflict'] = $sku_conflict; }
+			$done[] = $row;
 		}
 
 		$parent_changes = array();
