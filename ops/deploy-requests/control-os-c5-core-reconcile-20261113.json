@@ -1,0 +1,5 @@
+{
+  "expected_sha": "c5e1604fd6fa2dd8de946cb6fd19ed45f42a51d9",
+  "requested_by": "Casa Viva Control OS task #69",
+  "reason": "Reconcile production Core 3.14.167 with Git source of truth after drift audit; certified SHA has full CI success and plugin tree is unchanged in current main."
+}
