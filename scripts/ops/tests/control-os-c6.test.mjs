@@ -57,3 +57,18 @@ test('C8 VPS diagnostic is explicitly allowlisted and read-only', () => {
   assert.doesNotMatch(body, /subprocess\.|os\.system|eval\(|exec\(/);
   assert.doesNotMatch(body, /line\.strip\(\)|"content": line|send_message|api_request\(/);
 });
+
+// C8: the chat diagnostic must not be an arbitrary command execution path.
+const bridge = fs.readFileSync(new URL('../cv-ops-bridge.py', import.meta.url), 'utf8');
+test('owner_ingest_audit is explicitly read-only and allowlisted', () => {
+  const start = bridge.indexOf('def action_owner_ingest_audit(args):');
+  const end = bridge.indexOf('def action_ai_audit(args):', start);
+  assert.ok(start >= 0 && end > start, 'bounded audit action must exist');
+  const body = bridge.slice(start, end);
+  assert.match(body, /files_examined/);
+  assert.match(body, /read_only.*True/);
+  assert.match(body, /len\(hits\) >= 80/);
+  assert.match(body, /examined >= 2000/);
+  assert.doesNotMatch(body, /subprocess\.|os\.system|shell=True|\.write_text\(|\.write_bytes\(/);
+  assert.match(bridge, /"owner_ingest_audit": action_owner_ingest_audit/);
+});
