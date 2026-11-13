@@ -937,20 +937,52 @@ def action_dev_worker_status(args):
 
 
 def action_core_drift_audit(args):
-    """Compare production Core files with the Git checkout by SHA-256. Read-only."""
+    """Compare production Core files with origin/main by SHA-256. Read-only except git fetch refs."""
     import hashlib
     import re
+    import tempfile
 
-    root = Path('/root/Casa-Viva/wordpress/casa-viva-dropship-core')
+    repo = Path("/root/Casa-Viva")
+    prefix = "wordpress/casa-viva-dropship-core"
+    if not (repo / ".git").exists():
+        return {"returncode": 2, "output": "/root/Casa-Viva no es un checkout Git"}
+
+    fetched = run(["git", "-C", str(repo), "fetch", "origin", "main"], timeout=90)
+    if fetched["returncode"] != 0:
+        return fetched
+    head = run(["git", "-C", str(repo), "rev-parse", "origin/main"], timeout=20)
+    if head["returncode"] != 0:
+        return head
+    git_sha = head["output"].strip()
+
     local = {}
-    if root.exists():
-        for path in root.rglob('*'):
+    git_version = None
+    with tempfile.TemporaryDirectory(prefix="cv-core-main-") as tmp:
+        archive = subprocess.Popen(
+            ["git", "-C", str(repo), "archive", "origin/main", prefix],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        extract = subprocess.run(
+            ["tar", "-x", "-C", tmp],
+            stdin=archive.stdout, capture_output=True, timeout=90,
+        )
+        archive.stdout.close()
+        arc_err = archive.stderr.read().decode(errors="replace")
+        arc_rc = archive.wait(timeout=20)
+        if arc_rc != 0 or extract.returncode != 0:
+            return {"returncode": 3, "output": "git archive/tar falló\n" + arc_err + "\n" + extract.stderr.decode(errors="replace")}
+        root = Path(tmp) / prefix
+        for path in root.rglob("*"):
             if not path.is_file():
                 continue
             rel = path.relative_to(root).as_posix()
-            if rel in ('.cvd-deployed-sha', '.cvd-deployed-archive-sha256') or rel.endswith('.log'):
+            if rel in (".cvd-deployed-sha", ".cvd-deployed-archive-sha256") or rel.endswith(".log"):
                 continue
             local[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
+        main_file = root / "casa-viva-dropship-core.php"
+        if main_file.exists():
+            m = re.search(r"define\(\s*'CVD_VERSION'\s*,\s*'([^']+)'\s*\)", main_file.read_text(errors="replace"))
+            git_version = m.group(1) if m else None
 
     command = (
         "cd /home/u824654880/domains/casaviva.company/public_html/wp-content/plugins/casa-viva-dropship-core && "
@@ -958,42 +990,38 @@ def action_core_drift_audit(args):
         "| sort -z | xargs -0 sha256sum"
     )
     remote_run = run(WP_SSH + [command], timeout=90)
-    if remote_run['returncode'] != 0:
+    if remote_run["returncode"] != 0:
         return remote_run
     remote = {}
-    for line in remote_run['output'].splitlines():
+    for line in remote_run["output"].splitlines():
         if len(line) < 67:
             continue
         h = line[:64]
         rel = line[66:].strip()
-        if rel.startswith('./'):
+        if rel.startswith("./"):
             rel = rel[2:]
-        if re.fullmatch(r'[0-9a-f]{64}', h) and rel:
+        if re.fullmatch(r"[0-9a-f]{64}", h) and rel:
             remote[rel] = h
 
     changed = sorted(k for k in (set(local) & set(remote)) if local[k] != remote[k])
     only_live = sorted(set(remote) - set(local))
     only_git = sorted(set(local) - set(remote))
-    live_version = wp_remote('wp plugin get casa-viva-dropship-core --field=version')
-    git_version = None
-    main_file = root / 'casa-viva-dropship-core.php'
-    if main_file.exists():
-        m = re.search(r"define\(\s*'CVD_VERSION'\s*,\s*'([^']+)'\s*\)", main_file.read_text(errors='replace'))
-        git_version = m.group(1) if m else None
+    live_version = wp_remote("wp plugin get casa-viva-dropship-core --field=version")
 
     return {
-        'returncode': 0,
-        'output': json.dumps({
-            'git_version': git_version,
-            'live_version': live_version['output'].strip(),
-            'git_files': len(local),
-            'live_files': len(remote),
-            'changed_count': len(changed),
-            'only_live_count': len(only_live),
-            'only_git_count': len(only_git),
-            'changed': changed[:400],
-            'only_live': only_live[:400],
-            'only_git': only_git[:400],
+        "returncode": 0,
+        "output": json.dumps({
+            "git_sha": git_sha,
+            "git_version": git_version,
+            "live_version": live_version["output"].strip(),
+            "git_files": len(local),
+            "live_files": len(remote),
+            "changed_count": len(changed),
+            "only_live_count": len(only_live),
+            "only_git_count": len(only_git),
+            "changed": changed[:400],
+            "only_live": only_live[:400],
+            "only_git": only_git[:400],
         }, ensure_ascii=False),
     }
 
