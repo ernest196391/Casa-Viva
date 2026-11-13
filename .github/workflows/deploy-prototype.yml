@@ -7,6 +7,12 @@ on:
         description: SHA completo de main que se desea desplegar
         required: true
         type: string
+  workflow_call:
+    inputs:
+      expected_sha:
+        description: SHA completo de main que se desea desplegar
+        required: true
+        type: string
 
 permissions:
   contents: read
