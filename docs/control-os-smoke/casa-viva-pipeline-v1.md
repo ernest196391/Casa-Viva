@@ -1,0 +1,1 @@
+# Control OS Casa Viva smoke\n\nPrueba determinista de C5.1. No cambia comportamiento del Core.\n
