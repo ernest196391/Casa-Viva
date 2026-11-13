@@ -48,6 +48,8 @@ final class CVD_Panel_Bridge {
 		register_rest_route( self::NS, '/panel/curru/status', array( 'methods' => 'GET', 'callback' => static fn() => self::no_cache( array( 'enabled' => class_exists( 'CVD_Curru_AI' ) && CVD_Curru_AI::enabled() ) ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/curru/invoice', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'curru_invoice' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/save', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'save_product' ), 'permission_callback' => $auth ) );
+		// 3.14.168: NEXO es la autoridad de catálogo; repara drift parcial NEXO → Woo sin tocar stock/pedidos.
+		register_rest_route( self::NS, '/panel/catalog/reconcile', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'reconcile_catalog' ), 'permission_callback' => $auth ) );
 		// 3.13.52: diseños y colores (variaciones) y «Dejar de vender» desde el panel. Nada se borra.
 		register_rest_route( self::NS, '/panel/products/(?P<id>\d+)/variations', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'product_variations' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/products/(?P<id>\d+)/variations', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'add_variation' ), 'permission_callback' => $auth ) );
@@ -438,6 +440,110 @@ final class CVD_Panel_Bridge {
 		$saved = wc_get_product( $id );
 		$ficha = $saved && class_exists( 'CVD_Ficha_Estado' ) && ! CVD_Ficha_Estado::excluded( $saved ) ? CVD_Ficha_Estado::of_product( $saved )['etiquetas'] : array();
 		return self::no_cache( array( 'ok' => true, 'wooId' => $id, 'gallery' => $gallery, 'created' => ! $woo_id, 'url' => get_permalink( $product->is_type( 'variation' ) ? $product->get_parent_id() : $id ), 'ficha' => $ficha ) );
+	}
+
+	/**
+	 * 3.14.168: reconciliación idempotente del catálogo NEXO → WooCommerce.
+	 * Solo campos con autoridad explícita del panel: nombre (no variantes), SKU si es único y precio normal.
+	 * Para variantes también repara las opciones del atributo padre a partir de los hijos ya existentes.
+	 * No toca stock, pedidos, fotos, descripción, ofertas ni retenciones manuales.
+	 * items: [{wooId,name,sku,price,active,parentWooId}]
+	 */
+	public static function reconcile_catalog( WP_REST_Request $request ): WP_REST_Response {
+		$p = (array) $request->get_json_params();
+		$items = array_slice( (array) ( $p['items'] ?? array() ), 0, 500 );
+		$done = array();
+		$parents = array();
+		foreach ( $items as $raw ) {
+			$item = (array) $raw;
+			$id = absint( $item['wooId'] ?? 0 );
+			$product = $id ? wc_get_product( $id ) : null;
+			if ( ! $product || 'trash' === $product->get_status() ) {
+				$done[] = array( 'wooId' => $id, 'ok' => false, 'skipped' => 'missing' );
+				continue;
+			}
+			$changed = array();
+			$name = sanitize_text_field( (string) ( $item['name'] ?? '' ) );
+			$price = (float) ( $item['price'] ?? 0 );
+			$sku = sanitize_text_field( (string) ( $item['sku'] ?? '' ) );
+
+			if ( ! $product->is_type( 'variation' ) && '' !== $name && $product->get_name() !== $name ) {
+				$product->set_name( $name );
+				$changed[] = 'name';
+			}
+			if ( $price > 0 && (float) $product->get_regular_price() !== (float) wc_format_decimal( $price, 2 ) ) {
+				$product->set_regular_price( wc_format_decimal( $price, 2 ) );
+				$changed[] = 'price';
+			}
+			if ( '' !== $sku && $product->get_sku() !== $sku ) {
+				$owner = wc_get_product_id_by_sku( $sku );
+				if ( ! $owner || (int) $owner === $id ) {
+					$product->set_sku( $sku );
+					$changed[] = 'sku';
+				}
+			}
+			if ( $changed ) { $product->save(); }
+
+			$parent_id = $product->is_type( 'variation' ) ? (int) $product->get_parent_id() : 0;
+			if ( $parent_id ) { $parents[ $parent_id ] = true; }
+			$done[] = array( 'wooId' => $id, 'ok' => true, 'changed' => $changed );
+		}
+
+		$parent_changes = array();
+		foreach ( array_keys( $parents ) as $parent_id ) {
+			$parent = wc_get_product( $parent_id );
+			if ( ! $parent instanceof WC_Product_Variable ) { continue; }
+			$fixed = self::repair_parent_variation_options( $parent );
+			if ( $fixed ) { $parent_changes[ $parent_id ] = $fixed; }
+			WC_Product_Variable::sync( $parent_id );
+			wc_delete_product_transients( $parent_id );
+		}
+		return self::no_cache( array( 'items' => $done, 'parents' => $parent_changes ) );
+	}
+
+	/** Repara las opciones del padre usando los valores que ya tienen sus variantes. */
+	private static function repair_parent_variation_options( WC_Product_Variable $parent ): array {
+		$attributes = $parent->get_attributes();
+		$changed = array();
+		foreach ( $parent->get_children() as $child_id ) {
+			$v = wc_get_product( $child_id );
+			if ( ! $v instanceof WC_Product_Variation ) { continue; }
+			foreach ( $v->get_variation_attributes( false ) as $key => $value ) {
+				$value = (string) $value;
+				if ( '' === $value || ! isset( $attributes[ $key ] ) || ! $attributes[ $key ] instanceof WC_Product_Attribute ) { continue; }
+				$attr = $attributes[ $key ];
+				if ( $attr->is_taxonomy() ) {
+					$tax = $attr->get_name();
+					$term = get_term_by( 'slug', $value, $tax ) ?: get_term_by( 'name', $value, $tax );
+					if ( ! $term || is_wp_error( $term ) ) { continue; }
+					$options = array_map( 'intval', $attr->get_options() );
+					if ( ! in_array( (int) $term->term_id, $options, true ) ) {
+						$options[] = (int) $term->term_id;
+						$attr->set_options( $options );
+						wp_set_object_terms( $parent->get_id(), (int) $term->term_id, $tax, true );
+						$attributes[ $key ] = $attr;
+						$changed[] = $key . ':' . $value;
+					}
+				} else {
+					$options = array_map( 'strval', $attr->get_options() );
+					$found = false;
+					foreach ( $options as $option ) {
+						if ( sanitize_title( $option ) === sanitize_title( $value ) ) { $found = true; break; }
+					}
+					if ( ! $found ) {
+						$options[] = $value;
+						$attr->set_options( $options );
+						$attributes[ $key ] = $attr;
+						$changed[] = $key . ':' . $value;
+					}
+				}
+			}
+		}
+		if ( $changed ) {
+			$parent->set_attributes( $attributes );
+			$parent->save();
+		}
+		return array_values( array_unique( $changed ) );
 	}
 
 	// ---------- 3.13.52: diseños y colores (variaciones) ----------
