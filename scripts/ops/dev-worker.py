@@ -26,10 +26,16 @@ MAX_LOG = 30000
 
 REPOS = {
     "vivabot": Path("/root/vivabot"),
+    "nexo": Path("/root/ernesto-rondon-nexo"),
 }
 TEST_PROFILES = {
     "vivabot": [
         ["npm", "run", "check"],
+    ],
+    "nexo": [
+        ["npm", "run", "lint"],
+        ["npm", "test"],
+        ["npm", "run", "typecheck"],
     ],
 }
 
@@ -313,6 +319,22 @@ def run_tests(repo_name: str, work: Path):
                 logs.append("$ " + " ".join(cmd) + "\n" + out)
                 if rc:
                     return False, "\n".join(logs)
+    elif repo_name == "nexo":
+        rc, out = run(["npm", "install", "--no-audit", "--no-fund"], cwd=str(work), timeout=240)
+        logs.append("$ npm install\n" + out)
+        if rc:
+            return False, "\n".join(logs)
+        for cmd in TEST_PROFILES["nexo"]:
+            rc, out = run(cmd, cwd=str(work), timeout=300)
+            logs.append("$ " + " ".join(cmd) + "\n" + out)
+            if rc:
+                return False, "\n".join(logs)
+        py = work / "worker/app.py"
+        if py.exists():
+            rc, out = run(["python3", "-m", "py_compile", str(py)], cwd=str(work), timeout=60)
+            logs.append("$ python3 -m py_compile worker/app.py\n" + out)
+            if rc:
+                return False, "\n".join(logs)
     else:
         return False, "repo no habilitado"
     return True, "\n".join(logs)[-MAX_LOG:]
@@ -429,6 +451,33 @@ def task_for_run(run_row: dict):
     return task_row(run_row["task_id"])
 
 
+def http_json(url: str):
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Casa-Viva-Control-OS/1"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            raw = resp.read()
+            status = resp.status
+        return status, json.loads(raw.decode() or "{}")
+    except Exception as exc:
+        return 0, {"error": str(exc)[:500]}
+
+
+def nexo_deploy_health(expected_sha: str):
+    checks = {
+        "web": "https://ernesto-rondon-nexo.onrender.com/api/health",
+        "worker": "https://nexo-content-worker.onrender.com/health",
+    }
+    results = {}
+    ok = True
+    for name, url in checks.items():
+        status, body = http_json(url)
+        commit = body.get("gitCommit") if isinstance(body, dict) else None
+        healthy = status == 200 and body.get("ok") is True and commit == expected_sha
+        results[name] = {"http": status, "ok": body.get("ok") if isinstance(body, dict) else None, "gitCommit": commit, "matches": healthy}
+        ok = ok and healthy
+    return ok, results
+
+
 def monitor_runs():
     rows = api("GET", "ops_dev_runs?select=*&status=in.(pushed,deploy_queued,deploying)&order=updated_at.asc&limit=20") or []
     for row in rows:
@@ -436,29 +485,63 @@ def monitor_runs():
         if not task:
             continue
         repo_name = row["repo"]
-        if repo_name != "vivabot":
+        if repo_name not in REPOS:
             continue
-        repo = REPOS["vivabot"]
+        repo = REPOS[repo_name]
 
         if row["status"] == "pushed":
             run(["git", "-C", str(repo), "fetch", "origin", "main"], timeout=90)
             rc, _ = run(["git", "-C", str(repo), "merge-base", "--is-ancestor", row["work_sha"], "origin/main"], timeout=20)
             if rc == 0:
-                result = api("POST", "rpc/ops_enqueue_bridge", {
-                    "p_task_public_id": task["public_id"],
-                    "p_action": "deploy_vivabot",
-                    "p_args": {"sha": row["work_sha"]},
-                })
-                bridge_id = result if isinstance(result, int) else (result[0] if isinstance(result, list) and result else None)
-                if isinstance(bridge_id, dict):
-                    bridge_id = next(iter(bridge_id.values()), None)
-                if not bridge_id:
-                    continue
-                patch_table("ops_dev_runs", row["id"], {"status": "deploy_queued", "deploy_bridge_id": int(bridge_id)})
-                event(task, "dev_ci_gate_passed", {"run_id": row["id"], "work_sha": row["work_sha"], "deploy_bridge_id": int(bridge_id)})
+                if repo_name == "vivabot":
+                    result = api("POST", "rpc/ops_enqueue_bridge", {
+                        "p_task_public_id": task["public_id"],
+                        "p_action": "deploy_vivabot",
+                        "p_args": {"sha": row["work_sha"]},
+                    })
+                    bridge_id = result if isinstance(result, int) else (result[0] if isinstance(result, list) and result else None)
+                    if isinstance(bridge_id, dict):
+                        bridge_id = next(iter(bridge_id.values()), None)
+                    if not bridge_id:
+                        continue
+                    patch_table("ops_dev_runs", row["id"], {"status": "deploy_queued", "deploy_bridge_id": int(bridge_id)})
+                    event(task, "dev_ci_gate_passed", {"run_id": row["id"], "work_sha": row["work_sha"], "deploy_bridge_id": int(bridge_id)})
+                elif repo_name == "nexo":
+                    patch_table("ops_dev_runs", row["id"], {
+                        "status": "deploying",
+                        "summary": "GitHub Gate pasó; Render auto-deploy detectado. Esperando health con SHA exacto.",
+                    })
+                    event(task, "dev_ci_gate_passed", {"run_id": row["id"], "work_sha": row["work_sha"], "deploy": "render-auto"})
             elif not row.get("auto_merge"):
                 # Validated branch intentionally awaits a final approval.
                 patch_table("ops_dev_runs", row["id"], {"status": "waiting_approval"})
+
+        elif row["status"] == "deploying" and repo_name == "nexo" and not row.get("deploy_bridge_id"):
+            healthy, health = nexo_deploy_health(row["work_sha"])
+            if healthy:
+                patch_table("ops_dev_runs", row["id"], {
+                    "status": "done",
+                    "summary": "GitHub Gate y Render deploy verificados por SHA en web + worker.",
+                    "logs": json.dumps({"render_health": health}, ensure_ascii=False),
+                    "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                })
+                patch_table("ops_tasks", task["id"], {
+                    "status": "done",
+                    "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "claimed_by": None,
+                    "claimed_at": None,
+                    "claim_expires_at": None,
+                    "error": None,
+                })
+                event(task, "dev_deployed", {"run_id": row["id"], "work_sha": row["work_sha"], "deploy": "render-auto", "health": health})
+            else:
+                started = row.get("started_at")
+                age = time.time() - (time.mktime(time.strptime(started[:19], "%Y-%m-%dT%H:%M:%S")) if started else time.time())
+                if age > 1200:
+                    err = "Render no confirmó el SHA esperado en 20 minutos: " + json.dumps(health, ensure_ascii=False)
+                    patch_table("ops_dev_runs", row["id"], {"status": "failed", "error": err, "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+                    patch_table("ops_tasks", task["id"], {"status": "failed", "error": err, "claim_expires_at": None})
+                    event(task, "dev_deploy_failed", {"run_id": row["id"], "work_sha": row["work_sha"], "health": health})
 
         elif row["status"] in ("deploy_queued", "deploying") and row.get("deploy_bridge_id"):
             bridge = bridge_row(int(row["deploy_bridge_id"]))
