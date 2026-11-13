@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: control-os-production-deploy
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   guard:
