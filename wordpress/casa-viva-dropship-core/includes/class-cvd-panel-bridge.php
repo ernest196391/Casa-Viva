@@ -444,10 +444,11 @@ final class CVD_Panel_Bridge {
 
 	/**
 	 * 3.14.168: reconciliación idempotente del catálogo NEXO → WooCommerce.
-	 * Solo campos con autoridad explícita del panel: nombre (no variantes), SKU si es único y precio normal.
+	 * Solo metadatos no financieros con autoridad explícita de NEXO: nombre (no variantes) y SKU si es único.
 	 * Para variantes también repara las opciones del atributo padre a partir de los hijos ya existentes.
 	 * No toca stock, pedidos, fotos, descripción, ofertas ni retenciones manuales.
-	 * items: [{wooId,name,sku,price,active,parentWooId}]
+	 * No toca precios, stock, pedidos, fotos, descripción, ofertas, visibilidad ni retenciones manuales.
+	 * items: [{wooId,name,sku,active,parentWooId}]
 	 */
 	public static function reconcile_catalog( WP_REST_Request $request ): WP_REST_Response {
 		$p = (array) $request->get_json_params();
@@ -464,16 +465,11 @@ final class CVD_Panel_Bridge {
 			}
 			$changed = array();
 			$name = sanitize_text_field( (string) ( $item['name'] ?? '' ) );
-			$price = (float) ( $item['price'] ?? 0 );
 			$sku = sanitize_text_field( (string) ( $item['sku'] ?? '' ) );
 
 			if ( ! $product->is_type( 'variation' ) && '' !== $name && $product->get_name() !== $name ) {
 				$product->set_name( $name );
 				$changed[] = 'name';
-			}
-			if ( $price > 0 && (float) $product->get_regular_price() !== (float) wc_format_decimal( $price, 2 ) ) {
-				$product->set_regular_price( wc_format_decimal( $price, 2 ) );
-				$changed[] = 'price';
 			}
 			if ( '' !== $sku && $product->get_sku() !== $sku ) {
 				$owner = wc_get_product_id_by_sku( $sku );
