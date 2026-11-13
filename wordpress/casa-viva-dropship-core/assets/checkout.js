@@ -344,6 +344,19 @@
     localityTimer = setTimeout(function () { $(document.body).trigger('update_checkout'); }, 350);
   });
   $(document.body).on('focus', '#billing_cvd_locality', populateLocalities);
+  // 3.14.148 (Ana Cogle, 6-nov): el navegador rellena municipio y reparto solo (autorrelleno / cliente guardado) sin
+  // avisar a la página, y la mensajería se quedaba en «Por confirmar» una hora. Cada segundo se compara lo que hay
+  // en los campos con lo último calculado; si cambió (y no se está escribiendo en el reparto), se recalcula.
+  var lastQuoteKey = '';
+  setInterval(function () {
+    var $loc = $('#billing_cvd_locality');
+    if (!$loc.length || $loc.is(':focus')) return;
+    var key = ($('#billing_city').val() || '') + '|' + $.trim($loc.val() || '');
+    if (key === lastQuoteKey || key === '|') return;
+    lastQuoteKey = key;
+    checkLocality();
+    $(document.body).trigger('update_checkout');
+  }, 1000);
   function chooseLocality(event) {
     if ($(this).hasClass('cvd-address-option')) return;
     event.preventDefault();

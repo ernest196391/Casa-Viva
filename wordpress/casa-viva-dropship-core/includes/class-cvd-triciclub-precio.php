@@ -132,8 +132,10 @@ final class CVD_Triciclub_Precio {
 		if ( is_array( $hit ) ) { return $hit; }
 		$api = rtrim( (string) get_option( 'cvd_tc_ruta_api', self::RUTA_API ), '/' );
 		$url = $api . '/route/v1/driving/' . $olng . ',' . $olat . ';' . $dlng . ',' . $dlat . '?overview=full&geometries=geojson';
-		for ( $intento = 0; $intento < 2; $intento++ ) { // un reintento: la red del VPS a veces corta
-			$res = wp_remote_get( $url, array( 'timeout' => 5, 'redirection' => 0 ) );
+		// 10-nov (auditoría): un solo intento de 2 s. Esperar más ocupaba los procesos de Hostinger (y la tienda) si el
+		// VPS iba lento; sin ruta, el precio sale con la recta y la línea llega en la siguiente consulta.
+		for ( $intento = 0; $intento < 1; $intento++ ) {
+			$res = wp_remote_get( $url, array( 'timeout' => 2, 'redirection' => 0 ) );
 			$data = is_wp_error( $res ) ? null : json_decode( (string) wp_remote_retrieve_body( $res ), true );
 			$route = is_array( $data ) && 'Ok' === ( $data['code'] ?? '' ) ? ( $data['routes'][0] ?? null ) : null;
 			if ( is_array( $route ) && (float) ( $route['distance'] ?? 0 ) > 0 ) {

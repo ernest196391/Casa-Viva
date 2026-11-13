@@ -198,5 +198,119 @@
     fotos.addEventListener('click', function (e) { var z = e.target.closest('[data-cvgf-zip]'); if (z) { var n = z.parentNode.querySelector('.cvga-note'); if (n) n.textContent = 'Preparando el ZIP… la primera vez puede tardar un minuto.'; } });
   }
 
+  // 3.14.116 (Ernesto 3-nov, caso #6062): «Cambiar», «Cancelar» y «Recuperar» en sus pedidos de «Tus ventas».
+  // Core decide qué se puede (GET /gestora/pedidos); aquí solo se pintan los botones y los formularios.
+  // Solo quitar o bajar cantidades, contacto, calle (mismo reparto), día y nota. Lo demás lo hace la tienda.
+  (function () {
+    var cfg = window.cvgaPedidos, table = document.querySelector('#ventas table');
+    if (!cfg || !table || !window.fetch) return;
+    var esc = function (v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]; }); };
+    var money = function (n, cur) { return (Math.round(Number(n) * 100) / 100).toFixed(2).replace('.', ',').replace(/,00$/, '') + ' ' + (cur || 'USD'); };
+    var reqId = function () { try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (ignore) {} return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); };
+    function api(path, body) {
+      var opts = { method: body ? 'POST' : 'GET', credentials: 'same-origin', headers: { 'X-WP-Nonce': cfg.nonce, 'Accept': 'application/json' } };
+      if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+      return fetch(cfg.base + path, opts).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) { var e = new Error(d && d.message ? d.message : 'No se pudo. Revisa tu conexión y vuelve a probar.'); e.data = d; throw e; } return d; });
+      });
+    }
+    var dlg = document.createElement('dialog');
+    dlg.className = 'cvga-ped-dialog';
+    app.appendChild(dlg);
+    var state = null;
+    function close() { if (dlg.open) dlg.close(); state = null; }
+    function done(text, bad) {
+      dlg.innerHTML = '<div class="cvga-ped-form"><h2>' + (bad ? 'No se puede desde aquí' : 'Listo') + '</h2><p class="' + (bad ? 'cvga-ped-err' : 'cvga-ped-ok') + '" role="status">' + esc(text) + '</p><div class="cvga-ped-buttons"><button type="button" class="cvga-btn" data-ped-reload>Entendido</button></div></div>';
+      if (!dlg.open) dlg.showModal();
+    }
+    function fail(form, err) { var m = form.querySelector('[data-ped-msg]'); if (m) m.textContent = err.message; var b = form.querySelector('[type=submit]'); if (b) b.disabled = false; }
+
+    function paintRows(orders) {
+      var byNumber = {};
+      orders.forEach(function (o) { byNumber[o.number] = o; });
+      table.querySelectorAll('tbody tr').forEach(function (tr) {
+        var cell = tr.cells[0]; if (!cell || cell.querySelector('.cvga-ped-actions')) return;
+        var m = (cell.textContent || '').match(/#\s*([\w-]+)/); var o = m && byNumber[m[1]]; if (!o) return;
+        var html = '';
+        if (o.can.cambiar === '') html += '<button type="button" class="cvga-ped-btn" data-ped-change="' + o.id + '">Cambiar</button>';
+        if (o.can.cancelar === '') html += '<button type="button" class="cvga-ped-btn is-warn" data-ped-cancel="' + o.id + '" data-number="' + esc(o.number) + '">Cancelar</button>';
+        if (o.can.recuperar === '') html += '<button type="button" class="cvga-ped-btn" data-ped-recover="' + o.id + '" data-number="' + esc(o.number) + '">Recuperar</button>';
+        if (!html && o.status !== 'cancelled') html = '<small class="cvga-ped-why">' + esc(o.can.cambiar || o.can.cancelar) + '</small>';
+        var box = document.createElement('div'); box.className = 'cvga-ped-actions'; box.innerHTML = html; cell.appendChild(box);
+      });
+    }
+    api('pedidos').then(function (d) { paintRows(d.orders || []); }).catch(function () {});
+
+    function openChange(id) {
+      api('pedido/' + id).then(function (d) {
+        if (d.can.cambiar !== '') { done(d.can.cambiar, true); return; }
+        state = { id: d.id, number: d.number, lines: d.lines, currency: d.currency, total: d.total, request: reqId() };
+        var windows = [['', 'A cualquier hora'], ['morning', 'Por la mañana'], ['afternoon', 'Por la tarde']];
+        var opts = function (max, cur) { var s = ''; for (var i = max; i >= 0; i--) s += '<option value="' + i + '"' + (i === cur ? ' selected' : '') + '>' + (i === 0 ? 'Quitar' : i) + '</option>'; return s; };
+        dlg.innerHTML = '<form class="cvga-ped-form" data-ped-form="change" novalidate><h2>Cambiar el pedido #' + esc(d.number) + '</h2>'
+          + '<p class="cvga-note">Puedes quitar productos o bajar cantidades, y cambiar los datos del cliente. Para añadir algo o cambiar de municipio, escribe a la tienda.</p>'
+          + '<h3>Productos</h3>' + d.lines.map(function (l) { return '<label class="cvga-ped-line"><span>' + esc(l.name) + '<small>' + esc(money(l.unit, d.currency)) + ' c/u</small></span><select data-ped-line="' + l.itemId + '" data-unit="' + l.unit + '" aria-label="Cantidad de ' + esc(l.name) + '">' + opts(l.qty, l.qty) + '</select></label>'; }).join('')
+          + '<p class="cvga-ped-total">Total: <b data-ped-total>' + esc(money(d.total, d.currency)) + '</b></p>'
+          + '<h3>Cliente</h3><div class="cvga-ped-two"><label class="cvga-field"><span>Nombre</span><input name="firstName" value="' + esc(d.firstName) + '" maxlength="60" required></label><label class="cvga-field"><span>Apellidos</span><input name="lastName" value="' + esc(d.lastName) + '" maxlength="60"></label></div>'
+          + '<label class="cvga-field"><span>Teléfono</span><input name="phone" value="' + esc(d.phone) + '" inputmode="tel" maxlength="30"></label>'
+          + (d.pickup ? '<p class="cvga-note">Recogida en tienda.</p>'
+            : '<label class="cvga-field"><span>Dirección (calle y número)</span><input name="address" value="' + esc(d.address) + '" maxlength="200"></label>'
+              + '<p class="cvga-note">Solo en el mismo reparto' + (d.locality ? ' (<b>' + esc(d.locality) + '</b>)' : '') + '. Si es en otro municipio o reparto, escribe a la tienda: cambia la mensajería.</p>'
+              + '<div class="cvga-ped-two"><label class="cvga-field"><span>Día de entrega</span><input type="date" name="deliveryDate" value="' + esc(d.date) + '" min="' + esc(d.minDate) + '" max="' + esc(d.maxDate) + '"></label><label class="cvga-field"><span>Franja</span><select name="deliveryWindow">' + windows.map(function (w) { return '<option value="' + w[0] + '"' + (w[0] === (d.window || '') ? ' selected' : '') + '>' + w[1] + '</option>'; }).join('') + '</select></label></div>'
+              + '<p class="cvga-note">Día vacío = lo antes posible. Ahora: ' + esc(d.whenLabel) + '</p>')
+          + '<label class="cvga-field"><span>Nota del pedido</span><textarea name="note" rows="2" maxlength="500">' + esc(d.note) + '</textarea></label>'
+          + (d.hasMessenger ? '<p class="cvga-ped-warn">Este pedido ya tiene mensajero: el bot le avisa del cambio.</p>' : '')
+          + '<p class="cvga-ped-err" data-ped-msg role="alert"></p>'
+          + '<div class="cvga-ped-buttons"><button type="button" class="cvga-btn cvga-btn-soft" data-ped-close>Volver</button><button type="submit" class="cvga-btn">Guardar cambios</button></div></form>';
+        dlg.showModal();
+      }).catch(function (err) { done(err.message, true); });
+    }
+    function newTotal(form) { var t = 0; form.querySelectorAll('[data-ped-line]').forEach(function (s) { t += Number(s.getAttribute('data-unit')) * Number(s.value); }); return t; }
+    function openReason(kind, id, number) {
+      state = { id: id, number: number, request: reqId(), kind: kind };
+      var cancel = kind === 'cancel';
+      dlg.innerHTML = '<form class="cvga-ped-form" data-ped-form="' + kind + '" novalidate><h2>' + (cancel ? '¿Cancelar el pedido #' : '¿Recuperar el pedido #') + esc(number) + '?</h2>'
+        + '<p class="cvga-note">' + (cancel ? 'Los productos vuelven a la tienda y la comisión de este pedido se anula. Si tiene mensajero, el bot le avisa.' : 'El pedido vuelve a estar activo y los productos se apartan otra vez.') + '</p>'
+        + '<label class="cvga-field"><span>' + (cancel ? '¿Por qué se cancela?' : '¿Por qué lo recuperas?') + '</span><textarea name="reason" rows="2" maxlength="200" required placeholder="' + (cancel ? 'Ej.: el cliente ya no lo quiere' : 'Ej.: lo cancelé por error') + '"></textarea></label>'
+        + '<p class="cvga-ped-err" data-ped-msg role="alert"></p>'
+        + '<div class="cvga-ped-buttons"><button type="button" class="cvga-btn cvga-btn-soft" data-ped-close>Volver</button><button type="submit" class="cvga-btn' + (cancel ? ' is-warn' : '') + '">' + (cancel ? 'Sí, cancelar' : 'Sí, recuperarlo') + '</button></div></form>';
+      dlg.showModal();
+    }
+
+    app.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-ped-change]'); if (b) { e.preventDefault(); openChange(b.getAttribute('data-ped-change')); return; }
+      b = e.target.closest('[data-ped-cancel]'); if (b) { e.preventDefault(); openReason('cancel', b.getAttribute('data-ped-cancel'), b.getAttribute('data-number')); return; }
+      b = e.target.closest('[data-ped-recover]'); if (b) { e.preventDefault(); openReason('recover', b.getAttribute('data-ped-recover'), b.getAttribute('data-number')); return; }
+      if (e.target.closest('[data-ped-close]')) { close(); return; }
+      if (e.target.closest('[data-ped-reload]')) { close(); window.location.hash = 'ventas'; window.location.reload(); }
+    });
+    dlg.addEventListener('change', function (e) {
+      if (!e.target.matches('[data-ped-line]') || !state) return;
+      var form = e.target.form, t = form.querySelector('[data-ped-total]'); if (t) t.textContent = money(newTotal(form), state.currency);
+    });
+    dlg.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!state) return;
+      var form = e.target, kind = form.getAttribute('data-ped-form'), msg = form.querySelector('[data-ped-msg]'), btn = form.querySelector('[type=submit]');
+      msg.textContent = '';
+      if (kind === 'change') {
+        var lines = Array.prototype.map.call(form.querySelectorAll('[data-ped-line]'), function (s) { return { itemId: Number(s.getAttribute('data-ped-line')), qty: Number(s.value) }; });
+        if (lines.every(function (l) { return l.qty === 0; })) { msg.textContent = 'El pedido no puede quedar sin productos. Si ya no lo quieren, cancélalo.'; return; }
+        if (!form.elements.firstName.value.trim()) { msg.textContent = 'Escribe el nombre del cliente.'; return; }
+        var body = { requestId: state.request, lines: lines, firstName: form.elements.firstName.value, lastName: form.elements.lastName.value, phone: form.elements.phone.value, note: form.elements.note.value };
+        if (form.elements.address) { body.address = form.elements.address.value; body.deliveryDate = form.elements.deliveryDate.value; body.deliveryWindow = form.elements.deliveryWindow.value; }
+        var total = newTotal(form);
+        if (Math.abs(total - state.total) > 0.009 && !window.confirm('El pedido #' + state.number + ' queda en ' + money(total, state.currency) + ' (antes ' + money(state.total, state.currency) + '). ¿Guardar?')) return;
+        btn.disabled = true;
+        api('pedido/' + state.id + '/cambiar', body).then(function (r) { done(r.message); }).catch(function (err) { fail(form, err); });
+        return;
+      }
+      var reason = form.elements.reason.value.trim();
+      if (reason.length < 3) { msg.textContent = 'Escribe el motivo (una frase corta).'; return; }
+      btn.disabled = true;
+      api('pedido/' + state.id + '/' + (kind === 'cancel' ? 'cancelar' : 'recuperar'), { requestId: state.request, reason: reason }).then(function (r) { done(r.message); }).catch(function (err) { fail(form, err); });
+    });
+  })();
+
   show(current(), false);
 })();

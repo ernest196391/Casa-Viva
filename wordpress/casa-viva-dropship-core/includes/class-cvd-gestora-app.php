@@ -52,6 +52,10 @@ final class CVD_Gestora_App {
 		wp_enqueue_style( 'cvd-gestora-app', CVD_URL . 'assets/gestora-app.css', array( 'cvd-portal' ), CVD_VERSION );
 		wp_enqueue_script( 'cvd-gestora-app', CVD_URL . 'assets/gestora-app.js', array( 'cvd-portal' ), CVD_VERSION, true );
 		wp_enqueue_script( 'cvd-gestora-confianza', CVD_URL . 'assets/gestora-confianza.js', array( 'cvd-gestora-app' ), CVD_VERSION, true ); // 3.14.42
+		// 3.14.116 (Ernesto 3-nov): «Cambiar» y «Cancelar» en sus pedidos de «Tus ventas» (CVD_Gestora_Pedidos).
+		if ( class_exists( 'CVD_Gestora_Pedidos' ) ) {
+			wp_add_inline_script( 'cvd-gestora-app', 'window.cvgaPedidos=' . wp_json_encode( array( 'base' => esc_url_raw( rest_url( 'casa-viva/v1/gestora/' ) ), 'nonce' => wp_create_nonce( 'wp_rest' ) ) ) . ';', 'before' );
+		}
 	}
 
 	/** Todo el cuerpo de la app: menú + vistas nuevas + secciones del portal clásico. */
