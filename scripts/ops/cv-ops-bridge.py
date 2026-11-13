@@ -1025,6 +1025,39 @@ def action_core_drift_audit(args):
         }, ensure_ascii=False),
     }
 
+
+def action_dev_agent_status(args):
+    """Read-only inventory of coding engines and git tooling available on the VPS."""
+    tools_to_check = {
+        "git": ["git", "--version"],
+        "gh": ["gh", "--version"],
+        "claude": ["claude", "--version"],
+        "codex": ["codex", "--version"],
+        "node": ["node", "--version"],
+        "python3": ["python3", "--version"],
+    }
+    out = {}
+    for name, cmd in tools_to_check.items():
+        try:
+            p = run(cmd, timeout=20)
+            out[name] = {
+                "installed": p["returncode"] == 0,
+                "returncode": p["returncode"],
+                "version": p["output"].strip()[:500],
+            }
+        except Exception as exc:
+            out[name] = {"installed": False, "error": str(exc)}
+    for path in (
+        "/root/supervisor/run.sh",
+        "/root/supervisor/CLAUDE.md",
+        "/root/supervisor/CODEX-VPS.md",
+        "/root/vivabot/AGENTS.md",
+    ):
+        p = Path(path)
+        out[path] = {"exists": p.exists(), "size": p.stat().st_size if p.exists() else 0}
+    return {"returncode": 0, "output": json.dumps(out, ensure_ascii=False)}
+
+
 def action_ai_audit(args):
     cmd = [
         "bash", "-lc",
@@ -1064,6 +1097,7 @@ ACTIONS = {
     "deploy_control_web": action_deploy_control_web,
     "control_sync_service_status": action_control_sync_service_status,
     "install_control_sync_service": action_install_control_sync_service,
+    "dev_agent_status": action_dev_agent_status,
     "dev_environment_audit": action_dev_environment_audit,
     "dev_push_probe": action_dev_push_probe,
     "dev_claude_probe": action_dev_claude_probe,
