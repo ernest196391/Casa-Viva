@@ -1,0 +1,78 @@
+name: Control OS Deploy Request
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ops/deploy-requests/*.json'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: control-os-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.request.outputs.sha }}
+    steps:
+      - name: Checkout main with history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate one explicit deploy request
+        id: request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=250
+          mapfile -t changed < <(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA")
+          (("${#changed[@]}" == 1)) || { echo "Deploy request commit must change exactly one file" >&2; exit 2; }
+          request="${changed[0]}"
+          [[ "$request" =~ ^ops/deploy-requests/[A-Za-z0-9._-]+\.json$ ]] || { echo "Invalid request path" >&2; exit 3; }
+
+          jq -e 'type=="object" and (.expected_sha|type=="string") and (.requested_by|type=="string") and (.reason|type=="string")' "$request" >/dev/null
+          sha="$(jq -r '.expected_sha' "$request")"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid expected_sha" >&2; exit 4; }
+
+          git cat-file -e "$sha^{commit}"
+          git merge-base --is-ancestor "$sha" origin/main
+
+          plugin='wordpress/casa-viva-dropship-core'
+          requested_tree="$(git rev-parse "$sha:$plugin")"
+          current_tree="$(git rev-parse "origin/main:$plugin")"
+          test "$requested_tree" = "$current_tree" || {
+            echo "Plugin changed after certified SHA; deploy blocked" >&2
+            exit 5
+          }
+
+          runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=$sha&branch=main&event=push&per_page=50")"
+          successful="$(jq -r '[.workflow_runs[] | select(.name == "Validar aplicación" and .conclusion == "success")] | length' <<<"$runs")"
+          test "$successful" -ge 1 || { echo "No successful full CI for $sha" >&2; exit 6; }
+
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Control OS deploy request"
+            echo "- Request: $request"
+            echo "- Certified SHA: $sha"
+            echo "- Current main: $(git rev-parse origin/main)"
+            echo "- Plugin tree unchanged after certified SHA: yes"
+            echo "- Full CI for certified SHA: success"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: guard
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/deploy-prototype.yml
+    with:
+      expected_sha: ${{ needs.guard.outputs.sha }}
+    secrets: inherit
