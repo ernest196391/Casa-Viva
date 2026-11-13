@@ -1,0 +1,45 @@
+{
+  "status": "screening_only",
+  "photos": [
+    {
+      "sku": "AS-2101-3501090-01",
+      "source_url": "https://aserezon.com/wp-content/uploads/2025/05/2101-3501090-01.jpg",
+      "status": "ok",
+      "format": "JPEG",
+      "width": 1000,
+      "height": 1000,
+      "white_corner_fraction": 1.0,
+      "screening": "candidate_white"
+    },
+    {
+      "sku": "AS-2101-1106010-10",
+      "source_url": "https://aserezon.com/wp-content/uploads/2025/03/2101-1106010-10.png",
+      "status": "ok",
+      "format": "PNG",
+      "width": 1000,
+      "height": 1000,
+      "white_corner_fraction": 1.0,
+      "screening": "candidate_white"
+    },
+    {
+      "sku": "AS-2101-1601130-01",
+      "source_url": "https://aserezon.com/wp-content/uploads/2025/03/2101-1601130-01.jpg",
+      "status": "ok",
+      "format": "JPEG",
+      "width": 1000,
+      "height": 1000,
+      "white_corner_fraction": 1.0,
+      "screening": "candidate_white"
+    },
+    {
+      "sku": "AS-2101-1011010-01",
+      "source_url": "https://aserezon.com/wp-content/uploads/2025/03/2101-1011010-01.png",
+      "status": "ok",
+      "format": "PNG",
+      "width": 1000,
+      "height": 1000,
+      "white_corner_fraction": 1.0,
+      "screening": "candidate_white"
+    }
+  ]
+}

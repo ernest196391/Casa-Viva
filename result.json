@@ -1,0 +1,42 @@
+{
+  "status": "ok",
+  "currency": "USD",
+  "products": [
+    {
+      "sku": "AS-2101-3501090-01",
+      "exists": true,
+      "status": "draft",
+      "catalog_visibility": "hidden",
+      "stock_status": "outofstock",
+      "regular_price": "22.00",
+      "image_count": 1
+    },
+    {
+      "sku": "AS-2101-1106010-10",
+      "exists": true,
+      "status": "draft",
+      "catalog_visibility": "hidden",
+      "stock_status": "outofstock",
+      "regular_price": "35.00",
+      "image_count": 1
+    },
+    {
+      "sku": "AS-2101-1601130-01",
+      "exists": true,
+      "status": "draft",
+      "catalog_visibility": "hidden",
+      "stock_status": "outofstock",
+      "regular_price": "41.00",
+      "image_count": 1
+    },
+    {
+      "sku": "AS-2101-1011010-01",
+      "exists": true,
+      "status": "draft",
+      "catalog_visibility": "hidden",
+      "stock_status": "outofstock",
+      "regular_price": "68.00",
+      "image_count": 1
+    }
+  ]
+}
