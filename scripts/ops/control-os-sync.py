@@ -207,7 +207,7 @@ def snapshot():
     )
     approvals = query(
         'ops_approvals?select=public_id,task_id,requested_for_role,warning,impact,proposed_change,status,created_at'
-        '&status=eq.pending&order=created_at.asc&limit=40'
+        '&status=eq.pending&order=created_at.asc&limit=500'
     )
     # Do not rely on the latest 120 tasks for financial approval safety:
     # older waiting tasks must remain visible until formally resolved.
@@ -215,7 +215,7 @@ def snapshot():
         'ops_tasks?select=id,public_id,title,status,risk,created_at'
         '&status=eq.waiting_approval&order=created_at.asc&limit=500'
     )
-    task_by_uuid = {str(x.get('id')): x for x in tasks}
+    task_by_uuid = {str(x.get('id')): x for x in tasks + waiting_approval_tasks}
 
     def task_summary(x):
         result = x.get('result')
@@ -241,7 +241,7 @@ def snapshot():
     # Never fabricate an approval_id: the decision RPC only accepts real approvals.
     # Surface these orphaned financial reviews separately so the owner can see
     # the blocked work without an invalid Approve/Reject button.
-    pending_approval_task_ids = {str(a.get('task_id')) for a in approvals}
+    # A truncated approval list must never turn a legitimate pending approval into an orphan.\n    approval_page_truncated = len(approvals) >= 500\n    waiting_page_truncated = len(waiting_approval_tasks) >= 500\n    pending_approval_task_ids = {str(a.get('task_id')) for a in approvals}
     orphan_reviews = [{
         'task_id': x.get('public_id'),
         'title': x.get('title') or 'Revisión pendiente',
@@ -251,7 +251,7 @@ def snapshot():
         'created_at': x.get('created_at'),
     } for x in waiting_approval_tasks
       if x.get('status') == 'waiting_approval'
-      and str(x.get('id')) not in pending_approval_task_ids]
+      and str(x.get('id')) not in pending_approval_task_ids] if not approval_page_truncated else []
 
     decisions = []
     for a in approvals:
@@ -322,6 +322,7 @@ def snapshot():
             'attention': len(attention),
             'decisions': len(decisions),
             'reviews_blocked': len(orphan_reviews),
+            'reviews_audit_incomplete': approval_page_truncated or waiting_page_truncated,
             'lennys': len(lennys),
             'errors': len(errors),
             'open_tasks': len(open_tasks),
