@@ -32,7 +32,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "4.0.0"
+BRIDGE_VERSION = "4.1.0"
 
 
 def load_env_files() -> dict[str, str]:
@@ -1241,6 +1241,101 @@ def action_snapshot_live_core_branch(args):
             run(["git", "-C", str(repo), "branch", "-D", branch], timeout=30)
 
 
+
+def action_deploy_casa_viva(args):
+    """Dispatch the existing GitHub deploy workflow for one exact main SHA."""
+    import re
+
+    sha = str((args or {}).get("sha", "")).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        return {"returncode": 2, "output": "args.sha debe ser un SHA Git completo"}
+
+    repo = Path("/root/Casa-Viva")
+    if not (repo / ".git").exists():
+        return {"returncode": 2, "output": "/root/Casa-Viva no es un checkout Git"}
+
+    fetched = run(["git", "-C", str(repo), "fetch", "origin", "main"], timeout=90)
+    if fetched["returncode"] != 0:
+        return fetched
+    main_sha = run(["git", "-C", str(repo), "rev-parse", "origin/main"], timeout=20)
+    if main_sha["returncode"] != 0:
+        return main_sha
+    if main_sha["output"].strip() != sha:
+        return {
+            "returncode": 3,
+            "output": f"SHA bloqueado: solicitado {sha}, origin/main {main_sha['output'].strip()}",
+        }
+
+    auth = run(["gh", "auth", "status"], timeout=30)
+    if auth["returncode"] != 0:
+        return {"returncode": 4, "output": "GitHub CLI no autenticado:\n" + auth["output"]}
+
+    # The workflow itself re-verifies CI, version, checksum, backup, smoke and rollback.
+    dispatched = run([
+        "gh", "workflow", "run", "deploy-prototype.yml",
+        "--repo", "ernest196391/Casa-Viva",
+        "--ref", "main",
+        "-f", f"expected_sha={sha}",
+    ], timeout=45)
+    if dispatched["returncode"] != 0:
+        return dispatched
+
+    # Return the newest matching workflow_dispatch run when visible; do not guess deployment success here.
+    time.sleep(4)
+    listed = run([
+        "gh", "run", "list",
+        "--repo", "ernest196391/Casa-Viva",
+        "--workflow", "deploy-prototype.yml",
+        "--event", "workflow_dispatch",
+        "--limit", "10",
+        "--json", "databaseId,headSha,status,conclusion,createdAt,url",
+    ], timeout=30)
+    info = []
+    if listed["returncode"] == 0:
+        try:
+            info = json.loads(listed["output"])
+        except Exception:
+            info = []
+    match = next((x for x in info if x.get("headSha") == sha), None)
+    return {
+        "returncode": 0,
+        "output": json.dumps({
+            "dispatched": True,
+            "sha": sha,
+            "workflow": "deploy-prototype.yml",
+            "run": match,
+            "note": "Resultado final pendiente del workflow; el propio workflow contiene rollback automático.",
+        }, ensure_ascii=False),
+    }
+
+
+def action_casa_viva_deploy_status(args):
+    """Read GitHub deploy status for one exact SHA without changing anything."""
+    import re
+
+    sha = str((args or {}).get("sha", "")).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        return {"returncode": 2, "output": "args.sha debe ser un SHA Git completo"}
+    listed = run([
+        "gh", "run", "list",
+        "--repo", "ernest196391/Casa-Viva",
+        "--workflow", "deploy-prototype.yml",
+        "--limit", "30",
+        "--json", "databaseId,headSha,status,conclusion,event,createdAt,updatedAt,url",
+    ], timeout=30)
+    if listed["returncode"] != 0:
+        return listed
+    try:
+        rows = json.loads(listed["output"])
+    except Exception as exc:
+        return {"returncode": 3, "output": f"No pude interpretar gh run list: {exc}"}
+    matches = [x for x in rows if x.get("headSha") == sha]
+    return {
+        "returncode": 0,
+        "output": json.dumps({"sha": sha, "runs": matches[:10]}, ensure_ascii=False),
+    }
+
+
 def action_ai_audit(args):
     cmd = [
         "bash", "-lc",
@@ -1289,6 +1384,8 @@ ACTIONS = {
     "dev_worker_status": action_dev_worker_status,
     "core_drift_audit": action_core_drift_audit,
     "snapshot_live_core_branch": action_snapshot_live_core_branch,
+    "deploy_casa_viva": action_deploy_casa_viva,
+    "casa_viva_deploy_status": action_casa_viva_deploy_status,
     "ai_audit": action_ai_audit,
     "catalog_sync_status": action_catalog_sync_status,
 }
