@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - prep/aserezon-wp-drafts-20261113-r2
+      - main
     paths:
       - .github/workflows/aserezon-drafts.yml
   workflow_dispatch:
@@ -59,17 +60,34 @@ jobs:
           SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
           SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
           SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
-          MODE: ${{ inputs.mode || 'dry-run' }}
+          MODE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'apply' || inputs.mode || 'dry-run' }}
         run: |
           set -euo pipefail
           test "$MODE" = "dry-run" || test "$MODE" = "apply"
           scp -P "$SSH_PORT" data/catalog/aserezon-piloto-borrador.json "$SSH_USER@$SSH_HOST:/tmp/cvd-aserezon-pilot.json"
           scp -P "$SSH_PORT" scripts/catalog/import-aserezon-drafts.php "$SSH_USER@$SSH_HOST:/tmp/cvd-import-aserezon-drafts.php"
+          # Verificar primero contra WordPress real, sin escribir datos.
           ssh -o ServerAliveInterval=30 -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            "cd '$WP_PATH' && CVD_ASEREZON_FILE=/tmp/cvd-aserezon-pilot.json CVD_ASEREZON_MODE='$MODE' wp eval-file /tmp/cvd-import-aserezon-drafts.php" > raw-output.txt
-          sed -n '/^{/,$p' raw-output.txt > report.json
-          jq -e '.mode and .created and .skipped and (.errors | length == 0)' report.json > /dev/null
-          jq -r '"::notice title=Aserezon borradores::creados=\(.created|length), omitidos=\(.skipped|length), errores=\(.errors|length)"' report.json
+            "cd '$WP_PATH' && CVD_ASEREZON_FILE=/tmp/cvd-aserezon-pilot.json CVD_ASEREZON_MODE=dry-run wp eval-file /tmp/cvd-import-aserezon-drafts.php" > dry-run-output.txt
+          sed -n '/^{/,$p' dry-run-output.txt > dry-run-report.json
+          jq -e '.mode=="dry-run" and .created and .skipped and (.errors | length == 0)' dry-run-report.json > /dev/null
+
+          if [ "$MODE" = "apply" ]; then
+            # Los precios del manifiesto están expresados en USD.
+            CURRENCY=$(ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cd '$WP_PATH' && wp option get woocommerce_currency" | tail -1 | tr -d '\r')
+            if [ "$CURRENCY" != "USD" ]; then
+              echo "::error title=Moneda WooCommerce::Se esperaba USD y el sitio devolvió una moneda distinta. Importación detenida."
+              exit 1
+            fi
+            ssh -o ServerAliveInterval=30 -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+              "cd '$WP_PATH' && CVD_ASEREZON_FILE=/tmp/cvd-aserezon-pilot.json CVD_ASEREZON_MODE=apply wp eval-file /tmp/cvd-import-aserezon-drafts.php" > raw-output.txt
+            sed -n '/^{/,$p' raw-output.txt > report.json
+            jq -e '.mode=="apply" and .created and .skipped and (.errors | length == 0)' report.json > /dev/null
+          else
+            cp dry-run-output.txt raw-output.txt
+            cp dry-run-report.json report.json
+          fi
+          jq -r '"::notice title=Aserezon borradores::modo=\\(.mode), creados=\\(.created|length), omitidos=\\(.skipped|length), errores=\\(.errors|length)"' report.json
       - name: Guardar informe
         if: always()
         uses: actions/upload-artifact@v4
@@ -78,5 +96,7 @@ jobs:
           path: |
             report.json
             raw-output.txt
+            dry-run-report.json
+            dry-run-output.txt
           if-no-files-found: ignore
           retention-days: 14
