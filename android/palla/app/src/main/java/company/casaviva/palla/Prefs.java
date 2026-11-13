@@ -47,6 +47,10 @@ final class Prefs {
     /** ¿Tiene que estar encendido el servicio? Disponible, o con una carrera abierta (el recorrido sigue aunque se desconecte). */
     static boolean needsService(Context c) { return ready(c) && (available(c) || active(c)); }
 
+    /** 10-nov (chofer): ya le enseñamos dónde está «Inicio automático» de Xiaomi (Android no deja saber si lo activó). */
+    static boolean autostartAsked(Context c) { return p(c).getBoolean("autostart", false); }
+    static void setAutostartAsked(Context c) { p(c).edit().putBoolean("autostart", true).apply(); }
+
     static boolean batteryAsked(Context c) { return p(c).getBoolean("battery", false); }
     static void setBatteryAsked(Context c) { p(c).edit().putBoolean("battery", true).apply(); }
 }

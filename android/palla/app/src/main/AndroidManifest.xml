@@ -36,7 +36,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="casaviva.company" android:pathPrefix="/palla" />
+                <data android:scheme="https" android:host="casaviva.company" android:pathPrefix="${linkPrefix}" />
             </intent-filter>
         </activity>
 
@@ -46,7 +46,7 @@
             android:foregroundServiceType="specialUse|location">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Avisos en tiempo real de carreras de reparto para mensajeros (sin Google Play Services)" />
+                android:value="Avisos en tiempo real de carreras y pedidos para mensajeros y choferes (sin Google Play Services)" />
         </service>
 
         <receiver

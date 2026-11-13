@@ -33,7 +33,9 @@ import java.nio.charset.StandardCharsets;
  * Sin Google: funciona en Cuba sin VPN (probado con la app ntfy el 27-oct). Si se cae la señal, reintenta solo.
  */
 public class AvisosService extends Service {
-    private static final String CONFIG_URL = "https://casaviva.company/wp-json/casa-viva/v1/palla/app";
+    // 10-nov: «Pa'llá Chofer» pide su tema a Pa'llá transporte (pv/chofer/app) y se desconecta en pv/chofer/disponible.
+    private static final String CONFIG_URL = BuildConfig.CHOFER ? "https://casaviva.company/wp-json/casa-viva/v1/pv/chofer/app" : "https://casaviva.company/wp-json/casa-viva/v1/palla/app";
+    private static final String POS_URL = "https://casaviva.company/wp-json/casa-viva/v1/pv/chofer/posicion";
     private static final String CH_RUN = "palla_conexion";
     // 1.1 (28-oct, Ernesto: «salió con la P pero no sonó»): el canal ya no lleva sonido; la bocina la toca la propia app
     // como ALARMA (MediaPlayer, volumen de alarma), así no depende del volumen de notificaciones ni de cómo cada marca de
@@ -42,7 +44,8 @@ public class AvisosService extends Service {
     private static final String ACTION_STOP = "company.casaviva.palla.PARAR";
     private static final String ACTION_SILENCE = "company.casaviva.palla.SILENCIAR"; // 1.2: calla, pero el aviso se queda
     private static final String ACTION_OFF = "company.casaviva.palla.DESCONECTAR";   // 1.4: «Desconectarme» desde el aviso fijo
-    private static final String DISP_URL = "https://casaviva.company/wp-json/casa-viva/v1/palla/disponible";
+    private static final String ACTION_NO = "company.casaviva.palla.RECHAZAR";       // 10-nov (chofer): «Rechazar» quita el aviso
+    private static final String DISP_URL = BuildConfig.CHOFER ? "https://casaviva.company/wp-json/casa-viva/v1/pv/chofer/disponible" : "https://casaviva.company/wp-json/casa-viva/v1/palla/disponible";
     private static android.media.MediaPlayer siren;
     // 1.2 (29-oct, Ernesto: «se quedó más de 1 min vibrando y no sabía cómo apagarlo»): la vibración se para con el MISMO
     // Vibrator que la empezó (en algunos teléfonos cancel() desde otra pantalla de la app no la paraba).
@@ -56,6 +59,9 @@ public class AvisosService extends Service {
     private static final long ALARM_MS = 30_000L;       // 1.2 (Ernesto): la bocina suena como mucho 30 s
     private static final long FRESH_S = 10 * 60L;       // al reconectar, solo suenan los avisos de los últimos 10 min
 
+    // 10-nov (prueba en el Redmi de Ernesto, reloj 1 h adelantado): un aviso recién llegado se tiraba por «viejo». La edad
+    // se mide con la hora del SERVIDOR de avisos (cabecera Date al conectar), no con el reloj del teléfono.
+    private volatile long skewMs;
     private volatile boolean running;
     private volatile HttpURLConnection conn;
     private Thread worker;
@@ -126,7 +132,7 @@ public class AvisosService extends Service {
         // «Desconectarme», que apaga todo de un toque (y el aviso desaparece). Sin carrera ni disponible, no hay aviso.
         boolean avail = Prefs.available(this);
         Notification.Builder b = builder(CH_RUN)
-            .setContentTitle(avail ? "Pa'llá · disponible" : "Pa'llá · en carrera")
+            .setContentTitle(BuildConfig.CHOFER ? (Prefs.active(this) ? "Pa'llá Chofer · en viaje" : "Pa'llá Chofer · en línea") : (avail ? "Pa'llá · disponible" : "Pa'llá · en carrera"))
             .setShowWhen(false)
             .setOngoing(true)
             .setContentIntent(openApp(null, 0));
@@ -278,8 +284,14 @@ public class AvisosService extends Service {
             || checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED;
     }
 
+    /** 10-nov (chofer): cada cuánto la posición: 10 s con viaje, 30 s en línea. 0 = mensajero (su recorrido de siempre). */
+    private long chInterval() { return !BuildConfig.CHOFER ? 0 : (Prefs.active(this) ? 10_000L : 30_000L); }
+    private long trackingInterval;
+    private long lastPosted;
+
     @SuppressWarnings("MissingPermission")
     private synchronized void startTracking() {
+        if (BuildConfig.CHOFER && locListener != null && trackingInterval != chInterval()) { stopTracking(); } // pasó de en línea a viaje (o al revés)
         if (locListener != null || !hasLocation()) { return; }
         android.location.LocationManager lm = (android.location.LocationManager) getSystemService(LOCATION_SERVICE);
         if (lm == null) { return; }
@@ -291,11 +303,14 @@ public class AvisosService extends Service {
             @Override public void onProviderEnabled(String provider) { }
             @Override public void onProviderDisabled(String provider) { }
         };
+        trackingInterval = chInterval();
+        long every = BuildConfig.CHOFER ? trackingInterval : 30_000L;
+        float metres = BuildConfig.CHOFER ? 0f : 50f;
         for (String provider : new String[]{android.location.LocationManager.GPS_PROVIDER, android.location.LocationManager.NETWORK_PROVIDER}) {
-            try { if (lm.isProviderEnabled(provider)) { lm.requestLocationUpdates(provider, 30_000L, 50f, locListener, Looper.getMainLooper()); } } catch (Exception ignored) { }
+            try { if (lm.isProviderEnabled(provider)) { lm.requestLocationUpdates(provider, every, metres, locListener, Looper.getMainLooper()); } } catch (Exception ignored) { }
         }
         uploader = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
-        uploader.scheduleWithFixedDelay(this::upload, 60, 60, java.util.concurrent.TimeUnit.SECONDS);
+        if (!BuildConfig.CHOFER) { uploader.scheduleWithFixedDelay(this::upload, 60, 60, java.util.concurrent.TimeUnit.SECONDS); }
     }
 
     private synchronized void stopTracking() {
@@ -306,7 +321,7 @@ public class AvisosService extends Service {
         }
         if (uploader != null) {
             uploader.shutdown();
-            new Thread(this::upload, "palla-recorrido-fin").start(); // lo último que quedó
+            if (!BuildConfig.CHOFER) { new Thread(this::upload, "palla-recorrido-fin").start(); } // lo último que quedó
             uploader = null;
         }
         foreground(false);
@@ -314,6 +329,16 @@ public class AvisosService extends Service {
 
     private void onLocation(android.location.Location l) {
         if (l == null || !l.hasAccuracy() || l.getAccuracy() > 150) { return; }
+        if (BuildConfig.CHOFER) { // al momento (no en lotes): el cliente ve el carrito moverse y el servidor sabe quién está cerca
+            long now = android.os.SystemClock.elapsedRealtime();
+            if (now - lastPosted < trackingInterval - 2_000) { return; } // GPS y red pueden mandar a la vez
+            lastPosted = now;
+            final double lat = l.getLatitude(), lng = l.getLongitude();
+            final int acc = Math.round(l.getAccuracy());
+            java.util.concurrent.ScheduledExecutorService u = uploader;
+            if (u != null) { try { u.execute(() -> postPosition(lat, lng, acc)); } catch (Exception ignored) { } }
+            return;
+        }
         // 30 s o 50 m desde el último (GPS y red pueden mandar a la vez)
         if (lastLoc != null && l.getTime() - lastLoc.getTime() < 30_000 && l.distanceTo(lastLoc) < 50) { return; }
         lastLoc = l;
@@ -341,6 +366,29 @@ public class AvisosService extends Service {
             h.setRequestProperty("Content-Type", "application/json");
             h.setRequestProperty("X-Palla-Token", token);
             h.getOutputStream().write("{\"on\":false}".getBytes(StandardCharsets.UTF_8));
+            h.getResponseCode();
+        } catch (Exception ignored) {
+        } finally {
+            if (h != null) { h.disconnect(); }
+        }
+    }
+
+    /** 10-nov (chofer): POST pv/chofer/posicion {lat, lng, precision}. Sin señal se pierde: la siguiente llega en 10–30 s. */
+    private void postPosition(double lat, double lng, int acc) {
+        String token = Prefs.token(this);
+        if (token.isEmpty()) { return; }
+        HttpURLConnection h = null;
+        try {
+            h = (HttpURLConnection) new URL(POS_URL).openConnection();
+            h.setConnectTimeout(10_000);
+            h.setReadTimeout(10_000);
+            h.setDoOutput(true);
+            h.setRequestMethod("POST");
+            h.setRequestProperty("Content-Type", "application/json");
+            h.setRequestProperty("Accept", "application/json");
+            h.setRequestProperty("X-Palla-Token", token);
+            String body = String.format(java.util.Locale.US, "{\"lat\":%.6f,\"lng\":%.6f,\"precision\":%d}", lat, lng, acc);
+            h.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));
             h.getResponseCode();
         } catch (Exception ignored) {
         } finally {
@@ -386,6 +434,7 @@ public class AvisosService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && (ACTION_STOP.equals(intent.getAction()) || ACTION_SILENCE.equals(intent.getAction()))) { stopSiren(this); } // quitó el aviso o tocó «Silenciar»
+        if (intent != null && ACTION_NO.equals(intent.getAction())) { stopAlarm(this); } // 10-nov: «Rechazar»: se calla y se quita el aviso
         if (intent != null && ACTION_OFF.equals(intent.getAction())) { // 1.4: «Desconectarme» desde la barra de arriba
             stopAlarm(this);
             Prefs.setAvailable(this, false, 0);
@@ -393,7 +442,9 @@ public class AvisosService extends Service {
             new Thread(() -> postOff(token), "palla-desconectar").start(); // que el servidor tampoco le mande carreras
         }
         if (!Prefs.ready(this)) { stopSelf(); return START_NOT_STICKY; }
-        if (intent != null && ACTION_TRACK.equals(intent.getAction())) {
+        if (BuildConfig.CHOFER) { // 10-nov: el chofer manda su posición en línea (30 s) y con viaje (10 s)
+            if (Prefs.available(this) || Prefs.active(this)) { startTracking(); } else { stopTracking(); }
+        } else if (intent != null && ACTION_TRACK.equals(intent.getAction())) {
             if (intent.getBooleanExtra("on", false)) { startTracking(); } else { stopTracking(); }
         } else if (Prefs.active(this)) {
             startTracking(); // p. ej. tras reiniciar el teléfono con una carrera abierta (si Android lo deja)
@@ -441,6 +492,8 @@ public class AvisosService extends Service {
                 c.setReadTimeout(120_000); // ntfy manda un latido cada 45 s: si en 2 min no llega nada, la conexión está muerta
                 c.setRequestProperty("Accept", "application/x-ndjson");
                 if (c.getResponseCode() != 200) { throw new IllegalStateException("HTTP " + c.getResponseCode()); }
+                long serverNow = c.getHeaderFieldDate("Date", 0);
+                if (serverNow > 0) { skewMs = serverNow - System.currentTimeMillis(); }
                 Prefs.setStatus(this, "conectado");
                 wait = 5_000;
                 try (BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream(), StandardCharsets.UTF_8))) {
@@ -465,20 +518,27 @@ public class AvisosService extends Service {
             JSONObject e = new JSONObject(line);
             if (!"message".equals(e.optString("event"))) { return; }
             Prefs.setLastId(this, e.optString("id"));
-            if (System.currentTimeMillis() / 1000 - e.optLong("time") > FRESH_S) { return; } // viejo (estaba sin señal): no suena
+            if ((System.currentTimeMillis() + skewMs) / 1000 - e.optLong("time") > FRESH_S) { return; } // viejo (estaba sin señal): no suena
             // 1.2: Core dice qué es en los tags (offer, assigned, lost, cancelled, changed, prueba; «o<id>» = la carrera).
             java.util.Set<String> tags = new java.util.HashSet<>();
             org.json.JSONArray t = e.optJSONArray("tags");
             for (int i = 0; t != null && i < t.length(); i++) { tags.add(t.optString(i)); }
             String order = "";
             for (String s : tags) { if (s.matches("o\\d+")) { order = s; } }
-            if (tags.contains("cerrada")) { // otro la cogió: si es la que suena, se calla y se quita
-                if (!order.isEmpty() && order.equals(alarmOrder)) { stopAlarm(this); alarmOrder = ""; }
+            String viaje = ""; // 10-nov (chofer): «v<id>» = el pedido de Pa'llá transporte (para el botón Aceptar)
+            for (String s : tags) { if (s.matches("v\\d+")) { viaje = s.substring(1); } }
+            String key = !order.isEmpty() ? order : (viaje.isEmpty() ? "" : "v" + viaje); // 10-nov: «v<id>» en Pa'llá transporte
+            if (tags.contains("cerrada")) { // otro la cogió (o se canceló): si es la que suena, se calla y se quita
+                if (!key.isEmpty() && key.equals(alarmOrder)) { stopAlarm(this); alarmOrder = ""; }
                 return;
             }
             boolean loud = !(tags.contains("lost") || tags.contains("cancelled") || tags.contains("changed"));
             if (tags.contains("offer") && !Prefs.available(this)) { return; } // 1.3: desconectado, las carreras libres no suenan
-            alarm(e.optString("title", "Pa'llá"), e.optString("message", ""), e.optString("click", ""), loud, order);
+            if (tags.contains("pedido") && !Prefs.available(this)) { return; } // 10-nov (chofer): desconectado, los pedidos no suenan
+            String click = e.optString("click", "");
+            boolean pedido = BuildConfig.CHOFER && tags.contains("pedido");
+            if (pedido) { click = MainActivity.HOME + "#ch-pedidos"; } // 10-nov: el aviso abre «Pedidos cerca»
+            alarm(e.optString("title", "Pa'llá"), e.optString("message", ""), click, loud, key, pedido ? viaje : "");
         } catch (Exception ignored) { }
     }
 
@@ -486,7 +546,7 @@ public class AvisosService extends Service {
      * El aviso: se ve arriba (sin sonido del canal) con «Silenciar», y la bocina suena aparte (carrera libre, asignada o
      * prueba) hasta 30 s. Lo demás (ya no es tuya, se canceló, cambió) solo vibra una vez.
      */
-    private void alarm(String title, String text, String click, boolean loud, String order) {
+    private void alarm(String title, String text, String click, boolean loud, String order, String viaje) {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm == null) { return; }
         Intent stop = new Intent(this, AvisosService.class).setAction(ACTION_STOP);
@@ -500,11 +560,23 @@ public class AvisosService extends Service {
             .setCategory(Notification.CATEGORY_ALARM)
             .setContentIntent(openApp(click, 1))
             .setDeleteIntent(onDismiss);
-        if (loud) {
+        if (loud && !viaje.isEmpty()) {
+            // 10-nov (Ernesto): pedido de Pa'llá → Aceptar (al precio del cliente, y abre la app) · Rechazar · Silenciar.
+            Intent si = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra("open", MainActivity.HOME + "#ch-pedidos").putExtra("aceptar", viaje);
+            PendingIntent onYes = PendingIntent.getActivity(this, 6, si, flags);
+            Intent no = new Intent(this, AvisosService.class).setAction(ACTION_NO);
+            PendingIntent onNo = Build.VERSION.SDK_INT >= 26 ? PendingIntent.getForegroundService(this, 7, no, flags) : PendingIntent.getService(this, 7, no, flags);
+            Intent silence = new Intent(this, AvisosService.class).setAction(ACTION_SILENCE);
+            PendingIntent onSilence = Build.VERSION.SDK_INT >= 26 ? PendingIntent.getForegroundService(this, 3, silence, flags) : PendingIntent.getService(this, 3, silence, flags);
+            b.addAction(new Notification.Action.Builder(null, "Aceptar", onYes).build());
+            b.addAction(new Notification.Action.Builder(null, "Rechazar", onNo).build());
+            b.addAction(new Notification.Action.Builder(null, "Silenciar", onSilence).build());
+        } else if (loud) {
             Intent silence = new Intent(this, AvisosService.class).setAction(ACTION_SILENCE);
             PendingIntent onSilence = Build.VERSION.SDK_INT >= 26 ? PendingIntent.getForegroundService(this, 3, silence, flags) : PendingIntent.getService(this, 3, silence, flags);
             b.addAction(new Notification.Action.Builder(null, "🔇 Silenciar", onSilence).build());
-            b.addAction(new Notification.Action.Builder(null, "Ver carrera", openApp(click, 4)).build());
+            if (!BuildConfig.CHOFER) { b.addAction(new Notification.Action.Builder(null, "Ver carrera", openApp(click, 4)).build()); } // chofer: tocar el aviso ya lleva al viaje
         }
         if (Build.VERSION.SDK_INT < 26) { b.setPriority(Notification.PRIORITY_MAX); }
         nm.notify(ID_NEW, b.build());
@@ -515,8 +587,9 @@ public class AvisosService extends Service {
         }
         alarmOrder = order;
         // De 22:00 a 7:00 (hora del teléfono) el aviso sale, pero sin bocina: como alarma sonaría aunque esté en silencio.
+        // 10-nov (chofer): Pa'llá transporte trabaja de noche (tarifa +20 %): si está En línea, suena a cualquier hora.
         int h = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
-        if (h >= 7 && h < 22) { startSiren(this); }
+        if (BuildConfig.CHOFER || (h >= 7 && h < 22)) { startSiren(this); }
     }
 
     // ------------------------------------------------------------------ Ayudas
@@ -528,7 +601,7 @@ public class AvisosService extends Service {
 
     private PendingIntent openApp(String url, int code) {
         Intent i = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        i.putExtra("open", url != null && !url.isEmpty() ? url : MainActivity.HOME + "#carreras");
+        i.putExtra("open", url != null && !url.isEmpty() ? url : (BuildConfig.CHOFER ? MainActivity.HOME : MainActivity.HOME + "#carreras"));
         return PendingIntent.getActivity(this, code, i, PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0));
     }
 
@@ -540,7 +613,7 @@ public class AvisosService extends Service {
         NotificationChannel run = new NotificationChannel(CH_RUN, "Conexión de avisos", NotificationManager.IMPORTANCE_MIN);
         run.setShowBadge(false);
         nm.createNotificationChannel(run);
-        NotificationChannel nueva = new NotificationChannel(CH_NEW, "Carreras libres", NotificationManager.IMPORTANCE_HIGH);
+        NotificationChannel nueva = new NotificationChannel(CH_NEW, BuildConfig.CHOFER ? "Pedidos" : "Carreras libres", NotificationManager.IMPORTANCE_HIGH);
         nueva.setSound(null, null);       // la bocina la toca startSiren(), no el canal
         nueva.enableVibration(false);     // y la vibración también
         nueva.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);

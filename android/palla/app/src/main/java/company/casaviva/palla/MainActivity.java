@@ -25,7 +25,7 @@ import android.webkit.WebViewClient;
  *  - el enlace personal de WhatsApp abre la app (assetlinks), y los enlaces de fuera (Llamar, Ir, WhatsApp) salen fuera.
  */
 public class MainActivity extends Activity {
-    static final String HOME = "https://casaviva.company/palla/";
+    static final String HOME = BuildConfig.HOME; // mensajero: /palla/ · chofer (10-nov): /palla/chofer/
     private static final int REQ_NOTIF = 1, REQ_GEO = 2;
 
     private WebView web;
@@ -68,19 +68,126 @@ public class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
         }
-        if (state != null) { web.restoreState(state); } else { web.loadUrl(urlFrom(getIntent())); }
+        // 10-nov (Redmi): si Android cerró la app y la reabre desde un aviso, antes se restauraba la página vieja y se
+        // ignoraba a dónde llevaba el aviso. Ahora, si el aviso trae dirección, se abre esa.
+        if (BuildConfig.CHOFER && getIntent() != null && getIntent().hasExtra("aceptar")) { web.loadUrl(HOME); aceptarDesdeAviso(getIntent()); }
+        else if (state != null) {
+            web.restoreState(state);
+            Intent in = getIntent();
+            if (in != null && (in.getData() != null || in.hasExtra("open"))) { web.loadUrl(urlFrom(in)); in.removeExtra("open"); in.setData(null); }
+        } else { web.loadUrl(urlFrom(getIntent())); }
+    }
+
+    /**
+     * 10-nov (chofer): «Aceptar» desde el aviso → «Acepto» al precio del cliente (POST pv/chofer/pedidos/{id}/ofertar
+     * {pct:0}) y luego se abre «Pedidos cerca», donde se ve «Enviaste… Esperando» o si ya lo cogió otro.
+     */
+    private void aceptarDesdeAviso(Intent in) {
+        String id = in == null ? null : in.getStringExtra("aceptar");
+        if (id == null || !id.matches("\\d+")) { return; }
+        in.removeExtra("aceptar");
+        AvisosService.stopAlarm(this);
+        final String url = urlFrom(in), token = Prefs.token(this);
+        new Thread(() -> {
+            java.net.HttpURLConnection h = null;
+            try {
+                h = (java.net.HttpURLConnection) new java.net.URL("https://casaviva.company/wp-json/casa-viva/v1/pv/chofer/pedidos/" + id + "/ofertar").openConnection();
+                h.setConnectTimeout(10_000);
+                h.setReadTimeout(15_000);
+                h.setDoOutput(true);
+                h.setRequestMethod("POST");
+                h.setRequestProperty("Content-Type", "application/json");
+                h.setRequestProperty("X-Palla-Token", token);
+                h.getOutputStream().write("{\"pct\":0}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                h.getResponseCode();
+            } catch (Exception ignored) {
+            } finally {
+                if (h != null) { h.disconnect(); }
+            }
+            runOnUiThread(() -> web.loadUrl(url)); // la lista ya trae su oferta (o «lo cogió otro»)
+        }, "palla-aceptar").start();
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        if (BuildConfig.CHOFER && intent.hasExtra("aceptar")) { aceptarDesdeAviso(intent); return; }
         if (intent.getData() != null || intent.hasExtra("open")) { web.loadUrl(urlFrom(intent)); }
+    }
+
+    // ------------------------------------------------------------------ 10-nov (chofer): permisos para que suene
+    private boolean permisoAbierto, permisoAhoraNo, notifPedida, geoPedida; // pedidas una vez por apertura: si dice que no, no se repite en bucle
+
+    /**
+     * Prueba en el Redmi de Ernesto (MIUI): la app estaba «En línea» pero sin permiso de avisos, sin «Inicio automático» y
+     * con ahorro de batería: así Android la calla o la cierra. Al conectarse (y al volver a la app) se le guía, de uno en
+     * uno: 1) avisos, 2) ubicación, 3) batería sin restricciones, 4) en Xiaomi, «Inicio automático». «Ahora no» lo deja
+     * hasta la próxima vez que abra la app.
+     */
+    private void checkPermisos() {
+        if (!BuildConfig.CHOFER || permisoAbierto || permisoAhoraNo || isFinishing() || !Prefs.available(this)) { return; }
+        android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED && !notifPedida) {
+            notifPedida = true;
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
+            return;
+        }
+        if (nm != null && !nm.areNotificationsEnabled()) {
+            Intent i = Build.VERSION.SDK_INT >= 26
+                ? new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName())
+                : new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()));
+            pedir("Permite los avisos", "Activa «Permitir notificaciones».", i);
+            return;
+        }
+        if (!hasGeo() && !geoPedida) { geoPedida = true; askLocation(); return; }
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        if (Build.VERSION.SDK_INT >= 23 && pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+            pedir("Que no se duerma", "Para que suene con la pantalla apagada: toca «Permitir» o «Sin restricciones».",
+                new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName())));
+            return;
+        }
+        if (isXiaomi() && !Prefs.autostartAsked(this)) {
+            Prefs.setAutostartAsked(this);
+            Intent i = new Intent().setComponent(new android.content.ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"));
+            if (getPackageManager().resolveActivity(i, 0) == null) { i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())); }
+            pedir("Inicio automático", "Busca «Pa'llá Chofer» y actívalo.", i);
+        }
+    }
+
+    private static boolean isXiaomi() {
+        String m = (Build.MANUFACTURER + " " + Build.BRAND).toLowerCase(java.util.Locale.ROOT);
+        return m.contains("xiaomi") || m.contains("redmi") || m.contains("poco");
+    }
+
+    private void pedir(String titulo, String texto, Intent abrir) {
+        permisoAbierto = true;
+        new android.app.AlertDialog.Builder(this)
+            .setTitle(titulo)
+            .setMessage(texto)
+            .setCancelable(false)
+            .setPositiveButton("Abrir", (d, w) -> {
+                permisoAbierto = false;
+                try { startActivity(abrir); } catch (Exception e) {
+                    try { startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))); } catch (Exception ignored) { }
+                }
+            })
+            .setNegativeButton("Ahora no", (d, w) -> { permisoAbierto = false; permisoAhoraNo = true; })
+            .show();
+    }
+
+    /** 10-nov (auditoría): fuera de la pantalla, la web no sigue preguntando ni usando el GPS (el servicio avisa y manda la posición). */
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (BuildConfig.CHOFER && web != null) { web.onPause(); web.pauseTimers(); }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        if (BuildConfig.CHOFER && web != null) { web.resumeTimers(); web.onResume(); }
+        if (BuildConfig.CHOFER) { checkPermisos(); } // 10-nov: al volver de Ajustes, el paso siguiente
         AvisosService.stopAlarm(this); // al abrir la app, la bocina se calla
         if (Prefs.needsService(this)) { AvisosService.start(this); } // 1.3: solo si está disponible o en una carrera
     }
@@ -125,6 +232,7 @@ public class MainActivity extends Activity {
             geoCallback = null;
         }
         if (code == REQ_GEO && hasGeo() && Prefs.active(this)) { AvisosService.track(this, true); } // 1.1: ya puede seguir el recorrido
+        if (BuildConfig.CHOFER && (code == REQ_NOTIF || code == REQ_GEO)) { checkPermisos(); } // 10-nov: el siguiente paso
     }
 
     private boolean hasGeo() {
@@ -159,7 +267,7 @@ public class MainActivity extends Activity {
             boolean changed = !token.trim().equals(Prefs.token(ctx));
             Prefs.setToken(ctx, token);
             if (changed || !Prefs.ready(ctx)) { new Thread(() -> AvisosService.configure(ctx), "palla-config").start(); }
-            runOnUiThread(MainActivity.this::askBattery);
+            if (!BuildConfig.CHOFER) { runOnUiThread(MainActivity.this::askBattery); }
         }
 
         /** 1.1: la web dice si hay carreras abiertas → la app manda (o deja de mandar) el recorrido. */
@@ -179,8 +287,15 @@ public class MainActivity extends Activity {
             long u = (long) until;
             if (on == Prefs.available(ctx) && u == Prefs.availableUntil(ctx)) { return; }
             Prefs.setAvailable(ctx, on, u);
-            runOnUiThread(() -> AvisosService.availability(ctx));
+            runOnUiThread(() -> {
+                if (BuildConfig.CHOFER && on) { permisoAhoraNo = false; checkPermisos(); } // chofer: en línea → que suene y mande su posición
+                AvisosService.availability(ctx);
+            });
         }
+
+        /** 10-nov: «Probar el sonido» en Mi perfil (el chofer comprueba que su teléfono no calla la app). */
+        @JavascriptInterface
+        public void probarSonido() { AvisosService.startSiren(ctx); }
 
         @JavascriptInterface
         public String status() {
