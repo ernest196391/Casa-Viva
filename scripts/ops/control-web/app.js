@@ -59,9 +59,11 @@ function render(data){
   const s=data.summary||{};$('m-attention').textContent=s.attention??0;$('m-decisions').textContent=s.decisions??0;$('m-lennys').textContent=s.lennys??0;$('m-errors').textContent=s.errors??0;
   const decisions=Array.isArray(data.decisions)?data.decisions:[];$('decision-count').textContent=decisions.length;$('decisions-list').replaceChildren(...decisions.map(decisionCard));if(!decisions.length)empty($('decisions-list'),'No tienes decisiones pendientes ahora.');
   const blocked=Array.isArray(data.reviews_blocked)?data.reviews_blocked:[];
-  $('blocked-reviews-section').hidden=!blocked.length;
-  $('blocked-reviews-count').textContent=blocked.length;
+  const auditIncomplete=Boolean(s.reviews_audit_incomplete);
+  $('blocked-reviews-section').hidden=!blocked.length&&!auditIncomplete;
+  $('blocked-reviews-count').textContent=auditIncomplete?'Revisión incompleta':blocked.length;
   $('blocked-reviews-list').replaceChildren(...blocked.map(blockedReviewCard));
+  if(auditIncomplete)$('blocked-reviews-list').prepend(el('p','No se pudieron comprobar todas las aprobaciones: el límite de consulta se alcanzó. No tomar decisiones basadas en este listado hasta completar la auditoría.','card-error'));
   const today=Array.isArray(data.today)?data.today:[];$('today-list').replaceChildren(...today.map(taskCard));if(!today.length)empty($('today-list'),'No hay trabajo prioritario abierto.');
   renderTasks();
   const l=Array.isArray(data.lennys)?data.lennys:[];
