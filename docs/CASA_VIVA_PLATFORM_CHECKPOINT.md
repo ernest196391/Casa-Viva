@@ -244,3 +244,13 @@ Al retomar el proyecto:
 3. ejecutar solamente la próxima acción aprobada;
 4. actualizar estado, evidencia, costo y próxima compuerta;
 5. no avanzar de fase por inferencia ni por CI verde.
+
+## PREPARE — Aserezon, piloto de borradores (2026-11-13)
+
+- Base: `main` actualizado (rama `prep/aserezon-wp-drafts-20261113-r2`); reemplaza la rama antigua del PR #192 para evitar arrastrar commits anteriores.
+- Incluye cuatro referencias iniciales en `data/catalog/aserezon-piloto-borrador.json`, importador WP-CLI idempotente y flujo GitHub Actions/Hostinger `aserezon-drafts.yml`, sin publicación automática.
+- El importador **solo crea borradores ocultos** y nunca edita productos existentes; stock sin confirmar e imágenes sin asignar.
+- Autorización de fotos y publicidad expresada por Ernesto. Falta identificar las fotografías originales exactas y revisar técnicamente las tres complementarias IA por SKU.
+- Precios y comisiones son propuestas, no condiciones formalmente aceptadas por Aserezon. Reservas, pagos y liquidación pendientes de validar.
+- `dry-run` desde la rama habilitado como prueba de acceso a WP-CLI; la ejecución real y el informe del servidor todavía deben verificarse. Prohibido declarar importado sin evidencia.
+- No desplegar plugin, no modificar operaciones financieras ni stock, no publicar productos hasta revisión de calidad y acuerdo comercial.
