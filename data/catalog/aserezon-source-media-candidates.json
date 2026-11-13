@@ -1,0 +1,45 @@
+{
+  "supplier": "Aserezon",
+  "status": "CANDIDATE — NEVER AUTO-PUBLISH",
+  "source": "og:image on supplier product page, verified 2026-11-13",
+  "authorization": "User states supplier expressly authorized photography and advertisements; written record not attached",
+  "photos": [
+    {
+      "sku": "AS-2101-3501090-01",
+      "manufacturer_code": "2101-3501090-01",
+      "url": "https://aserezon.com/wp-content/uploads/2025/05/2101-3501090-01.jpg",
+      "kind": "source-original",
+      "stage": "candidate-pending-image-quality-and-correspondence-review",
+      "slot": 1
+    },
+    {
+      "sku": "AS-2101-1106010-10",
+      "manufacturer_code": "2101-1106010-10",
+      "url": "https://aserezon.com/wp-content/uploads/2025/03/2101-1106010-10.png",
+      "kind": "source-original",
+      "stage": "candidate-pending-image-quality-and-correspondence-review",
+      "slot": 1
+    },
+    {
+      "sku": "AS-2101-1601130-01",
+      "manufacturer_code": "2101-1601130-01",
+      "url": "https://aserezon.com/wp-content/uploads/2025/03/2101-1601130-01.jpg",
+      "kind": "source-original",
+      "stage": "candidate-pending-image-quality-and-correspondence-review",
+      "slot": 1
+    },
+    {
+      "sku": "AS-2101-1011010-01",
+      "manufacturer_code": "2101-1011010-01",
+      "url": "https://aserezon.com/wp-content/uploads/2025/03/2101-1011010-01.png",
+      "kind": "source-original",
+      "stage": "candidate-pending-image-quality-and-correspondence-review",
+      "slot": 1
+    }
+  ],
+  "notes": [
+    "Photo candidates map manufacturer codes to filenames and OG images; photo fidelity/whiteness must still be reviewed.",
+    "Do not replace existing WooCommerce images or publish any product automatically.",
+    "No generated technical diagram is approved for use as exact-fit reference."
+  ]
+}

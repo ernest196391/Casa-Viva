@@ -1,0 +1,106 @@
+name: Aserezon · auditoría de WooCommerce (solo lectura)
+
+on:
+  push:
+    branches:
+      - audit/aserezon-hostinger-evidence-20261113
+    paths:
+      - .github/workflows/aserezon-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aserezon-audit
+  cancel-in-progress: false
+
+jobs:
+  read-only-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      WP_PATH: /home/u824654880/domains/casaviva.company/public_html
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar evidencia sin secretos
+        shell: bash
+        run: |
+          mkdir -p /tmp/aserezon-evidence
+          printf '%s\n' '{"state":"not_started","note":"Solo lectura"}' > /tmp/aserezon-evidence/result.json
+      - name: Auditar Hostinger y WooCommerce
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SSH_PRIVATE_KEY" ] || [ -z "$SSH_HOST" ] || [ -z "$SSH_PORT" ] || [ -z "$SSH_USER" ]; then
+            printf '%s\n' '{"state":"missing_ssh_configuration"}' > /tmp/aserezon-evidence/result.json
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          if ! ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null; then
+            printf '%s\n' '{"state":"ssh_host_unreachable"}' > /tmp/aserezon-evidence/result.json
+            exit 1
+          fi
+          if ! scp -P "$SSH_PORT" scripts/catalog/audit-aserezon.php "$SSH_USER@$SSH_HOST:/tmp/cvd-audit-aserezon.php"; then
+            printf '%s\n' '{"state":"scp_failed"}' > /tmp/aserezon-evidence/result.json
+            exit 1
+          fi
+          if ! ssh -o ServerAliveInterval=30 -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cd '$WP_PATH' && wp eval-file /tmp/cvd-audit-aserezon.php" > /tmp/aserezon-evidence/raw.txt; then
+            printf '%s\n' '{"state":"wp_cli_failed"}' > /tmp/aserezon-evidence/result.json
+            exit 1
+          fi
+          if ! sed -n '/^{/,$p' /tmp/aserezon-evidence/raw.txt | jq -e 'select(.status=="ok" and (.products|length)==4)' > /tmp/aserezon-evidence/result.json; then
+            printf '%s\n' '{"state":"invalid_wp_response"}' > /tmp/aserezon-evidence/result.json
+            exit 1
+          fi
+      - name: Inspeccionar imágenes de origen (solo lectura)
+        if: always()
+        shell: bash
+        run: |
+          python3 scripts/catalog/audit-aserezon-media.py
+          cp aserezon-source-images.json /tmp/aserezon-evidence/source-images.json
+      - name: Examinar resolución y fondo de fotografías originales
+        if: always()
+        shell: bash
+        run: |
+          python3 -m venv /tmp/aserezon-photo-venv
+          /tmp/aserezon-photo-venv/bin/pip install --quiet Pillow
+          /tmp/aserezon-photo-venv/bin/python scripts/catalog/audit-aserezon-image-quality.py
+          cp aserezon-photo-quality.json /tmp/aserezon-evidence/photo-quality.json
+      - name: Guardar informe en rama evidence/aserezon-audit
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/aserezon-report
+          cp /tmp/aserezon-evidence/result.json /tmp/aserezon-report/result.json
+          if [ -f /tmp/aserezon-evidence/source-images.json ]; then
+            cp /tmp/aserezon-evidence/source-images.json /tmp/aserezon-report/source-images.json
+          fi
+          printf '%s\n' "${GITHUB_SHA}" > /tmp/aserezon-report/source_sha.txt
+          cd /tmp/aserezon-report
+          git init -q -b audit-result
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -f /tmp/aserezon-evidence/photo-quality.json ]; then
+            cp /tmp/aserezon-evidence/photo-quality.json /tmp/aserezon-report/photo-quality.json
+          fi
+          git add -A
+          git commit -qm "Audit Aserezon WooCommerce (read-only) ${GITHUB_RUN_ID}"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/evidence/aserezon-audit
+      - name: Informe como artefacto
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aserezon-audit-${{ github.run_id }}
+          path: /tmp/aserezon-evidence/result.json
+          if-no-files-found: ignore
