@@ -50,7 +50,7 @@ jobs:
           # El navegador tiene un presupuesto de hasta 30 min. Esperamos hasta 35 min
           # para no fallar un despliegue válido mientras CI todavía está ejecutándose.
           for attempt in {1..140}; do
-            runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${DEPLOY_SHA}&branch=main&event=push&per_page=50")"
+            runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${DEPLOY_SHA}&branch=main&per_page=50")"
             successful="$(jq -r '[.workflow_runs[] | select(.name == "Validar aplicación" and .conclusion == "success")] | length' <<<"$runs")"
             test "$successful" -ge 1 && exit 0
             sleep 15
