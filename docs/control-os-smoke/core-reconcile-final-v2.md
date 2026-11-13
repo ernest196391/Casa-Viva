@@ -1,0 +1,1 @@
+# Control OS Core reconciliation final smoke v2\n\nRuns from the current main after reconciliation and validates branch gate, full CI, GitHub→Hostinger deploy, deployed SHA, smoke and rollback contract.\n
