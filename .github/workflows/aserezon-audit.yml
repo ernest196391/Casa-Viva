@@ -66,6 +66,14 @@ jobs:
         run: |
           python3 scripts/catalog/audit-aserezon-media.py
           cp aserezon-source-images.json /tmp/aserezon-evidence/source-images.json
+      - name: Examinar resolución y fondo de fotografías originales
+        if: always()
+        shell: bash
+        run: |
+          python3 -m venv /tmp/aserezon-photo-venv
+          /tmp/aserezon-photo-venv/bin/pip install --quiet Pillow
+          /tmp/aserezon-photo-venv/bin/python scripts/catalog/audit-aserezon-image-quality.py
+          cp aserezon-photo-quality.json /tmp/aserezon-evidence/photo-quality.json
       - name: Guardar informe en rama evidence/aserezon-audit
         if: always()
         shell: bash
@@ -83,7 +91,10 @@ jobs:
           git init -q -b audit-result
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add result.json source_sha.txt source-images.json
+          if [ -f /tmp/aserezon-evidence/photo-quality.json ]; then
+            cp /tmp/aserezon-evidence/photo-quality.json /tmp/aserezon-report/photo-quality.json
+          fi
+          git add -A
           git commit -qm "Audit Aserezon WooCommerce (read-only) ${GITHUB_RUN_ID}"
           git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/evidence/aserezon-audit
       - name: Informe como artefacto
