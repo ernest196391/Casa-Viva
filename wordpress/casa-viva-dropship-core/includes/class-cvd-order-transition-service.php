@@ -267,11 +267,30 @@ final class CVD_Order_Transition_Service {
 		$metadata['_canonical_event_anchor']=$anchor;$history=$order->get_meta('_cvd_delivery_history',true);$history=is_array($history)?$history:array();$history[]=array('from'=>$from,'to'=>$to,'actor_user_id'=>$actor_id,'at'=>$at,'data'=>$metadata);$order->update_meta_data('_cvd_delivery_status',$to);$order->update_meta_data('_cvd_delivery_updated_at',$at);$order->update_meta_data('_cvd_delivery_history',array_slice($history,-150));$order->add_order_note('Mensajería: '.self::delivery_label($from).' → '.self::delivery_label($to).'.');
 	}
 	/**
-	 * 3.14.104 (Ernesto 1-nov, #5976): reactivar un pedido cancelado. No hay transición normal desde «cancelado»; esto
-	 * deja la operación como estaba antes de cancelar y el reparto «sin asignar», con su historial. Lo llama
-	 * CVD_Order_Edit::reactivate (que ya comprobó permisos, existencias y estado) después de volver el pedido a «En espera».
+	 * Última etapa de entrega real anterior a una cancelación. Una oferta abierta al grupo no se restaura porque
+	 * puede haber caducado o haber avisado ya a varios mensajeros; solo se conserva una asignación/custodia real.
 	 */
-	public static function reopen_after_cancel(WC_Order $order,string $operation,int $actor_id):void{$at=gmdate('Y-m-d H:i:s');$anchor='reactivate:'.$order->get_id().':'.wp_generate_uuid4();self::write_state_and_history($order,'operation',self::state($order,'operation'),$operation,$actor_id,$at,$anchor.':operation',array());if('unassigned'!==self::state($order,'delivery')){self::write_state_and_history($order,'delivery',self::state($order,'delivery'),'unassigned',$actor_id,$at,$anchor.':delivery',array('reason'=>'reactivated'));}}
+	public static function delivery_before_cancel(WC_Order $order):string{
+		$history=$order->get_meta('_cvd_delivery_history',true);$history=is_array($history)?$history:array();
+		$restorable=array('assigned','accepted','to_store','picked_up','handed_over','delivered','cash_returned');
+		foreach(array_reverse($history) as $step){
+			if(!is_array($step)||'cancelled'!==sanitize_key((string)($step['to']??''))){continue;}
+			$from=sanitize_key((string)($step['from']??''));
+			return in_array($from,$restorable,true)&&absint($order->get_meta('_cvd_messenger_user_id',true))?$from:'unassigned';
+		}
+		return 'unassigned';
+	}
+
+	/**
+	 * 3.14.167 (#162): reactivar conserva el mensajero y la etapa que tenía antes de cancelar cuando había una
+	 * asignación real. Si solo estaba sin asignar/ofertado, vuelve a «sin asignar» y se publica de nuevo normalmente.
+	 */
+	public static function reopen_after_cancel(WC_Order $order,string $operation,int $actor_id):void{
+		$at=gmdate('Y-m-d H:i:s');$anchor='reactivate:'.$order->get_id().':'.wp_generate_uuid4();
+		self::write_state_and_history($order,'operation',self::state($order,'operation'),$operation,$actor_id,$at,$anchor.':operation',array());
+		$delivery=self::delivery_before_cancel($order);$current=self::state($order,'delivery');
+		if($delivery!==$current){self::write_state_and_history($order,'delivery',$current,$delivery,$actor_id,$at,$anchor.':delivery',array('reason'=>'reactivated','restored'=>true));}
+	}
 	private static function state(WC_Order $order,string $domain):string{$key='operation'===$domain?'_cvd_operation_status':'_cvd_delivery_status';$value=sanitize_key((string)$order->get_meta($key,true));return $value?:('operation'===$domain?'new':'unassigned');}
 	private static function fresh_order(int $id){$order=wc_get_order($id);if($order&&method_exists($order,'get_data_store')){$store=$order->get_data_store();if(is_object($store)&&method_exists($store,'read')){$store->read($order);}}if($order&&method_exists($order,'read_meta_data')){$order->read_meta_data(true);}return $order;}
 	private static function receipts(WC_Order $order):array{$value=$order->get_meta(self::RECEIPTS_META,true);return is_array($value)?$value:array();}
