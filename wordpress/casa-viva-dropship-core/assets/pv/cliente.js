@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-this-alias -- legacy PV code captured from production; behavior preserved during reconciliation */
 /* Pa'llá transporte (5-nov-2026) · app del CLIENTE en /palla/ir/. Pantallas del diseño v3 aprobado (6-nov, D142:
  * diseno-v3/prototipo/app.js): inicio con 4 servicios (Viajar · Paquete · Comida · Carga); Viajar enseña los 7 vehículos con
  * su precio y el precio se toca para subirlo o bajarlo (pista B); la recogida es opcional («Desde…»). Paquete, Comida y Carga

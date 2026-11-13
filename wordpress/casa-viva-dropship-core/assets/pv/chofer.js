@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-this-alias -- legacy PV code captured from production; behavior preserved during reconciliation */
 /* Pa'llá transporte (5-nov-2026) · app del CHOFER en /palla/chofer/ (taxi, triciclo, moto y mensajero de envíos).
  * Pantallas del diseño v2 aprobado (prototipo/app.js, «ch-…») con los datos reales de la API casa-viva/v1/pv/chofer/…
  * Mismo enlace que Pa'llá: localStorage «palla.k» → cabecera X-Palla-Token (también vale #k=… en la URL).
