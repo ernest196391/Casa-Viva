@@ -231,6 +231,22 @@ def snapshot():
         'at': x.get('finished_at') or x.get('started_at') or x.get('created_at'),
     } for x in open_tasks[:60]]
 
+    # A task may be waiting for approval without an ops_approvals row.
+    # Never fabricate an approval_id: the decision RPC only accepts real approvals.
+    # Surface these orphaned financial reviews separately so the owner can see
+    # the blocked work without an invalid Approve/Reject button.
+    pending_approval_task_ids = {str(a.get('task_id')) for a in approvals}
+    orphan_reviews = [{
+        'task_id': x.get('public_id'),
+        'title': x.get('title') or 'Revisión pendiente',
+        'warning': 'Falta la solicitud formal de aprobación. No se puede aprobar desde el panel todavía.',
+        'status': x.get('status'),
+        'risk': x.get('risk'),
+        'created_at': x.get('created_at'),
+    } for x in tasks
+      if x.get('status') == 'waiting_approval'
+      and str(x.get('id')) not in pending_approval_task_ids]
+
     decisions = []
     for a in approvals:
         t = task_by_uuid.get(str(a.get('task_id')), {})
@@ -299,6 +315,7 @@ def snapshot():
         'summary': {
             'attention': len(attention),
             'decisions': len(decisions),
+            'reviews_blocked': len(orphan_reviews),
             'lennys': len(lennys),
             'errors': len(errors),
             'open_tasks': len(open_tasks),
@@ -306,6 +323,7 @@ def snapshot():
         'today': task_cards[:10],
         'tasks': task_cards,
         'decisions': decisions,
+        'reviews_blocked': orphan_reviews,
         'lennys': lennys,
         'system': {
             'ok': system_ok,
