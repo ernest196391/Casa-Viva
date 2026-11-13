@@ -46,6 +46,9 @@ jobs:
       - name: Validar historial canónico de eventos
         run: php artifacts/tests/test-canonical-order-events-1b.php
 
+      - name: Validar reconciliación de catálogo no financiera
+        run: php artifacts/tests/test-catalog-reconcile-314168.php
+
       - name: Validar servicio único de transiciones
         run: php artifacts/tests/test-order-transition-service-1c.php
 
