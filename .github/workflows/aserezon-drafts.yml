@@ -1,6 +1,11 @@
 name: Aserezon · importar borradores controlados
 
 on:
+  push:
+    branches:
+      - prep/aserezon-30-productos-20261113
+    paths:
+      - .github/workflows/aserezon-drafts.yml
   workflow_dispatch:
     inputs:
       mode:
@@ -54,7 +59,7 @@ jobs:
           SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
           SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
           SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
-          MODE: ${{ inputs.mode }}
+          MODE: ${{ inputs.mode || 'dry-run' }}
         run: |
           set -euo pipefail
           test "$MODE" = "dry-run" || test "$MODE" = "apply"
