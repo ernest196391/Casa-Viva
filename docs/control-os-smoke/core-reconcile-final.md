@@ -1,0 +1,1 @@
+# Control OS Core reconciliation final smoke\n\nValidates reconciled Core 3.14.167 through branch gate, full CI, GitHub→Hostinger deploy, deployed SHA verification, smoke and rollback contract.\n
