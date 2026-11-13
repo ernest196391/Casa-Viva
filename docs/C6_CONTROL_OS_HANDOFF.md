@@ -30,3 +30,24 @@ La base de datos contiene tareas de `whatsapp-lennys-live` creadas a partir de m
 - Si la consulta de tareas en espera alcanza 500 filas, también se advierte que la auditoría está incompleta.
 - Validación de GitHub del commit `fbde73c2acd9fe4023321d6af9975413fc01f448`: las tres suites principales terminaron con éxito.
 - **Límite conocido**: la paginación total no está implementada; la señal de incompletitud es una barrera conservadora, no una auditoría exhaustiva.
+
+## C8 — Control desde una conversación de ChatGPT (diseño y primer diagnóstico)
+
+### Ya implementado en código, no instalado en VPS
+- Nueva acción permitida `owner_ingest_audit` en el Ops Bridge: examina hasta 2.000 archivos fuente de `/root/vivabot/src` y `/root/vivabot/scripts`; devuelve únicamente rutas y números de línea, no mensajes ni secretos.
+- No ejecuta shell arbitrario, no cambia archivos, no toca aprobaciones ni envía mensajes.
+- La acción solo estará disponible cuando una versión aprobada del puente se instale en el VPS; el commit de GitHub por sí solo no la activa.
+
+### Arquitectura de conversación segura
+1. ChatGPT conectado a un conector de Casa Viva autenticado (MCP o equivalente) con identidad individual; no aceptar como prueba de identidad el texto «soy Lennys» o un hashtag.
+2. Conector de solo lectura inicialmente: salud, estado, tareas, historial y `owner_ingest_audit`; filtros por rol y registros de acceso.
+3. Para cambios: plan/diff, pruebas, PR, revisión de impacto y confirmación explícita de la propietaria en acciones sensibles. Las peticiones normales no equivalen a una aprobación financiera.
+4. El servidor verifica permisos y una política de operaciones permitidas; no ejecuta comandos arbitrarios enviados por chat. Credenciales almacenadas únicamente en el servidor y rotables.
+5. Para publicar: CI, staging, copia de seguridad, comprobación de versión y rollback; devolver al chat el resultado real y el identificador de operación.
+6. Registrar quién solicitó, autorizó y ejecutó cada cambio, con fecha, objeto y resultado. Aplicar idempotencia para no repetir operaciones.
+
+### Bloqueos antes de activar
+- No existe todavía un conector Casa Viva autenticado expuesto como herramienta en este chat.
+- Falta comprobar el esquema de permisos y la autenticación del ingreso a `crm_ops_bridge`; **no insertar acciones directamente en esa tabla desde una conversación sin el conector**.
+- Falta desplegar el bridge aprobado y probar `owner_ingest_audit` en el VPS.
+- No habilitar escrituras financieras, envío de WhatsApp ni cambios de aprobaciones en la primera versión.
