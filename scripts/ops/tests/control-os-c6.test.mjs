@@ -43,3 +43,17 @@ test('panel must show an incomplete audit warning', () => {
   assert.match(js, /reviews_audit_incomplete/);
   assert.match(js, /No se pudieron comprobar todas las aprobaciones/);
 });
+
+const bridge = fs.readFileSync(new URL('../cv-ops-bridge.py', import.meta.url), 'utf8');
+test('C8 VPS diagnostic is explicitly allowlisted and read-only', () => {
+  assert.match(bridge, /"owner_ingest_audit": action_owner_ingest_audit/);
+  const start = bridge.indexOf('def action_owner_ingest_audit(args):');
+  const end = bridge.indexOf('\ndef action_ai_audit(args):', start);
+  assert.ok(start >= 0 && end > start);
+  const body = bridge.slice(start, end);
+  assert.match(body, /"read_only": True/);
+  assert.match(body, /len\(hits\) >= 80/);
+  assert.match(body, /examined >= 2000/);
+  assert.doesNotMatch(body, /subprocess\.|os\.system|eval\(|exec\(/);
+  assert.doesNotMatch(body, /line\.strip\(\)|"content": line|send_message|api_request\(/);
+});
