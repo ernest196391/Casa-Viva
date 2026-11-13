@@ -1,0 +1,1 @@
+# Control OS Casa Viva smoke v2\n\nValida Gate → main → CI completo → deploy GitHub/Hostinger → SHA.\n
