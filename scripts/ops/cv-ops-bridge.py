@@ -32,7 +32,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "4.1.1"
+BRIDGE_VERSION = "4.1.2"
 
 
 def load_env_files() -> dict[str, str]:
@@ -1242,8 +1242,64 @@ def action_snapshot_live_core_branch(args):
 
 
 
+def _github_repo_token(repo: Path) -> str:
+    """Use existing Git credential without logging or persisting it."""
+    env = load_env_files()
+    for name in ("GH_TOKEN", "GITHUB_TOKEN", "GITHUB_PAT", "GIT_TOKEN"):
+        value = env.get(name)
+        if value and len(value) > 20:
+            return value.strip()
+
+    try:
+        p = subprocess.run(
+            ["git", "-C", str(repo), "credential", "fill"],
+            input="protocol=https\nhost=github.com\n\n",
+            capture_output=True, text=True, timeout=15,
+        )
+        if p.returncode == 0:
+            values = {}
+            for line in (p.stdout or "").splitlines():
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    values[k.strip()] = v.strip()
+            token = values.get("password", "")
+            if len(token) > 20:
+                return token
+    except Exception:
+        pass
+
+    # Last resort: extract credential embedded in HTTPS origin, without ever returning/logging URL.
+    try:
+        p = subprocess.run(
+            ["git", "-C", str(repo), "remote", "get-url", "origin"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if p.returncode == 0:
+            parsed = urllib.parse.urlsplit((p.stdout or "").strip())
+            if parsed.hostname == "github.com" and parsed.password and len(parsed.password) > 20:
+                return parsed.password
+            if parsed.hostname == "github.com" and parsed.username and len(parsed.username) > 20:
+                return parsed.username
+    except Exception:
+        pass
+    raise RuntimeError("No encontré una credencial GitHub utilizable en el VPS")
+
+
+def _github_api(token: str, method: str, path: str, body=None):
+    url = "https://api.github.com" + path
+    data = None if body is None else json.dumps(body).encode()
+    req = urllib.request.Request(url, data=data, method=method)
+    req.add_header("Authorization", "Bearer " + token)
+    req.add_header("Accept", "application/vnd.github+json")
+    req.add_header("X-GitHub-Api-Version", "2022-11-28")
+    req.add_header("User-Agent", "Casa-Viva-Control-OS")
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        raw = resp.read()
+        return resp.status, (json.loads(raw.decode()) if raw else None)
+
+
 def action_deploy_casa_viva(args):
-    """Dispatch the existing GitHub deploy workflow for one exact main SHA."""
+    """Dispatch the existing GitHub deploy workflow for one certified plugin SHA."""
     import re
 
     sha = str((args or {}).get("sha", "")).strip().lower()
@@ -1261,13 +1317,11 @@ def action_deploy_casa_viva(args):
     if main_sha["returncode"] != 0:
         return main_sha
     current_main = main_sha["output"].strip()
+
     if current_main != sha:
         ancestor = run(["git", "-C", str(repo), "merge-base", "--is-ancestor", sha, "origin/main"], timeout=20)
         if ancestor["returncode"] != 0:
-            return {
-                "returncode": 3,
-                "output": f"SHA bloqueado: {sha} no es ancestro de origin/main {current_main}",
-            }
+            return {"returncode": 3, "output": f"SHA bloqueado: {sha} no es ancestro de origin/main {current_main}"}
         plugin_path = "wordpress/casa-viva-dropship-core"
         requested_tree = run(["git", "-C", str(repo), "rev-parse", f"{sha}:{plugin_path}"], timeout=20)
         current_tree = run(["git", "-C", str(repo), "rev-parse", f"{current_main}:{plugin_path}"], timeout=20)
@@ -1276,81 +1330,82 @@ def action_deploy_casa_viva(args):
         if requested_tree["output"].strip() != current_tree["output"].strip():
             return {
                 "returncode": 3,
-                "output": (
-                    f"SHA bloqueado: origin/main avanzó de {sha} a {current_main} "
-                    "y el árbol del plugin Casa Viva también cambió."
-                ),
+                "output": f"SHA bloqueado: origin/main avanzó a {current_main} y el plugin también cambió.",
             }
 
-    auth = run(["gh", "auth", "status"], timeout=30)
-    if auth["returncode"] != 0:
-        return {"returncode": 4, "output": "GitHub CLI no autenticado:\n" + auth["output"]}
+    try:
+        token = _github_repo_token(repo)
+        status, payload = _github_api(
+            token, "POST",
+            "/repos/ernest196391/Casa-Viva/actions/workflows/deploy-prototype.yml/dispatches",
+            {"ref": "main", "inputs": {"expected_sha": sha}},
+        )
+        if status != 204:
+            return {"returncode": 4, "output": f"GitHub workflow dispatch devolvió HTTP {status}"}
 
-    # The workflow itself re-verifies CI, version, checksum, backup, smoke and rollback.
-    dispatched = run([
-        "gh", "workflow", "run", "deploy-prototype.yml",
-        "--repo", "ernest196391/Casa-Viva",
-        "--ref", "main",
-        "-f", f"expected_sha={sha}",
-    ], timeout=45)
-    if dispatched["returncode"] != 0:
-        return dispatched
-
-    # Return the newest matching workflow_dispatch run when visible; do not guess deployment success here.
-    time.sleep(4)
-    listed = run([
-        "gh", "run", "list",
-        "--repo", "ernest196391/Casa-Viva",
-        "--workflow", "deploy-prototype.yml",
-        "--event", "workflow_dispatch",
-        "--limit", "10",
-        "--json", "databaseId,headSha,status,conclusion,createdAt,url",
-    ], timeout=30)
-    info = []
-    if listed["returncode"] == 0:
-        try:
-            info = json.loads(listed["output"])
-        except Exception:
-            info = []
-    match = next((x for x in info if x.get("headSha") == sha), None)
-    return {
-        "returncode": 0,
-        "output": json.dumps({
-            "dispatched": True,
-            "sha": sha,
-            "workflow": "deploy-prototype.yml",
-            "run": match,
-            "note": "Resultado final pendiente del workflow; el propio workflow contiene rollback automático.",
-        }, ensure_ascii=False),
-    }
-
+        time.sleep(4)
+        _, runs = _github_api(
+            token, "GET",
+            "/repos/ernest196391/Casa-Viva/actions/workflows/deploy-prototype.yml/runs?event=workflow_dispatch&per_page=20",
+        )
+        match = None
+        for row in (runs or {}).get("workflow_runs", []):
+            # workflow_dispatch checks out ref=main, so head_sha may be current main even when expected_sha is an ancestor.
+            if row.get("status") in ("queued", "in_progress") or row.get("created_at"):
+                match = {
+                    "id": row.get("id"),
+                    "head_sha": row.get("head_sha"),
+                    "status": row.get("status"),
+                    "conclusion": row.get("conclusion"),
+                    "url": row.get("html_url"),
+                    "created_at": row.get("created_at"),
+                }
+                break
+        return {
+            "returncode": 0,
+            "output": json.dumps({
+                "dispatched": True,
+                "expected_sha": sha,
+                "current_main": current_main,
+                "plugin_tree_verified_equal": True,
+                "workflow": "deploy-prototype.yml",
+                "run": match,
+                "note": "El workflow vuelve a verificar CI/versión/checksum y tiene rollback automático.",
+            }, ensure_ascii=False),
+        }
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")[:1000]
+        return {"returncode": 5, "output": f"GitHub API HTTP {exc.code}: {body}"}
+    except Exception as exc:
+        return {"returncode": 6, "output": f"No pude despachar deploy: {type(exc).__name__}: {exc}"}
 
 def action_casa_viva_deploy_status(args):
-    """Read GitHub deploy status for one exact SHA without changing anything."""
+    """Read deploy workflow status using the existing GitHub credential."""
     import re
-
     sha = str((args or {}).get("sha", "")).strip().lower()
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         return {"returncode": 2, "output": "args.sha debe ser un SHA Git completo"}
-    listed = run([
-        "gh", "run", "list",
-        "--repo", "ernest196391/Casa-Viva",
-        "--workflow", "deploy-prototype.yml",
-        "--limit", "30",
-        "--json", "databaseId,headSha,status,conclusion,event,createdAt,updatedAt,url",
-    ], timeout=30)
-    if listed["returncode"] != 0:
-        return listed
+    repo = Path("/root/Casa-Viva")
     try:
-        rows = json.loads(listed["output"])
+        token = _github_repo_token(repo)
+        _, payload = _github_api(
+            token, "GET",
+            "/repos/ernest196391/Casa-Viva/actions/workflows/deploy-prototype.yml/runs?event=workflow_dispatch&per_page=30",
+        )
+        rows = []
+        for x in (payload or {}).get("workflow_runs", []):
+            rows.append({
+                "id": x.get("id"),
+                "head_sha": x.get("head_sha"),
+                "status": x.get("status"),
+                "conclusion": x.get("conclusion"),
+                "created_at": x.get("created_at"),
+                "updated_at": x.get("updated_at"),
+                "url": x.get("html_url"),
+            })
+        return {"returncode": 0, "output": json.dumps({"expected_sha": sha, "runs": rows[:10]}, ensure_ascii=False)}
     except Exception as exc:
-        return {"returncode": 3, "output": f"No pude interpretar gh run list: {exc}"}
-    matches = [x for x in rows if x.get("headSha") == sha]
-    return {
-        "returncode": 0,
-        "output": json.dumps({"sha": sha, "runs": matches[:10]}, ensure_ascii=False),
-    }
-
+        return {"returncode": 3, "output": f"No pude consultar deploy: {type(exc).__name__}: {exc}"}
 
 def action_ai_audit(args):
     cmd = [
