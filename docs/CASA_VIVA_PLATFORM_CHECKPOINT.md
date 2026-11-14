@@ -469,3 +469,6 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 - Revisión del esquema real detectó y corrigió estado de run (waiting_approval) e impact JSONB; recibo conciliado por run_id/estado. Cuarentena con descriptores fijados, rechazo de enlaces y notas únicas sin sobrescritura.
 - CHECK crm_ops_bridge_action_chk conservada y ampliada exclusivamente con control_codex_consumer_publish (migración allow_fixed_control_codex_consumer_publish), verificada con convalidated=true.
 - Se añaden al CI la suite Python real y PostgreSQL 17 desechable con fixtures de negativos, duplicación y atomicidad. La migración de recibos no se ha aplicado y el servicio no se ha activado; pendiente validación CI y revisión de permisos.
+
+- PostgreSQL desechable del primer head auditado 4274ad2 pasó (job 132576605470). Se refuerzan después permisos de recibos y aislamiento por business_id/executor; nuevo head requiere repetir CI.
+- Gate identificado antes de activar: ops_decide_approval genérico devuelve a triaged; falta decisión de resultado IA que no reprograme el trabajo aprobado. No aplicar esta migración ni activar consumidor hasta certificar ese paso. PR permanece draft y producción sin cambios de ese consumidor.
