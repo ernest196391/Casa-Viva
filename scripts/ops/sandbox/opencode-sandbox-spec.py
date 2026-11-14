@@ -27,16 +27,26 @@ BWRAP_BIN = "bwrap"
 PROFILE_REL_PATH = "scripts/ops/sandbox/opencode-sandbox.profile"
 VERIFY_REL_PATH = "scripts/ops/sandbox/verify-sandbox.py"
 
+# Raíz del buzón cvdev. Fuente única de la ruta: el perfil AppArmor
+# asigna su variable @{CV_CONTROL_OS} a este mismo valor y el ejecutor
+# de Fase B usa esta ruta como valor por defecto de CV_OPENCODE_HOME.
+# Cambiar la ruta en el VPS invalida perfil y comando: hay que revisar
+# los tres artefactos juntos (las pruebas verifican la coincidencia).
+CV_CONTROL_OS = "/home/cvdev/control-os-dev"
+
 # Raíz de worktrees desechables del ejecutor de Fase B. El workspace
-# cedido al sandbox debe ser un directorio hijo directo de esta raíz.
-DEFAULT_WORK_ROOT = "/home/cvdev/control-os-dev/work"
+# cedido al sandbox debe ser un directorio hijo directo de esta raíz,
+# nombrado run-<id> (mismo identificador que el buzón).
+DEFAULT_WORK_ROOT = CV_CONTROL_OS + "/work"
 
 # Montajes de solo lectura del sistema (origen y destino idénticos).
 RO_BIND_SYSTEM = ("/usr",)
 # Montajes de solo lectura opcionales: si faltan en el host, se omiten.
+# /etc/ssl NUNCA se monta entero: contiene /etc/ssl/private (claves TLS
+# del host); solo se expone el directorio público de CA.
 RO_BIND_TRY_SYSTEM = (
     "/usr/local",
-    "/etc/ssl",
+    "/etc/ssl/certs",
     "/etc/localtime",
     "/etc/ld.so.cache",
     "/etc/ld.so.preload",
@@ -46,16 +56,21 @@ RO_BIND_TRY_SYSTEM = (
 # ocultar los demás run-<id> del host dentro del sandbox.
 WORK_ROOT_MASK = "__work_root__"
 TMPFS_TARGETS = ("/tmp", "/run", WORK_ROOT_MASK)
-SYMLINKS = (("/bin", "usr/bin"), ("/lib", "usr/lib"), ("/sbin", "usr/sbin"))
+SYMLINKS = (("/bin", "usr/bin"), ("/lib", "usr/lib"), ("/lib64", "usr/lib64"),
+            ("/sbin", "usr/sbin"))
 
-# Entorno del hijo: lista blanca; nunca hereda secretos. La integración
-# con el adaptador (Fase E) debe pasar aquí SOLO el entorno ya depurado
-# por `child_environment()` del adaptador.
-CHILD_ENV_KEYS = frozenset({"PATH", "HOME", "TMPDIR", "TERM", "LANG", "LC_ALL", "LC_CTYPE", "USER", "LOGNAME"})
+# Entorno del hijo: lista blanca; nunca hereda secretos. Debe cubrir
+# TODO el KEEP_ENV del adaptador (Fase D) para que la integración futura
+# pueda pasar el entorno ya depurado por `child_environment()`.
+CHILD_ENV_KEYS = frozenset({"PATH", "HOME", "TMPDIR", "TERM", "LANG", "LC_ALL", "LC_CTYPE", "USER", "LOGNAME", "SHELL"})
 DEFAULT_CHILD_ENV = {"PATH": "/usr/bin:/bin", "HOME": "/tmp", "TMPDIR": "/tmp"}
 
 ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 WORKSPACE_RE = re.compile(r"^/[A-Za-z0-9_][A-Za-z0-9_./-]{0,240}$")
+# Hoja del workspace: run-<id> con el mismo alfabeto que safe_id del
+# ejecutor (Fase B); el contrato documentado es run-<id>, no cualquier
+# hijo de la raíz.
+WORKSPACE_LEAF_RE = re.compile(r"^run-[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
 class SandboxSpecError(ValueError):
@@ -76,6 +91,8 @@ def validate_workspace(workspace, work_root: str = DEFAULT_WORK_ROOT) -> str:
         raise SandboxSpecError(
             f"workspace debe ser hijo directo de {work_root} (run-<id>): {workspace}"
         )
+    if not WORKSPACE_LEAF_RE.match(parts[-1]):
+        raise SandboxSpecError(f"workspace debe llamarse run-<id>: {workspace}")
     return workspace
 
 
@@ -174,9 +191,13 @@ def validate_command(cmd, work_root: str = DEFAULT_WORK_ROOT) -> list:
     for required in ("--unshare-all", "--die-with-parent", "--new-session", "--clearenv"):
         if flag_count(required) != 1:
             violations.append(f"falta {required} (exactamente una vez)")
-    for forbidden in ("--share-net", "--dev-bind", "--bind-try"):
+    for forbidden in ("--share-net", "--dev-bind", "--dev-bind-try", "--bind-try"):
         if flag_count(forbidden):
             violations.append(f"bandera prohibida presente: {forbidden}")
+
+    for key, _value in _pairs(cmd, "--setenv"):
+        if key not in CHILD_ENV_KEYS:
+            violations.append(f"--setenv con clave fuera de lista blanca: {key}")
 
     ro_pairs = _pairs(cmd, "--ro-bind") + _pairs(cmd, "--ro-bind-try")
     allowed_ro = set(RO_BIND_SYSTEM) | set(RO_BIND_TRY_SYSTEM)
@@ -236,9 +257,16 @@ PROFILE_HEADER = f"profile {PROFILE_NAME} /usr/bin/bwrap"
 PROFILE_REQUIRED = ("userns,", "deny network,")
 PROFILE_REQUIRED_WRITE = "@{CV_CONTROL_OS}/work/{,**} rw,"
 PROFILE_REQUIRED_IX = "/usr/bin/** ix,"
+# Lecturas requeridas: bibliotecas (incluido /usr/lib64, que aloja el
+# cargador dinámico en distros usrmerge) y CA TLS públicas.
+PROFILE_REQUIRED_READ = ("/usr/lib/** mr,", "/usr/lib64/** mr,", "/etc/ssl/certs/** r,")
 PROFILE_FORBIDDEN_SUBSTRINGS = ("unconfined", "capability", "net_admin")
 PROFILE_WRITE_PREFIXES = ("@{CV_CONTROL_OS}/work/", "/tmp/")
-PROFILE_FORBIDDEN_RULES = ("/ rw,", "/** rw,", "/etc/{,**} rw,", "/home/{,", "/ rwk,")
+PROFILE_FORBIDDEN_RULES = (
+    "/ rw,", "/** rw,", "/etc/{,**} rw,", "/home/{,", "/ rwk,",
+    # /etc/ssl entero expone /etc/ssl/private (claves TLS del host).
+    "/etc/ssl/** r,", "/etc/ssl/private",
+)
 
 
 def _profile_rules(text: str) -> list:
@@ -302,7 +330,12 @@ def validate_profile(text) -> list:
         if any(rule in candidate for candidate in rules):
             violations.append(f"regla demasiado amplia: {rule}")
 
-    for required in PROFILE_REQUIRED + (PROFILE_REQUIRED_WRITE, PROFILE_REQUIRED_IX):
+    for required in (
+        *PROFILE_REQUIRED,
+        PROFILE_REQUIRED_WRITE,
+        PROFILE_REQUIRED_IX,
+        *PROFILE_REQUIRED_READ,
+    ):
         if not any(required in rule for rule in rules):
             violations.append(f"falta regla requerida: {required}")
 

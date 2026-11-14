@@ -36,18 +36,26 @@ profile cv-opencode-bwrap /usr/bin/bwrap flags=(attach_disconnected,mediate_dele
   # Defensa en profundidad: el proceso aislado no usa red (el namespace
   # de red ya está aislado por bwrap). La regla cubre inet/inet6/raw y
   # no afecta a sockets UNIX de abi 4.0.
+  # ATENCIÓN: con esta regla la jaula NO puede ejecutar el modelo
+  # remoto (la CLI de OpenCode necesita salida a la red). Es una
+  # decisión pendiente de diseño, ver docs/CONTROL_OS_SANDBOX_PROPOSAL.md
+  # §4/§6: nunca aflojar esta regla sin revisión humana.
   deny network,
 
   # Binarios: los hijos heredan este perfil (ix). Bibliotecas y datos.
+  # /usr/lib64 cubre el cargador dinámico en distros usrmerge (el
+  # intérprete ELF se resuelve dentro de la jaula vía /lib64 → usr/lib64).
   /usr/bin/** ix,
   /usr/local/bin/** ix,
   /usr/lib/** mr,
+  /usr/lib64/** mr,
   /usr/share/** r,
 
-  # Lectura del sistema: enlazador dinámico, zona horaria y CA TLS
-  # (los únicos /etc montados dentro de la jaula, todos read-only).
-  /etc/{localtime,ld.so.cache,ld.so.preload,protocols,services} r,
-  /etc/ssl/** r,
+  # Lectura del sistema: los únicos /etc concedidos, todos montados
+  # read-only. /etc/ssl NUNCA entero (contiene /etc/ssl/private con las
+  # claves TLS del host): solo el directorio público de CA.
+  /etc/{localtime,ld.so.cache,ld.so.preload} r,
+  /etc/ssl/certs/** r,
 
   # Escritura permitida: únicamente el worktree desechable y tmpfs.
   # El resto del árbol queda denegado por omisión.

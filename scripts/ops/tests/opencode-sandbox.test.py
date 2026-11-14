@@ -2,11 +2,15 @@
 """Pruebas de la PROPUESTA de sandbox Bubblewrap + AppArmor (Fase E).
 
 Cubre: invariantes del perfil AppArmor propuesto (sin unconfined, sin
-capabilities, userns y denegación de red presentes, escritura limitada),
-contrato del comando Bubblewrap (montaje mínimo: sistema read-only, un
-único destino de escritura, red aislada, entorno limpio), lógica del
-arnés de pruebas negativas con runner falso, protecciones contra
-ejecución accidental del arnés y escaneo estático de la fuente.
+capabilities, userns y denegación de red presentes, escritura limitada,
+lecturas acotadas sin /etc/ssl/private ni /etc/ssl entero, /usr/lib64
+para el cargador), contrato del comando Bubblewrap (montaje mínimo:
+sistema read-only, un único destino de escritura, red aislada, entorno
+limpio por lista blanca en build y en validate, hoja run-<id>), lógica
+del arnés de pruebas negativas con runner falso, protecciones contra
+ejecución accidental del arnés, coherencia de ruta entre perfil, módulo
+y ejecutor (CV_CONTROL_OS / CV_OPENCODE_HOME), el conflicto documentado
+con el modelo remoto y escaneo estático de la fuente.
 
 Importante: NINGUNA prueba ejecuta bwrap, apparmor_parser ni consulta
 rutas del sistema ni del VPS. El arnés real (verify-sandbox.py) solo se
@@ -18,6 +22,7 @@ Ejecutar: python3 scripts/ops/tests/opencode-sandbox.test.py
 import ast
 import importlib.util
 import json
+import re
 import stat
 import subprocess
 import sys
@@ -32,6 +37,7 @@ PROFILE_PATH = SANDBOX_DIR / "opencode-sandbox.profile"
 VERIFY_PATH = SANDBOX_DIR / "verify-sandbox.py"
 REPO = HERE.parent.parent.parent
 ADAPTER_PATH = OPS / "opencode-adapter.py"
+EXECUTOR_PATH = OPS / "opencode-executor.py"
 VALIDATE_PATH = REPO / ".github" / "workflows" / "validate.yml"
 
 _spec = importlib.util.spec_from_file_location("cv_sandbox_spec", SPEC_PATH)
@@ -46,6 +52,7 @@ PROFILE_TEXT = PROFILE_PATH.read_text(encoding="utf-8")
 SPEC_TEXT = SPEC_PATH.read_text(encoding="utf-8")
 VERIFY_TEXT = VERIFY_PATH.read_text(encoding="utf-8")
 ADAPTER_TEXT = ADAPTER_PATH.read_text(encoding="utf-8")
+EXECUTOR_TEXT = EXECUTOR_PATH.read_text(encoding="utf-8")
 VALIDATE_TEXT = VALIDATE_PATH.read_text(encoding="utf-8")
 
 WORK_ROOT = spec.DEFAULT_WORK_ROOT
@@ -108,8 +115,19 @@ class ProfileFileTests(unittest.TestCase):
             )
 
     def test_profile_variable_matches_spec_work_root(self):
-        self.assertIn("@{CV_CONTROL_OS} = /home/cvdev/control-os-dev", PROFILE_TEXT)
-        self.assertEqual(WORK_ROOT, "/home/cvdev/control-os-dev/work")
+        self.assertIn(f"@{{CV_CONTROL_OS}} = {spec.CV_CONTROL_OS}", PROFILE_TEXT)
+        self.assertEqual(WORK_ROOT, f"{spec.CV_CONTROL_OS}/work")
+
+    def test_profile_never_grants_etc_ssl_wide_read(self):
+        rules = spec._profile_rules(PROFILE_TEXT)
+        joined = "\n".join(rules)
+        self.assertNotIn("/etc/ssl/** r,", joined)
+        self.assertNotIn("/etc/ssl/private", joined)
+        self.assertIn("/etc/ssl/certs/** r,", joined)
+
+    def test_profile_covers_dynamic_loader_in_usr_lib64(self):
+        rules = spec._profile_rules(PROFILE_TEXT)
+        self.assertIn("/usr/lib64/** mr,", rules)
 
 
 class ProfileNegativeTests(unittest.TestCase):
@@ -142,6 +160,34 @@ class ProfileNegativeTests(unittest.TestCase):
             "profile cv-other /usr/bin/other flags=\nprofile cv-opencode-bwrap /usr/bin/bwrap flags=",
         )
 
+    def test_detects_wide_etc_ssl_read_exposing_private_keys(self):
+        self.mutate("/etc/ssl/certs/** r,", "/etc/ssl/** r,")
+
+    def test_detects_missing_certs_read(self):
+        self.mutate("  /etc/ssl/certs/** r,", "  # /etc/ssl/certs/** r,")
+
+    def test_detects_missing_usr_lib64_rule(self):
+        self.mutate("  /usr/lib64/** mr,", "  # /usr/lib64/** mr,")
+
+
+class CrossArtifactTests(unittest.TestCase):
+    """CV_CONTROL_OS: una sola ruta en perfil, módulo y ejecutor."""
+
+    def test_spec_work_root_derived_from_control_os(self):
+        self.assertEqual(spec.DEFAULT_WORK_ROOT, spec.CV_CONTROL_OS + "/work")
+
+    def test_executor_default_home_matches_control_os(self):
+        match = re.search(
+            r'os\.environ\.get\("CV_OPENCODE_HOME", "([^"]+)"\)', EXECUTOR_TEXT
+        )
+        self.assertIsNotNone(match, "ejecutor sin valor por defecto de CV_OPENCODE_HOME")
+        self.assertEqual(match.group(1), spec.CV_CONTROL_OS)
+        self.assertEqual(spec.DEFAULT_WORK_ROOT, spec.CV_CONTROL_OS + "/work")
+
+    def test_profile_write_rule_covers_work_root(self):
+        self.assertIn("@{CV_CONTROL_OS}/work/{,**} rw,", PROFILE_TEXT)
+        self.assertTrue(spec.DEFAULT_WORK_ROOT.startswith(spec.CV_CONTROL_OS + "/"))
+
 
 class CommandTests(unittest.TestCase):
     def setUp(self):
@@ -167,6 +213,14 @@ class CommandTests(unittest.TestCase):
         self.assertIn(WORK_ROOT, tmpfs)
         self.assertIn("/tmp", tmpfs)
         self.assertIn("/run", tmpfs)
+
+    def test_build_binds_only_public_certs_not_etc_ssl(self):
+        ro_pairs = spec._pairs(self.cmd, "--ro-bind") + spec._pairs(self.cmd, "--ro-bind-try")
+        self.assertIn(("/etc/ssl/certs", "/etc/ssl/certs"), ro_pairs)
+        self.assertNotIn(("/etc/ssl", "/etc/ssl"), ro_pairs)
+
+    def test_build_includes_lib64_symlink_for_dynamic_loader(self):
+        self.assertIn(("usr/lib64", "/lib64"), spec._pairs(self.cmd, "--symlink"))
 
     def test_build_system_binds_read_only(self):
         self.assertIn("--ro-bind", self.cmd)
@@ -201,10 +255,19 @@ class CommandTests(unittest.TestCase):
         with self.assertRaises(spec.SandboxSpecError):
             spec.validate_child_env("no-dict")
 
+    def test_child_env_covers_adapter_keep_env(self):
+        # Toda clave conservada por child_environment() del adaptador
+        # (Fase D) debe estar habilitada en CHILD_ENV_KEYS (Fase E),
+        # incluida SHELL; nunca al revés con claves de secretos.
+        adapter_keys = set(re.findall(r'"([A-Z_]+)"', ADAPTER_TEXT.split("KEEP_ENV = (")[1].split(")")[0]))
+        self.assertEqual(adapter_keys <= set(spec.CHILD_ENV_KEYS), True)
+
     def test_workspace_validation(self):
         self.assertEqual(spec.validate_workspace(WORKSPACE), WORKSPACE)
+        self.assertEqual(spec.validate_workspace(f"{WORK_ROOT}/run-1a_b-2"), f"{WORK_ROOT}/run-1a_b-2")
         for bad in ("run-123", f"{WORK_ROOT}", "/etc/passwd", f"{WORK_ROOT}/../escape",
-                    f"{WORK_ROOT}/a/b", "", "/tmp/run-1"):
+                    f"{WORK_ROOT}/a/b", "", "/tmp/run-1", f"{WORK_ROOT}/directorio",
+                    f"{WORK_ROOT}/run-"):
             with self.assertRaises(spec.SandboxSpecError):
                 spec.validate_workspace(bad)
 
@@ -228,6 +291,26 @@ class CommandNegativeTests(unittest.TestCase):
         tampered = self.cmd[:1] + ["--dev-bind", "/", "/"] + self.cmd[1:]
         violations = spec.validate_command(tampered)
         self.assertTrue(any("--dev-bind" in v for v in violations))
+
+    def test_rejects_dev_bind_try(self):
+        index = self.cmd.index("--")
+        tampered = self.cmd[:index] + ["--dev-bind-try", "/", "/"] + self.cmd[index:]
+        violations = spec.validate_command(tampered)
+        self.assertTrue(any("--dev-bind-try" in v for v in violations))
+
+    def test_rejects_setenv_outside_whitelist(self):
+        index = self.cmd.index("--")
+        tampered = self.cmd[:index] + [
+            "--setenv", "SUPABASE_SERVICE_ROLE_KEY", "filtrado",
+        ] + self.cmd[index:]
+        violations = spec.validate_command(tampered)
+        self.assertTrue(any("--setenv" in v for v in violations))
+
+    def test_rejects_bind_of_wide_etc_ssl(self):
+        index = self.cmd.index("--")
+        tampered = self.cmd[:index] + ["--ro-bind-try", "/etc/ssl", "/etc/ssl"] + self.cmd[index:]
+        violations = spec.validate_command(tampered)
+        self.assertTrue(any("/etc/ssl" in v for v in violations))
 
     def test_rejects_share_net(self):
         tampered = self.cmd[:1] + ["--share-net"] + self.cmd[1:]
@@ -425,6 +508,24 @@ class StaticScanTests(unittest.TestCase):
         self.assertIn("no instalada", text)
         self.assertIn("no probada", text)
         self.assertIn("reversión", text)
+
+    def test_proposal_document_declares_remote_model_conflict(self):
+        # deny network hace inviable el modelo remoto dentro de la jaula
+        # tal como está propuesta: el documento no puede perderlo.
+        doc = (REPO / "docs" / "CONTROL_OS_SANDBOX_PROPOSAL.md").read_text(encoding="utf-8").lower()
+        self.assertIn("modelo remoto", doc)
+        self.assertIn("credenciales", doc)
+        self.assertIn("proxy", doc)
+
+    def test_proposal_document_declares_path_single_source(self):
+        doc = (REPO / "docs" / "CONTROL_OS_SANDBOX_PROPOSAL.md").read_text(encoding="utf-8")
+        self.assertIn("CV_OPENCODE_HOME", doc)
+        self.assertIn("@{CV_CONTROL_OS} = /home/cvdev/control-os-dev", doc)
+
+    def test_proposal_document_keeps_ssl_private_out(self):
+        doc = (REPO / "docs" / "CONTROL_OS_SANDBOX_PROPOSAL.md").read_text(encoding="utf-8")
+        self.assertIn("/etc/ssl/private", doc)
+        self.assertIn("/etc/ssl/certs", doc)
 
 
 if __name__ == "__main__":
