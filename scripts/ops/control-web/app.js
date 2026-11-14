@@ -61,6 +61,7 @@ function renderTasks(){
  if(term)rows=rows.filter(x=>('#'+x.id+' '+x.title+' '+(x.summary||'')).toLocaleLowerCase('es').includes(term));
  rows.sort((a,b)=>Date.parse(b.created_at||b.at)-Date.parse(a.created_at||a.at));
  const labels={new:'Tus solicitudes nuevas',pending:'Solicitudes nuevas pendientes',done:'Solicitudes nuevas finalizadas',history:'Historial anterior'};
+ $('list-help').textContent=state.filter==='history'?'Muestra del historial conservado. Las tareas anteriores siguen registradas; esta vista no las cancela ni las ejecuta.':'Tus solicitudes nuevas aparecerán aquí, con la más reciente primero. Lo anterior está en Historial anterior.';
  $('list-title').textContent=labels[state.filter];$('task-count').textContent=rows.length;
  $('tasks-list').replaceChildren(...rows.map(taskCard));
  if(!rows.length)empty($('tasks-list'),term?'No hay coincidencias en esta vista.':state.filter==='new'?'Todo listo para empezar. Pulsa Salud del sistema o escribe tu primera solicitud.':'No hay solicitudes en esta vista.');
@@ -115,7 +116,7 @@ $('decisions-list').addEventListener('click',async e=>{
 $('task-form').addEventListener('submit',async e=>{
  e.preventDefault();const buttons=[$('task-form').querySelector('button'),...document.querySelectorAll('[data-query]')];buttons.forEach(b=>b.disabled=true);$('task-feedback').textContent='Enviando solicitud…';
  try{const r=await fetch('./?action=task',{method:'POST',headers:{'Content-Type':'application/json','X-CV-Nonce':document.querySelector('meta[name=cv-nonce]').content},body:JSON.stringify({text:$('task-text').value})});const b=await r.json();if(!r.ok||!b.success)throw Error(b.data?.message||'No se pudo guardar.');state.pending={id:b.data.id};$('task-feedback').textContent='Solicitud recibida. Asignando número…';$('task-text').value='';$('task-search').value='';showTab('work');setFilter('new');refresh();setTimeout(refresh,4000);setTimeout(refresh,12000);}
- catch(err){$('task-feedback').textContent=err.message;}
+ catch(err){$('task-feedback').textContent=err instanceof TypeError?'No pude confirmar la recepción. Pulsa Actualizar y revisa la lista antes de reenviar.':err.message;}
  finally{buttons.forEach(b=>b.disabled=false);}
 });
 refresh();setInterval(refresh,15000);
