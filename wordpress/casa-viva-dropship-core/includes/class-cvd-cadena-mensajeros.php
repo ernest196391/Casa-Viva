@@ -56,7 +56,7 @@ final class CVD_Cadena_Mensajeros {
 	// ------------------------------------------------------------------ Ajustes
 
 	public static function on(): bool { return 'no' !== sanitize_key( (string) get_option( 'cvd_cadena', 'si' ) ); }
-	public static function remind_min(): int { return max( 1, absint( get_option( 'cvd_cadena_aviso_min', 10 ) ) ); }
+	public static function remind_min(): int { return max( 20, absint( get_option( 'cvd_cadena_aviso_min', 20 ) ) ); }
 	public static function group_min(): int { return max( self::remind_min() + 1, absint( get_option( 'cvd_cadena_grupo_min', 20 ) ) ); }
 	public static function stable_seconds(): int { return min( 600, max( 0, absint( get_option( 'cvd_cadena_estable_seg', 60 ) ) ) ); }
 
@@ -473,33 +473,23 @@ final class CVD_Cadena_Mensajeros {
 		if ( ! $holder || ! $assigned_at ) { return 'skip'; }
 		$age = $now - $assigned_at;
 		$num = $order->get_order_number();
-		if ( $age >= self::group_min() * 60 ) {
-			$minutes = self::group_min();
-			if ( ! self::system_release( $order, 'sin_respuesta', 'no aceptó en ' . $minutes . ' min', false, 'reloj' ) ) { return 'error'; }
-			$fresh = wc_get_order( $order->get_id() );
-			if ( $fresh ) {
-				self::queue_lost( $fresh, $holder->ID, '', '⏱️ Pasaron ' . $minutes . ' min sin que aceptaras la carrera *#' . $num . '*: salió al grupo de mensajeros. Ya no es tuya; no tienes que hacer nada con ese pedido.' );
-				self::queue_gestora( $fresh, 'grupo', '⏱️ *#' . $num . '*: ' . self::first_name( $holder->display_name ) . ' no aceptó en ' . $minutes . ' min. Lo pasé al grupo de mensajeros; te aviso quién lo coge.' );
-			}
-			return 'group';
-		}
 		if ( $age >= self::remind_min() * 60 && absint( $order->get_meta( self::REMINDED_META, true ) ) < $assigned_at ) {
 			$order->update_meta_data( self::REMINDED_META, $now );
 			$backup = self::backup( $order );
 			$stage = sanitize_key( (string) $order->get_meta( self::STAGE_META, true ) );
 			$open_backup = $backup && $backup->ID !== $holder->ID && 'backup' !== $stage;
-			if ( $open_backup ) { $order->update_meta_data( self::INVITED_META, $backup->ID ); }
+			// El respaldo solo se activa tras una decisión explícita.
 			$order->save();
 			$order = wc_get_order( $order->get_id() );
-			$left = self::group_min() - self::remind_min();
+			// No se libera por tiempo: la gestora decide después de llamar.
 			self::queue( $order, 'recordatorio', 'messenger', $holder->ID, implode( "\n", array(
 				'⏰ *Tienes la carrera #' . $num . '* (' . CVD_Delivery::destination_zone( $order ) . ') y todavía no la aceptaste.',
-				'Responde con la *hora* a la que puedes ir, o «suelto» si no puedes.',
-				$open_backup ? 'Ya se la ofrecí también a otro mensajero: el primero que acepte la lleva.' : 'Si en ' . $left . ' min no la aceptas, sale al grupo.',
+				'Confirma «OK» o «aceptado» para indicar que recibiste el vale; si no puedes, responde «suelto».',
+				'La carrera sigue asignada hasta que la gestora o la tienda decidan cambiarla.',
 			) ) );
-			if ( $open_backup ) { self::queue_invite( $order, $backup, 'respaldo' ); }
+			// No ofrecer a un segundo mensajero automáticamente mientras el primero conserva la carrera.
 			self::queue_gestora( $order, 'espera', '⏰ *#' . $num . '*: ' . self::first_name( $holder->display_name ) . ' todavía no acepta (' . self::remind_min() . ' min). '
-				. ( $open_backup ? 'Se lo ofrecí también a ' . self::first_name( $backup->display_name ) . ' (tu 2.º): el primero que acepte lo lleva.' : 'Si en ' . $left . ' min nadie acepta, sale al grupo solo.' )
+				. ( 'Llámalo para confirmar. Después puedes pasarlo al grupo o mantener la espera.' )
 				. ' Puedes cambiar el mensajero en Ventas.' );
 			return 'reminded';
 		}
