@@ -1,6 +1,6 @@
-# Control OS × OpenCode — Buzón, ejecutor cvdev y consumidor de resultados
+# Control OS × OpenCode — Buzón, ejecutor cvdev, consumidor de resultados y adaptador de CLI
 
-Estado: Fases A, B y C (simulación) implementadas en rama local `control-os/opencode-fase-a`. Sin push, sin merge, sin despliegue y sin acceso a Supabase real.
+Estado: Fases A, B y C (simulación) más Fase D (adaptador de CLI, bloqueado para invocación real) implementadas en rama local `control-os/opencode-fase-a`. Sin push, sin merge, sin despliegue y sin acceso a Supabase real.
 
 ## Papeles
 
@@ -84,3 +84,22 @@ Ruta por defecto: `/home/cvdev/control-os-dev` (configurable con `CV_OPENCODE_HO
 - Fase B: `scripts/ops/tests/opencode-executor.test.py` (47 casos): identificadores, rutas, paquete, buzón atómico, duplicados, caducidad, ejecución real sobre repo temporal, diff, límites, whitelist de git, sweeps y escaneo estático de la fuente (sin red, sin shell, sin rutas de sistema, sin credenciales).
 - Fase C: `scripts/ops/tests/opencode-result-consumer.test.py` (28 casos): validación del paquete de resultados, conciliación con run/tarea (huérfanos, task_id/repo/public_id inconciliables), duplicados, caducidad de resultados y de runs waiting_ai, cuarentena con motivo, aprobación y rechazo humanos, persistencia de la tienda simulada y escaneo estático de la fuente (sin red, sin subprocesos, sin `/root`, sin credenciales). Datos ficticios; sin Supabase.
 - Todo cableado en `.github/workflows/validate.yml` junto al `py_compile` del Ops Bridge.
+
+## Adaptador real de CLI (Fase D)
+
+`scripts/ops/opencode-adapter.py` envuelve la única interfaz de invocación del modelo admitida:
+
+```
+opencode run --pure -m opencode/glm-5.3-flash-free --format json
+```
+
+- **Superficie estricta**: el comando se construye por lista blanca (sin shell, sin `--auto`, sin argumentos provenientes del paquete); el prompt es un único elemento de argv (≤200k, sin NUL) y el modelo debe estar en `ALLOWED_MODELS`.
+- **Entorno del hijo por lista de conservación**: solo `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `LANG`, `LC_ALL`, `LC_CTYPE`, `TMPDIR`, `TERM`. Nunca hereda claves de servicio, tokens ni credenciales; el adaptador no consulta rutas de configuración del sistema.
+- **Límites de tiempo y recursos**: timeout configurable 5..900 s (por defecto 600); al vencer se mata el grupo de procesos completo (SIGKILL vía `os.killpg`, sesión propia con `start_new_session=True`). El hijo corre con `RLIMIT_FSIZE` igual al máximo de salida (≤10 MB, por defecto 1 MB), `RLIMIT_CPU` (timeout + 30 s), `RLIMIT_AS` 2 GiB, `RLIMIT_NPROC` 512 y `RLIMIT_CORE=0`.
+- **Validación estricta de la salida**: JSON Lines; cada línea no vacía debe ser un objeto con `type` string (≤64 caracteres); el texto de respuesta se extrae solo de eventos `type == "text"` con `part.text` o `text` string; ≤10 000 eventos. JSON inválido, objeto malformado o no UTF-8 → error de protocolo. El vocabulario de eventos se calibrará en la primera invocación real supervisada.
+- **Errores tipificados** con código de salida CLI: uso 2, deshabilitado 3, bloqueado 4, timeout 5, límite de salida 6, protocolo 7, fallo de CLI 8. `stderr` se registra truncado (≤4000) y sin tratar como confiable.
+- **Bloqueo de aislamiento (estado actual)**: `ISOLATION_GUARANTEED = False`. `--pure` solo desactiva plugins externos; **no** aísla archivos, comandos ni red. Mientras no existan restricciones efectivas de permisos y un entorno aislado (sandbox sin red, escritura limitada al workspace, p. ej. nsjail/bubblewrap), el adaptador se niega a ejecutar el binario real (`AdapterBlocked`) y ningún proceso invoca el modelo automáticamente.
+- **Integración desactivada por defecto**: `invoke()` exige `CV_OPENCODE_MODEL_ENABLED=1` y `CV_OPENCODE_SANDBOX_ATTESTED=1`; aun con ambos activados, el binario real sigue bloqueado por la invariante anterior. El binario puede ajustarse solo para pruebas (`CV_OPENCODE_BIN`).
+- **No cableado**: el ejecutor de Fase B y el consumidor de Fase C no usan el adaptador (prueba estática lo verifica). El camino determinista (operaciones estructuradas + smoke), el buzón atómico y la aprobación humana se conservan intactos.
+- **Pruebas**: `scripts/ops/tests/opencode-adapter.test.py` (46 casos). **Todas las invocaciones de la suite usan un simulador de CLI** (script generado en un directorio temporal que registra argv/cwd/entorno recibido y emite escenarios controlados); ninguna prueba invoca el modelo real. Se prueban: puerta apagada por defecto, bloqueo de aislamiento, comando exacto, scrubbing de entorno, SIGXFSZ por `RLIMIT_FSIZE`, timeout con verificación de muerte real del grupo, JSONL estricto, errores de CLI y de contrato del runner, códigos de salida de `main()` y escaneo estático de la fuente (sin shell, sin red, sin `--auto`, sin secretos ni rutas de sistema).
+- **Invocación real del modelo**: pendiente. Requiere sandbox efectivo (Fase E) y calibración del esquema de eventos en una sesión supervisada; hasta entonces el adaptador solo es ejecutable con simulador o runner inyectado.
