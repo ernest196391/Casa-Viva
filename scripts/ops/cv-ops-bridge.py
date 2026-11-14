@@ -1599,6 +1599,72 @@ def action_cvdev_control_push(args):
         "head": head["output"].strip(), "push": pushed["output"][-10000:]
     }, ensure_ascii=False)}
 
+
+def action_snapshot_vivabot_live_branch(args):
+    """Push the exact clean live VivaBot HEAD to a review branch. Never changes local files or main."""
+    repo = Path("/root/vivabot")
+    if not (repo / ".git").exists():
+        return {"returncode": 2, "output": "/root/vivabot no es un checkout Git"}
+
+    tracked = run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=str(repo), timeout=20)
+    untracked = run(["git", "ls-files", "--others", "--exclude-standard"], cwd=str(repo), timeout=20)
+    if tracked["returncode"] != 0 or untracked["returncode"] != 0:
+        return {"returncode": 3, "output": "No pude comprobar limpieza del repo"}
+    if tracked["output"].strip() or untracked["output"].strip():
+        return {"returncode": 4, "output": "Snapshot bloqueado: el checkout VivaBot no está limpio"}
+
+    head = run(["git", "rev-parse", "HEAD"], cwd=str(repo), timeout=20)
+    if head["returncode"] != 0:
+        return head
+    live_sha = head["output"].strip()
+
+    fetched = run(["git", "fetch", "origin", "main"], cwd=str(repo), timeout=90)
+    if fetched["returncode"] != 0:
+        return fetched
+    remote = run(["git", "rev-parse", "origin/main"], cwd=str(repo), timeout=20)
+    if remote["returncode"] != 0:
+        return remote
+    remote_sha = remote["output"].strip()
+
+    names = run(["git", "ls-tree", "-r", "--name-only", "HEAD"], cwd=str(repo), timeout=30)
+    if names["returncode"] != 0:
+        return names
+    forbidden_names = {".env", "id_rsa", "id_ed25519", "authorized_keys", "credentials.json", "auth.json"}
+    forbidden_suffixes = (".pem", ".key", ".p12", ".pfx")
+    bad_names = []
+    for rel in names["output"].splitlines():
+        name = Path(rel).name.lower()
+        if name in forbidden_names or name.endswith(forbidden_suffixes):
+            bad_names.append(rel)
+    if bad_names:
+        return {"returncode": 5, "output": "Snapshot bloqueado por nombres sensibles:\n" + "\n".join(bad_names[:100])}
+
+    grep = run([
+        "git", "grep", "-I", "-l", "-E",
+        r"BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=|ANTHROPIC_API_KEY[[:space:]]*=|OPENAI_API_KEY[[:space:]]*=|AWS_SECRET_ACCESS_KEY[[:space:]]*=",
+        "HEAD", "--", "."
+    ], cwd=str(repo), timeout=45)
+    if grep["returncode"] not in (0, 1):
+        return grep
+    if grep["returncode"] == 0 and grep["output"].strip():
+        return {"returncode": 6, "output": "Snapshot bloqueado por patrones de secreto en archivos: " + ", ".join(grep["output"].splitlines()[:50])}
+
+    if live_sha == remote_sha:
+        return {"returncode": 0, "output": json.dumps({"changed": False, "head": live_sha, "origin_main": remote_sha}, ensure_ascii=False)}
+
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+    branch = f"control-os/live-vivabot-{live_sha[:8]}-{stamp}"
+    pushed = run(["git", "push", "origin", f"{live_sha}:refs/heads/{branch}"], cwd=str(repo), timeout=120)
+    if pushed["returncode"] != 0:
+        return pushed
+    return {"returncode": 0, "output": json.dumps({
+        "changed": True,
+        "branch": branch,
+        "live_sha": live_sha,
+        "origin_main": remote_sha,
+        "note": "Snapshot de revisión creado; producción y main no cambiaron."
+    }, ensure_ascii=False)}
+
 ACTIONS = {
     "health": action_health,
     "errors_open": action_errors_open,
@@ -1638,6 +1704,7 @@ ACTIONS = {
     "cvdev_rebase_resume": action_cvdev_rebase_resume,
     "cvdev_control_tests": action_cvdev_control_tests,
     "cvdev_control_push": action_cvdev_control_push,
+    "snapshot_vivabot_live_branch": action_snapshot_vivabot_live_branch,
 }
 
 
