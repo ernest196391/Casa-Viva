@@ -367,3 +367,10 @@ Al retomar el proyecto:
 - Herramientas denegadas, entorno sin credenciales, prompt/modelo/comandos fijos; ningún argumento de tarea modifica esos valores. Éxito exige evento text exacto CV_PROBE_OK y exit 0.
 - Tres regresiones locales pasaron: salida/redacción, timeout mata grupo y conserva diagnóstico, exit no cero. CI incluye la suite; resultado remoto pendiente al abrir PR.
 - Coste nuevo: 0. Sin activar el adaptador ni desplegar código comercial. Próximo: instalar bridge validado y repetir prueba supervisada.
+
+## CURRENT — Checkout dedicado certificado (2026-11-14)
+
+- Acción prepare_control_dev_checkout: destino fijo /home/cvdev/workspace/control-os-certified, exige SHA completo exacto de origin/main; checkout detached como cvdev, origin público sin credenciales. No mueve ramas, no cambia servicios ni cambia el worker.
+- Rechaza symlinks y checkouts existentes no coincidentes; reintento del mismo SHA comprueba limpieza y propiedad sin mutar. Fallo conserva archivos para diagnóstico, no borra ni resetea.
+- Próximo: CI, instalar bridge, ampliar allowlist conservando CHECK, preparar checkout y verificar propietario/SHA/limpieza. Luego conectar una tarea real determinista; el bootstrap por sí solo no demuestra E2E.
+- Coste adicional 0; IA no invocada; producción sin cambios. Autorizado por Ernesto continuar bloques 1–2.
