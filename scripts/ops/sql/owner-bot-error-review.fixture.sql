@@ -36,6 +36,8 @@ begin
  insert into public.ops_tasks(payload,risk) values('{"text":"errores del bot"}','sensitive');
  insert into public.ops_tasks(payload,approval_required) values('{"text":"errores del bot"}',true);
  insert into public.ops_tasks(payload,requested_by_ref) values('{"text":"errores del bot"}','otro');
+ insert into public.ops_tasks(payload,requested_by_ref) values('{"text":"errores del bot"}',null);
+ insert into public.ops_tasks(payload,requested_by_role) values('{"text":"errores del bot"}',null);
  insert into public.ops_tasks(payload,source) values('{"text":"errores del bot"}','legacy-crm-supervisor');
  if (select count(*) from public.crm_ops_bridge)<>n then raise exception 'guard bypass'; end if;
  -- WhatsApp path preserves owner_change and requires its original identity.
