@@ -2186,6 +2186,9 @@ def action_control_codex_sandbox(args):
         if not binary.exists():
             shutil.copyfile("/usr/bin/bwrap",binary)
             binary.chmod(0o755)
+        if ("security.capability" in os.listxattr(binary)
+                or binary.read_bytes()!=Path("/usr/bin/bwrap").read_bytes()):
+            return {"returncode":3,"output":"Binario distinto o con file capabilities"}
         if binary.stat().st_uid!=0 or binary.stat().st_mode & 0o6022:
             return {"returncode":3,"output":"Binario con propietario/permisos inseguros"}
         os.replace(temporary,policy)
@@ -2200,8 +2203,17 @@ def action_control_codex_sandbox(args):
     if boot["returncode"]:
         return {"returncode":5,"output":json.dumps({"stage":"bootstrap","probe":boot,
             "global_restriction":Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").read_text().strip()})}
+    canary = Path("/home/cvdev/control-os-auth/isolation-read-check")
+    canary.write_text("CONTROL_OS_FAKE_SECRET")
+    cv = pwd.getpwnam("cvdev")
+    os.chown(canary,cv.pw_uid,cv.pw_gid)
+    canary.chmod(0o600)
     checks = """import json,os,pathlib,socket
 report={}
+try:
+    pathlib.Path('/home/cvdev/control-os-auth/isolation-read-check').read_text();report['auth_read_denied']=False
+except OSError as e:
+    report['auth_read_denied']=e.errno in (1,13)
 p=pathlib.Path('.control-os-isolation-check')
 try:
     p.write_text('fixture'); report['workspace_write']=p.read_text()=='fixture'; p.unlink()
@@ -2221,6 +2233,7 @@ raise SystemExit(0 if all(report.values()) else 1)
 """
     verified = run(command+["-c",'sandbox_mode="workspace-write"',"sandbox","linux","--",
                    "/usr/bin/python3","-c",checks],cwd=work,timeout=30)
+    canary.unlink(missing_ok=True)
     return {"returncode":verified["returncode"],"output":json.dumps({
         "stage":"negative_tests","probe":verified,"bootstrap_passed":True,
         "global_restriction":Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").read_text().strip(),
