@@ -2007,9 +2007,9 @@ def action_control_codex_login(args):
         os.chmod(pid_path,0o600)
         live = True
     text = log.read_text(errors="replace")[-6000:] if log.exists() else ""
-    text = re.sub(r"\\x1b\\[[0-9;]*m", "", text)
-    url = re.search(r"https://auth\\.openai\\.com/[^\\s]+",text)
-    code = re.search(r"\\b[A-Z0-9]{4,8}-[A-Z0-9]{4,8}\\b",text)
+    text = re.sub(r"\x1b\[[0-9;]*m", "", text)
+    url = re.search(r"https://auth\.openai\.com/[^\s]+",text)
+    code = re.search(r"\b[A-Z0-9]{4,8}-[A-Z0-9]{4,8}\b",text)
     return {"returncode":0,"output":json.dumps({"logged_in":False,"login_running":live,
             "login_url":url.group(0) if url else None,
             "user_code":code.group(0) if code else None,
