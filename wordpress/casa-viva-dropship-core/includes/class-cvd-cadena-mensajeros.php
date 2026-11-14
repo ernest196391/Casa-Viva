@@ -472,6 +472,11 @@ final class CVD_Cadena_Mensajeros {
 		$assigned_at = self::utc_ts( (string) $order->get_meta( '_cvd_direct_assigned_at', true ) );
 		if ( ! $holder || ! $assigned_at ) { return 'skip'; }
 		$age = $now - $assigned_at;
+		// Escalamiento de confirmación solo entre 09:00 y 17:00, hora de Cuba.
+		// Los vales preparados después de las 17:00 se revisan a partir de las 09:00 siguientes.
+		$cuba = ( new DateTime( '@' . $now ) )->setTimezone( new DateTimeZone( 'America/Havana' ) );
+		$hour = (int) $cuba->format( 'G' );
+		if ( $hour < 9 || $hour >= 17 ) { return 'outside_confirmation_hours'; }
 		$num = $order->get_order_number();
 		if ( $age >= self::remind_min() * 60 && absint( $order->get_meta( self::REMINDED_META, true ) ) < $assigned_at ) {
 			$order->update_meta_data( self::REMINDED_META, $now );
