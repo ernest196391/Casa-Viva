@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""Casa Viva Control OS — arnés de pruebas negativas del sandbox (Fase E, PROPUESTA).
+
+Verifica, en una instalación real y supervisada, que la jaula Bubblewrap
++ AppArmor proposed en scripts/ops/sandbox/ DENIEGA lo que debe denegar:
+
+- bootstrap: el sandbox arranca y responde (control de vida).
+- write_workspace_allowed: control positivo, escribir en el worktree SÍ.
+- write_usr_denied / write_etc_denied / write_root_denied: escrituras
+  prohibidas fuera del workspace.
+- home_masked: el resto del home del host no es visible.
+- etc_shadow_absent: /etc/shadow no existe dentro de la jaula.
+- net_denied: no hay salida TCP.
+
+Importante:
+- ESTE ARNÉS NO SE EJECUTA EN CI Y NO SE HA EJECUTADO AÚN: la propuesta
+  no está instalada. Veredictos posibles: ok (todo denegado/permitido
+  según diseño), failed (alguna denegación faltó), sandbox-no-operativo
+  (la jaula ni siquiera arrancó: revisar la propuesta, NO forzarla con
+  un perfil más permisivo).
+- Las pruebas de CI solo ejercitan la lógica con un runner falso; nunca
+  invocan bwrap. La ejecución real exige pasar `--execute` explícito.
+- Nunca convertir un fallo en éxito aflojando el perfil o el comando:
+  los resultados alimentan la revisión humana del documento de propuesta.
+
+Uso (solo tras instalar el perfil y con revisión humana):
+    python3 scripts/ops/sandbox/verify-sandbox.py \
+        --workspace /home/cvdev/control-os-dev/work/run-<run_id> --execute
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import importlib.util
+
+_HERE = Path(__file__).resolve().parent
+
+_spec_file = _HERE / "opencode-sandbox-spec.py"
+_spec = importlib.util.spec_from_file_location("cv_opencode_sandbox_spec", _spec_file)
+spec = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(spec)
+
+SANDBOX_VERIFY_VERSION = "opencode-sandbox-verify-v1"
+
+VERDICT_OK = "ok"
+VERDICT_FAILED = "failed"
+VERDICT_NO_OPERATIVO = "sandbox-no-operativo"
+
+EXIT_OK = 0
+EXIT_USAGE = 2
+EXIT_REFUSED = 3
+EXIT_NO_OPERATIVO = 4
+EXIT_FAILED = 5
+
+CHECKS = (
+    "bootstrap",
+    "write_workspace_allowed",
+    "write_usr_denied",
+    "write_etc_denied",
+    "write_root_denied",
+    "home_masked",
+    "etc_shadow_absent",
+    "net_denied",
+)
+
+INNER_PROBE = r'''
+import json, os, socket, sys
+name = sys.argv[1]
+def done(ok, detail=""):
+    print(json.dumps({"check": name, "ok": bool(ok), "detail": str(detail)[:500]}))
+    sys.stdout.flush()
+    sys.exit(0)
+if name == "bootstrap":
+    done(True, "viva")
+elif name == "write_workspace_allowed":
+    try:
+        p = os.path.join(os.getcwd(), "__cv_probe_rw.txt")
+        with open(p, "w") as f:
+            f.write("x")
+        os.remove(p)
+        done(True)
+    except OSError as exc:
+        done(False, repr(exc))
+elif name == "write_usr_denied":
+    try:
+        with open("/usr/bin/__cv_probe_w", "wb") as f:
+            f.write(b"x")
+        os.remove("/usr/bin/__cv_probe_w")
+        done(False, "escritura en /usr/bin permitida (inesperado)")
+    except OSError:
+        done(True)
+elif name == "write_etc_denied":
+    try:
+        with open("/etc/__cv_probe_w", "w") as f:
+            f.write("x")
+        os.remove("/etc/__cv_probe_w")
+        done(False, "escritura en /etc permitida (inesperado)")
+    except OSError:
+        done(True)
+elif name == "write_root_denied":
+    try:
+        with open("/__cv_probe_w", "w") as f:
+            f.write("x")
+        os.remove("/__cv_probe_w")
+        done(False, "escritura en / permitida (inesperado)")
+    except OSError:
+        done(True)
+elif name == "home_masked":
+    done(not os.path.isdir("/home/cvdev/workspace"), "el home del host es visible")
+elif name == "etc_shadow_absent":
+    done(not os.path.exists("/etc/shadow"), "/etc/shadow es visible en la jaula")
+elif name == "net_denied":
+    try:
+        socket.create_connection(("1.1.1.1", 443), timeout=3).close()
+        done(False, "conexión TCP permitida (inesperado)")
+    except OSError as exc:
+        done(True, type(exc).__name__)
+else:
+    done(False, "prueba desconocida")
+'''
+
+
+def build_probe_command(workspace: str, check: str, **kwargs) -> list:
+    """Comando bwrap completo para una prueba individual."""
+    inner = ["/usr/bin/python3", "-c", INNER_PROBE, check]
+    return spec.build_bwrap_command(workspace, inner, **kwargs)
+
+
+def real_runner(cmd: list):
+    """Runner real: SOLO lo usa main() tras la confirmación --execute."""
+    proc = subprocess.run(cmd, capture_output=True, timeout=120)
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def _parse_probe(stdout: bytes):
+    try:
+        text = stdout.decode("utf-8", errors="replace")
+    except Exception:
+        return None
+    for line in reversed(text.splitlines()):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            data = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(data, dict) and {"check", "ok", "detail"} <= set(data):
+            return data
+    return None
+
+
+def run_checks(workspace: str, runner, **kwargs) -> dict:
+    """Ejecuta todas las pruebas con el runner dado (inyectable en CI).
+
+    El runner recibe el comando bwrap completo (argv, sin shell) y
+    devuelve (returncode, stdout, stderr). Con un runner falso la lógica
+    se prueba sin tocar el sistema.
+    """
+    results = {}
+    verdict = VERDICT_OK
+    for check in CHECKS:
+        cmd = build_probe_command(workspace, check, **kwargs)
+        try:
+            returncode, stdout, _stderr = runner(cmd)
+        except Exception as exc:
+            results[check] = {"ok": False, "detail": f"runner falló: {exc}"}
+            verdict = VERDICT_NO_OPERATIVO if check == "bootstrap" else VERDICT_FAILED
+            break
+        probe = _parse_probe(stdout)
+        if probe is None:
+            results[check] = {
+                "ok": False,
+                "detail": f"sin respuesta válida (returncode {returncode}); "
+                          "si esto ocurre en bootstrap, la jaula no arranca",
+            }
+            verdict = VERDICT_NO_OPERATIVO if check == "bootstrap" else VERDICT_FAILED
+            break
+        results[check] = {"ok": bool(probe["ok"]), "detail": probe["detail"]}
+        if not probe["ok"]:
+            # Se acumulan todas las denegaciones fallidas para el informe
+            # humano; el veredicto global queda en failed.
+            verdict = VERDICT_FAILED
+    return {
+        "verify_version": SANDBOX_VERIFY_VERSION,
+        "spec_version": spec.SANDBOX_SPEC_VERSION,
+        "workspace": workspace,
+        "verdict": verdict,
+        "checks": results,
+    }
+
+
+def main(argv: list) -> int:
+    parser = argparse.ArgumentParser(add_help=True)
+    parser.add_argument("--workspace", default=None)
+    parser.add_argument("--execute", action="store_true")
+    args = parser.parse_args(argv)
+
+    if not args.workspace or not args.execute:
+        print(json.dumps({
+            "verify": SANDBOX_VERIFY_VERSION,
+            "verdict": "refused",
+            "reason": "ejecución real requiere --workspace <run-<id>> y --execute; "
+                      "esta herramienta no se ejecuta automáticamente ni en CI",
+        }))
+        return EXIT_REFUSED
+    try:
+        spec.validate_workspace(args.workspace)
+    except spec.SandboxSpecError as exc:
+        print(json.dumps({"verify": SANDBOX_VERIFY_VERSION, "verdict": "refused",
+                          "reason": str(exc)}))
+        return EXIT_USAGE
+    if not Path(args.workspace).is_dir():
+        print(json.dumps({"verify": SANDBOX_VERIFY_VERSION, "verdict": "refused",
+                          "reason": f"workspace inexistente: {args.workspace}"}))
+        return EXIT_USAGE
+
+    report = run_checks(args.workspace, real_runner)
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    if report["verdict"] == VERDICT_OK:
+        return EXIT_OK
+    if report["verdict"] == VERDICT_NO_OPERATIVO:
+        return EXIT_NO_OPERATIVO
+    return EXIT_FAILED
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

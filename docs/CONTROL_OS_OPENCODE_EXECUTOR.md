@@ -2,6 +2,8 @@
 
 Estado: Fases A, B y C (simulación) más Fase D (adaptador de CLI, bloqueado para invocación real) implementadas en rama local `control-os/opencode-fase-a`. Sin push, sin merge, sin despliegue y sin acceso a Supabase real.
 
+**Fase E (propuesta de sandbox, no instalada)**: la propuesta de aislamiento con Bubblewrap + AppArmor está documentada en `docs/CONTROL_OS_SANDBOX_PROPOSAL.md`, con artefactos en `scripts/ops/sandbox/`. El adaptador sigue bloqueado (`ISOLATION_GUARANTEED = False`); nada de la propuesta está instalado, probado contra el sistema real ni cableado al adaptador.
+
 ## Papeles
 
 - **Productor (root, Fase A)**: `scripts/ops/dev-worker.py`. Reclama tareas `mode == "ai"` de Supabase, construye el paquete con whitelist estricta (`build_ai_job`) y lo entrega en el buzón de cvdev. Nunca ejecuta el editor de IA.
