@@ -229,7 +229,7 @@ def snapshot():
         'requested_by': x.get('requested_by_name') or '',
         'approval_required': bool(x.get('approval_required')),
         'at': x.get('finished_at') or x.get('started_at') or x.get('created_at'),
-    } for x in open_tasks[:60]]
+    } for x in (open_tasks[:60] + [t for t in tasks if t.get('status') in ('done','cancelled','superseded')][:20])]
 
     decisions = []
     for a in approvals:
@@ -303,7 +303,7 @@ def snapshot():
             'errors': len(errors),
             'open_tasks': len(open_tasks),
         },
-        'today': task_cards[:10],
+        'today': [x for x in task_cards if x.get('status') not in ('done','cancelled','superseded')][:10],
         'tasks': task_cards,
         'decisions': decisions,
         'lennys': lennys,
