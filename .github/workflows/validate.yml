@@ -368,4 +368,6 @@ jobs:
       - name: Preparar roles de la base desechable
         run: psql -X -v ON_ERROR_STOP=1 -c "create role anon; create role authenticated; create role service_role bypassrls;"
       - name: Verificar transacción de resultados sin producción
-        run: psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/opencode-result-receipts.fixture.sql
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/opencode-result-receipts.fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/owner-bot-error-review.fixture.sql

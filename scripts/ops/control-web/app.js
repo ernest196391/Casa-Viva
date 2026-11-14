@@ -16,7 +16,13 @@ function taskCard(x){
  let label=statusLabel[x.status]||'Pendiente de revisión';
  if(x.status==='waiting_approval'&&!state.data.decisions.some(d=>d.task_id===x.id))label='Revisión anterior pendiente';
  top.append(el('h3','#'+x.id+' · '+(x.title||'Solicitud')),pill(label));a.append(top);
- if(x.summary)a.append(el('p',x.summary,'card-copy'));
+ if(x.summary){
+  const summary=String(x.summary);
+  if(summary.length>1600){
+   a.append(el('p',summary.split('\n').slice(0,2).join('\n'),'card-copy'));
+   const report=el('details');report.append(el('summary','Leer informe completo'),el('p',summary,'card-copy'));a.append(report);
+  }else a.append(el('p',summary,'card-copy'));
+ }
  else if(!closed.has(x.status))a.append(el('p',x.status==='triaged'?'Solicitud guardada. Todavía no se ha ejecutado.':'Esperando el siguiente paso.','card-copy'));
  if(x.detail)a.append(el('p',x.detail,'card-error'));
  const details=el('details');details.append(el('summary','Ver detalles'));

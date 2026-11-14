@@ -493,3 +493,14 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 - Navegador real: vista limpia con 0 solicitudes anteriores, botón Salud crea #140 y muestra el número; historial encuentra #139 y muestra resumen legible del código del bot. No se borró ni se canceló el historial.
 - Observación: el timeout de lectura de 10s genera avisos prematuros en conexión lenta. Se amplía a 30s y se conserva el último estado de menos de 3 minutos durante dos reintentos; se informa Reintentando. Tres fallos consecutivos o estado viejo mantienen aviso visible. No se reenvían instrucciones automáticamente.
 - Pendiente CI de este ajuste y revalidación de resultado final/móvil. Costo nuevo: 0.
+
+
+## CURRENT — Solicitudes desde el panel y consulta automática de errores (2026-11-14)
+
+- Base 49502dfcdc9e2e46634059a16b1838d53dd3d662; panel limpio auditado y operativo, evento #384. Ernesto solicita ejemplo real desde el panel. Coste adicional: 0.
+- Envío real mediante navegador: #141 revisar errores del bot; #142 preparar vista de pedidos para Lennys con WooCommerce/Core canónico, permisos por diseñar y aprobación previa. #142 queda revisión pendiente, no se afirma construida ni automática.
+- Nueva regla exacta revisar errores del bot / revisa los errores del bot / errores del bot usa errors_open ya allowlisted. Reutiliza la única ops_tasks y el cierre read-only ligado a bridge_id. Conserva identidad owner/WhatsApp, riesgo, aprobación y duplicación. No analiza chats nuevos con IA: muestra incidencias abiertas ya registradas y lo declara en el informe.
+- Botón de consulta en el panel. Assets JS/CSS versionados por hash de contenido para que las siguientes versiones no queden obsoletas en caché (se observó texto anterior en navegador tras redeploy).
+- Pruebas PostgreSQL desechables: ruta/cierre/síntesis, duplicados, instrucción ambigua, riesgo sensible, aprobación, actor distinto, legacy, owner_change de WhatsApp, fallo y bridge incorrecto. Pendiente CI, migración y cierre real de #141; rollback de las tres funciones incluido. No se habilita programación autónoma ni se amplían permisos de Lennys.
+
+- Preflight real errors_open #208: returncode 0, 21 incidencias abiertas, salida legible de 6123 caracteres. No es análisis IA nuevo. Informes largos se muestran con resumen y Leer informe completo para conservar la portada limpia. La prueba SQL incorpora además identidades nulas y las rechaza explícitamente.
