@@ -392,3 +392,13 @@ Al retomar el proyecto:
 - Snapshot incluye 20 tareas terminadas además de abiertas para que el resultado siga visible. Hoy conserva solo trabajo abierto.
 - Acciones nuevas propuestas: control_codex_setup instala @openai/codex@0.169.0 oficial como cvdev en directorio dedicado; control_codex_login solo inicia/consulta device auth, sin modelos ni API keys. CODEX_HOME separado; entorno limpio sin credenciales de producción; no cambia servicios.
 - Pendiente de CI y despliegue. Inicio de sesión requiere intervención del propietario con link y código oficial. Ninguna suscripción contratada ni coste adicional autorizado.
+
+## CURRENT — Panel real y autenticación de Codex (2026-11-14)
+
+- #212 y #213 fusionados tras CI verde (integración requirió un segundo intento por fallo 4A de atribución ya observado).
+- Bridge actualizado y control_sync desplegado desde 05306de1c7a69bcc555bedfd61ba9aa84b0967b1; bridge #166 confirma primer ciclo correcto con tareas recientes terminadas visibles.
+- Ernesto confirmó acceso al panel y envió una solicitud real: #131 con comillas «salud del sistema». Se corrigió normalización de comillas exteriores; #131 pasó por bridge #164 y terminó automáticamente con resumen de salud. No se validó visualmente el resultado en navegador del agente: conexión CUA agotó tiempo.
+- Codex oficial 0.169.0 instalado en /home/cvdev/control-os-tools como cvdev, CODEX_HOME /home/cvdev/control-os-auth, sin API key ni invocación de modelo (bridge #167). Device auth iniciado #170; requiere autenticación personal del propietario, no se extraen credenciales de su sesión local.
+- SQL de entradas probó aprobación WhatsApp, conservación de owner_change, cierre, comillas y rechazo de instrucción ambigua con rollback de fixtures.
+- Guía docs/CONTROL_OS_USO.md distingue consultas operativas verificadas de programación autónoma aún pendiente. No declarar objetivo completo hasta autenticar proveedor, certificar sandbox y conectar consumidor/promoción reales.
+- Coste nuevo 0. Claves de Gemini no configuradas. El envío de audios usa transcripción existente; no se afirma coste cero para audio.
