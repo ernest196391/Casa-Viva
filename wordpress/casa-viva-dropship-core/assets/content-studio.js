@@ -1240,7 +1240,7 @@
       body.replaceChildren(...(dudas.length ? dudas.map((d) => h('article', { class: 'cv-dq' }, dHead(d, d.tarea?.texto || d.origen_texto),
         d.estado === 'resultado' ? [h('h2', { text: d.pregunta }), dMedia(d, true), h('div', { class: 'cv-states cv-in' },
           btn('Rechazada', 'cv-bad', () => d.tipo === 'foto' ? reject(d) : answer(d, 'rechazada')), btn('Revisión', '', () => answer(d, 'revision')), btn('Aprobada', 'cv-primary', () => answer(d, 'aprobada')))]
-          : h('p', { class: 'cv-run' }, h('span', { class: 'cv-spin' }), 'Lo hace el supervisor del VPS'))) : [empty('Nada en marcha.')]));
+          : [h('p', { class: 'cv-note2', text: d.pregunta }), h('p', { class: 'cv-run' }, h('span', { class: 'cv-spin' }), 'Lo hace el supervisor del VPS')])) : [empty('Nada en marcha.')]));
       bar.replaceChildren(back); return;
     }
     // Hechas: quién, cuándo, antes → después y dónde se guardó.

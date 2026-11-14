@@ -419,7 +419,7 @@ test('Editor de contenido: login, guardar, subir foto y descargar en móvil', as
   const width = await page.evaluate(() => ({ viewport: innerWidth, scroll: document.documentElement.scrollWidth }));
   expect(width.scroll).toBeLessThanOrEqual(width.viewport);
   await closePie(page);
-  await back(page);
+  await leaveUnsaved(page);
   await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
   await page.getByRole('button', { name: 'Cambiar contraseña', exact: true }).click();
   await page.locator('#cv-current-password').fill('Synthetic-Content-Only-1!');
