@@ -138,10 +138,10 @@ declare command text; action_name text;
 begin
  if new.business_id<>'casa-viva' or new.status<>'triaged' or new.approval_required
     or new.risk not in ('safe','guarded') then return new; end if;
- if not ((new.source='control-private' and new.task_type='owner_request'
+ if ((new.source='control-private' and new.task_type='owner_request'
           and new.requested_by_role='owner' and new.requested_by_ref='ernesto')
       or (new.source='whatsapp-owner' and new.task_type='owner_change'
-          and new.requested_by_role='owner_operational' and new.requested_by_ref is not null))
+          and new.requested_by_role='owner_operational' and new.requested_by_ref is not null)) is not true
  then return new; end if;
  command:=lower(btrim(coalesce(new.payload->>'request',new.payload->>'text',''), ' «»“”"'));
  command:=regexp_replace(command,'[.!?]+$','','g');
