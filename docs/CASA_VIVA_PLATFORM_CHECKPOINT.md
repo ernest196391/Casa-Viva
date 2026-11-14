@@ -445,3 +445,8 @@ Al retomar el proyecto:
 ### Control OS — staging privado de Bubblewrap
 
 PR #220 resolvió el directorio root 0700 causado por umask 077; prueba directa dedicada superada. Bridge #187 llegó al ejecutor nativo, pero AppArmor bloqueó mkdir/mknod en /newroot/dev/null (auditoría #188). Se permite el staging /newroot del tmpfs privado previo a pivot_root, con denegaciones explícitas equivalentes para root, autenticación, SSH y claves privadas en esa ruta. No se añaden capabilities ni se cambia el sysctl global. La actualización acepta exclusivamente el perfil anterior exacto o el nuevo; deben pasar las pruebas positivas de escritura del workspace y negativas de secretos/escritura/red antes de ejecutar el modelo.
+
+
+### Control OS — sintaxis del diagnóstico Codex 0.169
+
+Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del comando interno. La prueba conservaba `codex sandbox linux -- ...`; en rust-v0.169.0 `SandboxCommand` aplana `HostSandboxArgs` y pasa `linux` como nombre de ejecutable, provocando `Failed to execvp linux`. Se corrigen las tres pruebas a `codex sandbox -- ...` según codex-rs/cli/src/main.rs oficial. Sin cambios de permisos ni nuevas llamadas al modelo. La certificación exige de nuevo arranque nativo, escritura permitida y lectura/escritura/red prohibidas antes de reintentar la tarea de desarrollo.
