@@ -80,7 +80,7 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="cv-nonce" content="<?php echo esc_attr(wp_create_nonce('cv-control')); ?>">
 <title>Control OS · Casa Viva</title>
-<link rel="stylesheet" href="style.css?v=20261114-clean1">
+<link rel="stylesheet" href="style.css?v=<?php echo esc_attr(substr(hash_file('sha256', __DIR__ . '/style.css'), 0, 12)); ?>">
 </head>
 <body>
 <header class="topbar">
@@ -97,6 +97,7 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
       <button type="button" data-query="salud del sistema">Salud del sistema</button>
       <button type="button" data-query="estado de wordpress">WordPress</button>
       <button type="button" data-query="estado del bot">Código del bot</button>
+      <button type="button" data-query="revisar errores del bot">Errores del bot</button>
     </div>
     <form id="task-form">
       <label class="sr-only" for="task-text">Tu solicitud</label>
@@ -142,6 +143,6 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
   </section>
 </main>
 <footer>Casa Viva Control OS · Una sola cola, una sola verdad operativa.</footer>
-<script src="app.js?v=20261114-clean1"></script>
+<script src="app.js?v=<?php echo esc_attr(substr(hash_file('sha256', __DIR__ . '/app.js'), 0, 12)); ?>"></script>
 </body>
 </html>
