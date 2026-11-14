@@ -12,6 +12,7 @@ from __future__ import annotations
 import fcntl
 import io
 import json
+import re
 import os
 from pathlib import Path
 import subprocess
