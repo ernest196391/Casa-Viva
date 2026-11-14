@@ -409,3 +409,9 @@ Al retomar el proyecto:
 - Nueva acción acotada control_codex_consumer_build: solo tarea fija para consumidor Supabase, worktree propio, usuario cvdev, sandbox workspace-write nativo y unidad systemd con límite 600 s, NoNewPrivileges, ProtectSystem=strict y ProtectHome=read-only; escritura solo worktree y CODEX_HOME. No SQL real, push ni despliegue. Nunca ejecuta comandos enviados por una tarea.
 - Resultado se revisará como diff antes de promover. Si el sandbox no arranca, se mantiene cerrado; no se desactiva AppArmor ni se usa danger-full-access.
 - Costo adicional previsto 0: usa cuota existente de ChatGPT. No certifica todavía generación ni consumo de resultados hasta revisar ejecución real.
+
+## CURRENT — Publicación acotada del consumidor (2026-11-14)
+
+- Preparación Codex arrancó en unidad cv-control-consumer-build como cvdev (#174), sin tocar producción. El journal confirmó sesión y primer mensaje del modelo; no equivale a resultado certificado.
+- Se propone acción de publicación solo desde worktree fijo, preparación inactiva, HEAD igual a origin/main, máximo 20 archivos/500KB, sin borrados, symlinks, dotfiles, rutas fuera de scripts/ops y docs ni patrones de secreto. Commit como cvdev y push sin force a rama fija review/control-os-real-consumer; hooks deshabilitados para el push privilegiado. No ejecuta código generado, merge, SQL ni despliegue.
+- Pendiente revisar diff y pruebas antes de cualquier instalación. Coste adicional 0; utiliza cuota ChatGPT existente.

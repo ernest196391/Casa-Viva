@@ -2071,11 +2071,68 @@ def action_control_codex_consumer_build(args):
     return {"returncode":0,"output":json.dumps({"unit":unit,"state":state["output"],
             "journal":output,"diff_stat":diff["output"],"production_changed":False})}
 
+def action_control_codex_consumer_publish(args):
+    """Publish reviewed-material branch only. No merge, SQL, deploy or generated-code execution."""
+    work = Path("/home/cvdev/workspace/control-os-consumer-build")
+    if work.is_symlink() or work.resolve() != work or not (work / ".git").is_file():
+        return {"returncode":2,"output":"Worktree inesperado"}
+    state = run(["systemctl","is-active","cv-control-consumer-build"],timeout=10)
+    if state["output"].strip() in ("active","activating"):
+        return {"returncode":3,"output":"Preparación todavía activa"}
+    def git(argv):
+        return run(["runuser","-u","cvdev","--","git","-C",str(work),*argv],timeout=90)
+    head = git(["rev-parse","HEAD"])
+    base = git(["rev-parse","origin/main"])
+    if head["returncode"] or base["returncode"] or head["output"].strip()!=base["output"].strip():
+        return {"returncode":4,"output":"HEAD no coincide con base; no se publica"}
+    names = git(["ls-files","--modified","--others","--exclude-standard"])
+    if names["returncode"]:
+        return names
+    paths = sorted(set(names["output"].splitlines()))
+    if not paths or len(paths)>20:
+        return {"returncode":5,"output":"Cantidad de archivos fuera de límite"}
+    total = 0
+    for rel in paths:
+        if not re.fullmatch(r"[A-Za-z0-9_./-]+",rel) or ".." in Path(rel).parts:
+            return {"returncode":5,"output":"Ruta insegura"}
+        if not rel.startswith(("scripts/ops/","docs/")) or any(x.startswith(".") for x in Path(rel).parts):
+            return {"returncode":5,"output":"Ruta fuera del alcance: "+rel}
+        current = work
+        for part in Path(rel).parts:
+            current = current / part
+            if current.is_symlink():
+                return {"returncode":5,"output":"Symlink rechazado"}
+        if not current.is_file():
+            return {"returncode":5,"output":"Borrados o archivos especiales requieren revisión"}
+        body = current.read_text(encoding="utf-8")
+        total += len(body.encode())
+        if total>500000 or re.search(r"BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY|\b(?:sk-|sbp_)[A-Za-z0-9_-]{16,}|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+",body):
+            return {"returncode":6,"output":"Límite o patrón sensible: "+rel}
+    check = git(["diff","--check"])
+    if check["returncode"]:
+        return check
+    branch = "review/control-os-real-consumer"
+    for cmd in (["switch","-c",branch],["add","--",*paths],
+                ["-c","user.name=Casa Viva Control OS","-c","user.email=control-os@local.invalid",
+                 "commit","-m","Control OS: propuesta de consumidor real preparada por cvdev"]):
+        step = git(cmd)
+        if step["returncode"]:
+            return step
+    pushed = run(["git","-c","safe.directory="+str(work),"-c","core.hooksPath=/dev/null",
+                  "-C",str(work),"push","git@github-casaviva:ernest196391/Casa-Viva.git",
+                  "HEAD:refs/heads/"+branch],timeout=120)
+    if pushed["returncode"]:
+        return pushed
+    return {"returncode":0,"output":json.dumps({"branch":branch,
+        "head":git(["rev-parse","HEAD"])["output"].strip(),"paths":paths,
+        "merged":False,"deployed":False})}
+
 ACTIONS = {
     "prepare_control_dev_checkout": action_prepare_control_dev_checkout,
     "control_codex_setup": action_control_codex_setup,
     "control_codex_login": action_control_codex_login,
     "control_codex_consumer_build": action_control_codex_consumer_build,
+    "control_codex_consumer_publish": action_control_codex_consumer_publish,
     "health": action_health,
     "errors_open": action_errors_open,
     "supervisor_status": action_supervisor_status,
