@@ -1558,36 +1558,55 @@ def action_cvdev_rebase_resume(args):
 
 
 def action_cvdev_control_tests(args):
-    """Run the fixed Control OS test suite; no task-supplied command is accepted."""
+    """Run the fixed Control OS test files as scripts; no task-supplied command is accepted."""
     if _cvdev_rebase_meta().get("active"):
         return {"returncode": 3, "output": "Rebase activo; pruebas bloqueadas"}
     branch = _cvdev(["git", "branch", "--show-current"], timeout=20)
     if branch["output"].strip() != CVDEV_BRANCH:
         return {"returncode": 4, "output": "Rama cvdev inesperada"}
-    cmds = [
-        ["python3", "-m", "unittest", "discover", "-s", "scripts/ops/tests", "-p", "*.test.py"],
-        ["python3", "-m", "py_compile",
-         "scripts/ops/dev-worker.py",
-         "scripts/ops/opencode-adapter.py",
-         "scripts/ops/opencode-executor.py",
-         "scripts/ops/opencode-proposal.py",
-         "scripts/ops/opencode-proposal-bridge.py",
-         "scripts/ops/opencode-result-consumer.py",
-         "scripts/ops/opencode-demo-e2e.py",
-         "scripts/ops/sandbox/opencode-sandbox-spec.py",
-         "scripts/ops/sandbox/verify-sandbox.py"],
+    test_files = [
+        "scripts/ops/tests/dev-worker.test.py",
+        "scripts/ops/tests/opencode-adapter.test.py",
+        "scripts/ops/tests/opencode-demo-e2e.test.py",
+        "scripts/ops/tests/opencode-executor.test.py",
+        "scripts/ops/tests/opencode-proposal.test.py",
+        "scripts/ops/tests/opencode-result-consumer.test.py",
+        "scripts/ops/tests/opencode-sandbox.test.py",
     ]
     logs = []
-    for cmd in cmds:
-        p = _cvdev(cmd, timeout=300)
-        logs.append("$ " + " ".join(cmd) + "\n" + p["output"])
+    total = 0
+    for rel in test_files:
+        p = _cvdev(["python3", rel], timeout=300)
+        logs.append("$ python3 " + rel + "\n" + p["output"])
         if p["returncode"] != 0:
             return {"returncode": p["returncode"], "output": "\n".join(logs)[-30000:]}
-    return {"returncode": 0, "output": "\n".join(logs)[-30000:]}
-
+        m = re.search(r"Ran\s+(\d+)\s+tests?", p["output"])
+        if m:
+            total += int(m.group(1))
+    compiled = _cvdev([
+        "python3", "-m", "py_compile",
+        "scripts/ops/dev-worker.py",
+        "scripts/ops/opencode-adapter.py",
+        "scripts/ops/opencode-executor.py",
+        "scripts/ops/opencode-proposal.py",
+        "scripts/ops/opencode-proposal-bridge.py",
+        "scripts/ops/opencode-result-consumer.py",
+        "scripts/ops/opencode-demo-e2e.py",
+        "scripts/ops/sandbox/opencode-sandbox-spec.py",
+        "scripts/ops/sandbox/verify-sandbox.py",
+    ], timeout=180)
+    logs.append("$ python3 -m py_compile ...\n" + compiled["output"])
+    if compiled["returncode"] != 0:
+        return {"returncode": compiled["returncode"], "output": "\n".join(logs)[-30000:]}
+    return {"returncode": 0, "output": json.dumps({
+        "test_files": len(test_files),
+        "reported_tests": total,
+        "summary": "Control OS tests + py_compile OK",
+        "logs": "\n".join(logs)[-24000:]
+    }, ensure_ascii=False)}
 
 def action_cvdev_control_push(args):
-    """Push only the clean rebased Control OS branch, never force."""
+    """Push the clean rebased Control OS HEAD to a fixed review branch, never force."""
     if _cvdev_rebase_meta().get("active"):
         return {"returncode": 3, "output": "Rebase activo; push bloqueado"}
     branch = _cvdev(["git", "branch", "--show-current"], timeout=20)
@@ -1595,10 +1614,54 @@ def action_cvdev_control_push(args):
     if branch["output"].strip() != CVDEV_BRANCH or status["output"].strip():
         return {"returncode": 4, "output": "Rama inesperada o checkout no limpio"}
     head = _cvdev(["git", "rev-parse", "HEAD"], timeout=20)
-    pushed = _cvdev(["git", "push", "-u", "origin", CVDEV_BRANCH], timeout=120)
+    remote_branch = "review/control-os-opencode-a-g"
+    pushed = _cvdev(["git", "push", "origin", f"HEAD:refs/heads/{remote_branch}"], timeout=120)
     return {"returncode": pushed["returncode"], "output": json.dumps({
-        "head": head["output"].strip(), "push": pushed["output"][-10000:]
+        "head": head["output"].strip(), "remote_branch": remote_branch,
+        "push": pushed["output"][-10000:]
     }, ensure_ascii=False)}
+
+
+def action_snapshot_vivabot_live_branch(args):
+    """Push the exact clean live VivaBot HEAD to a review branch. Never changes local files or main."""
+    repo = Path("/root/vivabot")
+    if not (repo / ".git").exists():
+        return {"returncode": 2, "output": "/root/vivabot no es un checkout Git"}
+    tracked = run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=str(repo), timeout=20)
+    untracked = run(["git", "ls-files", "--others", "--exclude-standard"], cwd=str(repo), timeout=20)
+    if tracked["returncode"] != 0 or untracked["returncode"] != 0:
+        return {"returncode": 3, "output": "No pude comprobar limpieza del repo"}
+    if tracked["output"].strip() or untracked["output"].strip():
+        return {"returncode": 4, "output": "Snapshot bloqueado: el checkout VivaBot no está limpio"}
+    head = run(["git", "rev-parse", "HEAD"], cwd=str(repo), timeout=20)
+    if head["returncode"] != 0: return head
+    live_sha = head["output"].strip()
+    fetched = run(["git", "fetch", "origin", "main"], cwd=str(repo), timeout=90)
+    if fetched["returncode"] != 0: return fetched
+    remote = run(["git", "rev-parse", "origin/main"], cwd=str(repo), timeout=20)
+    if remote["returncode"] != 0: return remote
+    remote_sha = remote["output"].strip()
+    names = run(["git", "ls-tree", "-r", "--name-only", "HEAD"], cwd=str(repo), timeout=30)
+    if names["returncode"] != 0: return names
+    forbidden_names = {".env", "id_rsa", "id_ed25519", "authorized_keys", "credentials.json", "auth.json"}
+    forbidden_suffixes = (".pem", ".key", ".p12", ".pfx")
+    bad_names = [rel for rel in names["output"].splitlines()
+                 if Path(rel).name.lower() in forbidden_names or Path(rel).name.lower().endswith(forbidden_suffixes)]
+    if bad_names:
+        return {"returncode": 5, "output": "Snapshot bloqueado por nombres sensibles:\n" + "\n".join(bad_names[:100])}
+    grep = run(["git","grep","-I","-l","-E",
+        r"BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=|ANTHROPIC_API_KEY[[:space:]]*=|OPENAI_API_KEY[[:space:]]*=|AWS_SECRET_ACCESS_KEY[[:space:]]*=",
+        "HEAD","--","."], cwd=str(repo), timeout=45)
+    if grep["returncode"] not in (0,1): return grep
+    if grep["returncode"] == 0 and grep["output"].strip():
+        return {"returncode": 6, "output": "Snapshot bloqueado por patrones de secreto en archivos: " + ", ".join(grep["output"].splitlines()[:50])}
+    if live_sha == remote_sha:
+        return {"returncode": 0, "output": json.dumps({"changed":False,"head":live_sha,"origin_main":remote_sha},ensure_ascii=False)}
+    stamp=time.strftime("%Y%m%d-%H%M%S",time.gmtime())
+    branch=f"review/live-vivabot-{live_sha[:8]}-{stamp}"
+    pushed=run(["git","push","origin",f"{live_sha}:refs/heads/{branch}"],cwd=str(repo),timeout=120)
+    if pushed["returncode"] != 0: return pushed
+    return {"returncode":0,"output":json.dumps({"changed":True,"branch":branch,"live_sha":live_sha,"origin_main":remote_sha},ensure_ascii=False)}
 
 ACTIONS = {
     "health": action_health,
@@ -1639,6 +1702,7 @@ ACTIONS = {
     "cvdev_rebase_resume": action_cvdev_rebase_resume,
     "cvdev_control_tests": action_cvdev_control_tests,
     "cvdev_control_push": action_cvdev_control_push,
+    "snapshot_vivabot_live_branch": action_snapshot_vivabot_live_branch,
 }
 
 
