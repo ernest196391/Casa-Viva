@@ -222,5 +222,15 @@ $r = $answer( $dato['id'], array( 'respuesta' => 'corregir', 'valor' => '32 cm',
 studio_assert( 200 === $r->get_status() && 'hecha' === $r->get_data()['estado'], 'v2: a corrected fact is applied' );
 $out = $bot( 'GET', 'dudas/respuestas', array( 'desde' => 0 ) )->get_data();
 studio_assert( in_array( 'crm_knowledge', array_column( $out['respuestas'], 'destino' ), true ) && '32 cm' === end( $out['respuestas'] )['valor'] && $out['cursor'] > 0, 'v2: the VPS reads what to apply, with a cursor' );
+studio_assert( $hp->get_name() === end( $out['respuestas'] )['producto_nombre'] && array_key_exists( 'pregunta', end( $out['respuestas'] ) ), 'v2: each answer carries the product name and the question for crm_knowledge' );
+// Cost keeps 4 decimals (the paid cut-out costs 0,0048 USD).
+$r = $bot( 'POST', 'dudas', array( 'dudas' => array( array( 'ref' => 'integ-coste', 'tipo' => 'regla', 'regla' => 'Coste fino', 'escalon' => array( 'usado' => 'ia', 'coste_usd' => 0.0048 ) ) ) ) );
+studio_assert( 200 === $r->get_status() && 0.0048 === (float) $r->get_data()['dudas'][0]['escalon']['coste_usd'], 'v2: the cost keeps 4 decimals' );
+// A transcribed voice note is deleted; only files of this inbox can be removed.
+$up = wp_upload_dir(); wp_mkdir_p( $up['basedir'] . '/cvd-dudas' ); $voz = str_repeat( 'a', 24 ) . '.webm';
+file_put_contents( $up['basedir'] . '/cvd-dudas/' . $voz, 'voz' );
+$r = $bot( 'POST', 'dudas/' . $dato['id'] . '/audio-procesado', array( 'url' => $up['baseurl'] . '/cvd-dudas/' . $voz ) );
+studio_assert( 200 === $r->get_status() && true === $r->get_data()['borrado'] && ! file_exists( $up['basedir'] . '/cvd-dudas/' . $voz ), 'v2: the VPS deletes a voice note once transcribed' );
+studio_assert( 400 === $bot( 'POST', 'dudas/' . $dato['id'] . '/audio-procesado', array( 'url' => $up['baseurl'] . '/2026/11/otra.webm' ) )->get_status(), 'v2: only inbox voice notes can be deleted' );
 remove_filter( 'cvd_content_recorte', $v2_recorte ); remove_filter( 'cvd_content_motor', $v2_motor );
 echo "Panel v2 server integration passed.\n";

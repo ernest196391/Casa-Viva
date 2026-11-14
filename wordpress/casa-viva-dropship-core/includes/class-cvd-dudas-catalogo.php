@@ -64,6 +64,30 @@ final class CVD_Dudas_Catalogo {
 		register_rest_route( 'casa-viva/v1', '/bot/dudas', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'bot_poner' ), 'permission_callback' => $bot ) );
 		register_rest_route( 'casa-viva/v1', '/bot/dudas/respuestas', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'bot_respuestas' ), 'permission_callback' => $bot ) );
 		register_rest_route( 'casa-viva/v1', '/bot/dudas/(?P<duda>[A-Za-z0-9_-]{1,40})/resultado', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'bot_resultado' ), 'permission_callback' => $bot ) );
+		register_rest_route( 'casa-viva/v1', '/bot/dudas/(?P<duda>[A-Za-z0-9_-]{1,40})/audio-procesado', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'bot_audio_procesado' ), 'permission_callback' => $bot ) );
+	}
+
+	/** Product name for the VPS (crm_knowledge needs it with the question). */
+	private static function nombre_producto( array $d ): string {
+		if ( '' !== (string) ( $d['producto']['nombre'] ?? '' ) ) { return (string) $d['producto']['nombre']; }
+		$p = ! empty( $d['producto']['id'] ) ? wc_get_product( (int) $d['producto']['id'] ) : null;
+		return $p instanceof WC_Product ? $p->get_name() : '';
+	}
+
+	/**
+	 * Zayri's voice note is deleted as soon as the VPS has transcribed it. Only files of this inbox can be removed:
+	 * the URL must point to uploads/cvd-dudas/ with the random name this class gives.
+	 */
+	public static function bot_audio_procesado( WP_REST_Request $r ) {
+		$s = self::leer();
+		if ( ! isset( $s['dudas'][ (string) $r->get_param( 'duda' ) ] ) ) { return new WP_Error( 'duda', 'No existe la duda.', array( 'status' => 404 ) ); }
+		$body = $r->get_json_params(); $url = (string) ( is_array( $body ) ? ( $body['url'] ?? '' ) : '' );
+		$up = wp_upload_dir(); $base = $up['baseurl'] . '/cvd-dudas/';
+		$name = 0 === strpos( $url, $base ) ? substr( $url, strlen( $base ) ) : '';
+		if ( ! preg_match( '/^[a-z0-9]{24}\.(webm|m4a|ogg|mp3)$/', $name ) ) { return new WP_Error( 'audio', 'Ese archivo no es una nota de voz de la bandeja.', array( 'status' => 400 ) ); }
+		$file = $up['basedir'] . '/cvd-dudas/' . $name;
+		if ( file_exists( $file ) ) { wp_delete_file( $file ); }
+		return rest_ensure_response( array( 'ok' => true, 'borrado' => ! file_exists( $file ) ) );
 	}
 
 	/** Off in production until it is switched on or the VPS sends the first card. */
@@ -225,7 +249,7 @@ final class CVD_Dudas_Catalogo {
 		}
 		if ( isset( $in['escalon'] ) && is_array( $in['escalon'] ) ) {
 			$e = $in['escalon'];
-			$d['escalon'] = array( 'usado' => sanitize_key( (string) ( $e['usado'] ?? '' ) ), 'coste_usd' => round( (float) ( $e['coste_usd'] ?? 0 ), 2 ), 'fallo_previo' => self::txt( $e['fallo_previo'] ?? '', 120 ) );
+			$d['escalon'] = array( 'usado' => sanitize_key( (string) ( $e['usado'] ?? '' ) ), 'coste_usd' => round( (float) ( $e['coste_usd'] ?? 0 ), 4 ), 'fallo_previo' => self::txt( $e['fallo_previo'] ?? '', 120 ) );
 		}
 		if ( isset( $in['opciones'] ) && is_array( $in['opciones'] ) ) {
 			$o = $in['opciones'];
@@ -339,6 +363,7 @@ final class CVD_Dudas_Catalogo {
 				if ( 'marcha' === $e['estado'] ) { $d['resultado'] = null; }
 				if ( $e['salida'] ) {
 					self::salida( $s, array_merge( array( 'duda' => $d['id'], 'ref' => $d['ref'], 'tipo' => $d['tipo'], 'accion' => $in['respuesta'], 'producto' => (int) $d['producto']['id'],
+						'producto_nombre' => self::nombre_producto( $d ), 'pregunta' => $d['pregunta'],
 						'pieza' => $d['pieza'], 'motivos' => $in['motivos'], 'dato' => $d['dato'], 'regla' => $d['regla'], 'campo' => $d['campo'], 'quien' => $in['quien'],
 						'tarea_id' => $d['tarea']['id'] ?? null ), $e['salida'] ) );
 				}
@@ -511,7 +536,7 @@ final class CVD_Dudas_Catalogo {
 			if ( $d['tarea'] ) { $d['tarea']['listo'] = true; }
 			if ( isset( $body['escalon'] ) && is_array( $body['escalon'] ) ) {
 				$e = $body['escalon'];
-				$d['escalon'] = array( 'usado' => sanitize_key( (string) ( $e['usado'] ?? '' ) ), 'coste_usd' => round( (float) ( $e['coste_usd'] ?? 0 ), 2 ), 'fallo_previo' => self::txt( $e['fallo_previo'] ?? '', 120 ) );
+				$d['escalon'] = array( 'usado' => sanitize_key( (string) ( $e['usado'] ?? '' ) ), 'coste_usd' => round( (float) ( $e['coste_usd'] ?? 0 ), 4 ), 'fallo_previo' => self::txt( $e['fallo_previo'] ?? '', 120 ) );
 			}
 			self::historial( $d, 'Supervisor', 'resultado', '', $media['texto'] ? wp_strip_all_tags( $media['texto'] ) : ( $media['valor'] ?: 'foto nueva' ) );
 			self::sellar( $s, $d );
