@@ -358,3 +358,5 @@ Al retomar el proyecto:
 - Panel: código exige sesión WordPress, user ID 1 y manage_options; nonce en POST y cabeceras privadas. No se certificó navegación autenticada; DNS local del entorno falló. No ampliar accesos.
 - costo_actual: infraestructura existente; costo_nuevo_requerido: 0; alternativa_gratuita: planner gratuito solo tras calibración; momento_de_escalar: únicamente si proveedor gratuito no permite operación verificable.
 - Siguiente: verificar #123–125; integrar un planner sin herramientas con contrato de propuesta, consumidor Supabase real y aprobación/promoción auditadas; después prueba E2E reversible desde panel/WhatsApp. No declarar Control OS operativo antes de esa evidencia.
+
+- Resultado terminal posterior: probe #123 falló por TimeoutExpired a los 120 s, sin CV_PROBE_OK. No se ha determinado si es red, proveedor o arranque de CLI; no atribuir causa sin diagnóstico. #124 confirma VivaBot limpio en 4a26e0797eb50851fb3a35216f406a7352c9282a; #125 confirma control_sync active/enabled. No se certifica modelo ni recorrido E2E.
