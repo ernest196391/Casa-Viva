@@ -1823,9 +1823,22 @@ def action_opencode_planner_probe(args):
     except Exception as exc:
         return {"returncode": 4, "output": f"No pude preparar HOME de probe: {exc}"}
     config = json.dumps({
-        "permissions": [
-            {"action": "*", "resource": "*", "effect": "deny"},
-        ]
+        "permission": {
+            "*": "deny",
+            "read": "deny",
+            "edit": "deny",
+            "glob": "deny",
+            "grep": "deny",
+            "list": "deny",
+            "bash": "deny",
+            "task": "deny",
+            "external_directory": "deny",
+            "webfetch": "deny",
+            "websearch": "deny",
+            "lsp": "deny",
+            "skill": "deny",
+            "question": "deny"
+        }
     }, ensure_ascii=False)
     env = [
         "env", "-i",
@@ -1836,7 +1849,7 @@ def action_opencode_planner_probe(args):
     ]
     cmd = [
         "runuser", "-u", "cvdev", "--", *env,
-        str(binary), "run", "--standalone",
+        str(binary), "run", "--pure",
         "--model", "opencode/glm-5.3-flash-free",
         "--format", "json",
         "Responde exactamente con: CV_PROBE_OK. No uses herramientas.",
