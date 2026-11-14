@@ -42,6 +42,7 @@ begin
  -- Lock order: run then task. Serializa reintentos concurrentes de la misma run.
  select * into strict r from public.ops_dev_runs where id=(p_result->>'run_id')::bigint for update;
  select * into strict t from public.ops_tasks where id=r.task_id for update;
+ moment := clock_timestamp();
  if r.task_id <> (p_result->>'task_id')::uuid or r.repo is distinct from p_result->>'repo'
  or r.mode is distinct from 'ai' or r.auto_merge is distinct from false
  or (p_result ? 'task_public_id' and p_result->'task_public_id' <> 'null'::jsonb
@@ -54,7 +55,7 @@ begin
   if prior <> p_result then raise exception 'conflicting duplicate'; end if;
   return jsonb_build_object('status','duplicate','run_id',r.id);
  end if;
- if exists(select 1 from public.ops_dev_runs other where other.task_id=t.id and other.id<>r.id and other.status in ('waiting_ai','awaiting_approval','waiting_approval','running')) then raise exception 'ambiguous task runs'; end if;
+ if exists(select 1 from public.ops_dev_runs other where other.task_id=t.id and other.id<>r.id and other.status in ('waiting_ai','waiting_approval','waiting_approval','running')) then raise exception 'ambiguous task runs'; end if;
  if r.status is distinct from 'waiting_ai' or t.status is distinct from 'waiting_ai' then raise exception 'invalid state'; end if;
  if jsonb_typeof(p_result->'ttl_seconds') is distinct from 'number'
  or coalesce(p_result->>'ttl_seconds','') !~ '^[0-9]+$'
@@ -88,7 +89,7 @@ begin
      where prefix<>'' and (path=prefix or (right(prefix,1)='/' and starts_with(path,prefix))))
    then raise exception 'path outside allowlist'; end if;
   end loop;
-  outcome := 'awaiting_approval';
+  outcome := 'waiting_approval';
  else
   if jsonb_typeof(p_result->'error') is distinct from 'string'
   or coalesce(length(p_result->>'error'),0) not between 1 and 8000
@@ -97,17 +98,20 @@ begin
   outcome := 'failed';
  end if;
  insert into public.ops_ai_result_receipts(run_id,task_id,payload) values(r.id,t.id,p_result);
- if outcome='awaiting_approval' then
+ if outcome='waiting_approval' then
   if exists(select 1 from public.ops_approvals where task_id=t.id and status='pending') then raise exception 'approval already pending'; end if;
   insert into public.ops_approvals(task_id,requested_for_role,warning,impact,proposed_change,status)
   values(t.id,'owner','Revisión humana obligatoria. Sin integración automática.',
-    'Diff IA recibido; no aplicado.', jsonb_build_object('run_id',r.id,'receipt','ops_ai_result_receipts','base_sha',r.base_sha,'changed_paths',p_result->'changed_paths'),'pending');
+    jsonb_build_object('summary','Diff IA recibido; no aplicado.','risk',t.risk), jsonb_build_object('run_id',r.id,'receipt','ops_ai_result_receipts','base_sha',r.base_sha,'changed_paths',p_result->'changed_paths'),'pending');
  end if;
  update public.ops_dev_runs set status=outcome, summary='Resultado IA recibido; sin integración.',
  error=p_result->>'error', logs=p_result->>'logs', updated_at=moment,
  finished_at=case when outcome='failed' then moment else null end where id=r.id;
  update public.ops_tasks set status=case when outcome='failed' then 'failed' else 'waiting_approval' end,
- approval_required=true, claim_expires_at=null, error=p_result->>'error', updated_at=moment where id=t.id;
+ approval_required=(outcome='waiting_approval'), claim_expires_at=null,
+ claimed_by=null, claimed_at=null, error=p_result->>'error', updated_at=moment,
+ finished_at=case when outcome='failed' then moment else null end,
+ result=jsonb_build_object('summary','Resultado IA recibido; sin integración.','run_id',r.id,'receipt','ops_ai_result_receipts') where id=t.id;
  insert into public.ops_events(task_id,thread_id,event_type,actor_type,actor_ref,detail)
  values(t.id,t.thread_id,case when outcome='failed' then 'ai_result_failed' else 'ai_result_validated' end,
  'worker','opencode-supabase-result-consumer-v1',jsonb_build_object('run_id',r.id,'receipt','ops_ai_result_receipts'));
