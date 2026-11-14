@@ -9,11 +9,21 @@ header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-sr
 $action = (string) ($_GET['action'] ?? '');
 if (!is_user_logged_in()) {
     if ($action !== '') { wp_send_json_error(['message' => 'Necesitas iniciar sesión.'], 401); }
-    auth_redirect(); exit;
+    status_header(401);
+    ?><!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Entrar · Casa Viva Control</title><link rel="stylesheet" href="style.css"></head><body><main><section class="command-card"><h1>Entrar a Control OS</h1><p>Usa tu cuenta de Casa Viva.</p><p><a class="primary" href="<?php echo esc_url(wp_login_url(home_url('/control/'))); ?>">1. Iniciar sesión</a></p><p>Si después ves Operaciones o tu área de gestora, vuelve a esta página.</p><p><a class="primary" href="<?php echo esc_url(home_url('/control/')); ?>">2. Abrir Control OS</a></p><p><a class="primary" href="<?php echo esc_url(wp_lostpassword_url()); ?>">He olvidado mi contraseña</a></p></section></main></body></html><?php
+    exit;
 }
-if ((int) get_current_user_id() !== 1 || !current_user_can('manage_options')) {
+// Control access: two verified owner accounts, with WordPress capabilities checked each time.
+// Lennys (14 / Lengonga) can consult; requests and decisions remain Ernesto-only.
+$actorId = (int) get_current_user_id();
+$canRead = in_array($actorId, [1, 14], true) && current_user_can('manage_options');
+$canWrite = $actorId === 1 && current_user_can('manage_options');
+if (!$canRead) {
     if ($action !== '') { wp_send_json_error(['message' => 'Este centro es privado.'], 403); }
     status_header(403); exit('Este centro es privado.');
+}
+if (in_array($action, ['task', 'decision'], true) && !$canWrite) {
+    wp_send_json_error(['message' => 'Tu acceso web es de consulta. Solicita cambios y aprueba por WhatsApp.'], 403);
 }
 $store = dirname(__DIR__, 2) . '/control-private';
 
@@ -37,7 +47,7 @@ if ($action === 'task') {
         wp_send_json_error(['message' => 'Escribe entre 8 y 6000 caracteres.'], 400);
     }
     if (!is_dir($store)) { wp_send_json_error(['message' => 'El servidor todavía no está preparado.'], 503); }
-    $request = ['id' => bin2hex(random_bytes(16)), 'at' => gmdate('c'), 'actor_wp_id' => 1, 'kind' => 'task', 'text' => $text];
+    $request = ['id' => bin2hex(random_bytes(16)), 'at' => gmdate('c'), 'actor_wp_id' => $actorId, 'kind' => 'task', 'text' => $text];
     $file = fopen($store . '/requests.jsonl', 'ab');
     if ($file === false || !flock($file, LOCK_EX)) { wp_send_json_error(['message' => 'No se pudo guardar. Inténtalo de nuevo.'], 503); }
     $line = json_encode($request, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n";
@@ -61,7 +71,7 @@ if ($action === 'decision') {
         wp_send_json_error(['message' => 'Decisión inválida.'], 400);
     }
     if (!is_dir($store)) { wp_send_json_error(['message' => 'El servidor todavía no está preparado.'], 503); }
-    $request = ['id' => bin2hex(random_bytes(16)), 'at' => gmdate('c'), 'actor_wp_id' => 1,
+    $request = ['id' => bin2hex(random_bytes(16)), 'at' => gmdate('c'), 'actor_wp_id' => $actorId,
                 'kind' => 'decision', 'approval_id' => $approvalId, 'decision' => $decision];
     $file = fopen($store . '/decisions.jsonl', 'ab');
     if ($file === false || !flock($file, LOCK_EX)) { wp_send_json_error(['message' => 'No se pudo guardar la decisión.'], 503); }
@@ -78,6 +88,7 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="cv-access" content="<?php echo $canWrite ? 'write' : 'read'; ?>">
 <meta name="cv-nonce" content="<?php echo esc_attr(wp_create_nonce('cv-control')); ?>">
 <title>Control OS · Casa Viva</title>
 <link rel="stylesheet" href="style.css?v=<?php echo esc_attr(substr(hash_file('sha256', __DIR__ . '/style.css'), 0, 12)); ?>">
@@ -88,24 +99,25 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
   <button id="refresh" class="icon-btn" aria-label="Actualizar">↻</button>
 </header>
 <main>
+  <p class="section-copy"><a href="<?php echo esc_url(home_url('/centro-operaciones/')); ?>">Pedidos e inventario</a> · <?php echo esc_html(wp_get_current_user()->display_name); ?> · <?php echo $canWrite ? 'Control OS' : 'Acceso de consulta. Cambios y aprobaciones por WhatsApp.'; ?></p>
   <section class="command-card">
     <div class="command-head">
-      <div><span class="eyebrow">CASA VIVA</span><h1>¿Qué quieres hacer?</h1></div>
+      <div><span class="eyebrow">CASA VIVA</span><h1><?php echo $canWrite ? '¿Qué quieres hacer?' : 'Estado de Control OS'; ?></h1></div>
       <div class="fresh"><span id="connection" class="dot"></span><span id="freshness">Cargando estado…</span></div>
     </div>
-    <div class="quick-actions" aria-label="Consultas sin IA">
+    <div class="quick-actions" aria-label="Consultas sin IA" <?php if (!$canWrite) { echo 'hidden'; } ?>>
       <button type="button" data-query="salud del sistema">Salud del sistema</button>
       <button type="button" data-query="estado de wordpress">WordPress</button>
       <button type="button" data-query="estado del bot">Código del bot</button>
       <button type="button" data-query="revisar errores del bot">Errores del bot</button>
     </div>
-    <form id="task-form">
+    <form id="task-form" <?php if (!$canWrite) { echo 'hidden'; } ?>>
       <label class="sr-only" for="task-text">Tu solicitud</label>
       <textarea id="task-text" minlength="8" maxlength="6000" rows="2" required placeholder="Escribe aquí lo que necesitas"></textarea>
       <div class="command-actions"><span>Las consultas de estado no gastan IA.</span><button type="submit" class="primary">Enviar solicitud</button></div>
       <p id="task-feedback" class="feedback" role="status" aria-live="polite"></p>
     </form>
-    <p class="capability-note">Los demás mensajes quedan para revisión. La programación automática de cambios todavía está en preparación.</p>
+    <p class="capability-note" <?php if (!$canWrite) { echo 'hidden'; } ?>>Los demás mensajes quedan para revisión. La programación automática de cambios todavía está en preparación.</p>
   </section>
   <div id="error" class="notice" role="alert" hidden></div>
   <nav class="tabs" aria-label="Secciones">

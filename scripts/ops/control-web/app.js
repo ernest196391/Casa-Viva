@@ -1,4 +1,5 @@
 const $=id=>document.getElementById(id);
+const canWrite=document.querySelector('meta[name=cv-access]')?.content==='write';
 // A presentation boundary only: old records remain in the canonical queue.
 const CLEAN_START='2026-11-14T22:24:32.392Z';
 const state={data:null,filter:'new',pending:null};
@@ -35,6 +36,7 @@ function decisionCard(x){
   if(x.warning)a.append(el('p',x.warning,'card-copy'));
   const impact=x.impact&&typeof x.impact==='object'?Object.values(x.impact).filter(v=>typeof v==='string').join(' · '):'';
   if(impact)a.append(el('small',impact,'impact'));
+  if(!canWrite){a.append(el('p','Acceso de consulta. Las aprobaciones se realizan por WhatsApp.','card-copy'));return a;}
   const actions=el('div','', 'decision-actions');
   const approve=el('button','Aprobar','approve-btn');approve.type='button';approve.dataset.decision='approve';approve.dataset.approval=String(x.approval_id||'');
   const reject=el('button','Rechazar','reject-btn');reject.type='button';reject.dataset.decision='reject';reject.dataset.approval=String(x.approval_id||'');
