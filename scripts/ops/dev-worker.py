@@ -4,9 +4,14 @@
 Phase 1: fully autonomous deterministic development for VivaBot.
 AI tasks are claimed into waiting_ai but are never executed as root.
 No arbitrary shell, repo, path, test command, or deploy target comes from a task.
+
+Fase A (OpenCode × Control OS): los trabajos de IA se preparan como
+paquetes sin secretos (whitelist + redacción), con caducidad (TTL) y
+manejo de errores; nunca se ejecutan aquí y nunca contienen credenciales.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import fcntl
 import json
 import os
@@ -14,6 +19,7 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
+import sys
 import time
 import urllib.parse
 import urllib.request
@@ -59,19 +65,32 @@ def load_env(path: Path) -> None:
         if k and k not in os.environ:
             os.environ[k] = v
 
-for env_path in (Path("/root/vivabot/.env"), ROOT / ".env"):
-    load_env(env_path)
+SUPABASE_URL = ""
+SERVICE_KEY = ""
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
-SERVICE_KEY = (
-    os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    or os.environ.get("SUPABASE_SERVICE_KEY")
-    or os.environ.get("SUPABASE_SECRET_KEY")
-    or os.environ.get("SERVICE_ROLE_KEY")
-    or os.environ.get("VIVABOT_SUPABASE_SERVICE_ROLE_KEY")
-)
-if not SUPABASE_URL or not SERVICE_KEY:
-    raise SystemExit("Faltan SUPABASE_URL o service key")
+TS_FMT = "%Y-%m-%dT%H:%M:%SZ"
+
+
+def load_credentials() -> None:
+    """Carga .env y credenciales Supabase; solo se llama en main().
+
+    Moverlo aquí (antes era código a nivel de módulo) permite importar
+    este archivo en las pruebas unitarias sin tocar /root ni red.
+    """
+    global SUPABASE_URL, SERVICE_KEY
+    for env_path in (Path("/root/vivabot/.env"), ROOT / ".env"):
+        load_env(env_path)
+
+    SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    SERVICE_KEY = (
+        os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        or os.environ.get("SUPABASE_SERVICE_KEY")
+        or os.environ.get("SUPABASE_SECRET_KEY")
+        or os.environ.get("SERVICE_ROLE_KEY")
+        or os.environ.get("VIVABOT_SUPABASE_SERVICE_ROLE_KEY")
+    )
+    if not SUPABASE_URL or not SERVICE_KEY:
+        raise SystemExit("Faltan SUPABASE_URL o service key")
 
 
 def api(method: str, path: str, body=None, prefer=None):
@@ -143,6 +162,289 @@ def path_allowed(path: str, prefixes: list[str]) -> bool:
         if path == prefix or path.startswith(prefix + "/"):
             return True
     return False
+
+
+# --- Fase A: preparación de trabajos de IA para OpenCode (sin secretos) ---
+
+AI_JOB_VERSION = "opencode-ai-job-v1"
+AI_JOB_TTL_SECONDS = 45 * 60
+AI_JOB_MAX_OPERATIONS = 8
+AI_JOB_MAX_CONTENT = 120000
+AI_JOB_MAX_DETERMINISTIC_CONTENT = 12000
+AI_JOB_SPOOL = DEV_ROOT / "ai-jobs"
+
+# Claves que nunca deben viajar en un trabajo de IA.
+SECRET_FIELD_RE = re.compile(
+    r"passw|passwd|secret|token|api[-_]?key|authorization|credential|service[-_]?role",
+    re.IGNORECASE,
+)
+# Valores que parecen credenciales aunque viajen dentro de otro campo.
+SECRET_VALUE_RE = re.compile(
+    r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"  # JWT
+    r"|sk-[A-Za-z0-9_-]{20,}"  # claves estilo OpenAI
+    r"|sbp_[A-Za-z0-9_-]{20,}"  # claves estilo Supabase
+    r"|Bearer\s+\S{20,}",  # cabeceras de autorización
+    re.IGNORECASE,
+)
+# Contenido de ediciones estructuradas: código verbatim, nunca se reescribe.
+CODE_FIELDS = ("content", "old", "new")
+
+
+def redact_value(value, _depth: int = 0):
+    """Redacción defensiva: claves sensibles y valores con forma de credencial.
+
+    Los campos de código (content/old/new) viajan verbatim: reescribirlos
+    rompería la edición determinista; la exclusión de secretos es por
+    whitelist, esto es solo segunda línea de defensa en metadatos.
+    """
+    if _depth > 8:
+        return "[REDACTED_DEEP]"
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            if isinstance(key, str) and SECRET_FIELD_RE.search(key):
+                out[key] = "[REDACTED]"
+            elif key in CODE_FIELDS:
+                out[key] = item
+            else:
+                out[key] = redact_value(item, _depth + 1)
+        return out
+    if isinstance(value, list):
+        return [redact_value(item, _depth + 1) for item in value]
+    if isinstance(value, str):
+        return SECRET_VALUE_RE.sub("[REDACTED]", value)
+    return value
+
+
+def _clean_allow_paths(prefixes) -> list[str]:
+    if not isinstance(prefixes, list) or not prefixes:
+        raise ValueError("trabajo IA requiere allow_paths")
+    out = []
+    for raw in prefixes:
+        if not isinstance(raw, str) or not raw:
+            raise ValueError("allow_paths inválido")
+        out.append(safe_rel_path(raw))
+    return out
+
+
+def _clean_operations(operations) -> list[dict]:
+    if not isinstance(operations, list) or not 1 <= len(operations) <= AI_JOB_MAX_OPERATIONS:
+        raise ValueError("structured patch requiere 1..8 operaciones")
+    out = []
+    for op in operations:
+        if not isinstance(op, dict):
+            raise ValueError("operación inválida")
+        cleaned = {}
+        for key in ("op", "path"):
+            value = op.get(key)
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"operación sin {key}")
+            cleaned[key] = value[:300]
+        safe_rel_path(cleaned["path"])
+        for key in CODE_FIELDS:
+            if key in op:
+                value = op[key]
+                if not isinstance(value, str) or len(value) > AI_JOB_MAX_CONTENT:
+                    raise ValueError(f"campo {key} inválido o demasiado grande")
+                cleaned[key] = value
+        if "expected_count" in op:
+            try:
+                cleaned["expected_count"] = int(op["expected_count"])
+            except (TypeError, ValueError):
+                raise ValueError("expected_count inválido")
+        out.append(cleaned)
+    return out
+
+
+def _clean_deterministic(spec) -> dict:
+    if not isinstance(spec, dict) or spec.get("operation") != "write_smoke_file":
+        raise ValueError("operación determinista no habilitada")
+    content = spec.get("content")
+    if not isinstance(content, str) or not content or len(content) > AI_JOB_MAX_DETERMINISTIC_CONTENT:
+        raise ValueError("contenido smoke inválido")
+    return {
+        "operation": "write_smoke_file",
+        "path": safe_rel_path(spec.get("path", "")),
+        "content": content,
+    }
+
+
+def build_ai_job(task: dict, claim: dict, now=None) -> dict:
+    """Construye el paquete OpenCode desde la tarea: whitelist, nunca secretos."""
+    if not isinstance(task, dict) or not task.get("id"):
+        raise ValueError("tarea inválida para trabajo IA")
+    if not isinstance(claim, dict) or not claim.get("run_id"):
+        raise ValueError("claim inválido para trabajo IA")
+    packet = (task.get("payload") or {}).get("dev") or {}
+    if not isinstance(packet, dict) or not packet:
+        raise ValueError("payload dev ausente o inválido")
+
+    allowed_keys = ("patch_format", "allow_paths", "operations", "deterministic")
+    instructions: dict = {}
+    ignored = sorted(str(key) for key in packet if key not in allowed_keys)
+    for key in allowed_keys:
+        if key not in packet:
+            continue
+        if key == "operations":
+            instructions["operations"] = _clean_operations(packet[key])
+        elif key == "allow_paths":
+            instructions["allow_paths"] = _clean_allow_paths(packet[key])
+        elif key == "deterministic":
+            instructions["deterministic"] = _clean_deterministic(packet[key])
+        else:
+            if not isinstance(packet[key], str) or not packet[key]:
+                raise ValueError("patch_format inválido")
+            instructions["patch_format"] = packet[key][:40]
+
+    if "allow_paths" not in instructions:
+        raise ValueError("trabajo IA requiere allow_paths")
+    if "operations" not in instructions and "deterministic" not in instructions:
+        raise ValueError("trabajo IA requiere operations o deterministic")
+
+    moment = time.time() if now is None else now
+    job = {
+        "version": AI_JOB_VERSION,
+        "run_id": str(claim["run_id"]),
+        "task_id": str(task["id"]),
+        "task_public_id": task.get("public_id"),
+        "repo": claim.get("repo"),
+        "mode": "ai",
+        "title": str(task.get("title") or "")[:200],
+        "risk": task.get("risk") or "guarded",
+        "created_at": time.strftime(TS_FMT, time.gmtime(moment)),
+        "expires_at": time.strftime(TS_FMT, time.gmtime(moment + AI_JOB_TTL_SECONDS)),
+        "ttl_seconds": AI_JOB_TTL_SECONDS,
+        "instructions": instructions,
+        "ignored_packet_keys": ignored,
+    }
+    return redact_value(job)
+
+
+def ai_job_path(run_id: str, spool_dir) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "-", str(run_id)).strip("-") or "run"
+    return Path(spool_dir) / f"task-run-{safe}.json"
+
+
+def write_ai_job(job: dict, spool_dir) -> Path:
+    """Escribe el paquete en el spool con permisos estrictos (0700 dir, 0600 file)."""
+    spool = Path(spool_dir)
+    spool.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path = ai_job_path(job.get("run_id", ""), spool)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(job, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+    return path
+
+
+def parse_ts(value) -> float | None:
+    """Parsea marcas ISO-8601 del worker; naive se interpreta como UTC."""
+    if not isinstance(value, str) or not value:
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp()
+
+
+def ts_expired(expires_at, now: float) -> bool:
+    epoch = parse_ts(expires_at)
+    if epoch is None:
+        return True
+    return epoch <= now
+
+
+def ai_run_expired(row: dict, now=None) -> bool:
+    moment = time.time() if now is None else now
+    base = row.get("updated_at") or row.get("started_at") if isinstance(row, dict) else None
+    epoch = parse_ts(base) if base else None
+    if epoch is None:
+        return False
+    return moment - epoch >= AI_JOB_TTL_SECONDS
+
+
+def purge_ai_job(run_id: str, spool_dir=None) -> bool:
+    path = ai_job_path(run_id, spool_dir if spool_dir is not None else AI_JOB_SPOOL)
+    try:
+        path.unlink()
+    except OSError:
+        return False
+    return True
+
+
+def clean_expired_ai_jobs(spool_dir, now=None) -> list[str]:
+    """Borra trabajos caducados o corruptos del spool; devuelve nombres borrados."""
+    moment = time.time() if now is None else now
+    spool = Path(spool_dir)
+    removed: list[str] = []
+    if not spool.is_dir():
+        return removed
+    for path in sorted(spool.glob("*.json")):
+        try:
+            job = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            job = None
+        if job is None or ts_expired(job.get("expires_at") if isinstance(job, dict) else None, moment):
+            try:
+                path.unlink()
+            except OSError:
+                continue
+            removed.append(path.name)
+    return removed
+
+
+def handle_ai_claim(task: dict, claim: dict, run_id: str):
+    # Hard safety gate: do not run an AI editor as root.
+    try:
+        job = build_ai_job(task, claim)
+        write_ai_job(job, AI_JOB_SPOOL)
+    except Exception as exc:
+        message = str(exc)[:8000]
+        patch_table("ops_dev_runs", run_id, {"status": "failed", "error": message, "finished_at": time.strftime(TS_FMT, time.gmtime())})
+        patch_table("ops_tasks", task["id"], {"status": "failed", "error": message, "claim_expires_at": None})
+        event(task, "ai_job_failed", {"run_id": run_id, "error": message})
+        return
+
+    summary = f"Trabajo IA preparado sin secretos; expira {job['expires_at']}. Esperando sandbox OpenCode."
+    patch_table("ops_dev_runs", run_id, {
+        "status": "waiting_ai",
+        "summary": summary,
+        "updated_at": time.strftime(TS_FMT, time.gmtime()),
+    })
+    patch_table("ops_tasks", task["id"], {
+        "status": "waiting_ai",
+        "claim_expires_at": None,
+        "updated_at": time.strftime(TS_FMT, time.gmtime()),
+    })
+    event(task, "ai_job_prepared", {
+        "run_id": run_id,
+        "job_version": job["version"],
+        "expires_at": job["expires_at"],
+        "operations": len(job.get("instructions", {}).get("operations") or []),
+        "ignored_packet_keys": job.get("ignored_packet_keys", []),
+    })
+
+
+def expire_waiting_ai_runs(now=None):
+    moment = time.time() if now is None else now
+    rows = api("GET", "ops_dev_runs?select=*&status=eq.waiting_ai&order=updated_at.asc&limit=20") or []
+    for row in rows:
+        if not ai_run_expired(row, moment):
+            continue
+        err = "Trabajo IA caducado sin ser recogido del spool."
+        finished = time.strftime(TS_FMT, time.gmtime())
+        patch_table("ops_dev_runs", row["id"], {"status": "failed", "error": err, "finished_at": finished})
+        task = task_for_run(row)
+        if task:
+            patch_table("ops_tasks", task["id"], {"status": "failed", "error": err, "claim_expires_at": None})
+            event(task, "ai_job_expired", {"run_id": row["id"]})
+        purge_ai_job(row["id"])
 
 
 def prepare_worktree(repo_name: str, task_public_id: int, title: str):
@@ -388,16 +690,7 @@ def process_claim(claim: dict):
     repo_name = claim["repo"]
     mode = claim["mode"]
     if mode == "ai":
-        # Hard safety gate: do not run an AI editor as root.
-        patch_table("ops_dev_runs", run_id, {
-            "status": "waiting_ai",
-            "summary": "Esperando sandbox de edición IA; no se ejecutó Claude como root.",
-        })
-        patch_table("ops_tasks", task["id"], {
-            "status": "waiting_ai",
-            "claim_expires_at": None,
-            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        })
+        handle_ai_claim(task, claim, run_id)
         return
 
     repo = work = branch = None
@@ -524,6 +817,7 @@ def casa_viva_deploy_health(expected_sha: str):
 
 
 def monitor_runs():
+    expire_waiting_ai_runs()
     rows = api("GET", "ops_dev_runs?select=*&status=in.(pushed,deploy_queued,deploying)&order=updated_at.asc&limit=20") or []
     for row in rows:
         task = task_for_run(row)
@@ -652,6 +946,7 @@ def monitor_runs():
 
 
 def main():
+    load_credentials()
     os.umask(0o077)
     with open(LOCK, "a") as guard:
         try:
@@ -662,6 +957,10 @@ def main():
         claims = api("POST", "rpc/ops_claim_dev_task", {"p_worker": WORKER}) or []
         if claims:
             process_claim(claims[0])
+        try:
+            clean_expired_ai_jobs(AI_JOB_SPOOL)
+        except Exception as exc:
+            print(f"clean_expired_ai_jobs: {exc}", file=sys.stderr)
 
 
 if __name__ == "__main__":

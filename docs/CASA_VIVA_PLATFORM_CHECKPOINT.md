@@ -254,3 +254,12 @@ Al retomar el proyecto:
 - Precios y comisiones son propuestas, no condiciones formalmente aceptadas por Aserezon. Reservas, pagos y liquidación pendientes de validar.
 - `dry-run` desde la rama habilitado como prueba de acceso a WP-CLI; la ejecución real y el informe del servidor todavía deben verificarse. Prohibido declarar importado sin evidencia.
 - No desplegar plugin, no modificar operaciones financieras ni stock, no publicar productos hasta revisión de calidad y acuerdo comercial.
+
+## PREPARE — OpenCode × Control OS, Fase A (2026-11-14)
+
+- Rama `control-os/opencode-fase-a` sobre `8b8c0ab` (3.14.169). Solo repo local: sin push, sin despliegue, sin acceso a `/root`, sin servicios ni Supabase real.
+- `scripts/ops/dev-worker.py`: los claims `mode == "ai"` ya no solo marcan `waiting_ai`; ahora preparan un trabajo para el sandbox OpenCode con `build_ai_job` (whitelist estricta del payload `dev`, sin secretos por diseño más redacción defensiva de claves/valores con forma de credencial; el código de las ediciones viaja verbatim), spool local con permisos 0700/0600 y TTL de 45 minutos (`expires_at`).
+- Caducidad: `expire_waiting_ai_runs` falla las runs `waiting_ai` vencidas, libera la tarea, emite `ops_events.ai_job_expired` y purga el spool; `clean_expired_ai_jobs` borra también trabajos caducados o corruptos en cada pasada del worker.
+- Manejo de errores: cualquier fallo de validación o escritura deja run y tarea en `failed` con evento `ai_job_failed`, sin tirar el loop del worker. Las credenciales se cargan ahora en `main()` (`load_credentials`), necesario para poder importar el módulo en pruebas; el comportamiento del CLI no cambia.
+- Pruebas: `scripts/ops/tests/dev-worker.test.py` (27 casos: paquete sin secretos, TTL, spool, redacción, rutas seguras y ediciones estructuradas sobre directorio temporal), cableado en `validate.yml` junto al `py_compile` del Ops Bridge. Local: 27/27 OK; `npm run lint/typecheck/build` no ejecutados por falta de `node_modules` en este equipo (limitación conocida).
+- Pendiente (Fases B+): consumidor sandbox OpenCode que lea el spool, contrato de devolución de resultados y publicación de la auditoría de la integración como documento propio del repo.
