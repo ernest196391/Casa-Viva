@@ -341,3 +341,20 @@ Al retomar el proyecto:
 - Comando de la demostración: `python3 scripts/ops/opencode-demo-e2e.py --decision approve` (o `reject`; con TTY se pide por teclado; `--conservar` mantiene el directorio temporal).
 - Limitaciones: modo simulación heredado de Fase C (sin Supabase), propuesta de demostración fija (generación real por modelo sigue bloqueada hasta sandbox efectivo y decisión humana), integración tras aprobación pendiente.
 - Pendiente: decisión humana sobre instalación del sandbox (Fase E), cableado de Supabase real y diseño de la integración post-aprobación.
+
+## CURRENT — Control OS: auditoría de continuidad (2026-11-14)
+
+- Estado: integración A–G en Git completada; operación autónoma por lenguaje natural NO certificada.
+- Último SHA del bridge instalado: `687df775fa09bf0e9307aaa8596e5919a2d60595` (PR #208). Supabase bridge #122 confirma actualización con respaldo .prev.
+- Relevo antiguo superado: #201 fusionado; #202 cerrado y sustituido por #203; rebase remoto #95 terminado y checkout #121 limpio en 9784676153db5ba608ab09b42f462d99e30b0e55, respaldo 25142ed intacto; #205 fusionó A–G.
+- VivaBot: snapshot #105 preservó bc1058f; snapshot #114 preservó 08e7b33; deploy #115 confirmó 4a26e0797eb50851fb3a35216f406a7352c9282a y rollback 08e7b33c4d4ee2f222f55c6d6a5e6cc476d30b48.
+- Salud #119: web 200, bot online, buzón sin atasco, datos respondiendo, disco 56 %, RAM 69 % libre.
+- PR #208: validate, integration, browser, staging-contract, release-foundation y content-studio en success. Los dos checks gate fallaron porque las ramas de mantenimiento no cumplen control-os/task-N-slug (exit 2 antes de cambios); no afirmar todos los checks verdes.
+- Corrección #208: probe de OpenCode instalado 1.19.5 usa --pure y permission con denegación de herramientas. Probe remoto #123 debe verificarse por resultado terminal; no equivale a activar el adaptador.
+- Brecha comprobada: owner-change.js crea payload.request/impact, sin payload.dev.ready/repo; ops_claim_dev_task exige esos campos. Hay 18 tareas dev triaged sin paquete listo. Su estado triaged no demuestra programación en curso.
+- Consumidor A–G aún declara SimStore; cableado Supabase real y promoción post-aprobación pendientes. Mantener ISOLATION_GUARANTEED=False hasta verificar aislamiento real.
+- Worker #120 active/enabled; journal devuelve fallo DNS de 06:44. Esto no demuestra un fallo actual ni una ejecución reciente exitosa. Pendiente smoke real de tarea.
+- Legacy #8/#14/#19/#24: sin aprobación pendiente. Reparación auditable control-os-20261114-legacy-orphans añade result.legacy_review y cuatro ops_events legacy_approval_orphan_identified; conserva waiting_approval y no autoriza ejecución ni mueve dinero. Verificación SELECT confirmó las cuatro marcas.
+- Panel: código exige sesión WordPress, user ID 1 y manage_options; nonce en POST y cabeceras privadas. No se certificó navegación autenticada; DNS local del entorno falló. No ampliar accesos.
+- costo_actual: infraestructura existente; costo_nuevo_requerido: 0; alternativa_gratuita: planner gratuito solo tras calibración; momento_de_escalar: únicamente si proveedor gratuito no permite operación verificable.
+- Siguiente: verificar #123–125; integrar un planner sin herramientas con contrato de propuesta, consumidor Supabase real y aprobación/promoción auditadas; después prueba E2E reversible desde panel/WhatsApp. No declarar Control OS operativo antes de esa evidencia.
