@@ -1882,7 +1882,63 @@ print(json.dumps(result))
                 "output": json.dumps({"stage": "model", "version": version,
                     "network": network, "probe": probe, "confirmed": confirmed})}
 
+def action_prepare_control_dev_checkout(args):
+    """Create one dedicated cvdev checkout at an exact main SHA. Never updates existing checkouts."""
+    import pwd
+    sha = str((args or {}).get("sha", "")).lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        return {"returncode": 2, "output": "SHA completo obligatorio"}
+    target = Path("/home/cvdev/workspace/control-os-certified")
+    parent = target.parent
+    if parent.is_symlink() or parent.resolve() != parent:
+        return {"returncode": 3, "output": "Workspace padre inseguro"}
+    cv = pwd.getpwnam("cvdev")
+    def as_dev(argv):
+        return run(["runuser", "-u", "cvdev", "--", "git", "-C", str(target), *argv], timeout=90)
+    if target.is_symlink():
+        return {"returncode": 3, "output": "Target symlink bloqueado"}
+    if target.exists():
+        head = as_dev(["rev-parse", "HEAD"])
+        status = as_dev(["status", "--porcelain"])
+        origin = as_dev(["remote", "get-url", "origin"])
+        ok = (head["returncode"] == status["returncode"] == origin["returncode"] == 0
+              and head["output"].strip() == sha and not status["output"].strip()
+              and origin["output"].strip() == "https://github.com/ernest196391/Casa-Viva.git"
+              and target.stat().st_uid == cv.pw_uid)
+        return {"returncode": 0 if ok else 4, "output": json.dumps({
+            "changed": False, "verified": ok, "path": str(target),
+            "head": head["output"].strip(), "note": "Checkout existente no modificado"})}
+    cloned = run(["git", "clone", "--no-checkout", "--single-branch", "--branch", "main",
+                  "git@github-casaviva:ernest196391/Casa-Viva.git", str(target)], timeout=120)
+    if cloned["returncode"]:
+        return cloned
+    head = run(["git", "-C", str(target), "rev-parse", "origin/main"], timeout=20)
+    if head["returncode"] or head["output"].strip() != sha:
+        return {"returncode": 5, "output": "main cambió; checkout no activado ni borrado"}
+    remote = run(["git", "-C", str(target), "remote", "set-url", "origin",
+                  "https://github.com/ernest196391/Casa-Viva.git"], timeout=20)
+    if remote["returncode"]:
+        return remote
+    # Only this newly created, fixed tree; never follows a symlink.
+    for root, dirs, files in os.walk(target, followlinks=False):
+        os.chown(root, cv.pw_uid, cv.pw_gid, follow_symlinks=False)
+        for name in dirs + files:
+            os.chown(Path(root) / name, cv.pw_uid, cv.pw_gid, follow_symlinks=False)
+    checked = as_dev(["checkout", "--detach", sha])
+    if checked["returncode"]:
+        return checked
+    status = as_dev(["status", "--porcelain"])
+    final = as_dev(["rev-parse", "HEAD"])
+    ok = (status["returncode"] == final["returncode"] == 0
+          and not status["output"].strip() and final["output"].strip() == sha)
+    return {"returncode": 0 if ok else 6, "output": json.dumps({
+        "changed": True, "verified": ok, "path": str(target), "user": "cvdev",
+        "head": final["output"].strip(), "tracked_clean": not status["output"].strip(),
+        "production_changed": False, "worker_switched": False})}
+
+
 ACTIONS = {
+    "prepare_control_dev_checkout": action_prepare_control_dev_checkout,
     "health": action_health,
     "errors_open": action_errors_open,
     "supervisor_status": action_supervisor_status,
