@@ -1954,7 +1954,7 @@ def _control_codex_paths():
 def _control_codex_cmd():
     base, auth = _control_codex_paths()
     return ["runuser", "-u", "cvdev", "--", "env", "-i",
-            "PATH=/usr/bin:/bin", "HOME=/home/cvdev",
+            "PATH=/usr/local/lib/control-os:/usr/bin:/bin", "HOME=/home/cvdev",
             "CODEX_HOME=" + str(auth),
             str(base / "node_modules/.bin/codex")]
 
@@ -2018,25 +2018,53 @@ def action_control_codex_login(args):
 def action_control_codex_consumer_build(args):
     """One fixed development task, in a dedicated cvdev worktree; never applies SQL or deploys."""
     mode = str((args or {}).get("mode", "status"))
-    if mode not in ("start","status"):
+    if mode not in ("start","retry","status","diagnostic"):
         return {"returncode":2,"output":"Modo inválido"}
     unit = "cv-control-consumer-build"
     work = Path("/home/cvdev/workspace/control-os-consumer-build")
     command = _control_codex_cmd()
-    if mode == "start":
+    if mode == "diagnostic":
+        profiles = {}
+        for name in ("cv-opencode-bwrap","bwrap-userns-restrict"):
+            path = Path("/etc/apparmor.d") / name
+            profiles[name] = path.read_text(errors="replace")[:14000] if path.is_file() else None
+        loaded = Path("/sys/kernel/security/apparmor/profiles")
+        loaded_text = loaded.read_text(errors="replace") if loaded.is_file() else ""
+        restrict = Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns")
+        probe = run(command + ["sandbox","--","/usr/bin/true"],timeout=30)
+        kernel = run(["journalctl","-k","-n","150","--no-pager","--output=cat"],timeout=20)
+        denied = [line for line in kernel["output"].splitlines()
+                  if ("DENIED" in line or "userns" in line) and
+                  any(x in line.lower() for x in ("bwrap","codex","userns"))]
+        return {"returncode":0,"output":json.dumps({
+            "restriction":restrict.read_text().strip() if restrict.exists() else None,
+            "profiles":profiles,
+            "loaded_profiles":[x for x in loaded_text.splitlines() if "bwrap" in x or "codex" in x],
+            "native_sandbox_probe":probe,"kernel_denials":denied[-20:],
+            "model_called":False,"policy_changed":False})}
+    if mode in ("start","retry"):
         state = run(["systemctl","is-active",unit],timeout=10)
         if state["output"].strip() in ("active","activating"):
             return {"returncode":0,"output":json.dumps({"already_running":True,"unit":unit})}
-        if work.exists() or work.is_symlink():
-            return {"returncode":3,"output":"Workspace existente: revisar resultado antes de repetir"}
+        if work.is_symlink():
+            return {"returncode":3,"output":"Workspace symlink bloqueado"}
         source = "/home/cvdev/workspace/control-os-certified"
         prefix = ["runuser","-u","cvdev","--","git","-C",source]
-        fetched = run(prefix + ["fetch","origin","main"],timeout=90)
-        if fetched["returncode"]:
-            return fetched
-        made = run(prefix + ["worktree","add","--detach",str(work),"origin/main"],timeout=60)
-        if made["returncode"]:
-            return made
+        if work.exists():
+            if mode != "retry":
+                return {"returncode":3,"output":"Workspace existente: revisar antes de repetir"}
+            clean = run(["runuser","-u","cvdev","--","git","-C",str(work),"status","--porcelain"],timeout=20)
+            head = run(["runuser","-u","cvdev","--","git","-C",str(work),"rev-parse","HEAD"],timeout=20)
+            base = run(prefix+["rev-parse","origin/main"],timeout=20)
+            if clean["returncode"] or clean["output"].strip() or head["returncode"] or base["returncode"] or head["output"].strip()!=base["output"].strip():
+                return {"returncode":3,"output":"Retry requiere worktree limpio y base intacta"}
+        else:
+            fetched = run(prefix + ["fetch","origin","main"],timeout=90)
+            if fetched["returncode"]:
+                return fetched
+            made = run(prefix + ["worktree","add","--detach",str(work),"origin/main"],timeout=60)
+            if made["returncode"]:
+                return made
         prompt = (
             "Implementa SOLO la integración de resultados Control OS con Supabase en este worktree. "
             "Lee AGENTS.md y blueprints/checkpoint. No ejecutes red, SQL real, git push, deploy ni leas credenciales. "
@@ -2071,11 +2099,187 @@ def action_control_codex_consumer_build(args):
     return {"returncode":0,"output":json.dumps({"unit":unit,"state":state["output"],
             "journal":output,"diff_stat":diff["output"],"production_changed":False})}
 
+def action_control_codex_consumer_publish(args):
+    """Publish reviewed-material branch only. No merge, SQL, deploy or generated-code execution."""
+    work = Path("/home/cvdev/workspace/control-os-consumer-build")
+    if work.is_symlink() or work.resolve() != work or not (work / ".git").is_file():
+        return {"returncode":2,"output":"Worktree inesperado"}
+    state = run(["systemctl","is-active","cv-control-consumer-build"],timeout=10)
+    if state["output"].strip() in ("active","activating"):
+        return {"returncode":3,"output":"Preparación todavía activa"}
+    def git(argv):
+        return run(["runuser","-u","cvdev","--","git","-C",str(work),*argv],timeout=90)
+    head = git(["rev-parse","HEAD"])
+    base = git(["rev-parse","origin/main"])
+    if head["returncode"] or base["returncode"] or head["output"].strip()!=base["output"].strip():
+        return {"returncode":4,"output":"HEAD no coincide con base; no se publica"}
+    names = git(["ls-files","--modified","--others","--exclude-standard"])
+    if names["returncode"]:
+        return names
+    paths = sorted(set(names["output"].splitlines()))
+    if not paths or len(paths)>20:
+        return {"returncode":5,"output":"Cantidad de archivos fuera de límite"}
+    total = 0
+    for rel in paths:
+        if not re.fullmatch(r"[A-Za-z0-9_./-]+",rel) or ".." in Path(rel).parts:
+            return {"returncode":5,"output":"Ruta insegura"}
+        if not rel.startswith(("scripts/ops/","docs/")) or any(x.startswith(".") for x in Path(rel).parts):
+            return {"returncode":5,"output":"Ruta fuera del alcance: "+rel}
+        current = work
+        for part in Path(rel).parts:
+            current = current / part
+            if current.is_symlink():
+                return {"returncode":5,"output":"Symlink rechazado"}
+        if not current.is_file():
+            return {"returncode":5,"output":"Borrados o archivos especiales requieren revisión"}
+        body = current.read_text(encoding="utf-8")
+        total += len(body.encode())
+        if total>500000 or re.search(r"BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY|\b(?:sk-|sbp_)[A-Za-z0-9_-]{16,}|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+",body):
+            return {"returncode":6,"output":"Límite o patrón sensible: "+rel}
+    check = git(["diff","--check"])
+    if check["returncode"]:
+        return check
+    branch = "review/control-os-real-consumer"
+    for cmd in (["switch","-c",branch],["add","--",*paths],
+                ["-c","user.name=Casa Viva Control OS","-c","user.email=control-os@local.invalid",
+                 "commit","-m","Control OS: propuesta de consumidor real preparada por cvdev"]):
+        step = git(cmd)
+        if step["returncode"]:
+            return step
+    pushed = run(["git","-c","safe.directory="+str(work),"-c","core.hooksPath=/dev/null",
+                  "-C",str(work),"push","git@github-casaviva:ernest196391/Casa-Viva.git",
+                  "HEAD:refs/heads/"+branch],timeout=120)
+    if pushed["returncode"]:
+        return pushed
+    return {"returncode":0,"output":json.dumps({"branch":branch,
+        "head":git(["rev-parse","HEAD"])["output"].strip(),"paths":paths,
+        "merged":False,"deployed":False})}
+
+def action_control_codex_sandbox(args):
+    """Dedicated bwrap profile only; no global AppArmor, sysctl, setuid or file-capability changes."""
+    import shutil
+    import pwd
+    mode = str((args or {}).get("mode","verify"))
+    if mode not in ("install","verify","rollback"):
+        return {"returncode":2,"output":"Modo inválido"}
+    folder = Path("/usr/local/lib/control-os")
+    binary = folder / "bwrap"
+    policy = Path("/etc/apparmor.d/cv-control-codex-bwrap")
+    previous_profile = "abi <abi/4.0>,\ninclude <tunables/global>\nprofile cv-control-codex-bwrap /usr/local/lib/control-os/bwrap flags=(attach_disconnected,mediate_deleted) {\n  include <abstractions/base>\n  userns,\n  # These mediate capabilities acquired INSIDE bwrap's user namespace.\n  # The root-owned copy is 0755, without setuid or file capabilities;\n  # cvdev acquires no host capabilities.\n  capability setpcap,\n  capability sys_admin,\n  capability net_admin,\n  capability sys_chroot,\n  capability setuid,\n  capability setgid,\n  mount,\n  umount,\n  pivot_root,\n  network netlink raw,\n  network unix,\n  deny network inet,\n  deny network inet6,\n  signal (send,receive) peer=cv-control-codex-bwrap,\n  signal (receive) peer=unconfined,\n  / r,\n  /** r,\n  /usr/** rixm,\n  /bin/** rixm,\n  /sbin/** rixm,\n  /lib/** mr,\n  /lib64/** mr,\n  /home/cvdev/control-os-tools/** rixm,\n  /home/cvdev/workspace/control-os-consumer-build/{,**} rwkixm,\n  /tmp/{,**} rwkixm,\n  /dev/{null,zero,random,urandom,tty} rw,\n  /dev/pts/{,**} rw,\n  /proc/[0-9]*/{uid_map,gid_map,setgroups} rw,\n  deny /root/{,**} rwklmx,\n  deny /home/cvdev/control-os-auth/{,**} rwklmx,\n  deny /home/cvdev/.ssh/{,**} rwklmx,\n  deny /etc/ssl/private/{,**} rwklmx,\n}\n"
+    profile = "abi <abi/4.0>,\ninclude <tunables/global>\nprofile cv-control-codex-bwrap /usr/local/lib/control-os/bwrap flags=(attach_disconnected,mediate_deleted) {\n  include <abstractions/base>\n  userns,\n  # These mediate capabilities acquired INSIDE bwrap's user namespace.\n  # The root-owned copy is 0755, without setuid or file capabilities;\n  # cvdev acquires no host capabilities.\n  capability setpcap,\n  capability sys_admin,\n  capability net_admin,\n  capability sys_chroot,\n  capability setuid,\n  capability setgid,\n  mount,\n  umount,\n  pivot_root,\n  network netlink raw,\n  network unix,\n  deny network inet,\n  deny network inet6,\n  signal (send,receive) peer=cv-control-codex-bwrap,\n  signal (receive) peer=unconfined,\n  # Private tmpfs staging root used by Bubblewrap before pivot_root.\n  /newroot/ rw,\n  /newroot/** rwkixm,\n  deny /newroot/root/{,**} rwklmx,\n  deny /newroot/home/cvdev/control-os-auth/{,**} rwklmx,\n  deny /newroot/home/cvdev/.ssh/{,**} rwklmx,\n  deny /newroot/etc/ssl/private/{,**} rwklmx,\n  / r,\n  /** r,\n  /usr/** rixm,\n  /bin/** rixm,\n  /sbin/** rixm,\n  /lib/** mr,\n  /lib64/** mr,\n  /home/cvdev/control-os-tools/** rixm,\n  /home/cvdev/workspace/control-os-consumer-build/{,**} rwkixm,\n  /tmp/{,**} rwkixm,\n  /dev/{null,zero,random,urandom,tty} rw,\n  /dev/pts/{,**} rw,\n  /proc/[0-9]*/{uid_map,gid_map,setgroups} rw,\n  deny /root/{,**} rwklmx,\n  deny /home/cvdev/control-os-auth/{,**} rwklmx,\n  deny /home/cvdev/.ssh/{,**} rwklmx,\n  deny /etc/ssl/private/{,**} rwklmx,\n}\n"
+    if folder.is_symlink() or policy.is_symlink() or binary.is_symlink():
+        return {"returncode":3,"output":"Ruta insegura"}
+    if policy.exists() and policy.read_text() not in (previous_profile,profile):
+        return {"returncode":3,"output":"Perfil existente distinto: requiere revisión"}
+    if mode == "rollback":
+        if policy.exists():
+            unloaded = run(["apparmor_parser","-R",str(policy)],timeout=30)
+            if unloaded["returncode"]:
+                return unloaded
+            policy.unlink()
+        if binary.is_file():
+            binary.unlink()
+        return {"returncode":0,"output":"Perfil dedicado revertido; protección global intacta"}
+    if mode == "install":
+        tools_root = Path("/home/cvdev/control-os-tools")
+        candidates = [p for p in tools_root.rglob("bwrap") if p.is_file() and not p.is_symlink()
+                      and p.resolve().is_relative_to(tools_root)
+                      and "codex-resources" in p.parts]
+        if len(candidates)!=1:
+            return {"returncode":4,"output":json.dumps({"error":"Recurso bwrap oficial ambiguo",
+                "candidates":[str(p) for p in candidates]})}
+        source = candidates[0]
+        help_probe = run(["runuser","-u","cvdev","--",str(source),"--help"],timeout=15)
+        if help_probe["returncode"] or not all(x in help_probe["output"] for x in ("--perms","--as-pid-1")):
+            return {"returncode":4,"output":"bwrap incluido no satisface requisitos de Codex"}
+        state = run(["systemctl","is-active","cv-control-consumer-build"],timeout=10)
+        if state["output"].strip() in ("active","activating"):
+            return {"returncode":4,"output":"Detener preparación antes de reemplazar binario"}
+        folder.mkdir(mode=0o755,exist_ok=True)
+        if folder.stat().st_uid!=0 or folder.stat().st_mode & 0o022:
+            return {"returncode":3,"output":"Directorio de binarios no es seguro"}
+        folder.chmod(0o755)  # Bridge umask is 077; cvdev must traverse this public binary directory.
+        temporary = Path("/etc/apparmor.d/cv-control-codex-bwrap.next")
+        temporary.write_text(profile)
+        temporary.chmod(0o644)
+        parsed = run(["apparmor_parser","-Q",str(temporary)],timeout=30)
+        if parsed["returncode"]:
+            temporary.unlink()
+            return parsed
+        if binary.exists() and binary.read_bytes()!=source.read_bytes():
+            if not Path("/usr/bin/bwrap").is_file() or binary.read_bytes()!=Path("/usr/bin/bwrap").read_bytes():
+                return {"returncode":3,"output":"Binario anterior no reconocido"}
+        if not binary.exists() or binary.read_bytes()!=source.read_bytes():
+            next_binary = folder / "bwrap.next"
+            shutil.copyfile(source,next_binary)
+            next_binary.chmod(0o755)
+            os.replace(next_binary,binary)
+        if ("security.capability" in os.listxattr(binary)
+                or binary.read_bytes()!=source.read_bytes()):
+            return {"returncode":3,"output":"Binario distinto o con file capabilities"}
+        if binary.stat().st_uid!=0 or binary.stat().st_mode & 0o6022:
+            return {"returncode":3,"output":"Binario con propietario/permisos inseguros"}
+        os.replace(temporary,policy)
+        loaded = run(["apparmor_parser","-r",str(policy)],timeout=30)
+        if loaded["returncode"]:
+            return loaded
+    if not binary.is_file() or not policy.is_file():
+        return {"returncode":4,"output":"Perfil dedicado no instalado"}
+    command = _control_codex_cmd()
+    work = "/home/cvdev/workspace/control-os-consumer-build"
+    direct = run(["runuser","-u","cvdev","--",str(binary),
+                  "--unshare-user","--unshare-net","--ro-bind","/","/","/usr/bin/true"],
+                  cwd=work,timeout=20)
+    if direct["returncode"]:
+        return {"returncode":5,"output":json.dumps({"stage":"dedicated_binary",
+            "directory_mode":oct(folder.stat().st_mode & 0o777),"probe":direct})}
+    boot = run(command+["sandbox","--","/usr/bin/true"],cwd=work,timeout=30)
+    if boot["returncode"]:
+        return {"returncode":5,"output":json.dumps({"stage":"bootstrap","probe":boot,
+            "global_restriction":Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").read_text().strip()})}
+    canary = Path("/home/cvdev/control-os-auth/isolation-read-check")
+    canary.write_text("CONTROL_OS_FAKE_SECRET")
+    cv = pwd.getpwnam("cvdev")
+    os.chown(canary,cv.pw_uid,cv.pw_gid)
+    canary.chmod(0o600)
+    checks = """import json,os,pathlib,socket
+report={}
+try:
+    pathlib.Path('/home/cvdev/control-os-auth/isolation-read-check').read_text();report['auth_read_denied']=False
+except OSError as e:
+    report['auth_read_denied']=e.errno in (1,13)
+p=pathlib.Path('.control-os-isolation-check')
+try:
+    p.write_text('fixture'); report['workspace_write']=p.read_text()=='fixture'; p.unlink()
+except OSError:
+    report['workspace_write']=False
+for key,path in [('auth_write','/home/cvdev/control-os-auth/isolation-write-check'),('root_write','/root/isolation-write-check')]:
+    try:
+        fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600);os.close(fd);os.unlink(path);report[key]=False
+    except OSError as e:
+        report[key]=e.errno in (1,13,30)
+try:
+    s=socket.socket();s.settimeout(2);s.connect(('1.1.1.1',443));s.close();report['network_denied']=False
+except OSError as e:
+    report['network_denied']=e.errno in (1,13)
+print(json.dumps(report))
+raise SystemExit(0 if all(report.values()) else 1)
+"""
+    verified = run(command+["-c",'sandbox_mode="workspace-write"',"sandbox","--",
+                   "/usr/bin/python3","-c",checks],cwd=work,timeout=30)
+    canary.unlink(missing_ok=True)
+    return {"returncode":verified["returncode"],"output":json.dumps({
+        "stage":"negative_tests","probe":verified,"bootstrap_passed":True,
+        "global_restriction":Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").read_text().strip(),
+        "production_changed":False,"model_called":False})}
+
 ACTIONS = {
     "prepare_control_dev_checkout": action_prepare_control_dev_checkout,
     "control_codex_setup": action_control_codex_setup,
     "control_codex_login": action_control_codex_login,
     "control_codex_consumer_build": action_control_codex_consumer_build,
+    "control_codex_consumer_publish": action_control_codex_consumer_publish,
+    "control_codex_sandbox": action_control_codex_sandbox,
     "health": action_health,
     "errors_open": action_errors_open,
     "supervisor_status": action_supervisor_status,

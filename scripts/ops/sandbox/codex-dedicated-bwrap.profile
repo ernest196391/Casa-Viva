@@ -1,0 +1,48 @@
+abi <abi/4.0>,
+include <tunables/global>
+profile cv-control-codex-bwrap /usr/local/lib/control-os/bwrap flags=(attach_disconnected,mediate_deleted) {
+  include <abstractions/base>
+  userns,
+  # These mediate capabilities acquired INSIDE bwrap's user namespace.
+  # The root-owned copy is 0755, without setuid or file capabilities;
+  # cvdev acquires no host capabilities.
+  capability setpcap,
+  capability sys_admin,
+  capability net_admin,
+  capability sys_chroot,
+  capability setuid,
+  capability setgid,
+  mount,
+  umount,
+  pivot_root,
+  network netlink raw,
+  network unix,
+  deny network inet,
+  deny network inet6,
+  signal (send,receive) peer=cv-control-codex-bwrap,
+  signal (receive) peer=unconfined,
+  # Private tmpfs staging root used by Bubblewrap before pivot_root.
+  /newroot/ rw,
+  /newroot/** rwkixm,
+  deny /newroot/root/{,**} rwklmx,
+  deny /newroot/home/cvdev/control-os-auth/{,**} rwklmx,
+  deny /newroot/home/cvdev/.ssh/{,**} rwklmx,
+  deny /newroot/etc/ssl/private/{,**} rwklmx,
+  / r,
+  /** r,
+  /usr/** rixm,
+  /bin/** rixm,
+  /sbin/** rixm,
+  /lib/** mr,
+  /lib64/** mr,
+  /home/cvdev/control-os-tools/** rixm,
+  /home/cvdev/workspace/control-os-consumer-build/{,**} rwkixm,
+  /tmp/{,**} rwkixm,
+  /dev/{null,zero,random,urandom,tty} rw,
+  /dev/pts/{,**} rw,
+  /proc/[0-9]*/{uid_map,gid_map,setgroups} rw,
+  deny /root/{,**} rwklmx,
+  deny /home/cvdev/control-os-auth/{,**} rwklmx,
+  deny /home/cvdev/.ssh/{,**} rwklmx,
+  deny /etc/ssl/private/{,**} rwklmx,
+}
