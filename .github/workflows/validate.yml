@@ -40,6 +40,7 @@ jobs:
           python3 scripts/ops/tests/opencode-result-consumer.test.py
           python3 scripts/ops/tests/opencode-adapter.test.py
           python3 scripts/ops/tests/opencode-sandbox.test.py
+          python3 scripts/ops/tests/planner-worker.test.py
           python3 scripts/ops/tests/opencode-proposal.test.py
           python3 scripts/ops/tests/opencode-demo-e2e.test.py
           php -l scripts/ops/control-web/index.php
