@@ -1,37 +1,38 @@
-# Resultados Control OS en Supabase — preparación local
+# Resultados de programación en Control OS
 
-Objetivo: el actor consumidor interno recibe `opencode-result-v1`, concilia run bigint y tarea UUID y solicita revisión humana. Fuente de verdad: `ops_dev_runs`, `ops_tasks`; evidencia del resultado: `ops_ai_result_receipts`. No cambia la autoridad comercial ni el flujo de WooCommerce.
+El consumidor recibe resultados de desarrollo, los guarda en Supabase y pide revisión humana. Reutiliza ops_tasks, ops_dev_runs, ops_approvals y ops_events. WooCommerce conserva la autoridad comercial.
 
-## Flujo y aceptación
+## Qué está implementado
 
-`opencode-supabase-result-consumer.py` importa la validación existente sin modificar `SimStore`. `SupabaseResultStore(client)` recibe un cliente compatible con `client.rpc(nombre, parámetros).execute()`. No carga configuración, archivos de secretos ni variables de credenciales. Su CLI permanece cerrada; no se instala ni activa servicio alguno. La llamada real al cliente es la frontera de transporte futura, probada aquí solo con mocks, sin añadir dependencias.
+- Consumidor separado con cliente Supabase inyectado; SimStore conserva su demostración.
+- Recibo por run con paquete completo, diff, base_sha y changed_paths.
+- Una RPC SECURITY INVOKER bloquea tarea y run, concilia identidad, negocio Casa Viva, executor dev, modo IA, auto_merge=false, estado waiting_ai, SHA, rutas, tamaños y caducidad.
+- Un resultado completo crea recibo, aprobación pending y evento en una transacción. Run y tarea quedan waiting_approval.
+- Un resultado fallido queda failed con evidencia, sin aprobación y sin aplicar cambios.
+- El reintento idéntico no duplica eventos/aprobaciones; un resultado diferente para la misma run se rechaza.
+- Un error del transporte conserva el archivo. El cliente comprueba run_id y estado de respuesta antes de archivarlo.
+- El buzón fija descriptores de directorios, rechaza enlaces y crea archivos de cuarentena/motivo únicos mediante O_EXCL/O_NOFOLLOW.
 
-Cada archivo válido invoca exclusivamente `ops_accept_opencode_result(p_result jsonb)`. La RPC bloquea run y tarea, comprueba identidad, public_id cuando viene informado, repo, modo IA, auto_merge deshabilitado, estados, base SHA y allowlist persistida. Rechaza tareas con otras runs activas. Los prefijos de directorio deben terminar en `/`; otros valores son rutas exactas. Verifica tamaños y ventana temporal también en SQL. El diff es evidencia opaca: nunca se ejecuta ni aplica; su concordancia semántica con los archivos requiere revisión posterior.
+## Decisión humana
 
-Un resultado completo crea recibo + aprobación `pending` + evento, deja run `waiting_approval`, tarea `waiting_approval` y `approval_required=true`. Un fallo crea recibo y evento y deja ambos en `failed`, sin cambios aplicados. Ninguna ruta crea aprobación aceptada ni integra, promueve, hace push o despliega. La decisión humana real posterior no se implementa aquí: la fila pendiente usa `ops_approvals`, que ya consulta el panel; `record_decision` de SimStore solo pertenece a demostraciones.
+La migración extiende ops_decide_approval exclusivamente para aprobaciones vinculadas a un recibo IA. Comprueba tarea/run pendientes y recibo conciliado.
 
-La PK del recibo deduplica por run; la comparación del JSONB completo acepta reintentos idénticos y rechaza conflictos. No se deduplica el mismo diff entre tareas independientes. Un error RPC conserva el archivo, incluso ante respuesta perdida después del commit. El duplicado exacto en SQL no vuelve a mutar estados ni crear aprobaciones. El validador local sigue rechazando resultados caducados antes de RPC; un recibo ya confirmado cuyo archivo caducó se concilia manualmente, sin promoverlo. No se añade otra política de expiración de runs.
+Aprobar deja tarea verifying, executor human y run blocked, pendiente de PR, CI y promoción técnica. No devuelve a triaged ni inicia otra programación. Rechazar bloquea el resultado sin aplicar el diff. Repetir una decisión no añade eventos. Las aprobaciones ordinarias conservan su comportamiento previo.
 
-## Migración propuesta, no aplicada
+Aprobar NO despliega. El diff sigue siendo evidencia opaca y debe concordar con archivos y pruebas antes de promoción. Este cambio no implementa aplicar diffs, crear PR automáticamente ni desplegar.
 
-`scripts/ops/sql/opencode-result-receipts.sql` debe revisarse y aplicarse dentro de una transacción administrativa independiente. Crea tabla de recibos con RLS sin políticas públicas y una única función `SECURITY INVOKER`, con `search_path` explícito. Revoca acceso público/anon/authenticated; concede solo SELECT/INSERT del recibo y EXECUTE de la RPC a `service_role`. No amplía permisos sobre tablas existentes: ese rol debe disponer ya de SELECT/UPDATE de runs/tareas, INSERT de eventos/aprobaciones y permisos de secuencias correspondientes. La función no puede elevar permisos.
+## Migración y permisos
 
-Antes de aplicar, comprobar en un entorno autorizado los constraints/enum de estados y las columnas/tipos/defaults de `ops_tasks`, `ops_approvals`, `ops_events`. La propuesta usa las columnas observadas en consumidores locales: `requested_for_role`, `warning`, `impact`, `proposed_change`, `status`, `thread_id`, `claim_expires_at`, etc.; no se certificó el DDL real de estas tablas. `requested_for_role='owner'` y `status='pending'` requieren compatibilidad con el esquema real. `logs` se guarda como texto JSON en la columna existente. No escribe diff/result en `ops_dev_runs`. Una incompatibilidad aborta toda la RPC, nunca usa escrituras parciales como alternativa.
+scripts/ops/sql/opencode-result-receipts.sql crea ops_ai_result_receipts con RLS y sin acceso público. Revoca privilegios de anon/authenticated/PUBLIC, limita service_role a SELECT/INSERT de recibos y EXECUTE de la RPC. La función no eleva permisos; usa los permisos existentes del servicio sobre tareas, runs, aprobaciones y eventos.
 
-No retirar una tabla con recibos reales para revertir: primero detener el consumidor y revocar EXECUTE; conservar evidencia y aprobaciones pendientes para revisión. No se aplica reversión destructiva automática.
+Se inspeccionó el esquema real: ops_dev_runs admite waiting_approval; ops_approvals.impact es JSONB. No se añaden columnas diff/result a ops_dev_runs. El resultado resumido se refleja en ops_tasks.result. El orden de locks tarea→run coincide con la decisión humana.
 
-## Evidencia y límites
+scripts/ops/sql/rollback-ai-result-decision.sql revoca la nueva RPC y restaura la decisión anterior. Antes de revertir, detener cualquier consumidor activo; conservar recibos, evidencias y aprobaciones. No borrar tablas ni resultados reales.
 
-Suite Python nueva: mocks del cliente, rechazo antes del transporte, respuestas inválidas y conservación del buzón ante errores de conciliación/estado/duplicado/fallo tardío. Estas pruebas verifican el cliente, no prueban transacciones PostgreSQL. Fixture SQL separada para base vacía desechable con roles Supabase existentes: crea esquema mínimo, incluye migración, prueba negativos, duplicados y fallo tardío de evento, y termina en ROLLBACK. No ejecutada por instrucción explícita de no ejecutar SQL real. No certifica concurrencia real, permisos efectivos ni constraints de producción; requiere validación posterior autorizada. No se hicieron llamadas de red ni lecturas de credenciales.
+## Pruebas y límites
 
-## Revisión contra el esquema real (2026-11-14)
+CI ejecuta mocks Python y PostgreSQL 17 desechable. La fixture crea tablas con los tipos/estados pertinentes y termina en ROLLBACK. Comprueba negativos, duplicados, fallo tardío de evento con rollback total, límites de permisos, decisión IA sin reencolado y aprobación ordinaria. No conecta con producción.
 
-Se inspeccionaron las columnas y CHECK reales por el conector: ops_dev_runs admite waiting_approval, no awaiting_approval; ops_approvals.impact es JSONB. La RPC y la fixture usan los contratos reales. El resultado se refleja en ops_tasks.result y se liberan claims; fallos terminan con finished_at. La recepción fija descriptores de directorios, rechaza enlaces y crea motivos de cuarentena únicos con O_EXCL/O_NOFOLLOW, sin reutilizar el helper de la simulación. El cliente concilia estado/run_id del recibo antes de archivarlo.
+La generación de código mediante Codex 0.169 en el VPS ya produjo esta propuesta. El aislamiento remoto #192 permitió escribir en el workspace y bloqueó lectura de canario auth, escritura auth/root y red del ejecutor; AppArmor global sigue activo. Ese ensayo no certifica todavía el recorrido completo WhatsApp/panel→tarea→modelo→promoción→despliegue.
 
-CI ejecuta la suite Python nueva y la fixture PostgreSQL 17 en un servicio desechable. La fixture no conecta con producción. Esta propuesta continúa sin activar consumidor ni promoción.
-
-## Decisión humana y promoción técnica
-
-La migración incluye una rama específica de ops_decide_approval para aprobaciones vinculadas a un recibo IA. Exige tarea/run pendientes y recibo conciliado. Aprobar deja la tarea verifying con executor human y el run blocked, pendiente de PR, CI y promoción técnica. Rechazar deja bloqueado el resultado sin aplicarlo. Repetir una decisión no duplica eventos. Las aprobaciones ordinarias conservan su comportamiento anterior. La fixture verifica ambas rutas y se incluye rollback no destructivo que revoca la RPC y restaura la decisión anterior preservando evidencias.
-
-Consumidor y decisión bloquean tarea antes de run para evitar invertir locks en reintentos concurrentes. El ciclo de promoción del diff sigue requiriendo implementación y certificación; aprobar no despliega código. La CLI del consumidor permanece cerrada y no hay servicio activado.
+La migración de recibos continúa sin aplicarse. No hay servicio consumidor activado y la CLI permanece cerrada. La promoción técnica y su E2E real siguen pendientes.
