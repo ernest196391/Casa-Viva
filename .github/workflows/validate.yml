@@ -105,6 +105,12 @@ jobs:
       - name: Validar contrato de incidencias operativas estructuradas
         run: node artifacts/tests/test-structured-incidents-5d.mjs
 
+      - name: Validar contador y confirmación de mensajeros
+        run: |
+          php -l wordpress/casa-viva-dropship-core/includes/class-cvd-cadena-mensajeros.php
+          php -l wordpress/casa-viva-dropship-core/includes/class-cvd-bot-bridge.php
+          node --test scripts/ops/tests/mensajeria-horario.test.mjs
+
       - name: Validar contratos field-ready de mensajería
         run: |
           node artifacts/tests/test-messenger-contact-events.mjs
