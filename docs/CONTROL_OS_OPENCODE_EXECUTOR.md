@@ -4,6 +4,8 @@ Estado: Fases A, B y C (simulación) más Fase D (adaptador de CLI, bloqueado pa
 
 **Fase E (propuesta de sandbox, no instalada)**: la propuesta de aislamiento con Bubblewrap + AppArmor está documentada en `docs/CONTROL_OS_SANDBOX_PROPOSAL.md`, con artefactos en `scripts/ops/sandbox/`. El adaptador sigue bloqueado (`ISOLATION_GUARANTEED = False`); nada de la propuesta está instalado, probado contra el sistema real ni cableado al adaptador.
 
+**Fase F (contrato de propuestas + puente, implementada)**: la separación entre generación remota de IA y ejecución determinista está documentada en `docs/CONTROL_OS_PROPOSAL_CONTRACT.md`, con el contrato `cv-change-proposal-v1` (`scripts/ops/opencode-proposal.py`) y el puente hacia el buzón (`scripts/ops/opencode-proposal-bridge.py`). El ejecutor no fue modificado y no conoce la Fase F (verificado por escaneo estático).
+
 ## Papeles
 
 - **Productor (root, Fase A)**: `scripts/ops/dev-worker.py`. Reclama tareas `mode == "ai"` de Supabase, construye el paquete con whitelist estricta (`build_ai_job`) y lo entrega en el buzón de cvdev. Nunca ejecuta el editor de IA.
