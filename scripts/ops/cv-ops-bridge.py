@@ -2106,7 +2106,7 @@ def action_control_codex_consumer_publish(args):
             return {"returncode":5,"output":"Borrados o archivos especiales requieren revisión"}
         body = current.read_text(encoding="utf-8")
         total += len(body.encode())
-        if total>500000 or re.search(r"BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY|\\b(?:sk-|sbp_)[A-Za-z0-9_-]{16,}|\\beyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+",body):
+        if total>500000 or re.search(r"BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY|\b(?:sk-|sbp_)[A-Za-z0-9_-]{16,}|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+",body):
             return {"returncode":6,"output":"Límite o patrón sensible: "+rel}
     check = git(["diff","--check"])
     if check["returncode"]:
