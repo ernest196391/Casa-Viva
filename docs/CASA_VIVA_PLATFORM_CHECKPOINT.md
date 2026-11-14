@@ -410,13 +410,62 @@ Al retomar el proyecto:
 - Resultado se revisará como diff antes de promover. Si el sandbox no arranca, se mantiene cerrado; no se desactiva AppArmor ni se usa danger-full-access.
 - Costo adicional previsto 0: usa cuota existente de ChatGPT. No certifica todavía generación ni consumo de resultados hasta revisar ejecución real.
 
+## CURRENT — Publicación acotada del consumidor (2026-11-14)
+
+- Preparación Codex arrancó en unidad cv-control-consumer-build como cvdev (#174), sin tocar producción. El journal confirmó sesión y primer mensaje del modelo; no equivale a resultado certificado.
+- Se propone acción de publicación solo desde worktree fijo, preparación inactiva, HEAD igual a origin/main, máximo 20 archivos/500KB, sin borrados, symlinks, dotfiles, rutas fuera de scripts/ops y docs ni patrones de secreto. Commit como cvdev y push sin force a rama fija review/control-os-real-consumer; hooks deshabilitados para el push privilegiado. No ejecuta código generado, merge, SQL ni despliegue.
+- Pendiente revisar diff y pruebas antes de cualquier instalación. Coste adicional 0; utiliza cuota ChatGPT existente.
+
+## CURRENT — Diagnóstico de aislamiento nativo (2026-11-14)
+
+- La sesión Codex autenticó y respondió, pero el trabajo #174/estado #176 no produjo cambios: fallo previo a comandos bwrap loopback Failed RTM_NEWADDR Operation not permitted. Exit 0 del modelo NO significa tarea realizada. No se repite un modelo hasta arreglar el entorno.
+- Nuevo modo diagnostic de la acción existente: prueba codex sandbox linux /usr/bin/true sin modelos, lee perfiles AppArmor públicos y denegaciones del kernel. No instala perfiles, cambia sysctl ni usa danger-full-access. Se comparará con documentación de la versión 0.169.0 antes de proponer una corrección específica.
+- Producción sin cambios; coste extra 0. Usuario confirmó sesión iniciada y panel accesible; consultas conocidas siguen operativas.
+
+## CURRENT — Remediación específica de Bubblewrap (2026-11-14)
+
+- Diagnóstico #178: sysctl restrict=1, ningún perfil bwrap cargado, sandbox nativo true falla RTM_NEWADDR. Kernel muestra transición unprivileged_userns y denegaciones setpcap/net_admin/uid_map. No hay evidencia de fallo de login.
+- Perfil propuesto confinado para copia root-owned 0755 de /usr/bin/bwrap en /usr/local/lib/control-os/bwrap, solo en PATH de Codex cvdev. No toca /usr/bin/bwrap ni sysctl; sin setuid, filecaps ni flags unconfined. Capacidades AppArmor limitadas al bootstrap de los namespaces de bwrap: no confieren capacidades de host al usuario cvdev. Montajes siguen sujetos a kernel/userns y sandbox nativo; hijos heredan perfil, red IP y credenciales denegadas.
+- Acción control_codex_sandbox: install/verify/rollback de rutas fijas; comprueba sintaxis antes de cargar, rechaza perfiles ajenos, pruebas nativas sin modelos para bootstrap, escritura en workspace, lectura de canario privado, escritura fuera y red IP. No relanzar modelo si falla verificación.
+- Pendiente: CI, instalación supervisada, verificar aislamiento real y registrar evidencia/denegaciones si procede. Política global preservada. Coste de modelos durante diagnóstico: 0.
+
+## CURRENT — Compatibilidad del recurso bwrap (2026-11-14)
+
+- Perfil dedicado cargó en enforce (#181) y sysctl global permanece 1. Prueba nativa #180 sigue RTM_NEWADDR; no se llamó modelo.
+- Revisión del launcher de Codex rust-v0.169.0: exige --perms y --as-pid-1; si el sistema no los soporta, ignora ese binario y usa el incluido sin perfil. Se propone copiar exclusivamente el recurso codex-resources/bwrap del paquete oficial instalado; exige candidato único, comprobación de help y rechazo de binarios previos desconocidos.
+- No cambia perfil, permisos, capacidades ni límites; conserva pruebas negativas. Se ejecuta help como cvdev y la copia queda root-owned 0755 sin setuid/filecaps. Pendiente prueba real; diagnóstico sin consumo de modelos.
+
+## CURRENT — Acceso al directorio público del sandbox (2026-11-14)
+
+- #183 falló bootstrap sin modelos. La revisión encontró que main() fija umask 077: folder.mkdir(mode=0755) genera 0700 y no se normalizaba después. cvdev no puede recorrer ese directorio y Codex escoge otro bwrap sin perfil; kernel #184 sigue mostrando unprivileged_userns, no el perfil dedicado.
+- Corrección: comprobar propietario root y ausencia de escritura de grupo/otros, luego chmod 0755 explícito al directorio que solo guarda bwrap. Los archivos de autenticación permanecen 0700/0600. Se añade prueba directa del binario como cvdev antes de la prueba Codex, diferenciando permisos de ruta y selección del helper.
+- Pendiente CI y verificación real; no afirmar corrección hasta controles positivos/negativos verdes. No se amplían capacidades ni permisos del perfil. Cero llamadas a modelo durante diagnóstico.
+
+
+### Control OS — staging privado de Bubblewrap
+
+PR #220 resolvió el directorio root 0700 causado por umask 077; prueba directa dedicada superada. Bridge #187 llegó al ejecutor nativo, pero AppArmor bloqueó mkdir/mknod en /newroot/dev/null (auditoría #188). Se permite el staging /newroot del tmpfs privado previo a pivot_root, con denegaciones explícitas equivalentes para root, autenticación, SSH y claves privadas en esa ruta. No se añaden capabilities ni se cambia el sysctl global. La actualización acepta exclusivamente el perfil anterior exacto o el nuevo; deben pasar las pruebas positivas de escritura del workspace y negativas de secretos/escritura/red antes de ejecutar el modelo.
+
+
+### Control OS — sintaxis del diagnóstico Codex 0.169
+
+Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del comando interno. La prueba conservaba `codex sandbox linux -- ...`; en rust-v0.169.0 `SandboxCommand` aplana `HostSandboxArgs` y pasa `linux` como nombre de ejecutable, provocando `Failed to execvp linux`. Se corrigen las tres pruebas a `codex sandbox -- ...` según codex-rs/cli/src/main.rs oficial. Sin cambios de permisos ni nuevas llamadas al modelo. La certificación exige de nuevo arranque nativo, escritura permitida y lectura/escritura/red prohibidas antes de reintentar la tarea de desarrollo.
+
 ## PREPARE — Control OS: resultados Supabase transaccionales (2026-11-14)
 
 - Alcance único: recepción de resultados y solicitud de revisión humana, sin promoción. Base local inspeccionada `085b27a35880bdab1585da3d0d9b6cf3fb765ec9`. Producción y CI remoto no consultados; sin red, SQL real, credenciales, commits, push, despliegues ni servicios activados.
 - Consumidor separado `scripts/ops/opencode-supabase-result-consumer.py`: reutiliza contrato del consumidor simulado sin modificarlo; cliente Supabase inyectado, una única RPC por resultado. CLI sin activación. Verifica bigint/UUID canónicos, identidad del nombre de archivo, límites, tiempos y lectura sin seguir symlinks; conserva archivo ante error RPC o respuesta perdida.
 - Migración propuesta en `scripts/ops/sql/opencode-result-receipts.sql`, NO aplicada: recibos por run con paquete completo (diff/base_sha/changed_paths), RLS, RPC SECURITY INVOKER y grants internos solo service_role. No presupone columnas diff/result en ops_dev_runs. Conciliación y bloqueo run/tarea, estados, modo IA, auto_merge=false, SHA y allowlist persistidos; rechaza otras runs activas de la tarea. Duplicado exacto sin efectos adicionales; conflicto rechazado.
-- Una transacción crea recibo, aprobación real pendiente en ops_approvals, actualiza estados a awaiting_approval/waiting_approval y audita evento. Fallos del ejecutor cierran failed sin aprobación aceptada. No existe decisión humana automática ni ejecución de comandos del modelo, integración, push o deploy. SimStore conserva su demostración independiente.
+- Una transacción crea recibo, aprobación real pendiente en ops_approvals, actualiza estados a waiting_approval y audita evento. Fallos del ejecutor cierran failed sin aprobación aceptada. No existe decisión humana automática ni ejecución de comandos del modelo, integración, push o deploy. SimStore conserva su demostración independiente.
 - Pruebas locales: 295 casos OK (adaptador 46, demo 18, ejecutor 47, propuestas 44, consumidor simulado 28, sandbox 76, consumidor Supabase mock 6, worker 30). py_compile y git diff --check OK. No se ejecutaron suites npm: cambio exclusivamente Python/SQL/documentación sin modificación de aplicación.
 - Fixture `scripts/ops/sql/opencode-result-receipts.fixture.sql`: base vacía desechable, negativos de conciliación/estados/límites, duplicados y fallo tardío para probar rollback total, termina ROLLBACK. NO ejecutada por prohibición de SQL real. Los mocks comprueban cliente/reintentos, no certifican atomicidad PostgreSQL.
 - Bloqueo para activación: revisar DDL real de ops_tasks/ops_approvals/ops_events (tipos, defaults, enums, rol owner/status pending, logs y permisos existentes), aplicar migración transaccional y ejecutar fixtures en entorno autorizado. No se certifica concurrencia ni permisos reales. Guía Supabase de skill inaccesible por permisos del entorno; sin conector utilizado.
 - Documento: `docs/CONTROL_OS_SUPABASE_RESULTS.md`. Siguiente acción: revisión del esquema y pruebas SQL autorizadas; promoción e instalación de servicios siguen fuera de alcance. Costo nuevo requerido: 0; infraestructura existente, sin escalado requerido por esta preparación.
+
+
+### Auditoría posterior de la propuesta Codex
+
+- PR #223, tarea real en cvdev completada y publicada sin force: bridge #193/#200, head inicial 2745006e9491314abb216ca2fa397c1641c7c392. Aislamiento #192: escritura workspace permitida y lecturas auth/escrituras auth-root/red denegadas; AppArmor global sigue 1.
+- Revisión del esquema real detectó y corrigió estado de run (waiting_approval) e impact JSONB; recibo conciliado por run_id/estado. Cuarentena con descriptores fijados, rechazo de enlaces y notas únicas sin sobrescritura.
+- CHECK crm_ops_bridge_action_chk conservada y ampliada exclusivamente con control_codex_consumer_publish (migración allow_fixed_control_codex_consumer_publish), verificada con convalidated=true.
+- Se añaden al CI la suite Python real y PostgreSQL 17 desechable con fixtures de negativos, duplicación y atomicidad. La migración de recibos no se ha aplicado y el servicio no se ha activado; pendiente validación CI y revisión de permisos.
