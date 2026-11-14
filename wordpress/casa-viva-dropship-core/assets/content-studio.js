@@ -689,7 +689,7 @@
     const max = MOTOR.max || 3;
     body.replaceChildren(h('p', { class: 'cv-sec', text: `Creando ${PIEZA[job.pieza].n} · opción ${Math.min(job.n, max)} de ${max}` }),
       job.antes ? h('div', { class: 'cv-src cv-dimmed' }, h('img', { src: job.antes, alt: '' }), h('span', { class: 'cv-chiptag', text: 'Foto real' })) : null,
-      h('div', { class: 'cv-work', role: 'status', 'aria-live': 'off' }, h('div', { class: 'cv-work-row' }, h('b', { id: 'cv-work-step' }), h('span', { id: 'cv-work-sec', text: '0 s' })),
+      h('div', { class: 'cv-work' }, h('div', { class: 'cv-work-row' }, h('b', { id: 'cv-work-step' }), h('span', { id: 'cv-work-sec', text: '0 s' })),
         h('div', { class: 'cv-track' }, h('i', { id: 'cv-work-bar' })), h('div', { class: 'cv-phases', id: 'cv-work-phases' }, ['En cola', 'Creando', 'Revisando'].map((t) => h('span', { text: t }))),
         h('div', { id: 'cv-work-ladder' })),
       h('p', { class: 'cv-note2', text: 'Suele tardar de 10 a 60 s. Puedes seguir en la Ficha: te aviso al terminar.' }));

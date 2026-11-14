@@ -174,7 +174,8 @@ test('Beneficio: punto 1 es la prueba, sin repetir datos, números por foto con 
     expect(drawn.join(' | ')).toContain('Huevo sin aceite');
     // Nunca precio ni logo en la imagen (tampoco en el lienzo de descarga).
     expect(drawn.join(' ')).not.toMatch(/40[.,]00|\$|CASA VIVA|VER EN CASA VIVA/i);
-    expect(drawn.filter((t) => /Antiadherente/.test(t))).toHaveLength(1);
+    // Puede haber más de un dibujo (vista previa y final): por cada titular, una sola «Antiadherente».
+    expect(drawn.filter((t) => /Antiadherente/.test(t)).length).toBe(drawn.filter((t) => t.includes('Huevo sin aceite')).length);
     // Pie PROOF: 5 líneas con su origen; el precio va aquí, nunca en la imagen.
     await expect(page.locator('#cv-proof .cv-pl')).toHaveCount(5);
     await expect(page.locator('#cv-proof')).toContainText('Gancho · Matriz · resultado');
@@ -259,7 +260,7 @@ test('Tarjeta de oferta: precio de la tienda, rebaja real con fecha y oferta esc
     const drawn = (await page.evaluate(() => window.__drawn)).join(' | ');
     // Nunca un precio ni el logo en la imagen: el precio va en el pie (condición A2).
     expect(drawn).not.toMatch(/25\.00|30\.00|CASA VIVA/);
-    expect(drawn).toContain('Oferta hasta el'); expect(drawn).toContain('Entrega gratis en La Habana');
+    expect(drawn).toContain('Oferta hasta el'); expect(drawn.replace(/ \| /g, ' ')).toContain('Entrega gratis en La Habana');
     await closePie(page);
   }
   await expect(page.locator('#cv-copy')).toHaveValue(/Precio de oferta: .*25\.00 \(antes .*30\.00\) · Oferta: Entrega gratis en La Habana/);
@@ -527,16 +528,30 @@ test('v2 · Dudas del catálogo: una tarjeta por pantalla, Revisión, Sí, Expli
   await expect(page.getByRole('heading', { name: 'Dudas del catálogo', exact: true })).toBeVisible();
   const bar = page.locator('#cv-dudas-bar'), card = page.locator('#cv-dudas-body .cv-dq');
   await expect(page.locator('.cv-dprog')).toContainText(/^1 de \d+/);
-  await expect(card.locator('h2')).toHaveText('¿Es el mismo producto?');
+  // Otras pruebas del mismo WordPress dejan tarjetas antes: «Luego» pasa a la siguiente hasta llegar a la buscada.
+  const goTo = async (question) => {
+    for (let i = 0; i < 30 && (await card.locator('h2').textContent()) !== question; i++) {
+      await bar.getByRole('button').nth(1).click();
+      await expect(page.getByRole('status')).toHaveText('Queda en Por contestar.');
+      await page.getByRole('status').click();
+      await expect(bar.getByRole('button').nth(1)).toBeEnabled();
+    }
+    await expect(card.locator('h2')).toHaveText(question);
+  };
+  await goTo('¿Es el mismo producto?');
   await expect(bar.getByRole('button')).toHaveText(['Rechazar', 'Revisión', 'Aprobar']);
   await expect(card.getByRole('button', { name: 'Corregir', exact: true })).toBeVisible();
   await bar.getByRole('button', { name: 'Revisión', exact: true }).click();
   await expect(page.getByRole('status')).toHaveText('Queda en Por contestar.');
-  await expect(card.locator('h2')).toHaveText('¿Trae herrajes para instalarla?');
+  await page.getByRole('status').click();
+  await expect(bar.getByRole('button').nth(1)).toBeEnabled();
+  await goTo('¿Trae herrajes para instalarla?');
   await expect(bar.getByRole('button')).toHaveText(['No', 'Luego', 'Sí']);
   await bar.getByRole('button', { name: 'Sí', exact: true }).click();
   await expect(page.getByRole('status')).toHaveText('Hecho · Ficha y crm_knowledge');
-  await expect(card.locator('h2')).toHaveText('¿Este título está bien?');
+  await page.getByRole('status').click();
+  await expect(bar.getByRole('button').nth(1)).toBeEnabled();
+  await goTo('¿Este título está bien?');
   await card.getByRole('button', { name: 'Explicar', exact: true }).click();
   await page.getByRole('textbox', { name: 'Explicación escrita', exact: true }).fill('El título debe decir la medida.');
   await page.getByRole('button', { name: 'Enviar', exact: true }).click();

@@ -1197,7 +1197,8 @@ final class CVD_Content_Studio {
 			$hero = self::piezas( $p->get_id() )['hero'];
 			if ( 'aprobada' === $hero['estado'] && $opcion === $hero['opcion'] ) { self::poner_pieza( $p->get_id(), 'hero', array( 'web' => (int) $att, 'auto' => false ) ); }
 		}
-		return rest_ensure_response( self::projection( $p ) );
+		// v2: la versión que vuelve es la del producto releído; con la copia en memoria la siguiente acción (matriz, guardar) daba 409.
+		return rest_ensure_response( self::projection( wc_get_product( $p->get_id() ) ) );
 		} finally { delete_option( $lock ); }
 	}
 
