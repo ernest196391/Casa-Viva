@@ -402,3 +402,10 @@ Al retomar el proyecto:
 - SQL de entradas probó aprobación WhatsApp, conservación de owner_change, cierre, comillas y rechazo de instrucción ambigua con rollback de fixtures.
 - Guía docs/CONTROL_OS_USO.md distingue consultas operativas verificadas de programación autónoma aún pendiente. No declarar objetivo completo hasta autenticar proveedor, certificar sandbox y conectar consumidor/promoción reales.
 - Coste nuevo 0. Claves de Gemini no configuradas. El envío de audios usa transcripción existente; no se afirma coste cero para audio.
+
+## CURRENT — Preparación fija del consumidor en cvdev (2026-11-14)
+
+- Codex device auth #172 confirmó logged_in=true y subscription_login=true. No clave API.
+- Nueva acción acotada control_codex_consumer_build: solo tarea fija para consumidor Supabase, worktree propio, usuario cvdev, sandbox workspace-write nativo y unidad systemd con límite 600 s, NoNewPrivileges, ProtectSystem=strict y ProtectHome=read-only; escritura solo worktree y CODEX_HOME. No SQL real, push ni despliegue. Nunca ejecuta comandos enviados por una tarea.
+- Resultado se revisará como diff antes de promover. Si el sandbox no arranca, se mantiene cerrado; no se desactiva AppArmor ni se usa danger-full-access.
+- Costo adicional previsto 0: usa cuota existente de ChatGPT. No certifica todavía generación ni consumo de resultados hasta revisar ejecución real.

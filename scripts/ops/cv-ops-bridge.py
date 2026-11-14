@@ -2015,10 +2015,67 @@ def action_control_codex_login(args):
             "user_code":code.group(0) if code else None,
             "model_called":False,"note":"Completar inicio de sesión en el navegador; no enviar contraseñas."})}
 
+def action_control_codex_consumer_build(args):
+    """One fixed development task, in a dedicated cvdev worktree; never applies SQL or deploys."""
+    mode = str((args or {}).get("mode", "status"))
+    if mode not in ("start","status"):
+        return {"returncode":2,"output":"Modo inválido"}
+    unit = "cv-control-consumer-build"
+    work = Path("/home/cvdev/workspace/control-os-consumer-build")
+    command = _control_codex_cmd()
+    if mode == "start":
+        state = run(["systemctl","is-active",unit],timeout=10)
+        if state["output"].strip() in ("active","activating"):
+            return {"returncode":0,"output":json.dumps({"already_running":True,"unit":unit})}
+        if work.exists() or work.is_symlink():
+            return {"returncode":3,"output":"Workspace existente: revisar resultado antes de repetir"}
+        source = "/home/cvdev/workspace/control-os-certified"
+        prefix = ["runuser","-u","cvdev","--","git","-C",source]
+        fetched = run(prefix + ["fetch","origin","main"],timeout=90)
+        if fetched["returncode"]:
+            return fetched
+        made = run(prefix + ["worktree","add","--detach",str(work),"origin/main"],timeout=60)
+        if made["returncode"]:
+            return made
+        prompt = (
+            "Implementa SOLO la integración de resultados Control OS con Supabase en este worktree. "
+            "Lee AGENTS.md y blueprints/checkpoint. No ejecutes red, SQL real, git push, deploy ni leas credenciales. "
+            "Reutiliza el contrato de opencode-result-consumer.py; SimStore actual no debe romperse. "
+            "Crea consumidor real separado con RPC transaccional para conciliar task/run, deduplicar resultados, "
+            "guardar diff/base_sha/changed_paths y crear aprobación humana real. ops_dev_runs actual tiene "
+            "id bigint,task_id uuid,repo,mode,status,base_sha,work_sha,auto_merge,allowed_paths jsonb,"
+            "summary,error,logs,started_at,updated_at,finished_at; no tiene columna diff/result. "
+            "Documenta cualquier migración necesaria en scripts/ops/sql, solo SECURITY INVOKER y grants "
+            "limitados a service_role para funciones internas. No añadas ejecución de comandos del modelo. "
+            "Ningún resultado puede saltarse aprobación, integrar, hacer push ni desplegar. "
+            "Haz pruebas negativas de conciliación, duplicados, límites, estados y atomicidad mediante mocks "
+            "y SQL fixtures con rollback. No actives servicios ni implementes promoción aún. "
+            "Actualiza checkpoint. Ejecuta suites Python pertinentes; resume cambios y límites. "
+            "No hagas commits. Mantén cambios limitados a scripts/ops y docs/."
+        )
+        launched = run(["systemd-run","--unit="+unit,"--uid=cvdev","--gid=cvdev","--collect",
+            "--property=RuntimeMaxSec=600","--property=NoNewPrivileges=yes",
+            "--property=ProtectSystem=strict","--property=ProtectHome=read-only",
+            "--property=PrivateTmp=yes",
+            "--property=ReadWritePaths="+str(work)+" /home/cvdev/control-os-auth",
+            "--working-directory="+str(work),
+            *command[4:], "exec","--sandbox","workspace-write","--ephemeral","--json",prompt],timeout=20)
+        return {"returncode":launched["returncode"],"output":json.dumps({
+            "unit":unit,"workspace":str(work),"launched":launched["returncode"]==0,
+            "details":launched["output"],"production_changed":False})}
+    state = run(["systemctl","show",unit,"--property=ActiveState,SubState,Result,ExecMainStatus"],timeout=10)
+    journal = run(["journalctl","-u",unit,"-n","30","--no-pager","--output=cat"],timeout=20)
+    diff = run(["runuser","-u","cvdev","--","git","-C",str(work),"diff","--stat"],timeout=20) if work.is_dir() else {"output":""}
+    output = journal["output"][-12000:]
+    output = re.sub(r"\\b(?:sk-|sbp_)[A-Za-z0-9_-]{12,}", "[REDACTED]",output)
+    return {"returncode":0,"output":json.dumps({"unit":unit,"state":state["output"],
+            "journal":output,"diff_stat":diff["output"],"production_changed":False})}
+
 ACTIONS = {
     "prepare_control_dev_checkout": action_prepare_control_dev_checkout,
     "control_codex_setup": action_control_codex_setup,
     "control_codex_login": action_control_codex_login,
+    "control_codex_consumer_build": action_control_codex_consumer_build,
     "health": action_health,
     "errors_open": action_errors_open,
     "supervisor_status": action_supervisor_status,
