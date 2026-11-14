@@ -31,7 +31,7 @@ begin
     and p_action=any(array['health','bridge_status','wp_status','vivabot_git_status','control_sync_service_status','errors_open']);
   return v_id;
 end
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.ops_project_bridge_event()
  RETURNS trigger
@@ -127,7 +127,7 @@ begin
   end if;
   return new;
 end
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.ops_route_readonly_owner_task()
  RETURNS trigger
