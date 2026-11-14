@@ -252,7 +252,7 @@ def validate_command(cmd, work_root: str = DEFAULT_WORK_ROOT) -> list:
 
 # --- Validación del perfil AppArmor propuesto --------------------------
 
-PROFILE_ABI = "abi 4.0,"
+PROFILE_ABI = "abi <abi/4.0>,"
 PROFILE_HEADER = f"profile {PROFILE_NAME} /usr/bin/bwrap"
 PROFILE_REQUIRED = ("userns,", "deny network,")
 PROFILE_REQUIRED_WRITE = "@{CV_CONTROL_OS}/work/{,**} rw,"
