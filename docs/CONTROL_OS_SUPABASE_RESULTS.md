@@ -30,6 +30,8 @@ Se inspeccionaron las columnas y CHECK reales por el conector: ops_dev_runs admi
 
 CI ejecuta la suite Python nueva y la fixture PostgreSQL 17 en un servicio desechable. La fixture no conecta con producción. Esta propuesta continúa sin activar consumidor ni promoción.
 
-## Gate obligatorio antes de activar
+## Decisión humana y promoción técnica
 
-La función actual ops_decide_approval devuelve cualquier tarea aprobada a triaged. Para resultados IA esto podría encolar otra ejecución en lugar de promover el diff revisado. Por tanto esta propuesta no debe aplicarse ni activarse hasta añadir y probar una decisión específica que conserve el run aprobado para revisión/promoción técnica y no lo vuelva a programar. El consumidor permanece sin CLI y sin servicio. La generación aislada de código en VPS ya está probada; el ciclo autónomo completo aún no está certificado.
+La migración incluye una rama específica de ops_decide_approval para aprobaciones vinculadas a un recibo IA. Exige tarea/run pendientes y recibo conciliado. Aprobar deja la tarea verifying con executor human y el run blocked, pendiente de PR, CI y promoción técnica. Rechazar deja bloqueado el resultado sin aplicarlo. Repetir una decisión no duplica eventos. Las aprobaciones ordinarias conservan su comportamiento anterior. La fixture verifica ambas rutas y se incluye rollback no destructivo que revoca la RPC y restaura la decisión anterior preservando evidencias.
+
+Consumidor y decisión bloquean tarea antes de run para evitar invertir locks en reintentos concurrentes. El ciclo de promoción del diff sigue requiriendo implementación y certificación; aprobar no despliega código. La CLI del consumidor permanece cerrada y no hay servicio activado.
