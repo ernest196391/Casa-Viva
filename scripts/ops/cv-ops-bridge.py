@@ -1954,7 +1954,7 @@ def _control_codex_paths():
 def _control_codex_cmd():
     base, auth = _control_codex_paths()
     return ["runuser", "-u", "cvdev", "--", "env", "-i",
-            "PATH=/usr/bin:/bin", "HOME=/home/cvdev",
+            "PATH=/usr/local/lib/control-os:/usr/bin:/bin", "HOME=/home/cvdev",
             "CODEX_HOME=" + str(auth),
             str(base / "node_modules/.bin/codex")]
 
@@ -2146,12 +2146,93 @@ def action_control_codex_consumer_publish(args):
         "head":git(["rev-parse","HEAD"])["output"].strip(),"paths":paths,
         "merged":False,"deployed":False})}
 
+def action_control_codex_sandbox(args):
+    """Dedicated bwrap profile only; no global AppArmor, sysctl, setuid or file-capability changes."""
+    import shutil
+    import pwd
+    mode = str((args or {}).get("mode","verify"))
+    if mode not in ("install","verify","rollback"):
+        return {"returncode":2,"output":"Modo inválido"}
+    folder = Path("/usr/local/lib/control-os")
+    binary = folder / "bwrap"
+    policy = Path("/etc/apparmor.d/cv-control-codex-bwrap")
+    profile = "abi <abi/4.0>,\ninclude <tunables/global>\nprofile cv-control-codex-bwrap /usr/local/lib/control-os/bwrap flags=(attach_disconnected,mediate_deleted) {\n  include <abstractions/base>\n  userns,\n  # These mediate capabilities acquired INSIDE bwrap's user namespace.\n  # The root-owned copy is 0755, without setuid or file capabilities;\n  # cvdev acquires no host capabilities.\n  capability setpcap,\n  capability sys_admin,\n  capability net_admin,\n  capability sys_chroot,\n  capability setuid,\n  capability setgid,\n  mount,\n  umount,\n  pivot_root,\n  network netlink raw,\n  network unix,\n  deny network inet,\n  deny network inet6,\n  signal (send,receive) peer=cv-control-codex-bwrap,\n  signal (receive) peer=unconfined,\n  / r,\n  /** r,\n  /usr/** rixm,\n  /bin/** rixm,\n  /sbin/** rixm,\n  /lib/** mr,\n  /lib64/** mr,\n  /home/cvdev/control-os-tools/** rixm,\n  /home/cvdev/workspace/control-os-consumer-build/{,**} rwkixm,\n  /tmp/{,**} rwkixm,\n  /dev/{null,zero,random,urandom,tty} rw,\n  /dev/pts/{,**} rw,\n  /proc/[0-9]*/{uid_map,gid_map,setgroups} rw,\n  deny /root/{,**} rwklmx,\n  deny /home/cvdev/control-os-auth/{,**} rwklmx,\n  deny /home/cvdev/.ssh/{,**} rwklmx,\n  deny /etc/ssl/private/{,**} rwklmx,\n}\n"
+    if folder.is_symlink() or policy.is_symlink() or binary.is_symlink():
+        return {"returncode":3,"output":"Ruta insegura"}
+    if policy.exists() and policy.read_text()!=profile:
+        return {"returncode":3,"output":"Perfil existente distinto: requiere revisión"}
+    if mode == "rollback":
+        if policy.exists():
+            unloaded = run(["apparmor_parser","-R",str(policy)],timeout=30)
+            if unloaded["returncode"]:
+                return unloaded
+            policy.unlink()
+        if binary.is_file():
+            binary.unlink()
+        return {"returncode":0,"output":"Perfil dedicado revertido; protección global intacta"}
+    if mode == "install":
+        if not Path("/usr/bin/bwrap").is_file():
+            return {"returncode":4,"output":"Falta bubblewrap del sistema"}
+        folder.mkdir(mode=0o755,exist_ok=True)
+        if folder.stat().st_uid!=0 or folder.stat().st_mode & 0o022:
+            return {"returncode":3,"output":"Directorio de binarios no es seguro"}
+        temporary = Path("/etc/apparmor.d/cv-control-codex-bwrap.next")
+        temporary.write_text(profile)
+        temporary.chmod(0o644)
+        parsed = run(["apparmor_parser","-Q",str(temporary)],timeout=30)
+        if parsed["returncode"]:
+            temporary.unlink()
+            return parsed
+        if not binary.exists():
+            shutil.copyfile("/usr/bin/bwrap",binary)
+            binary.chmod(0o755)
+        if binary.stat().st_uid!=0 or binary.stat().st_mode & 0o6022:
+            return {"returncode":3,"output":"Binario con propietario/permisos inseguros"}
+        os.replace(temporary,policy)
+        loaded = run(["apparmor_parser","-r",str(policy)],timeout=30)
+        if loaded["returncode"]:
+            return loaded
+    if not binary.is_file() or not policy.is_file():
+        return {"returncode":4,"output":"Perfil dedicado no instalado"}
+    command = _control_codex_cmd()
+    work = "/home/cvdev/workspace/control-os-consumer-build"
+    boot = run(command+["sandbox","linux","--","/usr/bin/true"],cwd=work,timeout=30)
+    if boot["returncode"]:
+        return {"returncode":5,"output":json.dumps({"stage":"bootstrap","probe":boot,
+            "global_restriction":Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").read_text().strip()})}
+    checks = """import json,os,pathlib,socket
+report={}
+p=pathlib.Path('.control-os-isolation-check')
+try:
+    p.write_text('fixture'); report['workspace_write']=p.read_text()=='fixture'; p.unlink()
+except OSError:
+    report['workspace_write']=False
+for key,path in [('auth_write','/home/cvdev/control-os-auth/isolation-write-check'),('root_write','/root/isolation-write-check')]:
+    try:
+        fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600);os.close(fd);os.unlink(path);report[key]=False
+    except OSError as e:
+        report[key]=e.errno in (1,13,30)
+try:
+    s=socket.socket();s.settimeout(2);s.connect(('1.1.1.1',443));s.close();report['network_denied']=False
+except OSError as e:
+    report['network_denied']=e.errno in (1,13)
+print(json.dumps(report))
+raise SystemExit(0 if all(report.values()) else 1)
+"""
+    verified = run(command+["-c",'sandbox_mode="workspace-write"',"sandbox","linux","--",
+                   "/usr/bin/python3","-c",checks],cwd=work,timeout=30)
+    return {"returncode":verified["returncode"],"output":json.dumps({
+        "stage":"negative_tests","probe":verified,"bootstrap_passed":True,
+        "global_restriction":Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").read_text().strip(),
+        "production_changed":False,"model_called":False})}
+
 ACTIONS = {
     "prepare_control_dev_checkout": action_prepare_control_dev_checkout,
     "control_codex_setup": action_control_codex_setup,
     "control_codex_login": action_control_codex_login,
     "control_codex_consumer_build": action_control_codex_consumer_build,
     "control_codex_consumer_publish": action_control_codex_consumer_publish,
+    "control_codex_sandbox": action_control_codex_sandbox,
     "health": action_health,
     "errors_open": action_errors_open,
     "supervisor_status": action_supervisor_status,
