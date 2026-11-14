@@ -227,6 +227,12 @@ Criterio de cierre de la unidad:
 - `ubuntu-latest` migrará a Ubuntu 26 a partir del 19 de octubre de 2026;
 - estas advertencias no afectaron el despliegue #20, pero deben entrar en mantenimiento técnico.
 
+## Panel de Zayri v2 (rama `diseno/panel-v2`, 14-nov-2026)
+
+- Servidor (ya probado): escalones del HERO (recorte gratis → IA de pago), publicación automática D152, restaurar, 3 estados, prioridades, matriz y bandeja «Dudas del catálogo». Incluye #187 (`vps_image`) y `vps_recorte` (a856eec).
+- Móvil (nuevo): lista con HERO, prioridad y filtros; pestaña Fotos (HERO · LIFESTYLE · BENEFICIO, comparar con 3 estados, tope del día); Anuncio sin precio ni logo con encuadre por la caja del producto, puntos por foto y pie PROOF; bandeja con voz o texto.
+- Estado: PR abierto hacia `main`, sin desplegar. Espera a la sesión de imágenes: servidor real de dudas en el VPS y recorte real.
+
 ## Próxima compuerta
 
 CV-LAUNCH-POLISH-002 cerrada (3.10.16): Añadir al carrito en verde #006068 con texto blanco en tienda/categorías; Copiar/Compartir del tarifario ocultos hasta consultar una tarifa.
