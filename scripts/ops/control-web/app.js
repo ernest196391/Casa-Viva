@@ -28,9 +28,22 @@ function decisionCard(x){
   const reject=el('button','Rechazar','reject-btn');reject.type='button';reject.dataset.decision='reject';reject.dataset.approval=String(x.approval_id||'');
   actions.append(approve,reject);a.append(actions,el('p','', 'decision-feedback'),el('div',stamp(x.created_at),'meta'));return a;
 }
+function blockedReviewCard(x){
+  const a=el('article','', 'card decision');
+  const top=el('div','', 'card-top');
+  top.append(el('h3','Tarea #'+(x.task_id||'—')+' · '+(x.title||'Revisión')),pill('Sin aprobación formal','warning'));
+  a.append(top,el('p',x.warning||'Falta crear la solicitud de aprobación.','card-copy'));
+  a.append(el('div',stamp(x.created_at),'meta'));
+  return a;
+}
+function isBriefContext(x){
+  const v=String(x.summary||x.subject||'').trim();
+  return /^(?:hola(?:,?\s+s[ií])?|ok(?:\s+entiendo)?|ah+|cu[aá]l|qu[eé]\s+hiciste|solo\s+los\s+pedidos|como\s+lo\s+tenemos\s+todos)[.!?\s]*$/i.test(v);
+}
 function lennysCard(x){
+  const brief=isBriefContext(x);
   const a=el('article','', 'card priority-'+(x.priority||'p2'));const top=el('div','', 'card-top');
-  top.append(el('h3',x.subject||'Asunto de Lennys'),pill(String(x.priority||'p2').toUpperCase(),x.priority||''));a.append(top);
+  top.append(el('h3',x.subject||'Asunto de Lennys'),pill(brief?'Fragmento de contexto':String(x.priority||'p2').toUpperCase(),brief?'warning':x.priority||''));a.append(top);
   if(x.summary)a.append(el('p',x.summary,'card-copy'));a.append(el('div',stamp(x.last_activity_at),'meta'));return a;
 }
 function activityCard(x){
@@ -45,9 +58,17 @@ function render(data){
   $('error').hidden=Number.isFinite(age)&&age<=180;if(!$('error').hidden)$('error').textContent='El estado lleva más de 3 minutos sin actualizarse.';
   const s=data.summary||{};$('m-attention').textContent=s.attention??0;$('m-decisions').textContent=s.decisions??0;$('m-lennys').textContent=s.lennys??0;$('m-errors').textContent=s.errors??0;
   const decisions=Array.isArray(data.decisions)?data.decisions:[];$('decision-count').textContent=decisions.length;$('decisions-list').replaceChildren(...decisions.map(decisionCard));if(!decisions.length)empty($('decisions-list'),'No tienes decisiones pendientes ahora.');
+  const blocked=Array.isArray(data.reviews_blocked)?data.reviews_blocked:[];
+  const auditIncomplete=Boolean(s.reviews_audit_incomplete);
+  $('blocked-reviews-section').hidden=!blocked.length&&!auditIncomplete;
+  $('blocked-reviews-count').textContent=auditIncomplete?'Revisión incompleta':blocked.length;
+  $('blocked-reviews-list').replaceChildren(...blocked.map(blockedReviewCard));
+  if(auditIncomplete)$('blocked-reviews-list').prepend(el('p','No se pudieron comprobar todas las aprobaciones: el límite de consulta se alcanzó. No tomar decisiones basadas en este listado hasta completar la auditoría.','card-error'));
   const today=Array.isArray(data.today)?data.today:[];$('today-list').replaceChildren(...today.map(taskCard));if(!today.length)empty($('today-list'),'No hay trabajo prioritario abierto.');
   renderTasks();
-  const l=Array.isArray(data.lennys)?data.lennys:[];$('lennys-count').textContent=l.length;$('lennys-list').replaceChildren(...l.map(lennysCard));if(!l.length)empty($('lennys-list'),'No hay asuntos activos de Lennys.');
+  const l=Array.isArray(data.lennys)?data.lennys:[];
+  const ordered=[...l.filter(x=>!isBriefContext(x)),...l.filter(isBriefContext)];
+  $('lennys-count').textContent=l.length;$('lennys-list').replaceChildren(...ordered.map(lennysCard));if(!l.length)empty($('lennys-list'),'No hay asuntos activos de Lennys.');
   const sys=data.system||{};$('system-badge').textContent=sys.ok?'Operativo':'Revisar';$('system-badge').classList.toggle('bad',!sys.ok);
   const grid=$('system-grid');grid.replaceChildren();
   const rows=[['VivaBot',sys.vivabot?.status||'desconocido',sys.vivabot?.sha?'SHA '+sys.vivabot.sha:''],['Control Agent',sys.bridge?.status||'desconocido',sys.bridge?.version?'v'+sys.bridge.version+' · cada '+(sys.bridge.poll_seconds||'?')+' s':''],['Centro móvil',sys.control_sync?.status||'desconocido',sys.control_sync?.at?stamp(sys.control_sync.at):'']];

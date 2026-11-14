@@ -1407,6 +1407,51 @@ def action_casa_viva_deploy_status(args):
     except Exception as exc:
         return {"returncode": 3, "output": f"No pude consultar deploy: {type(exc).__name__}: {exc}"}
 
+
+def action_owner_ingest_audit(args):
+    """Read-only, bounded inventory of the owner WhatsApp ingestion implementation.
+
+    Return file paths and matching line numbers, never message bodies or secrets.
+    """
+    import re
+    root = Path("/root/vivabot")
+    if not root.is_dir():
+        return {"returncode": 2, "output": "No existe /root/vivabot"}
+    needles = re.compile(
+        r"lennys_order_mirrored|whatsapp-lennys-live|createTask|grouping\\.attach|intenci[oó]n nueva",
+        re.IGNORECASE,
+    )
+    hits = []
+    examined = 0
+    for base in (root / "src", root / "scripts"):
+        if not base.is_dir():
+            continue
+        for file in base.rglob("*"):
+            if len(hits) >= 80 or examined >= 2000:
+                break
+            if not file.is_file() or file.suffix not in (".js", ".mjs", ".cjs", ".ts", ".py"):
+                continue
+            if any(part in ("node_modules", ".git", "dist", "build") for part in file.parts):
+                continue
+            try:
+                if file.stat().st_size > 400_000:
+                    continue
+                examined += 1
+                for lineno, line in enumerate(file.read_text(errors="replace").splitlines(), 1):
+                    if needles.search(line):
+                        hits.append({"path": str(file.relative_to(root)), "line": lineno})
+                        if len(hits) >= 80:
+                            break
+            except (OSError, UnicodeError):
+                continue
+    return {"returncode": 0, "output": json.dumps({
+        "action": "owner_ingest_audit", "read_only": True,
+        "files_examined": examined, "matches": hits,
+        "truncated": examined >= 2000 or len(hits) >= 80,
+    }, ensure_ascii=False)}
+
+
+
 def action_ai_audit(args):
     cmd = [
         "bash", "-lc",
@@ -1436,6 +1481,7 @@ ACTIONS = {
     "wp_product": action_wp_product,
     "cv_order": action_cv_order,
     "bot_access_audit": action_bot_access_audit,
+    "owner_ingest_audit": action_owner_ingest_audit,
     "vivabot_git_status": action_vivabot_git_status,
     "deploy_vivabot": action_deploy_vivabot,
     "bridge_status": action_bridge_status,
