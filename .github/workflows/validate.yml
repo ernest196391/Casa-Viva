@@ -46,6 +46,7 @@ jobs:
           python3 scripts/ops/tests/opencode-proposal.test.py
           python3 scripts/ops/tests/opencode-demo-e2e.test.py
           php -l scripts/ops/control-web/index.php
+          php scripts/ops/tests/control-web-access.php
           node --check scripts/ops/control-web/app.js
 
       - name: Validar panel de contenido y protección de fotos
