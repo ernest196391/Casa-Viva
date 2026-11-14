@@ -368,86 +368,7 @@ test('Un borrador sin foto ni existencias no se publica y el panel dice lo que f
   await expect(page.getByRole('status')).toHaveText('Borrador guardado. Falta: foto real, existencias, que pone Lennys.');
 });
 
-test('Editor de contenido: login, guardar, subir foto y descargar en móvil', async ({ page }) => {
-  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
-  test.setTimeout(60000);
-  await page.setViewportSize({ width: 390, height: 844 });
-  page.on('dialog', (dialog) => dialog.accept());
-  await page.goto('http://localhost:8889/wp-login.php');
-  await page.locator('#user_login').fill('cvt_content_browser');
-  await page.locator('#user_pass').fill('Synthetic-Content-Only-1!');
-  await Promise.all([page.waitForNavigation(), page.locator('#wp-submit').click()]);
-  await page.goto('http://localhost:8889/?cvd_contenido=1');
-  await expect(page.getByRole('heading', { name: 'Mi catálogo y fotos', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Studio browser fixture · Publicado', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Título', exact: true }).fill('Studio browser edited');
-  await page.getByRole('button', { name: 'Guardar cambios', exact: true }).click();
-  await expect(page.getByRole('status')).toHaveText('Cambios publicados en Casa Viva.');
-  await page.locator('#cv-photo').setInputFiles({ name: 'fixture.png', mimeType: 'image/png', buffer: pixel });
-  await expect(page.getByRole('status')).toContainText('Foto preparada.');
-  const [uploaded] = await Promise.all([
-    page.waitForResponse((r) => r.request().method() === 'POST' && decodeURIComponent(r.url()).includes('/contenido/upload')),
-    page.getByRole('button', { name: 'Subir a la web', exact: true }).click(),
-  ]);
-  await expect(page.getByRole('status')).toContainText('Foto subida y protegida.');
-  // The web copy is converted to WebP in the browser before it is sent.
-  expect((await uploaded.json()).image_full).toMatch(/\.webp$/);
-  await expect(page.locator('#cv-commercial')).toContainText('25');
-  await page.getByRole('textbox', { name: 'Característica 1', exact: true }).fill('Dato sintético de prueba');
-  await tab(page, 'Anuncio');
-  await finish(page);
-  await expect(page.getByRole('status')).toHaveText('Falta la duda → resultado → prueba: toca «Editar».');
-  await page.getByRole('button', { name: 'Editar', exact: true }).click();
-  await page.getByLabel('Duda', { exact: true }).fill('¿Aguanta?');
-  await page.getByLabel('Resultado', { exact: true }).fill('Resultado sintético');
-  await page.getByLabel('Prueba', { exact: true }).fill('Prueba sintética');
-  await page.getByRole('button', { name: 'Confirmar', exact: true }).click();
-  await expect(page.getByRole('status')).toHaveText('Duda → resultado → prueba confirmada.');
-  await finish(page);
-  await expect(page.getByRole('status')).toHaveText('Coloca los 2 puntos en la foto hasta que diga «Listo».');
-  const canvas = page.locator('#cv-canvas'), box = await canvas.boundingBox();
-  await canvas.click({ position: { x: box.width * 0.4, y: box.height * 0.5 } }); await canvas.click({ position: { x: box.width * 0.6, y: box.height * 0.6 } });
-  await expect(page.locator('#cv-point-hint')).toHaveText('Listo');
-  await finish(page);
-  await expect(page.getByRole('link', { name: 'Solo la imagen', exact: true })).toBeVisible();
-  const dimensions = await page.locator('#cv-canvas').evaluate((canvas) => [canvas.width, canvas.height]);
-  expect(dimensions).toEqual([1080, 1920]);
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Solo la imagen', exact: true }).click()]);
-  const bytes = fs.readFileSync(await download.path());
-  expect(bytes[0]).toBe(255); expect(bytes[1]).toBe(216); expect(bytes.length).toBeGreaterThan(1000);
-  await expect(page.getByRole('textbox', { name: 'Pie del anuncio', exact: true })).toHaveValue(/^Resultado sintético\nPrueba sintética\./);
-  const width = await page.evaluate(() => ({ viewport: innerWidth, scroll: document.documentElement.scrollWidth }));
-  expect(width.scroll).toBeLessThanOrEqual(width.viewport);
-  await closePie(page);
-  await leaveUnsaved(page);
-  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
-  await page.getByRole('button', { name: 'Cambiar contraseña', exact: true }).click();
-  await page.locator('#cv-current-password').fill('Synthetic-Content-Only-1!');
-  await page.locator('#cv-next-password').fill('Synthetic-Content-Changed-2!');
-  await page.getByRole('button', { name: 'Guardar contraseña y volver a entrar', exact: true }).click();
-  await expect(page).toHaveURL(/wp-login\.php/);
-});
-
-test('El fondo cambia y se conservan las piezas negras, claras y los huecos cerrados', async ({ page }) => {
-  await page.goto('about:blank');
-  await page.addScriptTag({path:'wordpress/casa-viva-dropship-core/assets/product-background.js'});
-  const actual = await page.evaluate(() => {
-    const source = document.createElement('canvas'); source.width = 100; source.height = 100;
-    const ctx = source.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,100,100);
-    for (const x of [5,35]) { ctx.fillStyle = '#111'; ctx.fillRect(x,10,14,14); ctx.fillStyle='#fff'; ctx.fillRect(x+4,14,6,6); }
-    ctx.fillStyle='#ebebeb'; ctx.fillRect(70,65,3,6);
-    const bg = document.createElement('canvas'); bg.width=1;bg.height=1;
-    const b=bg.getContext('2d');b.fillStyle='#ccbb99';b.fillRect(0,0,1,1);
-    const vertical = window.cvProductBackground(source,bg,true), square = window.cvProductBackground(source,bg,false);
-    const composed = vertical.getContext('2d');
-    return { sizes: [[vertical.width, vertical.height], [square.width, square.height]],
-      pixels: [[5,10],[35,10],[10,16],[70,65],[50,50]].map(([x,y]) => Array.from(composed.getImageData(490+x,910+y,1,1).data).slice(0,3)) };
-  });
-  // Composed at social size so templates and downloads are not upscaled.
-  expect(actual.sizes).toEqual([[1080, 1920], [1080, 1080]]);
-  expect(actual.pixels).toEqual([[17,17,17],[17,17,17],[255,255,255],[235,235,235],[204,187,153]]);
-});
-
+// v2 antes de «Editor de contenido»: esa prueba cambia la contraseña al final.
 test('v2 · Lista: foto HERO, prioridad, lo que falta, filtros, bandeja con contador y Helvetica sin franja arriba', async ({ page }) => {
   test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
   test.setTimeout(60000);
@@ -567,4 +488,84 @@ test('v2 · Dudas del catálogo: una tarjeta por pantalla, Revisión, Sí, Expli
   await expect(done).toContainText('cvt_content_browser');
   const width = await page.evaluate(() => ({ viewport: innerWidth, scroll: document.documentElement.scrollWidth }));
   expect(width.scroll).toBeLessThanOrEqual(width.viewport);
+});
+
+test('Editor de contenido: login, guardar, subir foto y descargar en móvil', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(60000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.goto('http://localhost:8889/wp-login.php');
+  await page.locator('#user_login').fill('cvt_content_browser');
+  await page.locator('#user_pass').fill('Synthetic-Content-Only-1!');
+  await Promise.all([page.waitForNavigation(), page.locator('#wp-submit').click()]);
+  await page.goto('http://localhost:8889/?cvd_contenido=1');
+  await expect(page.getByRole('heading', { name: 'Mi catálogo y fotos', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Studio browser fixture · Publicado', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Título', exact: true }).fill('Studio browser edited');
+  await page.getByRole('button', { name: 'Guardar cambios', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Cambios publicados en Casa Viva.');
+  await page.locator('#cv-photo').setInputFiles({ name: 'fixture.png', mimeType: 'image/png', buffer: pixel });
+  await expect(page.getByRole('status')).toContainText('Foto preparada.');
+  const [uploaded] = await Promise.all([
+    page.waitForResponse((r) => r.request().method() === 'POST' && decodeURIComponent(r.url()).includes('/contenido/upload')),
+    page.getByRole('button', { name: 'Subir a la web', exact: true }).click(),
+  ]);
+  await expect(page.getByRole('status')).toContainText('Foto subida y protegida.');
+  // The web copy is converted to WebP in the browser before it is sent.
+  expect((await uploaded.json()).image_full).toMatch(/\.webp$/);
+  await expect(page.locator('#cv-commercial')).toContainText('25');
+  await page.getByRole('textbox', { name: 'Característica 1', exact: true }).fill('Dato sintético de prueba');
+  await tab(page, 'Anuncio');
+  await finish(page);
+  await expect(page.getByRole('status')).toHaveText('Falta la duda → resultado → prueba: toca «Editar».');
+  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  await page.getByLabel('Duda', { exact: true }).fill('¿Aguanta?');
+  await page.getByLabel('Resultado', { exact: true }).fill('Resultado sintético');
+  await page.getByLabel('Prueba', { exact: true }).fill('Prueba sintética');
+  await page.getByRole('button', { name: 'Confirmar', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Duda → resultado → prueba confirmada.');
+  await finish(page);
+  await expect(page.getByRole('status')).toHaveText('Coloca los 2 puntos en la foto hasta que diga «Listo».');
+  const canvas = page.locator('#cv-canvas'), box = await canvas.boundingBox();
+  await canvas.click({ position: { x: box.width * 0.4, y: box.height * 0.5 } }); await canvas.click({ position: { x: box.width * 0.6, y: box.height * 0.6 } });
+  await expect(page.locator('#cv-point-hint')).toHaveText('Listo');
+  await finish(page);
+  await expect(page.getByRole('link', { name: 'Solo la imagen', exact: true })).toBeVisible();
+  const dimensions = await page.locator('#cv-canvas').evaluate((canvas) => [canvas.width, canvas.height]);
+  expect(dimensions).toEqual([1080, 1920]);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Solo la imagen', exact: true }).click()]);
+  const bytes = fs.readFileSync(await download.path());
+  expect(bytes[0]).toBe(255); expect(bytes[1]).toBe(216); expect(bytes.length).toBeGreaterThan(1000);
+  await expect(page.getByRole('textbox', { name: 'Pie del anuncio', exact: true })).toHaveValue(/^Resultado sintético\nPrueba sintética\./);
+  const width = await page.evaluate(() => ({ viewport: innerWidth, scroll: document.documentElement.scrollWidth }));
+  expect(width.scroll).toBeLessThanOrEqual(width.viewport);
+  await closePie(page);
+  await leaveUnsaved(page);
+  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Cambiar contraseña', exact: true }).click();
+  await page.locator('#cv-current-password').fill('Synthetic-Content-Only-1!');
+  await page.locator('#cv-next-password').fill('Synthetic-Content-Changed-2!');
+  await page.getByRole('button', { name: 'Guardar contraseña y volver a entrar', exact: true }).click();
+  await expect(page).toHaveURL(/wp-login\.php/);
+});
+
+test('El fondo cambia y se conservan las piezas negras, claras y los huecos cerrados', async ({ page }) => {
+  await page.goto('about:blank');
+  await page.addScriptTag({path:'wordpress/casa-viva-dropship-core/assets/product-background.js'});
+  const actual = await page.evaluate(() => {
+    const source = document.createElement('canvas'); source.width = 100; source.height = 100;
+    const ctx = source.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,100,100);
+    for (const x of [5,35]) { ctx.fillStyle = '#111'; ctx.fillRect(x,10,14,14); ctx.fillStyle='#fff'; ctx.fillRect(x+4,14,6,6); }
+    ctx.fillStyle='#ebebeb'; ctx.fillRect(70,65,3,6);
+    const bg = document.createElement('canvas'); bg.width=1;bg.height=1;
+    const b=bg.getContext('2d');b.fillStyle='#ccbb99';b.fillRect(0,0,1,1);
+    const vertical = window.cvProductBackground(source,bg,true), square = window.cvProductBackground(source,bg,false);
+    const composed = vertical.getContext('2d');
+    return { sizes: [[vertical.width, vertical.height], [square.width, square.height]],
+      pixels: [[5,10],[35,10],[10,16],[70,65],[50,50]].map(([x,y]) => Array.from(composed.getImageData(490+x,910+y,1,1).data).slice(0,3)) };
+  });
+  // Composed at social size so templates and downloads are not upscaled.
+  expect(actual.sizes).toEqual([[1080, 1920], [1080, 1080]]);
+  expect(actual.pixels).toEqual([[17,17,17],[17,17,17],[255,255,255],[235,235,235],[204,187,153]]);
 });
