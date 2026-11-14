@@ -59,6 +59,9 @@ final class CVD_Web_Push {
 	/** Entrega al service worker únicamente el último aviso del dispositivo autenticado por token aleatorio. */
 	public static function latest_for_device(): WP_REST_Response {
 		global $wpdb;
+		// 3.14.170: dirección fija y autenticación por cookie (sin sesión de WordPress): LiteSpeed guardaría el aviso de un
+		// teléfono y se lo daría a cualquiera. Nunca a la caché (auditoría docs/nexo-business/seguridad-cache-rutas-2026-11.md).
+		do_action( 'litespeed_control_set_nocache', 'Casa Viva: último aviso de este teléfono (privado)' );
 		$token = sanitize_text_field( wp_unslash( $_COOKIE['cvd_push_device'] ?? '' ) );
 		if ( ! preg_match( '/^[a-f0-9]{64}$/', $token ) ) { return new WP_REST_Response( array(), 204 ); }
 		$device = $wpdb->get_row( $wpdb->prepare( 'SELECT user_id,user_agent FROM '.self::subscriptions_table().' WHERE device_token=%s LIMIT 1', $token ) );
