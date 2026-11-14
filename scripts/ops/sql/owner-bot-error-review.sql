@@ -167,4 +167,4 @@ begin
    perform public.ops_enqueue_bridge(new.public_id,action_name,'{}');
  end if;
  return new;
-end $function$
+end $function$;
