@@ -440,3 +440,8 @@ Al retomar el proyecto:
 - #183 falló bootstrap sin modelos. La revisión encontró que main() fija umask 077: folder.mkdir(mode=0755) genera 0700 y no se normalizaba después. cvdev no puede recorrer ese directorio y Codex escoge otro bwrap sin perfil; kernel #184 sigue mostrando unprivileged_userns, no el perfil dedicado.
 - Corrección: comprobar propietario root y ausencia de escritura de grupo/otros, luego chmod 0755 explícito al directorio que solo guarda bwrap. Los archivos de autenticación permanecen 0700/0600. Se añade prueba directa del binario como cvdev antes de la prueba Codex, diferenciando permisos de ruta y selección del helper.
 - Pendiente CI y verificación real; no afirmar corrección hasta controles positivos/negativos verdes. No se amplían capacidades ni permisos del perfil. Cero llamadas a modelo durante diagnóstico.
+
+
+### Control OS — staging privado de Bubblewrap
+
+PR #220 resolvió el directorio root 0700 causado por umask 077; prueba directa dedicada superada. Bridge #187 llegó al ejecutor nativo, pero AppArmor bloqueó mkdir/mknod en /newroot/dev/null (auditoría #188). Se permite el staging /newroot del tmpfs privado previo a pivot_root, con denegaciones explícitas equivalentes para root, autenticación, SSH y claves privadas en esa ruta. No se añaden capabilities ni se cambia el sysctl global. La actualización acepta exclusivamente el perfil anterior exacto o el nuevo; deben pasar las pruebas positivas de escritura del workspace y negativas de secretos/escritura/red antes de ejecutar el modelo.

@@ -21,6 +21,13 @@ profile cv-control-codex-bwrap /usr/local/lib/control-os/bwrap flags=(attach_dis
   deny network inet6,
   signal (send,receive) peer=cv-control-codex-bwrap,
   signal (receive) peer=unconfined,
+  # Private tmpfs staging root used by Bubblewrap before pivot_root.
+  /newroot/ rw,
+  /newroot/** rwkixm,
+  deny /newroot/root/{,**} rwklmx,
+  deny /newroot/home/cvdev/control-os-auth/{,**} rwklmx,
+  deny /newroot/home/cvdev/.ssh/{,**} rwklmx,
+  deny /newroot/etc/ssl/private/{,**} rwklmx,
   / r,
   /** r,
   /usr/** rixm,
