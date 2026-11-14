@@ -3,6 +3,7 @@
 begin;
 create table public.ops_tasks(id uuid primary key, public_id bigint, thread_id uuid, status text,
  approval_required boolean, claim_expires_at timestamptz, claimed_by text, claimed_at timestamptz,
+ business_id text default 'casa-viva', executor text default 'dev',
  risk text default 'safe', result jsonb, finished_at timestamptz, error text, updated_at timestamptz,
  check(status in ('waiting_ai','waiting_approval','failed','cancelled')));
 create table public.ops_dev_runs(id bigint primary key,task_id uuid,repo text,mode text,status text,
@@ -20,6 +21,11 @@ insert into public.ops_dev_runs(id,task_id,repo,mode,status,base_sha,auto_merge,
 do $$
 declare p jsonb; bad jsonb; patch jsonb; before_state jsonb;
 begin
+ if has_function_privilege('anon','public.ops_accept_opencode_result(jsonb)','EXECUTE')
+ or has_function_privilege('authenticated','public.ops_accept_opencode_result(jsonb)','EXECUTE')
+ or has_table_privilege('service_role','public.ops_ai_result_receipts','UPDATE')
+ or has_table_privilege('service_role','public.ops_ai_result_receipts','DELETE')
+ then raise exception 'unexpected public access or mutable receipts'; end if;
  p := jsonb_build_object('version','opencode-result-v1','run_id','1','task_id','00000000-0000-0000-0000-000000000001',
  'task_public_id',42,'repo','casa-viva','status','completed','error',null,'base_sha',repeat('a',40),
  'changed_paths',jsonb_build_array('docs/a.md'),'diff','+a','logs','[]'::jsonb,
