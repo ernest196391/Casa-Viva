@@ -2,12 +2,15 @@
 -- psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/opencode-result-receipts.fixture.sql
 begin;
 create table public.ops_tasks(id uuid primary key, public_id bigint, thread_id uuid, status text,
- approval_required boolean, claim_expires_at timestamptz, error text, updated_at timestamptz);
+ approval_required boolean, claim_expires_at timestamptz, claimed_by text, claimed_at timestamptz,
+ risk text default 'safe', result jsonb, finished_at timestamptz, error text, updated_at timestamptz,
+ check(status in ('waiting_ai','waiting_approval','failed','cancelled')));
 create table public.ops_dev_runs(id bigint primary key,task_id uuid,repo text,mode text,status text,
  base_sha text,work_sha text,auto_merge boolean,allowed_paths jsonb,summary text,error text,logs text,
- started_at timestamptz,updated_at timestamptz,finished_at timestamptz);
-create table public.ops_approvals(task_id uuid,requested_for_role text,warning text,impact text,
- proposed_change jsonb,status text);
+ started_at timestamptz,updated_at timestamptz,finished_at timestamptz,
+ check(status in ('claimed','preparing','editing','testing','pushed','waiting_ci','waiting_approval','deploy_queued','deploying','done','failed','blocked','waiting_ai')));
+create table public.ops_approvals(task_id uuid,requested_for_role text,warning text,impact jsonb,
+ proposed_change jsonb,status text check(status in ('pending','approved','rejected','expired','cancelled')));
 create table public.ops_events(task_id uuid,thread_id uuid,event_type text,actor_type text,actor_ref text,detail jsonb);
 -- Roles anon/authenticated/service_role deben existir en el entorno de pruebas.
 \ir opencode-result-receipts.sql
@@ -63,6 +66,6 @@ begin
  if (select count(*) from public.ops_approvals)<>1 or (select count(*) from public.ops_events)<>1
  or (select count(*) from public.ops_ai_result_receipts)<>1 then raise exception 'duplicate side effects'; end if;
  if exists(select 1 from public.ops_tasks where status<>'waiting_approval' or approval_required is distinct from true)
- or exists(select 1 from public.ops_dev_runs where status<>'awaiting_approval') then raise exception 'approval bypass'; end if;
+ or exists(select 1 from public.ops_dev_runs where status<>'waiting_approval') then raise exception 'approval bypass'; end if;
 end $$;
 rollback;
