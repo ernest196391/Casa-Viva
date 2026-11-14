@@ -769,9 +769,7 @@ final class CVD_Palla_Api {
 		}
 		$out = array( 'ok' => true, 'days' => $list );
 		foreach ( $totals as $k => $t ) { $out[ $k ] = array( 'count' => $t[0], 'earnedText' => self::money( (float) $t[1], 'CUP' ) ); }
-		$response = rest_ensure_response( $out );
-		$response->header( 'Cache-Control', 'no-store' );
-		return $response;
+		return self::out( $out ); // 3.14.170: también fuera de la caché de LiteSpeed (antes solo Cache-Control, que LiteSpeed no mira).
 	}
 
 	// ------------------------------------------------------------------ Idempotencia (cola sin conexión)

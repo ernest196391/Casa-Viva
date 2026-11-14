@@ -131,6 +131,7 @@ final class CVD_Palla_Push {
 	}
 
 	private static function out( array $data ): WP_REST_Response {
+		do_action( 'litespeed_control_set_nocache', 'Palla: avisos del mensajero (privado)' ); // 3.14.170: Cache-Control solo no basta con LiteSpeed.
 		$response = rest_ensure_response( $data );
 		$response->header( 'Cache-Control', 'no-store' );
 		return $response;

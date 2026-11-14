@@ -527,6 +527,9 @@ final class CVD_Catalogo_Auto {
 	public static function review_page(): void {
 		if ( empty( $_GET[ self::PARAM ] ) ) { return; }
 		$t = sanitize_text_field( wp_unslash( $_GET['t'] ?? '' ) );
+		// 3.14.170: nocache_headers() no basta con LiteSpeed: guardaba la página con su token y, tras aprobar fichas, volvía a salir la lista vieja.
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) { define( 'DONOTCACHEPAGE', true ); }
+		do_action( 'litespeed_control_set_nocache', 'Casa Viva: revisión de fichas (privado)' );
 		nocache_headers();
 		header( 'X-Robots-Tag: noindex, nofollow' );
 		if ( ! self::verify( $t ) ) { wp_die( 'Este enlace ya no vale. Pide uno nuevo a Ernesto.', 'Revisión de fichas', array( 'response' => 403 ) ); }
