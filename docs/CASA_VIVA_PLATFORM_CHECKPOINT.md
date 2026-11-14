@@ -384,3 +384,11 @@ Al retomar el proyecto:
 - Fixture #114 quedó cancelada y etiquetada invalid_fixture_missing_bridge_id; la defensa rechazó correctamente cerrarla. No es una tarea comercial.
 - Scripts SQL de avance, rollback exacto y pruebas en scripts/ops/sql y scripts/ops/tests. No cambia servicios ni despliega web/VivaBot. Coste adicional 0; llamadas a modelos 0.
 - Límite: certifica cola→bridge→resultado→cierre de consulta. No certifica WhatsApp/panel ni generación/aprobación/promoción de cambios de código. Siguiente: ruta canónica para solicitudes desde canales y consumidor Supabase de desarrollo con aislamiento verificado.
+
+## CURRENT — Entradas de propietario y preparación Codex (2026-11-14)
+
+- Aplicado router SQL por coincidencia exacta para salud del sistema, estado de WordPress y estado del bot. Panel conserva actor Ernesto; WhatsApp conserva owner_change y exige sus permisos/aprobación originales antes del enrutado. No interpreta instrucciones ambiguas como consultas.
+- Pruebas SQL de solicitud conocida, duplicado e instrucción desconocida pasaron con rollback. Solicitud real por ops_ingest_control_request #130 produjo bridge #163 y resultado done con resumen, sin IA. No sustituye una prueba manual en panel/WhatsApp.
+- Snapshot incluye 20 tareas terminadas además de abiertas para que el resultado siga visible. Hoy conserva solo trabajo abierto.
+- Acciones nuevas propuestas: control_codex_setup instala @openai/codex@0.169.0 oficial como cvdev en directorio dedicado; control_codex_login solo inicia/consulta device auth, sin modelos ni API keys. CODEX_HOME separado; entorno limpio sin credenciales de producción; no cambia servicios.
+- Pendiente de CI y despliegue. Inicio de sesión requiere intervención del propietario con link y código oficial. Ninguna suscripción contratada ni coste adicional autorizado.
