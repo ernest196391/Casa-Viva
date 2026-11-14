@@ -91,12 +91,17 @@ function render(data){
   else $('task-feedback').textContent='Solicitud recibida. Esperando que la cola asigne su número; no hace falta enviarla otra vez.';
  }
 }
-let loading=false;
+let loading=false,readFailures=0;
 async function refresh(){
  if(loading)return;loading=true;$('refresh').classList.add('spin');
- const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),10000);
- try{const r=await fetch('./?action=state',{cache:'no-store',signal:controller.signal});if(r.status===401)throw Error('Tu sesión venció. Recarga la página e inicia sesión.');const b=await r.json();if(!r.ok||!b.success)throw Error(b.data?.message||'No se pudo consultar el estado.');render(b.data);}
- catch(e){$('error').hidden=false;$('error').textContent=e.name==='AbortError'?'La conexión está tardando. Pulsa Actualizar para volver a consultar.':e.message;$('freshness').textContent='Sin conexión con el estado';$('connection').classList.add('bad');}
+ const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),30000);
+ try{const r=await fetch('./?action=state',{cache:'no-store',signal:controller.signal});if(r.status===401)throw Error('Tu sesión venció. Recarga la página e inicia sesión.');const b=await r.json();if(!r.ok||!b.success)throw Error(b.data?.message||'No se pudo consultar el estado.');render(b.data);readFailures=0;}
+ catch(e){
+ readFailures++;
+ const recent=state.data&&Date.now()-Date.parse(state.data.at)<180000;
+ if(recent&&readFailures<3){$('error').hidden=true;$('freshness').textContent='Reintentando · último estado '+stamp(state.data.at);}
+ else{$('error').hidden=false;$('error').textContent=e.name==='AbortError'?'La conexión está tardando. Puedes consultar de nuevo sin reenviar la solicitud.':e.message;$('freshness').textContent='Sin conexión con el estado';$('connection').classList.add('bad');}
+ }
  finally{clearTimeout(timer);loading=false;$('refresh').classList.remove('spin');}
 }
 $('refresh').addEventListener('click',refresh);
