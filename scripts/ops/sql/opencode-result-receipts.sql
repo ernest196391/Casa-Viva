@@ -8,6 +8,7 @@ create table public.ops_ai_result_receipts (
 );
 alter table public.ops_ai_result_receipts enable row level security;
 revoke all on public.ops_ai_result_receipts from public, anon, authenticated;
+revoke all on public.ops_ai_result_receipts from service_role;
 grant select, insert on public.ops_ai_result_receipts to service_role;
 
 create function public.ops_accept_opencode_result(p_result jsonb) returns jsonb
@@ -43,7 +44,8 @@ begin
  select * into strict r from public.ops_dev_runs where id=(p_result->>'run_id')::bigint for update;
  select * into strict t from public.ops_tasks where id=r.task_id for update;
  moment := clock_timestamp();
- if r.task_id <> (p_result->>'task_id')::uuid or r.repo is distinct from p_result->>'repo'
+ if t.business_id is distinct from 'casa-viva' or t.executor is distinct from 'dev'
+ or r.task_id <> (p_result->>'task_id')::uuid or r.repo is distinct from p_result->>'repo'
  or r.mode is distinct from 'ai' or r.auto_merge is distinct from false
  or (p_result ? 'task_public_id' and p_result->'task_public_id' <> 'null'::jsonb
      and (jsonb_typeof(p_result->'task_public_id') <> 'number'
