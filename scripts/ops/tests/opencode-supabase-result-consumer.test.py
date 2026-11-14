@@ -57,11 +57,17 @@ class ConsumerTests(unittest.TestCase):
     def test_duplicate_receipt_and_failed(self):
         for status in ('duplicate','failed'):
             self.client.rpc.return_value.execute.return_value.data={'status':status,'run_id':1}
-            self.assertEqual(self.store.accept(self.result,self.now)['status'],status)
+            packet = self.result if status == 'duplicate' else {
+                **self.result, 'status':'failed', 'error':'fixture failed',
+                'changed_paths':[], 'diff':None}
+            self.assertEqual(self.store.accept(packet,self.now)['status'],status)
 
     def test_invalid_response_not_acknowledged(self):
-        self.client.rpc.return_value.execute.return_value.data={'status':'approved'}
-        with self.assertRaises(RuntimeError): self.store.accept(self.result,self.now)
+        for response in ({'status':'approved'}, {'status':'failed','run_id':1},
+                         {'status':'waiting_approval','run_id':2},
+                         {'status':'waiting_approval','run_id':True}):
+            self.client.rpc.return_value.execute.return_value.data=response
+            with self.assertRaises(RuntimeError): self.store.accept(self.result,self.now)
 
     def test_archive_never_overwrites_existing_notes(self):
         import tempfile, json
