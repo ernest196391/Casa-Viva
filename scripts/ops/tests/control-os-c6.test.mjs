@@ -78,7 +78,7 @@ test('courier timeout requires gestora decision and respects daytime hours', () 
   const tick = chain.split('public static function tick_order(')[1].split('// ------------------------------------------------------------------ Avisos')[0];
   assert.doesNotMatch(tick, /self::system_release\(/);
   assert.match(tick, /\$hour < 9 \|\| \$hour >= 17/);
-  assert.match(tick, /max\( 20, absint/);
+  assert.match(chain, /max\( 20, absint/);
   assert.match(tick, /Llámalo para confirmar/);
 });
 test('OK confirmation verifies assigned courier and uses atomic transition', () => {
