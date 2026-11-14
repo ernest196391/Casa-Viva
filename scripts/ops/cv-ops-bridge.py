@@ -2031,7 +2031,7 @@ def action_control_codex_consumer_build(args):
         loaded = Path("/sys/kernel/security/apparmor/profiles")
         loaded_text = loaded.read_text(errors="replace") if loaded.is_file() else ""
         restrict = Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns")
-        probe = run(command + ["sandbox","linux","--","/usr/bin/true"],timeout=30)
+        probe = run(command + ["sandbox","--","/usr/bin/true"],timeout=30)
         kernel = run(["journalctl","-k","-n","150","--no-pager","--output=cat"],timeout=20)
         denied = [line for line in kernel["output"].splitlines()
                   if ("DENIED" in line or "userns" in line) and
@@ -2233,7 +2233,7 @@ def action_control_codex_sandbox(args):
     if direct["returncode"]:
         return {"returncode":5,"output":json.dumps({"stage":"dedicated_binary",
             "directory_mode":oct(folder.stat().st_mode & 0o777),"probe":direct})}
-    boot = run(command+["sandbox","linux","--","/usr/bin/true"],cwd=work,timeout=30)
+    boot = run(command+["sandbox","--","/usr/bin/true"],cwd=work,timeout=30)
     if boot["returncode"]:
         return {"returncode":5,"output":json.dumps({"stage":"bootstrap","probe":boot,
             "global_restriction":Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").read_text().strip()})}
@@ -2265,7 +2265,7 @@ except OSError as e:
 print(json.dumps(report))
 raise SystemExit(0 if all(report.values()) else 1)
 """
-    verified = run(command+["-c",'sandbox_mode="workspace-write"',"sandbox","linux","--",
+    verified = run(command+["-c",'sandbox_mode="workspace-write"',"sandbox","--",
                    "/usr/bin/python3","-c",checks],cwd=work,timeout=30)
     canary.unlink(missing_ok=True)
     return {"returncode":verified["returncode"],"output":json.dumps({
