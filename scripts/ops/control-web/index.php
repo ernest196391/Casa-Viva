@@ -10,7 +10,7 @@ $action = (string) ($_GET['action'] ?? '');
 if (!is_user_logged_in()) {
     if ($action !== '') { wp_send_json_error(['message' => 'Necesitas iniciar sesión.'], 401); }
     status_header(401);
-    ?><!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Entrar · Casa Viva Control</title><link rel="stylesheet" href="style.css"></head><body><main><section class="command-card"><h1>Entrar a Control OS</h1><p>Usa tu cuenta de Casa Viva.</p><p><a href="<?php echo esc_url(wp_login_url(home_url('/control/'))); ?>">1. Iniciar sesión</a></p><p>Si después ves Operaciones o tu área de gestora, vuelve a esta página.</p><p><a href="<?php echo esc_url(home_url('/control/')); ?>">2. Abrir Control OS</a></p><p><a href="<?php echo esc_url(wp_lostpassword_url()); ?>">He olvidado mi contraseña</a></p></section></main></body></html><?php
+    ?><!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Entrar · Casa Viva Control</title><link rel="stylesheet" href="style.css"></head><body><main><section class="command-card"><h1>Entrar a Control OS</h1><p>Usa tu cuenta de Casa Viva.</p><p><a class="primary" href="<?php echo esc_url(wp_login_url(home_url('/control/'))); ?>">1. Iniciar sesión</a></p><p>Si después ves Operaciones o tu área de gestora, vuelve a esta página.</p><p><a class="primary" href="<?php echo esc_url(home_url('/control/')); ?>">2. Abrir Control OS</a></p><p><a class="primary" href="<?php echo esc_url(wp_lostpassword_url()); ?>">He olvidado mi contraseña</a></p></section></main></body></html><?php
     exit;
 }
 // Control access: two verified owner accounts, with WordPress capabilities checked each time.
@@ -102,7 +102,7 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
   <p class="section-copy"><a href="<?php echo esc_url(home_url('/centro-operaciones/')); ?>">Pedidos e inventario</a> · <?php echo esc_html(wp_get_current_user()->display_name); ?> · <?php echo $canWrite ? 'Control OS' : 'Acceso de consulta. Cambios y aprobaciones por WhatsApp.'; ?></p>
   <section class="command-card">
     <div class="command-head">
-      <div><span class="eyebrow">CASA VIVA</span><h1>¿Qué quieres hacer?</h1></div>
+      <div><span class="eyebrow">CASA VIVA</span><h1><?php echo $canWrite ? '¿Qué quieres hacer?' : 'Estado de Control OS'; ?></h1></div>
       <div class="fresh"><span id="connection" class="dot"></span><span id="freshness">Cargando estado…</span></div>
     </div>
     <div class="quick-actions" aria-label="Consultas sin IA" <?php if (!$canWrite) { echo 'hidden'; } ?>>
