@@ -428,3 +428,9 @@ Al retomar el proyecto:
 - Perfil propuesto confinado para copia root-owned 0755 de /usr/bin/bwrap en /usr/local/lib/control-os/bwrap, solo en PATH de Codex cvdev. No toca /usr/bin/bwrap ni sysctl; sin setuid, filecaps ni flags unconfined. Capacidades AppArmor limitadas al bootstrap de los namespaces de bwrap: no confieren capacidades de host al usuario cvdev. Montajes siguen sujetos a kernel/userns y sandbox nativo; hijos heredan perfil, red IP y credenciales denegadas.
 - Acción control_codex_sandbox: install/verify/rollback de rutas fijas; comprueba sintaxis antes de cargar, rechaza perfiles ajenos, pruebas nativas sin modelos para bootstrap, escritura en workspace, lectura de canario privado, escritura fuera y red IP. No relanzar modelo si falla verificación.
 - Pendiente: CI, instalación supervisada, verificar aislamiento real y registrar evidencia/denegaciones si procede. Política global preservada. Coste de modelos durante diagnóstico: 0.
+
+## CURRENT — Compatibilidad del recurso bwrap (2026-11-14)
+
+- Perfil dedicado cargó en enforce (#181) y sysctl global permanece 1. Prueba nativa #180 sigue RTM_NEWADDR; no se llamó modelo.
+- Revisión del launcher de Codex rust-v0.169.0: exige --perms y --as-pid-1; si el sistema no los soporta, ignora ese binario y usa el incluido sin perfil. Se propone copiar exclusivamente el recurso codex-resources/bwrap del paquete oficial instalado; exige candidato único, comprobación de help y rechazo de binarios previos desconocidos.
+- No cambia perfil, permisos, capacidades ni límites; conserva pruebas negativas. Se ejecuta help como cvdev y la copia queda root-owned 0755 sin setuid/filecaps. Pendiente prueba real; diagnóstico sin consumo de modelos.

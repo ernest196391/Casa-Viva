@@ -2180,8 +2180,20 @@ def action_control_codex_sandbox(args):
             binary.unlink()
         return {"returncode":0,"output":"Perfil dedicado revertido; protección global intacta"}
     if mode == "install":
-        if not Path("/usr/bin/bwrap").is_file():
-            return {"returncode":4,"output":"Falta bubblewrap del sistema"}
+        tools_root = Path("/home/cvdev/control-os-tools")
+        candidates = [p for p in tools_root.rglob("bwrap") if p.is_file() and not p.is_symlink()
+                      and p.resolve().is_relative_to(tools_root)
+                      and "codex-resources" in p.parts]
+        if len(candidates)!=1:
+            return {"returncode":4,"output":json.dumps({"error":"Recurso bwrap oficial ambiguo",
+                "candidates":[str(p) for p in candidates]})}
+        source = candidates[0]
+        help_probe = run(["runuser","-u","cvdev","--",str(source),"--help"],timeout=15)
+        if help_probe["returncode"] or not all(x in help_probe["output"] for x in ("--perms","--as-pid-1")):
+            return {"returncode":4,"output":"bwrap incluido no satisface requisitos de Codex"}
+        state = run(["systemctl","is-active","cv-control-consumer-build"],timeout=10)
+        if state["output"].strip() in ("active","activating"):
+            return {"returncode":4,"output":"Detener preparación antes de reemplazar binario"}
         folder.mkdir(mode=0o755,exist_ok=True)
         if folder.stat().st_uid!=0 or folder.stat().st_mode & 0o022:
             return {"returncode":3,"output":"Directorio de binarios no es seguro"}
@@ -2192,11 +2204,16 @@ def action_control_codex_sandbox(args):
         if parsed["returncode"]:
             temporary.unlink()
             return parsed
-        if not binary.exists():
-            shutil.copyfile("/usr/bin/bwrap",binary)
-            binary.chmod(0o755)
+        if binary.exists() and binary.read_bytes()!=source.read_bytes():
+            if not Path("/usr/bin/bwrap").is_file() or binary.read_bytes()!=Path("/usr/bin/bwrap").read_bytes():
+                return {"returncode":3,"output":"Binario anterior no reconocido"}
+        if not binary.exists() or binary.read_bytes()!=source.read_bytes():
+            next_binary = folder / "bwrap.next"
+            shutil.copyfile(source,next_binary)
+            next_binary.chmod(0o755)
+            os.replace(next_binary,binary)
         if ("security.capability" in os.listxattr(binary)
-                or binary.read_bytes()!=Path("/usr/bin/bwrap").read_bytes()):
+                or binary.read_bytes()!=source.read_bytes()):
             return {"returncode":3,"output":"Binario distinto o con file capabilities"}
         if binary.stat().st_uid!=0 or binary.stat().st_mode & 0o6022:
             return {"returncode":3,"output":"Binario con propietario/permisos inseguros"}
