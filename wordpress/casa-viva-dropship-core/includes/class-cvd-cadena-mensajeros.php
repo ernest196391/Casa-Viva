@@ -471,12 +471,25 @@ final class CVD_Cadena_Mensajeros {
 		$holder = self::user( self::holder_id( $order ) );
 		$assigned_at = self::utc_ts( (string) $order->get_meta( '_cvd_direct_assigned_at', true ) );
 		if ( ! $holder || ! $assigned_at ) { return 'skip'; }
-		$age = $now - $assigned_at;
-		// Escalamiento de confirmación solo entre 09:00 y 17:00, hora de Cuba.
-		// Los vales preparados después de las 17:00 se revisan a partir de las 09:00 siguientes.
-		$cuba = ( new DateTime( '@' . $now ) )->setTimezone( new DateTimeZone( 'America/Havana' ) );
+		// Solo cuentan minutos dentro del horario de seguimiento de Cuba (09:00–17:00).
+		// Un vale asignado de noche no vence al abrir: recibe 20 minutos desde las 09:00.
+		$tz = new DateTimeZone( 'America/Havana' );
+		$cuba = ( new DateTime( '@' . $now ) )->setTimezone( $tz );
 		$hour = (int) $cuba->format( 'G' );
 		if ( $hour < 9 || $hour >= 17 ) { return 'outside_confirmation_hours'; }
+		$assigned_local = ( new DateTime( '@' . $assigned_at ) )->setTimezone( $tz );
+		$cursor = clone $assigned_local;
+		$age = 0;
+		// Calcular minutos hábiles sin depender del cambio de horario de verano.
+		while ( $cursor < $cuba ) {
+			$start = ( clone $cursor )->setTime( 9, 0, 0 );
+			$end = ( clone $cursor )->setTime( 17, 0, 0 );
+			$from = max( $cursor->getTimestamp(), $start->getTimestamp() );
+			$to = min( $cuba->getTimestamp(), $end->getTimestamp() );
+			if ( $to > $from ) { $age += $to - $from; }
+			$cursor->setTime( 0, 0, 0 )->modify( '+1 day' );
+			if ( $cursor > $cuba ) { break; }
+		}
 		$num = $order->get_order_number();
 		if ( $age >= self::remind_min() * 60 && absint( $order->get_meta( self::REMINDED_META, true ) ) < $assigned_at ) {
 			$order->update_meta_data( self::REMINDED_META, $now );
