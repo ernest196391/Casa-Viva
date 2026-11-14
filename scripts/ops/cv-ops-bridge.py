@@ -2205,7 +2205,7 @@ def action_control_codex_sandbox(args):
             temporary.unlink()
             return parsed
         if binary.exists() and binary.read_bytes()!=source.read_bytes():
-            if not Path("/usr/bin/bwrap").is_file() or binary.read_bytes()!=source.read_bytes():
+            if not Path("/usr/bin/bwrap").is_file() or binary.read_bytes()!=Path("/usr/bin/bwrap").read_bytes():
                 return {"returncode":3,"output":"Binario anterior no reconocido"}
         if not binary.exists() or binary.read_bytes()!=source.read_bytes():
             next_binary = folder / "bwrap.next"
