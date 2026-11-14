@@ -91,5 +91,5 @@ begin
  values('00000000-0000-0000-0000-000000000002','owner','fixture','{}','{}','pending');
  perform public.ops_decide_approval((select public_id from public.ops_approvals where task_id='00000000-0000-0000-0000-000000000002'),'approve','owner','fixture-human','normal');
  if (select status from public.ops_tasks where public_id=43)<>'triaged' then raise exception 'generic approval regressed'; end if;
-end $;
+end $$;
 rollback;
