@@ -19,7 +19,7 @@
 #   sudo apparmor_parser -R /etc/apparmor.d/cv-opencode-bwrap
 #   sudo rm /etc/apparmor.d/cv-opencode-bwrap
 # --------------------------------------------------------------------
-abi 4.0,
+abi <abi/4.0>,
 include <tunables/global>
 
 @{CV_CONTROL_OS} = /home/cvdev/control-os-dev
