@@ -392,3 +392,10 @@ Al retomar el proyecto:
 - Snapshot incluye 20 tareas terminadas además de abiertas para que el resultado siga visible. Hoy conserva solo trabajo abierto.
 - Acciones nuevas propuestas: control_codex_setup instala @openai/codex@0.169.0 oficial como cvdev en directorio dedicado; control_codex_login solo inicia/consulta device auth, sin modelos ni API keys. CODEX_HOME separado; entorno limpio sin credenciales de producción; no cambia servicios.
 - Pendiente de CI y despliegue. Inicio de sesión requiere intervención del propietario con link y código oficial. Ninguna suscripción contratada ni coste adicional autorizado.
+
+## CURRENT — Preparación fija del consumidor en cvdev (2026-11-14)
+
+- Codex device auth #172 confirmó logged_in=true y subscription_login=true. No clave API.
+- Nueva acción acotada control_codex_consumer_build: solo tarea fija para consumidor Supabase, worktree propio, usuario cvdev, sandbox workspace-write nativo y unidad systemd con límite 600 s, NoNewPrivileges, ProtectSystem=strict y ProtectHome=read-only; escritura solo worktree y CODEX_HOME. No SQL real, push ni despliegue. Nunca ejecuta comandos enviados por una tarea.
+- Resultado se revisará como diff antes de promover. Si el sandbox no arranca, se mantiene cerrado; no se desactiva AppArmor ni se usa danger-full-access.
+- Costo adicional previsto 0: usa cuota existente de ChatGPT. No certifica todavía generación ni consumo de resultados hasta revisar ejecución real.
