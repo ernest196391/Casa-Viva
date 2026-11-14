@@ -701,7 +701,7 @@ final class CVD_Cadena_Mensajeros {
 	public static function gestora_notice(): string {
 		if ( ! isset( $_GET['cadena'] ) ) { return ''; }
 		$messages = array(
-			'saved'       => 'Listo: guardado. Si el 1.º no acepta en ' . self::remind_min() . ' min te aviso; a los ' . self::group_min() . ' min sale al grupo solo.',
+			'saved'       => 'Listo: guardado. Si el 1.º no confirma en ' . self::remind_min() . ' min (entre 9:00 y 17:00) te aviso para que lo llames. Solo tú o la tienda podéis pasarlo al grupo.',
 			'preferred'   => 'Listo: cuando la tienda pulse «Listo para salir», el pedido se le asigna directo a tu 1.º mensajero.',
 			'done'        => 'Listo: el pedido ya es de tu nuevo mensajero. Le llega el vale por WhatsApp y al anterior le aviso que ya no es suyo.',
 			'same'        => 'Ese mensajero ya lleva el pedido.',
