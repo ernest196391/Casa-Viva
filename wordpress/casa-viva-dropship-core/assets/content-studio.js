@@ -506,5 +506,311 @@
     closeSheet(); preview(0);
     message('Reseña guardada. Ya aparece en la tienda y puedes usarla en la tarjeta.');
   }));
-  /*@@FOTOS@@*/
+  /* ---------- Fotos: HERO · LIFESTYLE · BENEFICIO ---------- */
+  const GUIDE = [['Entera', '<rect x="8" y="6" width="32" height="36" rx="3" stroke-dasharray="3 3"/><rect x="16" y="12" width="16" height="24" rx="2"/>'],
+    ['Fuera de la caja', '<path d="M6 30l10-6 10 6-10 6z"/><path d="M6 30v8l10 6 10-6v-8"/><rect x="30" y="8" width="12" height="26" rx="2"/>'],
+    ['Con luz', '<circle cx="24" cy="18" r="7"/><path d="M24 4v4M24 28v4M10 18h4M34 18h4M14 8l3 3M31 25l3 3M34 8l-3 3M17 25l-3 3"/><path d="M10 42h28"/>']];
+  function guide() { return h('div', { class: 'cv-guide' }, GUIDE.map(([t, s]) => { const d = h('div'); d.innerHTML = `<svg viewBox="0 0 48 48" aria-hidden="true">${s}</svg>`; d.append(t); return d; })); }
+  const prios = () => product?.prios || [];
+  const locked = (k) => k !== 'hero' && !prios().length;
+  const piece = (k) => product?.piezas?.[k] || { estado: 'falta' };
+  const optionsOf = (k) => (product?.opciones || []).filter((o) => o.pieza === k);
+  const unreviewed = (k) => optionsOf(k).filter((o) => !o.estado);
+  const realPhotos = () => (product?.fotos || []).filter((f) => !f.hero);
+  const usedText = (escalon, coste) => escalon === 'ia' ? `IA de pago · ${usd(coste)}` : escalon === 'recorte' ? 'Recorte gratis · 0 USD' : escalon === 'anuncio' ? 'Hecho en Anuncio' : escalon ? `${escalon} · ${usd(coste)}` : '';
+  function chipFor(k) {
+    if (locked(k)) return h('span', { class: 'cv-st off', text: 'Solo top' });
+    if (job && job.id === product.id && job.pieza === k) return h('span', { class: 'cv-st run', text: 'Creando' });
+    const pz = piece(k);
+    if (ESTADO[pz.estado]) return h('span', { class: `cv-st ${pz.estado}`, text: ESTADO[pz.estado] });
+    if (k === 'hero' && product.hero_en_web) return h('span', { class: 'cv-st run', text: 'En la web' });
+    if (unreviewed(k).length) return h('span', { class: 'cv-st revision', text: 'Por revisar' });
+    return h('span', { class: 'cv-st', text: 'Falta' });
+  }
+  function renderPieces() {
+    const cur = fotoState.pieza || 'hero';
+    $('cv-pieces').replaceChildren(...['hero', 'life', 'ben'].map((k) => {
+      const url = k === 'hero' ? (product.hero_en_web ? product.image : piece(k).url) : piece(k).url;
+      return h('button', { type: 'button', class: `cv-pz${locked(k) ? ' cv-lock' : ''}`, 'aria-pressed': String(k === cur), 'data-pieza': k, onclick: () => pickPiece(k) },
+        h('span', { class: `cv-pzi${k === 'hero' ? ' cv-white' : ''}` }, url ? h('img', { src: url, alt: '' }) : null),
+        h('b', { text: PIEZA[k].n }), h('small', { text: PIEZA[k].d }), chipFor(k));
+    }));
+    const ps = prios();
+    $('cv-pieces-note').textContent = ps.length ? `${ps.map((k) => PRIO[k] || k).join(' · ')}: lleva las 3 piezas.` : 'Este producto lleva solo HERO. Las 3 piezas: más vendidos, nuevos y anuncios.';
+  }
+  function pickPiece(k) {
+    if (locked(k)) {
+      return sheet('Solo HERO', h('p', { text: 'LIFESTYLE y BENEFICIO son para los más vendidos, los nuevos y los que van a anuncios.' }),
+        h('div', { class: 'cv-acts' }, btn('Va a anuncios: hacer las 3', 'cv-primary', (e) => busy(e.currentTarget, async () => { await setPrio(true); closeSheet(); fotoState.pieza = k; renderFotos(); }))));
+    }
+    fotoState.pieza = k; fotoState.more = false; fotoState.option = ''; renderFotos();
+  }
+  async function setPrio(on) {
+    const current = ficha, p = await api('prioridad', { id: product.id, anuncios: on ? '1' : '0' });
+    if (current !== ficha) return;
+    mergePhoto(p); message(on ? 'Ahora lleva HERO, LIFESTYLE y BENEFICIO.' : 'Ya no va a anuncios: lleva solo HERO.');
+  }
+  $('cv-prio-toggle').addEventListener('click', (e) => busy(e.currentTarget, async () => { await setPrio(!prios().includes('anuncios')); closeSheet(); if (tab === 'fotos') renderFotos(); }));
+  async function restaurar() {
+    const current = ficha, p = await api('restaurar', { id: product.id });
+    if (current !== ficha) return;
+    mergePhoto(p); message('Volvió la foto anterior a la web.'); if (tab === 'fotos') renderFotos();
+  }
+  $('cv-restore-menu').addEventListener('click', (e) => busy(e.currentTarget, async () => { closeSheet(); await restaurar(); }));
+  // Tope del panel: «Hoy X de 0,50 USD». El recorte gratis no gasta ni se bloquea.
+  function budget() {
+    const g = MOTOR.gasto || {}, pct = Math.min(100, (g.hoy || 0) / (g.tope || 0.5) * 100);
+    return h('p', { class: 'cv-budget' }, h('span', { class: 'cv-meter' }, h('i', { style: `width:${pct}%` })),
+      g.lleno ? `Límite de hoy alcanzado · ${usd(g.hoy)} de ${usd(g.tope)}` : `Hoy ${usd(g.hoy)} de ${usd(g.tope)}`);
+  }
+  // Escalones, de lo gratis a lo caro, con su coste a la vista.
+  function ladder(done, runK, only) {
+    const STEPS = { recorte: ['Recorte gratis', 'VPS · ~7 s', '0 USD'], ia: ['IA de pago', 'gpt-image-1.5 · 20–60 s', `~${usd(MOTOR.gasto?.ia || 0.15)}`], codex: ['Corrector ChatGPT', 'Solo ocasional, a mano', '—'] };
+    return h('ol', { class: 'cv-ladder' }, (only || ['recorte', 'ia', 'codex']).map((k, i) => {
+      const s = (done || []).find((x) => x.escalon === k);
+      const off = k === 'codex' || (k === 'recorte' && !MOTOR.recorte) || (k === 'ia' && !MOTOR.ia);
+      const cls = s ? (s.ok ? 'ok' : 'ko') : runK === k ? 'run' : off ? 'off' : '';
+      const note = s ? (s.ok ? `Hecho en ${s.segundos || 0} s` : s.motivo || 'No sirvió') : off && k !== 'codex' ? 'Aún no disponible' : STEPS[k][1];
+      return h('li', { class: cls }, h('span', { class: 'cv-n2' }, s ? icon(s.ok ? 'check' : 'x') : String(i + 1)), h('b', { text: STEPS[k][0] }), h('small', { text: note }),
+        h('em', { text: s ? (s.coste ? usd(s.coste) : '0 USD') : STEPS[k][2] }));
+    }));
+  }
+  // Fotos de partida: hasta 2, de las reales del producto o una hecha con el móvil.
+  function bases() {
+    const ids = realPhotos().map((f) => String(f.id));
+    fotoState.bases = fotoState.bases.filter((b) => b === 'local' ? fotoState.local : ids.includes(b));
+    if (!fotoState.bases.length) { if (fotoState.local) fotoState.bases = ['local']; else if (ids[0]) fotoState.bases = [ids[0]]; }
+    return fotoState.bases;
+  }
+  const baseUrl = (b) => b === 'local' ? fotoState.local?.url : (realPhotos().find((f) => String(f.id) === b) || {}).url;
+  function toggleBase(b) {
+    const B = bases();
+    if (B[0] === b) { if (B.length === 2) fotoState.bases = [B[1], B[0]]; }
+    else if (B.includes(b)) fotoState.bases = [B[0]];
+    else fotoState.bases = fotoState.bad ? [b] : [B[0], b].filter(Boolean).slice(0, 2);
+    fotoState.bad = false; renderFotos();
+  }
+  $('cv-camera').addEventListener('change', (e) => {
+    const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) { message('Elige JPG, PNG o WebP de hasta 8 MB.'); return; }
+    if (fotoState.local) URL.revokeObjectURL(fotoState.local.url);
+    fotoState.local = { file, url: URL.createObjectURL(file) }; fotoState.bases = ['local']; fotoState.bad = false;
+    message('Foto añadida como foto de partida.'); renderFotos();
+  });
+  function renderFotos() {
+    if (!product?.id || $('cv-panel-fotos').hidden) return;
+    renderPieces();
+    const body = $('cv-foto-body'), k = fotoState.pieza || 'hero', pz = piece(k);
+    if (job && job.id === product.id && job.pieza === k) return showWork(body);
+    const chosen = fotoState.option && optionsOf(k).find((o) => o.id === fotoState.option);
+    if (chosen) return showCompare(body, chosen);
+    const pend = unreviewed(k);
+    if (!fotoState.more && pend.length && k !== 'ben') return showCompare(body, pend[pend.length - 1]);
+    if (!fotoState.more && k !== 'ben' && (ESTADO[pz.estado] || (k === 'hero' && product.hero_en_web))) return showDone(body, k);
+    if (k !== 'hero' && !product.brief?.matriz_ok) return showMatrix(body);
+    if (k === 'ben') return showBen(body);
+    return showPick(body, k);
+  }
+  function showPick(body, k) {
+    const B = bases(), has = B.length > 0, bad = fotoState.bad || !has;
+    const mini = (b, url, label) => { const n = B.indexOf(b) + 1; return h('button', { type: 'button', class: 'cv-mini2', 'aria-pressed': String(n > 0), 'aria-label': label, onclick: () => toggleBase(b) }, h('img', { src: url, alt: '' }), n ? h('span', { class: 'cv-bn', text: String(n) }) : null); };
+    const kids = [];
+    const err = fotoState.error && fotoState.error.pieza === k ? fotoState.error : null;
+    if (err) kids.push(h('div', { class: 'cv-warnbox' }, h('p', { text: err.message }), err.escalones.length ? ladder(err.escalones, '', k === 'hero' ? null : ['ia']) : null));
+    kids.push(h('p', { class: 'cv-sec', text: 'Foto de partida' }));
+    if (has) kids.push(h('div', { class: 'cv-src' }, h('img', { src: baseUrl(B[0]), alt: 'Foto real del producto' }), h('span', { class: 'cv-chiptag', text: 'Foto real' })));
+    kids.push(h('div', { class: 'cv-strip', role: 'group', 'aria-label': 'Fotos de partida, hasta 2' },
+      realPhotos().map((f, i) => mini(String(f.id), f.url, `Foto real ${i + 1}`)), fotoState.local ? mini('local', fotoState.local.url, 'Foto del móvil') : null,
+      h('label', { class: 'cv-mini2 cv-cam', for: 'cv-camera', 'aria-label': 'Hacer foto' }, icon('cam', 'cv-ic'))));
+    if (bad) {
+      const pedir = cvContent.dudas && has ? btn('Pedir otra foto a la tienda', 'cv-small', (e) => busy(e.currentTarget, async () => {
+        const current = ficha, r = await api('pieza', { id: product.id, pedir_foto: '1', motivo: 'La foto real no sirve para el HERO' });
+        if (current !== ficha) return; mergePhoto(r); message('Pedido en Dudas del catálogo.');
+      })) : null;
+      kids.push(h('div', { class: 'cv-warnbox' }, h('p', { text: has ? 'Esta foto no sirve: haz otra.' : 'Falta una foto del producto.' }), guide(), pedir ? h('div', { class: 'cv-actions' }, pedir) : null));
+    } else {
+      kids.push(h('p', { class: 'cv-ok' }, icon('check'), 'Sirve', h('button', { type: 'button', class: 'cv-link', style: 'margin-left:auto', text: 'No sirve', onclick: () => { fotoState.bad = true; renderFotos(); } })));
+      if (k === 'hero') kids.push(h('p', { class: 'cv-sec', text: 'HERO: fondo blanco puro, sin texto ni logo' }), ladder(null, '', null), budget());
+      else kids.push(h('p', { class: 'cv-sec', text: 'Escena con persona' }), h('p', { class: 'cv-note2', text: `Resultado: «${product.brief?.resultado || ''}»` }), ladder(null, '', ['ia']), budget());
+    }
+    body.replaceChildren(...kids);
+    const g = MOTOR.gasto || {}, off = (text) => btn(text, 'cv-primary', null, { disabled: true });
+    let main;
+    if (bad) main = h('label', { class: 'cv-btn cv-primary', for: 'cv-camera' }, icon('cam'), has ? 'Hacer otra foto' : 'Hacer foto');
+    else if (job) main = btn(h('span', { class: 'cv-spin' }), 'cv-primary', null, { disabled: true }), main.append(' Otra foto en marcha');
+    else if (k === 'hero' && !MOTOR.recorte && !MOTOR.ia) main = off('Motor de imágenes apagado');
+    else if ((k !== 'hero' || !MOTOR.recorte) && g.lleno) main = off('Límite de hoy alcanzado');
+    else if (k !== 'hero' && !MOTOR.ia) main = off('IA de pago sin configurar');
+    else main = btn(`Crear ${PIEZA[k].n}`, 'cv-primary', () => crear(k, false));
+    setFotobar(main);
+  }
+  // Crear es una sola llamada (hasta 150 s por escalón): se ve el tiempo y se puede seguir en la Ficha.
+  async function crear(k, forzar) {
+    if (job) { message('Otra foto en marcha. Espera a que termine.'); return; }
+    const hechas = optionsOf(k).length, max = MOTOR.max || 3;
+    if (!forzar && hechas >= max) {
+      sheet(`Ya hay ${hechas} opciones`, h('p', { text: 'Elige una de las que hay o haz una más.' }), h('div', { class: 'cv-acts' },
+        btn('Elegir de las que hay', 'cv-primary', () => { closeSheet(); fotoState.more = false; fotoState.option = optionsOf(k).at(-1).id; renderFotos(); }),
+        btn('Hacer una más', '', () => { closeSheet(); crear(k, true); })));
+      return;
+    }
+    const B = bases().slice(0, 2), fields = { id: product.id, pieza: k, escalon: k === 'hero' ? 'auto' : 'ia', forzar: forzar ? '1' : null };
+    const id = product.id, name = $('cv-name').value.trim() || product.name, before = B[0] ? baseUrl(B[0]) : '';
+    fotoState.error = null; fotoState.more = false; fotoState.option = '';
+    job = { id, pieza: k, name, start: Date.now(), phase: 0, antes: before, n: hechas + 1 };
+    renderFotos();
+    let out = null, error = null;
+    try {
+      // Dos fotos de partida (o una del móvil) van como archivos; una sola real va por su id.
+      if (B.length > 1 || B[0] === 'local') {
+        for (const [i, b] of B.entries()) {
+          fields[`base${i + 1}`] = b === 'local' ? fotoState.local.file
+            : new File([await (await fetch((realPhotos().find((f) => String(f.id) === b) || {}).full || baseUrl(b), { credentials: 'same-origin' })).blob()], `base${i + 1}.jpg`, { type: 'image/jpeg' });
+        }
+      } else if (B[0]) fields.base_id = B[0];
+      job.phase = 1;
+      out = await api('crear', form(fields));
+      job.phase = 2;
+      if (out.opcion?.url) await cachedImage(out.opcion.url).catch(() => null);
+    } catch (e) { error = e; }
+    job = null; clearInterval(workTimer);
+    if (out?.gasto) MOTOR.gasto = out.gasto; else if (error?.data?.gasto) MOTOR.gasto = error.data.gasto;
+    if (product?.id === id) {
+      if (out) { mergePhoto(out.producto); fotoState.option = out.opcion?.id || ''; fotoState.pieza = k; }
+      else fotoState.error = { pieza: k, message: error.message, escalones: error.data?.escalones || [] };
+      if (tab === 'fotos') renderFotos();
+    }
+    message(out ? (out.publicada ? `HERO de ${name} ya está en la web. Revísalo.` : `${PIEZA[k].n} de ${name} lista para revisar.`) : error.message);
+    if (!$('cv-list-screen').hidden) list().catch(() => {});
+  }
+  let workTimer = 0;
+  function showWork(body) {
+    const max = MOTOR.max || 3;
+    body.replaceChildren(h('p', { class: 'cv-sec', text: `Creando ${PIEZA[job.pieza].n} · opción ${Math.min(job.n, max)} de ${max}` }),
+      job.antes ? h('div', { class: 'cv-src cv-dimmed' }, h('img', { src: job.antes, alt: '' }), h('span', { class: 'cv-chiptag', text: 'Foto real' })) : null,
+      h('div', { class: 'cv-work', role: 'status', 'aria-live': 'off' }, h('div', { class: 'cv-work-row' }, h('b', { id: 'cv-work-step' }), h('span', { id: 'cv-work-sec', text: '0 s' })),
+        h('div', { class: 'cv-track' }, h('i', { id: 'cv-work-bar' })), h('div', { class: 'cv-phases', id: 'cv-work-phases' }, ['En cola', 'Creando', 'Revisando'].map((t) => h('span', { text: t }))),
+        h('div', { id: 'cv-work-ladder' })),
+      h('p', { class: 'cv-note2', text: 'Suele tardar de 10 a 60 s. Puedes seguir en la Ficha: te aviso al terminar.' }));
+    setFotobar(btn('Seguir en la Ficha', '', () => setTab('ficha')));
+    clearInterval(workTimer);
+    const step = () => {
+      const el = $('cv-work-sec'); if (!job || !el) { clearInterval(workTimer); return; }
+      const s = Math.floor((Date.now() - job.start) / 1000), recorte = job.pieza === 'hero' && MOTOR.recorte;
+      // El servidor prueba primero el recorte gratis (~7 s); si no sirve, pasa a la IA de pago.
+      const k = recorte && (s < 20 || !MOTOR.ia) ? 'recorte' : 'ia';
+      el.textContent = `${s} s`;
+      $('cv-work-step').textContent = k === 'recorte' ? 'Recorte gratis · 0 USD' : `IA de pago · ~${usd(MOTOR.gasto?.ia || 0.15)}`;
+      $('cv-work-bar').style.width = `${Math.min(95, k === 'recorte' ? 10 + s * 6 : 30 + (s - (recorte ? 20 : 0)) * 1.5)}%`;
+      [...$('cv-work-phases').children].forEach((x, i) => { x.className = i < job.phase ? 'done' : i === job.phase ? 'on' : ''; });
+      $('cv-work-ladder').replaceChildren(ladder(null, k, job.pieza === 'hero' ? null : ['ia']));
+    };
+    step(); workTimer = setInterval(step, 1000);
+  }
+  // Comparar es obligatorio: los 3 estados se encienden al mover el deslizador.
+  function showCompare(body, o) {
+    const k = o.pieza, pz = piece(k), onWeb = k === 'hero' && product.hero_en_web && pz.opcion === o.id;
+    const range = h('input', { type: 'range', min: '0', max: '100', value: '40', 'aria-label': 'Comparar antes y después' });
+    const after = h('div', { class: 'cv-after', style: 'clip-path:inset(0 0 0 40%)' }, h('img', { src: o.url, alt: 'Después: foto nueva' }));
+    const knob = h('span', { class: 'cv-knob', style: 'left:40%' }), before = o.antes || realPhotos()[0]?.url || '';
+    const kids = [h('p', { class: 'cv-sec', text: `Compara con la real · ${PIEZA[k].n}` }),
+      h('div', { class: 'cv-cmp' }, before ? h('img', { src: before, alt: 'Antes: foto real' }) : null, after, h('span', { class: 'cv-l', text: 'Antes' }), h('span', { class: 'cv-r', text: 'Después' }), knob, range),
+      h('p', { class: 'cv-used' }, icon('check'), usedText(o.escalon, o.coste), o.fallo ? h('small', { text: `(${o.fallo})` }) : null)];
+    if (o.cortado) kids.push(h('p', { class: 'cv-warn', text: 'Toca el borde: revisa que el producto salga entero.' }));
+    const all = optionsOf(k);
+    if (all.length > 1) {
+      kids.push(h('div', { class: 'cv-strip', role: 'group', 'aria-label': 'Opciones' }, all.map((x, i) => h('button', { type: 'button', class: 'cv-mini2', 'aria-pressed': String(x.id === o.id),
+        'aria-label': `Opción ${i + 1}${x.estado ? ` · ${ESTADO[x.estado]}` : ''}`, onclick: () => { fotoState.option = x.id; renderFotos(); } }, h('img', { src: x.url, alt: '' }), h('span', { class: 'cv-bn', text: String(i + 1) })))));
+    }
+    if (onWeb) kids.push(h('div', { class: 'cv-web' }, icon('check'), h('span', { text: 'Ya está en la web' }), product.restaurable ? h('button', { type: 'button', class: 'cv-link', text: 'Restaurar la anterior', onclick: (e) => busy(e.currentTarget, restaurar) }) : null));
+    let compared = !(o.cambio || []).length, slid = false;
+    const states = ['rechazada', 'revision', 'aprobada'].map((s) => btn(ESTADO[s], s === 'rechazada' ? 'cv-bad' : s === 'aprobada' ? 'cv-primary' : '', () => decide(o, s), { disabled: true, 'data-estado': s }));
+    const enable = () => states.forEach((b) => { b.disabled = !(slid && compared); });
+    if (!compared) {
+      // La ficha cambió desde que se hizo esta opción: se dice qué cambió y se pide compararla.
+      const what = { foto: 'la foto original', texto: 'el texto de la ficha' }, reasons = o.cambio.map((x) => what[x]).filter(Boolean);
+      const box = h('input', { type: 'checkbox', 'data-nodirty': true }); box.addEventListener('change', () => { compared = box.checked; enable(); });
+      kids.push(h('p', { class: 'cv-warn', text: `${reasons.length ? `Desde entonces cambió ${reasons.join(' y ')}.` : 'La ficha cambió desde que se hizo esta opción.'} Compárala con los datos actuales antes de decidir.` }),
+        h('label', { class: 'cv-switch' }, box, h('span', { text: 'Ya la comparé con la ficha actual' })));
+    }
+    const hint = h('p', { class: 'cv-note2', text: 'Desliza para comparar antes de decidir.' });
+    kids.push(hint);
+    if (o.estado) kids.push(h('p', { class: 'cv-note2', text: `Esta opción está ${ESTADO[o.estado].toLowerCase()}.` }));
+    range.addEventListener('input', () => { after.style.clipPath = `inset(0 0 0 ${range.value}%)`; knob.style.left = `${range.value}%`; if (!slid) { slid = true; hint.hidden = true; enable(); } });
+    body.replaceChildren(...kids);
+    setFotobar(h('div', { class: 'cv-states' }, states));
+  }
+  async function sendPieza(o, estado, extra = {}) {
+    const id = product.id, r = await api('pieza', { id, pieza: o.pieza, estado, opcion: o.id, ...extra });
+    if (product?.id !== id) return null;
+    mergePhoto(r); fotoState.option = ''; return r;
+  }
+  function decide(o, s) {
+    if (s === 'rechazada') {
+      const picked = new Set(), done = (r) => message(r.restaurada ? 'Rechazada. Volvió la foto anterior a la web.' : 'Rechazada. Apuntado en Preferencias.');
+      sheet('¿Qué falló?', chips(MOTOR.motivos || [], picked), h('p', { class: 'cv-note2', text: 'Se apunta en Preferencias para que no se repita.' }), h('div', { class: 'cv-acts' },
+        btn('Repetir', 'cv-primary', (e) => busy(e.currentTarget, async () => { const r = await sendPieza(o, 'rechazada', { motivos: [...picked] }); closeSheet(); if (!r) return; done(r); fotoState.more = true; await crear(o.pieza, false); })),
+        btn('Dejarla rechazada', '', (e) => busy(e.currentTarget, async () => { const r = await sendPieza(o, 'rechazada', { motivos: [...picked] }); closeSheet(); if (!r) return; done(r); fotoState.more = false; renderFotos(); }))));
+      return;
+    }
+    if (s === 'revision') { busy(null, async () => { if (await sendPieza(o, 'revision')) { message('En revisión: queda en Dudas del catálogo.'); renderFotos(); } }); return; }
+    const onWeb = o.pieza === 'hero' && product.hero_en_web && piece('hero').opcion === o.id;
+    if (o.pieza !== 'hero' || onWeb) {
+      busy(null, async () => { if (await sendPieza(o, 'aprobada', onWeb ? { web: '1' } : {})) { message(onWeb ? 'HERO aprobado. Ya está en la web.' : `${PIEZA[o.pieza].n} aprobada.`); renderFotos(); } });
+      return;
+    }
+    askWeb(o);
+  }
+  // A la web solo sube el HERO aprobado: WebP 1600 px en blanco puro, nunca una tarjeta.
+  function askWeb(o) {
+    sheet('¿Ponerla en la web?', h('div', { class: 'cv-webp' }, h('div', { class: 'cv-pvb' }, h('img', { src: o.url, alt: '' })), h('ul', {}, h('li', { text: 'Fondo blanco puro' }), h('li', { text: 'Sin texto ni logo' }), h('li', { text: 'WebP 1600 px' }))),
+      h('div', { class: 'cv-acts' },
+        btn('Poner en la web', 'cv-primary', (e) => busy(e.currentTarget, async () => { const r = await sendPieza(o, 'aprobada', { web: '1' }); closeSheet(); if (r) { message('HERO en la web.'); renderFotos(); } })),
+        btn('Ahora no', '', (e) => busy(e.currentTarget, async () => { const r = await sendPieza(o, 'aprobada', { web: '0' }); closeSheet(); if (r) { message('HERO aprobado. Aún no está en la web.'); renderFotos(); } }))));
+  }
+  function showDone(body, k) {
+    const pz = piece(k), onWeb = k === 'hero' && product.hero_en_web, url = onWeb ? product.image : pz.url;
+    const chip = ESTADO[pz.estado] ? h('span', { class: `cv-st ${pz.estado}`, text: ESTADO[pz.estado] }) : onWeb ? h('span', { class: 'cv-st run', text: 'En la web' }) : null;
+    const kids = [h('div', { class: 'cv-done1' }, h('div', { class: 'cv-pvb' }, url ? h('img', { src: url, alt: `${PIEZA[k].n} actual` }) : null),
+      h('div', {}, chip, usedText(pz.escalon, pz.coste) ? h('p', { class: 'cv-used', text: usedText(pz.escalon, pz.coste) }) : null,
+        k === 'hero' ? h('p', { class: 'cv-used', text: onWeb ? 'Ya está en la web' : 'Aún no está en la web' }) : null))];
+    if (onWeb && product.restaurable) kids.push(h('div', { class: 'cv-web' }, icon('back'), h('span', { text: '¿No te gusta? Vuelve la de antes.' }), h('button', { type: 'button', class: 'cv-link', text: 'Restaurar la anterior', onclick: (e) => busy(e.currentTarget, restaurar) })));
+    const approved = k === 'hero' && !onWeb && pz.estado === 'aprobada' && optionsOf('hero').find((o) => o.id === pz.opcion);
+    if (approved) kids.push(btn('Poner en la web', 'cv-wide', () => askWeb(approved)));
+    kids.push(h('button', { type: 'button', class: 'cv-link', text: `Repetir ${PIEZA[k].n}`, onclick: () => { fotoState.more = true; fotoState.option = ''; renderFotos(); } }));
+    body.replaceChildren(...kids);
+    const next = ['hero', 'life', 'ben'].find((x) => x !== k && (x === 'hero' || prios().length) && piece(x).estado !== 'aprobada' && !(x === 'hero' && product.hero_en_web));
+    setFotobar(next ? btn(`Siguiente: ${PIEZA[next].n}`, 'cv-primary', () => pickPiece(next)) : btn('Hacer anuncios', 'cv-primary', () => setTab('anuncio')));
+  }
+  // Antes de LIFESTYLE y BENEFICIO: duda → resultado → prueba (+ condición y fuente).
+  const MX = [['duda', 'Duda'], ['resultado', 'Resultado'], ['prueba', 'Prueba'], ['condicion', 'Condición']];
+  function matrixForm(onDone) {
+    const b = product.brief || {}, inputs = {};
+    const card = h('div', { class: 'cv-mxc' }, MX.map(([k, l]) => {
+      inputs[k] = h('input', { id: `cv-mx-${k}`, value: b[k] || '', maxlength: '160', 'data-nodirty': true, onkeydown: (e) => { if (e.key === 'Enter') e.preventDefault(); } });
+      return h('div', { class: 'cv-mx' }, h('label', { for: `cv-mx-${k}`, text: l }), inputs[k]);
+    }), h('small', { class: 'cv-mxsrc', text: b.fuente || 'Ficha · características' }));
+    const ok = () => inputs.duda.value.trim() && inputs.resultado.value.trim() && inputs.prueba.value.trim();
+    const confirm = btn('Confirmar', 'cv-primary', (e) => busy(e.currentTarget, async () => {
+      const current = ficha, p = await api('matriz', { id: product.id, version: product.version, duda: inputs.duda.value, resultado: inputs.resultado.value, prueba: inputs.prueba.value,
+        condicion: inputs.condicion.value, fuente: b.fuente || 'Ficha · características', confirmada: '1' });
+      if (current !== ficha) return;
+      mergePhoto(p); message('Duda → resultado → prueba confirmada.'); onDone();
+    }), { disabled: !ok() });
+    Object.values(inputs).forEach((i) => i.addEventListener('input', () => { confirm.disabled = !ok(); }));
+    return { card, confirm };
+  }
+  function showMatrix(body) {
+    const { card, confirm } = matrixForm(renderFotos);
+    body.replaceChildren(h('p', { class: 'cv-sec', text: 'Antes: duda → resultado → prueba' }), card, h('p', { class: 'cv-note2', text: 'Solo datos confirmados. El titular del BENEFICIO es el resultado.' }));
+    setFotobar(confirm);
+  }
+  const matrixView = () => { const b = product?.brief || {}; return h('div', { class: 'cv-mxc' }, MX.map(([k, l]) => h('div', { class: 'cv-mx' }, h('span', { text: l }), h('b', { text: b[k] || '—' }))), h('small', { class: 'cv-mxsrc', text: b.fuente || 'Ficha · características' })); };
+  function editMatrix(after) { const { card, confirm } = matrixForm(() => { closeSheet(); after(); }); sheet('Duda → resultado → prueba', card, h('div', { class: 'cv-acts' }, confirm)); }
+  function showBen(body) {
+    body.replaceChildren(h('p', { class: 'cv-sec', text: 'BENEFICIO' }), matrixView(), h('p', { class: 'cv-note2', text: 'Se arma en Anuncio: foto + resultado + prueba con su condición. Sin precio ni logo.' }),
+      h('button', { type: 'button', class: 'cv-link', text: 'Editar', onclick: () => editMatrix(renderFotos) }));
+    setFotobar(btn('Hacer BENEFICIO', 'cv-primary', () => { layoutValue = 'ben'; setTab('anuncio'); }));
+  }
+  /*@@ANUNCIO@@*/
 })();
