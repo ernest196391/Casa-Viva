@@ -194,7 +194,7 @@ def query(path):
 def snapshot():
     now = datetime.datetime.now(datetime.timezone.utc)
     tasks = query(
-        'ops_tasks?select=id,public_id,thread_id,title,status,priority,risk,result,error,created_at,started_at,finished_at,source,requested_by_name,approval_required'
+        'ops_tasks?select=id,public_id,thread_id,title,status,priority,risk,result,error,created_at,started_at,finished_at,source,source_ref,executor,task_type,requested_by_name,approval_required'
         '&order=created_at.desc&limit=120'
     )
     open_tasks = [x for x in tasks if x.get('status') not in ('done','cancelled','superseded')]
@@ -211,9 +211,199 @@ def snapshot():
     )
     task_by_uuid = {str(x.get('id')): x for x in tasks}
 
+    # Only these read-only execution outputs may enter the private UI summary.
+    lookup_ids = sorted({str((x.get('result') or {}).get('bridge_id'))
+                         for x in tasks if isinstance(x.get('result'), dict)
+                         and x['result'].get('action') in ('wp_status','vivabot_git_status')
+                         and str(x['result'].get('bridge_id','')).isdigit()})[-30:]
+    outputs = {}
+    if lookup_ids:
+        for row in query('crm_ops_bridge?select=id,action,status,result&id=in.(' + ','.join(lookup_ids) + ')&action=in.(wp_status,vivabot_git_status)&status=eq.done'):
+            result = row.get('result') or {}
+            if isinstance(result, dict) and result.get('returncode') == 0:
+                outputs[str(row['id'])] = result.get('output') or ''
+
     def task_summary(x):
         result = x.get('result')
         if isinstance(result, dict):
+            output = outputs.get(str(result.get('bridge_id')), '')
+            if result.get('action') == 'vivabot_git_status' and output:
+                try:
+                    info = json.loads(output)
+                    return 'Código del bot verificado: rama ' + str(info.get('branch') or 'desconocida') + '. ' + ('Sin cambios locales.' if info.get('tracked_clean') and info.get('untracked_count') == 0 else 'Hay cambios locales que revisar.')
+                except (ValueError, TypeError):
+                    pass
+            if result.get('action') == 'wp_status' and output:
+                core = re.search(r'^CORE=(.+)
+        return ''
+
+    # Recent owner requests must not disappear behind the first 60 legacy tasks.
+    recent_owner = [x for x in tasks if x.get('source') in ('control-private','whatsapp-owner')][:30]
+    selected = {}
+    for x in open_tasks[:60] + recent_owner + [t for t in tasks if t.get('status') in ('done','cancelled','superseded','failed')][:20]:
+        selected[str(x.get('id'))] = x
+    task_cards = [{
+        'id': x.get('public_id'),
+        'title': x.get('title') or 'Tarea',
+        'status': x.get('status'),
+        'priority': x.get('priority'),
+        'risk': x.get('risk'),
+        'source': x.get('source'),
+        'summary': task_summary(x),
+        'detail': x.get('error') or '',
+        'requested_by': x.get('requested_by_name') or '',
+        'approval_required': bool(x.get('approval_required')),
+        'request_id': x.get('source_ref'),
+        'created_at': x.get('created_at'),
+        'executor': x.get('executor'),
+        'task_type': x.get('task_type'),
+        'at': x.get('finished_at') or x.get('started_at') or x.get('created_at'),
+    } for x in selected.values()]
+
+    decisions = []
+    for a in approvals:
+        t = task_by_uuid.get(str(a.get('task_id')), {})
+        decisions.append({
+            'approval_id': a.get('public_id'),
+            'task_id': t.get('public_id'),
+            'title': t.get('title') or 'Decisión pendiente',
+            'warning': a.get('warning') or '',
+            'impact': a.get('impact') or {},
+            'proposed_change': a.get('proposed_change') or {},
+            'created_at': a.get('created_at'),
+        })
+
+    lennys_sources = {'legacy-crm-supervisor','whatsapp-lennys-live','whatsapp-lennys'}
+    lennys = [{
+        'id': x.get('source_ref'),
+        'subject': x.get('subject') or 'Asunto de Lennys',
+        'summary': x.get('summary') or '',
+        'priority': x.get('priority'),
+        'last_activity_at': x.get('last_activity_at'),
+    } for x in threads if x.get('source') in lennys_sources][:20]
+
+    errors = [x for x in open_tasks if x.get('source') == 'crm_errores']
+    attention = [x for x in open_tasks if x.get('priority') in ('p0','p1')]
+
+    events_raw = query(
+        'ops_events?select=id,event_type,actor_type,actor_ref,detail,created_at'
+        '&order=created_at.desc&limit=30'
+    )
+    activity = [{
+        'at': x.get('created_at'),
+        'provider': x.get('actor_ref') or x.get('actor_type') or 'Control OS',
+        'title': str(x.get('event_type') or 'evento').replace('_',' '),
+        'detail': x.get('detail') or {},
+    } for x in events_raw]
+
+    processes = json.loads(subprocess.check_output(['pm2','jlist'], text=True, timeout=10))
+    bot = next((p for p in processes if p.get('name') == 'vivabot'), {})
+    bot_status = bot.get('pm2_env', {}).get('status', 'unknown')
+
+    bridge_active = subprocess.run(
+        ['systemctl','is-active','cv-ops-bridge.service'],
+        capture_output=True,text=True,timeout=10
+    ).stdout.strip()
+    bridge_enabled = subprocess.run(
+        ['systemctl','is-enabled','cv-ops-bridge.service'],
+        capture_output=True,text=True,timeout=10
+    ).stdout.strip()
+    try:
+        bridge_text = Path('/root/supervisor/cv-ops-bridge.py').read_text(errors='ignore')
+        m = re.search(r'BRIDGE_VERSION\s*=\s*"([^"]+)"', bridge_text)
+        bridge_version = m.group(1) if m else 'unknown'
+    except Exception:
+        bridge_version = 'unknown'
+    try:
+        vivabot_sha = subprocess.check_output(
+            ['git','-C','/root/vivabot','rev-parse','--short','HEAD'],
+            text=True,timeout=10
+        ).strip()
+    except Exception:
+        vivabot_sha = 'unknown'
+
+    system_ok = bot_status == 'online' and bridge_active == 'active'
+    return {
+        'at': now.isoformat(),
+        'summary': {
+            'attention': len(attention),
+            'decisions': len(decisions),
+            'lennys': len(lennys),
+            'errors': len(errors),
+            'open_tasks': len(open_tasks),
+        },
+        'today': [x for x in task_cards if x.get('status') not in ('done','cancelled','superseded')][:10],
+        'tasks': task_cards,
+        'decisions': decisions,
+        'lennys': lennys,
+        'system': {
+            'ok': system_ok,
+            'vivabot': {'status': bot_status, 'sha': vivabot_sha},
+            'bridge': {'status': bridge_active, 'enabled': bridge_enabled, 'version': bridge_version, 'poll_seconds': 3},
+            'control_sync': {'status': 'online', 'at': now.isoformat()},
+        },
+        'activity': activity,
+        # Compatibility with the old UI until C3 web files are deployed.
+        'owner': 'control-os',
+        'supervisor': {'at': now.isoformat(), 'event': 'running'},
+        'health': {'state': 'ok' if system_ok else 'degraded', 'at': now.isoformat(), 'error': None if system_ok else 'Revisar servicios del Control OS'},
+        'bot': {'status': bot_status},
+        'findings': [{
+            'id': 'ops-' + str(x.get('public_id')),
+            'priority': x.get('priority'),
+            'title': x.get('title'),
+            'detail': x.get('error') or 'Error abierto en Control OS.',
+            'status': 'pending',
+            'order_id': None,
+            'question': None,
+        } for x in errors[:20]],
+        'events': [{
+            'at': x.get('at'),
+            'provider': x.get('provider'),
+            'title': x.get('title'),
+            'detail': json.dumps(x.get('detail') or {}, ensure_ascii=False)[:300],
+        } for x in activity],
+    }
+
+
+def push_snapshot(state):
+    command = 'umask 077; mkdir -p ' + STORE + '; cat > ' + STORE + '/snapshot.json.tmp && mv ' + STORE + '/snapshot.json.tmp ' + STORE + '/snapshot.json'
+    subprocess.run(SSH + [command], input=json.dumps(state, ensure_ascii=False), text=True,
+                   capture_output=True, timeout=25, check=True)
+
+
+def main():
+    os.umask(0o077)
+    with open('/tmp/casa-control-sync.lock', 'a') as guard:
+        try:
+            fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        rows = read_portal_requests()
+        known = read_state()
+        added = ingest(rows, known)
+        decisions = read_portal_decisions()
+        known_decisions = read_decision_state()
+        decisions_added = ingest_decisions(decisions, known_decisions)
+        state = snapshot()
+        push_snapshot(state)
+        print(json.dumps({
+            'ok': True,
+            'portal_requests': len(rows),
+            'imported_now': added,
+            'known': len(known),
+            'decision_requests': len(decisions),
+            'decisions_imported_now': decisions_added,
+            'known_decisions': len(known_decisions),
+            'open_tasks': len(state['tasks']),
+            'open_errors': len(state['findings']),
+        }, ensure_ascii=False))
+
+
+if __name__ == '__main__':
+    main()
+, output, re.M)
+                return 'WordPress ' + core.group(1).strip() + ': consulta completada.' if core else 'Consulta de WordPress completada.'
             return str(result.get('summary') or result.get('note') or result.get('goal') or '')
         return ''
 
