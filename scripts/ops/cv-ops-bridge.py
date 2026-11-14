@@ -2018,7 +2018,7 @@ def action_control_codex_login(args):
 def action_control_codex_consumer_build(args):
     """One fixed development task, in a dedicated cvdev worktree; never applies SQL or deploys."""
     mode = str((args or {}).get("mode", "status"))
-    if mode not in ("start","status","diagnostic"):
+    if mode not in ("start","retry","status","diagnostic"):
         return {"returncode":2,"output":"Modo inválido"}
     unit = "cv-control-consumer-build"
     work = Path("/home/cvdev/workspace/control-os-consumer-build")
@@ -2042,20 +2042,29 @@ def action_control_codex_consumer_build(args):
             "loaded_profiles":[x for x in loaded_text.splitlines() if "bwrap" in x or "codex" in x],
             "native_sandbox_probe":probe,"kernel_denials":denied[-20:],
             "model_called":False,"policy_changed":False})}
-    if mode == "start":
+    if mode in ("start","retry"):
         state = run(["systemctl","is-active",unit],timeout=10)
         if state["output"].strip() in ("active","activating"):
             return {"returncode":0,"output":json.dumps({"already_running":True,"unit":unit})}
-        if work.exists() or work.is_symlink():
-            return {"returncode":3,"output":"Workspace existente: revisar resultado antes de repetir"}
+        if work.is_symlink():
+            return {"returncode":3,"output":"Workspace symlink bloqueado"}
         source = "/home/cvdev/workspace/control-os-certified"
         prefix = ["runuser","-u","cvdev","--","git","-C",source]
-        fetched = run(prefix + ["fetch","origin","main"],timeout=90)
-        if fetched["returncode"]:
-            return fetched
-        made = run(prefix + ["worktree","add","--detach",str(work),"origin/main"],timeout=60)
-        if made["returncode"]:
-            return made
+        if work.exists():
+            if mode != "retry":
+                return {"returncode":3,"output":"Workspace existente: revisar antes de repetir"}
+            clean = run(["runuser","-u","cvdev","--","git","-C",str(work),"status","--porcelain"],timeout=20)
+            head = run(["runuser","-u","cvdev","--","git","-C",str(work),"rev-parse","HEAD"],timeout=20)
+            base = run(prefix+["rev-parse","origin/main"],timeout=20)
+            if clean["returncode"] or clean["output"].strip() or head["returncode"] or base["returncode"] or head["output"].strip()!=base["output"].strip():
+                return {"returncode":3,"output":"Retry requiere worktree limpio y base intacta"}
+        else:
+            fetched = run(prefix + ["fetch","origin","main"],timeout=90)
+            if fetched["returncode"]:
+                return fetched
+            made = run(prefix + ["worktree","add","--detach",str(work),"origin/main"],timeout=60)
+            if made["returncode"]:
+                return made
         prompt = (
             "Implementa SOLO la integración de resultados Control OS con Supabase en este worktree. "
             "Lee AGENTS.md y blueprints/checkpoint. No ejecutes red, SQL real, git push, deploy ni leas credenciales. "
