@@ -530,7 +530,7 @@
   function renderPieces() {
     const cur = fotoState.pieza || 'hero';
     $('cv-pieces').replaceChildren(...['hero', 'life', 'ben'].map((k) => {
-      const url = k === 'hero' ? (product.hero_en_web ? product.image : piece(k).url) : piece(k).url;
+      const url = (k === 'hero' && product.hero_en_web ? product.image : piece(k).url) || unreviewed(k).at(-1)?.url;
       return h('button', { type: 'button', class: `cv-pz${locked(k) ? ' cv-lock' : ''}`, 'aria-pressed': String(k === cur), 'data-pieza': k, onclick: () => pickPiece(k) },
         h('span', { class: `cv-pzi${k === 'hero' ? ' cv-white' : ''}` }, url ? h('img', { src: url, alt: '' }) : null),
         h('b', { text: PIEZA[k].n }), h('small', { text: PIEZA[k].d }), chipFor(k));
@@ -917,7 +917,7 @@
       const [x0, y0, x1, y1] = pb.box, bw = (x1 - x0) * I, bh = y1 - y0;
       k = Math.min(A * 0.9 / bw, 0.86 / bh); L = A / 2 - (x0 + x1) / 2 * I * k; T = 0.5 - (y0 + y1) / 2 * k;
     } else { k = Math.max(1, A / I); L = (A - I * k) / 2; T = (1 - k) / 2; }
-    return { x: zone.x + L / A * zone.w, y: zone.y + T * zone.h, w: I * k / A * zone.w, h: k * zone.h, bg: pb ? pb.bg : '#ffffff' };
+    return { img, x: zone.x + L / A * zone.w, y: zone.y + T * zone.h, w: I * k / A * zone.w, h: k * zone.h, bg: pb ? pb.bg : '#ffffff' };
   }
   function offerNow() {
     const text = $('cv-offer').value.trim(), sale = product?.sale, today = new Date().toLocaleDateString('en-CA');
@@ -970,9 +970,20 @@
       ctx.font = `400 30px ${FONT}`; p.l2 = p.t.s ? lines(ctx, p.t.s, boxW - 2 * padX, 2) : [];
       p.hh = 22 + p.l1.length * (p.i ? 42 : 48) + p.l2.length * 36 + 18; p.left = p.x >= W / 2;
     });
+    // Las etiquetas van debajo (o encima) del producto si hay sitio, para no taparlo; si no, junto a su punto.
+    const pb = productBox(g.img), top = pb ? g.y + pb.box[1] * g.h : z.y, bottom = pb ? g.y + pb.box[3] * g.h : z.y + z.h;
+    const needOf = (side) => placed.filter((p) => p.left === side).reduce((n, p) => n + p.hh + 18, 0);
+    placed.forEach((p) => { p.left = p.x < W / 2; });
+    const room = Math.max(z.y + z.h - bottom, top - z.y) - 24;
+    // Sin sitio fuera del producto: cada etiqueta va al lado contrario de su punto, como en el prototipo.
+    if (!pb || room < Math.max(needOf(true), needOf(false))) placed.forEach((p) => { p.left = !p.left; });
     for (const side of [true, false]) {
+      const group = placed.filter((p) => p.left === side).sort((a, b) => a.y - b.y), need = group.reduce((n, p) => n + p.hh + 18, 0);
       let last = z.y + 12;
-      placed.filter((p) => p.left === side).sort((a, b) => a.y - b.y).forEach((p) => { p.ly = Math.max(last, Math.min(z.y + z.h - p.hh - 12, p.y - p.hh / 2)); last = p.ly + p.hh + 18; });
+      if (pb && z.y + z.h - bottom - 24 >= need) last = bottom + 24;
+      else if (pb && top - z.y - 24 >= need) last = top - need - 6;
+      const free = last !== z.y + 12;
+      group.forEach((p) => { p.ly = free ? last : Math.max(last, Math.min(z.y + z.h - p.hh - 12, p.y - p.hh / 2)); last = p.ly + p.hh + 18; });
     }
     // Línea fina de cada punto a su explicación (blanca por debajo para que se vea sobre cualquier fondo).
     placed.forEach((p) => {
@@ -981,7 +992,7 @@
     });
     placed.forEach((p) => {
       const bx = p.left ? 40 : W - 40 - boxW, main = p.i === 0;
-      roundRect(ctx, bx, p.ly, boxW, p.hh, 22, main ? '#173e35' : 'rgba(255,255,255,0.95)');
+      roundRect(ctx, bx, p.ly, boxW, p.hh, 22, main ? '#173e35' : 'rgba(228,238,232,0.96)');
       let y = p.ly + 18; ctx.textAlign = 'left';
       ctx.fillStyle = main ? '#f6f2e9' : '#173e35'; ctx.font = `700 ${main ? 42 : 36}px ${FONT}`;
       p.l1.forEach((s) => { y += main ? 48 : 42; ctx.fillText(s, bx + padX, y - 8); });

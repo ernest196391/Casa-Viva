@@ -1247,7 +1247,7 @@ final class CVD_Content_Studio {
 				<div class="cv-field"><div class="cv-lab"><span>Reseñas</span><small id="cv-reviews-count"></small></div><div id="cv-reviews"></div><button type="button" class="cv-add" id="cv-review-open"><svg class="cv-ic cv-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Añadir reseña real</button></div>
 			</section>
 
-			<section id="cv-panel-fotos" role="tabpanel" aria-labelledby="cv-tab-fotos" hidden>
+			<section id="cv-panel-fotos" role="tabpanel" aria-labelledby="cv-tab-fotos" data-nodirty hidden>
 				<div id="cv-pieces" class="cv-pzs" role="group" aria-label="Piezas del producto"></div>
 				<p id="cv-pieces-note" class="cv-note2"></p>
 				<div id="cv-foto-body"></div>
