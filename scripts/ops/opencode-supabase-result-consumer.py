@@ -45,7 +45,7 @@ class SupabaseResultStore:
                 raise contract.ConsumerError("ruta no canónica")
         response = self.client.rpc("ops_accept_opencode_result", {"p_result": result}).execute()
         data = response.data
-        if not isinstance(data, dict) or data.get("status") not in ("awaiting_approval", "failed", "duplicate"):
+        if not isinstance(data, dict) or data.get("status") not in ("waiting_approval", "failed", "duplicate"):
             raise RuntimeError("respuesta RPC inválida; conservar resultado para reintento")
         return data
 
