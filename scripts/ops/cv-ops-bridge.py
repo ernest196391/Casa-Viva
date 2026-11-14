@@ -2197,6 +2197,7 @@ def action_control_codex_sandbox(args):
         folder.mkdir(mode=0o755,exist_ok=True)
         if folder.stat().st_uid!=0 or folder.stat().st_mode & 0o022:
             return {"returncode":3,"output":"Directorio de binarios no es seguro"}
+        folder.chmod(0o755)  # Bridge umask is 077; cvdev must traverse this public binary directory.
         temporary = Path("/etc/apparmor.d/cv-control-codex-bwrap.next")
         temporary.write_text(profile)
         temporary.chmod(0o644)
@@ -2225,6 +2226,12 @@ def action_control_codex_sandbox(args):
         return {"returncode":4,"output":"Perfil dedicado no instalado"}
     command = _control_codex_cmd()
     work = "/home/cvdev/workspace/control-os-consumer-build"
+    direct = run(["runuser","-u","cvdev","--",str(binary),
+                  "--unshare-user","--unshare-net","--ro-bind","/","/","/usr/bin/true"],
+                  cwd=work,timeout=20)
+    if direct["returncode"]:
+        return {"returncode":5,"output":json.dumps({"stage":"dedicated_binary",
+            "directory_mode":oct(folder.stat().st_mode & 0o777),"probe":direct})}
     boot = run(command+["sandbox","linux","--","/usr/bin/true"],cwd=work,timeout=30)
     if boot["returncode"]:
         return {"returncode":5,"output":json.dumps({"stage":"bootstrap","probe":boot,

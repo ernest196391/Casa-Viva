@@ -434,3 +434,9 @@ Al retomar el proyecto:
 - Perfil dedicado cargó en enforce (#181) y sysctl global permanece 1. Prueba nativa #180 sigue RTM_NEWADDR; no se llamó modelo.
 - Revisión del launcher de Codex rust-v0.169.0: exige --perms y --as-pid-1; si el sistema no los soporta, ignora ese binario y usa el incluido sin perfil. Se propone copiar exclusivamente el recurso codex-resources/bwrap del paquete oficial instalado; exige candidato único, comprobación de help y rechazo de binarios previos desconocidos.
 - No cambia perfil, permisos, capacidades ni límites; conserva pruebas negativas. Se ejecuta help como cvdev y la copia queda root-owned 0755 sin setuid/filecaps. Pendiente prueba real; diagnóstico sin consumo de modelos.
+
+## CURRENT — Acceso al directorio público del sandbox (2026-11-14)
+
+- #183 falló bootstrap sin modelos. La revisión encontró que main() fija umask 077: folder.mkdir(mode=0755) genera 0700 y no se normalizaba después. cvdev no puede recorrer ese directorio y Codex escoge otro bwrap sin perfil; kernel #184 sigue mostrando unprivileged_userns, no el perfil dedicado.
+- Corrección: comprobar propietario root y ausencia de escritura de grupo/otros, luego chmod 0755 explícito al directorio que solo guarda bwrap. Los archivos de autenticación permanecen 0700/0600. Se añade prueba directa del binario como cvdev antes de la prueba Codex, diferenciando permisos de ruta y selección del helper.
+- Pendiente CI y verificación real; no afirmar corrección hasta controles positivos/negativos verdes. No se amplían capacidades ni permisos del perfil. Cero llamadas a modelo durante diagnóstico.
