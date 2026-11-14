@@ -63,6 +63,47 @@ class ConsumerTests(unittest.TestCase):
         self.client.rpc.return_value.execute.return_value.data={'status':'approved'}
         with self.assertRaises(RuntimeError): self.store.accept(self.result,self.now)
 
+    def test_archive_never_overwrites_existing_notes(self):
+        import tempfile, json
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            (home/'results').mkdir(mode=0o700)
+            (home/'dead').mkdir(mode=0o700)
+            protected = home/'protected'
+            protected.write_text('preserve')
+            (home/'dead/task-run-1.json.motivo.txt').symlink_to(protected)
+            for _ in range(2):
+                packet = home/'results/task-run-1.json'
+                packet.write_text(json.dumps(self.result))
+                packet.chmod(0o600)
+                self.assertEqual(len(m.consume_results(self.store, home, self.now)['consumed']), 1)
+            self.assertEqual(protected.read_text(), 'preserve')
+            self.assertEqual(len(list((home/'dead').glob('receipt-*.motivo.txt'))), 2)
+
+    def test_symlink_result_is_not_read(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            (home/'results').mkdir(mode=0o700)
+            (home/'dead').mkdir(mode=0o700)
+            protected = home/'protected'
+            protected.write_text('preserve')
+            (home/'results/task-run-1.json').symlink_to(protected)
+            self.assertEqual(m.consume_results(self.store, home, self.now)['dead'], ['task-run-1.json'])
+            self.client.rpc.assert_not_called()
+            self.assertEqual(protected.read_text(), 'preserve')
+
+    def test_symlink_mailbox_directory_rejected(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            (home/'actual').mkdir(mode=0o700)
+            (home/'results').symlink_to(home/'actual', target_is_directory=True)
+            (home/'dead').mkdir(mode=0o700)
+            with self.assertRaises(OSError):
+                m.consume_results(self.store, home, self.now)
+            self.client.rpc.assert_not_called()
+
     def test_sql_security_and_transaction_shape(self):
         sql=(P/'sql/opencode-result-receipts.sql').read_text().lower()
         self.assertIn('security invoker',sql)
