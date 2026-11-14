@@ -2018,11 +2018,30 @@ def action_control_codex_login(args):
 def action_control_codex_consumer_build(args):
     """One fixed development task, in a dedicated cvdev worktree; never applies SQL or deploys."""
     mode = str((args or {}).get("mode", "status"))
-    if mode not in ("start","status"):
+    if mode not in ("start","status","diagnostic"):
         return {"returncode":2,"output":"Modo inválido"}
     unit = "cv-control-consumer-build"
     work = Path("/home/cvdev/workspace/control-os-consumer-build")
     command = _control_codex_cmd()
+    if mode == "diagnostic":
+        profiles = {}
+        for name in ("cv-opencode-bwrap","bwrap-userns-restrict"):
+            path = Path("/etc/apparmor.d") / name
+            profiles[name] = path.read_text(errors="replace")[:14000] if path.is_file() else None
+        loaded = Path("/sys/kernel/security/apparmor/profiles")
+        loaded_text = loaded.read_text(errors="replace") if loaded.is_file() else ""
+        restrict = Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns")
+        probe = run(command + ["sandbox","linux","--","/usr/bin/true"],timeout=30)
+        kernel = run(["journalctl","-k","-n","150","--no-pager","--output=cat"],timeout=20)
+        denied = [line for line in kernel["output"].splitlines()
+                  if ("DENIED" in line or "userns" in line) and
+                  any(x in line.lower() for x in ("bwrap","codex","userns"))]
+        return {"returncode":0,"output":json.dumps({
+            "restriction":restrict.read_text().strip() if restrict.exists() else None,
+            "profiles":profiles,
+            "loaded_profiles":[x for x in loaded_text.splitlines() if "bwrap" in x or "codex" in x],
+            "native_sandbox_probe":probe,"kernel_denials":denied[-20:],
+            "model_called":False,"policy_changed":False})}
     if mode == "start":
         state = run(["systemctl","is-active",unit],timeout=10)
         if state["output"].strip() in ("active","activating"):
