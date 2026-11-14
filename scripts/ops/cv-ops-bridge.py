@@ -1803,66 +1803,84 @@ def action_snapshot_vivabot_dirty_branch(args):
     }, ensure_ascii=False)}
 
 
+def _planner_probe_run(cmd, cwd, timeout=50):
+    """Bound the whole process group and retain diagnostic output on timeout."""
+    import signal
+    proc = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True, start_new_session=True)
+    timed_out = False
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        stdout, stderr = proc.communicate(timeout=5)
+    output = ((stdout or "") + ("\nSTDERR:\n" + stderr if stderr else ""))[-16000:]
+    output = re.sub(r"(?i)(bearer\s+)[^\s\"']+", r"\1[REDACTED]", output)
+    output = re.sub(r"\b(?:sk-|sbp_)[A-Za-z0-9_-]{12,}", "[REDACTED]", output)
+    output = re.sub(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", "[REDACTED]", output)
+    return {"returncode": 124 if timed_out else proc.returncode,
+            "timed_out": timed_out, "output": output}
+
+
 def action_opencode_planner_probe(args):
-    """Calibrate installed OpenCode V2 without tools or repository access."""
+    """Fixed, tool-denied probe: no task-supplied prompt, path, model or command."""
+    import pwd
+    import tempfile
     binary = Path("/usr/bin/opencode")
     if not binary.exists():
         return {"returncode": 2, "output": "/usr/bin/opencode no existe"}
-    version = run([str(binary), "--version"], timeout=20)
-    help_run = run([str(binary), "run", "--help"], timeout=30)
-    if version["returncode"] != 0 or help_run["returncode"] != 0:
-        return {"returncode": 3, "output": json.dumps({
-            "version": version, "run_help": help_run,
-        }, ensure_ascii=False)}
-    probe_dir = Path("/tmp/cv-opencode-probe")
-    probe_dir.mkdir(mode=0o700, exist_ok=True)
-    try:
-        import pwd
-        cv = pwd.getpwnam("cvdev")
+    cv = pwd.getpwnam("cvdev")
+    # Fresh HOME prevents stale config, sessions and plugins affecting diagnosis.
+    with tempfile.TemporaryDirectory(prefix="cv-opencode-probe-") as temp:
+        probe_dir = Path(temp)
         os.chown(probe_dir, cv.pw_uid, cv.pw_gid)
-    except Exception as exc:
-        return {"returncode": 4, "output": f"No pude preparar HOME de probe: {exc}"}
-    config = json.dumps({
-        "permission": {
-            "*": "deny",
-            "read": "deny",
-            "edit": "deny",
-            "glob": "deny",
-            "grep": "deny",
-            "list": "deny",
-            "bash": "deny",
-            "task": "deny",
-            "external_directory": "deny",
-            "webfetch": "deny",
-            "websearch": "deny",
-            "lsp": "deny",
-            "skill": "deny",
-            "question": "deny"
-        }
-    }, ensure_ascii=False)
-    env = [
-        "env", "-i",
-        "PATH=/usr/bin:/bin",
-        f"HOME={probe_dir}",
-        "LANG=C.UTF-8",
-        "OPENCODE_CONFIG_CONTENT=" + config,
-    ]
-    cmd = [
-        "runuser", "-u", "cvdev", "--", *env,
-        str(binary), "run", "--pure",
-        "--model", "opencode/glm-5.3-flash-free",
-        "--format", "json",
-        "Responde exactamente con: CV_PROBE_OK. No uses herramientas.",
-    ]
-    probe = run(cmd, cwd=str(probe_dir), timeout=120)
-    return {
-        "returncode": probe["returncode"],
-        "output": json.dumps({
-            "version": version["output"][:1000],
-            "run_help": help_run["output"][:12000],
-            "probe": probe["output"][:20000],
-        }, ensure_ascii=False),
-    }
+        config = json.dumps({"permission": {"*": "deny"}})
+        env = ["env", "-i", "PATH=/usr/bin:/bin", f"HOME={probe_dir}",
+               "LANG=C.UTF-8", "OPENCODE_CONFIG_CONTENT=" + config]
+        prefix = ["runuser", "-u", "cvdev", "--", *env]
+        version = _planner_probe_run(prefix + [str(binary), "--version"], temp, 10)
+        help_run = _planner_probe_run(prefix + [str(binary), "run", "--help"], temp, 10)
+        if version["returncode"] or help_run["returncode"]:
+            return {"returncode": 3, "output": json.dumps({"stage": "startup",
+                    "version": version, "help": help_run})}
+        # Fixed public endpoints; status only, never response bodies or credentials.
+        network_code = """import json,urllib.request,urllib.error
+result={}
+for url in ('https://opencode.ai/zen/v1/models','https://models.dev/api.json'):
+    try:
+        with urllib.request.urlopen(url,timeout=6) as r:
+            result[url]={'status':r.status}
+    except urllib.error.HTTPError as e:
+        result[url]={'status':e.code}
+    except Exception as e:
+        result[url]={'error_type':type(e).__name__}
+print(json.dumps(result))
+"""
+        network = _planner_probe_run(prefix + ["/usr/bin/python3", "-c", network_code], temp, 16)
+        cmd = prefix + [str(binary), "run", "--pure", "--print-logs",
+                        "--log-level", "DEBUG", "--model", "opencode/glm-5.3-flash-free",
+                        "--format", "json",
+                        "Responde exactamente con: CV_PROBE_OK. No uses herramientas."]
+        probe = _planner_probe_run(cmd, temp, 50)
+        # CLI exit 0 is insufficient: require an actual text event.
+        confirmed = False
+        for line in probe["output"].splitlines():
+            try:
+                event = json.loads(line)
+            except (ValueError, TypeError):
+                continue
+            if isinstance(event, dict) and event.get("type") == "text":
+                part = event.get("part") or {}
+                value = part.get("text", "") if isinstance(part, dict) else ""
+                confirmed = confirmed or value.strip() == "CV_PROBE_OK"
+        return {"returncode": 0 if confirmed and probe["returncode"] == 0 else
+                (probe["returncode"] or 7),
+                "output": json.dumps({"stage": "model", "version": version,
+                    "network": network, "probe": probe, "confirmed": confirmed})}
 
 ACTIONS = {
     "health": action_health,
