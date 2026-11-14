@@ -5,13 +5,16 @@ create table public.ops_tasks(id uuid primary key, public_id bigint, thread_id u
  approval_required boolean, claim_expires_at timestamptz, claimed_by text, claimed_at timestamptz,
  business_id text default 'casa-viva', executor text default 'dev',
  risk text default 'safe', result jsonb, finished_at timestamptz, error text, updated_at timestamptz,
- check(status in ('waiting_ai','waiting_approval','failed','cancelled')));
+ check(status in ('waiting_ai','waiting_approval','verifying','triaged','failed','cancelled','blocked')));
 create table public.ops_dev_runs(id bigint primary key,task_id uuid,repo text,mode text,status text,
  base_sha text,work_sha text,auto_merge boolean,allowed_paths jsonb,summary text,error text,logs text,
  started_at timestamptz,updated_at timestamptz,finished_at timestamptz,
  check(status in ('claimed','preparing','editing','testing','pushed','waiting_ci','waiting_approval','deploy_queued','deploying','done','failed','blocked','waiting_ai')));
-create table public.ops_approvals(task_id uuid,requested_for_role text,warning text,impact jsonb,
- proposed_change jsonb,status text check(status in ('pending','approved','rejected','expired','cancelled')));
+create table public.ops_approvals(
+ id uuid primary key default gen_random_uuid(), public_id bigint generated always as identity,
+ task_id uuid,requested_for_role text,warning text,impact jsonb,proposed_change jsonb,
+ status text check(status in ('pending','approved','rejected','expired','cancelled')),
+ expires_at timestamptz, decided_by_role text,decided_by_ref text,decision_note text,decided_at timestamptz);
 create table public.ops_events(task_id uuid,thread_id uuid,event_type text,actor_type text,actor_ref text,detail jsonb);
 -- Roles anon/authenticated/service_role deben existir en el entorno de pruebas.
 \ir opencode-result-receipts.sql
@@ -73,5 +76,20 @@ begin
  or (select count(*) from public.ops_ai_result_receipts)<>1 then raise exception 'duplicate side effects'; end if;
  if exists(select 1 from public.ops_tasks where status<>'waiting_approval' or approval_required is distinct from true)
  or exists(select 1 from public.ops_dev_runs where status<>'waiting_approval') then raise exception 'approval bypass'; end if;
-end $$;
+ -- Approving a result must not requeue it, replay must be harmless.
+ perform public.ops_decide_approval((select public_id from public.ops_approvals),'approve','owner','fixture-human','test');
+ if exists(select 1 from public.ops_tasks where status<>'verifying' or executor<>'human' or approval_required)
+ or exists(select 1 from public.ops_dev_runs where status<>'blocked')
+ or exists(select 1 from public.ops_approvals where status<>'approved')
+ then raise exception 'AI approval requeued or bypassed promotion'; end if;
+ perform public.ops_decide_approval((select public_id from public.ops_approvals),'approve','owner','fixture-human','replay');
+ if (select count(*) from public.ops_events where event_type='ai_result_approved')<>1 then raise exception 'approval replay duplicated event'; end if;
+ -- Generic approvals still requeue ordinary operations.
+ insert into public.ops_tasks(id,public_id,status,approval_required)
+ values('00000000-0000-0000-0000-000000000002',43,'waiting_approval',true);
+ insert into public.ops_approvals(task_id,requested_for_role,warning,impact,proposed_change,status)
+ values('00000000-0000-0000-0000-000000000002','owner','fixture','{}','{}','pending');
+ perform public.ops_decide_approval((select public_id from public.ops_approvals where task_id='00000000-0000-0000-0000-000000000002'),'approve','owner','fixture-human','normal');
+ if (select status from public.ops_tasks where public_id=43)<>'triaged' then raise exception 'generic approval regressed'; end if;
+end $;
 rollback;
