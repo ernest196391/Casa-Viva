@@ -45,6 +45,10 @@ def valid_task(**overrides):
     return task
 
 
+def valid_job(**overrides):
+    return worker.build_ai_job(valid_task(), valid_claim(), **overrides)
+
+
 def valid_claim(**overrides):
     claim = {"run_id": "run-abc-123", "repo": "casa-viva", "mode": "ai"}
     claim.update(overrides)
@@ -140,15 +144,36 @@ class SpoolTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_write_ai_job_strict_permissions_and_roundtrip(self):
+    def test_write_ai_job_mailbox_permissions_and_roundtrip(self):
         job = worker.build_ai_job(valid_task(), valid_claim())
         path = worker.write_ai_job(job, self.spool)
         self.assertTrue(path.exists())
+        # El buzón pertenece a cvdev: el archivo debe poder leerlo cvdev (0644).
         mode = stat.S_IMODE(os.stat(path).st_mode)
-        self.assertEqual(oct(mode), oct(0o600))
-        self.assertEqual(oct(stat.S_IMODE(os.stat(self.spool).st_mode)), oct(0o700))
+        self.assertEqual(oct(mode), oct(0o644))
         loaded = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(loaded["run_id"], job["run_id"])
+
+    def test_write_ai_job_atomic_no_tmp_leftovers(self):
+        job = worker.build_ai_job(valid_task(), valid_claim())
+        worker.write_ai_job(job, self.spool)
+        self.assertEqual([p.name for p in self.spool.iterdir()], [f"task-run-{job['run_id']}.json"])
+
+    def test_write_ai_job_requires_provisioned_mailbox(self):
+        missing = self.spool / "no-existe"
+        with self.assertRaises(RuntimeError):
+            worker.write_ai_job(valid_job(), missing)
+        self.assertFalse(missing.exists())
+
+    def test_write_ai_job_rejects_group_writable_mailbox(self):
+        insecure = self.spool / "inseguro"
+        insecure.mkdir()
+        os.chmod(insecure, 0o777)
+        try:
+            with self.assertRaises(RuntimeError):
+                worker.write_ai_job(valid_job(), insecure)
+        finally:
+            os.chmod(insecure, 0o700)
 
     def test_clean_expired_ai_jobs_removes_expired_keeps_valid(self):
         fresh = worker.build_ai_job(valid_task(), valid_claim(run_id="fresh"))
@@ -211,7 +236,7 @@ class HandleAiClaimTests(unittest.TestCase):
     def _enter(self):
         patcher_table = mock.patch.object(worker, "patch_table", side_effect=lambda table, rid, values: self.patches.append((table, rid, values)))
         patcher_event = mock.patch.object(worker, "event", side_effect=lambda task, etype, detail: self.events.append((etype, detail)))
-        patcher_spool = mock.patch.object(worker, "AI_JOB_SPOOL", self.spool)
+        patcher_spool = mock.patch.object(worker, "AI_MAILBOX", self.spool)
         return patcher_table, patcher_event, patcher_spool
 
     def test_success_marks_waiting_ai_and_writes_job(self):

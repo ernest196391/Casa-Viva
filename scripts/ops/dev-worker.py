@@ -8,6 +8,12 @@ No arbitrary shell, repo, path, test command, or deploy target comes from a task
 Fase A (OpenCode × Control OS): los trabajos de IA se preparan como
 paquetes sin secretos (whitelist + redacción), con caducidad (TTL) y
 manejo de errores; nunca se ejecutan aquí y nunca contienen credenciales.
+
+Buzón cvdev (Fase B): los paquetes se entregan en el buzón del ejecutor
+OpenCode (cvdev) con archivos 0644; la confidencialidad la aporta el
+directorio provisionado para cvdev (0700/0750), no la redacción. El
+directorio debe existir y ser seguro antes de escribir; el worker nunca
+lo crea como root para no apropiarse de él.
 """
 from __future__ import annotations
 
@@ -18,6 +24,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -171,7 +178,9 @@ AI_JOB_TTL_SECONDS = 45 * 60
 AI_JOB_MAX_OPERATIONS = 8
 AI_JOB_MAX_CONTENT = 120000
 AI_JOB_MAX_DETERMINISTIC_CONTENT = 12000
-AI_JOB_SPOOL = DEV_ROOT / "ai-jobs"
+# Buzón del ejecutor OpenCode (cvdev). Provisionado manualmente, propiedad
+# de cvdev, sin escritura para grupo/otros; root escribe dentro pero no lo crea.
+AI_MAILBOX = Path(os.environ.get("CV_AI_MAILBOX", "/home/cvdev/control-os-dev/jobs"))
 
 # Claves que nunca deben viajar en un trabajo de IA.
 SECRET_FIELD_RE = re.compile(
@@ -325,14 +334,34 @@ def ai_job_path(run_id: str, spool_dir) -> Path:
     return Path(spool_dir) / f"task-run-{safe}.json"
 
 
-def write_ai_job(job: dict, spool_dir) -> Path:
-    """Escribe el paquete en el spool con permisos estrictos (0700 dir, 0600 file)."""
-    spool = Path(spool_dir)
-    spool.mkdir(mode=0o700, parents=True, exist_ok=True)
+def validate_mailbox_dir(spool) -> None:
+    """El buzón debe existir y no ser escribible por grupo/otros.
+
+    No se crea aquí: si root lo creara, sería de root y cvdev no podría
+    entrar (o requeriría chmod posteriores). Es responsabilidad del
+    provisionamiento como usuario cvdev.
+    """
+    mailbox = Path(spool)
+    if not mailbox.is_dir():
+        raise RuntimeError(f"buzón IA no provisionado: {mailbox}")
+    mode = stat.S_IMODE(mailbox.stat().st_mode)
+    if mode & 0o022:
+        raise RuntimeError(f"buzón IA con permisos inseguros: {oct(mode)}")
+
+
+def write_ai_job(job: dict, spool_dir=None) -> Path:
+    """Entrega atómica en el buzón cvdev: tmp + rename, archivo 0644.
+
+    La confidencialidad la aporta el directorio del buzón (provisionado
+    para cvdev sin acceso de grupo/otros); el archivo debe poder leerlo
+    cvdev, por eso 0644 y no 0600.
+    """
+    spool = Path(spool_dir) if spool_dir is not None else AI_MAILBOX
+    validate_mailbox_dir(spool)
     path = ai_job_path(job.get("run_id", ""), spool)
-    tmp = path.with_name(path.name + ".tmp")
+    tmp = path.with_name(f"{path.name}.tmp-{os.getpid()}")
     tmp.write_text(json.dumps(job, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-    os.chmod(tmp, 0o600)
+    os.chmod(tmp, 0o644)
     os.replace(tmp, path)
     return path
 
@@ -370,7 +399,7 @@ def ai_run_expired(row: dict, now=None) -> bool:
 
 
 def purge_ai_job(run_id: str, spool_dir=None) -> bool:
-    path = ai_job_path(run_id, spool_dir if spool_dir is not None else AI_JOB_SPOOL)
+    path = ai_job_path(run_id, spool_dir if spool_dir is not None else AI_MAILBOX)
     try:
         path.unlink()
     except OSError:
@@ -403,7 +432,7 @@ def handle_ai_claim(task: dict, claim: dict, run_id: str):
     # Hard safety gate: do not run an AI editor as root.
     try:
         job = build_ai_job(task, claim)
-        write_ai_job(job, AI_JOB_SPOOL)
+        write_ai_job(job)
     except Exception as exc:
         message = str(exc)[:8000]
         patch_table("ops_dev_runs", run_id, {"status": "failed", "error": message, "finished_at": time.strftime(TS_FMT, time.gmtime())})
@@ -654,7 +683,7 @@ def run_tests(repo_name: str, work: Path):
             logs.append("$ " + " ".join(cmd) + "\n" + out)
             if rc:
                 return False, "\n".join(logs)
-        for rel in ("scripts/ops/cv-ops-bridge.py", "scripts/ops/control-os-sync.py", "scripts/ops/dev-worker.py"):
+        for rel in ("scripts/ops/cv-ops-bridge.py", "scripts/ops/control-os-sync.py", "scripts/ops/dev-worker.py", "scripts/ops/opencode-executor.py"):
             target = work / rel
             if target.exists():
                 rc, out = run(["python3", "-m", "py_compile", str(target)], cwd=str(work), timeout=60)
@@ -958,7 +987,7 @@ def main():
         if claims:
             process_claim(claims[0])
         try:
-            clean_expired_ai_jobs(AI_JOB_SPOOL)
+            clean_expired_ai_jobs(AI_MAILBOX)
         except Exception as exc:
             print(f"clean_expired_ai_jobs: {exc}", file=sys.stderr)
 
