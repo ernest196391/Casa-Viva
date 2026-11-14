@@ -80,7 +80,7 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="cv-nonce" content="<?php echo esc_attr(wp_create_nonce('cv-control')); ?>">
 <title>Control OS · Casa Viva</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20261114-clean1">
 </head>
 <body>
 <header class="topbar">
@@ -90,58 +90,58 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
 <main>
   <section class="command-card">
     <div class="command-head">
-      <div><span class="eyebrow">CENTRO ÚNICO</span><h1>¿Qué necesita atención?</h1></div>
-      <div class="fresh"><span id="connection" class="dot"></span><span id="freshness">Conectando…</span></div>
+      <div><span class="eyebrow">CASA VIVA</span><h1>¿Qué quieres hacer?</h1></div>
+      <div class="fresh"><span id="connection" class="dot"></span><span id="freshness">Cargando estado…</span></div>
+    </div>
+    <div class="quick-actions" aria-label="Consultas sin IA">
+      <button type="button" data-query="salud del sistema">Salud del sistema</button>
+      <button type="button" data-query="estado de wordpress">WordPress</button>
+      <button type="button" data-query="estado del bot">Código del bot</button>
     </div>
     <form id="task-form">
-      <label class="sr-only" for="task-text">Orden para Casa Viva</label>
-      <textarea id="task-text" minlength="8" maxlength="6000" rows="3" required placeholder="Ej.: revisa por qué el pedido 6452 sigue pendiente"></textarea>
-      <div class="command-actions"><span>Escribe como hablas.</span><button type="submit" class="primary">Enviar</button></div>
-      <p id="task-feedback" class="feedback" role="status"></p>
+      <label class="sr-only" for="task-text">Tu solicitud</label>
+      <textarea id="task-text" minlength="8" maxlength="6000" rows="2" required placeholder="Escribe aquí lo que necesitas"></textarea>
+      <div class="command-actions"><span>Las consultas de estado no gastan IA.</span><button type="submit" class="primary">Enviar solicitud</button></div>
+      <p id="task-feedback" class="feedback" role="status" aria-live="polite"></p>
     </form>
+    <p class="capability-note">Los demás mensajes quedan para revisión. La programación automática de cambios todavía está en preparación.</p>
   </section>
   <div id="error" class="notice" role="alert" hidden></div>
   <nav class="tabs" aria-label="Secciones">
-    <button class="selected" data-tab="today">Hoy</button>
-    <button data-tab="work">Trabajo</button>
-    <button data-tab="lennys">Lennys</button>
-    <button data-tab="system">Sistema</button>
+    <button class="selected" data-tab="work" aria-pressed="true">Mis solicitudes</button>
+    <button data-tab="today" aria-pressed="false">Aprobaciones <span id="decision-count">0</span></button>
+    <button data-tab="system" aria-pressed="false">Sistema</button>
   </nav>
-  <section id="today" class="view">
-    <div class="metrics">
-      <article><strong id="m-attention">—</strong><span>Atención</span></article>
-      <article><strong id="m-decisions">—</strong><span>Decisiones</span></article>
-      <article><strong id="m-lennys">—</strong><span>Lennys</span></article>
-      <article><strong id="m-errors">—</strong><span>Errores</span></article>
-    </div>
-    <div class="section-head"><div><span class="eyebrow">PRIMERO</span><h2>Decisiones tuyas</h2></div><span id="decision-count" class="count">0</span></div>
-    <div id="decisions-list" class="stack"></div>
-    <div class="section-head"><div><span class="eyebrow">PRIORIDAD</span><h2>Lo que merece atención</h2></div></div>
-    <div id="today-list" class="stack"></div>
-  </section>
-  <section id="work" class="view" hidden>
-    <div class="section-head"><div><span class="eyebrow">TRABAJO</span><h2>Tareas abiertas</h2></div><span id="task-count" class="count">0</span></div>
+  <section id="work" class="view">
+    <div class="section-head"><h2 id="list-title">Empezamos desde ahora</h2><span id="task-count" class="count">0</span></div>
+    <p id="list-help" class="section-copy">Tus solicitudes nuevas aparecerán aquí, con la más reciente primero. Lo anterior sigue disponible en el historial.</p>
+    <label class="sr-only" for="task-search">Buscar solicitud por número o texto</label>
+    <input id="task-search" class="task-search" type="search" placeholder="Buscar por número o texto">
     <div class="filters">
-      <button class="filter selected" data-filter="all">Todas</button>
-      <button class="filter" data-filter="p0p1">Urgentes</button>
-      <button class="filter" data-filter="dev">Programación</button>
-      <button class="filter" data-filter="approval">Aprobación</button>
+      <button class="filter selected" data-filter="new">Desde ahora</button>
+      <button class="filter" data-filter="pending">Pendientes nuevas</button>
+      <button class="filter" data-filter="done">Terminadas nuevas</button>
+      <button class="filter" data-filter="history">Historial anterior</button>
     </div>
     <div id="tasks-list" class="stack"></div>
+    <details id="legacy-details" hidden><summary>Mensajes anteriores de Lennys</summary>
+      <p class="section-copy">Conversaciones conservadas como referencia. Un saludo o fragmento no equivale a una solicitud ejecutable.</p>
+      <div id="lennys-list" class="stack"></div>
+    </details>
   </section>
-  <section id="lennys" class="view" hidden>
-    <div class="section-head"><div><span class="eyebrow">OPERACIÓN</span><h2>Asuntos de Lennys</h2></div><span id="lennys-count" class="count">0</span></div>
-    <p class="section-copy">Un asunto puede contener varios mensajes, audios o fotos. Aquí no se cuentan fragmentos como tareas separadas.</p>
-    <div id="lennys-list" class="stack"></div>
+  <section id="today" class="view" hidden>
+    <div class="section-head"><h2>Necesita tu aprobación</h2></div>
+    <p class="section-copy">Aquí solo aparecen decisiones reales pendientes, incluso si son anteriores a la limpieza. Aprobar no significa desplegar un cambio de código.</p>
+    <div id="decisions-list" class="stack"></div>
   </section>
   <section id="system" class="view" hidden>
-    <div class="section-head"><div><span class="eyebrow">SALUD</span><h2>Sistema</h2></div><span id="system-badge" class="health-badge">Comprobando</span></div>
+    <div class="section-head"><h2>Estado de los servicios</h2><span id="system-badge" class="health-badge">Comprobando</span></div>
     <div id="system-grid" class="system-grid"></div>
-    <div class="section-head activity-head"><div><span class="eyebrow">HISTORIAL</span><h2>Actividad reciente</h2></div></div>
-    <div id="activity-list" class="stack compact"></div>
+    <p class="section-copy">Estos indicadores muestran la conexión de los servicios; no certifican el ciclo automático de programación.</p>
+    <details><summary>Información técnica y actividad</summary><div id="activity-list" class="stack compact"></div></details>
   </section>
 </main>
 <footer>Casa Viva Control OS · Una sola cola, una sola verdad operativa.</footer>
-<script src="app.js"></script>
+<script src="app.js?v=20261114-clean1"></script>
 </body>
 </html>

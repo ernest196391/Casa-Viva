@@ -474,3 +474,14 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 - Gate identificado antes de activar: ops_decide_approval genérico devuelve a triaged; falta decisión de resultado IA que no reprograme el trabajo aprobado. No aplicar esta migración ni activar consumidor hasta certificar ese paso. PR permanece draft y producción sin cambios de ese consumidor.
 
 - Gate de decisión resuelto en propuesta: aprobar un recibo IA deja tarea verifying/executor human y run blocked para PR/CI/promoción, nunca triaged. Rechazo sin aplicar diff, replay idempotente, aprobaciones ordinarias preservadas. Fixture ampliada y rollback no destructivo incluidos; locks tarea→run coherentes. Pendiente nuevo CI antes de cualquier migración.
+
+
+## CURRENT — Panel limpio desde hoy (2026-11-14)
+
+- Base verificada: e6838cdf7ae4eb93af7e28bfee7bd699d07c68b3. Producción: panel anterior auditado mediante navegador; consultas #138/#139 terminadas, presentación confusa. Costo nuevo necesario: 0.
+- La migración control_os_transactional_ai_results_with_review_gate SÍ está aplicada: prueba con service_role y rollback real superada, evento ops_events #368. No quedan datos sintéticos. Consumidor y promoción automática siguen pendientes.
+- Petición de Ernesto: arreglar el panel y empezar de cero hoy. Se implementa limpieza de presentación desde 2026-11-14T22:24:32.392Z; no se borran ni se cierran tareas, aprobaciones, pedidos, dinero o conversaciones. El historial sigue accesible.
+- Interfaz con Mis solicitudes, Aprobaciones y Sistema. Solicitudes nuevas primero, buscador, estados claros, detalles desplegables, consultas rápidas sin IA, seguimiento del número por source_ref y timeout de lectura. Todas las aprobaciones reales se muestran sin aplicar el corte temporal.
+- Se retiran de la portada los mensajes sueltos de Lennys y el historial técnico; conservados en secciones desplegables del historial/sistema. La programación incompleta se informa explícitamente. La aprobación no promete aplicar ni desplegar.
+- Snapshot añade created_at/request_id/executor/task_type y reserva solicitudes recientes del propietario para que las tareas legacy no las oculten. Solo se resumen outputs allowlist wp_status/vivabot_git_status ya completados; no se exponen credenciales.
+- Validación pendiente: CI, despliegue allowlist deploy_control_web/update_control_sync con SHA certificado y auditoría real de escritorio/móvil. Rollback: archivos anteriores conservados por el despliegue del panel y posibilidad de redeplegar SHA base; sync conserva .legacy y puede reinstalarse desde el SHA base.

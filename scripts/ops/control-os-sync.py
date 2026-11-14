@@ -194,7 +194,7 @@ def query(path):
 def snapshot():
     now = datetime.datetime.now(datetime.timezone.utc)
     tasks = query(
-        'ops_tasks?select=id,public_id,thread_id,title,status,priority,risk,result,error,created_at,started_at,finished_at,source,requested_by_name,approval_required'
+        'ops_tasks?select=id,public_id,thread_id,title,status,priority,risk,result,error,created_at,started_at,finished_at,source,source_ref,executor,task_type,requested_by_name,approval_required'
         '&order=created_at.desc&limit=120'
     )
     open_tasks = [x for x in tasks if x.get('status') not in ('done','cancelled','superseded')]
@@ -211,12 +211,39 @@ def snapshot():
     )
     task_by_uuid = {str(x.get('id')): x for x in tasks}
 
+    # Only successful allowlisted read-only outputs enter the private UI summary.
+    lookup_ids = sorted({str((x.get('result') or {}).get('bridge_id'))
+                         for x in tasks if isinstance(x.get('result'), dict)
+                         and x['result'].get('action') in ('wp_status','vivabot_git_status')
+                         and str(x['result'].get('bridge_id','')).isdigit()})[-30:]
+    outputs = {}
+    if lookup_ids:
+        for row in query('crm_ops_bridge?select=id,action,status,result&id=in.(' + ','.join(lookup_ids) + ')&action=in.(wp_status,vivabot_git_status)&status=eq.done'):
+            result = row.get('result') or {}
+            if isinstance(result, dict) and result.get('returncode') == 0:
+                outputs[str(row['id'])] = result.get('output') or ''
+
     def task_summary(x):
         result = x.get('result')
         if isinstance(result, dict):
+            output = outputs.get(str(result.get('bridge_id')), '')
+            if result.get('action') == 'vivabot_git_status' and output:
+                try:
+                    info = json.loads(output)
+                    return 'Código del bot verificado: rama ' + str(info.get('branch') or 'desconocida') + '. ' + ('Sin cambios locales.' if info.get('tracked_clean') and info.get('untracked_count') == 0 else 'Hay cambios locales que revisar.')
+                except (ValueError, TypeError):
+                    pass
+            if result.get('action') == 'wp_status' and output:
+                core = re.search(r'^CORE=(.+)$', output, re.M)
+                return 'WordPress ' + core.group(1).strip() + ': consulta completada.' if core else 'Consulta de WordPress completada.'
             return str(result.get('summary') or result.get('note') or result.get('goal') or '')
         return ''
 
+    # Recent requests must not disappear behind the first 60 legacy tasks.
+    recent_owner = [x for x in tasks if x.get('source') in ('control-private','whatsapp-owner')][:30]
+    selected = {}
+    for x in open_tasks[:60] + recent_owner + [t for t in tasks if t.get('status') in ('done','cancelled','superseded','failed')][:20]:
+        selected[str(x.get('id'))] = x
     task_cards = [{
         'id': x.get('public_id'),
         'title': x.get('title') or 'Tarea',
@@ -228,8 +255,12 @@ def snapshot():
         'detail': x.get('error') or '',
         'requested_by': x.get('requested_by_name') or '',
         'approval_required': bool(x.get('approval_required')),
+        'request_id': x.get('source_ref'),
+        'created_at': x.get('created_at'),
+        'executor': x.get('executor'),
+        'task_type': x.get('task_type'),
         'at': x.get('finished_at') or x.get('started_at') or x.get('created_at'),
-    } for x in (open_tasks[:60] + [t for t in tasks if t.get('status') in ('done','cancelled','superseded')][:20])]
+    } for x in selected.values()]
 
     decisions = []
     for a in approvals:
