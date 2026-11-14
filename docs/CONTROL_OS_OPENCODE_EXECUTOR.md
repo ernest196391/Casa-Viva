@@ -6,6 +6,8 @@ Estado: Fases A, B y C (simulación) más Fase D (adaptador de CLI, bloqueado pa
 
 **Fase F (contrato de propuestas + puente, implementada)**: la separación entre generación remota de IA y ejecución determinista está documentada en `docs/CONTROL_OS_PROPOSAL_CONTRACT.md`, con el contrato `cv-change-proposal-v1` (`scripts/ops/opencode-proposal.py`) y el puente hacia el buzón (`scripts/ops/opencode-proposal-bridge.py`). El ejecutor no fue modificado y no conoce la Fase F (verificado por escaneo estático).
 
+**Fase G (demostración E2E, implementada)**: la demostración reproducible de extremo a extremo está documentada en `docs/CONTROL_OS_DEMO_E2E.md`, con el arnés `scripts/ops/opencode-demo-e2e.py`: repo Git temporal con datos ficticios, propuesta `cv-change-proposal-v1` fija (sin modelo), puente real de Fase F (CLI), ejecutor de Fase B (CLI), consumidor de Fase C (in-process), decisión humana con `record_decision` y verificación de que aprobar no despliega (HEAD, ramas, commits, árbol y remotos intactos). Incluye defensas demostradas (duplicados, propuesta maliciosa, paquete manipulado, resultado manipulado). Ninguna fase A–F fue modificada.
+
 ## Papeles
 
 - **Productor (root, Fase A)**: `scripts/ops/dev-worker.py`. Reclama tareas `mode == "ai"` de Supabase, construye el paquete con whitelist estricta (`build_ai_job`) y lo entrega en el buzón de cvdev. Nunca ejecuta el editor de IA.
