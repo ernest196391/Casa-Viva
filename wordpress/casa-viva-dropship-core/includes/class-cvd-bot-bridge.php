@@ -37,6 +37,7 @@ final class CVD_Bot_Bridge {
 		// 3.14.19: después de recogerlo, el paquete pasa a otro mensajero (lo entrega él y devuelve el dinero).
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/handover', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'handover' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/eta', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'eta' ), 'permission_callback' => $auth ) );
+		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/confirm', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'confirm_received' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/delivered', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'delivered' ), 'permission_callback' => $auth ) );
 		// 3.13.55: el mensajero dice que ya tiene el paquete → «Entregado al mensajero» automático.
 		register_rest_route( self::NS, '/bot/dispatch/(?P<id>\d+)/picked-up', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'picked_up' ), 'permission_callback' => $auth ) );
@@ -732,6 +733,25 @@ final class CVD_Bot_Bridge {
 	}
 
 	/** Hora a la que el mensajero dice que puede ir: queda en el pedido y en el seguimiento. */
+	/** Confirmación de recepción del vale: OK / aceptado por el mensajero titular, sin modificar ETA. */
+	public static function confirm_received( WP_REST_Request $request ) {
+		$order = self::order( $request );
+		if ( is_wp_error( $order ) ) { return $order; }
+		$messenger = self::assigned_messenger( $order, (string) $request->get_param( 'phone' ) );
+		if ( ! $messenger ) { return new WP_Error( 'cvd_not_assigned', 'El teléfono no corresponde al mensajero asignado.', array( 'status' => 403 ) ); }
+		$text = mb_strtolower( trim( sanitize_text_field( (string) $request->get_param( 'text' ) ) ) );
+		if ( ! in_array( $text, array( 'ok', 'aceptado', 'acepto' ), true ) ) {
+			return new WP_Error( 'cvd_invalid_confirmation', 'Solo OK, aceptado o acepto confirman la carrera.', array( 'status' => 400 ) );
+		}
+		$status = CVD_Delivery::status( $order );
+		if ( in_array( $status, array( 'accepted', 'to_store', 'picked_up', 'handed_over', 'delivered' ), true ) ) {
+			return self::no_cache( array( 'result' => 'already_accepted', 'order' => $order->get_id() ) );
+		}
+		if ( 'assigned' !== $status ) { return new WP_Error( 'cvd_not_pending_confirmation', 'La carrera ya no espera aceptación.', array( 'status' => 409 ) ); }
+		$ok = CVD_Delivery::accept_assigned( $order, $messenger->ID, 'cvd_bot_bridge_confirm', 'por WhatsApp con OK/aceptado' );
+		return self::no_cache( array( 'result' => $ok ? 'accepted' : 'conflict', 'order' => $order->get_id() ) );
+	}
+
 	public static function eta( WP_REST_Request $request ) {
 		$order = self::order( $request );
 		if ( is_wp_error( $order ) ) { return $order; }
