@@ -485,3 +485,11 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 - Se retiran de la portada los mensajes sueltos de Lennys y el historial técnico; conservados en secciones desplegables del historial/sistema. La programación incompleta se informa explícitamente. La aprobación no promete aplicar ni desplegar.
 - Snapshot añade created_at/request_id/executor/task_type y reserva solicitudes recientes del propietario para que las tareas legacy no las oculten. Solo se resumen outputs allowlist wp_status/vivabot_git_status ya completados; no se exponen credenciales.
 - Validación pendiente: CI, despliegue allowlist deploy_control_web/update_control_sync con SHA certificado y auditoría real de escritorio/móvil. Rollback: archivos anteriores conservados por el despliegue del panel y posibilidad de redeplegar SHA base; sync conserva .legacy y puede reinstalarse desde el SHA base.
+
+
+### Verificación real del panel limpio y conexión lenta
+
+- PR #225 fusionado y desplegado en 99a35ceb1ea19456ff557d7ec5ac403845cb0839. Bridge #204 actualizó sync con primera ejecución OK; #205 instaló panel, PHP lint y checksums OK. Backup control-20261114T223535Z-99a35ceb1ea1 conservado.
+- Navegador real: vista limpia con 0 solicitudes anteriores, botón Salud crea #140 y muestra el número; historial encuentra #139 y muestra resumen legible del código del bot. No se borró ni se canceló el historial.
+- Observación: el timeout de lectura de 10s genera avisos prematuros en conexión lenta. Se amplía a 30s y se conserva el último estado de menos de 3 minutos durante dos reintentos; se informa Reintentando. Tres fallos consecutivos o estado viejo mantienen aviso visible. No se reenvían instrucciones automáticamente.
+- Pendiente CI de este ajuste y revalidación de resultado final/móvil. Costo nuevo: 0.
