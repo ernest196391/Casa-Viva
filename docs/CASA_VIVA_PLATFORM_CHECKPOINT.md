@@ -472,3 +472,5 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 
 - PostgreSQL desechable del primer head auditado 4274ad2 pasó (job 132576605470). Se refuerzan después permisos de recibos y aislamiento por business_id/executor; nuevo head requiere repetir CI.
 - Gate identificado antes de activar: ops_decide_approval genérico devuelve a triaged; falta decisión de resultado IA que no reprograme el trabajo aprobado. No aplicar esta migración ni activar consumidor hasta certificar ese paso. PR permanece draft y producción sin cambios de ese consumidor.
+
+- Gate de decisión resuelto en propuesta: aprobar un recibo IA deja tarea verifying/executor human y run blocked para PR/CI/promoción, nunca triaged. Rechazo sin aplicar diff, replay idempotente, aprobaciones ordinarias preservadas. Fixture ampliada y rollback no destructivo incluidos; locks tarea→run coherentes. Pendiente nuevo CI antes de cualquier migración.
