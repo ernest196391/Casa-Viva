@@ -812,5 +812,501 @@
       h('button', { type: 'button', class: 'cv-link', text: 'Editar', onclick: () => editMatrix(renderFotos) }));
     setFotobar(btn('Hacer BENEFICIO', 'cv-primary', () => { layoutValue = 'ben'; setTab('anuncio'); }));
   }
-  /*@@ANUNCIO@@*/
+  /* ---------- Anuncio: Beneficio · Oferta · Reseña. Nunca precio ni logo en la imagen ---------- */
+  const W = 1080;
+  let adSource = '', sourceList = [], selectedOption = null, lastLayout = null;
+  const thumbOf = (img) => { const c = document.createElement('canvas'), k = 160 / Math.max(img.width, img.height); c.width = Math.max(1, img.width * k); c.height = Math.max(1, img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', 0.8); };
+  const currentKey = () => selectedOption ? `var-${selectedOption.number}` : adSource;
+  // Fotos del anuncio: el HERO, la LIFESTYLE aprobada, tu foto y las reales. Nada de esto sube a la web.
+  function sources() {
+    if (!product) return;
+    const out = [], hero = piece('hero'), life = piece('life');
+    const heroUrl = product.hero_en_web ? (product.image_full || product.image) : hero.estado === 'aprobada' ? hero.url : '';
+    if (heroUrl) out.push({ key: 'hero', label: 'HERO', url: heroUrl });
+    if (life.estado === 'aprobada' && life.url) out.push({ key: 'life', label: 'LIFESTYLE', url: life.url });
+    if (photo) out.push({ key: 'local', label: 'Tu foto', img: photo });
+    else if (product.image && !product.hero_en_web) out.push({ key: 'main', label: 'Tu foto', url: product.image_full || product.image });
+    realPhotos().filter((f) => f.id !== product.image_id).forEach((f, i) => out.push({ key: `real-${f.id}`, label: `Real ${i + 1}`, url: f.full || f.url }));
+    sourceList = out;
+    if (!out.some((s) => s.key === adSource)) adSource = out[0]?.key || '';
+    $('cv-sources').replaceChildren(...out.map((s) => h('button', { type: 'button', role: 'radio', class: 'cv-opt', 'aria-checked': String(!selectedOption && s.key === adSource), 'aria-label': s.label, onclick: () => pickSource(s.key) },
+      h('span', { class: 'cv-opt-pic' }, h('img', { src: s.img ? thumbOf(s.img) : s.url, alt: '' })), h('span', { text: s.label }))));
+  }
+  function afterSourceChange(prev) {
+    markOptions(); optionPanel();
+    const n = layoutValue === 'ben' ? benTexts().length : 0;
+    if (n && prev !== currentKey()) {
+      // Los números se borran al cambiar de foto y vuelven si se vuelve a la foto anterior.
+      const placed = (points[currentKey()] || []).slice(0, n).filter(Boolean).length;
+      message(placed >= n ? 'Puntos de esta foto recuperados.' : `Foto nueva: coloca los ${n} puntos otra vez.`);
+      activePoint = 0;
+    }
+    showPoints(); preview(0);
+  }
+  function pickSource(key) { const prev = currentKey(); selectedOption = null; adSource = key; afterSourceChange(prev); }
+  async function sourceImage() {
+    if (selectedOption && !staleBlocks()) return selectedOption.img;
+    const s = sourceList.find((x) => x.key === adSource) || sourceList[0];
+    return s ? (s.img || cachedImage(s.url)) : null;
+  }
+  // Punto 1 = la prueba de la duda con su condición; 2 y 3 = características que no repiten ese dato.
+  function benTexts() {
+    const b = product?.brief || {}, out = [], norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9áéíóúñü]+/g, ' ').trim();
+    if (b.prueba) out.push({ t: b.prueba, s: b.condicion || '' });
+    for (const r of factRows()) {
+      const n = norm(r.fact);
+      if (out.length >= 3 || !n || out.some((x) => norm(x.t) === n || norm(x.t).includes(n) || n.includes(norm(x.t)))) continue;
+      out.push({ t: r.fact, s: r.benefit });
+    }
+    return out;
+  }
+  function showPoints() {
+    const n = layoutValue === 'ben' && product?.brief?.prueba ? benTexts().length : 0, pts = points[currentKey()] || [];
+    $('cv-pts').hidden = !n || $('cv-canvas').hidden; $('cv-point-hint').hidden = $('cv-pts').hidden;
+    if ($('cv-pts').hidden) return;
+    const placed = pts.slice(0, n).filter(Boolean).length;
+    if (placed < n && (pts[activePoint] || activePoint >= n)) activePoint = [...Array(n).keys()].find((i) => !pts[i]) ?? 0;
+    const hint = $('cv-point-hint'); hint.replaceChildren(); hint.classList.toggle('cv-listo', placed >= n);
+    if (placed >= n) hint.append(icon('check'), 'Listo'); else hint.append(`Toca la foto: punto ${activePoint + 1}`);
+    $('cv-pts').replaceChildren(...[...Array(n).keys()].map((i) => h('button', { type: 'button', class: pts[i] ? '' : 'cv-unset', 'aria-pressed': String(i === activePoint && placed < n), 'aria-label': `Mover punto ${i + 1}`, text: String(i + 1),
+      onclick: () => { activePoint = i; (points[currentKey()] || (points[currentKey()] = []))[i] = null; showPoints(); preview(0); } })));
+  }
+  function lines(ctx, text, width, max) {
+    const words = String(text).split(/\s+/).filter(Boolean), out = []; let line = '';
+    for (const word of words) { const next = line ? `${line} ${word}` : word; if (ctx.measureText(next).width > width && line) { out.push(line); line = word; } else line = next; }
+    if (line) out.push(line);
+    if (out.length > max) { out.length = max; out[max - 1] = `${out[max - 1].replace(/\s+\S*$/, '')}…`; }
+    return out;
+  }
+  // Bloque de texto que empieza en top; devuelve el alto usado. Si no cabe, pide acortarlo.
+  function textBlock(ctx, text, x, top, width, size, max, color, weight, error = 'Acorta el texto para que se lea completo.') {
+    ctx.fillStyle = color; ctx.font = `${weight} ${size}px ${FONT}`; ctx.textAlign = 'left';
+    const words = String(text).split(/\s+/).filter(Boolean), out = []; let line = '';
+    for (const word of words) { const next = line ? `${line} ${word}` : word; if (ctx.measureText(next).width > width && line) { out.push(line); line = word; } else line = next; }
+    if (line) out.push(line);
+    if (out.length > max || out.some((s) => ctx.measureText(s).width > width)) throw new Error(error);
+    const lh = Math.round(size * 1.15);
+    out.forEach((s, i) => ctx.fillText(s, x, top + size * 0.88 + i * lh)); return out.length * lh;
+  }
+  function roundRect(ctx, x, y, w, hh, r, fill) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, hh, r); else ctx.rect(x, y, w, hh); ctx.fillStyle = fill; ctx.fill(); }
+  // Caja del producto: se mide sobre el fondo liso (HERO blanco o recorte). Sin caja clara, la foto llena la zona.
+  const boxCache = new WeakMap();
+  function productBox(img) {
+    if (boxCache.has(img)) return boxCache.get(img);
+    let out = null;
+    try {
+      const w = img.naturalWidth || img.width, hh = img.naturalHeight || img.height, k = Math.min(1, 220 / Math.max(w, hh));
+      const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(hh * k));
+      const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(img, 0, 0, c.width, c.height);
+      const d = x.getImageData(0, 0, c.width, c.height).data, at = (i, j) => (j * c.width + i) * 4;
+      const corners = [[0, 0], [c.width - 1, 0], [0, c.height - 1], [c.width - 1, c.height - 1]].map(([i, j]) => [...d.slice(at(i, j), at(i, j) + 4)]);
+      const bg = corners[0], clear = bg[3] < 40, diff = (p) => clear ? d[p + 3] > 40 : d[p + 3] > 40 && Math.abs(d[p] - bg[0]) + Math.abs(d[p + 1] - bg[1]) + Math.abs(d[p + 2] - bg[2]) > 48;
+      if (corners.every((q) => clear ? q[3] < 40 : Math.abs(q[0] - bg[0]) + Math.abs(q[1] - bg[1]) + Math.abs(q[2] - bg[2]) < 36)) {
+        let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
+        for (let j = 0; j < c.height; j++) for (let i = 0; i < c.width; i++) if (diff(at(i, j))) { if (i < x0) x0 = i; if (i > x1) x1 = i; if (j < y0) y0 = j; if (j > y1) y1 = j; }
+        if (x1 >= 0 && (x1 - x0 + 1) * (y1 - y0 + 1) < 0.9 * c.width * c.height) out = { box: [x0 / c.width, y0 / c.height, (x1 + 1) / c.width, (y1 + 1) / c.height], bg: clear ? '#ffffff' : `rgb(${bg[0]},${bg[1]},${bg[2]})` };
+      }
+    } catch { out = null; }
+    boxCache.set(img, out); return out;
+  }
+  // Encuadre por código (como fit() del prototipo): el producto llena la zona y queda centrado.
+  function fitBox(img, zone) {
+    const w = img.naturalWidth || img.width, hh = img.naturalHeight || img.height, I = w / hh, A = zone.w / zone.h, pb = productBox(img);
+    let k, L, T;
+    if (pb) {
+      const [x0, y0, x1, y1] = pb.box, bw = (x1 - x0) * I, bh = y1 - y0;
+      k = Math.min(A * 0.9 / bw, 0.86 / bh); L = A / 2 - (x0 + x1) / 2 * I * k; T = 0.5 - (y0 + y1) / 2 * k;
+    } else { k = Math.max(1, A / I); L = (A - I * k) / 2; T = (1 - k) / 2; }
+    return { x: zone.x + L / A * zone.w, y: zone.y + T * zone.h, w: I * k / A * zone.w, h: k * zone.h, bg: pb ? pb.bg : '#ffffff' };
+  }
+  function offerNow() {
+    const text = $('cv-offer').value.trim(), sale = product?.sale, today = new Date().toLocaleDateString('en-CA');
+    const saleOn = Boolean(sale && (!sale.until || sale.until >= today));
+    if (!text && !saleOn) return null;
+    return { head: text || 'Precio rebajado en la tienda', sub: saleOn && sale.until ? `Oferta hasta el ${saleUntil(sale.until)}` : '' };
+  }
+  const saleUntil = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('es', { day: 'numeric', month: 'long' });
+  function drawReviewBox(ctx, r, square) {
+    const pad = 64, inner = W - 2 * pad - 64, x = pad + 32;
+    let y = 40 + 30;
+    const probe = document.createElement('canvas').getContext('2d'); probe.font = `400 ${square ? 34 : 42}px ${FONT}`;
+    const qLines = lines(probe, `“${r.text}”`, inner, 99).length, max = square ? 3 : 4;
+    if (qLines > max) throw new Error('La reseña es demasiado larga para la tarjeta. Elige otra más corta.');
+    const hh = 30 + (r.rating ? 60 : 0) + qLines * Math.round((square ? 34 : 42) * 1.15) + 20 + 44 + 30;
+    roundRect(ctx, pad, 40, W - 2 * pad, hh, 32, '#f6f2e9');
+    if (r.rating) { ctx.fillStyle = '#c99a1e'; ctx.font = `${square ? 40 : 48}px ${FONT}`; ctx.textAlign = 'left'; ctx.fillText(stars(r.rating), x, y + 42); y += 60; }
+    y += textBlock(ctx, `“${r.text}”`, x, y, inner, square ? 34 : 42, max, '#1c2925', 400, 'La reseña es demasiado larga para la tarjeta. Elige otra más corta.') + 20;
+    textBlock(ctx, `— ${shortName(r.name)}`, x, y, inner, 32, 1, '#5d6964', 700);
+    return 40 + hh + 24;
+  }
+  async function drawNow() {
+    const img = await sourceImage(); if (!img) throw new Error('Primero el HERO o una foto real: ve a Fotos.');
+    const hgt = Number(formatValue), square = hgt === 1080, c = $('cv-canvas'); c.width = W; c.height = hgt;
+    const ctx = c.getContext('2d'), b = product?.brief || {}, pad = 64;
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, hgt);
+    let top = 0;
+    if (layoutValue === 'review') {
+      const r = pickedReview(); if (!r) throw new Error('Elige o añade una reseña real del cliente.');
+      top = drawReviewBox(ctx, r, square);
+    } else {
+      let head = '', sub = '';
+      if (layoutValue === 'ben') { if (!b.resultado || !b.prueba) throw new Error('Falta la duda → resultado → prueba: toca «Editar».'); head = b.resultado; }
+      else { const o = offerNow(); if (!o) throw new Error('No hay oferta vigente: escribe la oferta real o pon la rebaja en la tienda.'); head = o.head; sub = o.sub; }
+      top = 48 + textBlock(ctx, head, pad, 48, W - 2 * pad, square ? 54 : 72, 3, '#173e35', 700, 'Acorta el titular para que se lea completo.');
+      if (sub) top += 12 + textBlock(ctx, sub, pad, top + 12, W - 2 * pad, square ? 32 : 40, 2, '#5d6964', 400);
+      top += 28;
+    }
+    const zone = { x: 0, y: top, w: W, h: hgt - top - Math.round(hgt * 0.03) }, geo = fitBox(img, zone);
+    ctx.save(); ctx.fillStyle = geo.bg; ctx.fillRect(zone.x, zone.y, zone.w, zone.h); ctx.beginPath(); ctx.rect(zone.x, zone.y, zone.w, zone.h); ctx.clip();
+    ctx.drawImage(img, geo.x, geo.y, geo.w, geo.h); ctx.restore();
+    lastLayout = { zone, geo };
+    if (layoutValue === 'ben') drawCallouts(ctx, geo, zone);
+  }
+  function drawCallouts(ctx, g, z) {
+    const texts = benTexts(), pts = points[currentKey()] || [], boxW = 400, padX = 24;
+    const placed = texts.map((t, i) => pts[i] ? { i, t, x: g.x + pts[i].u * g.w, y: g.y + pts[i].v * g.h } : null).filter(Boolean);
+    placed.forEach((p) => {
+      ctx.font = `700 ${p.i ? 36 : 42}px ${FONT}`; p.l1 = lines(ctx, p.t.t, boxW - 2 * padX, 2);
+      ctx.font = `400 30px ${FONT}`; p.l2 = p.t.s ? lines(ctx, p.t.s, boxW - 2 * padX, 2) : [];
+      p.hh = 22 + p.l1.length * (p.i ? 42 : 48) + p.l2.length * 36 + 18; p.left = p.x >= W / 2;
+    });
+    for (const side of [true, false]) {
+      let last = z.y + 12;
+      placed.filter((p) => p.left === side).sort((a, b) => a.y - b.y).forEach((p) => { p.ly = Math.max(last, Math.min(z.y + z.h - p.hh - 12, p.y - p.hh / 2)); last = p.ly + p.hh + 18; });
+    }
+    // Línea fina de cada punto a su explicación (blanca por debajo para que se vea sobre cualquier fondo).
+    placed.forEach((p) => {
+      const bx = p.left ? 40 + boxW : W - 40 - boxW, by = p.ly + p.hh / 2;
+      for (const [col, wd] of [['#ffffff', 8], ['#173e35', 3]]) { ctx.strokeStyle = col; ctx.lineWidth = wd; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(bx, by); ctx.stroke(); }
+    });
+    placed.forEach((p) => {
+      const bx = p.left ? 40 : W - 40 - boxW, main = p.i === 0;
+      roundRect(ctx, bx, p.ly, boxW, p.hh, 22, main ? '#173e35' : 'rgba(255,255,255,0.95)');
+      let y = p.ly + 18; ctx.textAlign = 'left';
+      ctx.fillStyle = main ? '#f6f2e9' : '#173e35'; ctx.font = `700 ${main ? 42 : 36}px ${FONT}`;
+      p.l1.forEach((s) => { y += main ? 48 : 42; ctx.fillText(s, bx + padX, y - 8); });
+      ctx.fillStyle = main ? '#f6f2e9' : '#1c2925'; ctx.font = `400 30px ${FONT}`;
+      p.l2.forEach((s) => { y += 36; ctx.fillText(s, bx + padX, y - 6); });
+    });
+    placed.forEach((p) => {
+      ctx.beginPath(); ctx.arc(p.x, p.y, 30, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 6; ctx.strokeStyle = '#173e35'; ctx.stroke();
+      ctx.fillStyle = '#173e35'; ctx.font = `700 32px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText(String(p.i + 1), p.x, p.y + 11); ctx.textAlign = 'left';
+    });
+  }
+  // Los dibujos van uno tras otro, así el lienzo siempre termina con lo último que se eligió.
+  let drawing = Promise.resolve();
+  function draw() { const job2 = drawing.then(drawNow, drawNow); drawing = job2.catch(() => {}); return job2; }
+  const staleBlocks = () => Boolean(selectedOption?.stale && !selectedOption.compared);
+  function showCanvas(error) {
+    const c = $('cv-canvas'), note = $('cv-preview-note');
+    c.hidden = !(sourceList.length || selectedOption);
+    c.classList.toggle('cv-square', formatValue === '1080'); c.classList.toggle('cv-dim', Boolean(error));
+    const text = staleBlocks() ? 'Compárala antes de usarla en el anuncio.' : (error || '');
+    note.textContent = text; note.hidden = !text;
+    showPoints();
+  }
+  let previewTimer = 0;
+  function preview(delay = 250) { clearTimeout(previewTimer); previewTimer = setTimeout(runPreview, delay); }
+  async function runPreview() {
+    if ($('cv-editor').hidden || $('cv-panel-anuncio').hidden) return;
+    const current = ficha;
+    try { await draw(); if (current === ficha) showCanvas(''); } catch (error) { if (current === ficha) showCanvas(error.message); }
+  }
+  function benMatrix() {
+    const b = product?.brief || {}, box = $('cv-ben-matrix');
+    if (!b.resultado || !b.prueba) { box.replaceChildren(h('span', { text: 'Sin datos aún: toca «Editar».' })); return; }
+    box.replaceChildren(h('span', { text: 'Duda: ' }), b.duda || '—', h('br'), h('span', { text: 'Resultado: ' }), b.resultado, h('br'), h('span', { text: 'Prueba: ' }), b.prueba, b.condicion ? ` · ${b.condicion}` : '');
+  }
+  function syncAnuncio() {
+    for (const b of $('cv-layout').querySelectorAll('[role=radio]')) b.setAttribute('aria-checked', String(b.dataset.value === layoutValue));
+    for (const b of $('cv-format').querySelectorAll('[role=radio]')) b.setAttribute('aria-checked', String(b.dataset.value === formatValue));
+    document.querySelectorAll('[data-for]').forEach((el) => { el.hidden = el.dataset.for !== layoutValue; });
+    benMatrix(); sources(); markOptions(); showPoints();
+  }
+  $('cv-ben-edit').addEventListener('click', () => { if (!product?.id) { message('Guarda primero el borrador.'); return; } editMatrix(() => { syncAnuncio(); preview(0); }); });
+  function radioKeys(group, pick) {
+    group.addEventListener('keydown', (e) => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+      const items = [...group.querySelectorAll('[role=radio]')], i = items.indexOf(document.activeElement); if (i < 0) return;
+      e.preventDefault(); const next = items[(i + (['ArrowRight', 'ArrowDown'].includes(e.key) ? 1 : items.length - 1)) % items.length]; next.focus(); pick(next);
+    });
+  }
+  const pickLayout = (b) => { layoutValue = b.dataset.value; syncAnuncio(); preview(0); };
+  const pickFormat = (b) => { formatValue = b.dataset.value; syncAnuncio(); preview(0); };
+  $('cv-layout').addEventListener('click', (e) => { const b = e.target.closest('[role=radio]'); if (b) pickLayout(b); });
+  $('cv-format').addEventListener('click', (e) => { const b = e.target.closest('[role=radio]'); if (b) pickFormat(b); });
+  radioKeys($('cv-layout'), pickLayout); radioKeys($('cv-format'), pickFormat); radioKeys($('cv-review-pick'), (b) => b.click()); radioKeys(document.querySelector('.cv-options'), (b) => b.click());
+  $('cv-canvas').addEventListener('click', async (e) => {
+    const n = layoutValue === 'ben' ? benTexts().length : 0; if (!n || !lastLayout || !product?.brief?.prueba) return;
+    const c = e.currentTarget, r = c.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * c.height;
+    const { zone, geo } = lastLayout; if (y < zone.y || y > zone.y + zone.h) return;
+    const arr = points[currentKey()] || (points[currentKey()] = []);
+    if (activePoint >= n) activePoint = 0;
+    arr[activePoint] = { u: (x - geo.x) / geo.w, v: (y - geo.y) / geo.h };
+    activePoint = [...Array(n).keys()].find((i) => !arr[i]) ?? activePoint;
+    const current = ficha;
+    try { await draw(); if (current === ficha) showCanvas(''); } catch (error) { if (current === ficha) showCanvas(error.message); }
+  });
+
+  /* ---------- Opciones guardadas y fotos del móvil para el anuncio ---------- */
+  function resetScenes() { generationSession++; selectedOption = null; $('cv-variants').replaceChildren(); $('cv-ai-status').textContent = ''; $('cv-import-ai').value = ''; markOptions(); optionPanel(); }
+  function markOptions() {
+    for (const b of $('cv-sources').querySelectorAll('[role=radio]')) b.setAttribute('aria-checked', String(!selectedOption && b.getAttribute('aria-label') === (sourceList.find((s) => s.key === adSource) || {}).label));
+    for (const b of $('cv-variants').querySelectorAll('[role=radio]')) b.setAttribute('aria-checked', String(b.option === selectedOption));
+  }
+  function selectOption(option) { const prev = currentKey(); selectedOption = option; afterSourceChange(prev); }
+  // changed: null si la opción es actual; si se guardó antes de que cambiara el producto, qué cambió ([] si no se sabe).
+  function showVariant(img, finalURL, session, saved = false, changed = null, label = '') {
+    const number = $('cv-variants').children.length + 1;
+    const option = { img, url: finalURL, session, saved, stale: Boolean(saved && changed), changed, compared: false, number };
+    const pic = h('span', { class: 'cv-opt-pic' }, h('img', { src: finalURL, alt: '' }), saved ? h('span', { class: option.stale ? 'cv-flag cv-flag-gold' : 'cv-flag', text: option.stale ? 'Revisar' : 'Guardada' }) : null);
+    const name = label || (saved ? 'Guardada' : `Opción ${number}`);
+    const b = h('button', { type: 'button', class: 'cv-opt', role: 'radio', 'aria-checked': 'false', 'aria-label': name, onclick: () => selectOption(option) }, pic, h('span', { text: name }));
+    b.option = option; $('cv-variants').append(b);
+    return option;
+  }
+  function optionPanel() {
+    const panel = $('cv-option-panel'), option = selectedOption;
+    panel.hidden = !option; panel.replaceChildren(); if (!option) return;
+    if (option.stale) {
+      const what = { foto: 'la foto original', texto: 'el texto de la ficha' }, reasons = option.changed.map((key) => what[key]).filter(Boolean);
+      const box = h('input', { type: 'checkbox' }); box.checked = option.compared;
+      box.addEventListener('change', () => { option.compared = box.checked; preview(0); });
+      panel.append(h('p', { class: 'cv-warn', text: `${reasons.length ? `Desde entonces cambió ${reasons.join(' y ')}.` : 'La ficha cambió desde que guardaste esta opción.'} Compárala con los datos actuales antes de usarla.` }),
+        h('label', { class: 'cv-switch' }, box, h('span', { text: 'Ya la comparé con la ficha actual' })));
+    }
+    panel.append(h('div', { class: 'cv-actions' }, h('a', { class: 'cv-link', href: option.url, download: `casa-viva-opcion-${option.number}`, text: 'Descargar sin textos' })));
+  }
+  // Una foto del móvil solo para este anuncio (así vuelve un resultado hecho en ChatGPT).
+  $('cv-import-ai').addEventListener('change', () => {
+    const file = $('cv-import-ai').files[0];
+    if (!file || !['image/png', 'image/webp', 'image/jpeg'].includes(file.type) || file.size > 8 * 1024 ** 2) { $('cv-import-ai').value = ''; message('Elige JPG, PNG o WebP de hasta 8 MB.'); return; }
+    const session = generationSession, url = URL.createObjectURL(file);
+    loadImage(url).then((img) => { if (session !== generationSession) return; selectOption(showVariant(img, url, session, false, null, 'Del móvil')); message('Foto añadida al anuncio.'); }).catch(() => message('No se pudo abrir la imagen.'));
+    $('cv-import-ai').value = '';
+  });
+
+  /* ---------- Terminar: imagen 1080, pie PROOF y enlace A+número ---------- */
+  let imageURL = '';
+  $('cv-render').addEventListener('click', (e) => { const button = e.currentTarget; busy(button, async () => {
+    if (staleBlocks()) throw new Error('Compara la opción guardada con la ficha actual antes de usarla.');
+    $('cv-download').removeAttribute('href');
+    const current = ficha;
+    try { await draw(); } catch (error) { showCanvas(error.message); throw error; }
+    if (current !== ficha) return;
+    showCanvas('');
+    const n = layoutValue === 'ben' ? benTexts().length : 0, placed = (points[currentKey()] || []).slice(0, n).filter(Boolean).length;
+    if (placed < n) throw new Error(`Coloca los ${n} puntos en la foto hasta que diga «Listo».`);
+    // Para redes sale con la máxima calidad JPEG; las redes la comprimen otra vez.
+    const blob = await new Promise((resolve) => $('cv-canvas').toBlob(resolve, 'image/jpeg', 1)); if (!blob) throw new Error('No se pudo preparar la imagen.');
+    if (imageURL) URL.revokeObjectURL(imageURL); imageURL = URL.createObjectURL(blob); $('cv-download').href = imageURL;
+    showProof(); if (!copyEdited) $('cv-copy').value = proofRows().filter((r) => r.t).map((r) => r.t).join('\n');
+    openSheet('cv-pie-sheet', button);
+    message('Imagen lista para descargar.');
+  }); });
+  // PROOF: Gancho, Prueba, Oferta (con el precio), Duda y Llamada. Cada línea dice de dónde sale; sin dato, no se pone.
+  function proofRows() {
+    const b = product?.brief || {}, rows = factRows(), sale = product?.sale, offer = $('cv-offer').value.trim();
+    const price = sale ? `Precio de oferta: ${sale.price} (antes ${sale.regular})` : product?.price ? `Precio: ${product.price}` : '';
+    const review = layoutValue === 'review' ? pickedReview() : null;
+    return [
+      { k: 'G', n: 'Gancho', t: b.resultado || $('cv-name').value.trim(), s: b.resultado ? 'Matriz · resultado' : 'Ficha · título' },
+      { k: 'P', n: 'Prueba', t: review ? `«${review.text}» — ${shortName(review.name)}` : b.prueba ? `${b.prueba}${b.condicion ? `. ${b.condicion}` : ''}.` : rows.map((r) => r.fact).join(' · '),
+        s: review ? 'Reseña real con permiso' : b.prueba ? (b.fuente || 'Matriz · prueba') : 'Ficha · características' },
+      { k: 'O', n: 'Oferta', t: price ? `${price}${offer ? ` · Oferta: ${offer}` : ''}` : '', s: 'Tienda · precio' },
+      { k: 'D', n: 'Duda', t: b.duda && b.prueba ? `${b.duda} ${b.prueba}.` : '', s: 'Matriz · duda' },
+      { k: 'L', n: 'Llamada', t: 'Escríbenos por WhatsApp y te lo apartamos.', s: 'Enlace A + número del anuncio' },
+    ];
+  }
+  function showProof() {
+    $('cv-proof').replaceChildren(...proofRows().map((r) => h('div', { class: `cv-pl${r.t ? '' : ' cv-off'}` }, h('i', { 'aria-hidden': 'true', text: r.k }),
+      h('p', { text: r.t || 'Sin dato en la ficha: no se pone.' }), h('small', { text: `${r.n} · ${r.s}` }))));
+  }
+  function buildPrompt() {
+    const rows = facts(), title = $('cv-name').value.trim(), b = product?.brief || {};
+    $('cv-prompt').value = `Crea una imagen comercial para Casa Viva, formato ${formatValue === '1920' ? '9:16' : '1:1'}. Usa la foto real adjunta como referencia exacta. Conserva forma, color, etiquetas, marca, piezas y proporciones. No inventes vistas interiores ni accesorios incluidos. Estilo minimalista cálido, beige y verde oscuro, luz suave. Producto: ${title}. Datos confirmados: ${rows.join('; ') || plain($('cv-description').value)}. Duda → resultado → prueba: ${b.duda || 'pendiente'} → ${b.resultado || 'pendiente'} → ${b.prueba || 'pendiente'}${b.condicion ? ` (${b.condicion})` : ''}. Uso confirmado: ${briefExtra.use || 'no indicado'}. No dibujes precios, logos, descuentos, estrellas, testimonios ni garantías. Si falta información, pregunta. Devuelve además tres títulos breves y una descripción usando solo estos datos. Revisa PROOF: promesa sustentada, evidencia real, oferta vigente, objeción y siguiente paso. No presentes el resultado como fotografía documental si modificas el producto.`;
+    $('cv-prompt').value += `\nContexto aportado por la tienda (no investigación independiente): comprador/situación: ${briefExtra.buyer || 'pendiente'}; objeción: ${briefExtra.objection || 'pendiente'}; evidencia: ${briefExtra.evidence || 'pendiente'}. Investiga antes de generar si estas fuentes no bastan para sustentar el mensaje. No deduzcas ventas por la duración o alcance de un anuncio competidor.`;
+  }
+  async function copyText(text) {
+    try { await Promise.race([navigator.clipboard.writeText(text), new Promise((resolve, reject) => setTimeout(() => reject(new Error('timeout')), 1500))]); return true; } catch { return false; }
+  }
+  // Anuncios medidos por el código de su enlace de WhatsApp: quién escribió y sus pedidos en los 14 días siguientes.
+  const adDate = (date) => new Date(`${date}T12:00:00`).toLocaleDateString('es', { day: 'numeric', month: 'short' });
+  function showAds(ads) {
+    $('cv-ads-count').textContent = ads.length ? ` ${ads.length}` : '';
+    const total = $('cv-ads-total'); total.replaceChildren();
+    if (!ads.length) { total.append(h('p', { class: 'cv-empty', text: 'Aún no hay anuncios.' }), btn('Crear anuncio', 'cv-primary cv-small', () => setTab('anuncio'))); $('cv-ads').replaceChildren(); return; }
+    const sum = (key) => ads.reduce((n, a) => n + Number(a[key] || 0), 0);
+    for (const [n, label] of [[sum('mensajes'), 'escribieron'], [sum('pedidos'), 'pedidos']]) total.append(h('div', {}, h('b', { text: String(n) }), h('small', { text: label })));
+    const best = [...ads].sort((a, b) => b.pedidos - a.pedidos || b.mensajes - a.mensajes)[0];
+    $('cv-ads').replaceChildren(...ads.map((a) => {
+      const isBest = a === best && a.mensajes > 0;
+      const num = (value, label) => h('span', {}, h('b', { text: String(value) }), ` ${label} `);
+      const again = btn('Repetir', 'cv-small', () => { if (['ben', 'offer', 'review'].includes(a.layout)) layoutValue = a.layout; if (['1920', '1080'].includes(a.format)) formatValue = a.format; setTab('anuncio'); message('Mismo tipo y formato. Cambia la foto o la frase.'); });
+      return h('li', { class: isBest ? 'cv-best' : null },
+        h('div', { class: 'cv-ad-head' }, h('span', { class: 'cv-code', text: a.code }), ' ', h('b', { text: `${LAYOUTS[a.layout] || 'Anuncio'} · ${a.format === '1080' ? '1:1' : '9:16'}` }),
+          isBest ? ' ' : null, isBest ? h('span', { class: 'cv-best-tag', text: 'Mejor' }) : null, ' ', h('small', { text: adDate(a.created) })),
+        h('div', { class: 'cv-ad-nums' }, num(a.mensajes, a.mensajes === 1 ? 'escribió' : 'escribieron'), num(a.pedidos, a.pedidos === 1 ? 'pedido' : 'pedidos'), a.total ? num(a.total, 'vendido') : null, again));
+    }));
+  }
+  $('cv-ad-link').addEventListener('click', (e) => busy(e.currentTarget, async () => {
+    if (!product?.id) throw new Error('Guarda primero el borrador.');
+    const current = ficha, result = await api('anuncio', { id: product.id, layout: layoutValue, format: formatValue });
+    if (current !== ficha) return;
+    product.anuncios = result.anuncios; showAds(result.anuncios);
+    const line = `Escríbenos por WhatsApp: ${result.link}`;
+    $('cv-copy').value = $('cv-copy').value.split('\n').filter((l) => !l.startsWith('Escríbenos por WhatsApp')).concat(line).join('\n').trim();
+    const copied = await copyText($('cv-copy').value);
+    if ($('cv-download').getAttribute('href')) $('cv-download').click();
+    message(`Anuncio ${result.code} creado. ${copied ? 'Imagen descargada y pie copiado.' : 'Imagen descargada; copia el pie a mano.'} El enlace va solo en el pie.`);
+  }));
+  function downloadTexts(withPrompt) {
+    if (!copyEdited && !$('cv-copy').value.trim()) $('cv-copy').value = proofRows().filter((r) => r.t).map((r) => r.t).join('\n');
+    if (withPrompt) buildPrompt();
+    // Los párrafos y saltos de la descripción quedan como líneas nuevas.
+    const description = plain($('cv-description').value.replace(/<\/(p|li|h[1-6])>|<br\s*\/?>/gi, '$&\n')).replace(/\n{3,}/g, '\n\n').trim();
+    const sections = [['TÍTULO', $('cv-name').value.trim()], ['DESCRIPCIÓN', description], ['TEXTO PARA REDES', $('cv-copy').value.trim()]];
+    if (withPrompt) sections.push(['INSTRUCCIÓN PARA IA', $('cv-prompt').value.trim()]);
+    const text = sections.filter(([, body]) => body).map(([head, body]) => `${head}\n${body}`).join('\n\n') + '\n';
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' })); const a = h('a', { href: url, download: 'casa-viva-textos.txt' }); a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  $('cv-copy-save').addEventListener('click', () => { downloadTexts(false); closeSheet(); });
+  $('cv-copy-save-prompt').addEventListener('click', () => downloadTexts(true));
+  $('cv-prompt-open').addEventListener('click', () => { buildPrompt(); openSheet('cv-prompt-sheet', $('cv-menu')); });
+  $('cv-prompt-copy').addEventListener('click', async () => {
+    if (await copyText($('cv-prompt').value)) message('Instrucción copiada. Adjunta la foto real y trae el resultado con «Del móvil».');
+    else { $('cv-prompt').select(); message('Mantén pulsado el texto para copiarlo.'); }
+  });
+  /* ---------- Bandeja «Dudas del catálogo»: una tarjeta por pantalla y 3 botones abajo para el pulgar ---------- */
+  let dTab = 'pendiente', dIdx = 0, dudas = [], dCuenta = { pendiente: 0, marcha: 0, hecha: 0 }, answering = false;
+  const DEST = { web: 'HERO en la web', ficha: 'Ficha publicada', 'ficha · crm_knowledge': 'Ficha y crm_knowledge', crm_knowledge: 'Ficha y crm_knowledge', preferencias: 'PREFERENCIAS_EDITABLES.md',
+    descartada: 'Descartada', supervisor: 'Supervisor del VPS', anuncios: 'Lista para anuncios', opciones: 'Opciones del producto' };
+  async function dudasCount() {
+    const data = await api('dudas?estado=pendiente');
+    $('cv-dudas-wrap').hidden = !data.activa; dCuenta = data.cuenta || dCuenta;
+    $('cv-dudas-count').textContent = dCuenta.pendiente ? String(dCuenta.pendiente) : '';
+    return data;
+  }
+  async function loadDudas() { const data = await api(`dudas?estado=${dTab}`); dudas = data.dudas || []; dCuenta = data.cuenta || dCuenta; renderDudas(); }
+  async function openDudas() { showScreen('dudas'); dIdx = 0; await loadDudas(); }
+  $('cv-dudas-open').addEventListener('click', () => busy(null, openDudas));
+  $('cv-dudas-back').addEventListener('click', () => { if (location.hash === '#dudas') history.replaceState(null, '', location.pathname + location.search); showList(); });
+  document.querySelectorAll('#cv-dudas-tabs [data-d]').forEach((b) => b.addEventListener('click', () => { dTab = b.dataset.d; dIdx = 0; busy(null, loadDudas); }));
+  const dThumb = (d) => h('span', { class: 'cv-thumb cv-s cv-white' }, d.producto?.foto ? h('img', { src: d.producto.foto, alt: '' }) : null);
+  const dHead = (d, sub) => h('header', {}, dThumb(d), h('span', {}, d.producto?.nombre || 'Regla de estilo', h('small', { text: sub || '' })));
+  function dMedia(d, res) {
+    const after = (res ? d.resultado : d.despues) || {}, before = d.antes || {};
+    if (d.tipo === 'foto' || d.tipo === 'pedir_foto') {
+      return [h('div', { class: 'cv-pair' }, before.foto ? h('figure', {}, h('img', { src: before.foto, alt: 'Foto real' }), h('figcaption', { text: 'Real' })) : null,
+        after.foto ? h('figure', { class: 'cv-w' }, h('img', { src: after.foto, alt: 'Foto nueva' }), h('figcaption', { text: res ? 'Rehecha' : 'Nueva' })) : null),
+        d.escalon?.usado ? h('p', { class: 'cv-used' }, usedText(d.escalon.usado, d.escalon.coste_usd), d.escalon.fallo_previo ? h('small', { text: `(${d.escalon.fallo_previo})` }) : null) : null];
+    }
+    if (d.tipo === 'texto') return h('div', { class: 'cv-txt' }, h('s', { text: plain(before.texto) }), h('b', { text: plain(after.texto) }));
+    if (d.tipo === 'dato') return h('div', { class: 'cv-txt' }, h('span', { text: d.dato }), h('b', { text: after.valor || before.valor || '—' }));
+    return h('div', { class: 'cv-txt' }, h('span', { text: 'Regla para la lista de Preferencias' }), h('b', { text: (res && plain(after.texto)) || d.regla }));
+  }
+  const when = (iso) => { const t = new Date(iso); return Number.isNaN(t.getTime()) ? '' : t.toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
+  function renderDudas() {
+    $('cv-dudas-tabs').querySelectorAll('[data-d]').forEach((b) => { b.setAttribute('aria-selected', String(b.dataset.d === dTab)); b.querySelector('i').textContent = String(dCuenta[b.dataset.d] ?? ''); });
+    const body = $('cv-dudas-body'), bar = $('cv-dudas-bar'), back = btn('Volver al catálogo', '', () => $('cv-dudas-back').click());
+    const empty = (text) => h('div', { class: 'cv-emptybox' }, h('p', { text }));
+    if (dTab === 'pendiente') {
+      if (!dudas.length) { body.replaceChildren(empty('No quedan dudas.')); bar.replaceChildren(back); return; }
+      dIdx = Math.min(dIdx, dudas.length - 1);
+      const d = dudas[dIdx], [no, later, yes] = d.tipo === 'foto' ? ['Rechazar', 'Revisión', 'Aprobar'] : d.tipo === 'pedir_foto' ? ['No se puede', 'Luego', 'Subir foto'] : ['No', 'Luego', 'Sí'];
+      body.replaceChildren(h('p', { class: 'cv-dprog' }, `${dIdx + 1} de ${dudas.length}`, d.estado === 'revision' ? h('span', { class: 'cv-st revision', text: 'Revisión' }) : null),
+        h('article', { class: 'cv-dq' }, dHead(d, d.origen_texto), h('h2', { text: d.pregunta }), dMedia(d, false),
+          h('div', { class: 'cv-dalt' }, d.tipo !== 'pedir_foto' ? btn('Corregir', 'cv-small', () => fix(d, false)) : null,
+            d.opciones?.explicar !== false ? btn(h('span', { style: 'display:flex;align-items:center;gap:6px' }, icon('mic'), 'Explicar'), 'cv-small', () => explain(d)) : null)));
+      bar.replaceChildren(h('div', { class: 'cv-states' },
+        btn(no, 'cv-bad', () => d.tipo === 'foto' ? reject(d) : ['dato', 'texto'].includes(d.tipo) ? fix(d, true) : answer(d, 'rechazada')),
+        btn(later, '', () => answer(d, 'revision')),
+        btn(yes, 'cv-primary', () => d.tipo === 'pedir_foto' ? fix(d, false) : answer(d, 'aprobada'))));
+      return;
+    }
+    if (dTab === 'marcha') {
+      body.replaceChildren(...(dudas.length ? dudas.map((d) => h('article', { class: 'cv-dq' }, dHead(d, d.tarea?.texto || d.origen_texto),
+        d.estado === 'resultado' ? [h('h2', { text: d.pregunta }), dMedia(d, true), h('div', { class: 'cv-states cv-in' },
+          btn('Rechazada', 'cv-bad', () => d.tipo === 'foto' ? reject(d) : answer(d, 'rechazada')), btn('Revisión', '', () => answer(d, 'revision')), btn('Aprobada', 'cv-primary', () => answer(d, 'aprobada')))]
+          : h('p', { class: 'cv-run' }, h('span', { class: 'cv-spin' }), 'Lo hace el supervisor del VPS'))) : [empty('Nada en marcha.')]));
+      bar.replaceChildren(back); return;
+    }
+    // Hechas: quién, cuándo, antes → después y dónde se guardó.
+    body.replaceChildren(...(dudas.length ? dudas.map((d) => {
+      const last = [...(d.historial || [])].reverse().find((x) => ['aprobada', 'rechazada', 'corregir', 'explicar', 'revision'].includes(x.accion)) || {};
+      const st = { aprobada: 'aprobada', corregir: 'aprobada', rechazada: 'rechazada', revision: 'revision', explicar: 'revision' }[last.accion];
+      const ab = d.tipo === 'foto' || d.tipo === 'pedir_foto' ? 'Foto real → foto nueva' : (last.antes || last.despues) ? `${last.antes || '—'} → ${last.despues || '—'}` : '';
+      return h('article', { class: 'cv-hist' }, st ? h('span', { class: `cv-st ${st}`, text: last.accion === 'corregir' ? 'Corregida' : ESTADO[st] }) : null, h('b', { text: d.pregunta }),
+        h('small', { text: [d.producto?.nombre, last.quien, when(last.cuando)].filter(Boolean).join(' · ') }), ab ? h('p', { class: 'cv-ab', text: ab }) : null,
+        h('small', { class: 'cv-dest', text: DEST[last.destino] || last.destino || '' }));
+    }) : [empty('Aún no hay respuestas.')]));
+    bar.replaceChildren(back);
+  }
+  async function answer(d, resp, extra = {}) {
+    if (answering) return;
+    answering = true; $('cv-dudas-bar').querySelectorAll('button').forEach((b) => { b.disabled = true; });
+    try {
+      const r = await api(`dudas/${encodeURIComponent(d.id)}/respuesta`, form({ respuesta: resp, version: d.version, ...extra }));
+      dCuenta = r.cuenta || dCuenta; closeSheet(); message(r.aviso || 'Hecho.');
+      if (resp === 'revision' && dTab === 'pendiente') dIdx++;
+      await loadDudas();
+    } catch (error) {
+      // 409: otra persona ya la cambió. Se recarga la tarjeta tal como está ahora.
+      closeSheet(); message(error.message);
+      if (error.status === 409) await loadDudas().catch(() => {}); else renderDudas();
+    } finally { answering = false; dudasCount().catch(() => {}); }
+  }
+  function reject(d) {
+    const picked = new Set();
+    sheet('¿Qué falló?', chips(MOTOR.motivos || [], picked), h('p', { class: 'cv-note2', text: 'Se rehace con el siguiente escalón y se apunta en Preferencias.' }),
+      h('div', { class: 'cv-acts' }, btn('Rehacer', 'cv-primary', () => answer(d, 'rechazada', { motivos: [...picked] }))));
+  }
+  function fix(d, fromNo) {
+    if (d.tipo === 'foto' || d.tipo === 'pedir_foto') {
+      let file = null;
+      const go = btn('Guardar foto', 'cv-primary', () => { message('Subiendo la foto. El HERO puede tardar hasta un minuto.'); answer(d, 'corregir', { foto: file }); }, { disabled: true });
+      const input = h('input', { type: 'file', class: 'cv-file', id: 'cv-duda-foto', accept: 'image/jpeg,image/png,image/webp', capture: 'environment' });
+      input.addEventListener('change', () => { file = input.files[0] || null; go.disabled = !file; if (file) message('Foto lista.'); });
+      sheet(d.tipo === 'pedir_foto' ? 'Haz otra foto del producto' : 'Corregir con otra foto', d.tipo === 'pedir_foto' ? guide() : null, input,
+        h('label', { class: 'cv-btn cv-wide', for: 'cv-duda-foto' }, icon('cam'), 'Hacer o elegir foto'), h('div', { class: 'cv-acts' }, go));
+      return;
+    }
+    const current = d.tipo === 'texto' ? plain(d.despues?.texto) : d.tipo === 'dato' ? (fromNo ? '' : d.despues?.valor || d.antes?.valor || '') : d.regla;
+    const ta = h('textarea', { rows: d.tipo === 'texto' ? '5' : '3', maxlength: d.tipo === 'texto' ? '2000' : '300', 'aria-label': 'Corrección' }); ta.value = current || '';
+    const value = () => d.tipo === 'texto' && d.campo !== 'name' ? toHtml(ta.value) : ta.value.trim();
+    const kids = [ta, h('div', { class: 'cv-acts' }, btn('Guardar', 'cv-primary', () => { if (!ta.value.trim()) { message('Escribe la corrección.'); return; } answer(d, fromNo ? 'rechazada' : 'corregir', { valor: value() }); }),
+      fromNo ? btn('Descartar', '', () => answer(d, 'rechazada', { valor: '' })) : null)];
+    sheet(fromNo ? (d.tipo === 'dato' ? '¿Cuál es el dato bueno?' : '¿Cuál es el texto bueno?') : 'Corregir', kids);
+    ta.focus();
+  }
+  // Explicar: nota de voz (hasta 60 s) si el móvil la permite; si no, por escrito.
+  function explain(d) {
+    let rec = null, chunks = [], blob = null, secs = 0, timer = 0, stream = null;
+    const can = typeof MediaRecorder !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia);
+    const label = h('b', { text: can ? 'Toca para grabar' : 'Escríbelo aquí' });
+    const ta = h('textarea', { rows: '3', placeholder: can ? 'O escríbelo' : 'Tu explicación', maxlength: '1000', 'aria-label': 'Explicación escrita' });
+    const stop = () => { clearInterval(timer); if (rec && rec.state === 'recording') rec.stop(); };
+    const send = btn('Enviar', 'cv-primary', () => {
+      stop(); const extra = { texto: ta.value.trim() };
+      if (blob) { const type = (blob.type || 'audio/webm').split(';')[0]; extra.audio = new File([blob], `nota.${type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm'}`, { type }); extra.duracion = String(Math.min(secs, 60)); }
+      answer(d, 'explicar', extra);
+    }, { disabled: true });
+    const check = () => { send.disabled = !(blob || ta.value.trim()); };
+    ta.addEventListener('input', check);
+    const mic = can ? h('button', { type: 'button', class: 'cv-micb', 'aria-label': 'Grabar nota de voz' }, icon('mic', 'cv-ic')) : null;
+    if (mic) mic.addEventListener('click', async () => {
+      if (rec && rec.state === 'recording') { stop(); return; }
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { message('No se pudo usar el micrófono. Escríbelo.'); return; }
+      chunks = []; blob = null; secs = 0; rec = new MediaRecorder(stream);
+      rec.ondataavailable = (ev) => { if (ev.data.size) chunks.push(ev.data); };
+      rec.onstop = () => { stream.getTracks().forEach((t) => t.stop()); blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' }); mic.classList.remove('cv-on'); label.textContent = `Nota de voz · 0:${String(secs).padStart(2, '0')}`; check(); };
+      rec.start(); mic.classList.add('cv-on'); label.textContent = 'Grabando · 0:00';
+      timer = setInterval(() => { secs++; label.textContent = `Grabando · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`; if (secs >= 60) stop(); }, 1000);
+    });
+    sheet('Explícalo', can ? h('div', { class: 'cv-voice' }, mic, h('div', {}, label, h('p', { class: 'cv-note2', text: 'Hasta 60 s.' }))) : null, ta, h('div', { class: 'cv-acts' }, send));
+  }
+
+  /* ---------- Arranque ---------- */
+  list().catch((error) => message(error.message));
+  if (cvContent.dudas && location.hash === '#dudas') openDudas().catch((error) => message(error.message));
 })();
