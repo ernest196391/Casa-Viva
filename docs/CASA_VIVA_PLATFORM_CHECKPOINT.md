@@ -450,3 +450,27 @@ PR #220 resolvió el directorio root 0700 causado por umask 077; prueba directa 
 ### Control OS — sintaxis del diagnóstico Codex 0.169
 
 Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del comando interno. La prueba conservaba `codex sandbox linux -- ...`; en rust-v0.169.0 `SandboxCommand` aplana `HostSandboxArgs` y pasa `linux` como nombre de ejecutable, provocando `Failed to execvp linux`. Se corrigen las tres pruebas a `codex sandbox -- ...` según codex-rs/cli/src/main.rs oficial. Sin cambios de permisos ni nuevas llamadas al modelo. La certificación exige de nuevo arranque nativo, escritura permitida y lectura/escritura/red prohibidas antes de reintentar la tarea de desarrollo.
+
+## PREPARE — Control OS: resultados Supabase transaccionales (2026-11-14)
+
+- Alcance único: recepción de resultados y solicitud de revisión humana, sin promoción. Base local inspeccionada `085b27a35880bdab1585da3d0d9b6cf3fb765ec9`. Producción y CI remoto no consultados; sin red, SQL real, credenciales, commits, push, despliegues ni servicios activados.
+- Consumidor separado `scripts/ops/opencode-supabase-result-consumer.py`: reutiliza contrato del consumidor simulado sin modificarlo; cliente Supabase inyectado, una única RPC por resultado. CLI sin activación. Verifica bigint/UUID canónicos, identidad del nombre de archivo, límites, tiempos y lectura sin seguir symlinks; conserva archivo ante error RPC o respuesta perdida.
+- Migración propuesta en `scripts/ops/sql/opencode-result-receipts.sql`, NO aplicada: recibos por run con paquete completo (diff/base_sha/changed_paths), RLS, RPC SECURITY INVOKER y grants internos solo service_role. No presupone columnas diff/result en ops_dev_runs. Conciliación y bloqueo run/tarea, estados, modo IA, auto_merge=false, SHA y allowlist persistidos; rechaza otras runs activas de la tarea. Duplicado exacto sin efectos adicionales; conflicto rechazado.
+- Una transacción crea recibo, aprobación real pendiente en ops_approvals, actualiza estados a waiting_approval y audita evento. Fallos del ejecutor cierran failed sin aprobación aceptada. No existe decisión humana automática ni ejecución de comandos del modelo, integración, push o deploy. SimStore conserva su demostración independiente.
+- Pruebas locales: 295 casos OK (adaptador 46, demo 18, ejecutor 47, propuestas 44, consumidor simulado 28, sandbox 76, consumidor Supabase mock 6, worker 30). py_compile y git diff --check OK. No se ejecutaron suites npm: cambio exclusivamente Python/SQL/documentación sin modificación de aplicación.
+- Fixture `scripts/ops/sql/opencode-result-receipts.fixture.sql`: base vacía desechable, negativos de conciliación/estados/límites, duplicados y fallo tardío para probar rollback total, termina ROLLBACK. NO ejecutada por prohibición de SQL real. Los mocks comprueban cliente/reintentos, no certifican atomicidad PostgreSQL.
+- Bloqueo para activación: revisar DDL real de ops_tasks/ops_approvals/ops_events (tipos, defaults, enums, rol owner/status pending, logs y permisos existentes), aplicar migración transaccional y ejecutar fixtures en entorno autorizado. No se certifica concurrencia ni permisos reales. Guía Supabase de skill inaccesible por permisos del entorno; sin conector utilizado.
+- Documento: `docs/CONTROL_OS_SUPABASE_RESULTS.md`. Siguiente acción: revisión del esquema y pruebas SQL autorizadas; promoción e instalación de servicios siguen fuera de alcance. Costo nuevo requerido: 0; infraestructura existente, sin escalado requerido por esta preparación.
+
+
+### Auditoría posterior de la propuesta Codex
+
+- PR #223, tarea real en cvdev completada y publicada sin force: bridge #193/#200, head inicial 2745006e9491314abb216ca2fa397c1641c7c392. Aislamiento #192: escritura workspace permitida y lecturas auth/escrituras auth-root/red denegadas; AppArmor global sigue 1.
+- Revisión del esquema real detectó y corrigió estado de run (waiting_approval) e impact JSONB; recibo conciliado por run_id/estado. Cuarentena con descriptores fijados, rechazo de enlaces y notas únicas sin sobrescritura.
+- CHECK crm_ops_bridge_action_chk conservada y ampliada exclusivamente con control_codex_consumer_publish (migración allow_fixed_control_codex_consumer_publish), verificada con convalidated=true.
+- Se añaden al CI la suite Python real y PostgreSQL 17 desechable con fixtures de negativos, duplicación y atomicidad. La migración de recibos no se ha aplicado y el servicio no se ha activado; pendiente validación CI y revisión de permisos.
+
+- PostgreSQL desechable del primer head auditado 4274ad2 pasó (job 132576605470). Se refuerzan después permisos de recibos y aislamiento por business_id/executor; nuevo head requiere repetir CI.
+- Gate identificado antes de activar: ops_decide_approval genérico devuelve a triaged; falta decisión de resultado IA que no reprograme el trabajo aprobado. No aplicar esta migración ni activar consumidor hasta certificar ese paso. PR permanece draft y producción sin cambios de ese consumidor.
+
+- Gate de decisión resuelto en propuesta: aprobar un recibo IA deja tarea verifying/executor human y run blocked para PR/CI/promoción, nunca triaged. Rechazo sin aplicar diff, replay idempotente, aprobaciones ordinarias preservadas. Fixture ampliada y rollback no destructivo incluidos; locks tarea→run coherentes. Pendiente nuevo CI antes de cualquier migración.
