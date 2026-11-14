@@ -51,21 +51,51 @@ class SupabaseResultStore:
 
 
 def consume_results(store, home: Path, now=None):
-    """Conserva el archivo ante error RPC, incluso si se perdió la respuesta al COMMIT.
+    """Pin mailbox directories and never follow producer-controlled links.
 
-    El siguiente intento concilia el recibo persistido y devuelve duplicate.
-    No expira runs: esa política sigue siendo responsabilidad del worker existente.
+    RPC errors keep results available for retry. Archive names are unique and
+    reason files use exclusive, no-follow creation; no privileged path writes.
     """
     import fcntl
-    dirs = contract.ensure_mailbox_dirs(home)
+    from contextlib import ExitStack
+    from uuid import uuid4
     summary = {"consumed": [], "dead": [], "retry": []}
-    with open(home / "supabase-consumer.lock", "a") as guard:
-        fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        for path in sorted(dirs["results"].iterdir()):
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    with ExitStack() as stack:
+        def opened(name, flags, mode=0o600, parent=None):
+            fd = os.open(name, flags, mode, dir_fd=parent)
+            stack.callback(os.close, fd)
+            return fd
+        home_fd = opened(home, directory_flags)
+        if os.fstat(home_fd).st_mode & 0o022:
+            raise contract.ConsumerError("buzón alterable por grupo/otros")
+        results_fd = opened("results", directory_flags, parent=home_fd)
+        dead_fd = opened("dead", directory_flags, parent=home_fd)
+        if any(os.fstat(fd).st_mode & 0o022 for fd in (results_fd, dead_fd)):
+            raise contract.ConsumerError("directorio de buzón inseguro")
+        lock_fd = opened("supabase-consumer.lock",
+                         os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
+                         parent=home_fd)
+        lock_info = os.fstat(lock_fd)
+        if not stat.S_ISREG(lock_info.st_mode) or lock_info.st_nlink != 1 or lock_info.st_mode & 0o077:
+            raise contract.ConsumerError("lock de consumidor inseguro")
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        def archive(name, reason):
+            destination = "receipt-" + uuid4().hex
+            os.rename(name, destination, src_dir_fd=results_fd, dst_dir_fd=dead_fd)
+            note_fd = os.open(destination + ".motivo.txt",
+                             os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                             0o600, dir_fd=dead_fd)
+            with os.fdopen(note_fd, "w") as note:
+                note.write((name + ": " + reason)[:2000])
+
+        for name in sorted(os.listdir(results_fd)):
             try:
-                if not contract.RESULT_NAME_RE.fullmatch(path.name):
+                match = contract.RESULT_NAME_RE.fullmatch(name)
+                if not match:
                     raise contract.ConsumerError("nombre inválido")
-                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=results_fd)
                 with os.fdopen(fd, "rb") as stream:
                     info = os.fstat(stream.fileno())
                     if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o022:
@@ -76,19 +106,23 @@ def consume_results(store, home: Path, now=None):
                 result = json.loads(raw)
                 if not isinstance(result, dict):
                     raise contract.ConsumerError("resultado no es un objeto")
-                if result.get("run_id") != contract.RESULT_NAME_RE.fullmatch(path.name).group(1):
+                if result.get("run_id") != match.group(1):
                     raise contract.ConsumerError("nombre no concilia con run_id")
                 contract.validate_result(result, time.time() if now is None else now)
             except (ValueError, OSError) as exc:
-                contract.move_to_dead(dirs, path, str(exc))
-                summary["dead"].append(path.name)
+                archive(name, str(exc))
+                summary["dead"].append(name)
                 continue
             try:
                 receipt = store.accept(result, now)
-            except Exception:
-                summary["retry"].append(path.name)
+            except contract.ConsumerError as exc:
+                archive(name, str(exc))
+                summary["dead"].append(name)
                 continue
-            contract.move_to_dead(dirs, path, "persistido: " + receipt["status"])
+            except Exception:
+                summary["retry"].append(name)
+                continue
+            archive(name, "persistido: " + receipt["status"])
             summary["consumed"].append(receipt)
     return summary
 
