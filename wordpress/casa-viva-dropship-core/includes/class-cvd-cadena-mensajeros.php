@@ -12,10 +12,11 @@ defined( 'ABSPATH' ) || exit;
  *     mientras el mensajero no recogió el paquete (Ventas o el bot).
  *  2. SIN FRENO: si el que la tiene la suelta («suelto», «ya no puedo», el botón), pasa AL INSTANTE al 2.º (vale por
  *     privado); sin 2.º, al grupo. Lo hace el Core dentro de CVD_Bot_Bridge::release_by_messenger, no el bot.
- *  3. Reloj del Core (cron cada minuto y cada vez que el bot pide /bot/cadena-avisos): a los 10 min sin aceptar,
- *     recordatorio al mensajero y aviso a la gestora; si hay 2.º, se le abre a la vez (gana el primero que acepte).
- *     A los 20 min sin aceptar nadie, sale al grupo. Tiempos: opciones cvd_cadena_aviso_min / cvd_cadena_grupo_min
- *     (el bot las copia de crm_settings con POST /bot/cadena/ajustes). Interruptor: cvd_cadena (si | no).
+ *  3. Reloj del Core (cron cada minuto y cada vez que el bot pide /bot/cadena-avisos): 3.14.169 (PR #197): a los 20 min
+ *     HÁBILES (09:00–17:00 de Cuba; fuera de horario el contador se para) sin aceptar, UN recordatorio al mensajero y UN
+ *     aviso a la gestora. Nunca se suelta ni sale al grupo por tiempo: la asignación sigue hasta que la gestora o la
+ *     tienda decidan (Ventas → «pasar al grupo» o cambiar mensajero). cvd_cadena_grupo_min ya no se usa para soltar.
+ *     El mensajero confirma con «OK», «aceptado» o «acepto»: VivaBot → POST /bot/dispatch/{id}/confirm.
  *  4. «Suelto» de quien no tiene la carrera no afecta (release_by_messenger ya lo rechaza). Cada suelta queda apuntada
  *     (quién, cuándo, cuánto la tuvo) para el resumen de las 21:00: GET /bot/cadena/resumen.
  *  5. Orden de administración: POST /bot/cadena/{id}/asignar = soltar + asignar + aceptar de una vez; el nuevo recibe
@@ -461,6 +462,34 @@ final class CVD_Cadena_Mensajeros {
 		}
 	}
 
+	/** 3.14.169: ¿es horario de seguimiento de vales (09:00–17:00, hora de Cuba)? */
+	public static function in_confirmation_hours( int $now ): bool {
+		$hour = (int) ( new DateTime( '@' . $now ) )->setTimezone( new DateTimeZone( 'America/Havana' ) )->format( 'G' );
+		return $hour >= 9 && $hour < 17;
+	}
+
+	/**
+	 * 3.14.169: segundos entre $from y $to que caen dentro de 09:00–17:00 de Cuba (America/Havana).
+	 * Fuera de ese horario el contador se detiene; cada día se recorta con las horas locales de ese día,
+	 * así que el cambio de horario de verano no suma ni resta minutos.
+	 */
+	public static function business_seconds( int $from, int $to ): int {
+		if ( $to <= $from ) { return 0; }
+		$tz = new DateTimeZone( 'America/Havana' );
+		$end_local = ( new DateTime( '@' . $to ) )->setTimezone( $tz );
+		$cursor = ( new DateTime( '@' . $from ) )->setTimezone( $tz );
+		$age = 0;
+		for ( $guard = 0; $cursor < $end_local && $guard < 400; $guard++ ) {
+			$start = ( clone $cursor )->setTime( 9, 0, 0 );
+			$end = ( clone $cursor )->setTime( 17, 0, 0 );
+			$a = max( $cursor->getTimestamp(), $start->getTimestamp() );
+			$b = min( $to, $end->getTimestamp() );
+			if ( $b > $a ) { $age += $b - $a; }
+			$cursor->setTime( 0, 0, 0 )->modify( '+1 day' );
+		}
+		return $age;
+	}
+
 	public static function tick_order( WC_Order $order, ?int $now = null ): string {
 		$now = $now ?? time();
 		if ( 'assigned' !== CVD_Delivery::status( $order ) ) {
@@ -473,23 +502,8 @@ final class CVD_Cadena_Mensajeros {
 		if ( ! $holder || ! $assigned_at ) { return 'skip'; }
 		// Solo cuentan minutos dentro del horario de seguimiento de Cuba (09:00–17:00).
 		// Un vale asignado de noche no vence al abrir: recibe 20 minutos desde las 09:00.
-		$tz = new DateTimeZone( 'America/Havana' );
-		$cuba = ( new DateTime( '@' . $now ) )->setTimezone( $tz );
-		$hour = (int) $cuba->format( 'G' );
-		if ( $hour < 9 || $hour >= 17 ) { return 'outside_confirmation_hours'; }
-		$assigned_local = ( new DateTime( '@' . $assigned_at ) )->setTimezone( $tz );
-		$cursor = clone $assigned_local;
-		$age = 0;
-		// Calcular minutos hábiles sin depender del cambio de horario de verano.
-		while ( $cursor < $cuba ) {
-			$start = ( clone $cursor )->setTime( 9, 0, 0 );
-			$end = ( clone $cursor )->setTime( 17, 0, 0 );
-			$from = max( $cursor->getTimestamp(), $start->getTimestamp() );
-			$to = min( $cuba->getTimestamp(), $end->getTimestamp() );
-			if ( $to > $from ) { $age += $to - $from; }
-			$cursor->setTime( 0, 0, 0 )->modify( '+1 day' );
-			if ( $cursor > $cuba ) { break; }
-		}
+		if ( ! self::in_confirmation_hours( $now ) ) { return 'outside_confirmation_hours'; }
+		$age = self::business_seconds( $assigned_at, $now );
 		$num = $order->get_order_number();
 		if ( $age >= self::remind_min() * 60 && absint( $order->get_meta( self::REMINDED_META, true ) ) < $assigned_at ) {
 			$order->update_meta_data( self::REMINDED_META, $now );
