@@ -20,11 +20,11 @@ class ConsumerTests(unittest.TestCase):
             diff='+a', logs=[], finished_at=m.contract.ts(self.now-10),
             expires_at=m.contract.ts(self.now+60), ttl_seconds=70)
         self.client = Mock()
-        self.client.rpc.return_value.execute.return_value.data = {'status':'awaiting_approval','run_id':1}
+        self.client.rpc.return_value.execute.return_value.data = {'status':'waiting_approval','run_id':1}
         self.store = m.SupabaseResultStore(self.client)
 
     def test_one_transaction_no_table_writes(self):
-        self.assertEqual(self.store.accept(self.result,self.now)['status'],'awaiting_approval')
+        self.assertEqual(self.store.accept(self.result,self.now)['status'],'waiting_approval')
         self.client.rpc.assert_called_once_with('ops_accept_opencode_result',{'p_result':self.result})
         self.client.table.assert_not_called()
 
