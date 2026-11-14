@@ -106,7 +106,7 @@ begin
                       then 'done' else 'failed' end,
           result=coalesce(t.result,'{}'::jsonb)||jsonb_build_object(
               'bridge_id',new.id,'action',new.action,'closure_mode','bridge_readonly_v1',
-              'summary',case when new.action='errors_open' and new.status='done' and new.result->'returncode'='0'::jsonb then 'Errores registrados pendientes (solo lectura; no es una auditoría nueva de todos los chats):'||E'\n'||left(coalesce(new.result->>'output',''),12000) when new.action='health' then left(coalesce(new.result->>'output',''),4000) else 'Consulta completada: '||new.action end,
+              'summary',case when new.action='errors_open' and new.status='done' and new.result->'returncode'='0'::jsonb then 'Errores registrados pendientes (solo lectura; no es una auditoría nueva de todos los chats):'||E'\n'||left(coalesce(new.result->>'output',''),12000) when new.action='errors_open' then 'No se pudo consultar el registro de errores; no se aplicaron cambios.' when new.action='health' then left(coalesce(new.result->>'output',''),4000) else 'Consulta completada: '||new.action end,
               'verified',new.status='done' and new.result->'returncode'='0'::jsonb),
           error=case when new.status='done' and new.result->'returncode'='0'::jsonb
                      then null else left(coalesce(new.error,'Resultado del puente no verificado'),1200) end,
