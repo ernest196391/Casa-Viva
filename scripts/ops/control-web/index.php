@@ -114,7 +114,7 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
   </nav>
   <section id="work" class="view">
     <div class="section-head"><h2 id="list-title">Empezamos desde ahora</h2><span id="task-count" class="count">0</span></div>
-    <p class="section-copy">Tus solicitudes nuevas aparecerán aquí, con la más reciente primero. Lo anterior sigue disponible en el historial.</p>
+    <p id="list-help" class="section-copy">Tus solicitudes nuevas aparecerán aquí, con la más reciente primero. Lo anterior sigue disponible en el historial.</p>
     <label class="sr-only" for="task-search">Buscar solicitud por número o texto</label>
     <input id="task-search" class="task-search" type="search" placeholder="Buscar por número o texto">
     <div class="filters">
