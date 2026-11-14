@@ -39,6 +39,7 @@ jobs:
           python3 scripts/ops/tests/dev-worker.test.py
           python3 scripts/ops/tests/opencode-executor.test.py
           python3 scripts/ops/tests/opencode-result-consumer.test.py
+          python3 scripts/ops/tests/opencode-supabase-result-consumer.test.py
           python3 scripts/ops/tests/opencode-adapter.test.py
           python3 scripts/ops/tests/opencode-sandbox.test.py
           python3 scripts/ops/tests/opencode-proposal.test.py
@@ -337,3 +338,33 @@ jobs:
       - name: Eliminar entorno desechable
         if: always()
         run: scripts/integration.sh down
+
+  control-os-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: control_os_fixture
+          POSTGRES_DB: control_os_fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: control_os_fixture
+      PGDATABASE: control_os_fixture
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar roles de la base desechable
+        run: psql -X -v ON_ERROR_STOP=1 -c "create role anon; create role authenticated; create role service_role bypassrls;"
+      - name: Verificar transacción de resultados sin producción
+        run: psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/opencode-result-receipts.fixture.sql
