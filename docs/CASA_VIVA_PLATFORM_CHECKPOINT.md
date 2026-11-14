@@ -374,3 +374,13 @@ Al retomar el proyecto:
 - Rechaza symlinks y checkouts existentes no coincidentes; reintento del mismo SHA comprueba limpieza y propiedad sin mutar. Fallo conserva archivos para diagnóstico, no borra ni resetea.
 - Próximo: CI, instalar bridge, ampliar allowlist conservando CHECK, preparar checkout y verificar propietario/SHA/limpieza. Luego conectar una tarea real determinista; el bootstrap por sí solo no demuestra E2E.
 - Coste adicional 0; IA no invocada; producción sin cambios. Autorizado por Ernesto continuar bloques 1–2.
+
+## CURRENT — Cierre real sin IA de operaciones de consulta (2026-11-14)
+
+- Aplicadas migraciones close_explicit_readonly_bridge_tasks y bind_readonly_bridge_on_enqueue. Se amplían los RPC/proyectores existentes, sin cola paralela, SECURITY DEFINER ni grants nuevos.
+- Contrato explícito payload.ops: completion_mode=bridge_readonly_v1, action y bridge_id exacto. Solo task_type ops_operation, executor ops, risk safe, approval_required=false, status running; allowlist de cinco consultas sin escritura. Resultado done requiere returncode numérico 0. Fallo/bloqueo cierra como failed. Tareas dev, sensibles, canceladas o esperando aprobación no se cierran por esta vía.
+- Encolado vincula bridge_id en la misma transacción; conserva evidencia/eventos existentes y agrega un evento de cierre. Repetir actualización no duplica el cierre.
+- Prueba SQL en Postgres real: diez escenarios y duplicados pasaron; fixtures revertidas con ROLLBACK. Tarea real #115/bridge #150 cerrada automáticamente. #116/bridge #151 certifica vínculo automático sin actualización manual.
+- Fixture #114 quedó cancelada y etiquetada invalid_fixture_missing_bridge_id; la defensa rechazó correctamente cerrarla. No es una tarea comercial.
+- Scripts SQL de avance, rollback exacto y pruebas en scripts/ops/sql y scripts/ops/tests. No cambia servicios ni despliega web/VivaBot. Coste adicional 0; llamadas a modelos 0.
+- Límite: certifica cola→bridge→resultado→cierre de consulta. No certifica WhatsApp/panel ni generación/aprobación/promoción de cambios de código. Siguiente: ruta canónica para solicitudes desde canales y consumidor Supabase de desarrollo con aislamiento verificado.
