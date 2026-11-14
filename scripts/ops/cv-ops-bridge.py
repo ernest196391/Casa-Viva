@@ -1424,6 +1424,181 @@ def action_catalog_sync_status(args):
     return run(cmd, timeout=30)
 
 
+
+CVDEV_REPO = Path("/home/cvdev/workspace/casa-viva")
+CVDEV_BRANCH = "control-os/opencode-fase-a"
+CVDEV_BACKUP = "control-os/backup-pre-rebase-25142ed"
+
+
+def _cvdev(cmd, timeout=120):
+    """Run a fixed Git command as the unprivileged cvdev account."""
+    return run(["runuser", "-u", "cvdev", "--", *cmd], cwd=str(CVDEV_REPO), timeout=timeout)
+
+
+def _cvdev_rebase_meta():
+    git_dir = CVDEV_REPO / ".git"
+    rm = git_dir / "rebase-merge"
+    ra = git_dir / "rebase-apply"
+    if rm.is_dir():
+        mode = "merge"
+        base = rm
+    elif ra.is_dir():
+        mode = "apply"
+        base = ra
+    else:
+        return {"active": False}
+    def read(name):
+        try:
+            return (base / name).read_text(errors="replace").strip()
+        except Exception:
+            return ""
+    return {
+        "active": True,
+        "mode": mode,
+        "head_name": read("head-name"),
+        "onto": read("onto"),
+        "msgnum": read("msgnum"),
+        "end": read("end"),
+        "done": read("done")[-6000:],
+    }
+
+
+def action_cvdev_control_status(args):
+    """Read-only status of the dedicated Control OS development checkout."""
+    if not (CVDEV_REPO / ".git").exists():
+        return {"returncode": 2, "output": "Falta checkout cvdev"}
+    branch = _cvdev(["git", "branch", "--show-current"], timeout=20)
+    head = _cvdev(["git", "rev-parse", "HEAD"], timeout=20)
+    status = _cvdev(["git", "status", "--porcelain=v1"], timeout=20)
+    conflicts = _cvdev(["git", "diff", "--name-only", "--diff-filter=U"], timeout=20)
+    backup = _cvdev(["git", "rev-parse", "--verify", CVDEV_BACKUP], timeout=20)
+    return {
+        "returncode": 0,
+        "output": json.dumps({
+            "repo": str(CVDEV_REPO),
+            "branch": branch["output"].strip(),
+            "head": head["output"].strip(),
+            "status": status["output"][:12000],
+            "conflicts": [x for x in conflicts["output"].splitlines() if x.strip()],
+            "backup": backup["output"].strip() if backup["returncode"] == 0 else None,
+            "rebase": _cvdev_rebase_meta(),
+        }, ensure_ascii=False),
+    }
+
+
+def _cvdev_last_done_sha(meta):
+    done = str(meta.get("done") or "").splitlines()
+    for line in reversed(done):
+        m = re.match(r"^(?:pick|edit|reword|squash|fixup)\s+([0-9a-f]{7,40})\b", line.strip())
+        if m:
+            return m.group(1)
+    return None
+
+
+def action_cvdev_rebase_resume(args):
+    """Resume only the pre-authorized Control OS A-G rebase, never arbitrary Git history."""
+    if not (CVDEV_REPO / ".git").exists():
+        return {"returncode": 2, "output": "Falta checkout cvdev"}
+    meta = _cvdev_rebase_meta()
+    if not meta.get("active") or meta.get("mode") != "merge":
+        return {"returncode": 3, "output": "No hay rebase-merge activo"}
+    if meta.get("head_name") != f"refs/heads/{CVDEV_BRANCH}":
+        return {"returncode": 4, "output": "Rebase fuera de la rama Control OS autorizada"}
+    backup = _cvdev(["git", "rev-parse", "--verify", CVDEV_BACKUP], timeout=20)
+    if backup["returncode"] != 0 or backup["output"].strip() != "25142ed89c0fa947a1a7d246d2df775c5865ca31":
+        # Accept the known short SHA only if Git cannot expose full historical object identically.
+        if not backup["output"].strip().startswith("25142ed"):
+            return {"returncode": 5, "output": "Respaldo 25142ed ausente o inesperado"}
+    logs = []
+    for _ in range(12):
+        conflicts = _cvdev(["git", "diff", "--name-only", "--diff-filter=U"], timeout=20)
+        if conflicts["returncode"] != 0:
+            return conflicts
+        if conflicts["output"].strip():
+            return {"returncode": 6, "output": "CONFLICTOS; no se modificó nada:\n" + conflicts["output"][:6000]}
+        meta = _cvdev_rebase_meta()
+        if not meta.get("active"):
+            break
+        staged = _cvdev(["git", "diff", "--cached", "--quiet"], timeout=20)
+        # git diff --cached --quiet => 1 means staged changes exist.
+        if staged["returncode"] == 1:
+            old_sha = _cvdev_last_done_sha(meta)
+            if not old_sha:
+                return {"returncode": 7, "output": "Hay cambios staged pero no pude identificar el commit original"}
+            chk = _cvdev(["git", "cat-file", "-e", f"{old_sha}^{{commit}}"], timeout=20)
+            if chk["returncode"] != 0:
+                return {"returncode": 8, "output": f"No existe commit original {old_sha}"}
+            made = _cvdev(["git", "-c", "user.name=Casa Viva Control OS", "-c", "user.email=control-os@local.invalid",
+                           "commit", "-C", old_sha], timeout=60)
+            logs.append("$ git commit -C " + old_sha + "\n" + made["output"])
+            if made["returncode"] != 0:
+                return {"returncode": 9, "output": "\n".join(logs)[-12000:]}
+        cont = _cvdev(["env", "GIT_EDITOR=true", "git", "rebase", "--continue"], timeout=120)
+        logs.append("$ git rebase --continue\n" + cont["output"])
+        if cont["returncode"] != 0:
+            # A shallow interactive rebase can stop after applying the next patch with it staged.
+            after = _cvdev_rebase_meta()
+            staged2 = _cvdev(["git", "diff", "--cached", "--quiet"], timeout=20)
+            conflicts2 = _cvdev(["git", "diff", "--name-only", "--diff-filter=U"], timeout=20)
+            if after.get("active") and staged2["returncode"] == 1 and not conflicts2["output"].strip():
+                continue
+            return {"returncode": 10, "output": "\n".join(logs)[-12000:]}
+    if _cvdev_rebase_meta().get("active"):
+        return {"returncode": 11, "output": "Rebase no terminó dentro del límite de pasos\n" + "\n".join(logs)[-10000:]}
+    branch = _cvdev(["git", "branch", "--show-current"], timeout=20)
+    clean = _cvdev(["git", "status", "--porcelain=v1"], timeout=20)
+    head = _cvdev(["git", "rev-parse", "HEAD"], timeout=20)
+    if branch["output"].strip() != CVDEV_BRANCH or clean["output"].strip():
+        return {"returncode": 12, "output": json.dumps({"branch": branch["output"], "status": clean["output"], "head": head["output"]}, ensure_ascii=False)}
+    return {"returncode": 0, "output": json.dumps({
+        "rebased": True, "branch": CVDEV_BRANCH, "head": head["output"].strip(),
+        "log": "\n".join(logs)[-10000:]
+    }, ensure_ascii=False)}
+
+
+def action_cvdev_control_tests(args):
+    """Run the fixed Control OS test suite; no task-supplied command is accepted."""
+    if _cvdev_rebase_meta().get("active"):
+        return {"returncode": 3, "output": "Rebase activo; pruebas bloqueadas"}
+    branch = _cvdev(["git", "branch", "--show-current"], timeout=20)
+    if branch["output"].strip() != CVDEV_BRANCH:
+        return {"returncode": 4, "output": "Rama cvdev inesperada"}
+    cmds = [
+        ["python3", "-m", "unittest", "discover", "-s", "scripts/ops/tests", "-p", "*.test.py"],
+        ["python3", "-m", "py_compile",
+         "scripts/ops/dev-worker.py",
+         "scripts/ops/opencode-adapter.py",
+         "scripts/ops/opencode-executor.py",
+         "scripts/ops/opencode-proposal.py",
+         "scripts/ops/opencode-proposal-bridge.py",
+         "scripts/ops/opencode-result-consumer.py",
+         "scripts/ops/opencode-demo-e2e.py",
+         "scripts/ops/sandbox/opencode-sandbox-spec.py",
+         "scripts/ops/sandbox/verify-sandbox.py"],
+    ]
+    logs = []
+    for cmd in cmds:
+        p = _cvdev(cmd, timeout=300)
+        logs.append("$ " + " ".join(cmd) + "\n" + p["output"])
+        if p["returncode"] != 0:
+            return {"returncode": p["returncode"], "output": "\n".join(logs)[-30000:]}
+    return {"returncode": 0, "output": "\n".join(logs)[-30000:]}
+
+
+def action_cvdev_control_push(args):
+    """Push only the clean rebased Control OS branch, never force."""
+    if _cvdev_rebase_meta().get("active"):
+        return {"returncode": 3, "output": "Rebase activo; push bloqueado"}
+    branch = _cvdev(["git", "branch", "--show-current"], timeout=20)
+    status = _cvdev(["git", "status", "--porcelain=v1"], timeout=20)
+    if branch["output"].strip() != CVDEV_BRANCH or status["output"].strip():
+        return {"returncode": 4, "output": "Rama inesperada o checkout no limpio"}
+    head = _cvdev(["git", "rev-parse", "HEAD"], timeout=20)
+    pushed = _cvdev(["git", "push", "-u", "origin", CVDEV_BRANCH], timeout=120)
+    return {"returncode": pushed["returncode"], "output": json.dumps({
+        "head": head["output"].strip(), "push": pushed["output"][-10000:]
+    }, ensure_ascii=False)}
+
 ACTIONS = {
     "health": action_health,
     "errors_open": action_errors_open,
@@ -1459,6 +1634,10 @@ ACTIONS = {
     "casa_viva_deploy_status": action_casa_viva_deploy_status,
     "ai_audit": action_ai_audit,
     "catalog_sync_status": action_catalog_sync_status,
+    "cvdev_control_status": action_cvdev_control_status,
+    "cvdev_rebase_resume": action_cvdev_rebase_resume,
+    "cvdev_control_tests": action_cvdev_control_tests,
+    "cvdev_control_push": action_cvdev_control_push,
 }
 
 
