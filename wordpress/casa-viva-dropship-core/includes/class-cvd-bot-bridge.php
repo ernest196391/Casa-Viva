@@ -732,8 +732,10 @@ final class CVD_Bot_Bridge {
 		return self::no_cache( array( 'result' => 'handed', 'from' => $holder->display_name, 'messenger' => $to->display_name, 'voucher' => self::voucher( wc_get_order( $order->get_id() ) ) ) );
 	}
 
-	/** Hora a la que el mensajero dice que puede ir: queda en el pedido y en el seguimiento. */
-	/** Confirmación de recepción del vale: OK / aceptado por el mensajero titular, sin modificar ETA. */
+	/**
+	 * Confirmación de recepción del vale: OK / aceptado / acepto del mensajero titular, sin modificar ETA (3.14.169).
+	 * → accepted | already_accepted | conflict; 403 si el teléfono no es el del mensajero asignado; 409 si ya no espera.
+	 */
 	public static function confirm_received( WP_REST_Request $request ) {
 		$order = self::order( $request );
 		if ( is_wp_error( $order ) ) { return $order; }
@@ -749,9 +751,17 @@ final class CVD_Bot_Bridge {
 		}
 		if ( 'assigned' !== $status ) { return new WP_Error( 'cvd_not_pending_confirmation', 'La carrera ya no espera aceptación.', array( 'status' => 409 ) ); }
 		$ok = CVD_Delivery::accept_assigned( $order, $messenger->ID, 'cvd_bot_bridge_confirm', 'por WhatsApp con OK/aceptado' );
+		if ( ! $ok ) {
+			// Dos «OK» casi a la vez: el segundo pierde el bloqueo, pero la carrera ya es suya y está aceptada.
+			$fresh = wc_get_order( $order->get_id() );
+			if ( $fresh && 'accepted' === CVD_Delivery::status( $fresh ) && $messenger->ID === absint( $fresh->get_meta( '_cvd_messenger_user_id', true ) ) ) {
+				return self::no_cache( array( 'result' => 'already_accepted', 'order' => $order->get_id() ) );
+			}
+		}
 		return self::no_cache( array( 'result' => $ok ? 'accepted' : 'conflict', 'order' => $order->get_id() ) );
 	}
 
+	/** Hora a la que el mensajero dice que puede ir: queda en el pedido y en el seguimiento. */
 	public static function eta( WP_REST_Request $request ) {
 		$order = self::order( $request );
 		if ( is_wp_error( $order ) ) { return $order; }
