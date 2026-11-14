@@ -1713,6 +1713,95 @@ def action_snapshot_vivabot_live_branch(args):
         "note": "Snapshot de revisión creado; producción y main no cambiaron."
     }, ensure_ascii=False)}
 
+
+def action_snapshot_vivabot_dirty_branch(args):
+    """Snapshot tracked dirty VivaBot changes without modifying HEAD, index or working tree."""
+    repo = Path("/root/vivabot")
+    if not (repo / ".git").exists():
+        return {"returncode": 2, "output": "/root/vivabot no es un checkout Git"}
+    before_head = run(["git", "rev-parse", "HEAD"], cwd=str(repo), timeout=20)
+    before_status = run(["git", "status", "--porcelain=v1"], cwd=str(repo), timeout=20)
+    untracked = run(["git", "ls-files", "--others", "--exclude-standard"], cwd=str(repo), timeout=20)
+    if before_head["returncode"] or before_status["returncode"] or untracked["returncode"]:
+        return {"returncode": 3, "output": "No pude auditar el repo vivo"}
+    if untracked["output"].strip():
+        return {"returncode": 4, "output": "Snapshot dirty bloqueado: existen archivos no rastreados"}
+    changed = run(["git", "diff", "--name-only"], cwd=str(repo), timeout=20)
+    if changed["returncode"] != 0:
+        return changed
+    changed_files = [x.strip() for x in changed["output"].splitlines() if x.strip()]
+    if not 1 <= len(changed_files) <= 12:
+        return {"returncode": 5, "output": f"Cantidad inesperada de archivos dirty: {len(changed_files)}"}
+    check = run(["git", "diff", "--check"], cwd=str(repo), timeout=30)
+    if check["returncode"] != 0:
+        return {"returncode": 6, "output": "git diff --check falló:\n" + check["output"][:6000]}
+    num = run(["git", "diff", "--numstat"], cwd=str(repo), timeout=20)
+    lines = 0
+    for row in num["output"].splitlines():
+        parts = row.split("\t")
+        if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+            lines += int(parts[0]) + int(parts[1])
+    if lines > 1200:
+        return {"returncode": 7, "output": f"Diff dirty demasiado grande: {lines} líneas"}
+
+    forbidden_names = {".env", "id_rsa", "id_ed25519", "authorized_keys", "credentials.json", "auth.json", "service-account.json"}
+    forbidden_suffixes = (".pem", ".key", ".p12", ".pfx")
+    bad_names = [rel for rel in changed_files
+                 if Path(rel).name.lower() in forbidden_names or Path(rel).name.lower().endswith(forbidden_suffixes)]
+    if bad_names:
+        return {"returncode": 8, "output": "Snapshot bloqueado por nombres sensibles:\n" + "\n".join(bad_names)}
+
+    pem_rx = re.compile(rb"BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY")
+    assign_rx = re.compile(
+        rb"(?:SUPABASE_SERVICE_ROLE_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|AWS_SECRET_ACCESS_KEY)"
+        rb"\s*=\s*[\"']?([^\s\"']{20,})"
+    )
+    placeholders = (b"example", b"placeholder", b"dummy", b"changeme", b"your_", b"xxxx", b"test_")
+    suspicious = []
+    for rel in changed_files:
+        path = repo / rel
+        if not path.is_file():
+            continue
+        data = path.read_bytes()
+        if len(data) > 3 * 1024 * 1024:
+            return {"returncode": 9, "output": f"Archivo dirty demasiado grande: {rel}"}
+        if pem_rx.search(data):
+            suspicious.append(rel + " [private-key]")
+            continue
+        for m in assign_rx.finditer(data):
+            value = m.group(1).lower()
+            if not any(p in value for p in placeholders) and len(set(value)) > 4:
+                suspicious.append(rel + " [secret-assignment]")
+                break
+    if suspicious:
+        return {"returncode": 10, "output": "Snapshot bloqueado por posibles secretos:\n" + "\n".join(suspicious)}
+
+    snap = run(["git", "stash", "create", "Control OS snapshot dirty VivaBot"], cwd=str(repo), timeout=45)
+    if snap["returncode"] != 0 or not re.fullmatch(r"[0-9a-f]{40}", snap["output"].strip()):
+        return {"returncode": 11, "output": "git stash create no produjo commit válido:\n" + snap["output"][:3000]}
+    snapshot_sha = snap["output"].strip()
+
+    # Prove that stash create did not alter the live checkout before publishing.
+    after_head = run(["git", "rev-parse", "HEAD"], cwd=str(repo), timeout=20)
+    after_status = run(["git", "status", "--porcelain=v1"], cwd=str(repo), timeout=20)
+    if after_head["output"].strip() != before_head["output"].strip() or after_status["output"] != before_status["output"]:
+        return {"returncode": 12, "output": "Snapshot abortado: el checkout vivo cambió durante la captura"}
+
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+    review_branch = f"review/live-vivabot-dirty-{snapshot_sha[:8]}-{stamp}"
+    pushed = run(["git", "push", "origin", f"{snapshot_sha}:refs/heads/{review_branch}"], cwd=str(repo), timeout=120)
+    if pushed["returncode"] != 0:
+        return pushed
+    return {"returncode": 0, "output": json.dumps({
+        "snapshot": True,
+        "branch": review_branch,
+        "snapshot_sha": snapshot_sha,
+        "live_head": before_head["output"].strip(),
+        "changed_files": changed_files,
+        "changed_lines": lines,
+        "checkout_unchanged": True,
+    }, ensure_ascii=False)}
+
 ACTIONS = {
     "health": action_health,
     "errors_open": action_errors_open,
@@ -1753,6 +1842,7 @@ ACTIONS = {
     "cvdev_control_tests": action_cvdev_control_tests,
     "cvdev_control_push": action_cvdev_control_push,
     "snapshot_vivabot_live_branch": action_snapshot_vivabot_live_branch,
+    "snapshot_vivabot_dirty_branch": action_snapshot_vivabot_dirty_branch,
 }
 
 
