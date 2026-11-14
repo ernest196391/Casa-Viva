@@ -421,3 +421,10 @@ Al retomar el proyecto:
 - La sesión Codex autenticó y respondió, pero el trabajo #174/estado #176 no produjo cambios: fallo previo a comandos bwrap loopback Failed RTM_NEWADDR Operation not permitted. Exit 0 del modelo NO significa tarea realizada. No se repite un modelo hasta arreglar el entorno.
 - Nuevo modo diagnostic de la acción existente: prueba codex sandbox linux /usr/bin/true sin modelos, lee perfiles AppArmor públicos y denegaciones del kernel. No instala perfiles, cambia sysctl ni usa danger-full-access. Se comparará con documentación de la versión 0.169.0 antes de proponer una corrección específica.
 - Producción sin cambios; coste extra 0. Usuario confirmó sesión iniciada y panel accesible; consultas conocidas siguen operativas.
+
+## CURRENT — Remediación específica de Bubblewrap (2026-11-14)
+
+- Diagnóstico #178: sysctl restrict=1, ningún perfil bwrap cargado, sandbox nativo true falla RTM_NEWADDR. Kernel muestra transición unprivileged_userns y denegaciones setpcap/net_admin/uid_map. No hay evidencia de fallo de login.
+- Perfil propuesto confinado para copia root-owned 0755 de /usr/bin/bwrap en /usr/local/lib/control-os/bwrap, solo en PATH de Codex cvdev. No toca /usr/bin/bwrap ni sysctl; sin setuid, filecaps ni flags unconfined. Capacidades AppArmor limitadas al bootstrap de los namespaces de bwrap: no confieren capacidades de host al usuario cvdev. Montajes siguen sujetos a kernel/userns y sandbox nativo; hijos heredan perfil, red IP y credenciales denegadas.
+- Acción control_codex_sandbox: install/verify/rollback de rutas fijas; comprueba sintaxis antes de cargar, rechaza perfiles ajenos, pruebas nativas sin modelos para bootstrap, escritura en workspace, lectura de canario privado, escritura fuera y red IP. No relanzar modelo si falla verificación.
+- Pendiente: CI, instalación supervisada, verificar aislamiento real y registrar evidencia/denegaciones si procede. Política global preservada. Coste de modelos durante diagnóstico: 0.
