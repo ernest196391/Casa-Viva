@@ -1802,6 +1802,55 @@ def action_snapshot_vivabot_dirty_branch(args):
         "checkout_unchanged": True,
     }, ensure_ascii=False)}
 
+
+def action_opencode_planner_probe(args):
+    """Calibrate installed OpenCode V2 without tools or repository access."""
+    binary = Path("/usr/bin/opencode")
+    if not binary.exists():
+        return {"returncode": 2, "output": "/usr/bin/opencode no existe"}
+    version = run([str(binary), "--version"], timeout=20)
+    help_run = run([str(binary), "run", "--help"], timeout=30)
+    if version["returncode"] != 0 or help_run["returncode"] != 0:
+        return {"returncode": 3, "output": json.dumps({
+            "version": version, "run_help": help_run,
+        }, ensure_ascii=False)}
+    probe_dir = Path("/tmp/cv-opencode-probe")
+    probe_dir.mkdir(mode=0o700, exist_ok=True)
+    try:
+        import pwd
+        cv = pwd.getpwnam("cvdev")
+        os.chown(probe_dir, cv.pw_uid, cv.pw_gid)
+    except Exception as exc:
+        return {"returncode": 4, "output": f"No pude preparar HOME de probe: {exc}"}
+    config = json.dumps({
+        "permissions": [
+            {"action": "*", "resource": "*", "effect": "deny"},
+        ]
+    }, ensure_ascii=False)
+    env = [
+        "env", "-i",
+        "PATH=/usr/bin:/bin",
+        f"HOME={probe_dir}",
+        "LANG=C.UTF-8",
+        "OPENCODE_CONFIG_CONTENT=" + config,
+    ]
+    cmd = [
+        "runuser", "-u", "cvdev", "--", *env,
+        str(binary), "run", "--standalone",
+        "--model", "opencode/glm-5.3-flash-free",
+        "--format", "json",
+        "Responde exactamente con: CV_PROBE_OK. No uses herramientas.",
+    ]
+    probe = run(cmd, cwd=str(probe_dir), timeout=120)
+    return {
+        "returncode": probe["returncode"],
+        "output": json.dumps({
+            "version": version["output"][:1000],
+            "run_help": help_run["output"][:12000],
+            "probe": probe["output"][:20000],
+        }, ensure_ascii=False),
+    }
+
 ACTIONS = {
     "health": action_health,
     "errors_open": action_errors_open,
@@ -1843,6 +1892,7 @@ ACTIONS = {
     "cvdev_control_push": action_cvdev_control_push,
     "snapshot_vivabot_live_branch": action_snapshot_vivabot_live_branch,
     "snapshot_vivabot_dirty_branch": action_snapshot_vivabot_dirty_branch,
+    "opencode_planner_probe": action_opencode_planner_probe,
 }
 
 
