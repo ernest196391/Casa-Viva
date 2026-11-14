@@ -1937,8 +1937,88 @@ def action_prepare_control_dev_checkout(args):
         "production_changed": False, "worker_switched": False})}
 
 
+def _control_codex_paths():
+    import pwd
+    cv = pwd.getpwnam("cvdev")
+    base = Path("/home/cvdev/control-os-tools")
+    auth = Path("/home/cvdev/control-os-auth")
+    for p in (base, auth):
+        if p.is_symlink():
+            raise ValueError("Ruta Codex insegura")
+        p.mkdir(mode=0o700, exist_ok=True)
+        os.chown(p, cv.pw_uid, cv.pw_gid)
+        os.chmod(p, 0o700)
+    return base, auth
+
+
+def _control_codex_cmd():
+    base, auth = _control_codex_paths()
+    return ["runuser", "-u", "cvdev", "--", "env", "-i",
+            "PATH=/usr/bin:/bin", "HOME=/home/cvdev",
+            "CODEX_HOME=" + str(auth),
+            str(base / "node_modules/.bin/codex")]
+
+
+def action_control_codex_setup(args):
+    """Install one pinned official CLI as cvdev. No login, API key or model request."""
+    base, auth = _control_codex_paths()
+    result = run(["runuser","-u","cvdev","--","env","-i",
+                  "PATH=/usr/bin:/bin","HOME=/home/cvdev",
+                  "npm","install","--prefix",str(base),"--save-exact",
+                  "--no-audit","--no-fund","@openai/codex@0.169.0"], timeout=180)
+    if result["returncode"]:
+        return result
+    version = run(_control_codex_cmd() + ["--version"], timeout=20)
+    return {"returncode":version["returncode"],"output":json.dumps({
+        "version":version["output"],"user":"cvdev","model_called":False,
+        "api_key_configured":False,"production_changed":False})}
+
+
+def action_control_codex_login(args):
+    """Device login only; never returns auth.json, tokens, or API credentials."""
+    mode = str((args or {}).get("mode", "status"))
+    if mode not in ("start","status"):
+        return {"returncode":2,"output":"Modo inválido"}
+    base, auth = _control_codex_paths()
+    command = _control_codex_cmd()
+    if not (base / "node_modules/.bin/codex").exists():
+        return {"returncode":2,"output":"Ejecutar control_codex_setup primero"}
+    status = run(command + ["login","status"], timeout=20)
+    if status["returncode"] == 0:
+        return {"returncode":0,"output":json.dumps({"logged_in":True,
+                "subscription_login": "ChatGPT" in status["output"],
+                "model_called":False})}
+    log = auth / "device-login.log"
+    pid_path = auth / "device-login.pid"
+    live = False
+    try:
+        pid = int(pid_path.read_text())
+        os.kill(pid, 0)
+        live = True
+    except (OSError, ValueError):
+        pass
+    if mode == "start" and not live:
+        with log.open("w") as output:
+            os.chmod(log,0o600)
+            proc = subprocess.Popen(command + ["login","--device-auth"],
+                    cwd="/home/cvdev",stdout=output,stderr=subprocess.STDOUT,
+                    start_new_session=True)
+        pid_path.write_text(str(proc.pid))
+        os.chmod(pid_path,0o600)
+        live = True
+    text = log.read_text(errors="replace")[-6000:] if log.exists() else ""
+    text = re.sub(r"\x1b\[[0-9;]*m", "", text)
+    url = re.search(r"https://auth\.openai\.com/[^\s]+",text)
+    code = re.search(r"\b[A-Z0-9]{4,8}-[A-Z0-9]{4,8}\b",text)
+    return {"returncode":0,"output":json.dumps({"logged_in":False,"login_running":live,
+            "login_url":url.group(0) if url else None,
+            "user_code":code.group(0) if code else None,
+            "model_called":False,"note":"Completar inicio de sesión en el navegador; no enviar contraseñas."})}
+
 ACTIONS = {
     "prepare_control_dev_checkout": action_prepare_control_dev_checkout,
+    "control_codex_setup": action_control_codex_setup,
+    "control_codex_login": action_control_codex_login,
     "health": action_health,
     "errors_open": action_errors_open,
     "supervisor_status": action_supervisor_status,
