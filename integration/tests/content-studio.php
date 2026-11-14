@@ -225,7 +225,8 @@ studio_assert( in_array( 'crm_knowledge', array_column( $out['respuestas'], 'des
 studio_assert( $hp->get_name() === end( $out['respuestas'] )['producto_nombre'] && array_key_exists( 'pregunta', end( $out['respuestas'] ) ), 'v2: each answer carries the product name and the question for crm_knowledge' );
 // Cost keeps 4 decimals (the paid cut-out costs 0,0048 USD).
 $r = $bot( 'POST', 'dudas', array( 'dudas' => array( array( 'ref' => 'integ-coste', 'tipo' => 'regla', 'regla' => 'Coste fino', 'escalon' => array( 'usado' => 'ia', 'coste_usd' => 0.0048 ) ) ) ) );
-studio_assert( 200 === $r->get_status() && 0.0048 === (float) $r->get_data()['dudas'][0]['escalon']['coste_usd'], 'v2: the cost keeps 4 decimals' );
+$coste_id = $r->get_data()['dudas'][0]['id'] ?? '';
+studio_assert( 200 === $r->get_status() && 0.0048 === (float) ( get_option( 'cvd_dudas_catalogo' )['dudas'][ $coste_id ]['escalon']['coste_usd'] ?? 0 ), 'v2: the cost keeps 4 decimals' );
 // A transcribed voice note is deleted; only files of this inbox can be removed.
 $up = wp_upload_dir(); wp_mkdir_p( $up['basedir'] . '/cvd-dudas' ); $voz = str_repeat( 'a', 24 ) . '.webm';
 file_put_contents( $up['basedir'] . '/cvd-dudas/' . $voz, 'voz' );
