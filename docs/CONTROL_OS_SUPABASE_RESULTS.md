@@ -29,3 +29,7 @@ Suite Python nueva: mocks del cliente, rechazo antes del transporte, respuestas 
 Se inspeccionaron las columnas y CHECK reales por el conector: ops_dev_runs admite waiting_approval, no awaiting_approval; ops_approvals.impact es JSONB. La RPC y la fixture usan los contratos reales. El resultado se refleja en ops_tasks.result y se liberan claims; fallos terminan con finished_at. La recepción fija descriptores de directorios, rechaza enlaces y crea motivos de cuarentena únicos con O_EXCL/O_NOFOLLOW, sin reutilizar el helper de la simulación. El cliente concilia estado/run_id del recibo antes de archivarlo.
 
 CI ejecuta la suite Python nueva y la fixture PostgreSQL 17 en un servicio desechable. La fixture no conecta con producción. Esta propuesta continúa sin activar consumidor ni promoción.
+
+## Gate obligatorio antes de activar
+
+La función actual ops_decide_approval devuelve cualquier tarea aprobada a triaged. Para resultados IA esto podría encolar otra ejecución en lugar de promover el diff revisado. Por tanto esta propuesta no debe aplicarse ni activarse hasta añadir y probar una decisión específica que conserve el run aprobado para revisión/promoción técnica y no lo vuelva a programar. El consumidor permanece sin CLI y sin servicio. La generación aislada de código en VPS ya está probada; el ciclo autónomo completo aún no está certificado.
