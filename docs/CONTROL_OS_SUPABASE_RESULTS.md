@@ -8,7 +8,7 @@ Objetivo: el actor consumidor interno recibe `opencode-result-v1`, concilia run 
 
 Cada archivo válido invoca exclusivamente `ops_accept_opencode_result(p_result jsonb)`. La RPC bloquea run y tarea, comprueba identidad, public_id cuando viene informado, repo, modo IA, auto_merge deshabilitado, estados, base SHA y allowlist persistida. Rechaza tareas con otras runs activas. Los prefijos de directorio deben terminar en `/`; otros valores son rutas exactas. Verifica tamaños y ventana temporal también en SQL. El diff es evidencia opaca: nunca se ejecuta ni aplica; su concordancia semántica con los archivos requiere revisión posterior.
 
-Un resultado completo crea recibo + aprobación `pending` + evento, deja run `awaiting_approval`, tarea `waiting_approval` y `approval_required=true`. Un fallo crea recibo y evento y deja ambos en `failed`, sin cambios aplicados. Ninguna ruta crea aprobación aceptada ni integra, promueve, hace push o despliega. La decisión humana real posterior no se implementa aquí: la fila pendiente usa `ops_approvals`, que ya consulta el panel; `record_decision` de SimStore solo pertenece a demostraciones.
+Un resultado completo crea recibo + aprobación `pending` + evento, deja run `waiting_approval`, tarea `waiting_approval` y `approval_required=true`. Un fallo crea recibo y evento y deja ambos en `failed`, sin cambios aplicados. Ninguna ruta crea aprobación aceptada ni integra, promueve, hace push o despliega. La decisión humana real posterior no se implementa aquí: la fila pendiente usa `ops_approvals`, que ya consulta el panel; `record_decision` de SimStore solo pertenece a demostraciones.
 
 La PK del recibo deduplica por run; la comparación del JSONB completo acepta reintentos idénticos y rechaza conflictos. No se deduplica el mismo diff entre tareas independientes. Un error RPC conserva el archivo, incluso ante respuesta perdida después del commit. El duplicado exacto en SQL no vuelve a mutar estados ni crear aprobaciones. El validador local sigue rechazando resultados caducados antes de RPC; un recibo ya confirmado cuyo archivo caducó se concilia manualmente, sin promoverlo. No se añade otra política de expiración de runs.
 
@@ -23,3 +23,9 @@ No retirar una tabla con recibos reales para revertir: primero detener el consum
 ## Evidencia y límites
 
 Suite Python nueva: mocks del cliente, rechazo antes del transporte, respuestas inválidas y conservación del buzón ante errores de conciliación/estado/duplicado/fallo tardío. Estas pruebas verifican el cliente, no prueban transacciones PostgreSQL. Fixture SQL separada para base vacía desechable con roles Supabase existentes: crea esquema mínimo, incluye migración, prueba negativos, duplicados y fallo tardío de evento, y termina en ROLLBACK. No ejecutada por instrucción explícita de no ejecutar SQL real. No certifica concurrencia real, permisos efectivos ni constraints de producción; requiere validación posterior autorizada. No se hicieron llamadas de red ni lecturas de credenciales.
+
+## Revisión contra el esquema real (2026-11-14)
+
+Se inspeccionaron las columnas y CHECK reales por el conector: ops_dev_runs admite waiting_approval, no awaiting_approval; ops_approvals.impact es JSONB. La RPC y la fixture usan los contratos reales. El resultado se refleja en ops_tasks.result y se liberan claims; fallos terminan con finished_at. La recepción fija descriptores de directorios, rechaza enlaces y crea motivos de cuarentena únicos con O_EXCL/O_NOFOLLOW, sin reutilizar el helper de la simulación. El cliente concilia estado/run_id del recibo antes de archivarlo.
+
+CI ejecuta la suite Python nueva y la fixture PostgreSQL 17 en un servicio desechable. La fixture no conecta con producción. Esta propuesta continúa sin activar consumidor ni promoción.
