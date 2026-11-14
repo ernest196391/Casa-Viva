@@ -35,6 +35,8 @@ const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQ
 const tab = (page, name) => page.getByRole('tab', { name: new RegExp(`^${name}`) }).click();
 const pick = (page, name) => page.getByRole('radio', { name, exact: true }).click();
 const back = (page) => page.locator('#cv-back').click();
+// v2: con cambios sin guardar sale la hoja «Cambios sin guardar» (antes era un confirm() del navegador).
+const leaveUnsaved = async (page) => { await back(page); await page.getByRole('button', { name: 'Salir sin guardar', exact: true }).click(); };
 // Characteristics: one row per item, «dato» and «para qué sirve».
 async function fillFacts(page, rows) {
   for (const [i, [fact, benefit]] of rows.entries()) {
@@ -57,7 +59,7 @@ test('Guardado tardío de una ficha publicada no pisa la mercancía nueva', asyn
   await page.getByRole('textbox', { name: 'Título', exact: true }).fill('Ficha A guardada tarde');
   await page.getByRole('button', { name: 'Guardar cambios', exact: true }).click();
   const a = await held;
-  await back(page);
+  await leaveUnsaved(page);
   await page.locator('#cv-new').click();
   await page.getByRole('textbox', { name: 'Título', exact: true }).fill('Ficha B nueva');
   release();
@@ -79,7 +81,7 @@ test('Guardado tardío de mercancía nueva no pisa la ficha publicada abierta de
   await page.getByRole('textbox', { name: 'Título', exact: true }).fill('Ficha nueva guardada tarde');
   await page.getByRole('button', { name: 'Guardar borrador', exact: true }).click();
   const fresh = await held;
-  await back(page);
+  await leaveUnsaved(page);
   await page.getByRole('button', { name: 'Studio race fixture 2 · Publicado', exact: true }).click();
   await expect(page.getByRole('status')).toHaveText('Producto abierto.');
   await page.getByRole('textbox', { name: 'Título', exact: true }).fill('Ficha publicada editada');
@@ -100,17 +102,16 @@ test('Una opción guardada antes de cambiar la ficha se ve con aviso y no se usa
   await pick(page, 'Guardada');
   const panel = page.locator('#cv-option-panel');
   await expect(panel).toContainText('Desde entonces cambió la foto original y el texto de la ficha. Compárala con los datos actuales antes de usarla.');
-  const choose = panel.getByRole('button', { name: 'Poner como foto de la web', exact: true });
-  await expect(choose).toBeDisabled();
   // Not used in the ad either: the preview says so and «Terminar anuncio» refuses it.
   await expect(page.locator('#cv-preview-note')).toHaveText('Compárala antes de usarla en el anuncio.');
   await finish(page);
   await expect(page.getByRole('status')).toHaveText('Compara la opción guardada con la ficha actual antes de usarla.');
   await expect(panel.getByRole('link', { name: 'Descargar sin textos', exact: true })).toBeVisible();
   await panel.getByRole('checkbox', { name: 'Ya la comparé con la ficha actual' }).check();
-  await expect(choose).toBeEnabled();
-  // Now the option is the photo of the ad (the fixture has no characteristics yet).
-  await expect(page.locator('#cv-preview-note')).toHaveText('Añade al menos una característica confirmada.');
+  // Now the option is the photo of the ad (the fixture has no duda → resultado → prueba yet).
+  await expect(page.locator('#cv-preview-note')).toHaveText('Falta la duda → resultado → prueba: toca «Editar».');
+  // A la web solo sube el HERO aprobado: en Anuncio ya no hay «Poner como foto de la web» (condición B4).
+  await expect(page.getByRole('button', { name: 'Poner como foto de la web' })).toHaveCount(0);
 });
 
 test('El TXT trae título, descripción y texto para redes; la instrucción para IA solo si se pide', async ({ page }) => {
@@ -123,14 +124,12 @@ test('El TXT trae título, descripción y texto para redes; la instrucción para
   await page.locator('#cv-description').fill('<p>Base de metal confirmada.</p><p>Luz cálida.</p>');
   await fillFacts(page, [['Metal confirmado']]);
   await tab(page, 'Anuncio');
-  await pick(page, 'Uso diario');
-  await page.locator('#cv-use').fill('Para la mesa de noche');
   const download = async (button) => {
     const [file] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: button, exact: true }).click()]);
     return fs.readFileSync(await file.path(), 'utf8');
   };
   await page.getByRole('button', { name: 'Más opciones', exact: true }).click();
-  expect(await download('Descargar textos (.txt)')).toBe('TÍTULO\nLámpara TXT\n\nDESCRIPCIÓN\nBase de metal confirmada.\nLuz cálida.\n\nTEXTO PARA REDES\nLámpara TXT\n• Metal confirmado\nPara la mesa de noche\nConsulta en Casa Viva.\n');
+  expect(await download('Descargar textos (.txt)')).toBe('TÍTULO\nLámpara TXT\n\nDESCRIPCIÓN\nBase de metal confirmada.\nLuz cálida.\n\nTEXTO PARA REDES\nLámpara TXT\nMetal confirmado\nEscríbenos por WhatsApp y te lo apartamos.\n');
   await page.getByRole('button', { name: 'Más opciones', exact: true }).click();
   await page.getByRole('button', { name: 'Instrucción para IA', exact: true }).click();
   await expect(page.locator('#cv-prompt')).toHaveValue(/^Crea una imagen comercial para Casa Viva/);
@@ -139,31 +138,49 @@ test('El TXT trae título, descripción y texto para redes; la instrucción para
   expect(saves).toBe(0);
 });
 
-test('Características señaladas: línea fina de cada punto a su explicación', async ({ page }) => {
+test('Beneficio: punto 1 es la prueba, sin repetir datos, números por foto con «Listo», sin precio ni logo en 9:16 y 1:1', async ({ page }) => {
   test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
-  test.setTimeout(60000);
+  test.setTimeout(90000);
+  await page.addInitScript(() => {
+    window.__drawn = []; const fill = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (text, ...rest) { window.__drawn.push(String(text)); return fill.call(this, text, ...rest); };
+  });
   await openPanel(page);
-  await page.locator('#cv-new').click();
-  await page.getByRole('textbox', { name: 'Título', exact: true }).fill('Diagrama de prueba');
-  await fillFacts(page, [['Metal resistente', 'aguanta cortinas pesadas'], ['Extensible', 'sirve para ventanas grandes']]);
-  await page.locator('#cv-photo').setInputFiles({ name: 'diagrama.png', mimeType: 'image/png', buffer: pixel });
-  await expect(page.getByRole('status')).toContainText('Foto preparada.');
+  await page.getByRole('button', { name: 'Studio v2 HERO fixture · Publicado', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Producto abierto.');
+  // «Antiadherente» ya es la prueba de la matriz: no sale dos veces.
+  await fillFacts(page, [['Antiadherente', 'no se pega'], ['Mango largo', 'no quema']]);
   await tab(page, 'Anuncio');
-  await pick(page, 'Características'); await pick(page, 'Historia 9:16');
-  const hint = page.locator('#cv-point-hint');
-  await expect(hint).toHaveText('Toca la foto: número 1');
-  const canvas = page.locator('#cv-canvas');
-  const tap = async (x, y, next) => {
-    const b = await canvas.boundingBox();
-    await canvas.click({ position: { x: x * b.width / 1080, y: y * b.height / 1920 } });
-    await expect(hint).toHaveText(`Toca la foto: número ${next}`);
-  };
-  await tap(300, 800, 2); await tap(800, 900, 1);
-  // Point 1 is on the left: its line runs down the first left lane; point 2 down the second right lane.
-  const colors = await canvas.evaluate((c) => [[24, 1000], [1042, 1100], [540, 330]].map(([x, y]) => Array.from(c.getContext('2d').getImageData(x, y, 1, 1).data).slice(0, 3)));
-  expect(colors).toEqual([[23, 62, 53], [23, 62, 53], [246, 242, 233]]);
-  await finish(page);
-  await expect(page.getByRole('link', { name: 'Solo la imagen', exact: true })).toBeVisible();
+  const hint = page.locator('#cv-point-hint'), canvas = page.locator('#cv-canvas');
+  await expect(hint).toHaveText('Toca la foto: punto 1');
+  await expect(page.locator('#cv-pts button')).toHaveCount(2);
+  const tap = async (x, y) => { const b = await canvas.boundingBox(); await canvas.click({ position: { x: x * b.width, y: y * b.height } }); };
+  await tap(0.4, 0.5); await expect(hint).toHaveText('Toca la foto: punto 2');
+  await tap(0.6, 0.6); await expect(hint).toHaveText('Listo');
+  // Otra foto: los números se borran; al volver, se recuperan.
+  await page.getByRole('radio', { name: 'Real 1', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Foto nueva: coloca los 2 puntos otra vez.');
+  await expect(hint).toHaveText('Toca la foto: punto 1');
+  await page.getByRole('radio', { name: 'HERO', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Puntos de esta foto recuperados.');
+  await expect(hint).toHaveText('Listo');
+  for (const [format, size] of [['Historia 9:16', [1080, 1920]], ['Post 1:1', [1080, 1080]]]) {
+    await pick(page, format);
+    await page.evaluate(() => { window.__drawn = []; });
+    await finish(page);
+    await expect(pieSheet(page)).toBeVisible();
+    expect(await canvas.evaluate((c) => [c.width, c.height])).toEqual(size);
+    const drawn = await page.evaluate(() => window.__drawn);
+    expect(drawn.join(' | ')).toContain('Huevo sin aceite');
+    // Nunca precio ni logo en la imagen (tampoco en el lienzo de descarga).
+    expect(drawn.join(' ')).not.toMatch(/40[.,]00|\$|CASA VIVA|VER EN CASA VIVA/i);
+    expect(drawn.filter((t) => /Antiadherente/.test(t))).toHaveLength(1);
+    // Pie PROOF: 5 líneas con su origen; el precio va aquí, nunca en la imagen.
+    await expect(page.locator('#cv-proof .cv-pl')).toHaveCount(5);
+    await expect(page.locator('#cv-proof')).toContainText('Gancho · Matriz · resultado');
+    await expect(page.locator('#cv-copy')).toHaveValue(/^Huevo sin aceite\nAntiadherente\. Fuego medio\.\nPrecio: .*40\.00\n¿Se pega\? Antiadherente\.\nEscríbenos por WhatsApp y te lo apartamos\.$/);
+    await closePie(page);
+  }
 });
 
 test('Descripción y resumen en texto normal, sin código, y sin la barra de la tienda', async ({ page }) => {
@@ -183,10 +200,19 @@ test('Descripción y resumen en texto normal, sin código, y sin la barra de la 
   // Formatting the plain editor cannot keep is shown as HTML, with a note, and saved untouched.
   await back(page);
   await page.getByRole('button', { name: 'Studio rich text fixture · Borrador / privado', exact: true }).click();
-  await expect(page.locator('#cv-description')).toHaveValue('<p>Con <strong>negrita</strong>.</p>');
-  await expect(page.locator('#cv-text-note')).toBeVisible();
+  // v2: la negrita (preguntas frecuentes) se edita como texto normal, *así*, sin código.
+  await expect(page.locator('#cv-description')).toHaveValue('Con *negrita*.');
+  await expect(page.locator('#cv-text-note')).toBeHidden();
   const rich = await saveNow(page);
   expect(rich.description).toBe('<p>Con <strong>negrita</strong>.</p>');
+  await page.locator('#cv-description').fill('Medidas:\n\n*¿Trae herrajes?* Sí, incluidos.');
+  expect((await saveNow(page)).description).toBe('<h3>Medidas</h3><p><strong>¿Trae herrajes?</strong> Sí, incluidos.</p>');
+  // Lo que el texto normal no puede guardar (un enlace) se ve como HTML, con aviso, y se guarda intacto.
+  await back(page);
+  await page.getByRole('button', { name: 'Studio link text fixture · Borrador / privado', exact: true }).click();
+  await expect(page.locator('#cv-description')).toHaveValue('<p>Ver <a href="https://example.com">enlace</a>.</p>');
+  await expect(page.locator('#cv-text-note')).toBeVisible();
+  expect((await saveNow(page)).description).toBe('<p>Ver <a href="https://example.com">enlace</a>.</p>');
 });
 
 test('La entrada lleva la marca Casa Viva y el aviso del panel no tapa la pantalla', async ({ page }) => {
@@ -231,11 +257,12 @@ test('Tarjeta de oferta: precio de la tienda, rebaja real con fecha y oferta esc
     await expect(pieSheet(page)).toBeVisible();
     await expect(page.getByRole('status')).toHaveText('Imagen lista para descargar.');
     const drawn = (await page.evaluate(() => window.__drawn)).join(' | ');
-    expect(drawn).toMatch(/25\.00/); expect(drawn).toMatch(/30\.00/);
+    // Nunca un precio ni el logo en la imagen: el precio va en el pie (condición A2).
+    expect(drawn).not.toMatch(/25\.00|30\.00|CASA VIVA/);
     expect(drawn).toContain('Oferta hasta el'); expect(drawn).toContain('Entrega gratis en La Habana');
     await closePie(page);
   }
-  await expect(page.locator('#cv-copy')).toHaveValue(/Precio de oferta: .*25\.00 \(antes .*30\.00\)\nOferta: Entrega gratis en La Habana/);
+  await expect(page.locator('#cv-copy')).toHaveValue(/Precio de oferta: .*25\.00 \(antes .*30\.00\) · Oferta: Entrega gratis en La Habana/);
   await page.locator('#cv-offer').fill('Entrega gratis en Centro Habana');
   const saved = await saveNow(page);
   expect(saved.brief.offer).toBe('Entrega gratis en Centro Habana');
@@ -248,7 +275,7 @@ test('Tarjeta de oferta: precio de la tienda, rebaja real con fecha y oferta esc
   await tab(page, 'Anuncio');
   await pick(page, 'Oferta');
   await finish(page);
-  await expect(page.getByRole('status')).toHaveText('La tarjeta de oferta necesita el precio del catálogo comercial.');
+  await expect(page.getByRole('status')).toHaveText('No hay oferta vigente: escribe la oferta real o pon la rebaja en la tienda.');
 });
 
 test('Tarjeta de reseña: solo reseñas reales guardadas con permiso, nombre con inicial y estrellas si las dio', async ({ page }) => {
@@ -368,13 +395,26 @@ test('Editor de contenido: login, guardar, subir foto y descargar en móvil', as
   await page.getByRole('textbox', { name: 'Característica 1', exact: true }).fill('Dato sintético de prueba');
   await tab(page, 'Anuncio');
   await finish(page);
+  await expect(page.getByRole('status')).toHaveText('Falta la duda → resultado → prueba: toca «Editar».');
+  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  await page.getByLabel('Duda', { exact: true }).fill('¿Aguanta?');
+  await page.getByLabel('Resultado', { exact: true }).fill('Resultado sintético');
+  await page.getByLabel('Prueba', { exact: true }).fill('Prueba sintética');
+  await page.getByRole('button', { name: 'Confirmar', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Duda → resultado → prueba confirmada.');
+  await finish(page);
+  await expect(page.getByRole('status')).toHaveText('Coloca los 2 puntos en la foto hasta que diga «Listo».');
+  const canvas = page.locator('#cv-canvas'), box = await canvas.boundingBox();
+  await canvas.click({ position: { x: box.width * 0.4, y: box.height * 0.5 } }); await canvas.click({ position: { x: box.width * 0.6, y: box.height * 0.6 } });
+  await expect(page.locator('#cv-point-hint')).toHaveText('Listo');
+  await finish(page);
   await expect(page.getByRole('link', { name: 'Solo la imagen', exact: true })).toBeVisible();
   const dimensions = await page.locator('#cv-canvas').evaluate((canvas) => [canvas.width, canvas.height]);
   expect(dimensions).toEqual([1080, 1920]);
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Solo la imagen', exact: true }).click()]);
   const bytes = fs.readFileSync(await download.path());
   expect(bytes[0]).toBe(255); expect(bytes[1]).toBe(216); expect(bytes.length).toBeGreaterThan(1000);
-  await expect(page.getByRole('textbox', { name: 'Pie del anuncio', exact: true })).toHaveValue(/Studio browser edited/);
+  await expect(page.getByRole('textbox', { name: 'Pie del anuncio', exact: true })).toHaveValue(/^Resultado sintético\nPrueba sintética\./);
   const width = await page.evaluate(() => ({ viewport: innerWidth, scroll: document.documentElement.scrollWidth }));
   expect(width.scroll).toBeLessThanOrEqual(width.viewport);
   await closePie(page);
@@ -405,4 +445,111 @@ test('El fondo cambia y se conservan las piezas negras, claras y los huecos cerr
   // Composed at social size so templates and downloads are not upscaled.
   expect(actual.sizes).toEqual([[1080, 1920], [1080, 1080]]);
   expect(actual.pixels).toEqual([[17,17,17],[17,17,17],[255,255,255],[235,235,235],[204,187,153]]);
+});
+
+test('v2 · Lista: foto HERO, prioridad, lo que falta, filtros, bandeja con contador y Helvetica sin franja arriba', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(60000);
+  await openPanel(page);
+  const hero = page.getByRole('button', { name: 'Studio v2 HERO fixture · Publicado', exact: true });
+  await expect(hero).toContainText('Va a anuncios');
+  await expect(hero.locator('.cv-thumb')).toHaveClass(/cv-white/);
+  const none = page.getByRole('button', { name: 'Studio v2 sin HERO fixture · Publicado', exact: true });
+  await expect(none).toContainText('Falta HERO');
+  await page.getByRole('button', { name: /^Falta HERO/ }).click();
+  await expect(none).toBeVisible();
+  await expect(hero).toHaveCount(0);
+  await page.getByRole('button', { name: /^Borradores/ }).click();
+  await expect(page.getByRole('button', { name: 'Studio v2 compare fixture · Borrador / privado', exact: true })).toContainText('Lista para revisar');
+  await expect(page.locator('#cv-dudas-open')).toBeVisible();
+  await expect(page.locator('#cv-dudas-count')).toHaveText(/^\d+$/);
+  // Arreglos de la prueba en vivo: Helvetica también en títulos y sin franja vacía arriba.
+  await expect(page.locator('#cv-title')).toHaveCSS('font-family', /Helvetica/);
+  await expect(page.locator('#cv-title')).toHaveCSS('text-transform', 'none');
+  expect(await page.locator('#cv-list-screen').evaluate((el) => Math.round(el.getBoundingClientRect().top))).toBe(0);
+});
+
+test('v2 · HERO: comparar enciende los 3 estados, aprobar lo pone en la web y Restaurar vuelve la anterior', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(60000);
+  await openPanel(page);
+  await page.getByRole('button', { name: 'Studio v2 compare fixture · Borrador / privado', exact: true }).click();
+  await expect(page.getByRole('tab', { name: /^Fotos/ })).toHaveAttribute('aria-selected', 'true');
+  const states = page.locator('#cv-fotobar [data-estado]');
+  await expect(states).toHaveCount(3);
+  for (const b of await states.all()) await expect(b).toBeDisabled();
+  await expect(page.locator('#cv-foto-body .cv-used')).toContainText('IA de pago · 0,15 USD');
+  await page.locator('.cv-cmp input[type=range]').fill('70');
+  for (const b of await states.all()) await expect(b).toBeEnabled();
+  await page.locator('#cv-fotobar').getByRole('button', { name: 'Aprobada', exact: true }).click();
+  await page.getByRole('button', { name: 'Poner en la web', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('HERO en la web.');
+  await expect(page.locator('#cv-pieces [data-pieza=hero]')).toContainText('Aprobada');
+  await expect(page.locator('#cv-foto-body')).toContainText('Ya está en la web');
+  await page.getByRole('button', { name: 'Restaurar la anterior', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Volvió la foto anterior a la web.');
+  await expect(page.locator('#cv-foto-body')).toContainText('Aún no está en la web');
+});
+
+test('v2 · Crear HERO: escalones con coste, en marcha con segundos, se publica solo y Rechazada restaura', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(120000);
+  await openPanel(page);
+  await page.getByRole('button', { name: 'Studio v2 sin HERO fixture · Publicado', exact: true }).click();
+  const body = page.locator('#cv-foto-body'), ladder = body.locator('.cv-ladder');
+  await expect(ladder.locator('li')).toHaveCount(3);
+  await expect(ladder).toContainText('Recorte gratis'); await expect(ladder).toContainText('0 USD');
+  await expect(ladder).toContainText('IA de pago'); await expect(ladder).toContainText('~0,15 USD');
+  await expect(ladder).toContainText('Corrector ChatGPT');
+  await expect(body.locator('.cv-budget')).toContainText(/Hoy .* de 0,50 USD/);
+  // The call is synchronous: hold it a moment to see the work screen with its seconds.
+  await page.route(/contenido(%2F|\/)crear/, async (route) => { await new Promise((r) => setTimeout(r, 2500)); await route.continue(); });
+  await page.getByRole('button', { name: 'Crear HERO', exact: true }).click();
+  await expect(body).toContainText('Creando HERO');
+  await expect(page.locator('#cv-work-sec')).toHaveText(/^\d+ s$/);
+  await expect(page.getByRole('button', { name: 'Seguir en la Ficha', exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveText(/ya está en la web/, { timeout: 60000 });
+  await expect(body).toContainText('Ya está en la web');
+  await expect(body.locator('.cv-used')).toContainText('Recorte gratis · 0 USD');
+  await page.locator('.cv-cmp input[type=range]').fill('30');
+  await page.locator('#cv-fotobar').getByRole('button', { name: 'Rechazada', exact: true }).click();
+  await page.getByRole('button', { name: 'Fondo', exact: true }).click();
+  await page.getByRole('button', { name: 'Dejarla rechazada', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Rechazada. Volvió la foto anterior a la web.');
+  await expect(page.locator('#cv-pieces [data-pieza=hero]')).toContainText('Rechazada');
+});
+
+test('v2 · Dudas del catálogo: una tarjeta por pantalla, Revisión, Sí, Explicar, en marcha y hechas', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  test.setTimeout(60000);
+  await openPanel(page);
+  await page.locator('#cv-dudas-open').click();
+  await expect(page.getByRole('heading', { name: 'Dudas del catálogo', exact: true })).toBeVisible();
+  const bar = page.locator('#cv-dudas-bar'), card = page.locator('#cv-dudas-body .cv-dq');
+  await expect(page.locator('.cv-dprog')).toContainText(/^1 de \d+/);
+  await expect(card.locator('h2')).toHaveText('¿Es el mismo producto?');
+  await expect(bar.getByRole('button')).toHaveText(['Rechazar', 'Revisión', 'Aprobar']);
+  await expect(card.getByRole('button', { name: 'Corregir', exact: true })).toBeVisible();
+  await bar.getByRole('button', { name: 'Revisión', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Queda en Por contestar.');
+  await expect(card.locator('h2')).toHaveText('¿Trae herrajes para instalarla?');
+  await expect(bar.getByRole('button')).toHaveText(['No', 'Luego', 'Sí']);
+  await bar.getByRole('button', { name: 'Sí', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Hecho · Ficha y crm_knowledge');
+  await expect(card.locator('h2')).toHaveText('¿Este título está bien?');
+  await card.getByRole('button', { name: 'Explicar', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Explicación escrita', exact: true }).fill('El título debe decir la medida.');
+  await page.getByRole('button', { name: 'Enviar', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText(/^En marcha · /);
+  await page.getByRole('tab', { name: /^En marcha/ }).click();
+  const result = page.locator('#cv-dudas-body .cv-dq', { hasText: '¿Se ve bien la escena?' });
+  await expect(page.locator('#cv-dudas-body .cv-dq', { hasText: '¿Este título está bien?' })).toContainText('Lo hace el supervisor del VPS');
+  await result.getByRole('button', { name: 'Aprobada', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Hecho · lista para anuncios');
+  await page.getByRole('tab', { name: /^Hechas/ }).click();
+  const done = page.locator('#cv-dudas-body .cv-hist', { hasText: '¿Trae herrajes para instalarla?' });
+  await expect(done).toContainText('Ficha y crm_knowledge');
+  await expect(done).toContainText('cvt_content_browser');
+  const width = await page.evaluate(() => ({ viewport: innerWidth, scroll: document.documentElement.scrollWidth }));
+  expect(width.scroll).toBeLessThanOrEqual(width.viewport);
 });

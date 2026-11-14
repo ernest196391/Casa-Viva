@@ -604,7 +604,8 @@
     if (job && job.id === product.id && job.pieza === k) return showWork(body);
     const chosen = fotoState.option && optionsOf(k).find((o) => o.id === fotoState.option);
     if (chosen) return showCompare(body, chosen);
-    const pend = unreviewed(k);
+    // Opciones sin revisar más nuevas que la última decisión de la pieza: se comparan primero.
+    const pend = unreviewed(k).filter((o) => !ESTADO[pz.estado] || (o.at || '') > (pz.at || ''));
     if (!fotoState.more && pend.length && k !== 'ben') return showCompare(body, pend[pend.length - 1]);
     if (!fotoState.more && k !== 'ben' && (ESTADO[pz.estado] || (k === 'hero' && product.hero_en_web))) return showDone(body, k);
     if (k !== 'hero' && !product.brief?.matriz_ok) return showMatrix(body);

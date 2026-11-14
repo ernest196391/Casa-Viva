@@ -22,6 +22,9 @@ $simple = new WC_Product_Simple(); $simple->set_name( 'Studio text fixture' ); $
 $simple->set_description( "<p>Un cortinero para vestir\nla ventana.</p>\n<h3>Características</h3>\n<ul>\n<li>Metal negro</li>\n<li>Ligero</li>\n</ul>" ); $simple->set_short_description( '<p>Corto.</p>' ); $simple->save();
 $rich = new WC_Product_Simple(); $rich->set_name( 'Studio rich text fixture' ); $rich->set_status( 'draft' );
 $rich->set_description( '<p>Con <strong>negrita</strong>.</p>' ); $rich->save();
+// Formatting the plain editor cannot keep (a link): it stays as HTML, with a note.
+$link = new WC_Product_Simple(); $link->set_name( 'Studio link text fixture' ); $link->set_status( 'draft' );
+$link->set_description( '<p>Ver <a href="https://example.com">enlace</a>.</p>' ); $link->save();
 // A real store sale with an end date, and an offer already written by the editor.
 $offer = new WC_Product_Simple(); $offer->set_name( 'Studio offer fixture' ); $offer->set_description( '<p>Datos sintéticos para prueba.</p>' );
 $offer->set_regular_price( '30' ); $offer->set_sale_price( '25' ); $offer->set_date_on_sale_to( gmdate( 'Y-m-d', time() + 7 * DAY_IN_SECONDS ) . ' 23:59:59' );
