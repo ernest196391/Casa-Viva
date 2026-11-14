@@ -40,9 +40,10 @@ begin
  or jsonb_typeof(p_result->'task_id') is distinct from 'string'
  or coalesce(p_result->>'task_id','') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
  then raise exception 'invalid identity/contract'; end if;
- -- Lock order: run then task. Serializa reintentos concurrentes de la misma run.
- select * into strict r from public.ops_dev_runs where id=(p_result->>'run_id')::bigint for update;
+ -- Lock order matches human decisions: task, then run. Recheck run identity after locking.
+ select * into strict r from public.ops_dev_runs where id=(p_result->>'run_id')::bigint;
  select * into strict t from public.ops_tasks where id=r.task_id for update;
+ select * into strict r from public.ops_dev_runs where id=(p_result->>'run_id')::bigint for update;
  moment := clock_timestamp();
  if t.business_id is distinct from 'casa-viva' or t.executor is distinct from 'dev'
  or r.task_id <> (p_result->>'task_id')::uuid or r.repo is distinct from p_result->>'repo'
