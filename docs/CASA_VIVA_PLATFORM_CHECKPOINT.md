@@ -415,3 +415,9 @@ Al retomar el proyecto:
 - Preparación Codex arrancó en unidad cv-control-consumer-build como cvdev (#174), sin tocar producción. El journal confirmó sesión y primer mensaje del modelo; no equivale a resultado certificado.
 - Se propone acción de publicación solo desde worktree fijo, preparación inactiva, HEAD igual a origin/main, máximo 20 archivos/500KB, sin borrados, symlinks, dotfiles, rutas fuera de scripts/ops y docs ni patrones de secreto. Commit como cvdev y push sin force a rama fija review/control-os-real-consumer; hooks deshabilitados para el push privilegiado. No ejecuta código generado, merge, SQL ni despliegue.
 - Pendiente revisar diff y pruebas antes de cualquier instalación. Coste adicional 0; utiliza cuota ChatGPT existente.
+
+## CURRENT — Diagnóstico de aislamiento nativo (2026-11-14)
+
+- La sesión Codex autenticó y respondió, pero el trabajo #174/estado #176 no produjo cambios: fallo previo a comandos bwrap loopback Failed RTM_NEWADDR Operation not permitted. Exit 0 del modelo NO significa tarea realizada. No se repite un modelo hasta arreglar el entorno.
+- Nuevo modo diagnostic de la acción existente: prueba codex sandbox linux /usr/bin/true sin modelos, lee perfiles AppArmor públicos y denegaciones del kernel. No instala perfiles, cambia sysctl ni usa danger-full-access. Se comparará con documentación de la versión 0.169.0 antes de proponer una corrección específica.
+- Producción sin cambios; coste extra 0. Usuario confirmó sesión iniciada y panel accesible; consultas conocidas siguen operativas.
