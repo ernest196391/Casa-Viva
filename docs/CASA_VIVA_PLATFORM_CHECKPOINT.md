@@ -1,3 +1,16 @@
+# CURRENT — EVO-001: certificación de producción BLOQUEADA (2026-11-15)
+
+Esta entrada sustituye el estado histórico “sin merge” de EVO-001 más abajo; no declara instalación íntegra ni cierre.
+
+- Fase: 0 / EVO-001 / BLOQUE 1. Rama de evidencia `review/evo001-production-certification`, base `a5551fdfb9c849ade7ecc5d76b0b703d808c2d7e`. Coordinación #231; aprobación de merge/despliegue ya concedida.
+- Confirmados fusionados #230 y vivabot#42. SHA vivo VivaBot `3cbdeca5eaed19bdaaecbb79384999e5ab4a1b77`, limpio, PM2 online (#221–222).
+- Core vivo activo declara 3.14.171 (#223), pero auditoría de hashes #225 contra a5551fd encontró **8 archivos distintos y 2 ausentes**, incluidos `class-cvd-content-policy.php` y `class-cvd-dudas-catalogo.php`. No certificar el SHA del Core por la versión ni desplegar encima sin preservar y revisar deltas.
+- Cron antiguo de catálogo sigue programado (#224). No comprobadas congelación de trabajos ni política cargada del servicio systemd `casaviva-imagen`.
+- SSH de la sesión rechazó conexión (Permission denied). Puente 4.1.2 no expone reinicio de ese servicio; no se ampliaron permisos. Consulta de despliegue #226 falló: no encuentra credencial GitHub utilizable en VPS.
+- Evidencia y recuperación: [EVO_001_PRODUCTION_PREFLIGHT_2026_11_15.md](evidence/EVO_001_PRODUCTION_PREFLIGHT_2026_11_15.md). Seis consultas reales finalizadas, sin pruebas nuevas de proveedor, integración, recorte, 403 autenticado, restauración ni navegador.
+- Producción no modificada por esta sesión: sin reinicio, deploy, cron alterado o autonomía. Costo nuevo de estas operaciones: 0 USD; no certifica costes de tareas preexistentes.
+- Siguiente: recuperar acceso operativo, congelar contenido y preservar/comparar archivos vivos; certificar casaviva-imagen, restaurar mecanismo oficial de release y completar pruebas. Bloques 2–6 detenidos por incidencia crítica, conforme a la directiva. No hace falta nueva aprobación ordinaria de despliegue; falta acceso y resolver condiciones previas.
+
 # Casa Viva Platform — Checkpoint operativo
 
 ## Activación limitada del panel de fotos
