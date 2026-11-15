@@ -504,3 +504,17 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 - Pruebas PostgreSQL desechables: ruta/cierre/síntesis, duplicados, instrucción ambigua, riesgo sensible, aprobación, actor distinto, legacy, owner_change de WhatsApp, fallo y bridge incorrecto. Pendiente CI, migración y cierre real de #141; rollback de las tres funciones incluido. No se habilita programación autónoma ni se amplían permisos de Lennys.
 
 - Preflight real errors_open #208: returncode 0, 21 incidencias abiertas, salida legible de 6123 caracteres. No es análisis IA nuevo. Informes largos se muestran con resumen y Leer informe completo para conservar la portada limpia. La prueba SQL incorpora además identidades nulas y las rechaza explícitamente.
+
+
+## PREPARE — EVO-MAP-001: integración de Stitch (2026-11-15)
+
+- Rama independiente: `review/evolution-stitch-map`, base inspeccionada `8f3e525985c6e1a4ebf8f249925672a6d8956aa5`.
+- Mapa previo: [CASA_VIVA_EVOLUTION_STITCH_MAP.md](CASA_VIVA_EVOLUTION_STITCH_MAP.md). Reutiliza Control Web, Content Studio, Photo AI, Dudas, auditoría y tareas; no crea aplicación, catálogo ni autenticación paralelos.
+- Estado: unidad exclusivamente documental; implementación visual, EVO-001 y pruebas de ejecución pendientes. PR #224 sigue abierto y conflictivo en head `bbd10f21d82fd53fc8e6d1aed7d904e3ce8001e0`.
+- Referencia inspeccionada: ZIP local sin sufijo, cinco HTML y DESIGN.md. ZIP (2) localizado por metadatos, bytes y delta aún sin comprobar. Brand Kit no localizado en carpetas revisadas; conservar logo/identidad actuales y no usar la marca de Stitch.
+- Permisos verificados en código: Control Web conserva WP 1 con escritura y WP 14 de consulta, ambos sujetos a manage_options; editor conserva su capability. No se modificaron permisos.
+- Producción: no inspeccionada de forma autenticada ni modificada en esta unidad. Sin merge, despliegue, llamadas a modelos, servicios nuevos ni prueba real del VPS.
+- Bloqueo local: git clone no resuelve github.com; lectura actual de repositorio por conector. Sin pruebas unitarias, integración o navegador nuevas; no trasladar CI anterior a esta unidad.
+- costo_actual: infraestructura existente; costo_nuevo_requerido: 0 USD; gasto adicional ejecutado en esta unidad: 0 USD; bloqueo de gasto del Engine todavía pendiente de implementar/certificar.
+- Siguiente: cerrar EVO-001 (reconciliación, tres regresiones, presupuesto cerrado por defecto, restauración no destructiva, pruebas y recorte real gratuito); comparar ZIP definitivo y localizar Brand Kit antes de modificar pantallas. No activar autonomía.
+- Reversión: revertir únicamente los commits documentales de esta unidad; no modifica datos ni servicios.
