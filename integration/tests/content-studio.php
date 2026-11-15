@@ -245,6 +245,7 @@ foreach ( array( 'restaurar', 'rechazar' ) as $undo ) {
  $gen = studio_call( 'POST', 'crear', array( 'id' => $hp->get_id(), 'pieza' => 'hero', 'forzar' => '1' ) )->get_data();
  studio_assert( ! $gen['publicada'], 'EVO-001 no autonomous publication in undo regression' );
  studio_assert( 200 === studio_call( 'POST', 'pieza', array( 'id' => $hp->get_id(), 'pieza' => 'hero', 'estado' => 'aprobada', 'opcion' => $gen['opcion']['id'], 'web' => '1' ) )->get_status(), 'human publishes for controlled undo regression' );
+ clean_post_cache( $hp->get_id() ); $expected_original = (int) wc_get_product( $hp->get_id() )->get_meta( CVD_Content_Studio::HERO_ANTES )['image'];
  $tmp = tempnam( sys_get_temp_dir(), 'evo-real-' ); file_put_contents( $tmp, $v2_jpg( 900, 700 ) );
  $later = CVD_Content_Studio::foto_real( wc_get_product( $hp->get_id() ), array( 'tmp_name' => $tmp, 'size' => filesize( $tmp ), 'type' => 'image/jpeg' ) );
  studio_assert( ! is_wp_error( $later ), 'later real image saved through WooCommerce media' );
@@ -253,7 +254,10 @@ foreach ( array( 'restaurar', 'rechazar' ) as $undo ) {
  if ( 'restaurar' === $undo ) { $result = studio_call( 'POST', 'restaurar', array( 'id' => $hp->get_id() ) ); }
  else { $result = studio_call( 'POST', 'pieza', array( 'id' => $hp->get_id(), 'pieza' => 'hero', 'estado' => 'rechazada', 'opcion' => $gen['opcion']['id'], 'motivos' => array( 'Color' ) ) ); }
  clean_post_cache( $hp->get_id() ); $q = wc_get_product( $hp->get_id() );
- studio_assert( 200 === $result->get_status() && $previous === (int) $q->get_image_id() && in_array( (int) $later, $q->get_gallery_image_ids(), true ) && ! in_array( $real, $q->get_gallery_image_ids(), true ), 'EVO-001 ' . $undo . ' preserves later gallery additions and removals' );
+ studio_assert( 200 === $result->get_status(), 'EVO-001 ' . $undo . ' succeeds' );
+ studio_assert( $expected_original === (int) $q->get_image_id(), 'EVO-001 ' . $undo . ' restores original before HERO chain' );
+ studio_assert( in_array( (int) $later, $q->get_gallery_image_ids(), true ), 'EVO-001 ' . $undo . ' preserves later gallery additions' );
+ studio_assert( ! in_array( $real, $q->get_gallery_image_ids(), true ), 'EVO-001 ' . $undo . ' preserves later gallery removals' );
 }
 // Deferred supervisor results must stay authoritative for fact, text and photo.
 foreach ( array( 'dato', 'texto', 'foto' ) as $type ) {
