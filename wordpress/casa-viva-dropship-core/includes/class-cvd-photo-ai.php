@@ -48,6 +48,11 @@ final class CVD_Photo_AI {
 	 * Tarda 20–60 s. Para el rediseño del panel (fotos de estudio a partir de la foto del móvil).
 	 */
 	public static function vps_image( string $prompt, array $opts = array(), array $refs = array() ) {
+		return CVD_Content_Policy::billable();
+	}
+
+	/** Preserved implementation, unreachable while EVO-001 is closed. */
+	private static function vps_image_legacy( string $prompt, array $opts = array(), array $refs = array() ) {
 		$key = self::key( 'vps' );
 		if ( ! $key ) { return self::error( 'Pide al administrador que configure el servidor de imágenes.' ); }
 		$body = array( 'prompt' => $prompt, 'quien' => (string) wp_get_current_user()->user_login );
@@ -144,6 +149,11 @@ final class CVD_Photo_AI {
 	}
 
 	public static function generate( WP_REST_Request $r ) {
+		return CVD_Content_Policy::billable();
+	}
+
+	/** Preserved implementation, unreachable while EVO-001 is closed. */
+	private static function generate_legacy( WP_REST_Request $r ) {
 		$provider = (string) $r['provider'];
 		if ( empty( self::providers()[ $provider ] ) ) { return self::error( 'Pide al administrador que configure este proveedor.' ); }
 		if ( 'cloudflare' !== $provider && '1' !== $r['paid'] ) { return self::error( 'Confirma el uso de la API de pago.' ); }
@@ -194,6 +204,11 @@ final class CVD_Photo_AI {
 	}
 
 	public static function poll( WP_REST_Request $r ) {
+		return CVD_Content_Policy::billable();
+	}
+
+	/** Preserved implementation, unreachable while EVO-001 is closed. */
+	private static function poll_legacy( WP_REST_Request $r ) {
 		$id = (string) $r['job'];
 		if ( (int) get_transient( 'cvd_ai_job_' . md5( $id ) ) !== get_current_user_id() ) { return self::error( 'Generación no disponible.', 404 ); }
 		$out = self::request( 'https://api.higgsfield.ai/requests/' . rawurlencode( $id ) . '/status', array( 'headers' => array( 'Authorization' => 'Key ' . self::key( 'higgsfield' ) ) ) );

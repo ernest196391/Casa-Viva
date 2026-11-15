@@ -47,6 +47,29 @@ const finish = (page) => page.getByRole('button', { name: 'Terminar anuncio', ex
 const pieSheet = (page) => page.getByRole('dialog', { name: 'Pie del anuncio' });
 async function closePie(page) { await expect(pieSheet(page)).toBeVisible(); await page.keyboard.press('Escape'); await expect(pieSheet(page)).toBeHidden(); }
 
+test('EVO-001 conserva la pantalla y bloquea API facturable con sesión real', async ({ page }) => {
+  test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
+  await openPanel(page);
+  await expect(page.getByRole('tab', { name: 'Fotos', exact: true })).toHaveCount(0);
+  const results = await page.evaluate(async () => {
+    const out = [];
+    for (const [route, body] of [
+      ['ia/generate', { provider: 'openai', paid: '1', mode: 'background', layout: 'features' }],
+      ['ia/generate', { provider: 'vps', paid: '1' }],
+      ['ia/generate', { provider: 'higgsfield', paid: '1' }],
+      ['ia/generate', { provider: 'cloudflare' }],
+      ['ia/poll', { provider: 'higgsfield' }],
+      ['suggest', { name: 'Producto', facts: 'Metal', kind: 'description' }],
+    ]) {
+      const response = await fetch(cvContent.base + route, { method: 'POST', credentials: 'same-origin', headers: { 'X-WP-Nonce': cvContent.nonce, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      out.push({ status: response.status, code: (await response.json()).code });
+    }
+    return out;
+  });
+  expect(results).toHaveLength(6);
+  for (const result of results) expect(result).toEqual({ status: 403, code: 'evo_budget_zero' });
+});
+
 test('Guardado tardío de una ficha publicada no pisa la mercancía nueva', async ({ page }) => {
   test.skip(process.env.CONTENT_STUDIO_BROWSER !== '1', 'Dedicated disposable studio environment required');
   test.setTimeout(60000);

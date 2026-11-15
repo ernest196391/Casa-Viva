@@ -227,6 +227,12 @@ Criterio de cierre de la unidad:
 - `ubuntu-latest` migrará a Ubuntu 26 a partir del 19 de octubre de 2026;
 - estas advertencias no afectaron el despliegue #20, pero deben entrar en mantenimiento técnico.
 
+## Panel de Zayri v2 (rama `diseno/panel-v2`, 14-nov-2026)
+
+- Servidor (ya probado): escalones del HERO (recorte gratis → IA de pago), publicación automática D152, restaurar, 3 estados, prioridades, matriz y bandeja «Dudas del catálogo». Incluye #187 (`vps_image`) y `vps_recorte` (a856eec).
+- Móvil (nuevo): lista con HERO, prioridad y filtros; pestaña Fotos (HERO · LIFESTYLE · BENEFICIO, comparar con 3 estados, tope del día); Anuncio sin precio ni logo con encuadre por la caja del producto, puntos por foto y pie PROOF; bandeja con voz o texto.
+- Estado: PR abierto hacia `main`, sin desplegar. Espera a la sesión de imágenes: servidor real de dudas en el VPS y recorte real.
+
 ## Próxima compuerta
 
 CV-LAUNCH-POLISH-002 cerrada (3.10.16): Añadir al carrito en verde #006068 con texto blanco en tienda/categorías; Copiar/Compartir del tarifario ocultos hasta consultar una tarifa.
@@ -504,3 +510,14 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 - Pruebas PostgreSQL desechables: ruta/cierre/síntesis, duplicados, instrucción ambigua, riesgo sensible, aprobación, actor distinto, legacy, owner_change de WhatsApp, fallo y bridge incorrecto. Pendiente CI, migración y cierre real de #141; rollback de las tres funciones incluido. No se habilita programación autónoma ni se amplían permisos de Lennys.
 
 - Preflight real errors_open #208: returncode 0, 21 incidencias abiertas, salida legible de 6123 caracteres. No es análisis IA nuevo. Informes largos se muestran con resumen y Leer informe completo para conservar la portada limpia. La prueba SQL incorpora además identidades nulas y las rechaza explícitamente.
+
+
+## CURRENT — EVO-001: estabilización Content Studio y presupuesto cero (2026-11-15)
+
+- Rama independiente `evo/evo-001-content-studio`, base `8f3e525985c6e1a4ebf8f249925672a6d8956aa5`; reconciliación del servidor del PR #224 (`bbd10f21d82fd53fc8e6d1aed7d904e3ce8001e0`). Conserva los cambios posteriores de main, Core 3.14.171 candidato, pantalla y assets actuales byte a byte. El diseño v2 y su suite visual permanecen en #224 para la etapa Stitch; no se activan aquí.
+- Corregidos: resultado de supervisor aplazado sigue siendo el resultado a aprobar (dato/texto/foto); restauración y rechazo HERO conservan altas/bajas posteriores de galería; destino URL-only respeta HERO/web y LIFESTYLE-BENEFICIO/anuncios. Se mantienen clases, rutas, recorte, prioridades, snapshots y pruebas anteriores con expectativas adaptadas a EVO-001.
+- Política fija de gasto adicional 0: bloquea las entradas de imágenes, polling, texto externo y escalado incluso con credenciales/flags. Recorte VPS continúa; publicación autónoma deshabilitada también por llamada directa. Aprobación humana existente preservada. No cambia presupuestos ni chats ajenos al motor de contenido. Complemento VivaBot necesario para bloquear QA visual pagada y rutas de imágenes de panel/lote; código preparado, aún no instalado.
+- Pruebas locales: contratos PHP originales, v2 y política; Node HERO y política del motor real. Integración WordPress y navegador pendientes de CI del nuevo PR; no confundir las pruebas v2 simuladas con recorte real.
+- VPS: prueba controlada preparada en `scripts/catalog/evo-001-recorte-smoke.py`; requiere ejecutarse con el secreto existente dentro del VPS. No hay acceso SSH directo autenticado en este entorno ni una acción de recorte en la allowlist inspeccionada. Bridge #217 terminó done/returncode 0: la allowlist viva no incluye recorte. No se instala bridge ni se cambia servicio para sortear esta compuerta. No certificar recorte real mientras no exista resultado terminal e inspección del PNG.
+- Producción sin despliegues ni publicaciones de esta fase. `costo_actual`: infraestructura existente; `costo_nuevo_requerido`: 0; `alternativa_gratuita`: recorte local y revisión humana; `momento_de_escalar`: solo una fase posterior expresamente aprobada.
+- Evidencias, inventario y reversión: `docs/EVO_001_CONTENT_STUDIO.md`. Siguiente: CI completo de ambos PR, revisión del código, ejecutar smoke autenticado del recorte; luego solicitar aprobación de despliegue por SHA. No fusionar ni desplegar automáticamente.
