@@ -18,7 +18,7 @@ Se reconcilia la lógica v2 con main preservando la pantalla PHP de `page()`, JS
 | `integration/tests/content-studio.php`, fixture del motor | WordPress/WooCommerce reales, transporte y permisos, proveedor simulado, galería y resultados aplazados |
 | `tests/browser/content-studio.spec.js` | Pantalla anterior íntegra más caso de seis intentos de API bloqueados |
 | `.github/workflows/validate.yml` | Ejecuta unidades nuevas además de las suites existentes |
-| `scripts/catalog/evo-001-recorte-smoke.py` | Prueba acotada del endpoint local de recorte, sin generación/QA API/publicación |
+| `scripts/catalog/evo-001-recorte-live.php`, workflow dedicado | Prueba acotada por SSH existente/WP-CLI stdin del adaptador instalado; sin generación/QA API/publicación |
 
 Las clases `CVD_Content_Studio`, `CVD_Photo_AI`, `CVD_Dudas_Catalogo`, REST, prioridades, recorte y restauración se reutilizan. Catálogo, SEO, stock, precios, SKU, variantes, comisiones y pedidos conservan autoridad en Core/WooCommerce.
 
@@ -56,13 +56,20 @@ Localmente se extrajo PHP 8.4/GD/mbstring/tokenizer a una carpeta temporal para 
 
 Pruebas de VivaBot: `node --test test/hero.test.js test/evo-content-policy.test.js`. El caso de motor real instala una `fetch` que falla si se alcanza y verifica cero llamadas con credenciales presentes; las pruebas de contrato también comprueban revisión humana.
 
-### Prueba controlada de recorte real — compuerta abierta
+### Evidencias CI y recorte real
 
-No ejecutada todavía: el entorno no dispone de sesión SSH autenticada al VPS y el bridge vivo (consulta #217, done/returncode 0) no expone recorte entre sus acciones fijas. No desplegar/modificar el bridge ni pedirle comandos arbitrarios para conseguirla. El PR conserva esta limitación visible; una llamada sin credenciales no acredita recorte.
+- Core de aplicación `89abd45b001560ec04324d031bff68bb5598ae27`: [CI completo 43744444152](https://github.com/ernest196391/Casa-Viva/actions/runs/43744444152) en success: validate, integration, browser, content-studio y control-os-postgres. Release/staging también success.
+- Content Studio: 14/14 pruebas de navegador, incluida la pantalla anterior y seis intentos facturables rechazados; integración WordPress/MariaDB confirmó los tres errores corregidos y ambas rutas de restauración conservando altas y bajas posteriores. Navegador general: 39 aprobadas, 13 omitidas por estar reservadas al job dedicado, sin fallos.
+- VivaBot `d95b31801b58578da93a478ec33ee0f37a75a814`, [PR #42](https://github.com/ernest196391/vivabot/pull/42): [VivaBot verification 43744354065](https://github.com/ernest196391/vivabot/actions/runs/43744354065) y [Pedidos y vales 43744354087](https://github.com/ernest196391/vivabot/actions/runs/43744354087) success. Incluye npm run check y el proveedor espía de EVO-001.
+- Recorte real: [smoke 43744911546](https://github.com/ernest196391/Casa-Viva/actions/runs/43744911546) success sobre `52fd70ee8ccd2379b5c20bd65b7f92278eba4a95`. [Artefacto antes/después/JSON 14174360264](https://github.com/ernest196391/Casa-Viva/actions/runs/43744911546/artifacts/14174360264), retención hasta 29-nov-2026. Resumen durable y hashes en `docs/evidence/EVO_001_RECORTE.json`.
 
-Ejecutar el script preparado en una sesión autorizada del VPS con una fotografía real existente y `IMAGEN_PANEL_KEY` ya presente en el entorno. El script fija `http://127.0.0.1:5020/imagen/recorte`, rechaza redirects y no permite elegir `/panel`. Solo crea un PNG temporal y emite JSON con hashes, dimensiones, duración, `fiable` y motivos; nunca imprime clave ni imagen en base64. No modifica WordPress, catálogo, PM2/systemd o presupuestos.
+Se superó la limitación inicial del bridge usando exclusivamente la conexión SSH existente de GitHub Actions a Hostinger y `wp eval-file -`. La primera tentativa con `/dev/stdin` falló antes de llamar al adaptador; se corrigió a la entrada estándar documentada por WP-CLI. No se instaló código en el plugin ni se modificaron servicios. El PHP de prueba se transmitió por stdin.
 
-Guardar la salida sin secretos, revisar visualmente el PNG frente a la fuente, y comprobar que los registros del proveedor no tienen generación/QA nueva. `fiable=true` no sustituye revisión de forma, color, etiquetas y piezas finas. Eliminar después únicamente el PNG temporal creado por esta prueba. Si falta servicio/modelo/clave, registrar el fallo y mantener bloqueo; no instalar ni reiniciar servicios sin aprobación.
+Se leyó la foto del producto 52, adjunto 6490 (no etiquetada como `_cvd_foto_real`; fuente actual de catálogo), y se llamó una vez a `CVD_Photo_AI::vps_recorte()`. Respuesta PNG 377×872, 167434 bytes, 33,24 s, `fiable=true`, motivos vacíos. Se descargaron el original y el PNG, se verificaron sus hashes y se borraron únicamente los dos archivos temporales de evidencia del servidor. No se actualizaron productos, galería, presupuestos, servicios ni el código desplegado. No hubo generación ni QA de pago en este recorrido.
+
+**Revisión visual:** mantiene el carro y sus colores, pero quedan restos claros de fondo en la parte inferior y halo en bordes. No se aprueba como imagen lista para publicación. `fiable=true` de la máscara no certifica la calidad fotográfica; se mantiene revisión humana y cero publicación autónoma. Esta prueba acredita funcionamiento real del recorte, no calidad universal para todo el catálogo ni cuatro fotos profesionales.
+
+El workflow queda limitado a esta rama y a cambios del propio workflow o script. Las actualizaciones de documentación no repiten el recorte. No debe activarse como tarea nocturna ni ampliarse a pago en EVO-001.
 
 ## Reversión
 
@@ -74,7 +81,6 @@ Para revertir solo una imagen: usar restauración del motor, que debe conservar 
 
 ## Siguientes pasos
 
-1. Obtener CI verificable del head combinado y del complemento VivaBot; registrar URLs y SHA.
-2. Completar smoke autenticado y revisión visual del recorte real, sin cambios de producción.
-3. Solicitar aprobación explícita de despliegue de ambos SHA; no auto-merge ni auto-deploy.
-4. Solo después abrir EVO-002: auditoría integral/puntuación/cola; las interfaces esperan los diseños Stitch.
+1. Revisar el diff y aprobar explícitamente el despliegue de ambos PR/SHA; no auto-merge ni auto-deploy.
+2. Tras aprobación: usar el proceso de release existente y verificar rutas, política 403, aprobación humana y restauración en un producto controlado.
+3. Solo después abrir EVO-002: auditoría integral/puntuación/cola; las interfaces esperan los diseños Stitch. El recorte de objetos con huecos necesita revisión humana.

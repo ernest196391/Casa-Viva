@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "product_id": 52,
+  "attachment_id": 6490,
+  "marked_real": false,
+  "input_sha256": "07a89e19456958c8c2806406d454869ac225024fa573cd70c3df05b6830270d0",
+  "output_sha256": "6b038d4421bcb22c3cbad622010914ec100da27446da5a8acd8a575187bdb107",
+  "width": 377,
+  "height": 872,
+  "bytes": 167434,
+  "seconds": 33.24,
+  "fiable": true,
+  "motivos": [],
+  "billable_endpoint_called": false,
+  "catalog_changed": false,
+  "visual_fidelity": "manual_review_required",
+  "workflow_run": 43744911546,
+  "commit": "52fd70ee8ccd2379b5c20bd65b7f92278eba4a95",
+  "artifact_id": 14174360264,
+  "artifact_zip_sha256": "b956288c2070e1ea991b2033675d3b9e22c6f06af12112951cc72c50693c8956",
+  "temporary_files_removed": true,
+  "visual_review": "Restos claros de fondo en la parte inferior y halo en bordes. No aprobar para publicación automática."
+}
