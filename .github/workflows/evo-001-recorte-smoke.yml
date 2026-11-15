@@ -1,0 +1,85 @@
+name: EVO-001 free VPS cutout smoke
+
+on:
+  push:
+    branches: ['evo/evo-001-content-studio']
+    paths:
+      - '.github/workflows/evo-001-recorte-smoke.yml'
+      - 'scripts/catalog/evo-001-recorte-live.php'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evo-001-free-recorte
+  cancel-in-progress: false
+
+jobs:
+  recorte:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare existing Hostinger SSH connection
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+      - name: Run one free cutout through installed Core, without publishing
+        id: smoke
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "cd /home/u824654880/domains/casaviva.company/public_html && wp eval-file /dev/stdin" \
+            < scripts/catalog/evo-001-recorte-live.php > smoke-private.log
+          sed -n 's/^EVO001_REPORT //p' smoke-private.log | tail -n 1 > recorte-result.json
+          jq -e '.ok == true and .billable_endpoint_called == false and .catalog_changed == false' recorte-result.json >/dev/null
+          output="$(jq -r .output recorte-result.json)"
+          source="$(jq -r .source recorte-result.json)"
+          [[ "$output" =~ ^/tmp/evo-001-recorte-[A-Za-z0-9]+$ ]]
+          [[ "$source" =~ ^/tmp/evo-001-source-[A-Za-z0-9]+$ ]]
+          echo "output=$output" >> "$GITHUB_OUTPUT"
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          scp -P "$SSH_PORT" "$SSH_USER@$SSH_HOST:$output" recorte.png
+          scp -P "$SSH_PORT" "$SSH_USER@$SSH_HOST:$source" source-image
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          d=json.loads(Path('recorte-result.json').read_text())
+          assert hashlib.sha256(Path('recorte.png').read_bytes()).hexdigest()==d['output_sha256']
+          assert hashlib.sha256(Path('source-image').read_bytes()).hexdigest()==d['input_sha256']
+          PY
+      - name: Delete only temporary smoke images
+        if: always() && steps.smoke.outputs.output != ''
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          OUTPUT: ${{ steps.smoke.outputs.output }}
+          SOURCE: ${{ steps.smoke.outputs.source }}
+        run: |
+          set -euo pipefail
+          [[ "$OUTPUT" =~ ^/tmp/evo-001-recorte-[A-Za-z0-9]+$ ]]
+          [[ "$SOURCE" =~ ^/tmp/evo-001-source-[A-Za-z0-9]+$ ]]
+          ssh -o BatchMode=yes -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "rm -f -- '$OUTPUT' '$SOURCE'"
+      - name: Upload product-only smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: evo-001-free-recorte-${{ github.run_id }}
+          path: |
+            recorte-result.json
+            recorte.png
+            source-image
+          if-no-files-found: error
+          retention-days: 14
