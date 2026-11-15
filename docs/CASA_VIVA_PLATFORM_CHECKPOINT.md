@@ -227,6 +227,12 @@ Criterio de cierre de la unidad:
 - `ubuntu-latest` migrará a Ubuntu 26 a partir del 19 de octubre de 2026;
 - estas advertencias no afectaron el despliegue #20, pero deben entrar en mantenimiento técnico.
 
+## Panel de Zayri v2 (rama `diseno/panel-v2`, 14-nov-2026)
+
+- Servidor (ya probado): escalones del HERO (recorte gratis → IA de pago), publicación automática D152, restaurar, 3 estados, prioridades, matriz y bandeja «Dudas del catálogo». Incluye #187 (`vps_image`) y `vps_recorte` (a856eec).
+- Móvil (nuevo): lista con HERO, prioridad y filtros; pestaña Fotos (HERO · LIFESTYLE · BENEFICIO, comparar con 3 estados, tope del día); Anuncio sin precio ni logo con encuadre por la caja del producto, puntos por foto y pie PROOF; bandeja con voz o texto.
+- Estado: PR abierto hacia `main`, sin desplegar. Espera a la sesión de imágenes: servidor real de dudas en el VPS y recorte real.
+
 ## Próxima compuerta
 
 CV-LAUNCH-POLISH-002 cerrada (3.10.16): Añadir al carrito en verde #006068 con texto blanco en tienda/categorías; Copiar/Compartir del tarifario ocultos hasta consultar una tarifa.
@@ -504,3 +510,16 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 - Pruebas PostgreSQL desechables: ruta/cierre/síntesis, duplicados, instrucción ambigua, riesgo sensible, aprobación, actor distinto, legacy, owner_change de WhatsApp, fallo y bridge incorrecto. Pendiente CI, migración y cierre real de #141; rollback de las tres funciones incluido. No se habilita programación autónoma ni se amplían permisos de Lennys.
 
 - Preflight real errors_open #208: returncode 0, 21 incidencias abiertas, salida legible de 6123 caracteres. No es análisis IA nuevo. Informes largos se muestran con resumen y Leer informe completo para conservar la portada limpia. La prueba SQL incorpora además identidades nulas y las rechaza explícitamente.
+
+
+## CURRENT — EVO-001: estabilización preparada y verificada, sin desplegar (2026-11-15)
+
+- Rama independiente `evo/evo-001-content-studio`, [PR #230](https://github.com/ernest196391/Casa-Viva/pull/230), base `8f3e525985c6e1a4ebf8f249925672a6d8956aa5`. El servidor de #224 (`bbd10f21d82fd53fc8e6d1aed7d904e3ce8001e0`) queda reconciliado como segundo padre, preservando main posterior, pantalla `page()` y assets actuales byte a byte. Core candidato 3.14.171. Diseño v2/suite visual de #224 reservados para Stitch.
+- Corregidos y probados: resultado aplazado conserva corrección del supervisor (dato/texto/foto); restaurar/rechazar HERO conserva altas y bajas posteriores de galería; URL-only respeta HERO/web y LIFESTYLE-BENEFICIO/anuncios. Clases, REST, prioridades, recorte, snapshots y pruebas anteriores reutilizados.
+- Política fija de gasto adicional 0: generación/poll/texto externo y escalados bloqueados con credenciales/flags. Recorte gratuito permanece. Publicación autónoma deshabilitada incluso por llamada directa; aprobación humana existente preservada. Handoffs declaran budget_usd=0 y billable_allowed=false.
+- Complemento [VivaBot #42](https://github.com/ernest196391/vivabot/pull/42), SHA `d95b31801b58578da93a478ec33ee0f37a75a814`: QA visual humana con/sin --sin-pago; bloqueo panel/lote antes de proveedor; sin cambios a imágenes ordinarias de WhatsApp. CI completo 43744354065 y Pedidos/vales 43744354087 en success. Aún no instalado.
+- Core código `89abd45b001560ec04324d031bff68bb5598ae27`: CI 43744444152 success en los cinco jobs, release/staging success. PHP local: contratos anteriores, 94 comprobaciones v2 y política con red espía; Node 7/7. Integración WordPress/MariaDB y navegador: Content Studio 14/14; general 39 pass, 13 skip reservadas al job dedicado. No pruebas con proveedores pagados.
+- Recorte real verificado por SSH existente/WordPress → VPS, sin instalar nada: smoke 43744911546 sobre `52fd70ee8ccd2379b5c20bd65b7f92278eba4a95`, producto 52/adjunto 6490, PNG 377×872, 33,24 s; hashes y evidencia en docs/evidence/EVO_001_RECORTE.json. Temporales remotos borrados; catálogo y servicios sin cambios. Bridge #217 había confirmado que no expone recorte, limitación superada por workflow acotado.
+- Revisión visual del PNG: quedan restos claros de fondo inferior/halo; no aprobar publicación aunque la máscara diga fiable=true. No bloquea certificar el transporte/recorte real, sí impide declarar calidad fotográfica automática. Se mantiene revisión humana y autonomía desactivada.
+- Estado: implementación estabilizada y verificada, PRs en borrador para revisión del propietario. Ningún merge ni despliegue. `costo_actual`: infraestructura existente; `costo_nuevo_requerido`: 0; `alternativa_gratuita`: recorte local y revisión humana; `momento_de_escalar`: fase posterior expresamente aprobada.
+- Evidencias, archivos y reversión: docs/EVO_001_CONTENT_STUDIO.md. Siguiente: aprobación explícita de ambos PR/SHA y despliegue controlado con rollback; después EVO-002 de auditoría/score/cola. No incorporar interfaces ni activar publicaciones autónomas.
