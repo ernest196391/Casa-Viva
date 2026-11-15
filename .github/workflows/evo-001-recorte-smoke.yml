@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            "cd /home/u824654880/domains/casaviva.company/public_html && wp eval-file /dev/stdin" \
+            "cd /home/u824654880/domains/casaviva.company/public_html && wp eval-file -" \
             < scripts/catalog/evo-001-recorte-live.php > smoke-private.log
           sed -n 's/^EVO001_REPORT //p' smoke-private.log | tail -n 1 > recorte-result.json
           jq -e '.ok == true and .billable_endpoint_called == false and .catalog_changed == false' recorte-result.json >/dev/null
