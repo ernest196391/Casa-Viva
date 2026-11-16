@@ -9,6 +9,8 @@ VPS (`cv-proposal-gate`, vía `ssh vps-gate`). Se lanza A MANO.
     local-runner.py proponer N                 reserva la tarea, genera la propuesta
                                                con Qwen y la GUARDA en local (no se envía)
     local-runner.py proponer N --entregar      lo mismo y, además, la entrega a la puerta
+    local-runner.py entregar N archivo.json    entrega una propuesta ya guardada y revisada
+                                               (la reserva de «proponer» dura 45 min)
 
 Por defecto nada se entrega: hay que pedir `--entregar` de forma explícita.
 La puerta decide si acepta (apagada por defecto, solo `docs/**`, idempotencia,
@@ -134,6 +136,21 @@ def cmd_proponer(public_id: int, deliver: bool, repo: Path, out: Path, model: st
     return EXIT_OK
 
 
+def cmd_entregar_guardada(public_id: int, path: Path) -> int:
+    """Entrega una propuesta ya guardada y revisada (la reserva de `proponer` sigue vigente 45 min)."""
+    try:
+        proposal = json.loads(Path(path).read_text(encoding="utf-8"))
+        proposal["proposal_id"], proposal["operations"], proposal["title"]
+    except (OSError, ValueError, KeyError, TypeError):
+        raise RunnerError(EXIT_USAGE, "archivo de propuesta no válido")
+    if proposal.get("task_public_id") != public_id:
+        raise RunnerError(EXIT_USAGE, "la propuesta guardada no es de esa tarea")
+    print(summarize(proposal))
+    _require_ok(ssh_gate(f"entregar {public_id}", Path(path).read_bytes()))
+    print("Entregada a la puerta: pasa al Dev Worker y queda pendiente de aprobación humana.")
+    return EXIT_OK
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Programa del portátil: Qwen local + puerta de propuestas del VPS (a mano).")
     ap.add_argument("--model", default=DEFAULT_MODEL)
@@ -146,6 +163,9 @@ def main(argv=None) -> int:
     p = sub.add_parser("proponer")
     p.add_argument("tarea", type=int)
     p.add_argument("--entregar", action="store_true")
+    e = sub.add_parser("entregar", help="entrega una propuesta ya guardada y revisada")
+    e.add_argument("tarea", type=int)
+    e.add_argument("archivo")
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):  # tildes y «» legibles en la consola de Windows
         try:
@@ -159,6 +179,8 @@ def main(argv=None) -> int:
             return cmd_latido(args.model)
         if args.tarea < 1:
             raise RunnerError(EXIT_USAGE, "número de tarea no válido")
+        if args.cmd == "entregar":
+            return cmd_entregar_guardada(args.tarea, Path(args.archivo))
         return cmd_proponer(args.tarea, args.entregar, Path(args.repo), Path(args.out), args.model, args.host)
     except RunnerError as exc:
         print(f"{exc.message}", file=sys.stderr)

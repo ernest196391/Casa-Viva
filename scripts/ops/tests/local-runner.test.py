@@ -101,6 +101,30 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(sent["repo"], "casa-viva")
         self.assertIn("pendiente de aprobación humana", text)
 
+    def test_entregar_guardada_tras_revisar(self):
+        self.proponer(deliver=False)
+        saved = next((self.out / "tarea-77").glob("lp-*.json"))
+        self.gate.calls.clear()
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(runner.cmd_entregar_guardada(77, saved), 0)
+        self.assertEqual(self.gate.verbs(), ["entregar"])
+        self.assertEqual(self.gate.calls[0][1], saved.read_bytes())
+
+    def test_entregar_guardada_valida_el_archivo(self):
+        bad = Path(self.tmp.name) / "mala.json"
+        bad.write_text("no es json", encoding="utf-8")
+        with self.assertRaises(runner.RunnerError) as ctx:
+            runner.cmd_entregar_guardada(77, bad)
+        self.assertEqual(ctx.exception.code, runner.EXIT_USAGE)
+        self.proponer(deliver=False)
+        saved = next((self.out / "tarea-77").glob("lp-*.json"))
+        self.gate.calls.clear()
+        with self.assertRaises(runner.RunnerError):
+            runner.cmd_entregar_guardada(78, saved)  # propuesta de otra tarea
+        with self.assertRaises(runner.RunnerError):
+            runner.cmd_entregar_guardada(77, Path(self.tmp.name) / "no-existe.json")
+        self.assertNotIn("entregar", self.gate.verbs())
+
     def test_la_puerta_rechaza_la_reserva(self):
         self.gate.replies["tarea"] = {"ok": False, "code": 4, "reason": "tarea reservada"}
         with self.assertRaises(runner.RunnerError) as ctx:
