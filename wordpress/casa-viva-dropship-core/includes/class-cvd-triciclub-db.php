@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
  * - Un viaje NO es un pedido de WooCommerce.
  */
 final class CVD_Triciclub_Db {
-	public const VERSION = 7; // 7 (10-nov, auditoría): clientes.lugares (Casa/Trabajo, antes una opción por cliente) · 6 (10-nov, Pa'llá «para otra persona»): codigos.texto — avisos de WhatsApp al pasajero · 2 (4-nov): alta — tipo, motor, carga_kg, enviado_at, revisado_at, motivo · 3: verificación — verif, carne_hash · 4 (5-nov, Pa'llá transporte D138–D140): ofertas, cuenta, viajes con precio mixto · 5 (6-nov, Pa'llá v3 D142): servicio comida/carga — adelanto, recibo, peso, ayudante; chofer «puedo adelantar»
+	public const VERSION = 8; // 8 (16-nov, Pa'llá Reparto D157): negocios, puntos, confianza, turnos; viajes con negocio, ventana, salida y «lo lleva» · 7 (10-nov, auditoría): clientes.lugares (Casa/Trabajo, antes una opción por cliente) · 6 (10-nov, Pa'llá «para otra persona»): codigos.texto — avisos de WhatsApp al pasajero · 2 (4-nov): alta — tipo, motor, carga_kg, enviado_at, revisado_at, motivo · 3: verificación — verif, carne_hash · 4 (5-nov, Pa'llá transporte D138–D140): ofertas, cuenta, viajes con precio mixto · 5 (6-nov, Pa'llá v3 D142): servicio comida/carga — adelanto, recibo, peso, ayudante; chofer «puedo adelantar»
 	private const VERSION_OPTION = 'cvd_tc_db';
 
 	public static function t( string $name ): string {
@@ -138,6 +138,15 @@ final class CVD_Triciclub_Db {
   recibo_foto varchar(160) NOT NULL DEFAULT '',
   peso varchar(8) NOT NULL DEFAULT '',
   extra_cup int unsigned NOT NULL DEFAULT 0,
+  negocio_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  punto_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  ventana_desde datetime NULL,
+  ventana_hasta datetime NULL,
+  sale_at datetime NULL,
+  sigue_at datetime NULL,
+  lleva_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  cobrar_para varchar(10) NOT NULL DEFAULT '',
+  turno_fase tinyint unsigned NOT NULL DEFAULT 0,
   respondido_at datetime NULL,
   llego_at datetime NULL,
   recogido_at datetime NULL,
@@ -153,7 +162,9 @@ final class CVD_Triciclub_Db {
   KEY estado_fecha (estado,created_at),
   KEY chofer_estado (chofer_id,estado),
   KEY cliente_fecha (cliente_id,created_at),
-  KEY buscando (estado,clase,created_at)
+  KEY buscando (estado,clase,created_at),
+  KEY negocio_fecha (negocio_id,created_at),
+  KEY salida (estado,sale_at)
 ) {$c};" );
 		// 4 (5-nov, Pa'llá transporte): cada «Acepto» o «+10/+20/+30 %» de un chofer a un pedido.
 		dbDelta( 'CREATE TABLE ' . self::t( 'ofertas' ) . " (
@@ -242,6 +253,67 @@ final class CVD_Triciclub_Db {
   KEY telefono_fecha (telefono,created_at),
   KEY pendientes (enviado_at,vence_at),
   KEY ip_fecha (ip,created_at)
+) {$c};" );
+		// 8 (16-nov, Pa'llá Reparto D157): los negocios que piden mensajeros (tienda, mercado, otra web) y sus puntos de recogida.
+		dbDelta( 'CREATE TABLE ' . self::t( 'negocios' ) . " (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  nombre varchar(80) NOT NULL,
+  tipo varchar(12) NOT NULL DEFAULT 'tienda',
+  telefono varchar(20) NOT NULL DEFAULT '',
+  clave_hash char(64) NOT NULL DEFAULT '',
+  paga_envio varchar(8) NOT NULL DEFAULT 'cliente',
+  cobro varchar(16) NOT NULL DEFAULT 'pagado',
+  asignar varchar(8) NOT NULL DEFAULT 'te_toca',
+  comision_pct tinyint unsigned NULL,
+  activo tinyint(1) NOT NULL DEFAULT 1,
+  created_at datetime NOT NULL,
+  updated_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  KEY clave_hash (clave_hash)
+) {$c};" );
+		dbDelta( 'CREATE TABLE ' . self::t( 'puntos' ) . " (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  negocio_id bigint(20) unsigned NOT NULL,
+  nombre varchar(80) NOT NULL,
+  direccion varchar(160) NOT NULL DEFAULT '',
+  lat decimal(9,6) NOT NULL,
+  lng decimal(9,6) NOT NULL,
+  desde time NULL,
+  hasta time NULL,
+  dias varchar(7) NOT NULL DEFAULT '1234567',
+  telefono varchar(20) NOT NULL DEFAULT '',
+  activo tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY  (id),
+  KEY negocio_id (negocio_id)
+) {$c};" );
+		// La «persona de confianza» que lleva un viaje del mensajero titular (dinero, comisión y nota siguen siendo de él).
+		dbDelta( 'CREATE TABLE ' . self::t( 'confianza' ) . " (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  chofer_id bigint(20) unsigned NOT NULL,
+  nombre varchar(80) NOT NULL,
+  telefono varchar(20) NOT NULL DEFAULT '',
+  carne4 char(4) NOT NULL DEFAULT '',
+  estado varchar(10) NOT NULL DEFAULT 'pendiente',
+  epoca int unsigned NOT NULL DEFAULT 1,
+  aprobado_por bigint(20) unsigned NOT NULL DEFAULT 0,
+  created_at datetime NOT NULL,
+  updated_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  KEY chofer_id (chofer_id)
+) {$c};" );
+		// «Te toca»: a quién se le ofreció cada encargo, en qué ronda y qué contestó.
+		dbDelta( 'CREATE TABLE ' . self::t( 'turnos' ) . " (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  viaje_id bigint(20) unsigned NOT NULL,
+  chofer_id bigint(20) unsigned NOT NULL,
+  ronda tinyint unsigned NOT NULL DEFAULT 1,
+  estado varchar(10) NOT NULL DEFAULT 'ofrecido',
+  puntos smallint unsigned NOT NULL DEFAULT 0,
+  hasta datetime NOT NULL,
+  created_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  KEY viaje_id (viaje_id),
+  KEY chofer_estado (chofer_id,estado)
 ) {$c};" );
 		if ( ! get_role( CVD_Triciclub_Alta::ROL ) ) { add_role( CVD_Triciclub_Alta::ROL, 'Chofer de Triciclub', array( 'read' => true ) ); }
 		update_option( self::VERSION_OPTION, self::VERSION, true ); // autoload: se mira en cada carga, sin consulta aparte
