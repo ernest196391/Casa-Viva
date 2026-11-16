@@ -1,3 +1,9 @@
+# CURRENT — EVO-LOCAL-001: diseño del transporte portátil ↔ VPS (2026-11-16)
+
+- Diseño en [EVO_LOCAL_001_TRANSPORTE.md](EVO_LOCAL_001_TRANSPORTE.md): «puerta de propuestas» por SSH con comando forzado sobre `ops_prepare_dev_patch` y el Dev Worker existentes; fase 1 solo `docs/**`. **Nada instalado.** Espera 3 decisiones de Ernesto.
+
+---
+
 # CURRENT — EVO-LOCAL-001: proponedor local construido (2026-11-16)
 
 - Nuevo `scripts/ops/local-proposer.py` (Qwen2.5-Coder 7B por Ollama, solo loopback): tarea → propuesta `cv-change-proposal-v1`, validada con el contrato oficial y comprobada contra los archivos reales. No aplica ni entrega; sin subprocess ni credenciales. Detalle y límites: [EVO_LOCAL_001_PROPONEDOR_LOCAL.md](EVO_LOCAL_001_PROPONEDOR_LOCAL.md).
