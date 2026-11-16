@@ -13,7 +13,11 @@ require_once __DIR__ . '/class-cvd-pv-cuenta.php';
 require_once __DIR__ . '/class-cvd-pv.php';
 require_once __DIR__ . '/class-cvd-pv-api.php';
 require_once __DIR__ . '/class-cvd-pv-panel.php';
+require_once __DIR__ . '/class-cvd-pv-reparto.php';       // 16-nov (D157): Pa'llá Reparto — negocios, «Te toca», salida, confianza. Nace apagado: cvd_pv_reparto = no.
+require_once __DIR__ . '/class-cvd-pv-reparto-panel.php'; // su panel de soporte: /palla/admin/reparto
 
 CVD_Pv::register();
 CVD_Pv_Api::register();
 CVD_Pv_Panel::register();
+CVD_Pv_Reparto::register();
+CVD_Pv_Reparto_Panel::register();

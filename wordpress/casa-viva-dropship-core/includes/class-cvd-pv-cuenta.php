@@ -45,7 +45,7 @@ final class CVD_Pv_Cuenta {
 	/** Al terminar un viaje: apunta su comisión (una sola vez por viaje). Devuelve [pct, cup]. */
 	public static function apuntar( object $viaje, int $total ): array {
 		global $wpdb;
-		$pct = self::pct();
+		$pct = max( 0, min( 30, (int) apply_filters( 'cvd_pv_comision_pct', self::pct(), $viaje ) ) ); // Reparto (D157): la comisión propia de un negocio
 		$cup = (int) round( $total * $pct / 100 );
 		$t = CVD_Triciclub_Db::t( 'cuenta' );
 		if ( $cup > 0 && ! $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$t} WHERE viaje_id=%d AND tipo='comision'", (int) $viaje->id ) ) ) {
