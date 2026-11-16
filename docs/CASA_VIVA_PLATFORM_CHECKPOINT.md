@@ -1,3 +1,10 @@
+# CURRENT — EVO-LOCAL-001: ejecutor aislado, evidencia y plan (2026-11-16)
+
+- Verificado en el VPS: el aislamiento YA existe y funciona (copia dedicada de bwrap + perfil `cv-control-codex-bwrap` cargado desde el 14-nov; como `cvdev`: sin red, sin `/root` ni `~/.ssh`, `/usr` solo lectura, un solo destino de escritura, entorno limpio). `/usr/bin/bwrap` sigue fallando (RTM_NEWADDR).
+- **Hallazgo:** las pruebas del Dev Worker corren como root, con red y con 10 variables secretas en el entorno (medido). Plan A: pruebas en caja con perfil propio; mitigación inmediata: entorno limpio en `run()`. Detalle: [EVO_LOCAL_001_EJECUTOR_AISLADO.md](EVO_LOCAL_001_EJECUTOR_AISLADO.md). **Nada instalado ni cambiado.** Espera 3 decisiones de Ernesto.
+
+---
+
 # CURRENT — EVO-LOCAL-001: piloto de punta a punta HECHO (2026-11-16 00:16 Cuba)
 
 - **Resultado:** la tarea ficticia #150 («PILOTO: nota de prueba del programador local») llegó hasta `waiting_approval` por el camino completo: `ops_tasks` → puerta (`lista`, `tarea`, `entregar`) → `ops_prepare_dev_patch` → Dev Worker (reclamó 05:13:53 UTC, rama empujada 05:15:53) → pruebas locales `passed`. Qwen tardó 75 s en proponer; la entrega y el worker, ~2 min.
