@@ -1,3 +1,26 @@
+# CURRENT — EVO-LOCAL-001: piloto de punta a punta HECHO (2026-11-16 00:16 Cuba)
+
+- **Resultado:** la tarea ficticia #150 («PILOTO: nota de prueba del programador local») llegó hasta `waiting_approval` por el camino completo: `ops_tasks` → puerta (`lista`, `tarea`, `entregar`) → `ops_prepare_dev_patch` → Dev Worker (reclamó 05:13:53 UTC, rama empujada 05:15:53) → pruebas locales `passed`. Qwen tardó 75 s en proponer; la entrega y el worker, ~2 min.
+- **Qué quedó en GitHub:** rama `control-os/task-150-piloto-nota-de-prueba-del-programador-local-f`, 1 commit (`98539fa`, base `457a821`), autor «Casa Viva Control OS», `auto_merge=0`, **un solo archivo añadido** (`docs/control-os-smoke/piloto-qwen-local.md`, 4 líneas). Sin PR, sin fusión, sin despliegue. «Control OS Dev Gate» estaba en curso al cerrar este registro.
+- **Aviso de honestidad:** el Dev Worker EMPUJA la rama a GitHub por sí solo (como en las pruebas del 13-nov); antes del piloto se dijo que «no se publicaría nada» y eso era impreciso: se publicó una rama de revisión, no `main`.
+- **Auditoría en `ops_events`:** `dev_patch_prepared` (ai:local-proposer), `dev_claimed`, `dev_worktree_ready`, `dev_branch_pushed` (worker). Registro de la puerta sin cuerpos: 1 `lista` ok, 1 `tarea` ok, 1 `entregar` ok.
+- **Carga:** VPS de 1 núcleo llegó a carga ≈ 4,7 durante ~2 min; memoria disponible ≥ 2 GB; web 200, bot online sin reinicios. Con tareas de código (tests más largos) hay que vigilar.
+- **Estado final:** puerta APAGADA otra vez (fila `local_proposer` borrada 05:14 UTC; `lista` responde «apagada»), sin reservas. La fila de latido sigue. La tarea #150 queda **pendiente de aprobación humana** (nada se aprobó).
+- **Hueco corregido durante el piloto:** tras `proponer N` la tarea queda reservada y `--entregar` fallaba; se añadió `local-runner.py entregar N archivo.json` (PR #238, 18 pruebas).
+- **Limpieza (orden de Ernesto, 00:25):** rama borrada en GitHub (era `98539fa`; «Control OS Dev Gate» había terminado en éxito), tarea #150 `cancelled`, ejecución `blocked` («piloto cancelado») y evento `task_cancelled` en `ops_events`. Las 4 aprobaciones pendientes que quedan (8, 14, 19, 24) son anteriores y ajenas al piloto.
+- **Falta:** fusionar #238; ejecutor aislado y sandbox antes de abrir la fase 2 (código); Control Center crea tareas con `payload.proposal_request`; pantallas 99–102.
+
+---
+
+# CURRENT — EVO-LOCAL-001: programa del portátil construido (2026-11-16)
+
+- `scripts/ops/local-runner.py` (a mano): `lista`, `latido`, `proponer N` (reserva, genera con Qwen y GUARDA en local) y `proponer N --entregar` (además entrega a la puerta). Por defecto NO entrega. Única llamada externa: `ssh vps-gate <orden>` con lista blanca, sin shell. 16 pruebas cableadas en `validate.yml`.
+- **Probado en vivo contra la puerta apagada:** `lista` y `proponer 1` → «puerta apagada» (código 3 del programa, 7 de la puerta), sin reservas ni cambios; `latido` → ok y guardó `programador_local_latido` (`qwen2.5-coder:7b`, versión 1.0).
+- **Sin encender:** `crm_settings local_proposer` sigue sin existir. El piloto de punta a punta (tarea ficticia de `docs/` con `payload.proposal_request`) exige encenderla: pide el SÍ de Ernesto.
+- Diseño (artifact «Casa Viva Control OS», versión del 16-nov 13:00): ya incluye las pantallas 96–130; la 102 «Programadores locales» (Ollama, OpenCode, Qwen 2.5 Coder) puede leer `programador_local_latido`. Sin respuesta escrita a las 5 preguntas de #231.
+
+---
+
 # CURRENT — EVO-LOCAL-001: puerta de propuestas INSTALADA, apagada (2026-11-16 00:45 Cuba)
 
 - **Qué:** `cv-proposal-gate.py` en el VPS (`/opt/cv-proposal-gate/`, hashes = rama del PR #237 `c6c5114`; estado en `/var/lib/cv-proposal-gate/`, 0700). Clave SSH propia `cv-local-proposer-16nov` con `restrict,command=…` en `/root/.ssh/authorized_keys` (36 → 37 líneas; copia previa en `/root/backups/evo001-20261115/authorized_keys.antes-puerta`). Portátil: clave `~/.ssh/cv_local_proposer` y `Host vps-gate`.
