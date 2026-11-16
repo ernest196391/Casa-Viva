@@ -79,7 +79,7 @@ final class CVD_Pv_Panel {
 		foreach ( array( 'no' => 'Apagar', 'prueba' => 'Prueba', 'si' => 'Abrir a todos' ) as $k => $t ) {
 			if ( $k !== $modo ) { $h .= '<form class="i" method="post">' . $n . '<input type="hidden" name="accion" value="modo"><input type="hidden" name="modo" value="' . esc_attr( $k ) . '"><button' . ( 'si' === $k ? ' onclick="return confirm(\'¿Abrir Pa&#39;llá a TODOS los clientes y choferes?\')"' : '' ) . '>' . esc_html( $t ) . '</button></form> '; }
 		}
-		$h .= '<br><small>Cliente: <a href="' . esc_url( home_url( '/palla/ir/' ) ) . '">/palla/ir/</a> · Chofer: <a href="' . esc_url( home_url( '/palla/chofer/' ) ) . '">/palla/chofer/</a> · Choferes y altas: <a href="' . esc_url( home_url( '/triciclub/admin/' ) ) . '">/triciclub/admin</a></small></div>';
+		$h .= '<br><small>Cliente: <a href="' . esc_url( home_url( '/palla/ir/' ) ) . '">/palla/ir/</a> · Chofer: <a href="' . esc_url( home_url( '/palla/chofer/' ) ) . '">/palla/chofer/</a> · Choferes y altas: <a href="' . esc_url( home_url( '/triciclub/admin/' ) ) . '">/triciclub/admin</a> · Reparto (negocios): <a href="' . esc_url( home_url( '/palla/admin/reparto/' ) ) . '">/palla/admin/reparto</a></small></div>';
 		$h .= '<div class="n"><div><b>' . (int) $hoy->pedidos . '</b>pedidos hoy</div><div><b>' . (int) $hoy->hechos . '</b>viajes hechos</div><div><b>' . $ofertas . '</b>ofertas</div><div><b>' . $en_linea . '</b>choferes en línea</div></div>';
 		$h .= '<p><small>Movido hoy: ' . esc_html( self::cup( (int) $hoy->cup ) ) . ' · comisión: ' . esc_html( self::cup( (int) $hoy->com ) ) . '</small></p>';
 
