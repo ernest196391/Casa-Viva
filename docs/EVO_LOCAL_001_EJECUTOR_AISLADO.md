@@ -49,3 +49,15 @@ Instalar el ejecutor de la Fase B (buzón `jobs/` → resultado → consumidor) 
 1. ¿Se sigue con el diseño A (aislar el paso de pruebas del Dev Worker)?
 2. ¿Se aplica ya la mitigación inmediata (entorno limpio en `run()`), antes del sandbox completo?
 3. ¿E2 (perfil AppArmor y copia de bwrap en el VPS) se hace en cuanto E1 esté en `main`, o prefieres revisarlo antes?
+
+## 8. Avance del 16-nov (código en la rama; NADA desplegado)
+**Mitigación inmediata — construida y validada en copia temporal.**
+- `dev-worker.py`: `child_env()` y `run()` usan una lista blanca (`PATH`, `HOME`, `LANG`, `LC_*`, `USER`, `LOGNAME`, `TERM`, `TZ`, `TMPDIR`); ningún nombre con `KEY`, `TOKEN`, `SECRET`, `PASS`, `CREDENTIAL` o `AUTH` pasa, ni siquiera por `CV_DEV_CHILD_ENV_EXTRA` (salida de emergencia para variables NO secretas que una prueba necesite). Una prueba estática exige que `run()` sea el único punto que lanza procesos.
+- 10 pruebas nuevas (`dev-worker-env.test.py`, cableadas en `validate.yml`).
+- **Validación en el VPS** (copia temporal en `/tmp`, ya borrada; el repo vivo no se tocó): `npm run check` de VivaBot con un entorno de 3 variables → **1 715 pruebas, 0 fallos, 65 s**.
+- **No validado todavía:** los perfiles de `casa-viva` y `nexo` (`lint`, `typecheck`, `build`) con entorno mínimo. Si un `build` necesitara una variable pública, el worker lo mostraría como fallo de esa tarea (nada se rompe en producción) y se resuelve con `CV_DEV_CHILD_ENV_EXTRA`.
+- **Pendiente de SÍ:** copiar `dev-worker.py` al VPS y reiniciar `cv-dev-worker`.
+
+**E1 — módulo de la caja, sin cablear.** `scripts/ops/dev-sandbox.py`: `hand_over`/`take_back` (`lchown`, sin seguir enlaces), `install_deps` (`npm ci --ignore-scripts` como `cvdev`, con red, sin secretos) y `run_in_box` (bwrap de la especificación existente, siempre como usuario sin privilegios, sin shell, tiempo límite y muerte del grupo de procesos). 13 pruebas con procesos simulados (`dev-sandbox.test.py`, en CI). El worker aún no lo importa (lo comprueba una prueba).
+
+**Falta para cerrar E1:** (a) cablear el worker detrás de `CV_DEV_SANDBOX` (worktree en `work/run-task-N`, `hand_over`, `install_deps`, cada orden de `TEST_PROFILES` por `run_in_box`, `take_back`, y solo entonces `git add/commit/push` como root); (b) rechazar enlaces simbólicos y modos `120000` en `changed` antes de `git add`; (c) límites de memoria/procesos y medición en E3; (d) ampliar `verify-sandbox.py`.

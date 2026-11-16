@@ -115,8 +115,30 @@ def api(method: str, path: str, body=None, prefer=None):
     return json.loads(raw) if raw else None
 
 
+# Entorno de los procesos hijos (git, npm, pruebas): lista blanca, nunca el del worker.
+# El worker carga /root/vivabot/.env en os.environ para hablar con Supabase; sin esta
+# lista cada prueba heredaba claves de servicio (medido el 16-nov: 10 variables).
+CHILD_ENV_KEYS = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "USER", "LOGNAME", "TERM", "TZ", "TMPDIR")
+DEFAULT_CHILD_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+SECRET_NAME_RE = re.compile(r"KEY|TOKEN|SECRET|PASS|CREDENTIAL|AUTH", re.IGNORECASE)
+
+
+def child_env(environ=None) -> dict:
+    """Entorno mínimo para hijos. `CV_DEV_CHILD_ENV_EXTRA` (nombres separados por comas)
+    añade variables NO secretas que una prueba necesite; los nombres con aspecto de
+    secreto se ignoran siempre."""
+    source = os.environ if environ is None else environ
+    env = {k: source[k] for k in CHILD_ENV_KEYS if k in source and source[k] != ""}
+    env.setdefault("PATH", DEFAULT_CHILD_PATH)
+    for name in str(source.get("CV_DEV_CHILD_ENV_EXTRA", "")).split(","):
+        name = name.strip()
+        if re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", name) and not SECRET_NAME_RE.search(name) and name in source:
+            env[name] = source[name]
+    return env
+
+
 def run(cmd, cwd=None, timeout=120):
-    p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+    p = subprocess.run(cmd, cwd=cwd, env=child_env(), capture_output=True, text=True, timeout=timeout)
     out = (p.stdout or "") + (("\nSTDERR:\n" + p.stderr) if p.stderr else "")
     return p.returncode, out[-MAX_LOG:]
 
