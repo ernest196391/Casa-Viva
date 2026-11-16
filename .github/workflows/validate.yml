@@ -46,6 +46,7 @@ jobs:
           python3 scripts/ops/tests/opencode-sandbox.test.py
           python3 scripts/ops/tests/opencode-proposal.test.py
           python3 scripts/ops/tests/local-proposer.test.py
+          python3 scripts/ops/tests/cv-proposal-gate.test.py
           python3 scripts/ops/tests/opencode-demo-e2e.test.py
           php -l scripts/ops/control-web/index.php
           php scripts/ops/tests/control-web-access.php
