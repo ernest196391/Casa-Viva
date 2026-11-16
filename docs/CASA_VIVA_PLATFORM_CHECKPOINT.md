@@ -1,3 +1,13 @@
+# CURRENT — EVO-LOCAL-001: puerta de propuestas INSTALADA, apagada (2026-11-16 00:45 Cuba)
+
+- **Qué:** `cv-proposal-gate.py` en el VPS (`/opt/cv-proposal-gate/`, hashes = rama del PR #237 `c6c5114`; estado en `/var/lib/cv-proposal-gate/`, 0700). Clave SSH propia `cv-local-proposer-16nov` con `restrict,command=…` en `/root/.ssh/authorized_keys` (36 → 37 líneas; copia previa en `/root/backups/evo001-20261115/authorized_keys.antes-puerta`). Portátil: clave `~/.ssh/cv_local_proposer` y `Host vps-gate`.
+- **Probado en vivo con la clave restringida:** `lista` → código 7 «puerta apagada»; `id`, `lista; id` y sin orden → código 2; sin shell ni PTY; reenvío de puertos bloqueado; la clave anterior sigue funcionando; `latido` → ok (escribió `crm_settings programador_local_latido`).
+- **Apagada:** `crm_settings local_proposer` no existe (solo `si` la enciende). No hay tareas con `payload.proposal_request`. Nada se ha entregado al Dev Worker.
+- **Reversión:** restaurar `authorized_keys` desde la copia (o borrar la línea `cv-local-proposer-16nov`); `rm -rf /opt/cv-proposal-gate /var/lib/cv-proposal-gate`; borrar la fila `programador_local_latido`; en el portátil quitar `Host vps-gate` y la clave.
+- **Falta:** `local-runner.py` en el portátil (`lista → tarea → propone → entregar`, `--dry-run` por defecto), piloto con tarea ficticia de documentación (exige encender `local_proposer`), y pantallas 99–102 cuando Diseño responda en #231.
+
+---
+
 # CURRENT — EVO-LOCAL-001: proponedor local construido (2026-11-16)
 
 - Nuevo `scripts/ops/local-proposer.py` (Qwen2.5-Coder 7B por Ollama, solo loopback): tarea → propuesta `cv-change-proposal-v1`, validada con el contrato oficial y comprobada contra los archivos reales. No aplica ni entrega; sin subprocess ni credenciales. Detalle y límites: [EVO_LOCAL_001_PROPONEDOR_LOCAL.md](EVO_LOCAL_001_PROPONEDOR_LOCAL.md).
