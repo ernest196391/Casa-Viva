@@ -45,6 +45,11 @@ public class AvisosService extends Service {
     private static final String ACTION_SILENCE = "company.casaviva.palla.SILENCIAR"; // 1.2: calla, pero el aviso se queda
     private static final String ACTION_OFF = "company.casaviva.palla.DESCONECTAR";   // 1.4: «Desconectarme» desde el aviso fijo
     private static final String ACTION_NO = "company.casaviva.palla.RECHAZAR";       // 10-nov (chofer): «Rechazar» quita el aviso
+    // 16-nov (Reparto, D157): «Te toca» → Rechazar; «¿Sigues?» → Sigo · Ya no puedo. Llaman a la API sin abrir la app.
+    private static final String ACTION_TURNO_NO = "company.casaviva.palla.TURNO_NO";
+    private static final String ACTION_SIGO = "company.casaviva.palla.SIGO";
+    private static final String ACTION_NOPUEDO = "company.casaviva.palla.NOPUEDO";
+    static final String PV_API = "https://casaviva.company/wp-json/casa-viva/v1/pv/";
     private static final String DISP_URL = BuildConfig.CHOFER ? "https://casaviva.company/wp-json/casa-viva/v1/pv/chofer/disponible" : "https://casaviva.company/wp-json/casa-viva/v1/palla/disponible";
     private static android.media.MediaPlayer siren;
     // 1.2 (29-oct, Ernesto: «se quedó más de 1 min vibrando y no sabía cómo apagarlo»): la vibración se para con el MISMO
@@ -354,6 +359,26 @@ public class AvisosService extends Service {
     }
 
     /** 1.4: «Desconectarme» desde el aviso: el servidor deja de mandarle carreras (si no hay señal, la app ya no suena igual). */
+    /** 16-nov (Reparto): POST a la API del chofer (Rechazar el turno, Sigo, Ya no puedo). Sin señal se pierde: la app lo enseña al abrirla. */
+    static void postPv(String token, String path, String json) {
+        if (token == null || token.isEmpty()) { return; }
+        HttpURLConnection h = null;
+        try {
+            h = (HttpURLConnection) new URL(PV_API + path).openConnection();
+            h.setConnectTimeout(15_000);
+            h.setReadTimeout(15_000);
+            h.setDoOutput(true);
+            h.setRequestMethod("POST");
+            h.setRequestProperty("Content-Type", "application/json");
+            h.setRequestProperty("X-Palla-Token", token);
+            h.getOutputStream().write(json.getBytes(StandardCharsets.UTF_8));
+            h.getResponseCode();
+        } catch (Exception ignored) {
+        } finally {
+            if (h != null) { h.disconnect(); }
+        }
+    }
+
     private static void postOff(String token) {
         if (token == null || token.isEmpty()) { return; }
         HttpURLConnection h = null;
@@ -435,6 +460,15 @@ public class AvisosService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && (ACTION_STOP.equals(intent.getAction()) || ACTION_SILENCE.equals(intent.getAction()))) { stopSiren(this); } // quitó el aviso o tocó «Silenciar»
         if (intent != null && ACTION_NO.equals(intent.getAction())) { stopAlarm(this); } // 10-nov: «Rechazar»: se calla y se quita el aviso
+        if (intent != null && intent.getAction() != null && (ACTION_TURNO_NO.equals(intent.getAction()) || ACTION_SIGO.equals(intent.getAction()) || ACTION_NOPUEDO.equals(intent.getAction()))) {
+            stopAlarm(this); // 16-nov (Reparto): se calla, se quita el aviso y se manda la respuesta
+            final String id = intent.getStringExtra("viaje"), token = Prefs.token(this), a = intent.getAction();
+            if (id != null && id.matches("\\d+")) {
+                final String path = ACTION_TURNO_NO.equals(a) ? "chofer/turnos/" + id + "/rechazar" : (ACTION_SIGO.equals(a) ? "chofer/viajes/" + id + "/sigo" : "chofer/viajes/" + id + "/estado");
+                final String json = ACTION_NOPUEDO.equals(a) ? "{\"accion\":\"suelto\",\"motivo\":\"Ya no puedo\"}" : "{}";
+                new Thread(() -> postPv(token, path, json), "palla-reparto").start();
+            }
+        }
         if (intent != null && ACTION_OFF.equals(intent.getAction())) { // 1.4: «Desconectarme» desde la barra de arriba
             stopAlarm(this);
             Prefs.setAvailable(this, false, 0);
@@ -532,13 +566,17 @@ public class AvisosService extends Service {
                 if (!key.isEmpty() && key.equals(alarmOrder)) { stopAlarm(this); alarmOrder = ""; }
                 return;
             }
-            boolean loud = !(tags.contains("lost") || tags.contains("cancelled") || tags.contains("changed"));
+            boolean loud = !(tags.contains("lost") || tags.contains("cancelled") || tags.contains("changed") || tags.contains("suelto"));
             if (tags.contains("offer") && !Prefs.available(this)) { return; } // 1.3: desconectado, las carreras libres no suenan
             if (tags.contains("pedido") && !Prefs.available(this)) { return; } // 10-nov (chofer): desconectado, los pedidos no suenan
+            if (tags.contains("tetoca") && !Prefs.available(this)) { return; } // 16-nov (Reparto): igual con «Te toca»
             String click = e.optString("click", "");
             boolean pedido = BuildConfig.CHOFER && tags.contains("pedido");
+            String tipo = !BuildConfig.CHOFER ? "" : (tags.contains("tetoca") ? "tetoca" : (tags.contains("sigues") ? "sigues" : (pedido ? "pedido" : "")));
             if (pedido) { click = MainActivity.HOME + "#ch-pedidos"; } // 10-nov: el aviso abre «Pedidos cerca»
-            alarm(e.optString("title", "Pa'llá"), e.optString("message", ""), click, loud, key, pedido ? viaje : "");
+            if ("tetoca".equals(tipo)) { click = MainActivity.HOME + "#ch-tetoca"; }
+            if ("sigues".equals(tipo)) { click = MainActivity.HOME; }
+            alarm(e.optString("title", "Pa'llá"), e.optString("message", ""), click, loud, key, tipo.isEmpty() ? "" : viaje, tipo);
         } catch (Exception ignored) { }
     }
 
@@ -546,7 +584,7 @@ public class AvisosService extends Service {
      * El aviso: se ve arriba (sin sonido del canal) con «Silenciar», y la bocina suena aparte (carrera libre, asignada o
      * prueba) hasta 30 s. Lo demás (ya no es tuya, se canceló, cambió) solo vibra una vez.
      */
-    private void alarm(String title, String text, String click, boolean loud, String order, String viaje) {
+    private void alarm(String title, String text, String click, boolean loud, String order, String viaje, String tipo) {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm == null) { return; }
         Intent stop = new Intent(this, AvisosService.class).setAction(ACTION_STOP);
@@ -560,7 +598,24 @@ public class AvisosService extends Service {
             .setCategory(Notification.CATEGORY_ALARM)
             .setContentIntent(openApp(click, 1))
             .setDeleteIntent(onDismiss);
-        if (loud && !viaje.isEmpty()) {
+        if (loud && !viaje.isEmpty() && "tetoca".equals(tipo)) {
+            // 16-nov (Reparto): «Te toca» → Aceptar (se lo queda al precio fijo y abre la app) · Rechazar (pasa al siguiente).
+            Intent si = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra("open", MainActivity.HOME).putExtra("aceptar", viaje).putExtra("turno", true);
+            PendingIntent onYes = PendingIntent.getActivity(this, 8, si, flags);
+            Intent no = new Intent(this, AvisosService.class).setAction(ACTION_TURNO_NO).putExtra("viaje", viaje);
+            PendingIntent onNo = Build.VERSION.SDK_INT >= 26 ? PendingIntent.getForegroundService(this, 9, no, flags) : PendingIntent.getService(this, 9, no, flags);
+            b.addAction(new Notification.Action.Builder(null, "Aceptar", onYes).build());
+            b.addAction(new Notification.Action.Builder(null, "Rechazar", onNo).build());
+        } else if (loud && !viaje.isEmpty() && "sigues".equals(tipo)) {
+            // 16-nov (Reparto): «¿Sigues? Sales a las 14:30» → Sigo · Ya no puedo (lo suelta y lo coge otro).
+            Intent sigo = new Intent(this, AvisosService.class).setAction(ACTION_SIGO).putExtra("viaje", viaje);
+            PendingIntent onSigo = Build.VERSION.SDK_INT >= 26 ? PendingIntent.getForegroundService(this, 10, sigo, flags) : PendingIntent.getService(this, 10, sigo, flags);
+            Intent nop = new Intent(this, AvisosService.class).setAction(ACTION_NOPUEDO).putExtra("viaje", viaje);
+            PendingIntent onNop = Build.VERSION.SDK_INT >= 26 ? PendingIntent.getForegroundService(this, 11, nop, flags) : PendingIntent.getService(this, 11, nop, flags);
+            b.addAction(new Notification.Action.Builder(null, "Sigo", onSigo).build());
+            b.addAction(new Notification.Action.Builder(null, "Ya no puedo", onNop).build());
+        } else if (loud && !viaje.isEmpty()) {
             // 10-nov (Ernesto): pedido de Pa'llá → Aceptar (al precio del cliente, y abre la app) · Rechazar · Silenciar.
             Intent si = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 .putExtra("open", MainActivity.HOME + "#ch-pedidos").putExtra("aceptar", viaje);

@@ -86,19 +86,21 @@ public class MainActivity extends Activity {
         String id = in == null ? null : in.getStringExtra("aceptar");
         if (id == null || !id.matches("\\d+")) { return; }
         in.removeExtra("aceptar");
+        final boolean turno = in.getBooleanExtra("turno", false); // 16-nov (Reparto): «Te toca» → turnos/{id}/aceptar
+        in.removeExtra("turno");
         AvisosService.stopAlarm(this);
         final String url = urlFrom(in), token = Prefs.token(this);
         new Thread(() -> {
             java.net.HttpURLConnection h = null;
             try {
-                h = (java.net.HttpURLConnection) new java.net.URL("https://casaviva.company/wp-json/casa-viva/v1/pv/chofer/pedidos/" + id + "/ofertar").openConnection();
+                h = (java.net.HttpURLConnection) new java.net.URL(AvisosService.PV_API + (turno ? "chofer/turnos/" + id + "/aceptar" : "chofer/pedidos/" + id + "/ofertar")).openConnection();
                 h.setConnectTimeout(10_000);
                 h.setReadTimeout(15_000);
                 h.setDoOutput(true);
                 h.setRequestMethod("POST");
                 h.setRequestProperty("Content-Type", "application/json");
                 h.setRequestProperty("X-Palla-Token", token);
-                h.getOutputStream().write("{\"pct\":0}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                h.getOutputStream().write((turno ? "{}" : "{\"pct\":0}").getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 h.getResponseCode();
             } catch (Exception ignored) {
             } finally {
