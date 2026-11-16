@@ -1,6 +1,6 @@
 # CURRENT — EVO-LOCAL-001: mitigación del entorno limpio y módulo de caja construidos (2026-11-16)
 
-- `dev-worker.py`: los procesos hijos (git, npm, pruebas) ya NO heredan los 10 secretos (lista blanca en `child_env()`). 10 pruebas; validado en copia temporal del VPS con las 1 715 pruebas de VivaBot (0 fallos, entorno de 3 variables). **Sin desplegar** (pide SÍ).
+- `dev-worker.py`: los procesos hijos (git, npm, pruebas) ya NO heredan los 10 secretos (lista blanca en `child_env()`). 10 pruebas; validado en copia temporal del VPS con las 1 715 pruebas de VivaBot (0 fallos, entorno de 3 variables). **DESPLEGADO el 16-nov ~00:40 (SÍ de Ernesto):** hijos del worker con 5 variables y 0 secretos; copia previa en `/root/backups/evo001-20261115/`. Perfil `casa-viva` validado en verde con entorno mínimo; `nexo` ya falla por código/dependencias del checkout, no por el entorno.
 - `scripts/ops/dev-sandbox.py` (E1, sin cablear): entrega/recupera el worktree, instala dependencias como `cvdev` y ejecuta en bwrap sin privilegios; 13 pruebas. Falta cablear el worker, rechazar symlinks, límites de memoria y E2 (copia de bwrap + perfil). Detalle: `EVO_LOCAL_001_EJECUTOR_AISLADO.md` §8.
 
 ---
