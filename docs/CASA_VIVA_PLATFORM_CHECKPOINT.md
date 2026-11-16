@@ -1,3 +1,10 @@
+# CURRENT — EVO-LOCAL-001: Dev Worker cableado a la caja, APAGADO y sin desplegar (2026-11-16)
+
+- `CV_DEV_SANDBOX=1` (único valor que enciende) lleva el worktree a `run-task-N` bajo la raíz de la caja, instala con `npm ci --ignore-scripts` como `cvdev`, prueba dentro de bwrap sin red, recupera el worktree y revalida diff y enlaces antes de commit/push. Apagado = comportamiento anterior. 16 pruebas; CI verde (PR #241). Fusionados antes: #238, #239 y #240; el worker con entorno limpio sigue en el VPS (hash = main).
+- **Falta (pide SÍ):** E2 copiar `dev-worker.py`, `dev-sandbox.py` y la especificación al VPS, instalar el bwrap dedicado del Dev Worker y su perfil AppArmor; E3 validar en vivo con `verify-sandbox.py` y una tarea de docs; E4 encender el interruptor.
+
+---
+
 # CURRENT — EVO-LOCAL-001: mitigación del entorno limpio y módulo de caja construidos (2026-11-16)
 
 - `dev-worker.py`: los procesos hijos (git, npm, pruebas) ya NO heredan los 10 secretos (lista blanca en `child_env()`). 10 pruebas; validado en copia temporal del VPS con las 1 715 pruebas de VivaBot (0 fallos, entorno de 3 variables). **DESPLEGADO el 16-nov ~00:40 (SÍ de Ernesto):** hijos del worker con 5 variables y 0 secretos; copia previa en `/root/backups/evo001-20261115/`. Perfil `casa-viva` validado en verde con entorno mínimo; `nexo` ya falla por código/dependencias del checkout, no por el entorno.
