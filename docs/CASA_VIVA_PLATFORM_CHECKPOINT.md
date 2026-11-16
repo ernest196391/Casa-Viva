@@ -1,3 +1,12 @@
+# CURRENT — EVO-LOCAL-001: programa del portátil construido (2026-11-16)
+
+- `scripts/ops/local-runner.py` (a mano): `lista`, `latido`, `proponer N` (reserva, genera con Qwen y GUARDA en local) y `proponer N --entregar` (además entrega a la puerta). Por defecto NO entrega. Única llamada externa: `ssh vps-gate <orden>` con lista blanca, sin shell. 16 pruebas cableadas en `validate.yml`.
+- **Probado en vivo contra la puerta apagada:** `lista` y `proponer 1` → «puerta apagada» (código 3 del programa, 7 de la puerta), sin reservas ni cambios; `latido` → ok y guardó `programador_local_latido` (`qwen2.5-coder:7b`, versión 1.0).
+- **Sin encender:** `crm_settings local_proposer` sigue sin existir. El piloto de punta a punta (tarea ficticia de `docs/` con `payload.proposal_request`) exige encenderla: pide el SÍ de Ernesto.
+- Diseño (artifact «Casa Viva Control OS», versión del 16-nov 13:00): ya incluye las pantallas 96–130; la 102 «Programadores locales» (Ollama, OpenCode, Qwen 2.5 Coder) puede leer `programador_local_latido`. Sin respuesta escrita a las 5 preguntas de #231.
+
+---
+
 # CURRENT — EVO-LOCAL-001: puerta de propuestas INSTALADA, apagada (2026-11-16 00:45 Cuba)
 
 - **Qué:** `cv-proposal-gate.py` en el VPS (`/opt/cv-proposal-gate/`, hashes = rama del PR #237 `c6c5114`; estado en `/var/lib/cv-proposal-gate/`, 0700). Clave SSH propia `cv-local-proposer-16nov` con `restrict,command=…` en `/root/.ssh/authorized_keys` (36 → 37 líneas; copia previa en `/root/backups/evo001-20261115/authorized_keys.antes-puerta`). Portátil: clave `~/.ssh/cv_local_proposer` y `Host vps-gate`.
