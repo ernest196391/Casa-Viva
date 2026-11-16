@@ -7,7 +7,8 @@
 - **Carga:** VPS de 1 núcleo llegó a carga ≈ 4,7 durante ~2 min; memoria disponible ≥ 2 GB; web 200, bot online sin reinicios. Con tareas de código (tests más largos) hay que vigilar.
 - **Estado final:** puerta APAGADA otra vez (fila `local_proposer` borrada 05:14 UTC; `lista` responde «apagada»), sin reservas. La fila de latido sigue. La tarea #150 queda **pendiente de aprobación humana** (nada se aprobó).
 - **Hueco corregido durante el piloto:** tras `proponer N` la tarea queda reservada y `--entregar` fallaba; se añadió `local-runner.py entregar N archivo.json` (PR #238, 18 pruebas).
-- **Falta:** decidir qué hacer con la tarea #150 y la rama (aprobar/rechazar/borrar); fusionar #238; ejecutor aislado y sandbox antes de abrir la fase 2 (código); Control Center crea tareas con `payload.proposal_request`; pantallas 99–102.
+- **Limpieza (orden de Ernesto, 00:25):** rama borrada en GitHub (era `98539fa`; «Control OS Dev Gate» había terminado en éxito), tarea #150 `cancelled`, ejecución `blocked` («piloto cancelado») y evento `task_cancelled` en `ops_events`. Las 4 aprobaciones pendientes que quedan (8, 14, 19, 24) son anteriores y ajenas al piloto.
+- **Falta:** fusionar #238; ejecutor aislado y sandbox antes de abrir la fase 2 (código); Control Center crea tareas con `payload.proposal_request`; pantallas 99–102.
 
 ---
 
