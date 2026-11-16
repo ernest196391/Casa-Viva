@@ -189,9 +189,10 @@ class BoxTests(unittest.TestCase):
                 name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", "")
                 self.assertNotIn(name, ("eval", "exec", "system", "popen", "run", "call", "check_output", "check_call", "compile"))
 
-    def test_estatico_el_worker_no_lo_importa_todavia(self):
-        for name in ("dev-worker.py", "cv-proposal-gate.py", "local-runner.py", "opencode-executor.py"):
+    def test_estatico_solo_el_worker_lo_conoce_y_de_forma_perezosa(self):
+        for name in ("cv-proposal-gate.py", "local-runner.py", "opencode-executor.py", "local-proposer.py"):
             self.assertNotIn("dev-sandbox", (OPS / name).read_text(encoding="utf-8"), name)
+        self.assertEqual((OPS / "dev-worker.py").read_text(encoding="utf-8").count("dev-sandbox.py"), 1)
 
 
 if __name__ == "__main__":

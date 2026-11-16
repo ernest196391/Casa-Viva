@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import fcntl
+import importlib.util
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -514,8 +515,12 @@ def prepare_worktree(repo_name: str, task_public_id: int, title: str):
         raise RuntimeError(base)
     base_sha = base.strip()
 
-    DEV_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
-    work = DEV_ROOT / f"task-{task_public_id}"
+    root = work_root()
+    if not sandbox_enabled():
+        root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    elif not root.is_dir():
+        raise RuntimeError(f"raíz de worktrees de la caja no provisionada: {root}")
+    work = root / worktree_name(task_public_id)
     if work.exists():
         run(["git", "-C", str(repo), "worktree", "remove", "--force", str(work)], timeout=45)
         shutil.rmtree(work, ignore_errors=True)
@@ -659,15 +664,89 @@ def validate_diff(work: Path, allowed_paths: list[str]):
     return changed
 
 
+# --- Ejecución en caja (EVO-LOCAL-001, E1). APAGADA por defecto: solo CV_DEV_SANDBOX=1 la enciende. ---
+SANDBOX_USER = "cvdev"
+_BOX = None
+
+
+def sandbox_enabled() -> bool:
+    return os.environ.get("CV_DEV_SANDBOX") == "1"
+
+
+def _box():
+    """Carga perezosa del módulo de la caja (junto a este archivo); sin él, el modo caja no arranca."""
+    global _BOX
+    if _BOX is None:
+        path = Path(__file__).with_name("dev-sandbox.py")
+        spec = importlib.util.spec_from_file_location("cv_dev_sandbox", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _BOX = module
+    return _BOX
+
+
+def _sandbox_ids():
+    import pwd  # solo POSIX; únicamente se llama con la caja encendida
+    try:
+        entry = pwd.getpwnam(SANDBOX_USER)
+    except KeyError:
+        raise RuntimeError(f"usuario {SANDBOX_USER} no existe: no se puede usar la caja")
+    if entry.pw_uid == 0 or entry.pw_gid == 0:
+        raise RuntimeError("el usuario de la caja no puede ser root")
+    return {"uid": entry.pw_uid, "gid": entry.pw_gid}
+
+
+def work_root() -> Path:
+    return Path(_box().WORK_ROOT) if sandbox_enabled() else DEV_ROOT
+
+
+def worktree_name(task_public_id) -> str:
+    return f"run-task-{task_public_id}" if sandbox_enabled() else f"task-{task_public_id}"
+
+
+def run_tests_isolated(repo_name: str, work: Path, changed: list, allowed: list):
+    """Con la caja encendida: entrega el worktree a cvdev, prueba dentro de la caja, lo recupera y
+    comprueba que las pruebas no tocaron nada fuera de lo ya validado. Apagada: igual que antes."""
+    if not sandbox_enabled():
+        return run_tests(repo_name, work)
+    box, ids = _box(), _sandbox_ids()
+    box.hand_over(work, ids["uid"], ids["gid"])
+    try:
+        ok, logs = run_tests(repo_name, work)
+    finally:
+        box.take_back(work)
+    after = validate_diff(work, allowed)
+    if sorted(after) != sorted(changed):
+        raise RuntimeError("las pruebas modificaron archivos fuera de lo validado: " + ", ".join(sorted(set(after) ^ set(changed)))[:300])
+    for rel in changed:
+        if (work / rel).is_symlink():
+            raise RuntimeError(f"enlace simbólico en una ruta cambiada: {rel}")
+    return ok, logs
+
+
 def run_tests(repo_name: str, work: Path):
     logs = []
+    sandbox = sandbox_enabled()
+    ids = _sandbox_ids() if sandbox else None
+
+    def _install(argv, timeout):
+        # Caja: `npm ci --ignore-scripts` como cvdev, con red y sin secretos. Sin caja: la orden de siempre.
+        if sandbox:
+            return _box().install_deps(work, timeout, **ids)
+        return run(argv, cwd=str(work), timeout=timeout)
+
+    def _step(argv, timeout):
+        if sandbox:
+            return _box().run_in_box(argv, work, timeout, **ids)
+        return run(argv, cwd=str(work), timeout=timeout)
+
     if repo_name == "vivabot":
-        rc, out = run(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], cwd=str(work), timeout=180)
+        rc, out = _install(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], 180)
         logs.append("$ npm ci\n" + out)
         if rc:
             return False, "\n".join(logs)
         for cmd in TEST_PROFILES["vivabot"]:
-            rc, out = run(cmd, cwd=str(work), timeout=240)
+            rc, out = _step(cmd, 240)
             logs.append("$ " + " ".join(cmd) + "\n" + out)
             if rc:
                 return False, "\n".join(logs)
@@ -675,40 +754,40 @@ def run_tests(repo_name: str, work: Path):
         php_test = work / "test/core-chat-purchase.php"
         if php_file.exists() and php_test.exists():
             for cmd in (["php", "-l", str(php_file)], ["php", str(php_test)]):
-                rc, out = run(cmd, cwd=str(work), timeout=90)
+                rc, out = _step(cmd, 90)
                 logs.append("$ " + " ".join(cmd) + "\n" + out)
                 if rc:
                     return False, "\n".join(logs)
     elif repo_name == "nexo":
-        rc, out = run(["npm", "install", "--no-audit", "--no-fund"], cwd=str(work), timeout=240)
+        rc, out = _install(["npm", "install", "--no-audit", "--no-fund"], 240)
         logs.append("$ npm install\n" + out)
         if rc:
             return False, "\n".join(logs)
         for cmd in TEST_PROFILES["nexo"]:
-            rc, out = run(cmd, cwd=str(work), timeout=300)
+            rc, out = _step(cmd, 300)
             logs.append("$ " + " ".join(cmd) + "\n" + out)
             if rc:
                 return False, "\n".join(logs)
         py = work / "worker/app.py"
         if py.exists():
-            rc, out = run(["python3", "-m", "py_compile", str(py)], cwd=str(work), timeout=60)
+            rc, out = _step(["python3", "-m", "py_compile", str(py)], 60)
             logs.append("$ python3 -m py_compile worker/app.py\n" + out)
             if rc:
                 return False, "\n".join(logs)
     elif repo_name == "casa-viva":
-        rc, out = run(["npm", "install", "--no-audit", "--no-fund"], cwd=str(work), timeout=300)
+        rc, out = _install(["npm", "install", "--no-audit", "--no-fund"], 300)
         logs.append("$ npm install\n" + out)
         if rc:
             return False, "\n".join(logs)
         for cmd in TEST_PROFILES["casa-viva"]:
-            rc, out = run(cmd, cwd=str(work), timeout=360)
+            rc, out = _step(cmd, 360)
             logs.append("$ " + " ".join(cmd) + "\n" + out)
             if rc:
                 return False, "\n".join(logs)
         for rel in ("scripts/ops/cv-ops-bridge.py", "scripts/ops/control-os-sync.py", "scripts/ops/dev-worker.py", "scripts/ops/opencode-executor.py"):
             target = work / rel
             if target.exists():
-                rc, out = run(["python3", "-m", "py_compile", str(target)], cwd=str(work), timeout=60)
+                rc, out = _step(["python3", "-m", "py_compile", str(target)], 60)
                 logs.append("$ python3 -m py_compile " + rel + "\n" + out)
                 if rc:
                     return False, "\n".join(logs)
@@ -716,7 +795,7 @@ def run_tests(repo_name: str, work: Path):
             ["php", "artifacts/tests/test-panel-bajo-pedido.php"],
             ["node", "artifacts/tests/test-inventory-integrity-5c.mjs"],
         ):
-            rc, out = run(cmd, cwd=str(work), timeout=120)
+            rc, out = _step(cmd, 120)
             logs.append("$ " + " ".join(cmd) + "\n" + out)
             if rc:
                 return False, "\n".join(logs)
@@ -756,7 +835,7 @@ def process_claim(claim: dict):
         changed = validate_diff(work, allowed)
 
         patch_table("ops_dev_runs", run_id, {"status": "testing"})
-        ok, test_logs = run_tests(repo_name, work)
+        ok, test_logs = run_tests_isolated(repo_name, work, changed, allowed)
         if not ok:
             raise RuntimeError("pruebas locales fallaron\n" + test_logs)
 
