@@ -422,6 +422,18 @@ list( , $h1 ) = pv_req( 'GET', 'chofer/hoy', array(), $P( $m1 ) );
 pv_ok( $idt === $h1['activo']['id'] && ! isset( $h1['activo']['reparto'] ) && 'Rosa Prueba' === $h1['activo']['cliente']['nombre'], 'transporte: la vista del viaje no cambia' );
 pv_req( 'POST', 'viajes/' . $d['viaje']['uuid'] . '/cancelar', array(), $H );
 
+// ---------- 16-nov: un encargo programado ocupa al mensajero desde 45 min antes de salir (no coge un viaje que choque)
+$uo = (int) $todos[0];
+$wpdb->insert( CVD_Triciclub_Db::t( 'viajes' ), array( 'uuid' => wp_generate_uuid4(), 'cliente_id' => 0, 'cid' => 'ocupa', 'chofer_id' => $uo, 'servicio' => 'paquete', 'clase' => 'mensajero', 'estado' => 'asignado',
+	'origen_lat' => 23.14, 'origen_lng' => -82.38, 'destino_lat' => 23.13, 'destino_lng' => -82.37, 'distancia_m' => 1000, 'precio' => 1000, 'codigo' => '1234',
+	'sale_at' => gmdate( 'Y-m-d H:i:s', time() + 40 * 60 ), 'created_at' => CVD_Triciclub_Db::now(), 'updated_at' => CVD_Triciclub_Db::now() ) );
+$vo = (int) $wpdb->insert_id;
+$ocupado = new ReflectionMethod( 'CVD_Pv_Api', 'ocupado' ); $ocupado->setAccessible( true );
+pv_ok( true === $ocupado->invoke( null, $uo ), 'programado: sale en 40 min → ocupado (no coge otro viaje)' );
+$wpdb->update( CVD_Triciclub_Db::t( 'viajes' ), array( 'sale_at' => gmdate( 'Y-m-d H:i:s', time() + 2 * HOUR_IN_SECONDS ) ), array( 'id' => $vo ) );
+pv_ok( false === $ocupado->invoke( null, $uo ), 'programado: sale en 2 h → libre para otro viaje' );
+$wpdb->delete( CVD_Triciclub_Db::t( 'viajes' ), array( 'id' => $vo ) );
+
 // ---------- Limpieza
 require_once ABSPATH . 'wp-admin/includes/user.php';
 $wpdb->query( "DELETE FROM {$TV} WHERE negocio_id>0" );

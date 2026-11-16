@@ -280,7 +280,7 @@ final class CVD_Pv_Api {
 		}
 		$rows = $wpdb->get_results( $wpdb->prepare(
 			"SELECT c.* FROM {$t} c WHERE c.estado='aprobado' AND c.disponible=1 AND c.ubicado_at>%s AND c.lat IS NOT NULL{$caja}
-			AND NOT EXISTS (SELECT 1 FROM {$v} x WHERE x.chofer_id=c.user_id AND x.estado IN ('asignado','llego','recogido')" . CVD_Pv_Reparto::no_programado( 'x' ) . ")
+			AND NOT EXISTS (SELECT 1 FROM {$v} x WHERE x.chofer_id=c.user_id AND x.estado IN ('asignado','llego','recogido')" . CVD_Pv_Reparto::no_ocupa( 'x' ) . ")
 			{$orden} LIMIT 300", gmdate( 'Y-m-d H:i:s', time() - self::VIVO ) ) );
 		if ( 'prueba' === CVD_Pv::mode() ) {
 			$testers = CVD_Triciclub::testers();
@@ -1019,7 +1019,7 @@ final class CVD_Pv_Api {
 
 	public static function ocupado( int $user_id ): bool {
 		global $wpdb;
-		return (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT 1 FROM ' . self::t( 'viajes' ) . " WHERE chofer_id=%d AND estado IN ('asignado','llego','recogido')" . CVD_Pv_Reparto::no_programado() . ' LIMIT 1', $user_id ) );
+		return (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT 1 FROM ' . self::t( 'viajes' ) . " WHERE chofer_id=%d AND estado IN ('asignado','llego','recogido')" . CVD_Pv_Reparto::no_ocupa() . ' LIMIT 1', $user_id ) );
 	}
 
 	public static function cancelar( WP_REST_Request $request ): WP_REST_Response {

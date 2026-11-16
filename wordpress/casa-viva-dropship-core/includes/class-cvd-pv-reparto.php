@@ -113,6 +113,18 @@ final class CVD_Pv_Reparto {
 		return $wpdb->prepare( " AND NOT ({$p}estado='asignado' AND {$p}sale_at IS NOT NULL AND {$p}sale_at>%s)", self::utc( time() + self::SIGUES_MIN * 60 ) );
 	}
 
+	/**
+	 * 16-nov (Ernesto: «ciérralo»): para COGER trabajo nuevo, un encargo programado ocupa al mensajero desde 45 min antes
+	 * de su salida (opción `cvd_pv_ocupa_min`); así no coge un viaje que choque con la hora a la que dijo que sale.
+	 */
+	public static function ocupa_min(): int { return max( self::SIGUES_MIN, min( 180, (int) get_option( 'cvd_pv_ocupa_min', 45 ) ) ); }
+
+	public static function no_ocupa( string $alias = '' ): string {
+		global $wpdb;
+		$p = '' !== $alias ? $alias . '.' : '';
+		return $wpdb->prepare( " AND NOT ({$p}estado='asignado' AND {$p}sale_at IS NOT NULL AND {$p}sale_at>%s)", self::utc( time() + self::ocupa_min() * 60 ) );
+	}
+
 	public static function programado( object $v ): bool {
 		return 'asignado' === $v->estado && ! empty( $v->sale_at ) && self::ts( (string) $v->sale_at ) > time() + self::SIGUES_MIN * 60;
 	}
