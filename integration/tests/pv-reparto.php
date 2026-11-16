@@ -130,7 +130,7 @@ $res = rest_do_request( $rq );
 $e1 = $res->get_data();
 pv_ok( 200 === $res->get_status() && 'buscando' === $e1['estado'] && $e1['precio'] >= 1000, 'encargo por API (JSON): buscando con la tarifa justa (' . ( $e1['precio'] ?? '?' ) . ')' );
 pv_ok( 3000 + $e1['precio'] === $e1['cobrar'], 'el envío lo paga el cliente: cobra producto + envío' );
-pv_ok( false !== strpos( $e1['seguimiento_url'], '/pv/seguir' ) && 4 === strlen( $e1['codigo_entrega'] ), 'seguimiento y código de entrega' );
+pv_ok( false !== strpos( rawurldecode( $e1['seguimiento_url'] ), '/pv/seguir' ) && 4 === strlen( $e1['codigo_entrega'] ), 'seguimiento y código de entrega (' . $e1['seguimiento_url'] . ' · ' . $e1['codigo_entrega'] . ')' );
 list( $s, $x ) = pv_req( 'POST', 'negocio/encargos', $base + array( 'ref' => 'pedido-1' ), $N );
 pv_ok( 200 === $s && $x['repetido'] && $x['uuid'] === $e1['uuid'], 'repetir el encargo (sin señal) no crea otro' );
 $id1 = (int) $e1['id'];
