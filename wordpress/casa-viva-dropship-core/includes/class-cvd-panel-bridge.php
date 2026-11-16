@@ -541,7 +541,7 @@ final class CVD_Panel_Bridge {
 			}
 		}
 		if ( $changed ) {
-			$parent->set_attributes( $attributes );
+			$parent->set_attributes( array_map( static fn( $x ) => clone $x, $attributes ) ); // 3.14.171: copias, si no WooCommerce no ve el cambio y no guarda los colores nuevos (cojines, Lennys 12/14-nov)
 			$parent->save();
 		}
 		return array_values( array_unique( $changed ) );
@@ -681,7 +681,7 @@ final class CVD_Panel_Bridge {
 		}
 		$attributes = $parent->get_attributes();
 		$attributes[ $key ] = $attr;
-		$parent->set_attributes( $attributes );
+		$parent->set_attributes( array_map( static fn( $x ) => clone $x, $attributes ) ); // 3.14.171: copias, si no WooCommerce no ve el cambio y no guarda los colores nuevos (cojines, Lennys 12/14-nov)
 		$parent->save();
 		return array( $key, $value );
 	}
@@ -1186,7 +1186,7 @@ final class CVD_Panel_Bridge {
 			$attr->set_options( array_values( array_filter( $attr->get_options(), static fn( $o ) => sanitize_title( (string) $o ) !== sanitize_title( $value ) ) ) );
 		}
 		$attributes[ $key ] = $attr;
-		$parent->set_attributes( $attributes );
+		$parent->set_attributes( array_map( static fn( $x ) => clone $x, $attributes ) ); // 3.14.171: copias, si no WooCommerce no ve el cambio y no guarda los colores nuevos (cojines, Lennys 12/14-nov)
 		$parent->save();
 	}
 
