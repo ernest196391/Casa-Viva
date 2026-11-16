@@ -1,3 +1,10 @@
+# CURRENT — EVO-LOCAL-001: mitigación del entorno limpio y módulo de caja construidos (2026-11-16)
+
+- `dev-worker.py`: los procesos hijos (git, npm, pruebas) ya NO heredan los 10 secretos (lista blanca en `child_env()`). 10 pruebas; validado en copia temporal del VPS con las 1 715 pruebas de VivaBot (0 fallos, entorno de 3 variables). **DESPLEGADO el 16-nov ~00:40 (SÍ de Ernesto):** hijos del worker con 5 variables y 0 secretos; copia previa en `/root/backups/evo001-20261115/`. Perfil `casa-viva` validado en verde con entorno mínimo; `nexo` ya falla por código/dependencias del checkout, no por el entorno.
+- `scripts/ops/dev-sandbox.py` (E1, sin cablear): entrega/recupera el worktree, instala dependencias como `cvdev` y ejecuta en bwrap sin privilegios; 13 pruebas. Falta cablear el worker, rechazar symlinks, límites de memoria y E2 (copia de bwrap + perfil). Detalle: `EVO_LOCAL_001_EJECUTOR_AISLADO.md` §8.
+
+---
+
 # CURRENT — EVO-LOCAL-001: ejecutor aislado, evidencia y plan (2026-11-16)
 
 - Verificado en el VPS: el aislamiento YA existe y funciona (copia dedicada de bwrap + perfil `cv-control-codex-bwrap` cargado desde el 14-nov; como `cvdev`: sin red, sin `/root` ni `~/.ssh`, `/usr` solo lectura, un solo destino de escritura, entorno limpio). `/usr/bin/bwrap` sigue fallando (RTM_NEWADDR).
