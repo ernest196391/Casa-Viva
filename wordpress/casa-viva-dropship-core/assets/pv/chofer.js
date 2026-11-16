@@ -4,7 +4,10 @@
  * En vivo: tema callado del chofer por ntfy (PU.enVivo(hoy.tema)) + pregunta a la web. Posición cada 30 s en línea y
  * cada 10 s con viaje. Suena y vibra con cada pedido nuevo.
  * v3 (6-nov, D142): etiquetas del pedido («Comida · adelanta 2.400», «Carga · 50–150 kg · con ayudante»), foto del recibo
- * al recoger la comida que adelanta y el interruptor «Puedo adelantar dinero». Las pantallas no cambian. */
+ * al recoger la comida que adelanta y el interruptor «Puedo adelantar dinero». Las pantallas no cambian.
+ * Reparto (16-nov, D157; solo con cvd_pv_reparto = si, si no el servidor no manda «reparto»): «Te toca» (Aceptar/Rechazar),
+ * «¿Cuándo sales?», programados con «Ya no puedo», «¿Sigues?» con «Sigo», «Lo lleva…», personas de confianza en Mi perfil
+ * y la vista limitada de la persona de confianza (enlace #a=…: solo Recogí, Entregado y Problema). */
 (function () {
 	'use strict';
 	var C = window.PV || {}, U = window.PU;
@@ -22,6 +25,9 @@
 	var mk = /(?:^#|&)k=([0-9A-Za-z._-]+)/.exec(location.hash || '');
 	if (mk) { lsSet('palla.k', mk[1]); if (history.replaceState) { history.replaceState(null, '', location.pathname); } }
 	var K = lsGet('palla.k') || '';
+	var ma = /(?:^#|&)a=(a[0-9]+\.[0-9]+\.[a-f0-9]{32})/.exec(location.hash || '');
+	if (ma) { lsSet('pv.a', ma[1]); if (history.replaceState) { history.replaceState(null, '', location.pathname); } }
+	var AY = K ? '' : (lsGet('pv.a') || ''); // Reparto: persona de confianza (sin enlace de mensajero en este móvil)
 
 	var H = LS.json('ch.hoy'); // lo último de chofer/hoy (se ve aunque no haya señal)
 	var S = { cobrar: LS.json('ch.cobrar'), pos: null, visto: {}, perdidos: {}, msg: '' };
@@ -179,6 +185,7 @@
 				+ '<div class="pa-total"><div><p class="p-mini">Hoy</p><span class="p-precio">' + cupG(H.hoy.cup) + '</span></div><a class="p-btn p-btn--suave p-btn--chico" href="#ch-ganancias">' + H.hoy.viajes + (H.hoy.viajes === 1 ? ' viaje' : ' viajes') + ico('sigue', 'p-ico--16') + '</a></div>'
 				+ '<button type="button" class="pa-conectar ' + (on ? 'is-on' : '') + '" id="con" aria-pressed="' + on + '">' + ico('encender') + '<span>' + (on ? 'En línea' : 'Conectarme') + '</span></button>'
 				+ (cu.pausa ? '<a class="p-aviso p-aviso--error" href="#ch-deuda" style="text-decoration:none">' + ico('alerta') + '<span>Debes ' + cup(cu.debe) + ': solo te llegan viajes por Transfermóvil.</span></a>' : '')
+				+ '<div id="prog">' + programadosHtml() + '</div>'
 				+ '<p class="p-aviso p-aviso--error" id="err" hidden></p>'
 				+ (ops ? '<div><p class="pa-etq">Qué acepto hoy</p>' + ops + '</div>' : '')
 				+ '</div>' + (on ? '<div class="pa-pie"><a class="p-btn p-btn--marca p-btn--ancho" href="#ch-pedidos">' + (n ? 'Ver pedidos cerca (' + n + ')' : 'Ver pedidos cerca') + '</a></div>' : '') + '</div>';
@@ -206,8 +213,12 @@
 			$$('[data-op]', r).forEach(function (b) {
 				b.onclick = function () { var v = b.getAttribute('aria-checked') !== 'true', x = {}; x[b.dataset.op] = v ? 1 : 0; b.setAttribute('aria-checked', v); mandar(H.ficha.disponible, x); };
 			});
+			engancharProg(r);
 		},
-		actualizar: function (r) { var a = $('.pa-pie a', r), n = (H.pedidos || []).length; if (a) { a.textContent = n ? 'Ver pedidos cerca (' + n + ')' : 'Ver pedidos cerca'; } }
+		actualizar: function (r) {
+			var a = $('.pa-pie a', r), n = (H.pedidos || []).length; if (a) { a.textContent = n ? 'Ver pedidos cerca (' + n + ')' : 'Ver pedidos cerca'; }
+			var pg = $('#prog', r), h = programadosHtml(); if (pg && pg.dataset.h !== h) { pg.dataset.h = h; pg.innerHTML = h; engancharProg(r); }
+		}
 	};
 
 	// ---------- Pedidos con oferta ----------
@@ -277,7 +288,7 @@
 						if (x.status === 0) { el.classList.remove('is-enviado'); U.tostada('Sin señal. Prueba otra vez.', 'alerta'); return; }
 						perder(el, x.data.message || 'Ya no está.'); return;
 					}
-					if (x.data.elegido) { H.activo = x.data.activo; H.pedidos = []; guardarH(); U.tostada('¡Aceptó ' + cup(x.data.activo.precio) + '! Ve a recoger.'); vibrar([120, 60, 120]); seguirGps(); mandarPos(); ir('ch-recoger'); return; }
+					if (x.data.elegido) { H.activo = x.data.activo; H.pedidos = []; S.pideSalida = x.data.activo.id; guardarH(); U.tostada('¡Aceptó ' + cup(x.data.activo.precio) + '! Ve a recoger.'); vibrar([120, 60, 120]); seguirGps(); mandarPos(); ir('ch-recoger'); return; }
 					p.mia = { precio: x.data.oferta.precio, pct: x.data.oferta.pct, estado: 'activa', vence: x.data.oferta.vence };
 					var tmp = document.createElement('div'); tmp.innerHTML = tarjeta(p); var nuevo = tmp.firstChild;
 					el.parentNode.replaceChild(nuevo, el); engancharPedido(r, nuevo, p);
@@ -285,6 +296,125 @@
 			};
 		});
 	}
+
+	// ---------- Reparto (D157): «Te toca», «¿Cuándo sales?», programados, «¿Sigues?», «Lo lleva…» ----------
+	function R() { return (H && H.reparto) || null; }
+	function turnoDe(h) { h = h || H; var t = h && h.reparto && h.reparto.turno && h.reparto.turno[0]; return t && U.seg(t.turno_hasta) > 0 ? t : null; }
+	function nomNeg(v) { var rp = v && v.reparto; return (rp && rp.negocio && rp.negocio.nombre) || (v && v.cliente && v.cliente.nombre) || 'el negocio'; }
+	function soltarId(id, b) {
+		if (b) { b.disabled = true; }
+		api('chofer/viajes/' + id + '/estado', { accion: 'suelto', motivo: 'Ya no puedo' }).then(function (x) {
+			if (b) { b.disabled = false; }
+			if (!x.data.ok) { U.tostada(x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No se pudo.'), 'alerta'); return; }
+			if (H.activo && H.activo.id === id) { H.activo = null; guardarH(); }
+			U.tostada('Soltado. Lo coge otro.', 'info'); ir('ch-conectar'); cargar();
+		});
+	}
+	function programadosHtml() {
+		var p = (R() && R().programados) || []; if (!p.length) { return ''; }
+		return '<div><p class="pa-etq">Programados</p>' + p.map(function (v) {
+			var rp = v.reparto || {};
+			return '<div class="p-fila"><span class="p-fila__ico">' + ico('reloj') + '</span><span class="p-fila__txt"><b>Sale ' + esc(rp.sale_hora) + ' · ' + esc(nomNeg(v)) + '</b><span>' + esc(corto(v.destino.texto)) + (rp.lleva ? ' · lo lleva ' + esc(nombreCorto(rp.lleva.nombre)) : '') + '</span></span>'
+				+ '<button type="button" class="p-btn p-btn--suave p-btn--chico" data-nopuedo="' + v.id + '">Ya no puedo</button></div>';
+		}).join('') + '</div>';
+	}
+	function engancharProg(r) { $$('[data-nopuedo]', r).forEach(function (b) { b.onclick = function () { soltarId(+b.dataset.nopuedo, b); }; }); }
+	function hojaSalida(v) {
+		var s = v && v.reparto && v.reparto.salida; if (!s) { return; }
+		var horas = (s.horas || []).slice(0, 16);
+		U.hojaSobre('<p class="p-h2" style="margin:0 0 4px">¿Cuándo sales?</p><p class="p-peq" style="margin:0 0 12px">Recoger de ' + esc(s.desde) + ' a ' + esc(s.hasta) + '</p>'
+			+ (s.ahora ? '<button type="button" class="p-btn p-btn--marca p-btn--ancho" data-cuando="ahora">Ahora</button>' : '')
+			+ (horas.length ? '<div class="pa-chips" style="margin-top:12px">' + horas.map(function (h) { return '<button type="button" class="p-chip" data-cuando="' + esc(h.hora) + '">' + esc(h.hora) + '</button>'; }).join('') + '</div>' : '')
+			+ '<p class="p-aviso p-aviso--error" id="err" hidden></p>', function (h) {
+			$$('[data-cuando]', h).forEach(function (b) {
+				b.onclick = function () {
+					b.disabled = true;
+					api('chofer/viajes/' + v.id + '/salida', { cuando: b.dataset.cuando }).then(function (x) {
+						b.disabled = false;
+						if (!x.data.ok) { avisoErr(h, x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No se pudo.')); return; }
+						h.remove();
+						var w = x.data.viaje, prog = w.reparto && w.reparto.programado;
+						U.tostada(prog ? 'Sales a las ' + w.reparto.sale_hora + '. Te avisamos antes.' : '¡Dale! Ve a recoger.');
+						H.activo = prog ? null : w; guardarH(); ir(pantallaDe()); mostrar(true); cargar();
+					});
+				};
+			});
+		});
+	}
+	function aceptarTurno(t, b) {
+		desbloquear(); if (b) { b.disabled = true; }
+		api('chofer/turnos/' + t.id + '/aceptar', {}).then(function (x) {
+			if (b) { b.disabled = false; }
+			if (!x.data.ok) { U.tostada(x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'Ya no está.'), 'alerta'); if (H.reparto) { H.reparto.turno = []; } ir(pantallaDe()); cargar(); return; }
+			H.activo = x.data.viaje; if (H.reparto) { H.reparto.turno = []; } S.pideSalida = H.activo.id; guardarH(); vibrar([120, 60, 120]); seguirGps(); mandarPos();
+			ir(pantallaDe());
+		});
+	}
+	function hojaLleva(v) {
+		var l = (v.reparto && v.reparto.confianza) || [];
+		U.hojaSobre('<p class="p-h2" style="margin:0 0 12px">¿Quién lo lleva?</p>'
+			+ '<button type="button" class="p-fila" data-lleva="0"><span class="p-fila__txt"><b>Lo llevo yo</b></span></button>'
+			+ l.map(function (c) { return '<button type="button" class="p-fila" data-lleva="' + c.id + '"><span class="p-fila__txt"><b>' + esc(c.nombre) + '</b><span>Recoge y entrega. El dinero es tuyo.</span></span></button>'; }).join('')
+			+ '<p class="p-aviso p-aviso--error" id="err" hidden></p>', function (h) {
+			$$('[data-lleva]', h).forEach(function (b) {
+				b.onclick = function () {
+					api('chofer/viajes/' + v.id + '/lleva', { confianza_id: +b.dataset.lleva }).then(function (x) {
+						if (!x.data.ok) { avisoErr(h, x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No se pudo.')); return; }
+						h.remove(); H.activo = x.data.viaje; guardarH(); mostrar(true);
+						U.tostada(+b.dataset.lleva ? 'Lo ve en su enlace. Avísale tú.' : 'Lo llevas tú.');
+					});
+				};
+			});
+		});
+	}
+	/** Lo de Reparto en «Ir a recoger»: negocio, ¿Sigues?, ¿Cuándo sales?, Lo lleva… */
+	function repRecoger(v) {
+		var rp = v.reparto; if (!rp) { return ''; }
+		var h = '';
+		if (rp.sale_hora && !rp.sigue) {
+			h += '<p class="p-aviso p-aviso--aviso" style="margin:10px 0 4px">' + ico('reloj') + '<span><b>¿Sigues? Sales a las ' + esc(rp.sale_hora) + '</b></span></p>'
+				+ '<div class="pa-dos"><button type="button" class="p-btn p-btn--marca" id="sigo">Sigo</button><button type="button" class="p-btn p-btn--suave" id="nopuedo">Ya no puedo</button></div>';
+		} else if (rp.sale_hora) {
+			h += '<p class="p-peq" style="margin:8px 0 0">' + ico('reloj', 'p-ico--16') + ' Sales a las ' + esc(rp.sale_hora) + '</p>';
+		}
+		if (rp.salida) { h += '<button type="button" class="p-btn p-btn--suave p-btn--ancho" id="cuando" style="margin-top:10px">' + ico('reloj', 'p-ico--20') + '¿Cuándo sales?</button>'; }
+		if (rp.lleva) { h += '<button type="button" class="p-btn p-btn--texto" id="lleva" style="align-self:flex-start">Lo lleva ' + esc(nombreCorto(rp.lleva.nombre)) + ' · cambiar</button>'; }
+		else if (rp.confianza && rp.confianza.length) { h += '<button type="button" class="p-btn p-btn--texto" id="lleva" style="align-self:flex-start">Lo lleva…</button>'; }
+		return h;
+	}
+	function engancharRep(r, v) {
+		var b;
+		if ((b = $('#sigo', r))) { b.onclick = function () { var x0 = this; x0.disabled = true; api('chofer/viajes/' + v.id + '/sigo', {}).then(function (x) { x0.disabled = false; if (!x.data.ok) { avisoErr(r, x.data.message || 'No se pudo.'); return; } H.activo = x.data.viaje; guardarH(); mostrar(true); U.tostada('¡Dale! Te esperan.'); }); }; }
+		if ((b = $('#nopuedo', r))) { b.onclick = function () { soltarId(v.id, this); }; }
+		if ((b = $('#cuando', r))) { b.onclick = function () { hojaSalida(v); }; }
+		if ((b = $('#lleva', r))) { b.onclick = function () { hojaLleva(v); }; }
+		if (S.pideSalida === v.id) { S.pideSalida = 0; if (v.reparto && v.reparto.salida) { hojaSalida(v); } }
+	}
+	SCR['ch-tetoca'] = {
+		html: function () {
+			var t = turnoDe(); if (!t) { return '<div class="pa-llena">' + cabChofer('Te toca') + '<div class="pa-cuerpo"><p class="p-aviso">' + ico('info') + 'Ya no está.</p></div></div>'; }
+			var rp = t.reparto || {}, pu = rp.punto || {}, env = t.envio || {};
+			return '<div class="pa-llena">' + cabChofer('Te toca') + '<div class="pa-cuerpo">'
+				+ '<article class="pa-pedido" data-hasta="' + esc(t.turno_hasta) + '" data-total="' + ((R() && R().turno_seg) || 45) + '"><div class="arriba"><div><span class="p-precio" style="font-size:30px">' + cupG(t.oferta) + '</span><div class="p-peq">' + esc(nomNeg(t)) + (env.que ? ' · ' + esc(env.que) : '') + '</div></div><span class="p-sello">Encargo</span></div>'
+				+ '<div class="od"><span class="pm-pin"></span><b>' + esc(pu.nombre || corto(t.origen.texto)) + '</b><small>A ' + metros(t.lejos_m) + ' de ti</small><span class="pm-pin pm-pin--destino"></span><b>' + esc(corto(t.destino.texto)) + '</b><small>Viaje de ' + U.km(t.km) + ' km</small></div>'
+				+ (rp.ventana && rp.ventana.desde ? '<p class="p-aviso">' + ico('reloj') + '<span>Entregar de ' + esc(rp.ventana.desde) + (rp.ventana.hasta ? ' a ' + esc(rp.ventana.hasta) : '') + '</span></p>' : '')
+				+ (rp.cobro && rp.cobro.total ? '<p class="p-aviso">' + ico('efectivo') + '<span>Cobra ' + cup(rp.cobro.total) + ' al entregar</span></p>' : '')
+				+ (t.nota ? '<p class="p-aviso">' + ico('nota') + '«' + esc(t.nota) + '»</p>' : '')
+				+ '<i class="p-oferta__tiempo" aria-hidden="true"></i></article></div>'
+				+ '<div class="pa-pie"><button type="button" class="p-btn p-btn--marca p-btn--ancho" id="si">Aceptar</button><button type="button" class="p-btn p-btn--texto p-btn--ancho" id="no">Rechazar</button></div></div>';
+		},
+		init: function (r) {
+			var t = turnoDe(); if (!t) { T(function () { ir(pantallaDe()); }, 1200); return; }
+			$('#si', r).onclick = function () { aceptarTurno(t, this); };
+			$('#no', r).onclick = function () { this.disabled = true; api('chofer/turnos/' + t.id + '/rechazar', {}).then(function () { if (H.reparto) { H.reparto.turno = []; } guardarH(); ir(pantallaDe()); cargar(); }); };
+			I(function () {
+				var el = $('.pa-pedido', r); if (!el) { return; }
+				var s = U.seg(el.dataset.hasta), b = $('.p-oferta__tiempo', el);
+				if (b) { b.style.transform = 'scaleX(' + Math.max(0, Math.min(1, s / (+el.dataset.total || 45))).toFixed(3) + ')'; }
+				if (s <= 0) { if (H.reparto) { H.reparto.turno = []; } ir(pantallaDe()); cargar(); }
+			}, 1000);
+		}
+	};
 
 	// ---------- Ir a recoger / en viaje ----------
 	var tramo = null;
@@ -381,6 +511,7 @@
 				+ (llegue ? '<p class="p-peq" id="espera" style="margin:6px 0 0">' + esperaTxt(v) + '</p>' : '')
 				+ etq
 				+ (v.nota ? '<p class="p-aviso" style="margin:10px 0 4px">' + ico('nota') + '«' + esc(v.nota) + '»</p>' : '')
+				+ repRecoger(v)
 				+ abajo
 				+ '<p class="p-aviso p-aviso--error" id="err" hidden></p>'
 				+ '<button type="button" class="p-btn p-btn--texto pa-cancelar" id="soltar">' + (llegue ? 'Soltar viaje' : 'No puedo ir') + '</button></section>';
@@ -403,6 +534,7 @@
 			}
 			if (rc) { rc.onclick = function () { var c = $('#cod', r); accion(r, 'recogi', c ? { codigo: c.value } : null, this); }; }
 			$('#soltar', r).onclick = function () { hojaSoltar(r); };
+			engancharRep(r, v);
 			if (v.estado === 'llego') { I(function () { var e = $('#espera', r); if (e) { e.textContent = esperaTxt(v); } }, 1000); }
 			prepararTramo(v).then(function () { if (actual === 'ch-recoger') { escenaActual(); moverYo(r); } });
 		},
@@ -420,7 +552,8 @@
 					+ '<section class="pa-hoja"><div class="p-hoja__asa"></div>'
 					+ eta('Entregar a ' + rn + ' · ' + U.km(v.km) + ' km', esc(corto(v.destino.texto)), v.total, nombrePago(v.forma_pago))
 					+ (v.etiqueta && v.etiqueta !== 'Paquete' ? '<p class="p-aviso" style="margin:10px 0 4px">' + ico(v.servicio === 'carga' ? 'caja' : 'efectivo') + '<span><b>' + esc(v.etiqueta) + '</b></span></p>' : '')
-					+ (env.cobrar ? '<p class="p-aviso p-aviso--aviso" style="margin:10px 0 4px">' + ico('efectivo') + '<span>Cobra <b>' + miles(env.cobrar) + '</b>' + (v.servicio === 'comida' ? ' + envío' : '') + '</span></p>' : '')
+					+ (env.cobrar ? '<p class="p-aviso p-aviso--aviso" style="margin:10px 0 4px">' + ico('efectivo') + '<span>Cobra <b>' + miles(env.cobrar) + '</b>' + (v.servicio === 'comida' ? ' + envío' : '') + (v.reparto && v.reparto.cobro.devolver ? ' · devuelve ' + miles(v.reparto.cobro.devolver) + ' a ' + esc(nomNeg(v)) : '') + '</span></p>' : '')
+					+ (v.reparto && v.reparto.lleva ? '<p class="p-peq" style="margin:6px 0 0">Lo lleva ' + esc(nombreCorto(v.reparto.lleva.nombre)) + '</p>' : '')
 					+ filaPersona(env.recibe || 'Quien recibe', false, 'Recibe · ' + esc(env.que), env.telefono)
 					+ '<label class="p-btn p-btn--suave p-btn--ancho" style="margin-top:12px">' + ico('camara', 'p-ico--20') + '<span id="foto-t">' + (env.foto ? 'Foto ✓ · repetir' : 'Foto de entrega') + '</span><input type="file" id="foto" accept="image/*" capture="environment" hidden></label>'
 					+ cajasCodigo('Pide el código a ' + rn)
@@ -459,6 +592,14 @@
 	SCR['ch-cobrar'] = {
 		html: function () {
 			var v = S.cobrar, cli = v.cliente || { nombre: 'Cliente' }, n = esc(nombreCorto(cli.nombre));
+			if (v.reparto) { // Reparto: tu envío, lo que te paga el negocio y lo que le devuelves
+				var c = v.reparto.cobro || {}, ng = esc(nomNeg(v));
+				return '<div class="pa-llena">' + cabChofer('Entregado') + '<div class="pa-cuerpo">' + monto('Tu envío', v.precio)
+					+ (c.envio_cliente ? '<p class="p-aviso">' + ico('efectivo') + '<span>Cobraste ' + cup(c.envio_cliente) + ' del envío.</span></p>' : '')
+					+ (c.envio_negocio ? '<p class="p-aviso">' + ico('efectivo') + '<span>' + ng + ' te paga ' + cup(c.envio_negocio) + '.</span></p>' : '')
+					+ (c.devolver ? '<p class="p-aviso p-aviso--aviso">' + ico('alerta') + '<span>Devuelve ' + cup(c.devolver) + ' a ' + ng + '.</span></p>' : '')
+					+ '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="cob">' + ico('check', 'p-ico--20') + 'Listo</button><p class="p-aviso p-aviso--error" id="err" hidden></p></div></div>';
+			}
 			return '<div class="pa-llena">' + cabChofer('Cobrar') + '<div class="pa-cuerpo">'
 				+ monto('Cobra a ' + n + ' · ' + nombrePago(v.forma_pago).toLowerCase(), v.total)
 				+ (v.espera ? '<p class="p-peq" style="text-align:center;margin:-8px 0 0">' + cup(v.precio) + ' + ' + cup(v.espera) + ' de espera</p>' : '')
@@ -483,7 +624,7 @@
 					valorar().then(function () { terminar('Viaje terminado. +' + cup(v.total), 'check', 'ch-ganancias'); });
 				});
 			};
-			$('#nopago', r).onclick = function () {
+			if ($('#nopago', r)) $('#nopago', r).onclick = function () {
 				var b = this; b.disabled = true;
 				api('chofer/viajes/' + v.id + '/estado', { accion: 'nopago' }).then(function (x) {
 					if (!x.data.ok) { b.disabled = false; avisoErr(r, x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No se pudo.')); return; }
@@ -574,11 +715,38 @@
 				+ '<p class="pa-etq">Papeles</p>' + (f.papeles || []).map(doc).join('')
 				+ '<a class="p-fila" href="#ch-deuda" style="border-top:1px solid var(--linea);margin-top:12px"><span class="p-fila__ico">' + ico('moneda') + '</span><span class="p-fila__txt"><b>Lo que debo a Pa\'llá</b></span>' + ico('sigue', 'p-ico--20') + '</a>'
 				+ '<a class="p-fila" href="' + esc(C.alta) + '"><span class="p-fila__ico">' + ico('editar') + '</span><span class="p-fila__txt"><b>Cambiar mis papeles</b></span>' + ico('sigue', 'p-ico--20') + '</a>'
+				+ confianzaHtml()
 				+ (APP && APP.probarSonido ? '<button type="button" class="p-fila" id="probar" style="width:100%;border:0;background:none;font:inherit;text-align:left"><span class="p-fila__ico">' + ico('campana') + '</span><span class="p-fila__txt"><b>Probar el sonido</b><span>Suena como un pedido nuevo. Tócalo para callarlo.</span></span></button>' : '')
 				+ '</div></div>';
 		},
-		init: function (r) { var b = $('#probar', r); if (b) { b.onclick = function () { try { APP.probarSonido(); } catch (e) { } }; } }
+		init: function (r) { var b = $('#probar', r); if (b) { b.onclick = function () { try { APP.probarSonido(); } catch (e) { } }; } engancharConfianza(r); }
 	};
+	// Reparto: «Personas de confianza» (el mensajero la registra; Pa'llá la aprueba y le da su enlace).
+	function confianzaHtml() {
+		var l = R() && R().confianza; if (!l) { return ''; }
+		var EST = { pendiente: 'Por aprobar', aprobada: 'Aprobada', rechazada: 'No aprobada' };
+		return '<p class="pa-etq" style="margin-top:12px">Personas de confianza</p>'
+			+ l.map(function (c) { return '<div class="p-fila"><span class="p-fila__ico">' + ico('selfie') + '</span><span class="p-fila__txt"><b>' + esc(c.nombre) + '</b><span>' + esc(EST[c.estado] || c.estado) + '</span></span><button type="button" class="p-btn p-btn--texto p-btn--chico" data-quitar="' + c.id + '">Quitar</button></div>'; }).join('')
+			+ '<button type="button" class="p-btn p-btn--suave p-btn--ancho" id="conf-mas" style="margin-top:8px">Añadir persona</button>';
+	}
+	function engancharConfianza(r) {
+		var guardar = function (cuerpo, h) {
+			return api('chofer/confianza', cuerpo).then(function (x) {
+				if (!x.data.ok) { avisoErr(h || r, x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No se pudo.')); return; }
+				if (h) { h.remove(); } if (H.reparto) { H.reparto.confianza = x.data.confianza; } guardarH(); mostrar(true);
+			});
+		};
+		$$('[data-quitar]', r).forEach(function (b) { b.onclick = function () { b.disabled = true; guardar({ quitar: +b.dataset.quitar }); }; });
+		var mas = $('#conf-mas', r); if (!mas) { return; }
+		mas.onclick = function () {
+			U.hojaSobre('<p class="p-h2" style="margin:0 0 4px">Persona de confianza</p><p class="p-peq" style="margin:0 0 12px">Lleva tus encargos. El dinero sigue siendo tuyo.</p>'
+				+ '<label class="p-campo"><input id="cn" maxlength="80" placeholder="Nombre y apellido" aria-label="Nombre"></label>'
+				+ '<div class="pa-dos" style="margin:8px 0"><label class="p-campo"><input id="ct" inputmode="tel" maxlength="12" placeholder="Móvil" aria-label="Móvil"></label><label class="p-campo"><input id="cc" inputmode="numeric" maxlength="4" placeholder="Carné: 4 últimas" aria-label="4 últimas cifras del carné"></label></div>'
+				+ '<p class="p-aviso p-aviso--error" id="err" hidden></p><button type="button" class="p-btn p-btn--marca p-btn--ancho" id="cg">Mandar a aprobar</button>', function (h) {
+				$('#cg', h).onclick = function () { guardar({ nombre: $('#cn', h).value.trim(), telefono: $('#ct', h).value, carne4: $('#cc', h).value }, h); };
+			});
+		};
+	}
 
 	// =====================================================================================
 	// DATOS EN VIVO: chofer/hoy + tema ntfy callado
@@ -590,6 +758,7 @@
 		if (h.estado !== 'aprobado') { return 'ch-alta'; }
 		if (S.cobrar) { return 'ch-cobrar'; }
 		if (h.activo) { return h.activo.estado === 'recogido' ? 'ch-viaje' : 'ch-recoger'; }
+		if (turnoDe(h)) { return 'ch-tetoca'; } // Reparto: le toca un encargo
 		return 'ch-conectar';
 	}
 	function cargar() {
@@ -612,6 +781,7 @@
 			if (!!H.activo !== !!(antes && antes.activo)) { mandarPos(); } // al coger o soltar un viaje, la posición sale ya (y luego cada 10 s)
 			if (H.estado !== 'aprobado') { if (actual !== 'ch-alta') { ir('ch-alta'); } return; }
 			(H.pedidos || []).forEach(function (p) { if (!S.visto[p.id]) { S.visto[p.id] = 1; if (antes) { nuevos++; } } });
+			var tn = turnoDe(); if (tn && !S.visto['t' + tn.id]) { S.visto['t' + tn.id] = 1; nuevos++; } // Reparto: «Te toca» suena
 			if (nuevos && !H.activo) { sonar(); }
 			if (H.activo && antes && !antes.activo) { U.tostada('¡Te eligieron! Ve a recoger.'); }
 			if (!H.activo && antes && antes.activo && !S.cobrar) { U.tostada('El viaje se canceló.', 'info'); tramo = null; }
@@ -663,6 +833,84 @@
 		document.title = (id === 'ch-conectar' ? '' : ((pant.querySelector('h1') || {}).textContent || '') + ' · ') + 'Pa\'llá · Chofer';
 		if (!mismo) { pant.scrollTop = 0; }
 	}
+
+	// =====================================================================================
+	// Reparto: LA PERSONA DE CONFIANZA (enlace #a=…). Solo sus viajes: Recogí, Entregado (código + foto) y Problema.
+	// =====================================================================================
+	function ayudaApp() {
+		marco.classList.add('sin-mapa');
+		var D = null, firmaA = '';
+		var apiA = function (path, body) { return U.api(path, body, { 'X-Pv-Ayuda': AY }); };
+		var caja = function (m) { pant.innerHTML = '<div class="pa-llena"><div class="pa-cuerpo" style="padding-top:96px;align-items:center;text-align:center"><h1 class="p-titulo">Pa\'llá</h1><p class="p-2">' + esc(m) + '</p></div></div>'; };
+		var tarjetaA = function (v) {
+			var ng = v.negocio || {}, e = v.envio || {}, rec = v.estado === 'recogido', rn = nombreCorto(e.recibe) || 'quien recibe';
+			return '<article class="pa-pedido"><div class="arriba"><div><b class="p-h2">' + esc(rec ? 'Entregar a ' + rn : 'Recoger en ' + ((v.punto && v.punto.nombre) || ng.nombre)) + '</b><div class="p-peq">' + esc(ng.nombre) + ' · ' + esc(e.que) + (v.sale_hora ? ' · sale ' + esc(v.sale_hora) : '') + '</div></div></div>'
+				+ '<div class="od"><span class="pm-pin"></span><b>' + esc(corto(v.origen.texto)) + '</b><small></small><span class="pm-pin pm-pin--destino"></span><b>' + esc(corto(v.destino.texto)) + '</b><small></small></div>'
+				+ (rec ? filaPersona(e.recibe || 'Quien recibe', false, 'Recibe', e.telefono) : filaPersona(ng.nombre, false, 'Negocio', ng.telefono))
+				+ (rec && e.cobrar ? '<p class="p-aviso p-aviso--aviso">' + ico('efectivo') + '<span>Cobra <b>' + miles(e.cobrar) + '</b></span></p>' : '')
+				+ (rec ? '<label class="p-btn p-btn--suave p-btn--ancho" style="margin-top:12px">' + ico('camara', 'p-ico--20') + '<span id="ft">' + (e.foto ? 'Foto ✓ · repetir' : 'Foto de entrega') + '</span><input type="file" id="foto" accept="image/*" capture="environment" hidden></label>'
+					+ cajasCodigo('Pide el código a ' + esc(rn)) + '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="fin" disabled>' + ico('check', 'p-ico--20') + 'Entregado</button>'
+					: '<a class="p-btn p-btn--suave p-btn--ancho" style="margin-top:12px" href="geo:' + v.origen.lat + ',' + v.origen.lng + '?q=' + v.origen.lat + ',' + v.origen.lng + '">' + ico('navegar', 'p-ico--20') + 'Navegar</a>'
+					+ '<button type="button" class="p-btn p-btn--marca p-btn--ancho" id="recogi" style="margin-top:8px">' + ico('check', 'p-ico--20') + 'Recogí</button>')
+				+ '<p class="p-aviso p-aviso--error" id="err" hidden></p><button type="button" class="p-btn p-btn--texto" id="problema">Tengo un problema</button></article>';
+		};
+		var pintar = function () {
+			var v = D.viajes[0], r = pant;
+			pant.innerHTML = '<div class="pa-llena"><div class="pa-cab"><span style="width:12px"></span><h1>Hola, ' + esc(nombreCorto(D.nombre)) + '</h1><span style="width:12px"></span></div><div class="pa-cuerpo">'
+				+ '<p class="p-peq" style="margin:0">Llevas encargos de ' + esc(D.titular) + '.</p>'
+				+ (v ? tarjetaA(v) + (D.viajes.length > 1 ? '<p class="p-peq">Y ' + (D.viajes.length - 1) + ' más después.</p>' : '') : '<p class="p-aviso">' + ico('campana') + 'Nada por ahora. ' + esc(D.titular) + ' te avisa.</p>')
+				+ '</div></div>';
+			if (!v) { return; }
+			var paso = function (a, extra, b) {
+				var cuerpo = { accion: a }; Object.keys(extra || {}).forEach(function (k) { cuerpo[k] = extra[k]; });
+				if (b) { b.disabled = true; }
+				apiA('ayuda/viajes/' + v.id + '/estado', cuerpo).then(function (x) {
+					if (b) { b.disabled = false; }
+					if (!x.data.ok) { avisoErr(r, x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No se pudo.')); return; }
+					U.tostada(a === 'termine' ? '¡Entregado!' : (a === 'recogi' ? 'Recogido. Ve a entregar.' : 'Le avisamos a ' + D.titular + '.'), a === 'problema' ? 'info' : 'check');
+					firmaA = ''; cargarA();
+				});
+			};
+			var fin = $('#fin', r), ft = $('#foto', r), rc = $('#recogi', r);
+			var listo = function () { if (fin) { fin.disabled = !(v.envio.foto && $('#cod', r).value.length === 4); } };
+			engancharCajas(r, listo);
+			if (rc) { rc.onclick = function () { paso('recogi', null, this); }; }
+			if (fin) { fin.onclick = function () { paso('termine', { codigo: $('#cod', r).value }, this); }; }
+			if (ft) {
+				ft.onchange = function () {
+					var f = ft.files && ft.files[0]; if (!f) { return; }
+					$('#ft', r).textContent = 'Subiendo la foto…';
+					var fd = new FormData(); fd.append('foto', f);
+					apiA('ayuda/viajes/' + v.id + '/foto', fd).then(function (x) {
+						if (!x.data.ok) { $('#ft', r).textContent = 'Foto de entrega'; avisoErr(r, x.status === 0 ? 'Sin señal. Prueba otra vez.' : (x.data.message || 'No llegó la foto.')); return; }
+						v.envio.foto = true; $('#ft', r).textContent = 'Foto ✓ · repetir'; listo();
+					});
+				};
+			}
+			$('#problema', r).onclick = function () {
+				var mot = ['No abren', 'No encuentro la casa', 'No contestan', 'Otro problema'];
+				U.hojaSobre('<p class="p-h2" style="margin:0 0 12px">¿Qué pasa?</p>' + mot.map(function (m) { return '<button type="button" class="p-fila" data-mot="' + esc(m) + '"><span class="p-fila__txt"><b>' + esc(m) + '</b></span></button>'; }).join('')
+					+ '<button type="button" class="p-btn p-btn--texto p-btn--ancho" data-cerrar>Nada, sigo</button>', function (h) {
+					$$('[data-mot]', h).forEach(function (b) { b.onclick = function () { h.remove(); paso('problema', { motivo: b.dataset.mot }); }; });
+				});
+			};
+		};
+		var cargarA = function () {
+			return apiA('ayuda/hoy').then(function (x) {
+				if (x.status === 401 || x.status === 403) { lsSet('pv.a', null); caja(x.data.message || 'Tu enlace ya no vale.'); return; }
+				if (!x.data.ok) { if (!D) { caja('Sin señal. Prueba en un rato.'); } return; }
+				var f = JSON.stringify((x.data.viajes || []).map(function (v) { return [v.id, v.estado, v.envio && v.envio.foto]; }));
+				if (D && f === firmaA) { return; }
+				if (D && x.data.viajes.length > D.viajes.length) { vibrar([300, 120, 300]); }
+				D = x.data; firmaA = f; pintar();
+			});
+		};
+		caja('Cargando…');
+		cargarA();
+		setInterval(function () { if (!document.hidden) { cargarA(); } }, 20000);
+		document.addEventListener('visibilitychange', function () { if (!document.hidden) { cargarA(); } });
+	}
+	if (AY) { ayudaApp(); return; }
 
 	PMapa.iniciar(mapaEl, TEMA);
 	window.addEventListener('hashchange', function () { mostrar(); });

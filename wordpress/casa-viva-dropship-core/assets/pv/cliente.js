@@ -810,6 +810,7 @@
 		U.pintarBarra(r, k, 'chofer');
 		var eta = $('#eta', r), llega = $('[data-llega]', r);
 		if (v.estado === 'llego' || !eta) { return; }
+		if (v.estado === 'asignado' && v.programado && v.sale_hora) { eta.textContent = 'Sale a las ' + v.sale_hora; if (llega) { llega.textContent = ''; } return; } // Reparto (D157)
 		// 10-nov (auditoría): minutos, nunca la hora del reloj (el del móvil suele estar mal y confunde).
 		if (v.estado === 'recogido') { if (m != null) { eta.textContent = (esEnvio(v) ? 'Llega en ' : 'Llegas en ') + Math.max(1, m) + ' min'; if (llega) { llega.textContent = U.km(v.km) + ' km'; } } return; }
 		eta.textContent = m == null ? 'Viene hacia ti' : (m <= 0 ? 'Llegando' : (esEnvio(v) ? 'Recoge en ' : 'Llega en ') + m + ' min');
