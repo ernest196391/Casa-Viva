@@ -1,3 +1,12 @@
+# CURRENT — EVO-LOCAL-001: proponedor local construido (2026-11-16)
+
+- Nuevo `scripts/ops/local-proposer.py` (Qwen2.5-Coder 7B por Ollama, solo loopback): tarea → propuesta `cv-change-proposal-v1`, validada con el contrato oficial y comprobada contra los archivos reales. No aplica ni entrega; sin subprocess ni credenciales. Detalle y límites: [EVO_LOCAL_001_PROPONEDOR_LOCAL.md](EVO_LOCAL_001_PROPONEDOR_LOCAL.md).
+- Pruebas: 18 (17 en Windows, 1 omitida por symlinks), cableadas en `validate.yml`; prueba real con Qwen sobre archivo de ejemplo: propuesta válida en 57 s, original intacto.
+- VPS (sin cambios de código): buzón `/home/cvdev/control-os-dev` creado como `cvdev` (0700) y validado con `validate_mailbox_dir`; proceso huérfano de OpenCode cerrado; `cv-dev-worker` activo.
+- **Falta:** recoger tareas `waiting_ai` desde el portátil y entregar al puente (requiere aprobación de Ernesto); ejecutor aislado y sandbox sin instalar en el VPS; EVO-IA-001 y Centro de Control a la espera de la respuesta de Diseño en #231.
+
+---
+
 # CURRENT — EVO-001 / BLOQUE 1: Core y servicio de imagen en producción, certificación parcial (2026-11-15 23:10 Cuba)
 
 Sustituye la entrada «BLOQUEADA» de más abajo (incidencia resuelta; ver evidencia). No cierra EVO-001 entero.
