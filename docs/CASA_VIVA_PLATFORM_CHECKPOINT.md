@@ -1,3 +1,18 @@
+# CURRENT — EVO-001 / BLOQUE 1: Core y servicio de imagen en producción, certificación parcial (2026-11-15 23:10 Cuba)
+
+Sustituye la entrada «BLOQUEADA» de más abajo (incidencia resuelta; ver evidencia). No cierra EVO-001 entero.
+
+- **Servicio `casaviva-imagen`:** reiniciado 23:01:39 (PID 2429316 → 3080096; antes corría código anterior al merge). Clave falsa → 401; clave válida a `/panel` → **403 `evo_budget_zero`**, gasto de imagen 0,000 USD; `/recorte` (local) responde. VivaBot en VPS = `3cbdeca`.
+- **Core vivo:** desplegado **3.14.172** desde la rama del PR #233 (`c9bc6e9`, CI verde: validate, integration, browser, content-studio). Hashes de los 6 archivos desplegados = rama. Política cargada: `CVD_Content_Policy::billable()` → `WP_Error evo_budget_zero`. Home y /tienda/ 200, `/control/` 401 (protegido), 306 rutas `casa-viva`, sin errores PHP nuevos.
+- **Deriva explicada:** el vivo era anterior a EVO-001. De los «8 distintos» del auditor, 4 solo difieren en saltos de línea; los reales eran 4 distintos + 2 ausentes. El vivo tenía un arreglo que no estaba en git (`clone` en `set_attributes`, cojines 12/14-nov): se conserva en #233 (panel-bridge idéntico al vivo).
+- **Congelación:** `catalogo-fichas` retenido 23:01–23:3x con `flock` (sin editar el cron); soltado. El orquestador en ensayo solo tenía los días 14–15.
+- **Copias:** Core `~/bak-20261115-cvd-3.14.171-antes-3.14.172` (7,6 MB, 308 archivos); VPS `/root/backups/evo001-20261115/` (crontab, unidad, SHA, estado previo).
+- **Reversión Core:** copiar la carpeta de la copia sobre el plugin + `wp litespeed-purge all`. El servicio de imagen NO se revierte (reabriría el gasto).
+- **Pendiente:** fusionar #233 (el clasificador bloqueó a la sesión; lo hace Ernesto); prueba de navegador sobre producción (solo hay CI de rama); recuperar credencial GitHub del mecanismo de release (#226, no verificado); decidir qué hacer con el cron `catalogo-fichas` (cada 15 min, solo llama a la web). Bloques 2–6 siguen detenidos hasta el SÍ de Ernesto.
+- Evidencia: [EVO_001_CORE_RECONCILIATION_2026_11_15.md](evidence/EVO_001_CORE_RECONCILIATION_2026_11_15.md).
+
+---
+
 # Casa Viva Platform — Checkpoint operativo
 
 ## Activación limitada del panel de fotos
