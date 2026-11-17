@@ -122,6 +122,12 @@ cvt_assert( (int) $order_two->get_meta( '_cvd_owner_user_id', true ) === $gestor
 cvt_assert( 'referral_link' === $order_two->get_meta( '_cvd_attribution_source', true ), 'La venta con enlace no quedó como referral_link.' );
 cvt_assert( 'yes' === $order_two->get_meta( CVD_Attribution::OTHER_GESTORA_META, true ), 'Falta el aviso «ya compró con otra gestora».' );
 
+// Forzar un empate de fecha, incluso si la CI es lenta: el ID menor debe conservar el cliente fijo.
+$order_two->set_date_created( $order_one->get_date_created()->getTimestamp() );
+$order_two->save();
+cvt_assert( $order_one->get_id() < $order_two->get_id(), 'El escenario de empate requiere que A tenga el ID menor.' );
+cvt_assert( wc_get_order( $order_two->get_id() )->get_date_created()->getTimestamp() === $order_one->get_date_created()->getTimestamp(), 'No se persistió el empate de fecha.' );
+
 // 3. Navegación orgánica posterior (sin enlace ni vale): el cliente fijo A, sin aviso.
 cvt_clear_referral();
 $order_fixed = cvt_attach( cvt_order( $customer->ID, '5355510001', $customer->user_email, 'Cliente Uno' ) );
@@ -173,5 +179,14 @@ cvt_clear_referral();
 $order_organic = cvt_attach( cvt_order( 0, '5355510777', 'organico-4a@example.invalid', 'Cliente Organico' ) );
 cvt_assert( 0 === (int) $order_organic->get_meta( '_cvd_owner_user_id', true ), 'Un cliente orgánico recibió gestora artificial.' );
 cvt_assert( 'organic' === $order_organic->get_meta( '_cvd_owner_type', true ), 'La venta directa no quedó marcada como orgánica.' );
+
+// La fecha sigue siendo primaria: un pedido importado más antiguo puede tener un ID mayor.
+$original_date = $order_two->get_date_created()->getTimestamp();
+$order_two->set_date_created( $original_date - 60 );
+$order_two->save();
+$earliest = CVD_Attribution::customer_owner( '5355510001', $customer->user_email, $customer->ID );
+cvt_assert( $earliest && (int) $earliest['owner_user_id'] === $gestora_b->ID, 'El ID no debe desplazar a un pedido de fecha anterior.' );
+$order_two->set_date_created( $original_date );
+$order_two->save();
 
 echo "OK 4A: first-touch permanente, compra delegada y retorno orgánico validados.\n";
