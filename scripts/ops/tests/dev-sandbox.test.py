@@ -22,7 +22,7 @@ spec = importlib.util.spec_from_file_location("cv_dev_sandbox_under_test", OPS /
 box = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(box)
 
-WS = "/home/cvdev/control-os-dev/work/run-task-150"
+WS = box.WORK_ROOT + "/run-task-150"
 
 
 class FakeProc:
@@ -63,6 +63,14 @@ class BoxTests(unittest.TestCase):
         self.assertEqual(binds, [WS])  # un único destino de escritura real
         self.assertEqual(argv[argv.index("--chdir") + 1], WS)
         self.assertEqual(argv[-3:], ["npm", "run", "lint"])
+
+    def test_violaciones_del_validador_impiden_lanzar(self):
+        from unittest import mock
+        spawn = FakePopen()
+        with mock.patch.object(box.spec, "validate_command", return_value=["invalid"]):
+            with self.assertRaises(box.SandboxError):
+                box.run_in_box(["npm", "test"], WS, 60, uid=1000, gid=1001, spawn=spawn)
+        self.assertEqual(spawn.calls, [])
 
     def test_proceso_sin_shell_ni_privilegios_ni_entorno_heredado(self):
         spawn = FakePopen()
@@ -189,9 +197,10 @@ class BoxTests(unittest.TestCase):
                 name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", "")
                 self.assertNotIn(name, ("eval", "exec", "system", "popen", "run", "call", "check_output", "check_call", "compile"))
 
-    def test_estatico_el_worker_no_lo_importa_todavia(self):
-        for name in ("dev-worker.py", "cv-proposal-gate.py", "local-runner.py", "opencode-executor.py"):
+    def test_estatico_solo_el_worker_lo_conoce_y_de_forma_perezosa(self):
+        for name in ("cv-proposal-gate.py", "local-runner.py", "opencode-executor.py", "local-proposer.py"):
             self.assertNotIn("dev-sandbox", (OPS / name).read_text(encoding="utf-8"), name)
+        self.assertEqual((OPS / "dev-worker.py").read_text(encoding="utf-8").count("dev-sandbox.py"), 1)
 
 
 if __name__ == "__main__":
