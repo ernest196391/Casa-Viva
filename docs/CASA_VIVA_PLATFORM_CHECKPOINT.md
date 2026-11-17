@@ -1,3 +1,7 @@
+# CURRENT — Control OS primera entrega revisable (2026-11-16)
+
+- Rama de propuesta UI existente; vistas y barrera conservadora de aprobaciones. CI y smoke privado pendientes; sin despliegue. Ver `docs/CONTROL_OS_FIRST_SLICE.md`. PR #241 conserva E2/E3 pendientes y E4 bloqueada.
+
 # CURRENT — EVO-LOCAL-001: mitigación del entorno limpio y módulo de caja construidos (2026-11-16)
 
 - `dev-worker.py`: los procesos hijos (git, npm, pruebas) ya NO heredan los 10 secretos (lista blanca en `child_env()`). 10 pruebas; validado en copia temporal del VPS con las 1 715 pruebas de VivaBot (0 fallos, entorno de 3 variables). **DESPLEGADO el 16-nov ~00:40 (SÍ de Ernesto):** hijos del worker con 5 variables y 0 secretos; copia previa en `/root/backups/evo001-20261115/`. Perfil `casa-viva` validado en verde con entorno mínimo; `nexo` ya falla por código/dependencias del checkout, no por el entorno.

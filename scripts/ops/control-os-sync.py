@@ -207,9 +207,10 @@ def snapshot():
     )
     approvals = query(
         'ops_approvals?select=public_id,task_id,requested_for_role,warning,impact,proposed_change,status,created_at'
-        '&status=eq.pending&order=created_at.asc&limit=40'
+        '&status=eq.pending&order=created_at.asc&limit=500'
     )
     task_by_uuid = {str(x.get('id')): x for x in tasks}
+    approval_complete = len(approvals) < 500 and all(str(a.get('task_id')) in task_by_uuid for a in approvals)
 
     # Only successful allowlisted read-only outputs enter the private UI summary.
     lookup_ids = sorted({str((x.get('result') or {}).get('bridge_id'))
@@ -337,6 +338,7 @@ def snapshot():
         'today': [x for x in task_cards if x.get('status') not in ('done','cancelled','superseded')][:10],
         'tasks': task_cards,
         'decisions': decisions,
+        'approval_complete': approval_complete,
         'lennys': lennys,
         'system': {
             'ok': system_ok,

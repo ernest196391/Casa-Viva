@@ -15,7 +15,7 @@ function taskCard(x){
  const a=el('article','', 'card');a.id='task-'+x.id;
  const top=el('div','', 'card-top');
  let label=statusLabel[x.status]||'Pendiente de revisión';
- if(x.status==='waiting_approval'&&!state.data.decisions.some(d=>d.task_id===x.id))label='Revisión anterior pendiente';
+ if(x.status==='waiting_approval'&&!state.data.decisions.some(d=>d.task_id===x.id))label='Aprobación no visible en esta muestra';
  top.append(el('h3','#'+x.id+' · '+(x.title||'Solicitud')),pill(label));a.append(top);
  if(x.summary){
   const summary=String(x.summary);
@@ -36,7 +36,8 @@ function decisionCard(x){
   if(x.warning)a.append(el('p',x.warning,'card-copy'));
   const impact=x.impact&&typeof x.impact==='object'?Object.values(x.impact).filter(v=>typeof v==='string').join(' · '):'';
   if(impact)a.append(el('small',impact,'impact'));
-  if(!canWrite){a.append(el('p','Acceso de consulta. Las aprobaciones se realizan por WhatsApp.','card-copy'));return a;}
+  if(!Number.isSafeInteger(Number(x.approval_id))||Number(x.approval_id)<=0||!x.task_id){a.append(el('p','Sin vínculo verificable. Revisar el registro original.','card-copy'));return a;}
+  if(!canWrite||!state.data.approval_complete||Date.now()-Date.parse(state.data.at)>180000){a.append(el('p','Consulta únicamente: acceso, vigencia o integridad sin confirmar.','card-copy'));return a;}
   const actions=el('div','', 'decision-actions');
   const approve=el('button','Aprobar','approve-btn');approve.type='button';approve.dataset.decision='approve';approve.dataset.approval=String(x.approval_id||'');
   const reject=el('button','Rechazar','reject-btn');reject.type='button';reject.dataset.decision='reject';reject.dataset.approval=String(x.approval_id||'');
@@ -75,6 +76,24 @@ function renderTasks(){
  if(!rows.length)empty($('tasks-list'),term?'No hay coincidencias en esta vista.':state.filter==='new'?'Todo listo para empezar. Pulsa Salud del sistema o escribe tu primera solicitud.':'No hay solicitudes en esta vista.');
  $('legacy-details').hidden=state.filter!=='history';
 }
+function renderOperationalViews(data){
+ const tasks=Array.isArray(data.tasks)?data.tasks:[];
+ const findings=Array.isArray(data.findings)?data.findings:null;
+ const incidents=$('incidents-list');
+ if(findings?.length)incidents.replaceChildren(...findings.map(x=>{
+  const a=el('article','','card');a.append(el('h3',x.title||'Incidencia'),pill(String(x.priority||'Sin prioridad')),el('p',x.detail||'Sin detalle','card-copy'));return a;
+ }));else empty(incidents,findings?'No hay incidencias en la muestra recibida.':'Fuente de incidencias no disponible.');
+ const pending=tasks.filter(x=>x.status==='waiting_approval'&&!data.decisions.some(d=>d.task_id===x.id));
+ const target=$('approval-review-list');
+ if(pending.length)target.replaceChildren(...pending.map(taskCard));else empty(target,'No hay coincidencias en la muestra de tareas.');
+ const conversations=Array.isArray(data.lennys)?data.lennys:null;
+ const c=$('conversation-list');
+ if(conversations?.length)c.replaceChildren(...conversations.map(lennysCard));else empty(c,conversations?'Sin conversaciones en esta muestra.':'Fuente no disponible.');
+ const dev=tasks.filter(x=>x.status==='waiting_ai'||(typeof x.executor==='string'&&/^(dev-worker|qwen|opencode|claude-code)$/i.test(x.executor)));
+ const d=$('developer-list');
+ if(dev.length)d.replaceChildren(...dev.map(taskCard));else empty(d,'Sin tareas de programación identificables en esta muestra.');
+ $('ai-status').textContent='Sin telemetría certificada de modelos, costos o ejecución autónoma en este snapshot.';
+}
 function render(data){
  state.data=data;data.decisions=Array.isArray(data.decisions)?data.decisions:[];
  const age=(Date.now()-Date.parse(data.at))/1000;const stale=!Number.isFinite(age)||age>180;
@@ -83,7 +102,9 @@ function render(data){
  if(stale)$('error').textContent='No hemos recibido un estado reciente. Pulsa Actualizar; no vuelvas a enviar la misma solicitud.';
  $('decision-count').textContent=data.decisions.length;
  $('decisions-list').replaceChildren(...data.decisions.map(decisionCard));
- if(!data.decisions.length)empty($('decisions-list'),'No tienes aprobaciones pendientes.');
+ if(!data.decisions.length)empty($('decisions-list'),data.approval_complete?'No hay aprobaciones formales pendientes en esta consulta.':'No se puede certificar la lista de aprobaciones.');
+ $('approval-integrity').textContent=data.approval_complete?'Consulta de aprobaciones dentro del límite comprobado.':'Auditoría incompleta: no se habilitan decisiones web.';
+ renderOperationalViews(data);
  renderTasks();
  const l=Array.isArray(data.lennys)?data.lennys:[];$('lennys-list').replaceChildren(...l.map(lennysCard));
  if(!l.length)empty($('lennys-list'),'No hay mensajes anteriores en esta muestra.');
@@ -121,7 +142,7 @@ $('decisions-list').addEventListener('click',async e=>{
  const btn=e.target.closest('[data-decision]');if(!btn)return;
  const card=btn.closest('.card'),feedback=card.querySelector('.decision-feedback');
  const approval=Number(btn.dataset.approval),decision=btn.dataset.decision;
- if(!approval||!['approve','reject'].includes(decision))return;
+ if(!canWrite||!state.data?.approval_complete||!(Date.now()-Date.parse(state.data.at)<=180000)||!Number.isSafeInteger(approval)||approval<=0||!['approve','reject'].includes(decision))return;
  card.querySelectorAll('[data-decision]').forEach(x=>x.disabled=true);feedback.textContent='Registrando decisión…';
  try{const r=await fetch('./?action=decision',{method:'POST',headers:{'Content-Type':'application/json','X-CV-Nonce':document.querySelector('meta[name=cv-nonce]').content},body:JSON.stringify({approval_id:approval,decision})});const b=await r.json();if(!r.ok||!b.success)throw Error(b.data?.message||'No se pudo guardar la decisión.');feedback.textContent='Decisión recibida. Esperando confirmación del registro; no implica un despliegue.';setTimeout(refresh,12000);}
  catch(err){feedback.textContent=err.message;card.querySelectorAll('[data-decision]').forEach(x=>x.disabled=false);}
