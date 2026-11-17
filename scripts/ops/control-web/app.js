@@ -43,7 +43,7 @@ function decisionCard(x){
   const actions=el('div','', 'decision-actions');
   const approve=el('button','Aprobar','approve-btn');approve.type='button';approve.dataset.decision='approve';approve.dataset.approval=String(x.approval_id||'');
   const reject=el('button','Rechazar','reject-btn');reject.type='button';reject.dataset.decision='reject';reject.dataset.approval=String(x.approval_id||'');
-  actions.append(approve,reject);a.append(actions,el('p','', 'decision-feedback'),el('div',stamp(x.created_at),'meta'));return a;
+  actions.append(reject,approve);a.append(actions,el('p','', 'decision-feedback'),el('div',stamp(x.created_at),'meta'));return a;
 }
 function lennysCard(x){
   const a=el('article','', 'card priority-'+(x.priority||'p2'));const top=el('div','', 'card-top');
@@ -59,6 +59,9 @@ function activityCard(x){
 function showTab(name){
  document.querySelectorAll('[data-tab]').forEach(b=>{const selected=b.dataset.tab===name;b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));});
  document.querySelectorAll('.view').forEach(v=>v.hidden=v.id!==name);
+ const group=document.querySelector('[data-tab="'+name+'"]')?.closest('[data-nav-group]')?.dataset.navGroup;
+ document.querySelectorAll('[data-group]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.group===group)));
+ document.querySelectorAll('[data-nav-group]').forEach(g=>g.classList.toggle('group-active',g.dataset.navGroup===group));
 }
 function setFilter(name){
  state.filter=name;document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('selected',b.dataset.filter===name));renderTasks();
@@ -81,7 +84,7 @@ function renderTasks(){
 function renderOperationalViews(data){
  const tasks=Array.isArray(data.tasks)?data.tasks:[];
  const overview=[['incidents','Incidencias',Array.isArray(data.findings)?data.findings.length+' en la muestra':'Fuente no disponible'],['today','Aprobaciones',data.approval_complete===true?data.decisions.length+' formales pendientes':'Consulta incompleta'],['today','Revisiones sin aprobación',Array.isArray(data.reviews_blocked)?data.reviews_blocked.length+' identificadas':'Sin comprobación'],['work','Pendientes',data.pending_complete===true?tasks.filter(x=>!['done','cancelled','superseded'].includes(x.status)).length+' registradas':'Muestra parcial']];
- $('home-list').replaceChildren(...overview.map(([tab,title,detail])=>{const card=el('button','','card overview-card');card.type='button';card.append(el('strong',title),el('span',detail,'card-copy'));card.addEventListener('click',()=>{showTab(tab);if(tab==='work')setFilter('pending');});return card;}));
+ $('home-list').replaceChildren(...overview.map(([tab,title,detail])=>{const card=el('button','','card overview-card');card.type='button';card.append(el('span',title,'cv-kpi-label'),el('strong',detail,'cv-kpi-value'));card.addEventListener('click',()=>{showTab(tab);if(tab==='work')setFilter('pending');});return card;}));
  $('coverage').textContent='Fuente: cola de Control OS · '+stamp(data.at)+'. '+(data.coverage?.tasks||'Muestra limitada; no es el total histórico.');
  const findings=Array.isArray(data.findings)?data.findings:null;
  const incidents=$('incidents-list');
@@ -165,5 +168,9 @@ $('task-form').addEventListener('submit',async e=>{
  catch(err){$('task-feedback').textContent=err instanceof TypeError?'No pude confirmar la recepción. Pulsa Actualizar y revisa la lista antes de reenviar.':err.message;}
  finally{buttons.forEach(b=>b.disabled=false);}
 });
-refresh();setInterval(refresh,15000);
+document.querySelectorAll('[data-group]').forEach(b=>b.addEventListener('click',()=>{const first=document.querySelector('[data-nav-group="'+b.dataset.group+'"] [data-tab]');if(first)showTab(first.dataset.tab);}));
+function toggleAssistant(open){$('assistant-panel').hidden=!open;document.querySelectorAll('.cv-assistant-toggle').forEach(b=>b.setAttribute('aria-expanded',String(open)));if(open){$('assistant-panel').scrollIntoView({block:'nearest'});if(canWrite)$('task-text').focus();}}
+document.querySelectorAll('.cv-assistant-toggle').forEach(b=>b.addEventListener('click',()=>toggleAssistant($('assistant-panel').hidden)));
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('assistant-panel').hidden)toggleAssistant(false);});
+showTab('home');refresh();setInterval(refresh,15000);
 
