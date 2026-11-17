@@ -38,6 +38,7 @@ jobs:
           python3 -m py_compile scripts/ops/cv-ops-bridge.py scripts/ops/control-os-sync.py scripts/ops/dev-worker.py scripts/ops/opencode-executor.py scripts/ops/opencode-result-consumer.py scripts/ops/opencode-adapter.py scripts/ops/opencode-proposal.py scripts/ops/opencode-proposal-bridge.py scripts/ops/opencode-demo-e2e.py scripts/ops/sandbox/opencode-sandbox-spec.py scripts/ops/sandbox/verify-sandbox.py
           python3 scripts/ops/tests/control-sync-panel.test.py
           python3 scripts/ops/tests/planner-probe.test.py
+          python3 scripts/ops/tests/vivabot-rollback.test.py
           python3 scripts/ops/tests/dev-worker.test.py
           python3 scripts/ops/tests/opencode-executor.test.py
           python3 scripts/ops/tests/opencode-result-consumer.test.py
