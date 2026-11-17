@@ -1,3 +1,10 @@
+# CURRENT — Control OS: asistente universal, dictado (2026-11-17)
+
+- Bloque 1 / primer subpaso. Base GitHub main 3b7b5c0 (#245); corrección independiente de tamaño del logo #246 abierta. Producción del shell previamente observada, no recertificada en esta sesión.
+- Rama `evo/control-os-assistant-dictation`: micrófono opcional para Ernesto (canWrite), reconocimiento nativo del navegador con consentimiento explícito sobre posible procesamiento por su proveedor, borrador editable, nunca envío automático. Cancela al editar, enviar, cerrar o abandonar la página; ignora resultados tardíos. Sin reconocimiento disponible: teclado/texto. Lennys conserva acceso de consulta.
+- Reutiliza formulario y cola canónicos; no cambia endpoints, autorización, nonce, aprobaciones ni ejecutores. Sin API nueva de pago; coste adicional autorizado 0 USD. No se afirma reconocimiento offline ni conversación realtime.
+- Pruebas simuladas de consentimiento, borrador y cancelación ejecutadas (7 comprobaciones); suite Node añadida. CI, micrófono físico, inspección móvil y despliegue pendientes. Reversión: revertir PR. Siguiente: certificar dictado y logo, luego captura de archivos y diseño de respuestas con permisos y costes verificados.
+
 # Control OS — shell visual inicial (2026-11-16)
 
 - Fase CURRENT · PR #244. Base productiva ee8638f. Primer shell con navegación agrupada, cinco pestañas móviles, sidebar 248px, asistente desplegable y tarjetas de indicadores reales. Auth, endpoint, nonce y validación de aprobaciones preservados. Sin despliegue. Pendiente CI, inspección visual y comparación de identidad/logo, tema oscuro, controles de captura y pantallas restantes. Costo adicional 0 USD.
