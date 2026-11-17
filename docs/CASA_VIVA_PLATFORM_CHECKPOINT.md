@@ -1,3 +1,9 @@
+# CURRENT — VivaBot despliegue con recuperación conservadora (2026-11-17)
+
+- PR candidato: puente 4.1.3, solo recuperación de VivaBot. Producción último SHA certificado `0d537006aa6e5aa45ad89464f7ce4b6bbf6a419d`; candidato VivaBot #48 `b90883295e278c5a383bd7b832bb592b24daa4fd`, ambos workflows verdes, pendiente instalación. Puente anterior 4.1.2.
+- La recuperación comprueba HEAD esperado, rama y ausencia de cambios tracked, utiliza `git reset --keep` (no hard), verifica el SHA restaurado y solo recarga PM2 si se confirma. Si hay cambio concurrente, se bloquea y se informa revisión manual. No se cambian permisos ni se reinicia VPS.
+- Cuatro pruebas con repositorios temporales: restauración limpia conserva archivo local, cambio tracked bloquea, HEAD movido bloquea, rama cambiada bloquea. Integradas en CI, todavía pendiente resultado. Sin instalación del puente ni #48 en este subpaso. Costo nuevo 0 USD; reversión puente mediante copia anterior existente si se aprueba instalación.
+
 # Control OS — shell visual inicial (2026-11-16)
 
 - Fase CURRENT · PR #244. Base productiva ee8638f. Primer shell con navegación agrupada, cinco pestañas móviles, sidebar 248px, asistente desplegable y tarjetas de indicadores reales. Auth, endpoint, nonce y validación de aprobaciones preservados. Sin despliegue. Pendiente CI, inspección visual y comparación de identidad/logo, tema oscuro, controles de captura y pantallas restantes. Costo adicional 0 USD.
