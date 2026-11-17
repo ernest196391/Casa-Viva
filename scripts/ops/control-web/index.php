@@ -104,17 +104,17 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
 <title>Control OS · Casa Viva</title>
 <link rel="stylesheet" href="style.css?v=<?php echo esc_attr(substr(hash_file('sha256', __DIR__ . '/style.css'), 0, 12)); ?>">
 </head>
-<body>
+<body class="cv-shell">
 <header class="topbar">
   <a class="brand" href="./" aria-label="Casa Viva Control OS"><span><strong>CASA VIVA</strong><small>Control OS</small></span></a>
-  <button id="refresh" class="icon-btn" aria-label="Actualizar">↻</button>
-</header>
+  <div class="fresh"><span id="connection" class="dot"></span><span id="freshness">Cargando estado…</span></div><button id="refresh" class="icon-btn" aria-label="Actualizar">↻</button>
+</header><aside class="cv-sidebar"><a class="cv-wordmark" href="./">CASA VIVA<small>Control OS</small></a><button class="cv-assistant-toggle" type="button" aria-expanded="false" aria-controls="assistant-panel"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5z"/></svg> Pregúntale al asistente</button><nav class="tabs" aria-label="Secciones"><div class="nav-group" data-nav-group="0"><h2>Inicio</h2><button type="button" class="selected" data-tab="home" aria-pressed="true"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10 12 3l9 7v10H3z M9 20v-7h6v7"/></svg><span>Inicio ejecutivo</span></button><button type="button" data-tab="today" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l4 4 10-10"/></svg><span>Aprobaciones</span> <span id="decision-count">—</span></button><button type="button" data-tab="work" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Mis solicitudes</span></button></div><div class="nav-group" data-nav-group="1"><h2>Negocio</h2><button type="button" data-tab="orders" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l2-5h14l2 5v3H3z M5 12v8h14v-8M10 20v-5h4v5"/></svg><span>Comercio · Pedidos</span></button><button type="button" data-tab="conversations" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 1-8 8H4l2-4a8 8 0 1 1 14-4z"/></svg><span>CRM y WhatsApp</span></button></div><div class="nav-group" data-nav-group="2"><h2>Operaciones</h2><button type="button" data-tab="incidents" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20z M12 9v5m0 3v.5"/></svg><span>Incidencias</span></button></div><div class="nav-group" data-nav-group="3"><h2>Inteligencia</h2><button type="button" data-tab="ai" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5z"/></svg><span>Agentes IA</span></button><button type="button" data-tab="developers" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6 2 12l6 6m8-12 6 6-6 6m-2-15-4 18"/></svg><span>Evolution Engine</span></button></div><div class="nav-group" data-nav-group="4"><h2>Sistema</h2><button type="button" data-tab="system" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16M8 5v4m8 1v4m-6 1v4"/></svg><span>Sistema</span></button></div></nav><div class="cv-account"><?php echo esc_html(wp_get_current_user()->display_name); ?><small><?php echo $canWrite ? 'Administración' : 'Consulta'; ?></small></div></aside>
 <main>
   <p class="section-copy"><a href="<?php echo esc_url(home_url('/centro-operaciones/')); ?>">Pedidos e inventario</a> · <?php echo esc_html(wp_get_current_user()->display_name); ?> · <?php echo $canWrite ? 'Control OS' : 'Acceso de consulta. Cambios y aprobaciones por WhatsApp.'; ?></p>
-  <section class="command-card">
+  <section class="command-card" id="assistant-panel" hidden>
     <div class="command-head">
-      <div><span class="eyebrow">CASA VIVA</span><h1><?php echo $canWrite ? '¿Qué quieres hacer?' : 'Estado de Control OS'; ?></h1></div>
-      <div class="fresh"><span id="connection" class="dot"></span><span id="freshness">Cargando estado…</span></div>
+      <div><span class="eyebrow">ASISTENTE</span><h1><?php echo $canWrite ? '¿Qué quieres hacer?' : 'Estado de Control OS'; ?></h1></div>
+      
     </div>
     <div class="quick-actions" aria-label="Consultas sin IA" <?php if (!$canWrite) { echo 'hidden'; } ?>>
       <button type="button" data-query="salud del sistema">Salud del sistema</button>
@@ -131,18 +131,8 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
     <p class="capability-note" <?php if (!$canWrite) { echo 'hidden'; } ?>>Los demás mensajes quedan para revisión. La programación automática de cambios todavía está en preparación.</p>
   </section>
   <div id="error" class="notice" role="alert" hidden></div>
-  <nav class="tabs" aria-label="Secciones">
-    <button class="selected" data-tab="home" aria-pressed="true">Inicio</button>
-    <button data-tab="work" aria-pressed="false">Mis solicitudes</button>
-    <button data-tab="today" aria-pressed="false">Aprobaciones <span id="decision-count">—</span></button>
-    <button data-tab="incidents" aria-pressed="false">Incidencias</button>
-    <button data-tab="orders" aria-pressed="false">Pedidos</button>
-    <button data-tab="conversations" aria-pressed="false">Conversaciones</button>
-    <button data-tab="developers" aria-pressed="false">Programadores</button>
-    <button data-tab="ai" aria-pressed="false">IA</button>
-    <button data-tab="system" aria-pressed="false">Sistema</button>
-  </nav>
-  <section id="home" class="view"><h2>Centro de Control</h2><p class="section-copy">Consulta el estado recibido y abre el área que necesita atención.</p><div id="home-list" class="stack"></div><p id="coverage" class="section-copy">Esperando fuentes y alcance de la consulta.</p></section>
+
+  <section id="home" class="view"><h2>Inicio ejecutivo</h2><p class="section-copy">Consulta el estado recibido y abre el área que necesita atención.</p><div id="home-list" class="stack"></div><p id="coverage" class="section-copy">Esperando fuentes y alcance de la consulta.</p></section>
   <section id="work" class="view" hidden>
     <div class="section-head"><h2 id="list-title">Empezamos desde ahora</h2><span id="task-count" class="count">—</span></div>
     <p id="list-help" class="section-copy">Tus solicitudes nuevas aparecerán aquí, con la más reciente primero. Lo anterior sigue disponible en el historial.</p>
@@ -177,7 +167,7 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
     <p class="section-copy">Estos indicadores muestran la conexión de los servicios; no certifican el ciclo automático de programación.</p>
     <details><summary>Información técnica y actividad</summary><div id="activity-list" class="stack compact"></div></details>
   </section>
-</main>
+</main><button class="cv-assistant-fab cv-assistant-toggle" type="button" aria-label="Abrir asistente" aria-expanded="false" aria-controls="assistant-panel"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5z"/></svg></button><nav class="cv-bottom" aria-label="Navegación móvil"><button type="button" data-group="0" aria-pressed="true"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10 12 3l9 7v10H3z M9 20v-7h6v7"/></svg><span>Inicio</span></button><button type="button" data-group="1" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v13H3z M8 7V4h8v3M3 12h18"/></svg><span>Negocio</span></button><button type="button" data-group="2" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h13v12H2z M15 9h4l3 5v3h-7M5 19a2 2 0 1 0 4 0m8 0a2 2 0 1 0 4 0"/></svg><span>Operaciones</span></button><button type="button" data-group="3" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5z"/></svg><span>IA</span></button><button type="button" data-group="4" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h.1m7 0h.1m7 0h.1"/></svg><span>Más</span></button></nav>
 <footer>Casa Viva Control OS · Una sola cola, una sola verdad operativa.</footer>
 <script src="app.js?v=<?php echo esc_attr(substr(hash_file('sha256', __DIR__ . '/app.js'), 0, 12)); ?>"></script>
 </body>

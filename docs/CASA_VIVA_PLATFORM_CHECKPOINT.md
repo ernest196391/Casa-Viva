@@ -1,3 +1,7 @@
+# Control OS — shell visual inicial (2026-11-16)
+
+- Fase CURRENT · PR #244. Base productiva ee8638f. Primer shell con navegación agrupada, cinco pestañas móviles, sidebar 248px, asistente desplegable y tarjetas de indicadores reales. Auth, endpoint, nonce y validación de aprobaciones preservados. Sin despliegue. Pendiente CI, inspección visual y comparación de identidad/logo, tema oscuro, controles de captura y pantallas restantes. Costo adicional 0 USD.
+
 # Control OS — recuperación de diseño (2026-11-16)
 
 - Fuente original archivada parcialmente en `docs/control-os-design/`; ocho archivos visibles recuperados, faltan fuentes de componentes. No hay cambios de runtime ni despliegue. Siguiente: shell visual exacto sobre `/control/`, con pruebas.
