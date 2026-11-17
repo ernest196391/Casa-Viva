@@ -816,6 +816,10 @@ final class CVD_Programa {
 			$key = 'red1' === $l['kind'] ? $src : (int) ( $people[ $src ]['inviter'] ?? $people[ (string) $src ]['inviter'] ?? 0 );
 			$from[ $key ] = ( $from[ $key ] ?? 0 ) + (float) $l['amount'];
 		}
+		// Dany: ordenar por aporte mensual descendente; empate conserva el orden original.
+		usort( $l1, static function ( $a, $b ) use ( $from ) {
+			return (float) ( $from[ $b ] ?? 0 ) <=> (float) ( $from[ $a ] ?? 0 );
+		} );
 		$rate = (float) ( $data['params']['rate_cup'] ?? 0 );
 		ob_start();
 		?>
