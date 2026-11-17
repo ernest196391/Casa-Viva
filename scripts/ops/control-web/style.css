@@ -32,3 +32,6 @@ button,a.primary,summary{min-height:44px}a.primary{display:inline-flex;align-ite
 /* Preserve original brand vector proportions on both navigation surfaces. */
 .cv-shell .cv-logo{display:block;width:172px;max-width:100%;height:auto;aspect-ratio:4890/1000}.cv-shell .brand{color:var(--green)}.cv-shell .brand .cv-logo{width:132px}.cv-wordmark{letter-spacing:0}.cv-shell .brand small{margin-top:4px}
 @media(max-width:360px){.cv-shell .brand .cv-logo{width:110px}}
+
+/* AssistantComposer: optional voice draft, 44px touch target. */
+.cv-shell .cv-voice-row{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:8px}.cv-shell .cv-voice-status{font-size:12px;color:var(--muted);text-align:right}.cv-shell .cv-mic{width:44px;height:44px;min-height:44px;flex:none;display:grid;place-items:center;border:0;border-radius:50%;background:var(--accent);color:var(--onaccent);cursor:pointer}.cv-shell .cv-mic[aria-pressed=true]{outline:2px solid var(--accent);outline-offset:3px}.cv-shell .cv-mic svg{width:22px;height:22px}
