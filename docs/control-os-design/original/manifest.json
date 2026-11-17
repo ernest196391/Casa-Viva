@@ -1,0 +1,887 @@
+{
+  "manifestVersion": 3,
+  "name": "Casa Viva Control OS",
+  "namespace": "CasaViva",
+  "files": [
+    "01-navegacion.md",
+    "02-roles.md",
+    "03-flujos.md",
+    "04-pantallas.md",
+    "components/ActionProposal/README.md",
+    "components/AssistantComposer/README.md",
+    "components/Button/README.md",
+    "components/DecisionCard/README.md",
+    "components/Icon/README.md",
+    "components/KpiTile/README.md",
+    "components/ListRow/README.md",
+    "components/Logo/README.md",
+    "components/Money/README.md",
+    "components/SegmentedControl/README.md",
+    "components/Sidebar/README.md",
+    "components/StatusPill/README.md",
+    "components/TabBar/README.md",
+    "components/bundle.css",
+    "components/bundle.js",
+    "components/index.d.ts",
+    "tokens.css"
+  ],
+  "libraries": [
+    {
+      "name": "react",
+      "version": "18",
+      "global": "React"
+    },
+    {
+      "name": "react-dom",
+      "version": "18",
+      "global": "ReactDOM"
+    }
+  ],
+  "components": [
+    {
+      "name": "Icon",
+      "group": "Fundamentos",
+      "summary": "Icono de línea de la familia Lucide, trazo 1.75 y 20px por defecto; hereda el color del texto."
+    },
+    {
+      "name": "Button",
+      "group": "Acciones",
+      "summary": "Botón de acción; uno solo primary por vista o tarjeta."
+    },
+    {
+      "name": "StatusPill",
+      "group": "Estado",
+      "summary": "Píldora de estado con icono + palabra; el color nunca va solo."
+    },
+    {
+      "name": "Money",
+      "group": "Datos",
+      "summary": "Importe con cifras tabulares y la moneda como sufijo pequeño."
+    },
+    {
+      "name": "KpiTile",
+      "group": "Datos",
+      "summary": "Indicador: etiqueta en mayúsculas, valor y variación."
+    },
+    {
+      "name": "DecisionCard",
+      "group": "Decisiones",
+      "summary": "Tarjeta de algo que espera la decisión del propietario: qué, por qué, cuánto y dos botones."
+    },
+    {
+      "name": "ListRow",
+      "group": "Listas",
+      "summary": "Fila de lista de 56px mínimo: icono o avatar, título, subtítulo y dato a la derecha."
+    },
+    {
+      "name": "SegmentedControl",
+      "group": "Acciones",
+      "summary": "Selector de 2 a 5 opciones excluyentes, típicamente el periodo (Hoy · Semana · Mes · Año)."
+    },
+    {
+      "name": "TabBar",
+      "group": "Navegación",
+      "summary": "Barra inferior móvil con las cinco secciones y el botón flotante del asistente."
+    },
+    {
+      "name": "Sidebar",
+      "group": "Navegación",
+      "summary": "Barra lateral de escritorio (≥1024px) con los módulos agrupados y el acceso al asistente."
+    },
+    {
+      "name": "Logo",
+      "group": "Marca",
+      "summary": "Logo oficial de Casa Viva (SVG original, sin redibujar). Úsalo siempre con este componente; nunca se inventa ni se recolorea a mano."
+    },
+    {
+      "name": "AssistantComposer",
+      "group": "Asistente",
+      "summary": "Entrada del asistente universal: texto, voz, cámara y archivos, con sugerencias."
+    },
+    {
+      "name": "ActionProposal",
+      "group": "Asistente",
+      "summary": "Propuesta del asistente antes de cambiar algo: petición, cambios (antes → después), advertencias de impacto y confirmación."
+    },
+    {
+      "name": "AsAdvertencias",
+      "group": "L · Asistente universal · 118 Advertencias de impacto",
+      "page": true
+    },
+    {
+      "name": "AsCamara",
+      "group": "L · Asistente universal · 115 Cámara y archivos",
+      "page": true
+    },
+    {
+      "name": "AsConfirmar",
+      "group": "L · Asistente universal · 119 Confirmación de cambios",
+      "page": true
+    },
+    {
+      "name": "AsConversacion",
+      "group": "L · Asistente universal · 113 Conversación",
+      "page": true
+    },
+    {
+      "name": "AsEscritorio",
+      "group": "L · Asistente universal · Asistente escritorio",
+      "page": true
+    },
+    {
+      "name": "AsPropuesta",
+      "group": "L · Asistente universal · 117 Propuesta de acción",
+      "page": true
+    },
+    {
+      "name": "AsResultado",
+      "group": "L · Asistente universal · 120 Seguimiento y resultados",
+      "page": true
+    },
+    {
+      "name": "AsResumen",
+      "group": "L · Asistente universal · 116 Resumen de la petición",
+      "page": true
+    },
+    {
+      "name": "AsVoz",
+      "group": "L · Asistente universal · 114 Entrada por voz",
+      "page": true
+    },
+    {
+      "name": "CfAyuda",
+      "group": "M · Configuración · 130 Centro de ayuda",
+      "page": true
+    },
+    {
+      "name": "CfEscritorio",
+      "group": "M · Configuración · Configuración escritorio",
+      "page": true
+    },
+    {
+      "name": "CfIdentidad",
+      "group": "M · Configuración · 128 Identidad visual",
+      "page": true
+    },
+    {
+      "name": "CfIntegraciones",
+      "group": "M · Configuración · 125 Integraciones",
+      "page": true
+    },
+    {
+      "name": "CfNotificaciones",
+      "group": "M · Configuración · 126 Notificaciones",
+      "page": true
+    },
+    {
+      "name": "CfPerfil",
+      "group": "M · Configuración · 121 Perfil personal",
+      "page": true
+    },
+    {
+      "name": "CfPreferencias",
+      "group": "M · Configuración · 129 Preferencias",
+      "page": true
+    },
+    {
+      "name": "CfReglas",
+      "group": "M · Configuración · 124 Reglas comerciales",
+      "page": true
+    },
+    {
+      "name": "CfRoles",
+      "group": "M · Configuración · 123 Roles y permisos",
+      "page": true
+    },
+    {
+      "name": "CfSeguridad",
+      "group": "M · Configuración · 127 Seguridad",
+      "page": true
+    },
+    {
+      "name": "CfUsuarios",
+      "group": "M · Configuración · 122 Administración de usuarios",
+      "page": true
+    },
+    {
+      "name": "ComAgotados",
+      "group": "B · Comercio · 17 Productos agotados",
+      "page": true
+    },
+    {
+      "name": "ComCatalogo",
+      "group": "B · Comercio · 11 Catálogo de productos",
+      "page": true
+    },
+    {
+      "name": "ComCategorias",
+      "group": "B · Comercio · 15 Categorías",
+      "page": true
+    },
+    {
+      "name": "ComDetallePedido",
+      "group": "B · Comercio · 9 Detalle de pedido",
+      "page": true
+    },
+    {
+      "name": "ComDetalleProducto",
+      "group": "B · Comercio · 12 Detalle de producto",
+      "page": true
+    },
+    {
+      "name": "ComEdicionProducto",
+      "group": "B · Comercio · 13 Edición de producto",
+      "page": true
+    },
+    {
+      "name": "ComEscritorio",
+      "group": "B · Comercio · Pedidos escritorio",
+      "page": true
+    },
+    {
+      "name": "ComInventario",
+      "group": "B · Comercio · 14 Inventario",
+      "page": true
+    },
+    {
+      "name": "ComNuevoPedido",
+      "group": "B · Comercio · 10 Nuevo pedido",
+      "page": true
+    },
+    {
+      "name": "ComPedidos",
+      "group": "B · Comercio · 8 Pedidos",
+      "page": true
+    },
+    {
+      "name": "ComPotencial",
+      "group": "B · Comercio · 18 Productos con mayor potencial",
+      "page": true
+    },
+    {
+      "name": "ComPrecios",
+      "group": "B · Comercio · 16 Precios y márgenes",
+      "page": true
+    },
+    {
+      "name": "ConAntesDespues",
+      "group": "F · Content Studio · 51 Comparador antes y después",
+      "page": true
+    },
+    {
+      "name": "ConAprobaciones",
+      "group": "F · Content Studio · 57 Aprobaciones de contenido",
+      "page": true
+    },
+    {
+      "name": "ConBiblioteca",
+      "group": "F · Content Studio · 56 Biblioteca multimedia",
+      "page": true
+    },
+    {
+      "name": "ConCalendario",
+      "group": "F · Content Studio · 55 Calendario de publicaciones",
+      "page": true
+    },
+    {
+      "name": "ConCola",
+      "group": "F · Content Studio · 49 Cola de productos pendientes",
+      "page": true
+    },
+    {
+      "name": "ConDashboard",
+      "group": "F · Content Studio · 48 Dashboard de contenido",
+      "page": true
+    },
+    {
+      "name": "ConDescripciones",
+      "group": "F · Content Studio · 54 Generador de descripciones",
+      "page": true
+    },
+    {
+      "name": "ConEditor",
+      "group": "F · Content Studio · 50 Editor de fotografías · Cleanfy",
+      "page": true
+    },
+    {
+      "name": "ConEscritorio",
+      "group": "F · Content Studio · Contenido escritorio",
+      "page": true
+    },
+    {
+      "name": "ConHeroOffer",
+      "group": "F · Content Studio · 53 Generador de ofertas publicitarias",
+      "page": true
+    },
+    {
+      "name": "ConHistorial",
+      "group": "F · Content Studio · 58 Historial y restauración",
+      "page": true
+    },
+    {
+      "name": "ConLifestyle",
+      "group": "F · Content Studio · 52 Generador de imágenes lifestyle",
+      "page": true
+    },
+    {
+      "name": "CrmAudio",
+      "group": "D · CRM y WhatsApp · 33 Transcripción de audios",
+      "page": true
+    },
+    {
+      "name": "CrmBandeja",
+      "group": "D · CRM y WhatsApp · 30 Bandeja unificada",
+      "page": true
+    },
+    {
+      "name": "CrmConversacion",
+      "group": "D · CRM y WhatsApp · 31 Detalle de conversación",
+      "page": true
+    },
+    {
+      "name": "CrmEscritorio",
+      "group": "D · CRM y WhatsApp · Bandeja escritorio",
+      "page": true
+    },
+    {
+      "name": "CrmHistorial",
+      "group": "D · CRM y WhatsApp · 36 Historial de pedidos",
+      "page": true
+    },
+    {
+      "name": "CrmIncidencias",
+      "group": "D · CRM y WhatsApp · 34 Incidencias comerciales",
+      "page": true
+    },
+    {
+      "name": "CrmPerfil",
+      "group": "D · CRM y WhatsApp · 32 Perfil del cliente",
+      "page": true
+    },
+    {
+      "name": "CrmSeguimiento",
+      "group": "D · CRM y WhatsApp · 37 Seguimiento comercial",
+      "page": true
+    },
+    {
+      "name": "CrmSugeridas",
+      "group": "D · CRM y WhatsApp · 35 Respuestas sugeridas por IA",
+      "page": true
+    },
+    {
+      "name": "CrmVivaBot",
+      "group": "D · CRM y WhatsApp · 38 Configuración y conocimiento de VivaBot",
+      "page": true
+    },
+    {
+      "name": "EqComisiones",
+      "group": "H · Gestoras y equipo · 69 Ventas y comisiones",
+      "page": true
+    },
+    {
+      "name": "EqEmpleados",
+      "group": "H · Gestoras y equipo · 71 Gestión de empleados",
+      "page": true
+    },
+    {
+      "name": "EqEscritorio",
+      "group": "H · Gestoras y equipo · Ranking y perfil escritorio",
+      "page": true
+    },
+    {
+      "name": "EqGestoras",
+      "group": "H · Gestoras y equipo · 67 Directorio de gestoras",
+      "page": true
+    },
+    {
+      "name": "EqHorarios",
+      "group": "H · Gestoras y equipo · 72 Horarios",
+      "page": true
+    },
+    {
+      "name": "EqPerfil",
+      "group": "H · Gestoras y equipo · 68 Perfil de gestora",
+      "page": true
+    },
+    {
+      "name": "EqPermisos",
+      "group": "H · Gestoras y equipo · 73 Permisos y responsabilidades",
+      "page": true
+    },
+    {
+      "name": "EqRanking",
+      "group": "H · Gestoras y equipo · 70 Clasificación por rendimiento",
+      "page": true
+    },
+    {
+      "name": "EqTareas",
+      "group": "H · Gestoras y equipo · 74 Tareas del equipo",
+      "page": true
+    },
+    {
+      "name": "EvAuditoria",
+      "group": "K · Evolution Engine · 109 Centro de auditoría",
+      "page": true
+    },
+    {
+      "name": "EvCambios",
+      "group": "K · Evolution Engine · 111 Historial de cambios",
+      "page": true
+    },
+    {
+      "name": "EvCola",
+      "group": "K · Evolution Engine · 99 Cola de desarrollo",
+      "page": true
+    },
+    {
+      "name": "EvDashboard",
+      "group": "K · Evolution Engine · 96 Dashboard de evolución técnica",
+      "page": true
+    },
+    {
+      "name": "EvDespliegue",
+      "group": "K · Evolution Engine · 112 Aprobación de despliegues",
+      "page": true
+    },
+    {
+      "name": "EvEscritorio",
+      "group": "K · Evolution Engine · Evolución escritorio",
+      "page": true
+    },
+    {
+      "name": "EvFases",
+      "group": "K · Evolution Engine · 98 Fases y subfases",
+      "page": true
+    },
+    {
+      "name": "EvGithub",
+      "group": "K · Evolution Engine · 103 Integración GitHub",
+      "page": true
+    },
+    {
+      "name": "EvIncidencias",
+      "group": "K · Evolution Engine · 108 Incidencias técnicas",
+      "page": true
+    },
+    {
+      "name": "EvLocales",
+      "group": "K · Evolution Engine · 102 Programadores locales",
+      "page": true
+    },
+    {
+      "name": "EvPR",
+      "group": "K · Evolution Engine · 104 Pull requests",
+      "page": true
+    },
+    {
+      "name": "EvPruebas",
+      "group": "K · Evolution Engine · 105 Pruebas automatizadas",
+      "page": true
+    },
+    {
+      "name": "EvRespaldos",
+      "group": "K · Evolution Engine · 110 Respaldos y restauración",
+      "page": true
+    },
+    {
+      "name": "EvRoadmap",
+      "group": "K · Evolution Engine · 97 Roadmap",
+      "page": true
+    },
+    {
+      "name": "EvServicios",
+      "group": "K · Evolution Engine · 107 Monitor de servicios",
+      "page": true
+    },
+    {
+      "name": "EvTarea",
+      "group": "K · Evolution Engine · 100 Detalle de tarea técnica",
+      "page": true
+    },
+    {
+      "name": "EvVPS",
+      "group": "K · Evolution Engine · 106 Estado del VPS",
+      "page": true
+    },
+    {
+      "name": "EvWorker",
+      "group": "K · Evolution Engine · 101 Dev Worker",
+      "page": true
+    },
+    {
+      "name": "FinComisiones",
+      "group": "C · Finanzas · 24 Comisiones",
+      "page": true
+    },
+    {
+      "name": "FinCuentas",
+      "group": "C · Finanzas · 23 Cuentas por cobrar y pagar",
+      "page": true
+    },
+    {
+      "name": "FinDashboard",
+      "group": "C · Finanzas · 19 Dashboard financiero",
+      "page": true
+    },
+    {
+      "name": "FinEscritorio",
+      "group": "C · Finanzas · Dashboard escritorio",
+      "page": true
+    },
+    {
+      "name": "FinFlujoCaja",
+      "group": "C · Finanzas · 25 Flujo de caja",
+      "page": true
+    },
+    {
+      "name": "FinGananciaReal",
+      "group": "C · Finanzas · 21 Ganancia real",
+      "page": true
+    },
+    {
+      "name": "FinInformes",
+      "group": "C · Finanzas · 28 Informes financieros",
+      "page": true
+    },
+    {
+      "name": "FinMargenes",
+      "group": "C · Finanzas · 22 Márgenes por producto",
+      "page": true
+    },
+    {
+      "name": "FinMovimientos",
+      "group": "C · Finanzas · 20 Ingresos y gastos",
+      "page": true
+    },
+    {
+      "name": "FinPresupuestos",
+      "group": "C · Finanzas · 27 Presupuestos",
+      "page": true
+    },
+    {
+      "name": "FinSimulador",
+      "group": "C · Finanzas · 29 Simulador de cambios de precios",
+      "page": true
+    },
+    {
+      "name": "FinTasas",
+      "group": "C · Finanzas · 26 Tasas de cambio",
+      "page": true
+    },
+    {
+      "name": "FlujoContenido",
+      "group": "O · Flujos críticos · 4 Contenido",
+      "page": true
+    },
+    {
+      "name": "FlujoOportunidad",
+      "group": "O · Flujos críticos · 3 Oportunidad a producto",
+      "page": true
+    },
+    {
+      "name": "FlujoPedido",
+      "group": "O · Flujos críticos · 1 Pedido nuevo",
+      "page": true
+    },
+    {
+      "name": "FlujoRegla",
+      "group": "O · Flujos críticos · 5 Regla comercial",
+      "page": true
+    },
+    {
+      "name": "FlujoVivaBot",
+      "group": "O · Flujos críticos · 2 Incidencia con VivaBot",
+      "page": true
+    },
+    {
+      "name": "IaAlertas",
+      "group": "J · IA y agentes · 95 Alertas de presupuesto",
+      "page": true
+    },
+    {
+      "name": "IaCentro",
+      "group": "J · IA y agentes · 83 Centro de agentes",
+      "page": true
+    },
+    {
+      "name": "IaComparador",
+      "group": "J · IA y agentes · 91 Comparador de herramientas",
+      "page": true
+    },
+    {
+      "name": "IaConsumo",
+      "group": "J · IA y agentes · 92 Consumo y límites",
+      "page": true
+    },
+    {
+      "name": "IaEscritorio",
+      "group": "J · IA y agentes · Agentes escritorio",
+      "page": true
+    },
+    {
+      "name": "IaEstado",
+      "group": "J · IA y agentes · 85 Estado operativo",
+      "page": true
+    },
+    {
+      "name": "IaGastos",
+      "group": "J · IA y agentes · 94 Gastos mensuales",
+      "page": true
+    },
+    {
+      "name": "IaHistorial",
+      "group": "J · IA y agentes · 87 Historial de ejecuciones",
+      "page": true
+    },
+    {
+      "name": "IaPerfil",
+      "group": "J · IA y agentes · 84 Perfil de agente",
+      "page": true
+    },
+    {
+      "name": "IaPermisos",
+      "group": "J · IA y agentes · 89 Configuración de permisos",
+      "page": true
+    },
+    {
+      "name": "IaRegistro",
+      "group": "J · IA y agentes · 90 Registro de nuevas herramientas",
+      "page": true
+    },
+    {
+      "name": "IaRendimiento",
+      "group": "J · IA y agentes · 88 Evaluación del rendimiento",
+      "page": true
+    },
+    {
+      "name": "IaSuscripciones",
+      "group": "J · IA y agentes · 93 Suscripciones y renovaciones",
+      "page": true
+    },
+    {
+      "name": "IaTareas",
+      "group": "J · IA y agentes · 86 Tareas activas",
+      "page": true
+    },
+    {
+      "name": "InicioActividad",
+      "group": "A · Inicio ejecutivo · 5 Actividad reciente",
+      "page": true
+    },
+    {
+      "name": "InicioAlertas",
+      "group": "A · Inicio ejecutivo · 4 Alertas prioritarias",
+      "page": true
+    },
+    {
+      "name": "InicioAprobaciones",
+      "group": "A · Inicio ejecutivo · 6 Tareas por aprobar",
+      "page": true
+    },
+    {
+      "name": "InicioDashboard",
+      "group": "A · Inicio ejecutivo · 1 Dashboard",
+      "page": true
+    },
+    {
+      "name": "InicioEscritorio",
+      "group": "A · Inicio ejecutivo · 8 Dashboard escritorio",
+      "page": true
+    },
+    {
+      "name": "InicioEstadoFinanciero",
+      "group": "A · Inicio ejecutivo · 3 Estado financiero",
+      "page": true
+    },
+    {
+      "name": "InicioEstadoNegocio",
+      "group": "A · Inicio ejecutivo · 7 Estado de funcionamiento",
+      "page": true
+    },
+    {
+      "name": "InicioVentasHoy",
+      "group": "A · Inicio ejecutivo · 2 Ventas de hoy",
+      "page": true
+    },
+    {
+      "name": "LgAsignar",
+      "group": "I · Logística · 77 Asignación de mensajeros",
+      "page": true
+    },
+    {
+      "name": "LgEscritorio",
+      "group": "I · Logística · Entregas escritorio",
+      "page": true
+    },
+    {
+      "name": "LgIncidencias",
+      "group": "I · Logística · 82 Incidencias de entrega",
+      "page": true
+    },
+    {
+      "name": "LgLiquidacion",
+      "group": "I · Logística · 81 Liquidación de mensajeros",
+      "page": true
+    },
+    {
+      "name": "LgMapa",
+      "group": "I · Logística · 79 Mapa de rutas",
+      "page": true
+    },
+    {
+      "name": "LgPendientes",
+      "group": "I · Logística · 75 Pendientes de entrega",
+      "page": true
+    },
+    {
+      "name": "LgPreparacion",
+      "group": "I · Logística · 76 En preparación",
+      "page": true
+    },
+    {
+      "name": "LgSeguimiento",
+      "group": "I · Logística · 78 Seguimiento de entregas",
+      "page": true
+    },
+    {
+      "name": "LgTarifas",
+      "group": "I · Logística · 80 Tarifas de mensajería",
+      "page": true
+    },
+    {
+      "name": "MkCalendario",
+      "group": "G · Marketing y ventas · 66 Calendario comercial",
+      "page": true
+    },
+    {
+      "name": "MkCampanas",
+      "group": "G · Marketing y ventas · 59 Campañas",
+      "page": true
+    },
+    {
+      "name": "MkConversiones",
+      "group": "G · Marketing y ventas · 65 Seguimiento de conversiones",
+      "page": true
+    },
+    {
+      "name": "MkDetalle",
+      "group": "G · Marketing y ventas · 60 Detalle de campaña",
+      "page": true
+    },
+    {
+      "name": "MkEscritorio",
+      "group": "G · Marketing y ventas · Campañas escritorio",
+      "page": true
+    },
+    {
+      "name": "MkGrandSlam",
+      "group": "G · Marketing y ventas · 62 Generador de ofertas Grand Slam",
+      "page": true
+    },
+    {
+      "name": "MkPropuestas",
+      "group": "G · Marketing y ventas · 63 Propuestas comerciales",
+      "page": true
+    },
+    {
+      "name": "MkRendimiento",
+      "group": "G · Marketing y ventas · 61 Rendimiento publicitario",
+      "page": true
+    },
+    {
+      "name": "MkSegmentos",
+      "group": "G · Marketing y ventas · 64 Segmentación de clientes",
+      "page": true
+    },
+    {
+      "name": "ProvCandidatos",
+      "group": "E · Proveedores · 46 Productos candidatos para el catálogo",
+      "page": true
+    },
+    {
+      "name": "ProvComparador",
+      "group": "E · Proveedores · 42 Comparador de precios",
+      "page": true
+    },
+    {
+      "name": "ProvCotizacion",
+      "group": "E · Proveedores · 47 Generador de cotizaciones personalizadas",
+      "page": true
+    },
+    {
+      "name": "ProvDirectorio",
+      "group": "E · Proveedores · 39 Directorio de proveedores",
+      "page": true
+    },
+    {
+      "name": "ProvEscritorio",
+      "group": "E · Proveedores · Radar escritorio",
+      "page": true
+    },
+    {
+      "name": "ProvHistorial",
+      "group": "E · Proveedores · 44 Historial de precios",
+      "page": true
+    },
+    {
+      "name": "ProvOportunidad",
+      "group": "E · Proveedores · 43 Detalle de oportunidad comercial",
+      "page": true
+    },
+    {
+      "name": "ProvPerfil",
+      "group": "E · Proveedores · 40 Perfil del proveedor",
+      "page": true
+    },
+    {
+      "name": "ProvRadar",
+      "group": "E · Proveedores · 41 Radar de ofertas en WhatsApp",
+      "page": true
+    },
+    {
+      "name": "ProvSolicitudes",
+      "group": "E · Proveedores · 45 Solicitudes de compra",
+      "page": true
+    },
+    {
+      "name": "RolCompradora",
+      "group": "N · Vistas por rol · Compradora",
+      "page": true
+    },
+    {
+      "name": "RolDependienta",
+      "group": "N · Vistas por rol · Dependienta",
+      "page": true
+    },
+    {
+      "name": "RolErnesto",
+      "group": "N · Vistas por rol · Ernesto (dirección)",
+      "page": true
+    },
+    {
+      "name": "RolGestora",
+      "group": "N · Vistas por rol · Gestora",
+      "page": true
+    },
+    {
+      "name": "RolLennys",
+      "group": "N · Vistas por rol · Lennys (propietaria)",
+      "page": true
+    },
+    {
+      "name": "RolManager",
+      "group": "N · Vistas por rol · Manager",
+      "page": true
+    },
+    {
+      "name": "RolMensajero",
+      "group": "N · Vistas por rol · Mensajero",
+      "page": true
+    }
+  ],
+  "assetGroups": [
+    {
+      "name": "Other"
+    }
+  ]
+}
