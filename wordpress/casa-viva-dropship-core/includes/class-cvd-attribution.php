@@ -445,10 +445,8 @@ final class CVD_Attribution {
 					array(
 						'limit'      => 20,
 						'page'       => $page,
-						'paged'      => $page,
 						'paginate'   => true,
-						// ID único: evita saltos de página cuando varios pedidos tienen la misma fecha.
-						'orderby'    => 'ID',
+						'orderby'    => 'date',
 						'order'      => 'ASC',
 						'status'     => array( 'processing', 'on-hold', 'completed' ),
 						// WooCommerce 8.2 no filtra de forma fiable el meta_query compuesto
@@ -470,8 +468,7 @@ final class CVD_Attribution {
 					$owner_type = sanitize_key( (string) $order->get_meta( '_cvd_owner_type', true ) );
 					if ( ! $owner_user_id || 'organic' === $owner_type ) { continue; }
 					$since = $order->get_date_created() ? $order->get_date_created()->getTimestamp() : 0;
-					// La fecha manda; en el mismo segundo gana el ID menor (primer pedido creado).
-					if ( ! $best || $since < $best['since'] || ( $since === $best['since'] && $order->get_id() < $best['order_id'] ) ) {
+					if ( ! $best || $since < $best['since'] ) {
 						$best = array(
 							'owner_user_id' => $owner_user_id,
 							'owner_type'    => $owner_type,
@@ -481,6 +478,7 @@ final class CVD_Attribution {
 							'order_id'      => $order->get_id(),
 						);
 					}
+					break 2; // pedidos en orden de fecha: el primero válido de esta identidad es su más antiguo
 				}
 
 				$max_pages = is_object( $result ) && isset( $result->max_num_pages ) ? max( 1, (int) $result->max_num_pages ) : 1;
