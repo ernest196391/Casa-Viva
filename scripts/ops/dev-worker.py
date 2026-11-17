@@ -29,6 +29,7 @@ import stat
 import subprocess
 import sys
 import time
+import tempfile
 import urllib.parse
 import urllib.request
 
@@ -515,12 +516,10 @@ def prepare_worktree(repo_name: str, task_public_id: int, title: str):
         raise RuntimeError(base)
     base_sha = base.strip()
 
-    root = work_root()
-    if not sandbox_enabled():
-        root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    elif not root.is_dir():
-        raise RuntimeError(f"raíz de worktrees de la caja no provisionada: {root}")
-    work = root / worktree_name(task_public_id)
+    # Git metadata and the commit checkout must never enter the sandbox.
+    root = DEV_ROOT
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    work = root / f"task-{task_public_id}"
     if work.exists():
         run(["git", "-C", str(repo), "worktree", "remove", "--force", str(work)], timeout=45)
         shutil.rmtree(work, ignore_errors=True)
@@ -696,31 +695,43 @@ def _sandbox_ids():
     return {"uid": entry.pw_uid, "gid": entry.pw_gid}
 
 
-def work_root() -> Path:
-    return Path(_box().WORK_ROOT) if sandbox_enabled() else DEV_ROOT
-
-
-def worktree_name(task_public_id) -> str:
-    return f"run-task-{task_public_id}" if sandbox_enabled() else f"task-{task_public_id}"
+def _sandbox_parent() -> Path:
+    root = Path(_box().WORK_ROOT)
+    # No ancestor may be replaced by cvdev (including its home directory).
+    for path in (root, *root.parents):
+        try:
+            info = path.lstat()
+        except OSError as exc:
+            raise RuntimeError(f"raíz de caja no provisionada: {path}") from exc
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise RuntimeError(f"raíz de caja no confiable: {path}")
+    return root
 
 
 def run_tests_isolated(repo_name: str, work: Path, changed: list, allowed: list):
-    """Con la caja encendida: entrega el worktree a cvdev, prueba dentro de la caja, lo recupera y
-    comprueba que las pruebas no tocaron nada fuera de lo ya validado. Apagada: igual que antes."""
+    """Test a disposable copy; never execute Git or import files from that copy."""
     if not sandbox_enabled():
         return run_tests(repo_name, work)
+    for rel in changed:
+        target = _safe_target(work, rel)
+        if target.is_symlink() or not target.is_file():
+            raise RuntimeError(f"ruta cambiada no regular o simbólica: {rel}")
     box, ids = _box(), _sandbox_ids()
-    box.hand_over(work, ids["uid"], ids["gid"])
+    root = _sandbox_parent()
+    if not shutil.rmtree.avoids_symlink_attacks:
+        raise RuntimeError("limpieza segura de caja no disponible")
+    test_work = Path(tempfile.mkdtemp(prefix="run-task-", dir=root))
     try:
-        ok, logs = run_tests(repo_name, work)
+        shutil.copytree(work, test_work, symlinks=True, dirs_exist_ok=True,
+                        ignore=lambda _directory, names: {n for n in names if n.lower() == ".git"})
+        box.hand_over(test_work, ids["uid"], ids["gid"])
+        # No take_back(): the untrusted copy will never be used by privileged Git.
+        ok, logs = run_tests(repo_name, test_work)
     finally:
-        box.take_back(work)
+        shutil.rmtree(test_work)
     after = validate_diff(work, allowed)
     if sorted(after) != sorted(changed):
-        raise RuntimeError("las pruebas modificaron archivos fuera de lo validado: " + ", ".join(sorted(set(after) ^ set(changed)))[:300])
-    for rel in changed:
-        if (work / rel).is_symlink():
-            raise RuntimeError(f"enlace simbólico en una ruta cambiada: {rel}")
+        raise RuntimeError("el checkout confiable cambió durante las pruebas")
     return ok, logs
 
 

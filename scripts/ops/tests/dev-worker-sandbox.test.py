@@ -58,11 +58,16 @@ class SandboxWiringTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.work = Path(self.tmp.name) / "run-task-150"
         self.work.mkdir()
+        self.boxroot = Path(self.tmp.name) / "box"
+        self.boxroot.mkdir()
+        self.parent = mock.patch.object(worker, "_sandbox_parent", return_value=self.boxroot)
+        self.parent.start()
 
     def tearDown(self):
         worker._BOX = None
         self.ids.stop()
         self.env.stop()
+        self.parent.stop()
         self.tmp.cleanup()
 
     def sandbox(self, on=True):
@@ -125,40 +130,44 @@ class SandboxWiringTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(self.fake.kinds(), ["install"])  # no sigue tras fallar la instalación
 
-    def test_orden_entregar_probar_recuperar(self):
+    def test_copia_sin_git_y_checkout_intacto(self):
         self.sandbox()
-        with mock.patch.object(worker, "run_tests", side_effect=lambda r, w: (self.fake.calls.append(("tests",)), (True, "ok"))[1]), \
-                mock.patch.object(worker, "validate_diff", return_value=["docs/a.md"]):
+        (self.work / ".git").write_text("gitdir: trusted")
+        (self.work / "docs").mkdir()
+        (self.work / "docs/a.md").write_text("approved")
+        def hostile(_repo, copy):
+            self.assertNotEqual(copy, self.work)
+            self.assertFalse((copy / ".git").exists())
+            (copy / ".git").mkdir()
+            (copy / ".git/config").write_text("[core]\nfsmonitor = malicious\n")
+            (copy / "docs/a.md").write_text("tampered")
+            return True, "ok"
+        with mock.patch.object(worker, "run_tests", side_effect=hostile), \
+                mock.patch.object(worker, "validate_diff", return_value=["docs/a.md"]) as validate:
             ok, _ = worker.run_tests_isolated("casa-viva", self.work, ["docs/a.md"], ["docs/"])
         self.assertTrue(ok)
-        self.assertEqual(self.fake.kinds(), ["hand_over", "tests", "take_back"])
+        validate.assert_called_once_with(self.work, ["docs/"])
+        self.assertEqual((self.work / ".git").read_text(), "gitdir: trusted")
+        self.assertEqual((self.work / "docs/a.md").read_text(), "approved")
+        self.assertEqual(self.fake.kinds(), ["hand_over"])
+        self.assertEqual(list(self.boxroot.iterdir()), [])
 
-    def test_se_recupera_aunque_las_pruebas_revienten(self):
+    def test_limpieza_si_fallan_pruebas(self):
         self.sandbox()
+        (self.work / "a.md").write_text("approved")
         with mock.patch.object(worker, "run_tests", side_effect=RuntimeError("boom")):
-            with self.assertRaises(RuntimeError):
-                worker.run_tests_isolated("casa-viva", self.work, ["docs/a.md"], ["docs/"])
-        self.assertEqual(self.fake.kinds(), ["hand_over", "take_back"])
+            with self.assertRaisesRegex(RuntimeError, "boom"):
+                worker.run_tests_isolated("casa-viva", self.work, ["a.md"], ["docs/"])
+        self.assertEqual(list(self.boxroot.iterdir()), [])
 
-    def test_si_las_pruebas_tocan_otros_archivos_se_rechaza(self):
-        self.sandbox()
-        with mock.patch.object(worker, "run_tests", return_value=(True, "ok")), \
-                mock.patch.object(worker, "validate_diff", return_value=["docs/a.md", "docs/trampa.md"]):
-            with self.assertRaises(RuntimeError) as ctx:
-                worker.run_tests_isolated("casa-viva", self.work, ["docs/a.md"], ["docs/"])
-        self.assertIn("trampa.md", str(ctx.exception))
-
-    def test_si_las_pruebas_dejan_un_enlace_simbolico_se_rechaza(self):
+    def test_rechaza_symlink_antes_de_entregar(self):
         if os.name == "nt":
             self.skipTest("symlinks requieren permisos en Windows")
         self.sandbox()
-        (self.work / "docs").mkdir()
-        (self.work / "docs" / "a.md").symlink_to("/etc/passwd")
-        with mock.patch.object(worker, "run_tests", return_value=(True, "ok")), \
-                mock.patch.object(worker, "validate_diff", return_value=["docs/a.md"]):
-            with self.assertRaises(RuntimeError) as ctx:
-                worker.run_tests_isolated("casa-viva", self.work, ["docs/a.md"], ["docs/"])
-        self.assertIn("simbólico", str(ctx.exception))
+        (self.work / "a.md").symlink_to("/etc/passwd")
+        with self.assertRaises((RuntimeError, ValueError)):
+            worker.run_tests_isolated("casa-viva", self.work, ["a.md"], ["docs/"])
+        self.assertEqual(self.fake.calls, [])
 
     # --- ubicación del worktree
     def _prepare(self, root_dir):
@@ -180,22 +189,12 @@ class SandboxWiringTests(unittest.TestCase):
         self.assertEqual(work, root / "task-150")
         self.assertTrue(root.is_dir())
 
-    def test_encendida_usa_la_raiz_de_la_caja_y_run_task_n(self):
+    def test_encendida_conserva_git_en_dev_root(self):
         self.sandbox()
-        root = Path(self.tmp.name) / "caja-work"
-        root.mkdir()
-        self.fake.WORK_ROOT = str(root)
-        (_, work, branch, _), seen = self._prepare(root)
-        self.assertEqual(work, root / "run-task-150")
-        add = [c for c in seen if c[:4] == ["git", "-C", seen[0][2], "worktree"] and "add" in c]
-        self.assertTrue(any(str(root / "run-task-150") in c for c in add))
-
-    def test_encendida_sin_raiz_provisionada_falla(self):
-        self.sandbox()
-        self.fake.WORK_ROOT = str(Path(self.tmp.name) / "no-existe")
-        with self.assertRaises(RuntimeError) as ctx:
-            self._prepare(None)
-        self.assertIn("no provisionada", str(ctx.exception))
+        root = Path(self.tmp.name) / "trusted"
+        with mock.patch.object(worker, "DEV_ROOT", root):
+            (_, work, _, _), _ = self._prepare(root)
+        self.assertEqual(work, root / "task-150")
 
     # --- estáticas
     def test_estatico_la_caja_se_carga_perezosamente(self):

@@ -177,12 +177,12 @@ def _pairs(cmd: list, flag: str, arity: int = 2) -> list:
     return pairs
 
 
-def validate_command(cmd, work_root: str = DEFAULT_WORK_ROOT) -> list:
+def validate_command(cmd, work_root: str = DEFAULT_WORK_ROOT, *, bwrap_binary: str | None = None) -> list:
     """Verificación estructural del comando; devuelve violaciones ([]) si ok."""
     violations = []
     if not isinstance(cmd, (list, tuple)) or len(cmd) < 10:
         return ["comando demasiado corto o no es lista"]
-    if Path(str(cmd[0])).name != "bwrap":
+    if (str(cmd[0]) != bwrap_binary if bwrap_binary is not None else Path(str(cmd[0])).name != "bwrap"):
         violations.append(f"el comando no comienza por bwrap: {cmd[0]!r}")
 
     def flag_count(flag: str) -> int:

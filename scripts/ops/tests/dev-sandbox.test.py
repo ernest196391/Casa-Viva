@@ -22,7 +22,7 @@ spec = importlib.util.spec_from_file_location("cv_dev_sandbox_under_test", OPS /
 box = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(box)
 
-WS = "/home/cvdev/control-os-dev/work/run-task-150"
+WS = box.WORK_ROOT + "/run-task-150"
 
 
 class FakeProc:
@@ -63,6 +63,14 @@ class BoxTests(unittest.TestCase):
         self.assertEqual(binds, [WS])  # un único destino de escritura real
         self.assertEqual(argv[argv.index("--chdir") + 1], WS)
         self.assertEqual(argv[-3:], ["npm", "run", "lint"])
+
+    def test_violaciones_del_validador_impiden_lanzar(self):
+        from unittest import mock
+        spawn = FakePopen()
+        with mock.patch.object(box.spec, "validate_command", return_value=["invalid"]):
+            with self.assertRaises(box.SandboxError):
+                box.run_in_box(["npm", "test"], WS, 60, uid=1000, gid=1001, spawn=spawn)
+        self.assertEqual(spawn.calls, [])
 
     def test_proceso_sin_shell_ni_privilegios_ni_entorno_heredado(self):
         spawn = FakePopen()
