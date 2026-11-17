@@ -1,3 +1,7 @@
+# CURRENT — Control OS: integración de corrección 4A (2026-11-16)
+
+- #243 fusionado con aprobación expresa de Ernesto (main 3ab358a). Tres workflows verdes, integración confirma OK 4A. Candidato #242 actualizado para certificar ambos cambios juntos; sin despliegue ni E4.
+
 # CURRENT — Control OS recuperación del trabajo local (2026-11-16)
 
 - PR #242: recuperado parche de Codex. Amplía pendientes y vínculos de aprobación, bloquea decisiones no accionables, incorpora inicio, ejecutor `dev` y latido declarado. No cambia estados ni despliega.
@@ -7,6 +11,13 @@
 # CURRENT — Control OS primera entrega revisable (2026-11-16)
 
 - Rama de propuesta UI existente; vistas y barrera conservadora de aprobaciones. CI y smoke privado pendientes; sin despliegue. Ver `docs/CONTROL_OS_FIRST_SLICE.md`. PR #241 conserva E2/E3 pendientes y E4 bloqueada.
+
+# CURRENT — Control OS: estabilización independiente de integración 4A (2026-11-16)
+
+- Bloqueo de PR #242: integración WordPress 4A intermitente incluso en cambios documentales (#239). La selección previa del primer pedido tomaba el primer resultado ordenado solo por fecha; los pedidos del mismo segundo quedaban sin desempate. Se propone comparación explícita por fecha de creación y luego ID menor, con paginación estable por ID. Se conserva atribución de venta por enlace/vale/sesión, condición de pedido válido y prioridad de reasignación aprobada.
+- Regresión 4A fuerza empate de sellos de tiempo y verifica prioridad de fecha si el ID es posterior. CI pendiente; sin despliegue ni fusión. CV_DEV_SANDBOX desactivado; presupuesto adicional cero. Reversión: revertir el PR antes de cualquier release.
+
+---
 
 # CURRENT — EVO-LOCAL-001: mitigación del entorno limpio y módulo de caja construidos (2026-11-16)
 
