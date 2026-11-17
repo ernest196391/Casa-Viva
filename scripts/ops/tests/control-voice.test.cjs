@@ -1,8 +1,9 @@
 // Run: node --test scripts/ops/tests/control-voice.test.cjs
-const {test}=require('node:test');
-const assert=require('node:assert/strict');
-const fs=require('node:fs');
-const path=require('node:path');
+async function run(){
+const {test}=await import('node:test');
+const {default:assert}=await import('node:assert/strict');
+const {default:fs}=await import('node:fs');
+const {default:path}=await import('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../control-web/app.js'),'utf8');
 const install=new Function(source.slice(source.indexOf('function installVoiceInput'),source.indexOf('const voiceInput='))+';return installVoiceInput;')();
 class Element {
@@ -15,7 +16,7 @@ class Element {
 }
 function fixture(){
  let last, consent=false;
- class Recognition{constructor(){last=this;}start(){this.started=true;}stop(){this.stopped=true;}abort(){this.aborted=true;}}
+ class Recognition{constructor(){last={start(){this.started=true;},stop(){this.stopped=true;},abort(){this.aborted=true;}};return last;}}
  const field=new Element(),form=new Element(),panel=new Element();
  const doc={createElement:()=>new Element(),createElementNS:()=>new Element()};
  const controller=install({form,field,panel,Recognition,confirmSpeech:()=>consent,doc});
@@ -40,3 +41,6 @@ test('unsupported API provides keyboard fallback',()=>{
  assert.equal(install({form:new Element(),field,panel:new Element(),doc:{createElement:()=>new Element()}}),null);
  assert.match(field.next.textContent,/teclado/);
 });
+
+}
+run().catch(error=>{console.error(error);process.exitCode=1;});
