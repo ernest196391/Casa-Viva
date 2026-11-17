@@ -1,3 +1,9 @@
+# CURRENT — Control OS recuperación del trabajo local (2026-11-16)
+
+- PR #242: recuperado parche de Codex. Amplía pendientes y vínculos de aprobación, bloquea decisiones no accionables, incorpora inicio, ejecutor `dev` y latido declarado. No cambia estados ni despliega.
+- 9 pruebas de snapshot y sintaxis JS/Python verificadas; PHP y CI del nuevo SHA pendientes. Las 122 tareas, cero aprobaciones formales y cuatro revisiones #8/#14/#19/#24 son evidencia reportada por Codex, no reconsultada aquí. Parche VivaBot independiente pendiente de recuperar.
+- E2/E3 pendientes de autorización y E4 bloqueada. Sin gasto adicional.
+
 # CURRENT — Control OS primera entrega revisable (2026-11-16)
 
 - Rama de propuesta UI existente; vistas y barrera conservadora de aprobaciones. CI y smoke privado pendientes; sin despliegue. Ver `docs/CONTROL_OS_FIRST_SLICE.md`. PR #241 conserva E2/E3 pendientes y E4 bloqueada.
