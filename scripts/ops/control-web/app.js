@@ -163,14 +163,70 @@ $('decisions-list').addEventListener('click',async e=>{
  catch(err){feedback.textContent=err.message;card.querySelectorAll('[data-decision]').forEach(x=>x.disabled=false);}
 });
 $('task-form').addEventListener('submit',async e=>{
- e.preventDefault();const buttons=[$('task-form').querySelector('button'),...document.querySelectorAll('[data-query]')];buttons.forEach(b=>b.disabled=true);$('task-feedback').textContent='Enviando solicitud…';
+ e.preventDefault();const buttons=[$('task-form').querySelector('button[type=submit]'),...document.querySelectorAll('[data-query]')];buttons.forEach(b=>b.disabled=true);$('task-feedback').textContent='Enviando solicitud…';
  try{const r=await fetch('./?action=task',{method:'POST',headers:{'Content-Type':'application/json','X-CV-Nonce':document.querySelector('meta[name=cv-nonce]').content},body:JSON.stringify({text:$('task-text').value})});const b=await r.json();if(!r.ok||!b.success)throw Error(b.data?.message||'No se pudo guardar.');state.pending={id:b.data.id};$('task-feedback').textContent='Solicitud recibida. Asignando número…';$('task-text').value='';$('task-search').value='';showTab('work');setFilter('new');refresh();setTimeout(refresh,4000);setTimeout(refresh,12000);}
  catch(err){$('task-feedback').textContent=err instanceof TypeError?'No pude confirmar la recepción. Pulsa Actualizar y revisa la lista antes de reenviar.':err.message;}
  finally{buttons.forEach(b=>b.disabled=false);}
 });
 document.querySelectorAll('[data-group]').forEach(b=>b.addEventListener('click',()=>{const first=document.querySelector('[data-nav-group="'+b.dataset.group+'"] [data-tab]');if(first)showTab(first.dataset.tab);}));
-function toggleAssistant(open){$('assistant-panel').hidden=!open;document.querySelectorAll('.cv-assistant-toggle').forEach(b=>b.setAttribute('aria-expanded',String(open)));if(open){$('assistant-panel').scrollIntoView({block:'nearest'});if(canWrite)$('task-text').focus();}}
+function toggleAssistant(open){if(!open)voiceInput?.cancel();$('assistant-panel').hidden=!open;document.querySelectorAll('.cv-assistant-toggle').forEach(b=>b.setAttribute('aria-expanded',String(open)));if(open){$('assistant-panel').scrollIntoView({block:'nearest'});if(canWrite)$('task-text').focus();}}
 document.querySelectorAll('.cv-assistant-toggle').forEach(b=>b.addEventListener('click',()=>toggleAssistant($('assistant-panel').hidden)));
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('assistant-panel').hidden)toggleAssistant(false);});
+
+/* Voice input is a draft, never a command. Browser speech may use its provider. */
+function installVoiceInput({form,field,panel,Recognition,confirmSpeech,doc}){
+ if(!form||!field||!panel)return null;
+ if(!Recognition){const note=doc.createElement('p');note.className='cv-voice-status';note.textContent='Dictado no disponible en este navegador. Usa el micrófono del teclado o escribe.';field.after(note);return null;}
+ const row=doc.createElement('div');row.className='cv-voice-row';
+ const mic=doc.createElement('button');mic.type='button';mic.className='cv-mic';
+ mic.setAttribute('aria-label','Dictar solicitud');mic.setAttribute('aria-pressed','false');
+ const icon=doc.createElementNS('http://www.w3.org/2000/svg','svg');
+ icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('fill','none');icon.setAttribute('stroke','currentColor');icon.setAttribute('stroke-width','2');icon.setAttribute('stroke-linecap','round');icon.setAttribute('aria-hidden','true');
+ const path=doc.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d','M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0zM5 11v1a7 7 0 0 0 14 0v-1M12 19v3m-3 0h6');icon.append(path);mic.append(icon);
+ const message=doc.createElement('span');message.className='cv-voice-status';message.setAttribute('role','status');message.textContent='Dictar por voz';
+ row.append(message,mic);field.after(row);
+ let active=null;
+ function reset(session,label){
+  if(active!==session)return;
+  active=null;mic.setAttribute('aria-pressed','false');mic.setAttribute('aria-label','Dictar solicitud');message.textContent=label;
+ }
+ function cancel(){
+  if(!active)return;const session=active;reset(session,'Dictado cancelado');
+  try{session.recognition.abort();}catch{}
+ }
+ mic.addEventListener('click',()=>{
+  if(panel.hidden||form.hidden)return;
+  if(active){const session=active;try{session.recognition.stop();message.textContent='Finalizando…';}catch{cancel();}return;}
+  if(!confirmSpeech())return;
+  let recognition;try{recognition=new Recognition();}catch{message.textContent='Dictado no disponible. Escribe tu solicitud.';return;}
+  const session={recognition,initial:field.value,final:''};active=session;
+  recognition.lang='es-CU';recognition.interimResults=false;recognition.continuous=false;
+  mic.setAttribute('aria-pressed','true');mic.setAttribute('aria-label','Detener dictado');message.textContent='Escuchando…';
+  recognition.onresult=e=>{
+   if(active!==session||panel.hidden||form.hidden)return;
+   for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)session.final+=' '+e.results[i][0].transcript;
+  };
+  recognition.onerror=()=>reset(session,'No se pudo dictar. Escribe o vuelve a intentar.');
+  recognition.onend=()=>{
+   if(active!==session)return;
+   if(!panel.hidden&&!form.hidden&&field.value===session.initial&&session.final.trim()){
+    field.value=(session.initial.trimEnd()+' '+session.final.trim()).trim().slice(0,6000);
+    reset(session,'Revisa el texto antes de enviar.');
+   }else reset(session,'Dictado finalizado');
+  };
+  try{recognition.start();}catch{reset(session,'Dictado no disponible. Escribe tu solicitud.');}
+ });
+ field.addEventListener('input',cancel);
+ form.addEventListener('submit',cancel,{capture:true});
+ return {cancel};
+}
+const voiceInput=canWrite?installVoiceInput({
+ form:$('task-form'),field:$('task-text'),panel:$('assistant-panel'),
+ Recognition:window.SpeechRecognition||window.webkitSpeechRecognition,
+ confirmSpeech:()=>window.confirm('El dictado del navegador puede procesar tu voz con su proveedor. No incluyas datos sensibles. ¿Activar el micrófono?'),
+ doc:document
+}):null;
+window.addEventListener('pagehide',()=>voiceInput?.cancel());
+
 showTab('home');refresh();setInterval(refresh,15000);
 
