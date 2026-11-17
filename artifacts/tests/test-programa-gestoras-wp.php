@@ -177,6 +177,22 @@ $eq = CVD_Programa::render_equipo( $GLOBALS['users'][2] );
 ok( false !== strpos( $eq, 'En prueba:' ), 'Mi equipo: aviso de modo sombra' );
 ok( false !== strpos( $eq, 'Rosa Ejemplo' ) && false !== strpos( $eq, '3,90 USD' ) && false !== strpos( $eq, 'Te dan el 1 %' ), 'Mi equipo: Rosa, lo que le deja (3,90 USD) y «Te dan el 1 %»' );
 ok( false !== strpos( $eq, 'invita=CV2' ), 'Mi equipo: su enlace para invitar' );
+// Dany: el orden visual depende del aporte, no del orden de registro.
+$rank = $r;
+$rank['people'][2]['level1'] = array( 901, 902, 903, 904 );
+foreach ( array( 901 => 'Cero Ejemplo', 902 => 'Menor Ejemplo', 903 => 'Mayor Ejemplo', 904 => 'Empate Ejemplo' ) as $id => $name ) {
+	$rank['people'][$id] = array( 'name' => $name );
+}
+$rank['lines'] = array(
+	array( 'user' => 2, 'kind' => 'red1', 'source' => 902, 'amount' => 1.25 ),
+	array( 'user' => 2, 'kind' => 'red1', 'source' => 903, 'amount' => 4.50 ),
+	array( 'user' => 2, 'kind' => 'red1', 'source' => 904, 'amount' => 1.25 ),
+);
+$GLOBALS['wpdb']->latest['payload'] = json_encode( $rank );
+$ranked = CVD_Programa::render_equipo( $GLOBALS['users'][2] );
+$positions = array_map( static function ( $name ) use ( $ranked ) { return strpos( $ranked, $name ); }, array( 'Mayor Ejemplo', 'Menor Ejemplo', 'Empate Ejemplo', 'Cero Ejemplo' ) );
+ok( ! in_array( false, $positions, true ) && $positions[0] < $positions[1] && $positions[1] < $positions[2] && $positions[2] < $positions[3], 'Mi equipo: aporte descendente, empate estable y cero al final' );
+$GLOBALS['wpdb']->latest['payload'] = json_encode( $r );
 $pi = CVD_Programa::render_piedra( $GLOBALS['users'][1] );
 ok( false !== strpos( $pi, 'Bronce' ) && false !== strpos( $pi, '5.000 CUP' ), 'Mi piedra: Bronce y su bono' );
 ok( false !== strpos( $pi, 'Para llegar a Plata' ), 'Mi piedra: cuánto falta para Plata' );
