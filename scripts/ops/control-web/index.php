@@ -57,6 +57,15 @@ if ($action === 'task') {
     if (!$ok) { wp_send_json_error(['message' => 'No se pudo guardar la instrucción.'], 503); }
     wp_send_json_success(['id' => $request['id'], 'message' => 'Guardado en Control OS.']);
 }
+function cv_control_approval_linked($snapshot, int $approvalId, int $now): bool {
+    if (!is_array($snapshot) || ($snapshot['approval_complete'] ?? false) !== true || $approvalId <= 0) { return false; }
+    $snapshotTime = strtotime((string) ($snapshot['at'] ?? ''));
+    if ($snapshotTime === false || abs($now - $snapshotTime) > 180 || !is_array($snapshot['decisions'] ?? null)) { return false; }
+    foreach ($snapshot['decisions'] as $row) {
+        if (is_array($row) && (int) ($row['approval_id'] ?? 0) === $approvalId && (int) ($row['task_id'] ?? 0) > 0 && ($row['actionable'] ?? false) === true && ($row['task_status'] ?? '') === 'waiting_approval') { return true; }
+    }
+    return false;
+}
 if ($action === 'decision') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') { wp_send_json_error(['message' => 'Método no permitido.'], 405); }
     if (!wp_verify_nonce((string) ($_SERVER['HTTP_X_CV_NONCE'] ?? ''), 'cv-control')) {
@@ -71,6 +80,8 @@ if ($action === 'decision') {
         wp_send_json_error(['message' => 'Decisión inválida.'], 400);
     }
     if (!is_dir($store)) { wp_send_json_error(['message' => 'El servidor todavía no está preparado.'], 503); }
+    $snapshot = json_decode((string) @file_get_contents($store . '/snapshot.json'), true);
+    if (!cv_control_approval_linked($snapshot, $approvalId, time())) { wp_send_json_error(['message' => 'No hay una aprobación vigente y vinculada en el estado verificado. Actualiza.'], 409); }
     $request = ['id' => bin2hex(random_bytes(16)), 'at' => gmdate('c'), 'actor_wp_id' => $actorId,
                 'kind' => 'decision', 'approval_id' => $approvalId, 'decision' => $decision];
     $file = fopen($store . '/decisions.jsonl', 'ab');
@@ -95,7 +106,7 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="./" aria-label="Casa Viva Control OS"><span class="brand-mark">CV</span><span><strong>Casa Viva</strong><small>Control OS</small></span></a>
+  <a class="brand" href="./" aria-label="Casa Viva Control OS"><span><strong>CASA VIVA</strong><small>Control OS</small></span></a>
   <button id="refresh" class="icon-btn" aria-label="Actualizar">↻</button>
 </header>
 <main>
@@ -121,18 +132,25 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
   </section>
   <div id="error" class="notice" role="alert" hidden></div>
   <nav class="tabs" aria-label="Secciones">
-    <button class="selected" data-tab="work" aria-pressed="true">Mis solicitudes</button>
-    <button data-tab="today" aria-pressed="false">Aprobaciones <span id="decision-count">0</span></button>
+    <button class="selected" data-tab="home" aria-pressed="true">Inicio</button>
+    <button data-tab="work" aria-pressed="false">Mis solicitudes</button>
+    <button data-tab="today" aria-pressed="false">Aprobaciones <span id="decision-count">—</span></button>
+    <button data-tab="incidents" aria-pressed="false">Incidencias</button>
+    <button data-tab="orders" aria-pressed="false">Pedidos</button>
+    <button data-tab="conversations" aria-pressed="false">Conversaciones</button>
+    <button data-tab="developers" aria-pressed="false">Programadores</button>
+    <button data-tab="ai" aria-pressed="false">IA</button>
     <button data-tab="system" aria-pressed="false">Sistema</button>
   </nav>
-  <section id="work" class="view">
-    <div class="section-head"><h2 id="list-title">Empezamos desde ahora</h2><span id="task-count" class="count">0</span></div>
+  <section id="home" class="view"><h2>Centro de Control</h2><p class="section-copy">Consulta el estado recibido y abre el área que necesita atención.</p><div id="home-list" class="stack"></div><p id="coverage" class="section-copy">Esperando fuentes y alcance de la consulta.</p></section>
+  <section id="work" class="view" hidden>
+    <div class="section-head"><h2 id="list-title">Empezamos desde ahora</h2><span id="task-count" class="count">—</span></div>
     <p id="list-help" class="section-copy">Tus solicitudes nuevas aparecerán aquí, con la más reciente primero. Lo anterior sigue disponible en el historial.</p>
     <label class="sr-only" for="task-search">Buscar solicitud por número o texto</label>
     <input id="task-search" class="task-search" type="search" placeholder="Buscar por número o texto">
     <div class="filters">
       <button class="filter selected" data-filter="new">Desde ahora</button>
-      <button class="filter" data-filter="pending">Pendientes nuevas</button>
+      <button class="filter" data-filter="pending">Todas las pendientes</button>
       <button class="filter" data-filter="done">Terminadas nuevas</button>
       <button class="filter" data-filter="history">Historial anterior</button>
     </div>
@@ -145,8 +163,14 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
   <section id="today" class="view" hidden>
     <div class="section-head"><h2>Necesita tu aprobación</h2></div>
     <p class="section-copy">Aquí solo aparecen decisiones reales pendientes, incluso si son anteriores a la limpieza. Aprobar no significa desplegar un cambio de código.</p>
-    <div id="decisions-list" class="stack"></div>
+    <p id="approval-integrity" class="section-copy">Comprobando integridad…</p><div id="decisions-list" class="stack"></div>
+    <h3>Solicitudes sin aprobación visible</h3><div id="approval-review-list" class="stack"></div>
   </section>
+  <section id="incidents" class="view" hidden><h2>Incidencias</h2><p class="section-copy">Muestra del registro de errores; requiere confirmar cada caso.</p><div id="incidents-list" class="stack"></div></section>
+  <section id="orders" class="view" hidden><h2>Pedidos</h2><p class="section-copy">Consulta el registro existente de pedidos e inventario. El snapshot de Control OS no contiene un listado de pedidos.</p><a class="primary" href="<?php echo esc_url(home_url('/centro-operaciones/')); ?>">Abrir pedidos reales</a></section>
+  <section id="conversations" class="view" hidden><h2>Conversaciones</h2><p class="section-copy">Asuntos de Lennys registrados en Control OS, no el chat en directo. Un mensaje breve no confirma una incidencia.</p><div id="conversation-list" class="stack"></div></section>
+  <section id="developers" class="view" hidden><h2>Programadores</h2><p id="developer-status" class="section-copy">Esperando estado del servicio.</p><p id="local-status" class="section-copy">Esperando último aviso local.</p><p class="section-copy">Tareas identificadas por estado o ejecutor registrado. No certifica ejecución en vivo.</p><div id="developer-list" class="stack"></div></section>
+  <section id="ai" class="view" hidden><h2>Inteligencia artificial</h2><p id="ai-status" class="section-copy">Esperando estado.</p><div id="ai-list" class="stack"></div></section>
   <section id="system" class="view" hidden>
     <div class="section-head"><h2>Estado de los servicios</h2><span id="system-badge" class="health-badge">Comprobando</span></div>
     <div id="system-grid" class="system-grid"></div>

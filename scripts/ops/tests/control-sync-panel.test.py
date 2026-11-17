@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 import types
+import urllib.parse
 import unittest
 from unittest.mock import Mock
 
@@ -12,9 +13,12 @@ SOURCE = Path(__file__).resolve().parents[1] / 'control-os-sync.py'
 
 
 class CleanPanelTests(unittest.TestCase):
-    def snapshot(self, tasks, approvals=None, bridge=None):
+    def snapshot(self, tasks, approvals=None, bridge=None, pending=None, linked=None, heartbeat=None):
         def query(path):
             self.paths.append(path)
+            if path.startswith('crm_settings?'): return heartbeat or []
+            if path.startswith('ops_tasks?') and '&id=in.(' in path: return linked or []
+            if path.startswith('ops_tasks?') and '&status=not.in.' in path: return tasks if pending is None else pending
             for prefix, rows in [('ops_tasks?', tasks), ('ops_threads?', []),
                                  ('ops_approvals?', approvals or []),
                                  ('ops_events?', []), ('crm_ops_bridge?', bridge or [])]:
@@ -31,7 +35,7 @@ class CleanPanelTests(unittest.TestCase):
         )
         fake_path = Mock()
         fake_path.return_value.read_text.return_value = 'BRIDGE_VERSION = "test"'
-        env = dict(datetime=datetime,json=json,re=re,subprocess=process,Path=fake_path,query=query)
+        env = dict(datetime=datetime,json=json,re=re,subprocess=process,Path=fake_path,query=query,urllib=urllib)
         exec(compile(ast.Module(body=[fn],type_ignores=[]),str(SOURCE),'exec'),env)
         return env['snapshot']()
 
@@ -63,5 +67,39 @@ class CleanPanelTests(unittest.TestCase):
         self.assertNotIn('204',request)
         self.assertIn('status=eq.done',request)
 
+    def test_old_approval_resolves_outside_recent_window(self):
+        old=self.task(8); old.update(status='waiting_approval')
+        data=self.snapshot([], approvals=[dict(public_id=2,task_id='8',requested_for_role='owner')],pending=[],linked=[old])
+        self.assertTrue(data['approval_complete'])
+        self.assertEqual(data['decisions'][0]['task_id'],8)
+        self.assertTrue(data['decisions'][0]['actionable'])
+
+    def test_terminal_task_is_never_actionable(self):
+        old=self.task(8); old.update(status='cancelled')
+        data=self.snapshot([],approvals=[dict(public_id=2,task_id='8',requested_for_role='owner')],pending=[],linked=[old])
+        self.assertFalse(data['decisions'][0]['actionable'])
+
+    def test_orphan_review_is_visible_without_fabricated_approval(self):
+        old=self.task(8); old.update(status='waiting_approval')
+        data=self.snapshot([],pending=[old])
+        self.assertEqual(data['reviews_blocked'][0]['id'],8)
+        self.assertEqual(data['decisions'],[])
+
+    def test_truncated_approvals_do_not_invent_orphans(self):
+        old=self.task(8); old.update(status='waiting_approval')
+        data=self.snapshot([old],approvals=[dict(public_id=i,task_id='8') for i in range(500)])
+        self.assertFalse(data['approval_complete'])
+        self.assertEqual(data['reviews_blocked'],[])
+
+    def test_unlinked_approval_fails_closed(self):
+        data=self.snapshot([],approvals=[dict(public_id=2,task_id='missing')])
+        self.assertFalse(data['approval_complete'])
+
+    def test_pending_limit_and_heartbeat_allowlist(self):
+        data=self.snapshot([],pending=[self.task(i) for i in range(500)],heartbeat=[dict(value=json.dumps(dict(at='2026-11-16T00:00:00Z',modelo='qwen',version='1',secret='never-export')))])
+        self.assertFalse(data['pending_complete'])
+        self.assertNotIn('secret',data['programmer']['heartbeat'])
+
 if __name__=='__main__':
     unittest.main(verbosity=2)
+

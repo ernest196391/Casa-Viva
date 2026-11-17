@@ -193,23 +193,33 @@ def query(path):
 
 def snapshot():
     now = datetime.datetime.now(datetime.timezone.utc)
+    task_fields = 'id,public_id,thread_id,title,status,priority,risk,result,error,created_at,started_at,finished_at,source,source_ref,executor,task_type,requested_by_name,approval_required'
     tasks = query(
-        'ops_tasks?select=id,public_id,thread_id,title,status,priority,risk,result,error,created_at,started_at,finished_at,source,source_ref,executor,task_type,requested_by_name,approval_required'
-        '&order=created_at.desc&limit=120'
+        'ops_tasks?select=' + task_fields + '&business_id=eq.casa-viva&order=created_at.desc&limit=120'
     )
+    pending = query('ops_tasks?select=' + task_fields + '&business_id=eq.casa-viva&status=not.in.(done,cancelled,superseded)&order=created_at.asc&limit=500')
+    tasks = list({str(x['id']): x for x in tasks + pending}.values())
     open_tasks = [x for x in tasks if x.get('status') not in ('done','cancelled','superseded')]
     rank = {'p0': 0, 'p1': 1, 'p2': 2, 'p3': 3}
     open_tasks.sort(key=lambda x: (rank.get(x.get('priority'), 9), x.get('created_at') or ''))
 
     threads = query(
         'ops_threads?select=id,source,source_ref,subject,summary,status,priority,owner_role,owner_ref,last_activity_at'
-        '&status=eq.active&order=last_activity_at.desc&limit=100'
+        '&business_id=eq.casa-viva&status=eq.active&order=last_activity_at.desc&limit=100'
     )
     approvals = query(
         'ops_approvals?select=public_id,task_id,requested_for_role,warning,impact,proposed_change,status,created_at'
-        '&status=eq.pending&order=created_at.asc&limit=40'
+        '&status=eq.pending&order=created_at.asc&limit=500'
     )
     task_by_uuid = {str(x.get('id')): x for x in tasks}
+    missing = sorted({str(a.get('task_id')) for a in approvals} - set(task_by_uuid))
+    for start in range(0, len(missing), 50):
+        ids = urllib.parse.quote(','.join(missing[start:start+50]), safe=',-')
+        for row in query('ops_tasks?select=' + task_fields + '&business_id=eq.casa-viva&id=in.(' + ids + ')'):
+            task_by_uuid[str(row['id'])] = row
+    approval_complete = len(approvals) < 500 and all(str(a.get('task_id')) in task_by_uuid for a in approvals)
+    pending_links = {str(a.get('task_id')) for a in approvals}
+    reviews = [x for x in pending if x.get('status') == 'waiting_approval' and str(x['id']) not in pending_links] if len(approvals) < 500 else []
 
     # Only successful allowlisted read-only outputs enter the private UI summary.
     lookup_ids = sorted({str((x.get('result') or {}).get('bridge_id'))
@@ -242,7 +252,7 @@ def snapshot():
     # Recent requests must not disappear behind the first 60 legacy tasks.
     recent_owner = [x for x in tasks if x.get('source') in ('control-private','whatsapp-owner')][:30]
     selected = {}
-    for x in open_tasks[:60] + recent_owner + [t for t in tasks if t.get('status') in ('done','cancelled','superseded','failed')][:20]:
+    for x in open_tasks + recent_owner + [t for t in tasks if t.get('status') in ('done','cancelled','superseded','failed')][:20]:
         selected[str(x.get('id'))] = x
     task_cards = [{
         'id': x.get('public_id'),
@@ -268,6 +278,8 @@ def snapshot():
         decisions.append({
             'approval_id': a.get('public_id'),
             'task_id': t.get('public_id'),
+            'task_status': t.get('status'),
+            'actionable': t.get('status') == 'waiting_approval' and a.get('requested_for_role') == 'owner',
             'title': t.get('title') or 'Decisión pendiente',
             'warning': a.get('warning') or '',
             'impact': a.get('impact') or {},
@@ -325,6 +337,21 @@ def snapshot():
         vivabot_sha = 'unknown'
 
     system_ok = bot_status == 'online' and bridge_active == 'active'
+    # Read only the public heartbeat. Never send arbitrary crm_settings to the browser.
+    heartbeat = None
+    try:
+        settings = query('crm_settings?select=value&business_id=eq.casa-viva&key=eq.programador_local_latido&limit=1')
+        if settings:
+            value = settings[0].get('value')
+            value = json.loads(value) if isinstance(value, str) else value
+            if isinstance(value, dict):
+                heartbeat = {k: str(value[k])[:100] for k in ('at','modelo','version') if k in value}
+    except (ValueError, TypeError, OSError):
+        pass
+    try:
+        dev_status = subprocess.run(['systemctl','is-active','cv-dev-worker.service'], capture_output=True,text=True,timeout=10).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        dev_status = 'unknown'
     return {
         'at': now.isoformat(),
         'summary': {
@@ -337,6 +364,11 @@ def snapshot():
         'today': [x for x in task_cards if x.get('status') not in ('done','cancelled','superseded')][:10],
         'tasks': task_cards,
         'decisions': decisions,
+        'approval_complete': approval_complete,
+        'pending_complete': len(pending) < 500,
+        'reviews_blocked': [{'id': x.get('public_id'), 'title': x.get('title'), 'status': x.get('status'), 'source': x.get('source'), 'created_at': x.get('created_at'), 'risk': x.get('risk')} for x in reviews],
+        'coverage': {'tasks': 'Hasta 120 recientes y 500 pendientes; no es el total histórico.', 'conversations': 'Hasta 20 asuntos activos de Lennys; no es el chat completo.', 'incidents': 'Hasta 20 incidencias registradas; no es un análisis nuevo de WhatsApp.'},
+        'programmer': {'heartbeat': heartbeat, 'worker_status': dev_status, 'source': 'crm_settings.programador_local_latido / systemd'},
         'lennys': lennys,
         'system': {
             'ok': system_ok,
@@ -404,3 +436,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
