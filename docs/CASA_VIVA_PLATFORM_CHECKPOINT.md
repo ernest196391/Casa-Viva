@@ -1,3 +1,10 @@
+# CURRENT — Control OS: estabilización independiente de integración 4A (2026-11-16)
+
+- Bloqueo de PR #242: integración WordPress 4A intermitente incluso en cambios documentales (#239). La selección previa del primer pedido tomaba el primer resultado ordenado solo por fecha; los pedidos del mismo segundo quedaban sin desempate. Se propone comparación explícita por fecha de creación y luego ID menor, con paginación estable por ID. Se conserva atribución de venta por enlace/vale/sesión, condición de pedido válido y prioridad de reasignación aprobada.
+- Regresión 4A fuerza empate de sellos de tiempo y verifica prioridad de fecha si el ID es posterior. CI pendiente; sin despliegue ni fusión. CV_DEV_SANDBOX desactivado; presupuesto adicional cero. Reversión: revertir el PR antes de cualquier release.
+
+---
+
 # CURRENT — EVO-LOCAL-001: mitigación del entorno limpio y módulo de caja construidos (2026-11-16)
 
 - `dev-worker.py`: los procesos hijos (git, npm, pruebas) ya NO heredan los 10 secretos (lista blanca en `child_env()`). 10 pruebas; validado en copia temporal del VPS con las 1 715 pruebas de VivaBot (0 fallos, entorno de 3 variables). **DESPLEGADO el 16-nov ~00:40 (SÍ de Ernesto):** hijos del worker con 5 variables y 0 secretos; copia previa en `/root/backups/evo001-20261115/`. Perfil `casa-viva` validado en verde con entorno mínimo; `nexo` ya falla por código/dependencias del checkout, no por el entorno.
