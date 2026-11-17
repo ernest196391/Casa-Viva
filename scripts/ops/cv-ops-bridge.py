@@ -33,7 +33,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "4.1.2"
+BRIDGE_VERSION = "4.1.3"
 
 
 def load_env_files() -> dict[str, str]:
@@ -300,6 +300,35 @@ def _pm2_vivabot_online():
         return False, f"No pude interpretar PM2: {exc}"
 
 
+def _rollback_vivabot(repo, deployed_sha, old_sha, expected_branch, reload_pm2=False):
+    """Recover only the exact clean deployment; never discard concurrent edits."""
+    cwd = str(repo)
+    checks = [
+        (["git", "rev-parse", "HEAD"], deployed_sha),
+        (["git", "branch", "--show-current"], expected_branch),
+        (["git", "status", "--porcelain", "--untracked-files=no"], ""),
+    ]
+    for command, expected in checks:
+        result = run(command, timeout=20, cwd=cwd)
+        if result["returncode"] or result["output"].strip() != expected:
+            return {"returncode": 1, "output": "Rollback bloqueado: HEAD, rama o cambios locales no coinciden; revisión manual."}
+    # --keep refuses to overwrite local changes; also refuses untracked path collisions.
+    reset = run(["git", "reset", "--keep", old_sha], timeout=45, cwd=cwd)
+    if reset["returncode"]:
+        return {"returncode": 1, "output": "Rollback bloqueado por Git: " + reset["output"]}
+    restored = run(["git", "rev-parse", "HEAD"], timeout=20, cwd=cwd)
+    if restored["returncode"] or restored["output"].strip() != old_sha:
+        return {"returncode": 1, "output": "Rollback no certificado: SHA anterior no comprobado."}
+    if reload_pm2:
+        restart = run(["pm2", "reload", "vivabot"], timeout=45)
+        if restart["returncode"]:
+            return {"returncode": 1, "output": "Código restaurado; PM2 no recargó: " + restart["output"]}
+        online, detail = _pm2_vivabot_online()
+        if not online:
+            return {"returncode": 1, "output": "Código restaurado; PM2 no está online: " + detail}
+    return {"returncode": 0, "output": "SHA anterior restaurado y comprobado."}
+
+
 def action_deploy_vivabot(args):
     """Fast-forward VivaBot to an approved main SHA, test, reload PM2 and rollback on failure."""
     import re
@@ -379,34 +408,30 @@ def action_deploy_vivabot(args):
     syntax = run(["node", "--check", "src/index.js"], timeout=45, cwd=str(repo))
     focused = run(["npm", "run", "test:owner-change"], timeout=120, cwd=str(repo))
     if syntax["returncode"] != 0 or focused["returncode"] != 0:
-        run(["git", "reset", "--hard", old_sha], timeout=45, cwd=str(repo))
+        rollback = _rollback_vivabot(repo, sha, old_sha, branch["output"].strip())
         return {
             "returncode": 9,
-            "output": "PRUEBAS FALLARON; código devuelto al SHA anterior antes de recargar PM2.\n"
+            "output": "PRUEBAS FALLARON. " + rollback["output"] + "\n"
                       + syntax["output"] + "\n" + focused["output"],
         }
 
     reload_result = run(["pm2", "reload", "vivabot", "--update-env"], timeout=45)
     if reload_result["returncode"] != 0:
-        run(["git", "reset", "--hard", old_sha], timeout=45, cwd=str(repo))
-        run(["pm2", "reload", "vivabot", "--update-env"], timeout=45)
+        rollback = _rollback_vivabot(repo, sha, old_sha, branch["output"].strip(), reload_pm2=True)
         return {
             "returncode": 10,
-            "output": "PM2 no pudo recargar el nuevo código. Se restauró el SHA anterior.\n"
+            "output": "PM2 no pudo recargar el nuevo código. " + rollback["output"] + "\n"
                       + reload_result["output"],
         }
 
     time.sleep(5)
     online, pm = _pm2_vivabot_online()
     if not online:
-        rollback_git = run(["git", "reset", "--hard", old_sha], timeout=45, cwd=str(repo))
-        rollback_pm2 = run(["pm2", "reload", "vivabot", "--update-env"], timeout=45)
+        rollback = _rollback_vivabot(repo, sha, old_sha, branch["output"].strip(), reload_pm2=True)
         return {
             "returncode": 11,
-            "output": "HEALTH CHECK FALLÓ. Rollback automático ejecutado.\n"
-                      + "PM2 nuevo: " + pm + "\n"
-                      + "Rollback Git: " + rollback_git["output"] + "\n"
-                      + "Rollback PM2: " + rollback_pm2["output"],
+            "output": "HEALTH CHECK FALLÓ. " + rollback["output"] + "\n"
+                      + "PM2 nuevo: " + pm,
         }
 
     final = run(["git", "rev-parse", "HEAD"], timeout=20, cwd=str(repo))
