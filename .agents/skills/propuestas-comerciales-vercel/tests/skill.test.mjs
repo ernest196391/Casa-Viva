@@ -1,0 +1,14 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,writeFile,mkdir,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {validate} from '../scripts/validate-offer.mjs';
+import {prepare} from '../scripts/prepare-assets.mjs';
+const item={id:'MK-1913',title:'Carpeta',productUrl:'https://casaviva.company/producto/carpeta/',imageUrl:'https://casaviva.company/wp-content/uploads/photo.png',imageVerified:true,imageSource:'Ficha oficial',packSize:1,packLabel:'carpeta',priceCents:1200,priceVerifiedAt:'2026-11-18T20:00:00Z',source:'Woo',availability:'confirmed',availabilityVerifiedAt:'2026-11-18T20:00:00Z'};
+const offer={offerId:'cv-test-001',title:'Test',updatedAt:'2026-11-18T20:00:00Z',currency:'USD',payment:{method:'cuenta_fiscal',status:'confirmed'},delivery:{status:'confirmed'},contact:{whatsapp:'5354056173'},items:[item]};
+async function fixture(fn){const d=await mkdtemp(join(tmpdir(),'cv-skill-'));try{const file=join(d,'offer.json');await writeFile(file,JSON.stringify(offer));return await fn(file,d)}finally{await rm(d,{recursive:true,force:true})}}
+test('draft validates source while tolerating pending stock and absent downloaded photo',async()=>fixture(async(file,d)=>{const o=structuredClone(offer);o.items[0].availability='pending';await writeFile(file,JSON.stringify(o));assert.equal((await validate(file,d,{draft:true})).ok,true);assert.equal((await validate(file,d)).ok,false)}));
+test('reject price float, pack zero and duplicates',async()=>fixture(async(file,d)=>{const o=structuredClone(offer);o.items[0].priceCents=12.5;o.items[0].packSize=0;o.items.push({...o.items[0]});await writeFile(file,JSON.stringify(o));const r=await validate(file,d,{draft:true});assert.equal(r.ok,false);assert.ok(r.errors.some(x=>x.includes('precio')));assert.ok(r.errors.some(x=>x.includes('packSize')));assert.ok(r.errors.some(x=>x.includes('duplicado')))}));
+test('strict publication requires local image manifest and file',async()=>fixture(async(file,d)=>{const r=await validate(file,d);assert.equal(r.ok,false);assert.ok(r.errors.some(x=>x.includes('assets-manifest')));await mkdir(join(d,'assets','products'),{recursive:true});await writeFile(join(d,'assets','products','MK-1913.png'),Buffer.from([137,80,78,71]));await writeFile(join(d,'assets-manifest.json'),JSON.stringify({images:[{sku:'MK-1913',file:'assets/products/MK-1913.png'}]}));assert.equal((await validate(file,d)).ok,true)}));
+test('download rejects private URL with query tokens before network',async()=>fixture(async(file,d)=>{const o=structuredClone(offer);o.items[0].imageUrl='https://casaviva.company/photo.png?token=secret';await writeFile(file,JSON.stringify(o));await assert.rejects(prepare(file,d),/Origen no permitido/)}));
