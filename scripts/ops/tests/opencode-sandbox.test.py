@@ -400,6 +400,25 @@ class VerifyLogicTests(unittest.TestCase):
         report = verify.run_checks(WORKSPACE, runner)
         self.assertEqual(report["verdict"], verify.VERDICT_NO_OPERATIVO)
 
+    def test_nonzero_exit_cannot_pass(self):
+        report = verify.run_checks(WORKSPACE, fake_runner({"bootstrap": (1, probe("bootstrap"), b"")}))
+        self.assertEqual(report["verdict"], verify.VERDICT_NO_OPERATIVO)
+
+    def test_mismatched_check_cannot_pass(self):
+        report = verify.run_checks(WORKSPACE, fake_runner({"bootstrap": (0, probe("net_denied"), b"")}))
+        self.assertEqual(report["verdict"], verify.VERDICT_NO_OPERATIVO)
+
+    def test_string_boolean_cannot_pass(self):
+        payload = json.dumps({"check": "bootstrap", "ok": "false", "detail": ""}).encode()
+        report = verify.run_checks(WORKSPACE, fake_runner({"bootstrap": (0, payload, b"")}))
+        self.assertEqual(report["verdict"], verify.VERDICT_NO_OPERATIVO)
+
+    def test_dedicated_dev_command(self):
+        root = verify.DEV_WORK_ROOT
+        report = verify.run_checks(root + "/run-e3", fake_runner(), work_root=root,
+                                   bwrap_binary=verify.DEV_BWRAP)
+        self.assertEqual(report["verdict"], verify.VERDICT_OK)
+
     def test_positive_control_must_pass(self):
         outcomes = {"write_workspace_allowed": (0, probe("write_workspace_allowed", ok=False), b"")}
         report = verify.run_checks(WORKSPACE, fake_runner(outcomes))
