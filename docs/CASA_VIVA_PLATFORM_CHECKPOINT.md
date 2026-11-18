@@ -1,3 +1,9 @@
+# CURRENT — EVO-LOCAL-001 E3: evaluación de límites (2026-11-17)
+
+- #251: evaluador documental cgroup v2 para memory.max, pids.max y cpu.max; falla si faltan, son ilimitados, inválidos o superan umbrales aprobados. CLI --cgroup-evidence con presupuesto explícito, no ejecuta sandbox ni modifica host. Tres regresiones añadidas. CI pendiente. NO configura límites ni certifica que el proceso y sus descendientes estén en ese cgroup: validar pertenencia, mediciones y terminación en el VPS, tras autorización E2. Sin cambio productivo; coste nuevo cero.
+
+---
+
 # CURRENT — EVO-LOCAL-001 E3: configuración npm aislada (2026-11-17)
 
 - #251: HOME y cache npm desechables por workspace, userconfig/globalconfig /dev/null, PATH fijo, se ignoran variables npm heredadas y se rechaza .npmrc o HOME npm preexistente/incluso symlink colgante. Regresión de configuración y rutas negativas añadida. Esto reduce exposición accidental, NO impide que un proceso npm con red lea archivos del host: falta aislamiento de instalación y límites efectivos de recursos, canarios E3 y prueba en VPS. CI pendiente. E2/E4 sin autorización nueva, interruptor no activado, gasto adicional cero.
