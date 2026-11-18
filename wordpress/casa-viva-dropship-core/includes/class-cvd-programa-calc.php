@@ -472,6 +472,21 @@ final class CVD_Programa_Calc {
 			$alerts[] = array( 'type' => 'devolucion', 'user' => $owner, 'order' => $order, 'text' => 'Pedido #' . $order . ' se anuló después de cerrar su mes: se resta ahora.' );
 		}
 
+		// Ajustes de puntos auditados: no son ventas ni ganancia que financie el programa.
+		$fund_points = array();
+		foreach ( $people as $id => $person ) { $fund_points[$id] = max( 0.0, round( $person['own_points'], 4 ) ); }
+		$seen_adjustments = array();
+		foreach ( (array) ( $p['point_adjustments'] ?? array() ) as $a ) {
+			$id = (int) ( $a['user'] ?? 0 );
+			$ref = (string) ( $a['ref'] ?? '' );
+			$points = (float) ( $a['points'] ?? 0 );
+			if ( ( $a['period'] ?? '' ) !== $period || '' === $ref || isset( $seen_adjustments[$ref] ) || empty( $people[$id]['approved'] ) || ! is_finite( $points ) || $points <= 0 ) { continue; }
+			$seen_adjustments[$ref] = true;
+			if ( ! empty( $a['reversed_at'] ) ) { continue; }
+			$people[$id]['own_points'] += $points;
+			$lines[] = array( 'kind' => 'ajuste_puntos', 'user' => $id, 'order' => 0, 'source' => 0, 'base' => 0, 'cost' => 0, 'commission' => 0, 'points' => $points, 'pct' => 0, 'amount' => 0, 'ref' => $ref, 'reason' => (string) ( $a['reason'] ?? '' ) );
+		}
+
 		// 3) Equipo, piedra del mes y título.
 		foreach ( $people as $id => &$me ) {
 			$l1 = array(); $l2 = array();
@@ -538,7 +553,7 @@ final class CVD_Programa_Calc {
 		foreach ( $people as $id => &$me ) {
 			// 3.14.48 (D92): los puntos de proveedor del dueño no entran en su fondo de equipo y no le dan bono.
 			$is_og = $og && $id === $og;
-			$me['fund_usd'] = round( (float) $p['fund_pct'] * max( 0.0, $me['team_points'] - ( $is_og ? max( 0.0, $me['supplier_points'] ) : 0.0 ) ), 4 );
+			$me['fund_usd'] = round( (float) $p['fund_pct'] * ( $fund_points[$id] + array_sum( array_intersect_key( $fund_points, $me['contrib'] ) ) ), 4 );
 			$stone = self::stone( $me['stone'] );
 			$me['bonus_cup'] = $stone && ! $is_og ? $stone['bonus_cup'] : 0;
 			$me['bonus_usd'] = round( $me['bonus_cup'] / $rate, 4 );
