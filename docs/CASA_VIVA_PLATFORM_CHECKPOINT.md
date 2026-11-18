@@ -692,3 +692,8 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 - Prototipo aislado en scripts/ops/energy-pilot; no producción. Base `da28ed6747c2efb631b9415b9ab24f5cc5348a76`.
 - `node --test scripts/ops/energy-pilot/pilot.test.mjs`: 3/3 local. Ingesta HTTP, cálculo, cotización y bot simulado. Sin mensajes reales ni compras.
 - Pendiente: integración Core/CRM, autenticación, deduplicación, notificación real, búsqueda de proveedores, propuesta interactiva, prueba VivaBot aislada, aprobación y despliegue. No usar para clientes todavía.
+
+
+## ENERGY-PILOT-002 — 18 noviembre 2026
+- Registro de fuentes autorizadas, validación de ofertas del día en horario Cuba, stock, cotización en borrador y vista cliente sin costos internos.
+- 6/6 pruebas locales. Datos de prueba únicamente. No se consultaron ni contactaron proveedores reales, no se publicó ni activó VivaBot. Próximo: integración CRM y adaptadores, propuesta web y prueba controlada.
