@@ -503,5 +503,28 @@ near( $on['people'][OG]['own_points'], 80, '3.14.49: él 10 + 70 de su parte' );
 ok( $on['people'][1]['team_points'] === $off['people'][1]['team_points'] && $on['people'][1]['stone'] === $off['people'][1]['stone'] && $on['people'][1]['bonus_pay_cup'] === $off['people'][1]['bonus_pay_cup'], '3.14.49: a su madrina le cuentan solo sus 10 de la web (equipo, piedra y bono iguales)' );
 ok( 'bronce' === $on['people'][OG]['stone'] && 0 === $on['people'][OG]['bonus_pay_cup'], '3.14.49: con 80 puntos propios llega a Bronce, sin bono' );
 
+// Ajuste de puntos sin venta ficticia: referencia única, persistencia por recálculo y reversión.
+$m = array( 1 => member( 'Ana' ), 2 => member( 'Rosa', 1 ), 3 => member( 'Eva', 0, '2026-10-15', false ) );
+$s = array( sale( 100, 2, 30, 20, 3 ) );
+$base = $C::compute( P, $m, $s );
+$a = array( 'ref' => 'test-250', 'period' => P, 'user' => 2, 'points' => 4.0, 'reason' => 'Extra confirmado' );
+$other_month = array_merge( $a, array( 'ref' => 'old', 'period' => '2026-10' ) );
+$unapproved = array_merge( $a, array( 'ref' => 'unapproved', 'user' => 3 ) );
+$params = array( 'point_adjustments' => array( $a, $a, $other_month, $unapproved ) );
+$r = $C::compute( P, $m, $s, array(), $params );
+near( $r['people'][2]['own_points'], $base['people'][2]['own_points'] + 4, 'Ajuste: 4 puntos exactamente una vez' );
+near( $r['people'][1]['team_points'], $base['people'][1]['team_points'] + 4, 'Ajuste: cuenta en el equipo' );
+near( $r['people'][3]['own_points'], 0, 'Ajuste: gestora no aprobada no recibe puntos' );
+foreach ( array( 'sales_usd', 'profit_usd', 'pool_usd' ) as $key ) { near( $r['totals'][$key], $base['totals'][$key], 'Ajuste no cambia ' . $key ); }
+foreach ( array( 1, 2 ) as $uid ) { near( $r['people'][$uid]['fund_usd'], $base['people'][$uid]['fund_usd'], 'Ajuste no infla fondo del equipo' ); }
+near( $r['people'][2]['own_orders'], $base['people'][2]['own_orders'], 'Ajuste no simula pedidos' );
+near( $r['people'][2]['own_sales_usd'], $base['people'][2]['own_sales_usd'], 'Ajuste no simula ingresos' );
+$adjusted = array_values( array_filter( $r['lines'], static fn( $l ) => 'ajuste_puntos' === $l['kind'] ) );
+ok( 1 === count( $adjusted ) && 0 === $adjusted[0]['order'] && 0 === $adjusted[0]['commission'] && 0 === $adjusted[0]['amount'], 'Ajuste: detalle único no monetario' );
+ok( $r === $C::compute( P, $m, $s, array(), $params ), 'Ajuste: recálculo determinista' );
+$a['reversed_at'] = '2026-11-18 12:00:00';
+$r = $C::compute( P, $m, $s, array(), array( 'point_adjustments' => array( $a ) ) );
+near( $r['people'][2]['own_points'], $base['people'][2]['own_points'], 'Reversión restaura puntos originales' );
+
 echo $fails ? "\n$fails de $count comprobaciones fallaron\n" : "OK: $count comprobaciones\n";
 exit( $fails ? 1 : 0 );
