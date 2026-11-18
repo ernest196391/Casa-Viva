@@ -169,6 +169,21 @@ class SandboxWiringTests(unittest.TestCase):
             worker.run_tests_isolated("casa-viva", self.work, ["a.md"], ["docs/"])
         self.assertEqual(self.fake.calls, [])
 
+    def test_create_file_rechaza_symlink_colgante_y_ancestro(self):
+        if os.name == "nt":
+            self.skipTest("symlinks requieren permisos en Windows")
+        outside = Path(self.tmp.name) / "outside"
+        (self.work / "dangling.md").symlink_to(outside)
+        (self.work / "dangling-dir").symlink_to(outside, target_is_directory=True)
+        for rel in ("dangling.md", "dangling-dir/a.md"):
+            with self.subTest(rel=rel):
+                with self.assertRaisesRegex(ValueError, "symlink"):
+                    worker.structured_edit(self.work, {
+                        "allow_paths": [rel],
+                        "operations": [{"op": "create_file", "path": rel, "content": "must not escape"}],
+                    })
+                self.assertFalse(outside.exists())
+
     # --- ubicación del worktree
     def _prepare(self, root_dir):
         repo = Path(self.tmp.name) / "repo"
