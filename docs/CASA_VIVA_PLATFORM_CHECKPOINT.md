@@ -1,3 +1,9 @@
+# CURRENT — EVO-LOCAL-001 E3: verificador fail-closed (2026-11-17)
+
+- #251: arnés verify-sandbox v2 rechaza salida no cero, JSON de otra prueba, booleano no estricto, comando inválido; runner real no hereda entorno y se niega a correr como root. Modo explícito --dev-worker selecciona binario y raíz de E2. Cuatro regresiones añadidas sin ejecutar bwrap. CI pendiente; no certificación en VPS. Falta aislamiento npm y límites efectivos, pruebas de canarios y E2 autorizado. CV_DEV_SANDBOX no activado, costo adicional cero.
+
+---
+
 # CURRENT — EVO-LOCAL-001 E2/E3: preparación documental (2026-11-17)
 
 - E1 candidato #251 SHA 602b64d701bb60e1749dc7400c0447e0a7922d18: CI aplicación 44228082919, release 44228082935 y staging 44228084707 completadas success. Incluye regresión de enlaces colgantes. No integrado ni instalado.
