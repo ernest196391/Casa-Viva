@@ -686,3 +686,9 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 - Revisión visual del PNG: quedan restos claros de fondo inferior/halo; no aprobar publicación aunque la máscara diga fiable=true. No bloquea certificar el transporte/recorte real, sí impide declarar calidad fotográfica automática. Se mantiene revisión humana y autonomía desactivada.
 - Estado: implementación estabilizada y verificada, PRs en borrador para revisión del propietario. Ningún merge ni despliegue. `costo_actual`: infraestructura existente; `costo_nuevo_requerido`: 0; `alternativa_gratuita`: recorte local y revisión humana; `momento_de_escalar`: fase posterior expresamente aprobada.
 - Evidencias, archivos y reversión: docs/EVO_001_CONTENT_STUDIO.md. Siguiente: aprobación explícita de ambos PR/SHA y despliegue controlado con rollback; después EVO-002 de auditoría/score/cola. No incorporar interfaces ni activar publicaciones autónomas.
+
+
+## ENERGY-PILOT-001 — 18 noviembre 2026
+- Prototipo aislado en scripts/ops/energy-pilot; no producción. Base `da28ed6747c2efb631b9415b9ab24f5cc5348a76`.
+- `node --test scripts/ops/energy-pilot/pilot.test.mjs`: 3/3 local. Ingesta HTTP, cálculo, cotización y bot simulado. Sin mensajes reales ni compras.
+- Pendiente: integración Core/CRM, autenticación, deduplicación, notificación real, búsqueda de proveedores, propuesta interactiva, prueba VivaBot aislada, aprobación y despliegue. No usar para clientes todavía.
