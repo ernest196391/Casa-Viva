@@ -508,7 +508,7 @@ class SystemdCalibrationSpecTests(unittest.TestCase):
         cmd = self.spec["build_probe_command"](root + "/run-e3-good", root + "/run-e3-other", "cv-e3-test")
         self.assertEqual(cmd[0], "/usr/bin/systemd-run")
         self.assertEqual(cmd[-4:], ["/usr/bin/python3", "-B", "-c", self.spec["PROBE"]])
-        for prop in ("PrivateNetwork=yes", "RestrictAddressFamilies=AF_UNIX",
+        for prop in ("PrivateNetwork=yes", "PrivateIPC=yes", "RestrictAddressFamilies=AF_UNIX",
                      "CapabilityBoundingSet=", "NoNewPrivileges=yes", "TemporaryFileSystem=/var:ro",
                      "TemporaryFileSystem=/etc:ro", "TemporaryFileSystem=/run:ro",
                      "MemoryMax=256M", "TasksMax=16", "CPUQuota=25%",
