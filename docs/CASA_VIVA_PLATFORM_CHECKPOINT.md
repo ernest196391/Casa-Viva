@@ -1,3 +1,10 @@
+# CURRENT — EVO-LOCAL-001 E2/E3: preparación documental (2026-11-17)
+
+- E1 candidato #251 SHA 602b64d701bb60e1749dc7400c0447e0a7922d18: CI aplicación 44228082919, release 44228082935 y staging 44228084707 completadas success. Incluye regresión de enlaces colgantes. No integrado ni instalado.
+- Runbook E2 revisado: SHA integrado verificable, respaldo con manifiesto y hashes de tres destinos, reversión ante fallo intermedio, comprobación efectiva del interruptor apagado. Criterios E3 ampliados para canarios sintéticos, npm aislado, límites cgroup y checkout confiable intacto. Sin ejecución VPS; CI de cambios documentales pendiente. E2 y E4 requieren aprobación explícita; E3 no certificado. Costo adicional cero, infraestructura existente, sin compra de créditos.
+
+---
+
 # CURRENT — EVO-LOCAL-001 E1: reconciliación con main (2026-11-17)
 
 - Se conserva el código del PR #241 SHA aeca5e5, con tres workflows verdes (43992655160, 43992655264, 43992655176). Main bf1398d avanzó 19 commits; se incorporan los cambios E1 conservando los cambios de CI y checkpoint de main. Candidato de revisión; CI conjunto pendiente. No se fusiona ni despliega, CV_DEV_SANDBOX=0, E2/E3 pendientes y E4 bloqueada. Costo adicional cero.
