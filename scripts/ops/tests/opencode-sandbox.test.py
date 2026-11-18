@@ -477,6 +477,27 @@ class VerifyGuardTests(unittest.TestCase):
         self.assertEqual(json.loads(proc.stdout)["verdict"], "refused")
 
 
+class BootstrapDiagnosticTests(unittest.TestCase):
+    def test_loopback_error_classified_without_leaking_stderr(self):
+        def runner(_cmd):
+            return 1, b"", b"bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted\nSYNTHETIC_SECRET"
+        report = verify.run_checks(WORKSPACE, runner)
+        self.assertEqual(report["verdict"], verify.VERDICT_NO_OPERATIVO)
+        self.assertEqual(report["checks"]["bootstrap"]["diagnostic_code"], "loopback-rtnetlink-denied")
+        self.assertNotIn("SYNTHETIC_SECRET", json.dumps(report))
+
+    def test_unrecognized_error_is_not_disclosed(self):
+        def runner(_cmd):
+            return 1, b"", b"SYNTHETIC_SECRET"
+        report = verify.run_checks(WORKSPACE, runner)
+        self.assertEqual(report["checks"]["bootstrap"]["diagnostic_code"], "bootstrap-unclassified")
+        self.assertNotIn("SYNTHETIC_SECRET", json.dumps(report))
+
+    def test_uid_map_error_is_classified(self):
+        self.assertEqual(verify.classify_bootstrap_error(b"bwrap: setting up uid map: Permission denied"),
+                         "uid-map-denied")
+
+
 class StaticScanTests(unittest.TestCase):
     spec_tree = ast.parse(SPEC_TEXT)
     verify_tree = ast.parse(VERIFY_TEXT)
