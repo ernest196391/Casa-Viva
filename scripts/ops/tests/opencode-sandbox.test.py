@@ -698,5 +698,60 @@ class PreflightTests(unittest.TestCase):
 
 
 
+
+_e3report_spec = importlib.util.spec_from_file_location('cv_e3_report', SANDBOX_DIR / 'e3-report.py')
+_e3report = importlib.util.module_from_spec(_e3report_spec)
+_e3report_spec.loader.exec_module(_e3report)
+
+class E3ReportTests(unittest.TestCase):
+    def setUp(self):
+        self.result = {'checks': {k: True for k in _e3report.CHECKS},
+                       'limits': {'memory.max': '268435456', 'pids.max': '16', 'cpu.max': '25000 100000'}}
+
+    def validate(self, code=0):
+        return _e3report.validate_report(json.dumps(self.result).encode(), code)
+
+    def test_valid(self):
+        self.assertEqual(self.validate(), 'synthetic-probe-passed')
+
+    def test_failed_exit(self):
+        self.assertEqual(self.validate(5), 'probe-failed')
+
+    def test_missing_check(self):
+        del self.result['checks']['root_hidden']
+        self.assertEqual(self.validate(), 'invalid-report')
+
+    def test_false_check(self):
+        self.result['checks']['root_hidden'] = False
+        self.assertEqual(self.validate(), 'probe-failed')
+
+    def test_integer_check(self):
+        self.result['checks']['root_hidden'] = 1
+        self.assertEqual(self.validate(), 'invalid-report')
+
+    def test_cpu_excess(self):
+        self.result['limits']['cpu.max'] = '25001 100000'
+        self.assertEqual(self.validate(), 'probe-failed')
+
+    def test_unlimited(self):
+        self.result['limits']['memory.max'] = 'max'
+        self.assertEqual(self.validate(), 'probe-failed')
+
+    def test_duplicate(self):
+        raw = json.dumps(self.result).replace('"root_hidden": true', '"root_hidden": false, "root_hidden": true')
+        self.assertEqual(_e3report.validate_report(raw.encode(), 0), 'invalid-report')
+
+    def test_raw_secret(self):
+        self.assertEqual(_e3report.validate_report(b'SYNTHETIC_SECRET', 0), 'invalid-report')
+
+    def test_oversize(self):
+        self.assertEqual(_e3report.validate_report(b' '*8193, 0), 'invalid-report')
+
+    def test_extra_key(self):
+        self.result['payload'] = 'SYNTHETIC_SECRET'
+        self.assertEqual(self.validate(), 'invalid-report')
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
