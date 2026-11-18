@@ -498,6 +498,42 @@ class BootstrapDiagnosticTests(unittest.TestCase):
                          "uid-map-denied")
 
 
+class SystemdCalibrationSpecTests(unittest.TestCase):
+    def setUp(self):
+        import runpy
+        self.spec = runpy.run_path(str(REPO / "scripts/ops/sandbox/systemd-probe-spec.py"))
+
+    def test_fixed_command_has_no_user_supplied_payload(self):
+        root = self.spec["WORK_ROOT"]
+        cmd = self.spec["build_probe_command"](root + "/run-e3-good", root + "/run-e3-other", "cv-e3-test")
+        self.assertEqual(cmd[0], "/usr/bin/systemd-run")
+        self.assertEqual(cmd[-4:], ["/usr/bin/python3", "-B", "-c", self.spec["PROBE"]])
+        for prop in ("PrivateNetwork=yes", "RestrictAddressFamilies=AF_UNIX",
+                     "CapabilityBoundingSet=", "NoNewPrivileges=yes", "TemporaryFileSystem=/var:ro",
+                     "TemporaryFileSystem=/etc:ro", "TemporaryFileSystem=/run:ro",
+                     "MemoryMax=256M", "TasksMax=16", "CPUQuota=25%",
+                     "RuntimeMaxSec=30s", "KillMode=control-group"):
+            self.assertIn(prop, cmd)
+
+    def test_rejects_traversal_and_option_injection(self):
+        root = self.spec["WORK_ROOT"]
+        build = self.spec["build_probe_command"]
+        for bad in ("/root", root + "/../run-e3-escape", root + "/run-e3-x/child",
+                    root + "/run-e3-x --property=User=root", root + "/run-e3-x\n"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                build(bad, root + "/run-e3-other", "cv-e3-test")
+        with self.assertRaises(ValueError):
+            build(root + "/run-e3-good", root + "/run-e3-good", "cv-e3-test")
+        with self.assertRaises(ValueError):
+            build(root + "/run-e3-good", root + "/run-e3-other", "--uid=root")
+
+    def test_spec_only_constructs_no_execution(self):
+        source = (REPO / "scripts/ops/sandbox/systemd-probe-spec.py").read_text()
+        self.assertNotIn("subprocess", source)
+        self.assertNotIn("os.system", source)
+        compile(source, "systemd-probe-spec.py", "exec")
+
+
 class StaticScanTests(unittest.TestCase):
     spec_tree = ast.parse(SPEC_TEXT)
     verify_tree = ast.parse(VERIFY_TEXT)
