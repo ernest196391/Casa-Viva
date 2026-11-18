@@ -202,12 +202,54 @@ def run_checks(workspace: str, runner, **kwargs) -> dict:
     }
 
 
+def assess_cgroup_limits(observed: dict, *, memory_bytes: int, max_pids: int, cpu_cores: float) -> dict:
+    """Comprueba mediciones cgroup v2; no configura ni consulta el host."""
+    if (type(memory_bytes) is not int or memory_bytes <= 0
+            or type(max_pids) is not int or max_pids <= 0
+            or not isinstance(cpu_cores, (int, float)) or not 0 < cpu_cores < float("inf")):
+        raise ValueError("límites aprobados inválidos")
+    checks = {}
+    for key, limit in (("memory.max", memory_bytes), ("pids.max", max_pids)):
+        raw = observed.get(key)
+        try:
+            value = int(raw)
+            checks[key] = 0 < value <= limit
+        except (TypeError, ValueError):
+            checks[key] = False
+    try:
+        quota, period = (int(v) for v in observed["cpu.max"].split())
+        checks["cpu.max"] = quota > 0 and period > 0 and quota / period <= cpu_cores
+    except (KeyError, AttributeError, TypeError, ValueError, ZeroDivisionError):
+        checks["cpu.max"] = False
+    return {"checks": checks, "verdict": VERDICT_OK if all(checks.values()) else VERDICT_FAILED}
+
+
 def main(argv: list) -> int:
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument("--workspace", default=None)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--dev-worker", action="store_true", help="Usar binario y raíz dedicados de E2")
+    parser.add_argument("--cgroup-evidence", type=Path, help="Evaluar JSON de mediciones, sin ejecutar sandbox")
+    parser.add_argument("--memory-bytes", type=int)
+    parser.add_argument("--max-pids", type=int)
+    parser.add_argument("--cpu-cores", type=float)
     args = parser.parse_args(argv)
+
+    if args.cgroup_evidence is not None:
+        if args.execute or args.workspace:
+            parser.error("evaluación documental separada de la ejecución real")
+        try:
+            observed = json.loads(args.cgroup_evidence.read_text(encoding="utf-8"))
+            if not isinstance(observed, dict):
+                raise ValueError("evidencia no es objeto")
+            result = assess_cgroup_limits(observed, memory_bytes=args.memory_bytes,
+                                          max_pids=args.max_pids, cpu_cores=args.cpu_cores)
+        except (OSError, ValueError, TypeError):
+            print(json.dumps({"verdict": VERDICT_FAILED, "reason": "evidencia o límites inválidos"}))
+            return EXIT_FAILED
+        result["scope"] = "evaluación de datos aportados; no certificación del VPS"
+        print(json.dumps(result))
+        return EXIT_OK if result["verdict"] == VERDICT_OK else EXIT_FAILED
 
     if not args.workspace or not args.execute:
         print(json.dumps({
