@@ -14,7 +14,8 @@ worker necesitará para correr las pruebas de una tarea con aislamiento:
   solo lectura, un único destino de escritura: el worktree `run-<id>`), como
   `cvdev`, con tiempo límite y muerte del grupo de procesos.
 
-Nunca usa shell. Ninguna credencial entra en la caja ni en `install_deps`.
+Nunca usa shell. Las variables y configuración npm heredadas se excluyen;
+la ausencia de acceso a archivos del host todavía requiere certificación E3.
 La caja necesita la copia dedicada de bwrap y su perfil AppArmor (paso E2, que
 exige aprobación de Ernesto); hasta entonces este módulo solo se prueba con
 procesos simulados.
@@ -44,8 +45,8 @@ SandboxSpecError = spec.SandboxSpecError
 DEDICATED_BWRAP = "/usr/local/lib/control-os/bwrap-dev"  # copia root 0755 (E2); no existe todavía
 WORK_ROOT = "/var/lib/control-os-dev/work"  # root-owned ancestors; only disposable children are writable
 BOX_ENV = {"PATH": "/usr/bin:/bin", "HOME": "/tmp", "TMPDIR": "/tmp"}
-INSTALL_ENV_KEYS = ("PATH", "LANG", "LC_ALL", "TZ")
-INSTALL_HOME = "/home/cvdev"
+INSTALL_ENV_KEYS = ("LANG", "LC_ALL", "TZ")
+INSTALL_PATH = "/usr/local/bin:/usr/bin:/bin"
 MAX_OUT = 30_000
 
 
@@ -118,13 +119,21 @@ def run_in_box(cmd, workspace, timeout: int, *, uid: int, gid: int, bwrap_binary
 
 def install_deps(workspace, timeout: int, *, uid: int, gid: int, environ=None,
                  work_root: str = WORK_ROOT, spawn=subprocess.Popen):
-    """`npm ci --ignore-scripts` como `cvdev`: con red, entorno mínimo, sin ningún secreto."""
+    """Instalación con configuración aislada; el aislamiento del host requiere E3."""
     workspace = spec.validate_workspace(str(workspace), work_root)
     if uid == 0 or gid == 0:
         raise SandboxError("la instalación nunca corre como root")
     source = os.environ if environ is None else environ
     env = {k: source[k] for k in INSTALL_ENV_KEYS if k in source}
-    env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
-    env["HOME"] = INSTALL_HOME
+    # Una configuración de proyecto puede prevalecer sobre el entorno.
+    project_config = Path(workspace) / ".npmrc"
+    if project_config.is_symlink() or project_config.exists():
+        raise SandboxError("configuración npm de proyecto no permitida")
+    home = Path(workspace) / ".cv-npm-home"
+    if home.is_symlink() or home.exists():
+        raise SandboxError("HOME npm ya existe; se exige una copia nueva")
+    env.update({"PATH": INSTALL_PATH, "HOME": str(home),
+                "NPM_CONFIG_USERCONFIG": "/dev/null", "NPM_CONFIG_GLOBALCONFIG": "/dev/null",
+                "NPM_CONFIG_CACHE": str(home / "cache")})
     argv = ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"]
     return _launch(argv, cwd=workspace, env=env, timeout=timeout, uid=uid, gid=gid, spawn=spawn)
