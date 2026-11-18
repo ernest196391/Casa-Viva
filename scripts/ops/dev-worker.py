@@ -540,10 +540,10 @@ def _safe_target(work: Path, rel: str) -> Path:
     current = work
     for part in PurePosixPath(path).parts[:-1]:
         current = current / part
-        if current.exists() and current.is_symlink():
+        if current.is_symlink():
             raise ValueError("ruta pasa por symlink")
     target = work / path
-    if target.exists() and target.is_symlink():
+    if target.is_symlink():
         raise ValueError("target symlink no permitido")
     return target
 
