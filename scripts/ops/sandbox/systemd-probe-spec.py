@@ -57,7 +57,7 @@ def build_probe_command(workspace: str, sibling: str, unit: str) -> list[str]:
     if workspace == sibling or not isinstance(unit, str) or not UNIT.fullmatch(unit):
         raise ValueError("unidad o canario inválido")
     properties = (
-        "PrivateNetwork=yes", "RestrictAddressFamilies=AF_UNIX",
+        "PrivateNetwork=yes", "PrivateIPC=yes", "RestrictAddressFamilies=AF_UNIX",
         "ProtectSystem=strict", "ProtectHome=tmpfs", "PrivateTmp=yes",
         "PrivateDevices=yes", "NoNewPrivileges=yes", "CapabilityBoundingSet=",
         "ProtectKernelTunables=yes", "ProtectKernelModules=yes",
