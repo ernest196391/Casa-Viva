@@ -1,3 +1,9 @@
+# CURRENT — CV-INC-250: ajuste de puntos (2026-11-18)
+
+- Fase 0, corrección operativa aislada. Comisión ya aclarada; solo puntos. No se modifica pedido, comisión, cobro, inventario ni liquidaciones. Producción no cambiada por esta unidad; último SHA certificado según registro anterior.
+- Candidato: registro administrativo por mes vigente, referencia idempotente, actor, motivo y reversión auditada; cálculo puro incorpora puntos al equipo y piedra, excluyéndolos del fondo monetario. El detalle de gestora distingue ajuste de venta. Cierre mensual inmutable. Reintento no duplica.
+- Pruebas nuevas en test-programa-gestoras.php; PHP no disponible localmente, CI pendiente. No fusionar/desplegar ni acreditar en producción hasta certificación y puerta de producción. Después aplicar exclusivamente 4 puntos a la gestora autorizada en #250 y verificar dos cálculos y panel. Reversión: acción administrativa con referencia y motivo antes del cierre. Costo incremental 0 USD.
+
 # CURRENT — EVO-LOCAL-001 E3: evaluación de límites (2026-11-17)
 
 - #251: evaluador documental cgroup v2 para memory.max, pids.max y cpu.max; falla si faltan, son ilimitados, inválidos o superan umbrales aprobados. CLI --cgroup-evidence con presupuesto explícito, no ejecuta sandbox ni modifica host. Tres regresiones añadidas. CI pendiente. NO configura límites ni certifica que el proceso y sus descendientes estén en ese cgroup: validar pertenencia, mediciones y terminación en el VPS, tras autorización E2. Sin cambio productivo; coste nuevo cero.

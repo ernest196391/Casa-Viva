@@ -26,6 +26,12 @@ jobs:
           extensions: gd
           coverage: none
 
+      - name: Validar ajustes de puntos del programa de gestoras
+        run: |
+          php -l wordpress/casa-viva-dropship-core/includes/class-cvd-programa.php
+          php -l wordpress/casa-viva-dropship-core/includes/class-cvd-programa-calc.php
+          php artifacts/tests/test-programa-gestoras.php
+
       - name: Validar lector canónico de pedidos
         run: |
           php artifacts/tests/test-canonical-order-reader-1a.php
