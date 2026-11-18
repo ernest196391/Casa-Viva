@@ -156,6 +156,16 @@ final class CVD_Programa {
 		global $wpdb;
 		$done = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::t( 'runs' ) . " WHERE run_date=%s AND kind='diario'", $today ) );
 		if ( ! $done ) { self::run( wp_date( 'Y-m' ), 'diario', 0 ); }
+		$month = wp_date( 'Y-m' );
+		$month_field = '<input type="hidden" name="period" value="' . esc_attr( $month ) . '">';
+		echo '<h2>Ajustes de puntos · ' . esc_html( $month ) . '</h2><p>No crea ventas, comisiones ni fondos. Usa una referencia única y un motivo.</p>';
+		echo $form( 'ajuste_puntos', $month_field . '<label>ID gestora <input name="user" type="number" min="1" required></label> <label>Puntos <input name="points" type="number" min="0.0001" max="100000" step="0.0001" required></label> <label>Referencia <input name="ref" maxlength="80" required></label> <label>Motivo <input name="reason" maxlength="500" required></label> <button class="button">Registrar puntos</button>', '¿Registrar el ajuste de puntos?' ); // phpcs:ignore
+		foreach ( self::point_adjustments( $month ) as $a ) {
+			echo '<p>' . esc_html( $a['ref'] . ' · #' . $a['user'] . ' · ' . self::pts2( $a['points'] ) . ' puntos · ' . $a['reason'] . ' · por #' . $a['by'] . ' · ' . self::local( $a['at'] ) );
+			if ( ! empty( $a['reversed_at'] ) ) { echo esc_html( ' · Revertido por #' . $a['reversed_by'] . ' · ' . $a['reversal_reason'] ); }
+			else { echo ' ' . $form( 'revertir_puntos', $month_field . '<input type="hidden" name="ref" value="' . esc_attr( $a['ref'] ) . '"><label>Motivo de reversión <input name="reason" maxlength="500" required></label> <button class="button">Revertir</button>', '¿Revertir estos puntos?' ); } // phpcs:ignore
+			echo '</p>';
+		}
 		$prev = wp_date( 'Y-m', strtotime( wp_date( 'Y-m-01' ) . ' -1 month' ) );
 		// D79: si el cierre está esperando por alertas sin revisar, se sigue intentando cada noche aunque pase el día 5.
 		if ( ( (int) wp_date( 'j' ) <= 5 || (string) get_option( self::WAIT_OPTION, '' ) === $prev ) && ! self::monthly_run( $prev ) ) {
@@ -456,13 +466,51 @@ final class CVD_Programa {
 	}
 
 	/** Calcula sin guardar (vista previa). */
+	/** Libro de ajustes por mes, separado de pedidos, comisiones y pagos. */
+	private static function point_adjustments( string $period ): array {
+		$rows = get_option( 'cvd_programa_points_' . $period, array() );
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/** Solo administración, mes vigente y gestora aprobada. Una referencia no se reutiliza, ni tras reversión. */
+	private static function record_point_adjustment( string $period, int $user, float $points, string $ref, string $reason, bool $reverse ): bool {
+		if ( ! current_user_can( 'manage_woocommerce' ) || wp_date( 'Y-m' ) !== $period || ! preg_match( '/^[a-zA-Z0-9_-]{3,80}$/D', $ref ) || '' === $reason || strlen( $reason ) > 500 ) { return false; }
+		global $wpdb;
+		$lock = 'cvd_programa_cierre_' . str_replace( '-', '', $period );
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 20)', $lock ) ) ) { return false; }
+		try {
+			if ( self::monthly_run( $period ) ) { return false; }
+			$key = 'cvd_programa_points_' . $period;
+			wp_cache_delete( $key, 'options' );
+			$rows = self::point_adjustments( $period );
+			if ( $reverse ) {
+				if ( ! isset( $rows[$ref] ) ) { return false; }
+				if ( ! empty( $rows[$ref]['reversed_at'] ) ) { return true; }
+				$rows[$ref]['reversed_at'] = current_time( 'mysql', true );
+				$rows[$ref]['reversed_by'] = get_current_user_id();
+				$rows[$ref]['reversal_reason'] = $reason;
+			} else {
+				$members = self::members();
+				if ( empty( $members[$user]['approved'] ) || ! is_finite( $points ) || $points <= 0 || $points > 100000 || round( $points, 4 ) !== $points ) { return false; }
+				if ( isset( $rows[$ref] ) ) {
+					$a = $rows[$ref];
+					return empty( $a['reversed_at'] ) && (int) $a['user'] === $user && (float) $a['points'] === $points && $a['reason'] === $reason;
+				}
+				$rows[$ref] = array( 'ref' => $ref, 'period' => $period, 'user' => $user, 'points' => $points, 'reason' => $reason, 'at' => current_time( 'mysql', true ), 'by' => get_current_user_id() );
+			}
+			return update_option( $key, $rows, false );
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) );
+		}
+	}
+
 	public static function compute( string $period ): array {
 		$members = self::members();
 		$titles = self::titles( $period );
 		foreach ( $members as $id => &$m ) { $m['title'] = $titles[ $id ] ?? ''; }
 		unset( $m );
 		$closed = self::closed_orders();
-		return CVD_Programa_Calc::compute( $period, $members, self::sales( $period, $members, $closed ), self::reversals( $closed ), array( 'rate_cup' => self::rate(), 'carry_usd' => self::carry_in( $period ), 'owner_gestor' => class_exists( 'CVD_Supplier_Split' ) ? CVD_Supplier_Split::owner_gestor_user() : 0, 'owner_offweb' => self::offweb_for_calc( $period ) ) );
+		return CVD_Programa_Calc::compute( $period, $members, self::sales( $period, $members, $closed ), self::reversals( $closed ), array( 'rate_cup' => self::rate(), 'carry_usd' => self::carry_in( $period ), 'owner_gestor' => class_exists( 'CVD_Supplier_Split' ) ? CVD_Supplier_Split::owner_gestor_user() : 0, 'owner_offweb' => self::offweb_for_calc( $period ), 'point_adjustments' => self::point_adjustments( $period ) ) );
 	}
 
 	/** 3.14.48 (D92): ventas de proveedor fuera de la web del mes, para el cálculo. 3.14.49: sus puntos = su parte (specialUsd). */
@@ -522,10 +570,11 @@ final class CVD_Programa {
 		$mode = self::mode();
 		global $wpdb;
 		// 3.14.30 (D77): un solo cierre a la vez (la tarea de la noche y «Cerrar ahora» no pueden crear dos).
-		$lock = 'mensual' === $kind ? 'cvd_programa_cierre_' . str_replace( '-', '', $period ) : '';
+		$lock = 'cvd_programa_cierre_' . str_replace( '-', '', $period );
 		if ( $lock && 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 20)', $lock ) ) ) { return 0; }
 		try {
 			if ( 'mensual' === $kind && self::monthly_run( $period ) ) { return 0; } // un solo cierre por mes, nunca se reescribe
+			wp_cache_delete( 'cvd_programa_points_' . $period, 'options' );
 			return self::run_locked( $period, $kind, $by, $mode );
 		} finally {
 			if ( $lock ) { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); }
@@ -697,10 +746,15 @@ final class CVD_Programa {
 		$out = array( 'counted' => array(), 'waiting' => array(), 'total' => 0.0, 'period' => (string) ( $data['period'] ?? wp_date( 'Y-m' ) ) );
 		$seen = array();
 		// 3.14.49: en la cuenta del dueño, su parte de las ventas de proveedor también es puntos suyos: van en la lista.
-		$kinds = array( 'venta', 'devolucion', 'proveedor', 'proveedor_fuera', 'proveedor_devolucion' );
+		$kinds = array( 'venta', 'devolucion', 'proveedor', 'proveedor_fuera', 'proveedor_devolucion', 'ajuste_puntos' );
 		foreach ( (array) ( $data['lines'] ?? array() ) as $l ) {
 			if ( (int) ( $l['user'] ?? 0 ) !== $user->ID || ! in_array( $l['kind'] ?? '', $kinds, true ) ) { continue; }
 			$oid = (int) $l['order'];
+			if ( 'ajuste_puntos' === $l['kind'] ) {
+				$out['counted'][] = array( 'number' => 'Ajuste', 'made' => '', 'paid' => '', 'ts' => 0, 'products' => 'Ajuste de puntos · ' . (string) ( $l['reason'] ?? '' ), 'points' => (float) $l['points'], 'refund' => false );
+				$out['total'] += (float) $l['points'];
+				continue;
+			}
 			if ( 'proveedor_fuera' === $l['kind'] ) {
 				$out['counted'][] = array( 'number' => 'Fuera', 'made' => '', 'paid' => '', 'ts' => 0, 'products' => 'Venta de proveedor fuera de la web (tu parte)', 'points' => (float) $l['points'], 'refund' => false );
 				$out['total'] += (float) $l['points'];
@@ -962,6 +1016,12 @@ final class CVD_Programa {
 			$msg = 'guardado';
 		} elseif ( 'calcular' === $do ) {
 			$msg = self::run( wp_date( 'Y-m' ), 'manual', get_current_user_id() ) ? 'calculado' : 'error';
+		} elseif ( in_array( $do, array( 'ajuste_puntos', 'revertir_puntos' ), true ) ) {
+			$period = sanitize_text_field( wp_unslash( (string) ( $_POST['period'] ?? '' ) ) );
+			$points = filter_var( $_POST['points'] ?? '', FILTER_VALIDATE_FLOAT );
+			$reverse = 'revertir_puntos' === $do;
+			$ok = ( $reverse || false !== $points ) && self::record_point_adjustment( $period, absint( $_POST['user'] ?? 0 ), (float) $points, sanitize_text_field( wp_unslash( (string) ( $_POST['ref'] ?? '' ) ) ), sanitize_text_field( wp_unslash( (string) ( $_POST['reason'] ?? '' ) ) ), $reverse );
+			$msg = $ok ? ( self::run( $period, 'manual', get_current_user_id() ) ? 'puntos' : 'puntos_pendientes' ) : 'error';
 		} elseif ( 'cerrar' === $do ) {
 			$period = sanitize_text_field( (string) ( $_POST['period'] ?? '' ) );
 			$msg = $period < wp_date( 'Y-m' ) && self::run( $period, 'mensual', get_current_user_id() ) ? 'cerrado' : 'error';
@@ -1098,7 +1158,7 @@ final class CVD_Programa {
 		self::maybe_upgrade();
 		$rep = self::report();
 		$mode = $rep['mode'];
-		$msgs = array( 'guardado' => 'Guardado.', 'calculado' => 'Calculado y apuntado en el libro.', 'cerrado' => 'Mes cerrado y apuntado en el libro.', 'pagado' => 'Pago anotado con su recibo.', 'revisada' => 'Alerta marcada «Revisada».', 'error' => 'No se pudo (revisa que el mes no esté ya cerrado o que falte la referencia).' );
+		$msgs = array( 'guardado' => 'Guardado.', 'calculado' => 'Calculado y apuntado en el libro.', 'cerrado' => 'Mes cerrado y apuntado en el libro.', 'pagado' => 'Pago anotado con su recibo.', 'revisada' => 'Alerta marcada «Revisada».', 'puntos' => 'Ajuste registrado y cálculo actualizado.', 'puntos_pendientes' => 'Ajuste registrado; pulsa Calcular ahora para actualizar el panel.', 'error' => 'No se pudo (revisa que el mes no esté ya cerrado o que falte la referencia).' );
 		$msg = sanitize_key( (string) ( $_GET['msg'] ?? '' ) );
 		$names = array();
 		foreach ( $rep['people'] as $p ) { $names[ $p['id'] ] = $p['name']; }
