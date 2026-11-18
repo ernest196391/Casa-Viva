@@ -701,3 +701,7 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 
 ## ENERGY-PILOT-003 — 18 noviembre 2026
 - Propuesta privada revocable, vencimiento, selector por vivienda, total y solicitud de visita mediante adaptador; sin costes internos. Almacenamiento temporal en memoria para piloto; pendiente persistencia, autenticación supervisor, revalidación de vigencia, idempotencia de visita y CRM, fotos autorizadas y verificación visual móvil. No publicar ni enviar. 8/8 pruebas locales.
+
+
+## ENERGY-PILOT-004 — 18 noviembre 2026
+- Adaptador privado de expedientes persistentes, referencia para solicitud autenticada existente en Control OS, aprobación vinculada a versión y huella, reapertura. 10/10 pruebas locales. Base f63574c193f2f79b8b6cf513f3106d45d7178029. Sin conexión real a CRM ni suplantación de actor; pendiente validar adaptador autorizado y cola existente en staging, persistir propuestas y revocar en reapertura, prueba integral VivaBot. Producción intacta; cero gasto incremental.
