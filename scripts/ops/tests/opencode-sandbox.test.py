@@ -625,5 +625,78 @@ class StaticScanTests(unittest.TestCase):
         self.assertIn("/etc/ssl/certs", doc)
 
 
+
+import os
+import tempfile
+
+_e3pf_spec = importlib.util.spec_from_file_location('cv_e3_preflight', SANDBOX_DIR / 'e3-preflight.py')
+_e3pf = importlib.util.module_from_spec(_e3pf_spec)
+_e3pf_spec.loader.exec_module(_e3pf)
+
+class PreflightTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.root.chmod(0o755)
+        self.work = self.root / 'run-e3-work'
+        self.sibling = self.root / 'run-e3-other'
+        self.work.mkdir(mode=0o700)
+        self.sibling.mkdir(mode=0o755)
+        self.canary = self.sibling / 'canary'
+        self.canary.write_bytes(_e3pf.CANARY)
+        self.canary.chmod(0o644)
+        self.fd = _e3pf._open_dir(self.root)
+        self.addCleanup(os.close, self.fd)
+
+    def inspect(self, workspace='run-e3-work', sibling='run-e3-other', worker_uid=None):
+        uid = os.getuid()
+        _e3pf._inspect(self.fd, workspace, sibling, uid, uid if worker_uid is None else worker_uid)
+
+    def test_valid(self):
+        self.inspect()
+
+    def test_traversal(self):
+        with self.assertRaises(ValueError): self.inspect('../run-e3-work')
+
+    def test_same_directory(self):
+        with self.assertRaises(ValueError): self.inspect(sibling=self.work.name)
+
+    def test_wrong_owner(self):
+        with self.assertRaises(ValueError): self.inspect(worker_uid=os.getuid()+1)
+
+    def test_wrong_mode(self):
+        self.work.chmod(0o777)
+        with self.assertRaises(ValueError): self.inspect()
+
+    def test_nonempty_workspace(self):
+        (self.work / 'unexpected').touch()
+        with self.assertRaises(ValueError): self.inspect()
+
+    def test_workspace_symlink(self):
+        self.work.rmdir()
+        self.work.symlink_to(self.sibling, target_is_directory=True)
+        with self.assertRaises(OSError): self.inspect()
+
+    def test_canary_symlink(self):
+        self.canary.unlink()
+        self.canary.symlink_to(self.work)
+        with self.assertRaises(ValueError): self.inspect()
+
+    def test_canary_hardlink(self):
+        os.link(self.canary, self.root / 'alias')
+        with self.assertRaises(ValueError): self.inspect()
+
+    def test_canary_content(self):
+        self.canary.write_bytes(b'not a synthetic canary')
+        with self.assertRaises(ValueError): self.inspect()
+
+    def test_canary_fifo(self):
+        self.canary.unlink()
+        os.mkfifo(self.canary)
+        with self.assertRaises(ValueError): self.inspect()
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
