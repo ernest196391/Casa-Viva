@@ -1,3 +1,9 @@
+# CURRENT — EVO-LOCAL-001 E3: configuración npm aislada (2026-11-17)
+
+- #251: HOME y cache npm desechables por workspace, userconfig/globalconfig /dev/null, PATH fijo, se ignoran variables npm heredadas y se rechaza .npmrc o HOME npm preexistente/incluso symlink colgante. Regresión de configuración y rutas negativas añadida. Esto reduce exposición accidental, NO impide que un proceso npm con red lea archivos del host: falta aislamiento de instalación y límites efectivos de recursos, canarios E3 y prueba en VPS. CI pendiente. E2/E4 sin autorización nueva, interruptor no activado, gasto adicional cero.
+
+---
+
 # CURRENT — EVO-LOCAL-001 E3: verificador fail-closed (2026-11-17)
 
 - #251: arnés verify-sandbox v2 rechaza salida no cero, JSON de otra prueba, booleano no estricto, comando inválido; runner real no hereda entorno y se niega a correr como root. Modo explícito --dev-worker selecciona binario y raíz de E2. Cuatro regresiones añadidas sin ejecutar bwrap. CI pendiente; no certificación en VPS. Falta aislamiento npm y límites efectivos, pruebas de canarios y E2 autorizado. CV_DEV_SANDBOX no activado, costo adicional cero.
