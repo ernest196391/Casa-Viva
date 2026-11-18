@@ -768,7 +768,7 @@ final class CVD_Sales {
 		wp_enqueue_style( 'cvd-sales', CVD_URL . 'assets/sales.css', array(), CVD_VERSION );
 		wp_enqueue_script( 'cvd-qr-code', CVD_URL . 'assets/qr-code.js', array(), CVD_VERSION, true );
 		wp_enqueue_script( 'cvd-cash-day', CVD_URL . 'assets/cash-day.js', array(), CVD_VERSION, true );
-		wp_enqueue_script( 'cvd-sales', CVD_URL . 'assets/sales.js', array( 'cvd-qr-code', 'cvd-cash-day' ), CVD_VERSION, true );
+		wp_enqueue_script( 'cvd-sales', CVD_URL . 'assets/sales.js', array( 'cvd-qr-code', 'cvd-cash-day' ), CVD_VERSION . '-252', true );
 		wp_localize_script( 'cvd-sales', 'cvdSales', array(
 			'url' => rest_url( 'casa-viva/v1/sales' ),
 			'nonce' => wp_create_nonce( 'wp_rest' ),
