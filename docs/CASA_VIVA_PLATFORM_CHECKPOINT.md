@@ -705,3 +705,7 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 
 ## ENERGY-PILOT-004 — 18 noviembre 2026
 - Adaptador privado de expedientes persistentes, referencia para solicitud autenticada existente en Control OS, aprobación vinculada a versión y huella, reapertura. 10/10 pruebas locales. Base f63574c193f2f79b8b6cf513f3106d45d7178029. Sin conexión real a CRM ni suplantación de actor; pendiente validar adaptador autorizado y cola existente en staging, persistir propuestas y revocar en reapertura, prueba integral VivaBot. Producción intacta; cero gasto incremental.
+
+
+## ENERGY-PILOT-005 — 18 noviembre 2026
+- Ensayo integral aislado con dos viviendas, bot simulado, expediente HTTP, proveedores ficticios, aprobación versionada de prueba, propuesta privada y visita; invalidación explícita al reabrir. 11/11 pruebas locales. No equivale a aprobación real ni certificación técnica ni integración CRM/VivaBot. Pendiente persistencia/revocación automática y anti-duplicados, conexión autorizada y smoke controlado. Costo incremental cero.
