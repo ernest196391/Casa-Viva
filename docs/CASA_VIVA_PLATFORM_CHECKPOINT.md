@@ -713,3 +713,7 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 
 ## ENERGY-PILOT-006 — 18 noviembre 2026
 - CRM real verificado solo lectura: ops_tasks, ops_threads, ops_approvals, crm_ops_bridge y RPCs existentes. VivaBot PR #53, SHA 3aa82ff382bafc8125b1f89676cff533725e1b92: ruta determinista exclusiva de teléfono autorizado, flag desactivado por defecto, enlace exacto, reutiliza escalación; prueba de regla 1/1 local. No producción ni datos reales escritos. Pendiente CI, persistencia/revocación, deduplicación, conexión de expediente a cola, URL desplegada y aprobación para smoke de teléfono controlado. Cero gasto adicional.
+
+
+## ENERGY-PILOT-007 — 18 noviembre 2026
+- CI previa verde Casa Viva (3 workflows) y VivaBot (2 workflows). Persistencia opcional privada de propuestas, validación de versión del caso al servir, deduplicación de visita en proceso y referencia sin token. 13/13 pruebas locales incl. VivaBot. Pendiente CI de este SHA, persistencia/idempotencia de adaptador CRM real, autorización, integración segura de emisión y entrada, comprobación móvil y despliegue. No activar ni fusionar; cero costo incremental.

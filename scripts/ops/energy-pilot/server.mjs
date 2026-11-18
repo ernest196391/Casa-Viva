@@ -1,19 +1,20 @@
 import {createServer} from 'node:http';
 import {readFile,appendFile} from 'node:fs/promises';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {assess} from './engine.mjs';
 import {controlRequest} from './control-handoff.mjs';
 const allowed=new Map([['/','index.html'],['/engine.mjs','engine.mjs']]);
-export function makeServer({file,notify=async()=>{},proposals,visit,cases}){return createServer(async(req,res)=>{try{
+export function makeServer({file,notify=async()=>{},proposals,visit,cases}){const visits=new Map();return createServer(async(req,res)=>{try{
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');
   const path=new URL(req.url,'http://localhost').pathname;
   res.setHeader('Referrer-Policy','no-referrer');
   if(req.method==='GET'&&path==='/proposal-ui.mjs'){res.setHeader('Content-Type','text/javascript; charset=utf-8');res.end(await readFile(new URL('proposal-ui.mjs',import.meta.url)));return;}
   const match=path.match(/^\/(proposal|proposal-data|proposal-visit)\/([-_\w]{43})$/);
   if(match){res.setHeader('X-Robots-Tag','noindex, nofollow');const p=proposals?.get(match[2]);if(!p){res.writeHead(404).end();return;}
+    if(p.caseId){let current;try{current=await cases?.get(p.caseId);}catch{}if(!current||current.status!=='approved'||current.version!==p.version){res.writeHead(404).end();return;}}
     if(req.method==='GET'&&match[1]==='proposal'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(await readFile(new URL('proposal.html',import.meta.url)));return;}
-    if(req.method==='GET'&&match[1]==='proposal-data'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify(p));return;}
-    if(req.method==='POST'&&match[1]==='proposal-visit'&&visit){let raw='';for await(const c of req){raw+=c;if(raw.length>1000){res.writeHead(413).end();return;}}const {selections}=JSON.parse(raw);if(!Array.isArray(selections)||selections.length!==p.houses.length||!selections.every((n,i)=>Number.isInteger(n)&&n>=0&&n<p.houses[i].options.length))throw Error('Selección inválida');await visit({token:match[2],version:p.version,selections});res.writeHead(204).end();return;}
+    if(req.method==='GET'&&match[1]==='proposal-data'){res.setHeader('Content-Type','application/json');const {caseId,...safe}=p;res.end(JSON.stringify(safe));return;}
+    if(req.method==='POST'&&match[1]==='proposal-visit'&&visit){let raw='';for await(const c of req){raw+=c;if(raw.length>1000){res.writeHead(413).end();return;}}const {selections}=JSON.parse(raw);if(!Array.isArray(selections)||selections.length!==p.houses.length||!selections.every((n,i)=>Number.isInteger(n)&&n>=0&&n<p.houses[i].options.length))throw Error('Selección inválida');const id=createHash('sha256').update(JSON.stringify([match[2],p.version,selections])).digest('hex');if(!visits.has(id))visits.set(id,Promise.resolve().then(()=>visit({id,caseId:p.caseId,version:p.version,selections})).catch(e=>{visits.delete(id);throw e;}));await visits.get(id);res.writeHead(204).end();return;}
     res.writeHead(404).end();return;}
   if(req.method==='GET'&&allowed.has(path)){res.setHeader('Content-Type',path==='/'?'text/html; charset=utf-8':'text/javascript; charset=utf-8');res.end(await readFile(new URL(allowed.get(path),import.meta.url)));return;}
   if(req.method!=='POST'||path!=='/cases'){res.writeHead(404).end();return;}
