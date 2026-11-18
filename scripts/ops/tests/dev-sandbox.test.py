@@ -144,10 +144,35 @@ class BoxTests(unittest.TestCase):
         box.install_deps(WS, 120, uid=1000, gid=1001, environ=environ, spawn=spawn)
         argv, kw = spawn.calls[0]
         self.assertEqual(argv, ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"])
-        self.assertEqual(kw["env"]["HOME"], "/home/cvdev")
-        self.assertEqual(set(kw["env"]), {"PATH", "LANG", "HOME"})
+        self.assertEqual(kw["env"]["HOME"], WS + "/.cv-npm-home")
+        self.assertEqual(kw["env"]["PATH"], box.INSTALL_PATH)
+        self.assertEqual(kw["env"]["NPM_CONFIG_USERCONFIG"], "/dev/null")
+        self.assertEqual(kw["env"]["NPM_CONFIG_GLOBALCONFIG"], "/dev/null")
+        self.assertEqual(kw["env"]["NPM_CONFIG_CACHE"], WS + "/.cv-npm-home/cache")
+        self.assertEqual(set(kw["env"]), {"PATH", "LANG", "HOME", "NPM_CONFIG_USERCONFIG", "NPM_CONFIG_GLOBALCONFIG", "NPM_CONFIG_CACHE"})
         self.assertEqual((kw["user"], kw["group"]), (1000, 1001))
         self.assertNotIn("shell", kw)
+
+    @unittest.skipIf(os.name == "nt", "rutas POSIX")
+    def test_instalacion_rechaza_config_y_home_existente(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ws = root / "run-test"
+            ws.mkdir()
+            for name in (".npmrc", ".cv-npm-home"):
+                with self.subTest(name=name):
+                    target = ws / name
+                    target.symlink_to(root / "canario-ausente")
+                    spawn = FakePopen()
+                    with self.assertRaises(box.SandboxError):
+                        box.install_deps(ws, 60, uid=1000, gid=1001, work_root=str(root), spawn=spawn)
+                    self.assertEqual(spawn.calls, [])
+                    target.unlink()
+                    target.touch()
+                    with self.assertRaises(box.SandboxError):
+                        box.install_deps(ws, 60, uid=1000, gid=1001, work_root=str(root), spawn=spawn)
+                    self.assertEqual(spawn.calls, [])
+                    target.unlink()
 
     @unittest.skipIf(os.name == "nt", "las rutas del sandbox son POSIX; corre en Linux (CI)")
     def test_entregar_y_recuperar_sin_seguir_enlaces(self):
