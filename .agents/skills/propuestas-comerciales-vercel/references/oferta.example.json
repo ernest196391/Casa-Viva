@@ -1,0 +1,20 @@
+{
+  "offerId": "cv-ejemplo-001",
+  "title": "Selección empresarial para oficina",
+  "updatedAt": "2026-11-18T20:00:00Z",
+  "currency": "USD",
+  "payment": {"method": "cuenta_fiscal", "status": "confirmed", "detailsPublic": false},
+  "delivery": {"claim": "sin cargo adicional", "status": "pending_cost_confirmation"},
+  "contact": {"whatsapp": "5354056173"},
+  "items": [
+    {
+      "id": "MK-1913", "title": "Carpeta A4 de 13 divisiones", "productUrl": "https://casaviva.company/producto/carpeta-archivadora-expansible-a4-de-13-divisiones/",
+      "imageUrl": "https://casaviva.company/wp-content/uploads/2026/10/sefue-menta-5042.jpg",
+      "imageVerified": true,
+      "imageSource": "fotografía del producto MK-1913 en ficha pública de Casa Viva",
+      "packSize": 1, "packLabel": "carpeta", "priceCents": 1200,
+      "priceVerifiedAt": "2026-11-18T20:00:00Z", "source": "WooCommerce Casa Viva",
+      "availability": "pending", "availabilityVerifiedAt": null
+    }
+  ]
+}
