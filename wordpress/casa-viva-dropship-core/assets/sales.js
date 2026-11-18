@@ -371,12 +371,12 @@
     catch (error) { message.className = "is-error"; message.textContent = error.message; return; }
     message.textContent = "";
     if (!d.editable) { message.className = "is-error"; message.textContent = d.why || "Este pedido ya no se puede cambiar."; return; }
-    editState = { id: d.id, add: [], gestora: !!d.gestoraOrder, gestoraName: d.gestoraName || "" };
+    editState = { id: d.id, add: [], gestora: !!d.gestoraOrder, gestoraName: d.gestoraName || "", pickup: !!d.pickup };
     var windows = [["", "A cualquier hora"], ["morning", "Por la mañana"], ["afternoon", "Por la tarde"]];
     editDialog.innerHTML = '<form method="dialog" id="cvd-edit-form"><h2>Cambiar pedido #' + escapeText(d.number) + '</h2>'
       + (d.messenger ? '<p class="cvd-edit-warn">Ya lo tiene asignado <b>' + escapeText(d.messenger.name) + '</b>. Si cambias algo, avísale.</p>' : '')
-      + '<div class="cvd-edit-two">' + editField("Nombre", "firstName", d.firstName, ' required maxlength="60"') + editField("Apellidos", "lastName", d.lastName, ' maxlength="60"') + '</div>'
-      + editField("Teléfono", "phone", d.phone, ' inputmode="tel" required maxlength="30"')
+      + '<div class="cvd-edit-two">' + editField("Nombre", "firstName", d.firstName, (d.firstName ? ' required' : '') + ' maxlength="60"') + editField("Apellidos", "lastName", d.lastName, ' maxlength="60"') + '</div>'
+      + editField("Teléfono", "phone", d.phone, ' inputmode="tel"' + (d.pickup ? '' : ' required') + ' maxlength="30"')
       + (d.pickup ? '<p class="cvd-edit-hint">Recogida en tienda.</p>'
         : editField("Dirección", "address", d.address, ' maxlength="200"') + (d.locality ? '<p class="cvd-edit-hint">Reparto: ' + escapeText(d.locality) + '. Si cambia de municipio o de reparto, cancélalo y que se haga de nuevo (cambia la mensajería).</p>' : '')
           + '<div class="cvd-edit-two"><label>Día de entrega<input type="date" name="deliveryDate" value="' + escapeText(d.date) + '" min="' + escapeText(d.minDate) + '" max="' + escapeText(d.maxDate) + '"></label><label>Franja<select name="deliveryWindow">' + windows.map(function (w) { return '<option value="' + w[0] + '"' + (w[0] === (d.window || "") ? " selected" : "") + ">" + w[1] + "</option>"; }).join("") + '</select></label></div><p class="cvd-edit-hint">Día vacío = lo antes posible. Ahora: ' + escapeText(d.whenLabel) + '</p>')
@@ -419,7 +419,11 @@
     var f = event.target, msg = editDialog.querySelector("[data-edit-msg]"), submit = document.getElementById("cvd-edit-submit");
     var lines = Array.prototype.map.call(f.querySelectorAll("[data-line]"), function (i) { return { itemId: Number(i.dataset.line), qty: Math.max(0, parseInt(i.value, 10) || 0) }; });
     if (lines.every(function (l) { return l.qty === 0; }) && !editState.add.length) { msg.textContent = "El pedido no puede quedar sin productos. Si ya no lo quieren, cancélalo."; return; }
-    var body = { firstName: f.elements.firstName.value, lastName: f.elements.lastName.value, phone: f.elements.phone.value, note: f.elements.note.value, lines: lines, add: editState.add.map(function (a) { return { wooId: a.wooId, qty: a.qty, extra: !!a.extra }; }) };
+    var body = { lastName: f.elements.lastName.value, note: f.elements.note.value, lines: lines, add: editState.add.map(function (a) { return { wooId: a.wooId, qty: a.qty, extra: !!a.extra }; }) };
+    // Los vales pueden no tener nombre; en recogida el teléfono también puede faltar.
+    // Omitir estos campos vacíos conserva los datos existentes y la validación de Core.
+    if (f.elements.firstName.value.trim()) body.firstName = f.elements.firstName.value;
+    if (!editState.pickup || f.elements.phone.value.trim()) body.phone = f.elements.phone.value;
     if (f.elements.address) body.address = f.elements.address.value;
     if (f.elements.changeRequired) {
       var vuelto = parseChange(f.elements.changeRequired.value);
