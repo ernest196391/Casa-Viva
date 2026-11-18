@@ -1,6 +1,7 @@
 import {randomBytes,createHash} from 'node:crypto';
 import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
 import {dirname} from 'node:path';
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const digest=s=>createHash('sha256').update(s).digest('hex');
 const money=n=>{if(!Number.isFinite(n)||n<0)throw Error('Importe inválido');return Math.round(n*100);};
 const clean=s=>String(s??'').slice(0,300);
@@ -14,10 +15,10 @@ function option(o){
 export function createProposalStore({clock=()=>Date.now(),file}={}){
   let entries=new Map();if(file){try{entries=new Map(JSON.parse(readFileSync(file,'utf8')));}catch(e){if(e.code!=='ENOENT')throw e;}}
   const persist=()=>{if(!file)return;mkdirSync(dirname(file),{recursive:true,mode:0o700});writeFileSync(file+'.tmp',JSON.stringify([...entries]),{mode:0o600});renameSync(file+'.tmp',file);};return {
-    issue({houses,version,approvedBy,caseId=null,expiresInMs=86400000}){
-      if(!approvedBy||!Number.isInteger(version)||version<1||!Array.isArray(houses)||!houses.length||houses.length>5||!Number.isFinite(expiresInMs)||expiresInMs<=0||expiresInMs>86400000)throw Error('Aprobación o vigencia inválida');
+    issue({houses,version,approvedBy,caseId,approvalFingerprint,expiresInMs=86400000}){
+      if(approvedBy!==1||!uuid.test(caseId)||typeof approvalFingerprint!=='string'||!/^[a-f0-9]{64}$/.test(approvalFingerprint)||!Number.isInteger(version)||version<1||!Array.isArray(houses)||!houses.length||houses.length>5||!Number.isFinite(expiresInMs)||expiresInMs<=0||expiresInMs>86400000)throw Error('Aprobación o vigencia inválida');
       const safe=houses.map((h,i)=>{if(!Array.isArray(h.options)||!h.options.length||h.options.length>3)throw Error('Alternativas inválidas');return {label:`Vivienda ${i+1}`,options:h.options.map(option)};});
-      const token=randomBytes(32).toString('base64url');const expires=clock()+expiresInMs;entries.set(digest(token),{version,expires,houses:safe,caseId});persist();return {token,expires};
+      const token=randomBytes(32).toString('base64url');const expires=clock()+expiresInMs;entries.set(digest(token),{version,expires,houses:safe,caseId,approvalFingerprint});persist();return {token,expires};
     },
     get(token){if(typeof token!=='string'||!/^[-_\w]{43}$/.test(token))return null;const p=entries.get(digest(token));return p&&p.expires>clock()?structuredClone(p):null;},
     revoke(token){entries.delete(digest(token));persist();},
