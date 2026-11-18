@@ -697,3 +697,7 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 ## ENERGY-PILOT-002 — 18 noviembre 2026
 - Registro de fuentes autorizadas, validación de ofertas del día en horario Cuba, stock, cotización en borrador y vista cliente sin costos internos.
 - 6/6 pruebas locales. Datos de prueba únicamente. No se consultaron ni contactaron proveedores reales, no se publicó ni activó VivaBot. Próximo: integración CRM y adaptadores, propuesta web y prueba controlada.
+
+
+## ENERGY-PILOT-003 — 18 noviembre 2026
+- Propuesta privada revocable, vencimiento, selector por vivienda, total y solicitud de visita mediante adaptador; sin costes internos. Almacenamiento temporal en memoria para piloto; pendiente persistencia, autenticación supervisor, revalidación de vigencia, idempotencia de visita y CRM, fotos autorizadas y verificación visual móvil. No publicar ni enviar. 8/8 pruebas locales.
