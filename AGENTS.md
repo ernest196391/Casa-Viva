@@ -47,3 +47,7 @@ Casa Viva se desarrolla en paralelo con NEXO Business. Antes de cambiar identida
 - Prioriza diseño mobile-first, responsive, accesible y navegable con teclado.
 - Optimiza para conexiones lentas y dispositivos de recursos limitados.
 - Mantén la identidad de Casa Viva: minimalista, cálida, beige y verde oscuro, con estética de lujo silencioso accesible.
+
+## Skill — propuestas comerciales puntuales
+
+Para ofertas personalizadas, kits empresariales y micrositios de cotización con publicación en Vercel, **usar la skill del repositorio** `.agents/skills/propuestas-comerciales-vercel/SKILL.md` antes de crear un HTML o publicar. Obliga a descargar fotos originales verificadas en el proyecto, comprobar fuentes/precios/stock/paquetes, probar el configurador y la URL de producción y mantener el pedido separado de WooCommerce. La publicación y el envío al cliente requieren autorización; nunca crear enlaces rotos, vender productos agotados ni prometer fotos no descargadas.
