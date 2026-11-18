@@ -1,3 +1,23 @@
+# CURRENT — EVO-LOCAL-001 E1: reconciliación con main (2026-11-17)
+
+- Se conserva el código del PR #241 SHA aeca5e5, con tres workflows verdes (43992655160, 43992655264, 43992655176). Main bf1398d avanzó 19 commits; se incorporan los cambios E1 conservando los cambios de CI y checkpoint de main. Candidato de revisión; CI conjunto pendiente. No se fusiona ni despliega, CV_DEV_SANDBOX=0, E2/E3 pendientes y E4 bloqueada. Costo adicional cero.
+
+---
+
+# CURRENT — EVO-LOCAL-001 E1: corrección P1 en revisión (2026-11-16)
+
+- PR #241: separación de checkout Git confiable y copia de pruebas sin metadatos; ninguna mutación de la copia se importa. Rechazo de rutas cambiadas simbólicas/no regulares y de ancestros inseguros. Validador bwrap falla cerrado. Perfil dedicado propuesto y [runbook E2](EVO_LOCAL_001_E2_RUNBOOK.md).
+- Evidencia local: 68 pruebas de worker, entorno y caja (14 + 14 + 10 + 30); CI del nuevo SHA pendiente al registrar este checkpoint. Sin merge ni despliegue. E2 requiere aprobación; E3 debe validar aislamiento real, límites de recursos y npm; E4 exige aprobación separada. CV_DEV_SANDBOX permanece apagado y puerta docs-only. Costo adicional: 0 USD; alternativa: infraestructura existente; escalar solo tras aprobación.
+
+---
+
+# CURRENT — EVO-LOCAL-001: Dev Worker cableado a la caja, APAGADO y sin desplegar (2026-11-16)
+
+- `CV_DEV_SANDBOX=1` (único valor que enciende) lleva el worktree a `run-task-N` bajo la raíz de la caja, instala con `npm ci --ignore-scripts` como `cvdev`, prueba dentro de bwrap sin red, recupera el worktree y revalida diff y enlaces antes de commit/push. Apagado = comportamiento anterior. 16 pruebas; CI verde (PR #241). Fusionados antes: #238, #239 y #240; el worker con entorno limpio sigue en el VPS (hash = main).
+- **Falta (pide SÍ):** E2 copiar `dev-worker.py`, `dev-sandbox.py` y la especificación al VPS, instalar el bwrap dedicado del Dev Worker y su perfil AppArmor; E3 validar en vivo con `verify-sandbox.py` y una tarea de docs; E4 encender el interruptor.
+
+---
+
 # CURRENT — VivaBot despliegue con recuperación conservadora (2026-11-17)
 
 - PR candidato: puente 4.1.3, solo recuperación de VivaBot. Producción último SHA certificado `0d537006aa6e5aa45ad89464f7ce4b6bbf6a419d`; candidato VivaBot #48 `b90883295e278c5a383bd7b832bb592b24daa4fd`, ambos workflows verdes, pendiente instalación. Puente anterior 4.1.2.
