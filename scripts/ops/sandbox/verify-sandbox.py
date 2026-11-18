@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -44,7 +45,9 @@ _spec = importlib.util.spec_from_file_location("cv_opencode_sandbox_spec", _spec
 spec = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(spec)
 
-SANDBOX_VERIFY_VERSION = "opencode-sandbox-verify-v1"
+SANDBOX_VERIFY_VERSION = "opencode-sandbox-verify-v2"
+DEV_BWRAP = "/usr/local/lib/control-os/bwrap-dev"
+DEV_WORK_ROOT = "/var/lib/control-os-dev/work"
 
 VERDICT_OK = "ok"
 VERDICT_FAILED = "failed"
@@ -132,7 +135,7 @@ def build_probe_command(workspace: str, check: str, **kwargs) -> list:
 
 def real_runner(cmd: list):
     """Runner real: SOLO lo usa main() tras la confirmación --execute."""
-    proc = subprocess.run(cmd, capture_output=True, timeout=120)
+    proc = subprocess.run(cmd, capture_output=True, timeout=120, env={}, stdin=subprocess.DEVNULL)
     return proc.returncode, proc.stdout, proc.stderr
 
 
@@ -164,15 +167,20 @@ def run_checks(workspace: str, runner, **kwargs) -> dict:
     results = {}
     verdict = VERDICT_OK
     for check in CHECKS:
-        cmd = build_probe_command(workspace, check, **kwargs)
         try:
+            cmd = build_probe_command(workspace, check, **kwargs)
+            violations = spec.validate_command(cmd, kwargs.get("work_root", spec.DEFAULT_WORK_ROOT),
+                                               bwrap_binary=kwargs.get("bwrap_binary"))
+            if violations:
+                raise ValueError("comando de prueba rechazado")
             returncode, stdout, _stderr = runner(cmd)
         except Exception as exc:
             results[check] = {"ok": False, "detail": f"runner falló: {exc}"}
             verdict = VERDICT_NO_OPERATIVO if check == "bootstrap" else VERDICT_FAILED
             break
         probe = _parse_probe(stdout)
-        if probe is None:
+        if (returncode != 0 or probe is None or probe["check"] != check
+                or type(probe["ok"]) is not bool or not isinstance(probe["detail"], str)):
             results[check] = {
                 "ok": False,
                 "detail": f"sin respuesta válida (returncode {returncode}); "
@@ -194,11 +202,54 @@ def run_checks(workspace: str, runner, **kwargs) -> dict:
     }
 
 
+def assess_cgroup_limits(observed: dict, *, memory_bytes: int, max_pids: int, cpu_cores: float) -> dict:
+    """Comprueba mediciones cgroup v2; no configura ni consulta el host."""
+    if (type(memory_bytes) is not int or memory_bytes <= 0
+            or type(max_pids) is not int or max_pids <= 0
+            or not isinstance(cpu_cores, (int, float)) or not 0 < cpu_cores < float("inf")):
+        raise ValueError("límites aprobados inválidos")
+    checks = {}
+    for key, limit in (("memory.max", memory_bytes), ("pids.max", max_pids)):
+        raw = observed.get(key)
+        try:
+            value = int(raw)
+            checks[key] = 0 < value <= limit
+        except (TypeError, ValueError):
+            checks[key] = False
+    try:
+        quota, period = (int(v) for v in observed["cpu.max"].split())
+        checks["cpu.max"] = quota > 0 and period > 0 and quota / period <= cpu_cores
+    except (KeyError, AttributeError, TypeError, ValueError, ZeroDivisionError):
+        checks["cpu.max"] = False
+    return {"checks": checks, "verdict": VERDICT_OK if all(checks.values()) else VERDICT_FAILED}
+
+
 def main(argv: list) -> int:
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument("--workspace", default=None)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--dev-worker", action="store_true", help="Usar binario y raíz dedicados de E2")
+    parser.add_argument("--cgroup-evidence", type=Path, help="Evaluar JSON de mediciones, sin ejecutar sandbox")
+    parser.add_argument("--memory-bytes", type=int)
+    parser.add_argument("--max-pids", type=int)
+    parser.add_argument("--cpu-cores", type=float)
     args = parser.parse_args(argv)
+
+    if args.cgroup_evidence is not None:
+        if args.execute or args.workspace:
+            parser.error("evaluación documental separada de la ejecución real")
+        try:
+            observed = json.loads(args.cgroup_evidence.read_text(encoding="utf-8"))
+            if not isinstance(observed, dict):
+                raise ValueError("evidencia no es objeto")
+            result = assess_cgroup_limits(observed, memory_bytes=args.memory_bytes,
+                                          max_pids=args.max_pids, cpu_cores=args.cpu_cores)
+        except (OSError, ValueError, TypeError):
+            print(json.dumps({"verdict": VERDICT_FAILED, "reason": "evidencia o límites inválidos"}))
+            return EXIT_FAILED
+        result["scope"] = "evaluación de datos aportados; no certificación del VPS"
+        print(json.dumps(result))
+        return EXIT_OK if result["verdict"] == VERDICT_OK else EXIT_FAILED
 
     if not args.workspace or not args.execute:
         print(json.dumps({
@@ -208,8 +259,9 @@ def main(argv: list) -> int:
                       "esta herramienta no se ejecuta automáticamente ni en CI",
         }))
         return EXIT_REFUSED
+    options = {"bwrap_binary": DEV_BWRAP, "work_root": DEV_WORK_ROOT} if args.dev_worker else {}
     try:
-        spec.validate_workspace(args.workspace)
+        spec.validate_workspace(args.workspace, options.get("work_root", spec.DEFAULT_WORK_ROOT))
     except spec.SandboxSpecError as exc:
         print(json.dumps({"verify": SANDBOX_VERIFY_VERSION, "verdict": "refused",
                           "reason": str(exc)}))
@@ -219,7 +271,10 @@ def main(argv: list) -> int:
                           "reason": f"workspace inexistente: {args.workspace}"}))
         return EXIT_USAGE
 
-    report = run_checks(args.workspace, real_runner)
+    if os.geteuid() == 0:
+        print(json.dumps({"verdict": "refused", "reason": "ejecutar como usuario no privilegiado"}))
+        return EXIT_REFUSED
+    report = run_checks(args.workspace, real_runner, **options)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     if report["verdict"] == VERDICT_OK:
         return EXIT_OK

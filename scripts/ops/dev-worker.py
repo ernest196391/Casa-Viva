@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import fcntl
+import importlib.util
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -28,6 +29,7 @@ import stat
 import subprocess
 import sys
 import time
+import tempfile
 import urllib.parse
 import urllib.request
 
@@ -514,8 +516,10 @@ def prepare_worktree(repo_name: str, task_public_id: int, title: str):
         raise RuntimeError(base)
     base_sha = base.strip()
 
-    DEV_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
-    work = DEV_ROOT / f"task-{task_public_id}"
+    # Git metadata and the commit checkout must never enter the sandbox.
+    root = DEV_ROOT
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    work = root / f"task-{task_public_id}"
     if work.exists():
         run(["git", "-C", str(repo), "worktree", "remove", "--force", str(work)], timeout=45)
         shutil.rmtree(work, ignore_errors=True)
@@ -536,10 +540,10 @@ def _safe_target(work: Path, rel: str) -> Path:
     current = work
     for part in PurePosixPath(path).parts[:-1]:
         current = current / part
-        if current.exists() and current.is_symlink():
+        if current.is_symlink():
             raise ValueError("ruta pasa por symlink")
     target = work / path
-    if target.exists() and target.is_symlink():
+    if target.is_symlink():
         raise ValueError("target symlink no permitido")
     return target
 
@@ -659,15 +663,101 @@ def validate_diff(work: Path, allowed_paths: list[str]):
     return changed
 
 
+# --- Ejecución en caja (EVO-LOCAL-001, E1). APAGADA por defecto: solo CV_DEV_SANDBOX=1 la enciende. ---
+SANDBOX_USER = "cvdev"
+_BOX = None
+
+
+def sandbox_enabled() -> bool:
+    return os.environ.get("CV_DEV_SANDBOX") == "1"
+
+
+def _box():
+    """Carga perezosa del módulo de la caja (junto a este archivo); sin él, el modo caja no arranca."""
+    global _BOX
+    if _BOX is None:
+        path = Path(__file__).with_name("dev-sandbox.py")
+        spec = importlib.util.spec_from_file_location("cv_dev_sandbox", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _BOX = module
+    return _BOX
+
+
+def _sandbox_ids():
+    import pwd  # solo POSIX; únicamente se llama con la caja encendida
+    try:
+        entry = pwd.getpwnam(SANDBOX_USER)
+    except KeyError:
+        raise RuntimeError(f"usuario {SANDBOX_USER} no existe: no se puede usar la caja")
+    if entry.pw_uid == 0 or entry.pw_gid == 0:
+        raise RuntimeError("el usuario de la caja no puede ser root")
+    return {"uid": entry.pw_uid, "gid": entry.pw_gid}
+
+
+def _sandbox_parent() -> Path:
+    root = Path(_box().WORK_ROOT)
+    # No ancestor may be replaced by cvdev (including its home directory).
+    for path in (root, *root.parents):
+        try:
+            info = path.lstat()
+        except OSError as exc:
+            raise RuntimeError(f"raíz de caja no provisionada: {path}") from exc
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise RuntimeError(f"raíz de caja no confiable: {path}")
+    return root
+
+
+def run_tests_isolated(repo_name: str, work: Path, changed: list, allowed: list):
+    """Test a disposable copy; never execute Git or import files from that copy."""
+    if not sandbox_enabled():
+        return run_tests(repo_name, work)
+    for rel in changed:
+        target = _safe_target(work, rel)
+        if target.is_symlink() or not target.is_file():
+            raise RuntimeError(f"ruta cambiada no regular o simbólica: {rel}")
+    box, ids = _box(), _sandbox_ids()
+    root = _sandbox_parent()
+    if not shutil.rmtree.avoids_symlink_attacks:
+        raise RuntimeError("limpieza segura de caja no disponible")
+    test_work = Path(tempfile.mkdtemp(prefix="run-task-", dir=root))
+    try:
+        shutil.copytree(work, test_work, symlinks=True, dirs_exist_ok=True,
+                        ignore=lambda _directory, names: {n for n in names if n.lower() == ".git"})
+        box.hand_over(test_work, ids["uid"], ids["gid"])
+        # No take_back(): the untrusted copy will never be used by privileged Git.
+        ok, logs = run_tests(repo_name, test_work)
+    finally:
+        shutil.rmtree(test_work)
+    after = validate_diff(work, allowed)
+    if sorted(after) != sorted(changed):
+        raise RuntimeError("el checkout confiable cambió durante las pruebas")
+    return ok, logs
+
+
 def run_tests(repo_name: str, work: Path):
     logs = []
+    sandbox = sandbox_enabled()
+    ids = _sandbox_ids() if sandbox else None
+
+    def _install(argv, timeout):
+        # Caja: `npm ci --ignore-scripts` como cvdev, con red y sin secretos. Sin caja: la orden de siempre.
+        if sandbox:
+            return _box().install_deps(work, timeout, **ids)
+        return run(argv, cwd=str(work), timeout=timeout)
+
+    def _step(argv, timeout):
+        if sandbox:
+            return _box().run_in_box(argv, work, timeout, **ids)
+        return run(argv, cwd=str(work), timeout=timeout)
+
     if repo_name == "vivabot":
-        rc, out = run(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], cwd=str(work), timeout=180)
+        rc, out = _install(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], 180)
         logs.append("$ npm ci\n" + out)
         if rc:
             return False, "\n".join(logs)
         for cmd in TEST_PROFILES["vivabot"]:
-            rc, out = run(cmd, cwd=str(work), timeout=240)
+            rc, out = _step(cmd, 240)
             logs.append("$ " + " ".join(cmd) + "\n" + out)
             if rc:
                 return False, "\n".join(logs)
@@ -675,40 +765,40 @@ def run_tests(repo_name: str, work: Path):
         php_test = work / "test/core-chat-purchase.php"
         if php_file.exists() and php_test.exists():
             for cmd in (["php", "-l", str(php_file)], ["php", str(php_test)]):
-                rc, out = run(cmd, cwd=str(work), timeout=90)
+                rc, out = _step(cmd, 90)
                 logs.append("$ " + " ".join(cmd) + "\n" + out)
                 if rc:
                     return False, "\n".join(logs)
     elif repo_name == "nexo":
-        rc, out = run(["npm", "install", "--no-audit", "--no-fund"], cwd=str(work), timeout=240)
+        rc, out = _install(["npm", "install", "--no-audit", "--no-fund"], 240)
         logs.append("$ npm install\n" + out)
         if rc:
             return False, "\n".join(logs)
         for cmd in TEST_PROFILES["nexo"]:
-            rc, out = run(cmd, cwd=str(work), timeout=300)
+            rc, out = _step(cmd, 300)
             logs.append("$ " + " ".join(cmd) + "\n" + out)
             if rc:
                 return False, "\n".join(logs)
         py = work / "worker/app.py"
         if py.exists():
-            rc, out = run(["python3", "-m", "py_compile", str(py)], cwd=str(work), timeout=60)
+            rc, out = _step(["python3", "-m", "py_compile", str(py)], 60)
             logs.append("$ python3 -m py_compile worker/app.py\n" + out)
             if rc:
                 return False, "\n".join(logs)
     elif repo_name == "casa-viva":
-        rc, out = run(["npm", "install", "--no-audit", "--no-fund"], cwd=str(work), timeout=300)
+        rc, out = _install(["npm", "install", "--no-audit", "--no-fund"], 300)
         logs.append("$ npm install\n" + out)
         if rc:
             return False, "\n".join(logs)
         for cmd in TEST_PROFILES["casa-viva"]:
-            rc, out = run(cmd, cwd=str(work), timeout=360)
+            rc, out = _step(cmd, 360)
             logs.append("$ " + " ".join(cmd) + "\n" + out)
             if rc:
                 return False, "\n".join(logs)
         for rel in ("scripts/ops/cv-ops-bridge.py", "scripts/ops/control-os-sync.py", "scripts/ops/dev-worker.py", "scripts/ops/opencode-executor.py"):
             target = work / rel
             if target.exists():
-                rc, out = run(["python3", "-m", "py_compile", str(target)], cwd=str(work), timeout=60)
+                rc, out = _step(["python3", "-m", "py_compile", str(target)], 60)
                 logs.append("$ python3 -m py_compile " + rel + "\n" + out)
                 if rc:
                     return False, "\n".join(logs)
@@ -716,7 +806,7 @@ def run_tests(repo_name: str, work: Path):
             ["php", "artifacts/tests/test-panel-bajo-pedido.php"],
             ["node", "artifacts/tests/test-inventory-integrity-5c.mjs"],
         ):
-            rc, out = run(cmd, cwd=str(work), timeout=120)
+            rc, out = _step(cmd, 120)
             logs.append("$ " + " ".join(cmd) + "\n" + out)
             if rc:
                 return False, "\n".join(logs)
@@ -756,7 +846,7 @@ def process_claim(claim: dict):
         changed = validate_diff(work, allowed)
 
         patch_table("ops_dev_runs", run_id, {"status": "testing"})
-        ok, test_logs = run_tests(repo_name, work)
+        ok, test_logs = run_tests_isolated(repo_name, work, changed, allowed)
         if not ok:
             raise RuntimeError("pruebas locales fallaron\n" + test_logs)
 

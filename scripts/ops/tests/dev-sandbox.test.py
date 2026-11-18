@@ -22,7 +22,7 @@ spec = importlib.util.spec_from_file_location("cv_dev_sandbox_under_test", OPS /
 box = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(box)
 
-WS = "/home/cvdev/control-os-dev/work/run-task-150"
+WS = box.WORK_ROOT + "/run-task-150"
 
 
 class FakeProc:
@@ -63,6 +63,14 @@ class BoxTests(unittest.TestCase):
         self.assertEqual(binds, [WS])  # un único destino de escritura real
         self.assertEqual(argv[argv.index("--chdir") + 1], WS)
         self.assertEqual(argv[-3:], ["npm", "run", "lint"])
+
+    def test_violaciones_del_validador_impiden_lanzar(self):
+        from unittest import mock
+        spawn = FakePopen()
+        with mock.patch.object(box.spec, "validate_command", return_value=["invalid"]):
+            with self.assertRaises(box.SandboxError):
+                box.run_in_box(["npm", "test"], WS, 60, uid=1000, gid=1001, spawn=spawn)
+        self.assertEqual(spawn.calls, [])
 
     def test_proceso_sin_shell_ni_privilegios_ni_entorno_heredado(self):
         spawn = FakePopen()
@@ -136,10 +144,35 @@ class BoxTests(unittest.TestCase):
         box.install_deps(WS, 120, uid=1000, gid=1001, environ=environ, spawn=spawn)
         argv, kw = spawn.calls[0]
         self.assertEqual(argv, ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"])
-        self.assertEqual(kw["env"]["HOME"], "/home/cvdev")
-        self.assertEqual(set(kw["env"]), {"PATH", "LANG", "HOME"})
+        self.assertEqual(kw["env"]["HOME"], WS + "/.cv-npm-home")
+        self.assertEqual(kw["env"]["PATH"], box.INSTALL_PATH)
+        self.assertEqual(kw["env"]["NPM_CONFIG_USERCONFIG"], "/dev/null")
+        self.assertEqual(kw["env"]["NPM_CONFIG_GLOBALCONFIG"], "/dev/null")
+        self.assertEqual(kw["env"]["NPM_CONFIG_CACHE"], WS + "/.cv-npm-home/cache")
+        self.assertEqual(set(kw["env"]), {"PATH", "LANG", "HOME", "NPM_CONFIG_USERCONFIG", "NPM_CONFIG_GLOBALCONFIG", "NPM_CONFIG_CACHE"})
         self.assertEqual((kw["user"], kw["group"]), (1000, 1001))
         self.assertNotIn("shell", kw)
+
+    @unittest.skipIf(os.name == "nt", "rutas POSIX")
+    def test_instalacion_rechaza_config_y_home_existente(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ws = root / "run-test"
+            ws.mkdir()
+            for name in (".npmrc", ".cv-npm-home"):
+                with self.subTest(name=name):
+                    target = ws / name
+                    target.symlink_to(root / "canario-ausente")
+                    spawn = FakePopen()
+                    with self.assertRaises(box.SandboxError):
+                        box.install_deps(ws, 60, uid=1000, gid=1001, work_root=str(root), spawn=spawn)
+                    self.assertEqual(spawn.calls, [])
+                    target.unlink()
+                    target.touch()
+                    with self.assertRaises(box.SandboxError):
+                        box.install_deps(ws, 60, uid=1000, gid=1001, work_root=str(root), spawn=spawn)
+                    self.assertEqual(spawn.calls, [])
+                    target.unlink()
 
     @unittest.skipIf(os.name == "nt", "las rutas del sandbox son POSIX; corre en Linux (CI)")
     def test_entregar_y_recuperar_sin_seguir_enlaces(self):
@@ -189,9 +222,10 @@ class BoxTests(unittest.TestCase):
                 name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", "")
                 self.assertNotIn(name, ("eval", "exec", "system", "popen", "run", "call", "check_output", "check_call", "compile"))
 
-    def test_estatico_el_worker_no_lo_importa_todavia(self):
-        for name in ("dev-worker.py", "cv-proposal-gate.py", "local-runner.py", "opencode-executor.py"):
+    def test_estatico_solo_el_worker_lo_conoce_y_de_forma_perezosa(self):
+        for name in ("cv-proposal-gate.py", "local-runner.py", "opencode-executor.py", "local-proposer.py"):
             self.assertNotIn("dev-sandbox", (OPS / name).read_text(encoding="utf-8"), name)
+        self.assertEqual((OPS / "dev-worker.py").read_text(encoding="utf-8").count("dev-sandbox.py"), 1)
 
 
 if __name__ == "__main__":

@@ -1,3 +1,48 @@
+# CURRENT — EVO-LOCAL-001 E3: evaluación de límites (2026-11-17)
+
+- #251: evaluador documental cgroup v2 para memory.max, pids.max y cpu.max; falla si faltan, son ilimitados, inválidos o superan umbrales aprobados. CLI --cgroup-evidence con presupuesto explícito, no ejecuta sandbox ni modifica host. Tres regresiones añadidas. CI pendiente. NO configura límites ni certifica que el proceso y sus descendientes estén en ese cgroup: validar pertenencia, mediciones y terminación en el VPS, tras autorización E2. Sin cambio productivo; coste nuevo cero.
+
+---
+
+# CURRENT — EVO-LOCAL-001 E3: configuración npm aislada (2026-11-17)
+
+- #251: HOME y cache npm desechables por workspace, userconfig/globalconfig /dev/null, PATH fijo, se ignoran variables npm heredadas y se rechaza .npmrc o HOME npm preexistente/incluso symlink colgante. Regresión de configuración y rutas negativas añadida. Esto reduce exposición accidental, NO impide que un proceso npm con red lea archivos del host: falta aislamiento de instalación y límites efectivos de recursos, canarios E3 y prueba en VPS. CI pendiente. E2/E4 sin autorización nueva, interruptor no activado, gasto adicional cero.
+
+---
+
+# CURRENT — EVO-LOCAL-001 E3: verificador fail-closed (2026-11-17)
+
+- #251: arnés verify-sandbox v2 rechaza salida no cero, JSON de otra prueba, booleano no estricto, comando inválido; runner real no hereda entorno y se niega a correr como root. Modo explícito --dev-worker selecciona binario y raíz de E2. Cuatro regresiones añadidas sin ejecutar bwrap. CI pendiente; no certificación en VPS. Falta aislamiento npm y límites efectivos, pruebas de canarios y E2 autorizado. CV_DEV_SANDBOX no activado, costo adicional cero.
+
+---
+
+# CURRENT — EVO-LOCAL-001 E2/E3: preparación documental (2026-11-17)
+
+- E1 candidato #251 SHA 602b64d701bb60e1749dc7400c0447e0a7922d18: CI aplicación 44228082919, release 44228082935 y staging 44228084707 completadas success. Incluye regresión de enlaces colgantes. No integrado ni instalado.
+- Runbook E2 revisado: SHA integrado verificable, respaldo con manifiesto y hashes de tres destinos, reversión ante fallo intermedio, comprobación efectiva del interruptor apagado. Criterios E3 ampliados para canarios sintéticos, npm aislado, límites cgroup y checkout confiable intacto. Sin ejecución VPS; CI de cambios documentales pendiente. E2 y E4 requieren aprobación explícita; E3 no certificado. Costo adicional cero, infraestructura existente, sin compra de créditos.
+
+---
+
+# CURRENT — EVO-LOCAL-001 E1: reconciliación con main (2026-11-17)
+
+- Se conserva el código del PR #241 SHA aeca5e5, con tres workflows verdes (43992655160, 43992655264, 43992655176). Main bf1398d avanzó 19 commits; se incorporan los cambios E1 conservando los cambios de CI y checkpoint de main. Candidato de revisión; CI conjunto pendiente. No se fusiona ni despliega, CV_DEV_SANDBOX=0, E2/E3 pendientes y E4 bloqueada. Costo adicional cero.
+
+---
+
+# CURRENT — EVO-LOCAL-001 E1: corrección P1 en revisión (2026-11-16)
+
+- PR #241: separación de checkout Git confiable y copia de pruebas sin metadatos; ninguna mutación de la copia se importa. Rechazo de rutas cambiadas simbólicas/no regulares y de ancestros inseguros. Validador bwrap falla cerrado. Perfil dedicado propuesto y [runbook E2](EVO_LOCAL_001_E2_RUNBOOK.md).
+- Evidencia local: 68 pruebas de worker, entorno y caja (14 + 14 + 10 + 30); CI del nuevo SHA pendiente al registrar este checkpoint. Sin merge ni despliegue. E2 requiere aprobación; E3 debe validar aislamiento real, límites de recursos y npm; E4 exige aprobación separada. CV_DEV_SANDBOX permanece apagado y puerta docs-only. Costo adicional: 0 USD; alternativa: infraestructura existente; escalar solo tras aprobación.
+
+---
+
+# CURRENT — EVO-LOCAL-001: Dev Worker cableado a la caja, APAGADO y sin desplegar (2026-11-16)
+
+- `CV_DEV_SANDBOX=1` (único valor que enciende) lleva el worktree a `run-task-N` bajo la raíz de la caja, instala con `npm ci --ignore-scripts` como `cvdev`, prueba dentro de bwrap sin red, recupera el worktree y revalida diff y enlaces antes de commit/push. Apagado = comportamiento anterior. 16 pruebas; CI verde (PR #241). Fusionados antes: #238, #239 y #240; el worker con entorno limpio sigue en el VPS (hash = main).
+- **Falta (pide SÍ):** E2 copiar `dev-worker.py`, `dev-sandbox.py` y la especificación al VPS, instalar el bwrap dedicado del Dev Worker y su perfil AppArmor; E3 validar en vivo con `verify-sandbox.py` y una tarea de docs; E4 encender el interruptor.
+
+---
+
 # CURRENT — VivaBot despliegue con recuperación conservadora (2026-11-17)
 
 - PR candidato: puente 4.1.3, solo recuperación de VivaBot. Producción último SHA certificado `0d537006aa6e5aa45ad89464f7ce4b6bbf6a419d`; candidato VivaBot #48 `b90883295e278c5a383bd7b832bb592b24daa4fd`, ambos workflows verdes, pendiente instalación. Puente anterior 4.1.2.

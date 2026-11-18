@@ -400,10 +400,50 @@ class VerifyLogicTests(unittest.TestCase):
         report = verify.run_checks(WORKSPACE, runner)
         self.assertEqual(report["verdict"], verify.VERDICT_NO_OPERATIVO)
 
+    def test_nonzero_exit_cannot_pass(self):
+        report = verify.run_checks(WORKSPACE, fake_runner({"bootstrap": (1, probe("bootstrap"), b"")}))
+        self.assertEqual(report["verdict"], verify.VERDICT_NO_OPERATIVO)
+
+    def test_mismatched_check_cannot_pass(self):
+        report = verify.run_checks(WORKSPACE, fake_runner({"bootstrap": (0, probe("net_denied"), b"")}))
+        self.assertEqual(report["verdict"], verify.VERDICT_NO_OPERATIVO)
+
+    def test_string_boolean_cannot_pass(self):
+        payload = json.dumps({"check": "bootstrap", "ok": "false", "detail": ""}).encode()
+        report = verify.run_checks(WORKSPACE, fake_runner({"bootstrap": (0, payload, b"")}))
+        self.assertEqual(report["verdict"], verify.VERDICT_NO_OPERATIVO)
+
+    def test_dedicated_dev_command(self):
+        root = verify.DEV_WORK_ROOT
+        report = verify.run_checks(root + "/run-e3", fake_runner(), work_root=root,
+                                   bwrap_binary=verify.DEV_BWRAP)
+        self.assertEqual(report["verdict"], verify.VERDICT_OK)
+
     def test_positive_control_must_pass(self):
         outcomes = {"write_workspace_allowed": (0, probe("write_workspace_allowed", ok=False), b"")}
         report = verify.run_checks(WORKSPACE, fake_runner(outcomes))
         self.assertEqual(report["verdict"], verify.VERDICT_FAILED)
+
+
+class CgroupLimitTests(unittest.TestCase):
+    def test_finite_limits_at_or_below_budget(self):
+        result = verify.assess_cgroup_limits(
+            {"memory.max": "1048576", "pids.max": "32", "cpu.max": "50000 100000"},
+            memory_bytes=1048576, max_pids=32, cpu_cores=1)
+        self.assertEqual(result["verdict"], verify.VERDICT_OK)
+
+    def test_unlimited_missing_and_invalid_fail_closed(self):
+        for observed in ({}, {"memory.max": "max", "pids.max": "max", "cpu.max": "max 100000"},
+                         {"memory.max": "0", "pids.max": "-1", "cpu.max": "100000 0"}):
+            with self.subTest(observed=observed):
+                result = verify.assess_cgroup_limits(observed, memory_bytes=1024, max_pids=16, cpu_cores=1)
+                self.assertEqual(result["verdict"], verify.VERDICT_FAILED)
+
+    def test_over_budget_fails(self):
+        result = verify.assess_cgroup_limits(
+            {"memory.max": "2048", "pids.max": "17", "cpu.max": "200000 100000"},
+            memory_bytes=1024, max_pids=16, cpu_cores=1)
+        self.assertEqual(result["checks"], {"memory.max": False, "pids.max": False, "cpu.max": False})
 
 
 class VerifyGuardTests(unittest.TestCase):
