@@ -147,7 +147,7 @@ final class CVD_Product_Search {
 			return;
 		}
 		$ids = self::search( (string) $query->get( 's' ), self::MAX_SHOP_RESULTS );
-		if ( ! $ids && null === self::usd_budget( (string) $query->get( 's' ) ) ) {
+		if ( ! $ids && null === self::usd_budget( (string) $query->get( 's' ) ) && ! self::availability_requested( (string) $query->get( 's' ) ) ) {
 			return;
 		}
 		// No volver a la búsqueda textual si el presupuesto excluye todos los productos.
@@ -344,13 +344,34 @@ final class CVD_Product_Search {
 		return is_finite( $price ) && $price >= 0 && ( $budget['inclusive'] ? $price <= $budget['amount'] : $price < $budget['amount'] );
 	}
 
-	/** @return int[] IDs ordenados por relevancia (disponibles primero a igual puntuación). */
+	/** Solo expresiones positivas inequívocas al final de la consulta. */
+	public static function availability_requested( string $query ): bool {
+		$plain = self::normalize( $query );
+		return ! preg_match( '/\b(?:no|sin)\s+(?:esta[n]?\s+)?(?:disponibles?|stock|existencias?|en\s+tienda)\b/u', $plain )
+			&& (bool) preg_match( '/\b(?:disponibles?|en stock|en existencia|en tienda)$/u', $plain );
+	}
+
+	private static function available_now( int $id ): bool {
+		$product = wc_get_product( $id );
+		return $product && 'publish' === $product->get_status()
+			&& 'hidden' !== $product->get_catalog_visibility()
+			&& 'instock' === $product->get_stock_status()
+			&& $product->is_in_stock() && $product->is_purchasable()
+			&& ! ( class_exists( 'CVD_Datos_A_Mano' ) && CVD_Datos_A_Mano::is_bajo_pedido( $product ) );
+	}
+
+	/** @return int[] IDs ordenados por relevancia y disponibilidad. */
 	public static function search( string $query, int $limit = 6 ): array {
 		$budget = self::usd_budget( $query );
 		if ( null !== $budget && 'USD' !== get_woocommerce_currency() ) {
 			return array(); // No convertir ni comparar monedas distintas.
 		}
-		$terms = self::terms( null !== $budget ? $budget['query'] : $query );
+		$text = null !== $budget ? $budget['query'] : $query;
+		$available = self::availability_requested( $text );
+		if ( $available ) {
+			$text = preg_replace( '/\b(?:disponibles?|en stock|en existencia|en tienda)\s*$/u', '', self::normalize( $text ) );
+		}
+		$terms = self::terms( $text );
 		if ( ! $terms ) {
 			return array();
 		}
@@ -358,6 +379,7 @@ final class CVD_Product_Search {
 		$all = array();
 		$partial = array();
 		$rows = self::index();
+		$typed = array();
 		// En una consulta compuesta, si el catálogo reconoce el primer término como
 		// tipo de producto, no dejar que menciones de accesorios sustituyan dicho tipo.
 		if ( count( $terms ) > 1 ) {
@@ -380,7 +402,7 @@ final class CVD_Product_Search {
 			if ( ! $matched ) {
 				continue;
 			}
-			$entry = array( $row['id'], $total + $row['stock'], $matched );
+			$entry = array( $row['id'], $total + $row['stock'], $matched, $row['stock'] );
 			if ( $matched === count( $terms ) ) {
 				$all[] = $entry;
 			} else {
@@ -389,13 +411,16 @@ final class CVD_Product_Search {
 		}
 		// Primero lo que cumple todas las palabras; si no hay nada, lo que cumple más palabras.
 		$results = null !== $budget ? $all : ( $all ?: $partial );
-		usort( $results, static fn( $a, $b ) => array( $b[2], $b[1] ) <=> array( $a[2], $a[1] ) );
-		if ( null === $budget ) {
+		// Dentro del mismo tipo y cobertura de palabras, favorecer stock indexado.
+		usort( $results, static fn( $a, $b ) => $typed
+			? array( $b[2], $b[3], $b[1] ) <=> array( $a[2], $a[3], $a[1] )
+			: array( $b[2], $b[1] ) <=> array( $a[2], $a[1] ) );
+		if ( null === $budget && ! $available ) {
 			return array_slice( array_map( static fn( $r ) => (int) $r[0], $results ), 0, $limit );
 		}
 		$ids = array();
 		foreach ( $results as $row ) {
-			if ( self::within_budget( (int) $row[0], $budget ) ) {
+			if ( ( ! $available || self::available_now( (int) $row[0] ) ) && ( null === $budget || self::within_budget( (int) $row[0], $budget ) ) ) {
 				$ids[] = (int) $row[0];
 				if ( count( $ids ) >= $limit ) {
 					break;
