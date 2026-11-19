@@ -1,3 +1,9 @@
+# CURRENT — CV-AMZ-004A: recomendaciones comerciales (2026-11-19)
+
+- 003G e87a35a: 4/4 workflows verdes; HTTP 1000 productos (44598555503/job 135823393845): frío 1.529s, objetivo caliente mediana .133s; 45 mixtas mediana .149s, p95 .244s, máximo .268s. No extrapolar al hosting. 004A 2a907d4: reutiliza selección nativa de relacionados WooCommerce por categoría/etiqueta y filtra IDs con disponibilidad comercial viva, excluye fuente, duplicados, ocultos, agotados y bajo pedido. No cambia upsells/cross-sells manuales, precio, inventario ni afinidad histórica. Fixture real verifica hook, exclusiones y cambio stock con candidatos antiguos; CI pendiente. No afirmar recomendador personalizado ni desplegado; CV-03 revisión y autorización pendientes. Reversión: retirar filtro antes de release. Cero gasto.
+
+---
+
 # CURRENT — CV-AMZ-003G: escala de búsqueda (2026-11-19)
 
 - 003F 13c445c: CI focal 44588356367 3/3 verde (PHP, móvil Chromium, WooCommerce HTTP); general 44588356613 falla lint únicamente por imports CJS en fixture propio; corregido f2db363 con excepción localizada. Browser, integración, content-studio, postgres verdes. 003G ffaff32: fixture local con prefijo cvt_ añade 995 productos sintéticos, valida 1000 publicados, diez tipos con precios, stock y visibilidad variados. Conserva todos los asserts espejo/privacidad y añade 45 consultas mixtas; mide frío, mediana caliente, p95 y máximo. CI pendiente; no extrapolar a Hostinger ni cambiar motor sin medición. CV-03 revisión pendiente. Sin merge, producción ni gasto adicional.
