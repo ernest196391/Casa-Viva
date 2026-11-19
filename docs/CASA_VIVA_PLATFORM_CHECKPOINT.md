@@ -1,3 +1,9 @@
+# CURRENT — CV-AMZ-003E: certificación de integración (2026-11-19)
+
+- 003D head 008d299: 4/4 workflows verdes (44584345683, 44584345696, 44584345702, 44584345701). Nuevo candidato c7ca8fa: entorno WordPress/MariaDB/WooCommerce desechable, cinco productos sintéticos y gestora sintética; prueba HTTP de fonética, tipo, presupuesto, stock, proveedor, ocultos, aislamiento de espejo y ausencia de cantidades exactas públicas. Reporta primera consulta, mediana y máximo de HTTP local, no extrapolables a producción. CI pendiente; no es certificación móvil ni staging desplegado. CV-03 revisión pendiente; sin merge/despliegue ni gasto incremental autorizado.
+
+---
+
 # CURRENT — CV-AMZ-003D: disponibilidad comercial (2026-11-19)
 
 - #261 head anterior 0eb8e71 con 4/4 workflows verdes (44576460852, 44576460210, 44576460001, 44576460194). Candidato: prioridad stock indexado dentro de tipo y cobertura iguales, no garantía de stock vivo salvo consulta explícita positiva final (disponible/en tienda/en stock/en existencia). Esta verifica WooCommerce actual, producto comprable publicado visible, instock, y excluye bajo pedido reutilizando CVD_Datos_A_Mano; no altera etiquetas ni inventario. Sin fallback parcial para disponibilidad explícita y presupuesto; pruebas de stock desactualizado, proveedor, backorder, negación y combinación USD. Siete regresiones añadidas; CI nuevo pendiente. No fusionar/desplegar hasta CV-03, integración y autorización. 0 USD adicionales. Reversión: PR antes de release. Siguiente: benchmark en staging y prueba móvil/espejo; no activar radar inventario.
