@@ -1,3 +1,9 @@
+# CURRENT — CV-AMZ-003F: ajuste de prueba móvil (2026-11-19)
+
+- 6e6a6a0: CI focal 44587671848: PHP y HTTP WooCommerce verdes; browser falla únicamente al intentar tocar botón sintético cubierto por el desplegable (timeout, log job 135784906362). Corregido fixture 321d1b5 colocando target fuera del desplegable; no se fuerza click ni cambia código comercial. Reejecución pendiente. HTTP 5 productos: primera 0.598 s, mediana posterior 0.079 s, máximo 0.598 s (job 135784906965); no extrapolar. No despliegue. Siguiente: certificar browser antes de benchmark catálogo grande.
+
+---
+
 # CURRENT — CV-AMZ-003F: búsqueda móvil (2026-11-19)
 
 - 003E a677347: CI focal 44586883540 verde (HTTP WooCommerce real + regresiones), staging/release verdes; validación general en curso al comprobar. 003F b6a5b65 corrige ancho de sugerencias, invalida peticiones al borrar/cambiar/cerrar, impide repintado tardío al perder foco, elimina caché JS de tarjetas con precios, muestra búsqueda y error recuperable. Prueba Chromium 320x568 con HTTP simulado para latencia, fallo, actualización de precio, escape/desenfoque y ancho; CI pendiente. No equivale a hardware físico ni staging desplegado. CV-03 revisión pendiente, sin merge/despliegue, mensajes ni gasto incremental.
