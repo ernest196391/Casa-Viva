@@ -732,9 +732,10 @@ final class CVD_Bot_Bridge {
 			return new WP_Error( 'cvd_handover_conflict', 'No se confirmó el relevo. Consulta el titular actual antes de reintentar.', array( 'status' => 409 ) );
 		}
 		$fresh = wc_get_order( $order->get_id() );
+		if ( $fresh && method_exists( $fresh, 'read_meta_data' ) ) { $fresh->read_meta_data( true ); }
 		if ( ! $fresh || $to->ID !== absint( $fresh->get_meta( '_cvd_messenger_user_id', true ) ) ) { return new WP_Error( 'cvd_handover_conflict', 'El titular cambió. Consulta el pedido.', array( 'status' => 409 ) ); }
 		if ( class_exists( 'CVD_Messenger_Reputation' ) ) { CVD_Messenger_Reputation::invalidate( $holder->ID ); CVD_Messenger_Reputation::invalidate( $to->ID ); }
-		return self::no_cache( array( 'result' => 'handed', 'from' => $holder->display_name, 'messenger' => $to->display_name, 'voucher' => self::voucher( wc_get_order( $order->get_id() ) ) ) );
+		return self::no_cache( array( 'result' => 'handed', 'from' => $holder->display_name, 'messenger' => $to->display_name, 'voucher' => self::voucher( $fresh ) ) );
 	}
 
 	/**
