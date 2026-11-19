@@ -99,6 +99,57 @@ $empty_snapshot = CVD_Purchase_Affinity::snapshot();
 if ( $empty_snapshot !== array( 'scanned' => 0, 'eligible' => 0, 'truncated' => false, 'recommendations' => array() ) ) {
     throw new RuntimeException( 'Empty disposable order history should produce no recommendations' );
 }
+// Persisted synthetic histories: local disposable DB only; never send mail or charge.
+global $wpdb;
+if ( $wpdb->prefix !== 'cvt_' ) { throw new RuntimeException( 'Synthetic database required' ); }
+add_filter( 'pre_wp_mail', '__return_true', PHP_INT_MAX );
+add_filter( 'pre_http_request', static fn() => new WP_Error( 'cvamz_network_disabled', 'Synthetic order fixture blocks outbound HTTP' ), PHP_INT_MAX );
+function cvamz_history_order( array $product_ids, string $status, string $operation, int $age_days = 0 ): WC_Order {
+    $order = new WC_Order();
+    $order->set_currency( 'USD' );
+    $order->set_created_via( 'cvamz-synthetic' );
+    $order->set_status( $status );
+    $order->set_date_created( time() - $age_days * DAY_IN_SECONDS );
+    if ( $status === 'completed' ) { $order->set_date_completed( time() - $age_days * DAY_IN_SECONDS ); }
+    $order->update_meta_data( '_cvd_operation_status', $operation );
+    $order->update_meta_data( '_cvd_fulfillment_type', 'pickup' );
+    foreach ( $product_ids as $id ) {
+        $line = new WC_Order_Item_Product();
+        $line->set_product( wc_get_product( $id ) );
+        $line->set_quantity( 1 );
+        $line->set_subtotal( 10 );
+        $line->set_total( 10 );
+        $order->add_item( $line );
+    }
+    $order->set_total( count( $product_ids ) * 10 );
+    $order->save();
+    return wc_get_order( $order->get_id() );
+}
+for ( $i = 0; $i < 3; $i++ ) {
+    cvamz_history_order( array( $ids['fan'], $ids['accessory'] ), 'completed', 'delivered' );
+}
+cvamz_history_order( array( $ids['fan'], $ids['supplier'] ), 'completed', 'confirmed' );
+cvamz_history_order( array( $ids['fan'], $ids['supplier'] ), 'completed', 'delivered', 100 );
+cvamz_history_order( array( $ids['fan'], $ids['supplier'] ), 'cancelled', 'cancelled' );
+$refund_order = cvamz_history_order( array( $ids['fan'], $ids['supplier'] ), 'completed', 'delivered' );
+$refund = wc_create_refund( array( 'order_id' => $refund_order->get_id(), 'amount' => 1, 'refund_payment' => false, 'restock_items' => false ) );
+if ( is_wp_error( $refund ) ) { throw new RuntimeException( 'Synthetic partial refund failed' ); }
+$history = CVD_Purchase_Affinity::snapshot();
+$expected = array( $ids['fan'] => array( $ids['accessory'] ), $ids['accessory'] => array( $ids['fan'] ) );
+if ( $history['scanned'] !== 5 || $history['eligible'] !== 3 || $history['truncated'] || $history['recommendations'] !== $expected ) {
+    throw new RuntimeException( 'Unexpected aggregate snapshot counts or recommendations' );
+}
+if ( CVD_Product_Search::eligible_related_products( $history['recommendations'][ $ids['fan'] ], $ids['fan'] ) !== array( $ids['accessory'] ) ) {
+    throw new RuntimeException( 'Affinity recommendation not commercially eligible' );
+}
+$accessory = wc_get_product( $ids['accessory'] );
+$accessory->set_stock_status( 'outofstock' );
+$accessory->save();
+if ( CVD_Product_Search::eligible_related_products( $history['recommendations'][ $ids['fan'] ], $ids['fan'] ) ) {
+    throw new RuntimeException( 'Historical affinity must not bypass live stock' );
+}
+$accessory->set_stock_status( 'instock' );
+$accessory->save();
 // Optional scale benchmark; never run against a real store.
 if ( getenv( 'CVAMZ_SCALE' ) === '1000' ) {
     global $wpdb;
