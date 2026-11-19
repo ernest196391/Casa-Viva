@@ -696,3 +696,11 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 - Revisión visual del PNG: quedan restos claros de fondo inferior/halo; no aprobar publicación aunque la máscara diga fiable=true. No bloquea certificar el transporte/recorte real, sí impide declarar calidad fotográfica automática. Se mantiene revisión humana y autonomía desactivada.
 - Estado: implementación estabilizada y verificada, PRs en borrador para revisión del propietario. Ningún merge ni despliegue. `costo_actual`: infraestructura existente; `costo_nuevo_requerido`: 0; `alternativa_gratuita`: recorte local y revisión humana; `momento_de_escalar`: fase posterior expresamente aprobada.
 - Evidencias, archivos y reversión: docs/EVO_001_CONTENT_STUDIO.md. Siguiente: aprobación explícita de ambos PR/SHA y despliegue controlado con rollback; después EVO-002 de auditoría/score/cola. No incorporar interfaces ni activar publicaciones autónomas.
+
+
+## CURRENT — CV-03 QA-B01 (2026-11-19)
+
+- Base observada `c1bfdf196b15a2a0a27a950f096e3fd9e2b9b222`; PR #253 head `c814c7b5cac5e471a48c2762637c428f4c41625d` con tres workflows CI success (44329317645, 44329317725, 44329317814). No implica integración con main actual ni certificación E3.
+- Revisión independiente #253: calibración sintética real anterior documentada; faltan supervisor confiable, canarios positivos de aislamiento/adversarios, dependencias y limpieza en fallo/timeout. E4 sigue bloqueado. Producción no verificada de nuevo; sin cambios.
+- Candidato aislado `scripts/ops/quality/quality-evidence.mjs`: clasificador offline de registros aportados por revisor, 13 fixtures locales verdes. Rechaza SHA/base desalineados, evidencia faltante, coste no cero, conflictos, P0/P1 y E3 incompleto. REVIEW_READY nunca autoriza merge/despliegue ni sustituye la CI existente. No conectado a worker/cola.
+- Siguiente: revisión del contrato por CV-00 y prueba con evidencia real de CI al integrar, no crear cola paralela. Rollback: revertir PR documental/código, sin intervención de host. Coste nuevo requerido 0; alternativa gratuita: revisión manual y uso de CI existente. No escalar sin aprobación.
