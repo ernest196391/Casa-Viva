@@ -28,6 +28,21 @@ update_user_meta( $user_id, '_cvd_program_type', 'gestora' );
 update_user_meta( $user_id, '_cvd_referral_code', 'CVAMZTEST' );
 update_user_meta( $user_id, '_cvd_global_markup_percent', 20 );
 if ( ! CVD_Datos_A_Mano::is_bajo_pedido( wc_get_product( $ids['supplier'] ) ) ) { throw new RuntimeException( 'Supplier fixture not recognized' ); }
+// Native related-product eligibility, including stale cached candidate IDs.
+if ( ! has_filter( 'woocommerce_related_products', array( 'CVD_Product_Search', 'eligible_related_products' ) ) ) {
+    throw new RuntimeException( 'Related products hook not registered' );
+}
+$candidates = array( $ids['fan'], $ids['accessory'], $ids['supplier'], $ids['out'], $ids['hidden'], $ids['fan'], 0 );
+$related = apply_filters( 'woocommerce_related_products', $candidates, $ids['accessory'], array() );
+if ( $related !== array( $ids['fan'] ) ) { throw new RuntimeException( 'Ineligible related products: ' . wp_json_encode( $related ) ); }
+$fan = wc_get_product( $ids['fan'] );
+$fan->set_stock_status( 'outofstock' );
+$fan->save();
+if ( apply_filters( 'woocommerce_related_products', $candidates, $ids['accessory'], array() ) !== array() ) {
+    throw new RuntimeException( 'Stale recommendation survived live stock change' );
+}
+$fan->set_stock_status( 'instock' );
+$fan->save();
 // Optional scale benchmark; never run against a real store.
 if ( getenv( 'CVAMZ_SCALE' ) === '1000' ) {
     global $wpdb;
