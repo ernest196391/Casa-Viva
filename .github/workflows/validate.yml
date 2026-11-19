@@ -68,6 +68,7 @@ jobs:
           php artifacts/tests/test-content-studio.php
           php artifacts/tests/test-content-studio-v2.php
           php artifacts/tests/test-content-policy.php
+          for scenario in paid stale other-account quota unapproved; do php artifacts/tests/test-content-policy.php "$scenario"; done
           node --check wordpress/casa-viva-dropship-core/assets/content-studio.js
 
       - name: Validar historial canónico de eventos
