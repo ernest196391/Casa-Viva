@@ -93,6 +93,7 @@ final class CVD_Product_Search {
 
 	public static function register(): void {
 		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
+		add_filter( 'woocommerce_related_products', array( __CLASS__, 'eligible_related_products' ), 20, 2 );
 		add_action( 'pre_get_posts', array( __CLASS__, 'tolerant_shop_search' ), 20 );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 36 );
 		add_action( 'woocommerce_before_shop_loop', array( __CLASS__, 'render_form' ), 5 );
@@ -358,6 +359,22 @@ final class CVD_Product_Search {
 			&& 'instock' === $product->get_stock_status()
 			&& $product->is_in_stock() && $product->is_purchasable()
 			&& ! ( class_exists( 'CVD_Datos_A_Mano' ) && CVD_Datos_A_Mano::is_bajo_pedido( $product ) );
+	}
+
+	/**
+	 * Conserva la selección nativa de relacionados por categoría/etiqueta.
+	 * No inventa afinidad ni promete disponibilidad de encargos.
+	 * Los IDs pueden venir de la caché de WooCommerce: comprobar cada producto en vivo.
+	 */
+	public static function eligible_related_products( array $ids, int $source_id ): array {
+		$eligible = array();
+		foreach ( $ids as $id ) {
+			$id = absint( $id );
+			if ( $id && $id !== $source_id && ! isset( $eligible[ $id ] ) && self::available_now( $id ) ) {
+				$eligible[ $id ] = $id;
+			}
+		}
+		return array_values( $eligible );
 	}
 
 	/** @return int[] IDs ordenados por relevancia y disponibilidad. */
