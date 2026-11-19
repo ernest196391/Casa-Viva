@@ -147,10 +147,11 @@ final class CVD_Product_Search {
 			return;
 		}
 		$ids = self::search( (string) $query->get( 's' ), self::MAX_SHOP_RESULTS );
-		if ( ! $ids ) {
+		if ( ! $ids && null === self::usd_budget( (string) $query->get( 's' ) ) ) {
 			return;
 		}
-		$query->set( 'post__in', $ids );
+		// No volver a la búsqueda textual si el presupuesto excluye todos los productos.
+		$query->set( 'post__in', $ids ?: array( 0 ) );
 		// Si el cliente eligió un orden (precio, novedades), se respeta; si no, va por relevancia.
 		if ( empty( $_GET['orderby'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$query->set( 'orderby', 'post__in' );
@@ -317,9 +318,39 @@ final class CVD_Product_Search {
 		return $best;
 	}
 
+	/** Restricción explícita en USD; no interpreta medidas, modelos ni otras monedas. */
+	public static function usd_budget( string $query ): ?array {
+		$plain = mb_strtolower( remove_accents( $query ), 'UTF-8' );
+		$pattern = '/\b(menos\s+de|hasta|como\s+maximo|maximo)\s+(\d{1,7}(?:[.,]\d{1,2})?)\s*(?:usd|dolares?)\b/u';
+		if ( 1 !== preg_match_all( $pattern, $plain, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
+			return null;
+		}
+		$match = $matches[0];
+		$amount = (float) str_replace( ',', '.', $match[2][0] );
+		return array(
+			'query'     => trim( substr_replace( $plain, ' ', $match[0][1], strlen( $match[0][0] ) ) ),
+			'amount'    => $amount,
+			'inclusive' => 'menos de' !== preg_replace( '/\s+/', ' ', $match[1][0] ),
+		);
+	}
+
+	/** Precio mostrado en esta sesión, nunca almacenado en el índice compartido. */
+	private static function within_budget( int $id, array $budget ): bool {
+		$product = wc_get_product( $id );
+		if ( ! $product || 'publish' !== $product->get_status() || 'hidden' === $product->get_catalog_visibility() || ! is_numeric( $product->get_price() ) ) {
+			return false;
+		}
+		$price = round( (float) wc_get_price_to_display( $product ), wc_get_price_decimals() );
+		return is_finite( $price ) && $price >= 0 && ( $budget['inclusive'] ? $price <= $budget['amount'] : $price < $budget['amount'] );
+	}
+
 	/** @return int[] IDs ordenados por relevancia (disponibles primero a igual puntuación). */
 	public static function search( string $query, int $limit = 6 ): array {
-		$terms = self::terms( $query );
+		$budget = self::usd_budget( $query );
+		if ( null !== $budget && 'USD' !== get_woocommerce_currency() ) {
+			return array(); // No convertir ni comparar monedas distintas.
+		}
+		$terms = self::terms( null !== $budget ? $budget['query'] : $query );
 		if ( ! $terms ) {
 			return array();
 		}
@@ -345,9 +376,21 @@ final class CVD_Product_Search {
 			}
 		}
 		// Primero lo que cumple todas las palabras; si no hay nada, lo que cumple más palabras.
-		$results = $all ?: $partial;
+		$results = null !== $budget ? $all : ( $all ?: $partial );
 		usort( $results, static fn( $a, $b ) => array( $b[2], $b[1] ) <=> array( $a[2], $a[1] ) );
-		return array_slice( array_map( static fn( $r ) => (int) $r[0], $results ), 0, $limit );
+		if ( null === $budget ) {
+			return array_slice( array_map( static fn( $r ) => (int) $r[0], $results ), 0, $limit );
+		}
+		$ids = array();
+		foreach ( $results as $row ) {
+			if ( self::within_budget( (int) $row[0], $budget ) ) {
+				$ids[] = (int) $row[0];
+				if ( count( $ids ) >= $limit ) {
+					break;
+				}
+			}
+		}
+		return $ids;
 	}
 
 	/**
