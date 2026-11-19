@@ -304,9 +304,15 @@ final class CVD_Product_Search {
 				$best = max( $best, $extra - $penalty );
 			}
 		}
-		if ( ! $best && mb_strlen( $term ) >= 4 ) { // 3.14.97: escrito como suena («nebera», «telebisor»)
+		if ( mb_strlen( $term ) >= 4 ) { // Escrito como suena («nebera», «bentilador»).
 			$s = self::sound( $term );
-			foreach ( $row['words'] as $word ) { if ( self::sound( $word ) === $s ) { return 5; } }
+			// Un tipo de producto escrito fonéticamente prima sobre menciones accesorias.
+			if ( ! empty( $row['first'] ) && self::sound( $row['first'] ) === $s ) {
+				return max( $best, 10 );
+			}
+			if ( ! $best ) {
+				foreach ( $row['words'] as $word ) { if ( self::sound( $word ) === $s ) { return 5; } }
+			}
 		}
 		return $best;
 	}
