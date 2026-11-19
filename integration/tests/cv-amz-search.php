@@ -72,6 +72,33 @@ try {
     $GLOBALS['wp_query'] = $prior_query;
     $GLOBALS['product'] = $prior_product;
 }
+// Offline affinity candidate, intentionally not registered in the live plugin.
+require_once WP_PLUGIN_DIR . '/casa-viva-dropship-core/includes/class-cvd-purchase-affinity.php';
+$basket_order = new WC_Order();
+$basket_order->set_status( 'completed' );
+$basket_order->update_meta_data( '_cvd_operation_status', 'delivered' );
+$basket_order->update_meta_data( '_cvd_fulfillment_type', 'pickup' );
+foreach ( array( $ids['fan'], $ids['fan'], $ids['accessory'] ) as $id ) {
+    $line = new WC_Order_Item_Product();
+    $line->set_product( wc_get_product( $id ) );
+    $line->set_quantity( 1 );
+    $basket_order->add_item( $line );
+}
+$basket = CVD_Purchase_Affinity::basket( $basket_order );
+if ( $basket !== array( $ids['fan'], $ids['accessory'] ) ) { throw new RuntimeException( 'Canonical basket or dedupe failed' ); }
+$basket_order->update_meta_data( '_cvd_operation_incident_active', 'yes' );
+if ( CVD_Purchase_Affinity::basket( $basket_order ) ) { throw new RuntimeException( 'Incident order counted' ); }
+$basket_order->update_meta_data( '_cvd_operation_incident_active', 'no' );
+$basket_order->set_status( 'cancelled' );
+if ( CVD_Purchase_Affinity::basket( $basket_order ) ) { throw new RuntimeException( 'Cancelled order counted' ); }
+$ranked = CVD_Purchase_Affinity::rank( array( array( 1, 1, 2, 3 ), array( 1, 2 ), array( 1, 2 ), array( 1, 3 ) ) );
+if ( $ranked !== array( 1 => array( 2 ), 2 => array( 1 ) ) ) { throw new RuntimeException( 'Support threshold or dedupe failed' ); }
+$rare = array_merge( array_fill( 0, 3, array( 1, 2 ) ), array_fill( 0, 20, array( 1 ) ) );
+if ( isset( CVD_Purchase_Affinity::rank( $rare )[1] ) ) { throw new RuntimeException( 'Low confidence pair counted' ); }
+$empty_snapshot = CVD_Purchase_Affinity::snapshot();
+if ( $empty_snapshot !== array( 'scanned' => 0, 'eligible' => 0, 'truncated' => false, 'recommendations' => array() ) ) {
+    throw new RuntimeException( 'Empty disposable order history should produce no recommendations' );
+}
 // Optional scale benchmark; never run against a real store.
 if ( getenv( 'CVAMZ_SCALE' ) === '1000' ) {
     global $wpdb;
