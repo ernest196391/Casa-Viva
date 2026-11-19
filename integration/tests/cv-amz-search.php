@@ -43,6 +43,18 @@ if ( apply_filters( 'woocommerce_related_products', $candidates, $ids['accessory
 }
 $fan->set_stock_status( 'instock' );
 $fan->save();
+// Explicit cross-sell configuration is the only source of complement affinity.
+$fan->set_cross_sell_ids( array( $ids['accessory'], $ids['supplier'], $ids['out'], $ids['hidden'] ) );
+$fan->save();
+if ( CVD_Product_Search::complement_ids( wc_get_product( $ids['fan'] ) ) !== array( $ids['accessory'] ) ) {
+    throw new RuntimeException( 'Complement must be explicitly configured and available' );
+}
+if ( CVD_Product_Search::complement_ids( wc_get_product( $ids['accessory'] ) ) !== array() ) {
+    throw new RuntimeException( 'Unconfigured complement must not be invented' );
+}
+if ( ! has_action( 'woocommerce_after_single_product_summary', array( 'CVD_Product_Search', 'render_complements' ) ) ) {
+    throw new RuntimeException( 'Complement card hook not registered' );
+}
 // Optional scale benchmark; never run against a real store.
 if ( getenv( 'CVAMZ_SCALE' ) === '1000' ) {
     global $wpdb;
