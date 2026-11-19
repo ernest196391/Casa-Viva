@@ -1,3 +1,9 @@
+# CURRENT — CV-AMZ-003A: búsqueda fonética (2026-11-19)
+
+- Issue #260: 20 consultas públicas; «bentilador» mezclaba accesorios. Candidato limitado al peso fonético del tipo (10), conservando coincidencia exacta (11), sin tocar precios, stock, contratos ni caché. Ocho regresiones sintéticas y workflow dedicado, CI pendiente; PHP no disponible localmente. No fusionar ni desplegar hasta revisión CV-03 y certificación. Presupuesto y disponibilidad explícita quedan separados. Coste incremental 0 USD; reversión por revert del PR antes de release.
+
+---
+
 # CURRENT — EVO-FLUX-PILOT: vista previa gratuita aislada (2026-11-19)
 
 - Base main 0bc7570b3d7ed4543212586d120e2638f7965bf1. Cuenta Cloudflare autenticada: Workers Free, 0/10.000 neuronas al observar el dashboard; Klein 4B en catálogo. No se han revelado claves ni invocado inferencia. Producción no modificada ni reconsultada en este bloque.
