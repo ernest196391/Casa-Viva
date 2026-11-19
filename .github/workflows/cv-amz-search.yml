@@ -1,0 +1,101 @@
+name: CV-AMZ search regression
+on:
+  pull_request:
+    paths:
+      - 'wordpress/casa-viva-dropship-core/includes/class-cvd-product-search.php'
+      - 'artifacts/tests/test-search-phonetic-cv-amz.php'
+      - 'integration/tests/cv-amz-search.php'
+      - 'wordpress/casa-viva-dropship-core/assets/product-search.*'
+      - 'artifacts/tests/cv-amz-search-mobile.spec.cjs'
+      - '.github/workflows/cv-amz-search.yml'
+permissions:
+  contents: read
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: mbstring
+      - run: php -l wordpress/casa-viva-dropship-core/includes/class-cvd-product-search.php
+      - run: php artifacts/tests/test-search-phonetic-cv-amz.php
+
+  woocommerce-http:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/integration.sh up
+      - name: Seed synthetic catalog
+        run: docker compose -f integration/compose.yml run --rm --no-deps -e CVAMZ_SCALE=1000 cli wp eval-file /var/www/html/integration-tests/cv-amz-search.php | tail -n 1 > /tmp/cvamz-fixture.json
+      - name: Certify HTTP search and mirror isolation
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, urllib.parse, time, statistics
+          fixture = json.load(open('/tmp/cvamz-fixture.json'))
+          assert fixture['catalog_size'] == 1000
+          durations = []
+          def search(q, ref=None):
+              params = {'rest_route': '/casa-viva/v1/products/search', 'q': q, 'limit': 12}
+              if ref:
+                  params['ref'] = ref
+              url = 'http://localhost:8889/?' + urllib.parse.urlencode(params)
+              start = time.monotonic()
+              with urllib.request.urlopen(url, timeout=30) as response:
+                  data = json.load(response)
+                  cache = response.headers.get('Cache-Control', '')
+              durations.append(time.monotonic() - start)
+              cards = data['products']
+              assert all('stock' not in c and 'variants' not in c for c in cards), cards
+              return [c['id'] for c in cards], cache
+          q = 'bentilador CVAMZ disponible hasta 110 USD'
+          ids, cache = search(q)
+          assert ids == [fixture['fan']], ids
+          ids, cache = search(q, 'CVAMZTEST')
+          assert ids == [], ids
+          assert 'no-store' in cache and 'private' in cache, cache
+          ids, cache = search(q)
+          assert ids == [fixture['fan']], ids
+          assert 'public' in cache, cache
+          ids, _ = search('ventilador CVAMZ disponible')
+          assert ids == [fixture['fan']], ids
+          ids, _ = search('ventilador CVAMZ hasta 1 USD')
+          assert ids == [], ids
+          for _ in range(10):
+              assert search(q)[0] == [fixture['fan']]
+          cold = durations[0]
+          warm = durations[1:]
+          print('HTTP 1000-product targeted timings: cold %.3fs, warm median %.3fs, max %.3fs' %
+                (cold, statistics.median(warm), max(warm)))
+          durations.clear()
+          queries = ['ventilador', 'nevera', 'sarten', 'licuadora', 'toalla',
+                     'generador', 'lampara', 'alfombra', 'cocina', 'bateria',
+                     'ventilador disponible hasta 110 USD', 'nevera hasta 200 USD',
+                     'toalla disponible', 'bentilador', 'nevera pequena']
+          for _ in range(3):
+              for query in queries:
+                  ids, _ = search(query)
+                  assert ids and len(ids) <= 12, (query, ids)
+          ordered = sorted(durations)
+          p95 = ordered[(95 * len(ordered) + 99) // 100 - 1]
+          print('HTTP 1000-product mixed warm timings: n=%d, median %.3fs, p95 %.3fs, max %.3fs' %
+                (len(ordered), statistics.median(ordered), p95, max(ordered)))
+          PY
+      - if: failure()
+        run: scripts/integration.sh logs
+      - if: always()
+        run: scripts/integration.sh down
+
+  mobile-autocomplete:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install --no-save @playwright/test@1.54.2
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test artifacts/tests/cv-amz-search-mobile.spec.cjs --workers=1 --reporter=line

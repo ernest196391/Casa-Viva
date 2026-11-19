@@ -1,3 +1,75 @@
+# CURRENT — CV-AMZ-004D: historial persistido sintético (2026-11-19)
+
+- 004C 6b3e734: 4/4 workflows verdes (44605398490, 44605398651, 44605398463, 44605398708). 004D 996ca28: fixture WooCommerce local prefijo cvt_ crea siete pedidos sintéticos persistidos: 3 válidos, 1 inconsistente, 1 antiguo, 1 cancelado y 1 con reembolso parcial sin pago ni reposición. Bloquea WP mail y HTTP saliente durante fixture; afirma 5 encontrados en ventana, 3 elegibles y dos IDs de producto recomendados recíprocamente, prueba exclusión por stock vivo y restaura stock sintético. CI pendiente; motor sigue sin registro, sin cron/persistencia en producción ni UI. CV-03 revisar. Cero gasto, no mensajes reales/producción. Siguiente: verificar CI y preparar snapshot compartido con TTL y activación protegida.
+
+---
+
+# CURRENT — CV-AMZ-004C: afinidad histórica offline (2026-11-19)
+
+- 004B 339bbdd: 4/4 workflows verdes (44600710931, 44600710950, 44600710942, 44600711026). 004C 0c200ea: clase independiente NO registrada en runtime; snapshot explícito WC de hasta 500 pedidos completados recientes (90 días, informa truncamiento), reutiliza lector canónico para excluir conflictos, incidencias, no completados y reembolsos. IDs padre únicos por cesta, límite 40; mínimo 3 pedidos juntos y 20% de las cestas del producto, máximo 4 sugerencias. Devuelve IDs agregados, no identidades ni persistencia. Pruebas con objetos WooCommerce sin guardar, umbrales, dedupe, cancelación/incidencia y consulta vacía desechable; CI pendiente. No se ha leído historial real ni mostrado «comprados juntos». Siguiente: comprobar snapshot no vacío contra pedidos sintéticos persistidos y aplicar elegibilidad viva/privacidad antes de habilitar visualización. CV-03 revisión y autorización; cero gasto, sin despliegue o mensajes.
+
+---
+
+# CURRENT — CV-AMZ-004B: complementos comerciales (2026-11-19)
+
+- 004B 9c88bfc: sección «Completa tu compra» en ficha clásica, exclusivamente cross-sells configurados en WooCommerce, máximo 4, disponibilidad comercial viva y precio HTML WooCommerce por sesión. Sin recomendaciones inventadas, compra automática ni nuevos datos. CSS responsive, enlaces a fichas; no altera carrito/checkout ni upsells manuales. Fixture prueba relaciones explícitas, exclusiones, ausencia sin configuración, registro y render con consulta producto; CI nueva pendiente. 004A PHP/release/staging anteriores verdes, HTTP/mobile pendientes al inicio. CV-03 revisión y autorización antes de merge/despliegue; no gastos ni mensajes. Siguiente: validar UI real y diseñar afinidad agregada con pedidos confirmados sin exponer datos personales.
+
+---
+
+# CURRENT — CV-AMZ-004A: recomendaciones comerciales (2026-11-19)
+
+- 003G e87a35a: 4/4 workflows verdes; HTTP 1000 productos (44598555503/job 135823393845): frío 1.529s, objetivo caliente mediana .133s; 45 mixtas mediana .149s, p95 .244s, máximo .268s. No extrapolar al hosting. 004A 2a907d4: reutiliza selección nativa de relacionados WooCommerce por categoría/etiqueta y filtra IDs con disponibilidad comercial viva, excluye fuente, duplicados, ocultos, agotados y bajo pedido. No cambia upsells/cross-sells manuales, precio, inventario ni afinidad histórica. Fixture real verifica hook, exclusiones y cambio stock con candidatos antiguos; CI pendiente. No afirmar recomendador personalizado ni desplegado; CV-03 revisión y autorización pendientes. Reversión: retirar filtro antes de release. Cero gasto.
+
+---
+
+# CURRENT — CV-AMZ-003G: escala de búsqueda (2026-11-19)
+
+- 003F 13c445c: CI focal 44588356367 3/3 verde (PHP, móvil Chromium, WooCommerce HTTP); general 44588356613 falla lint únicamente por imports CJS en fixture propio; corregido f2db363 con excepción localizada. Browser, integración, content-studio, postgres verdes. 003G ffaff32: fixture local con prefijo cvt_ añade 995 productos sintéticos, valida 1000 publicados, diez tipos con precios, stock y visibilidad variados. Conserva todos los asserts espejo/privacidad y añade 45 consultas mixtas; mide frío, mediana caliente, p95 y máximo. CI pendiente; no extrapolar a Hostinger ni cambiar motor sin medición. CV-03 revisión pendiente. Sin merge, producción ni gasto adicional.
+
+---
+
+# CURRENT — CV-AMZ-003F: ajuste de prueba móvil (2026-11-19)
+
+- 6e6a6a0: CI focal 44587671848: PHP y HTTP WooCommerce verdes; browser falla únicamente al intentar tocar botón sintético cubierto por el desplegable (timeout, log job 135784906362). Corregido fixture 321d1b5 colocando target fuera del desplegable; no se fuerza click ni cambia código comercial. Reejecución pendiente. HTTP 5 productos: primera 0.598 s, mediana posterior 0.079 s, máximo 0.598 s (job 135784906965); no extrapolar. No despliegue. Siguiente: certificar browser antes de benchmark catálogo grande.
+
+---
+
+# CURRENT — CV-AMZ-003F: búsqueda móvil (2026-11-19)
+
+- 003E a677347: CI focal 44586883540 verde (HTTP WooCommerce real + regresiones), staging/release verdes; validación general en curso al comprobar. 003F b6a5b65 corrige ancho de sugerencias, invalida peticiones al borrar/cambiar/cerrar, impide repintado tardío al perder foco, elimina caché JS de tarjetas con precios, muestra búsqueda y error recuperable. Prueba Chromium 320x568 con HTTP simulado para latencia, fallo, actualización de precio, escape/desenfoque y ancho; CI pendiente. No equivale a hardware físico ni staging desplegado. CV-03 revisión pendiente, sin merge/despliegue, mensajes ni gasto incremental.
+
+---
+
+# CURRENT — CV-AMZ-003E: certificación de integración (2026-11-19)
+
+- 003D head 008d299: 4/4 workflows verdes (44584345683, 44584345696, 44584345702, 44584345701). Nuevo candidato c7ca8fa: entorno WordPress/MariaDB/WooCommerce desechable, cinco productos sintéticos y gestora sintética; prueba HTTP de fonética, tipo, presupuesto, stock, proveedor, ocultos, aislamiento de espejo y ausencia de cantidades exactas públicas. Reporta primera consulta, mediana y máximo de HTTP local, no extrapolables a producción. CI pendiente; no es certificación móvil ni staging desplegado. CV-03 revisión pendiente; sin merge/despliegue ni gasto incremental autorizado.
+
+---
+
+# CURRENT — CV-AMZ-003D: disponibilidad comercial (2026-11-19)
+
+- #261 head anterior 0eb8e71 con 4/4 workflows verdes (44576460852, 44576460210, 44576460001, 44576460194). Candidato: prioridad stock indexado dentro de tipo y cobertura iguales, no garantía de stock vivo salvo consulta explícita positiva final (disponible/en tienda/en stock/en existencia). Esta verifica WooCommerce actual, producto comprable publicado visible, instock, y excluye bajo pedido reutilizando CVD_Datos_A_Mano; no altera etiquetas ni inventario. Sin fallback parcial para disponibilidad explícita y presupuesto; pruebas de stock desactualizado, proveedor, backorder, negación y combinación USD. Siete regresiones añadidas; CI nuevo pendiente. No fusionar/desplegar hasta CV-03, integración y autorización. 0 USD adicionales. Reversión: PR antes de release. Siguiente: benchmark en staging y prueba móvil/espejo; no activar radar inventario.
+
+---
+
+# CURRENT — CV-AMZ-003C: intención de producto (2026-11-19)
+
+- #261: 003B head 2f01d9d, CI focal presupuesto 44576146992 verde, release/staging verdes; validación general en curso al comprobar. Candidato 003C: si una consulta compuesta empieza por tipo reconocido (peso >=10 por título exacto, alias o fonética), limita candidatos a esos tipos. «nevera pequeña» no mezcla aceite/estaciones; «aceite para nevera» conserva intención de accesorio. Sin tipo reconocido mantiene ranking actual. Las coincidencias parciales sin presupuesto no certifican atributos; presupuesto mantiene coincidencia completa. Siete regresiones sintéticas adicionales; CI nuevo pendiente. Sin precios/stock/caché modificados, sin despliegue, costo 0 USD. CV-03 debe revisar y certificar el candidato conjunto antes de producción. Siguiente: disponibilidad explícita con WooCommerce, sin cambiar inventario.
+
+---
+
+# CURRENT — CV-AMZ-003B: presupuesto explícito (2026-11-19)
+
+- #261 anterior 1ef1401: cuatro workflows verdes, incluido fixture fonético 8/8 (44574386057). Candidato ampliado: presupuesto máximo USD explícito (menos de / hasta / máximo), se retira la frase monetaria antes del ranking; precios mostrados por WooCommerce en la sesión, sin persistencia compartida; menos de estricto, hasta inclusivo. Sin resultados no hay fallback textual. No conversión CUP, sin cambios de inventario o precio. Fixtures adicionales de límite, precio espejo simulado, precio ausente y moneda diferente; pendiente CI del nuevo SHA e integración de precios espejo autenticada. Producción intacta, 0 USD nuevos, reversión por revert del PR. No fusionar ni desplegar hasta CV-03 y aprobación.
+
+---
+
+# CURRENT — CV-AMZ-003A: búsqueda fonética (2026-11-19)
+
+- Issue #260: 20 consultas públicas; «bentilador» mezclaba accesorios. Candidato limitado al peso fonético del tipo (10), conservando coincidencia exacta (11), sin tocar precios, stock, contratos ni caché. Ocho regresiones sintéticas y workflow dedicado, CI pendiente; PHP no disponible localmente. No fusionar ni desplegar hasta revisión CV-03 y certificación. Presupuesto y disponibilidad explícita quedan separados. Coste incremental 0 USD; reversión por revert del PR antes de release.
+
+---
+
 # CURRENT — EVO-FLUX-PILOT: vista previa gratuita aislada (2026-11-19)
 
 - Base main 0bc7570b3d7ed4543212586d120e2638f7965bf1. Cuenta Cloudflare autenticada: Workers Free, 0/10.000 neuronas al observar el dashboard; Klein 4B en catálogo. No se han revelado claves ni invocado inferencia. Producción no modificada ni reconsultada en este bloque.

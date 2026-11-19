@@ -93,6 +93,8 @@ final class CVD_Product_Search {
 
 	public static function register(): void {
 		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
+		add_filter( 'woocommerce_related_products', array( __CLASS__, 'eligible_related_products' ), 20, 2 );
+		add_action( 'woocommerce_after_single_product_summary', array( __CLASS__, 'render_complements' ), 19 );
 		add_action( 'pre_get_posts', array( __CLASS__, 'tolerant_shop_search' ), 20 );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 36 );
 		add_action( 'woocommerce_before_shop_loop', array( __CLASS__, 'render_form' ), 5 );
@@ -147,10 +149,11 @@ final class CVD_Product_Search {
 			return;
 		}
 		$ids = self::search( (string) $query->get( 's' ), self::MAX_SHOP_RESULTS );
-		if ( ! $ids ) {
+		if ( ! $ids && null === self::usd_budget( (string) $query->get( 's' ) ) && ! self::availability_requested( (string) $query->get( 's' ) ) ) {
 			return;
 		}
-		$query->set( 'post__in', $ids );
+		// No volver a la búsqueda textual si el presupuesto excluye todos los productos.
+		$query->set( 'post__in', $ids ?: array( 0 ) );
 		// Si el cliente eligió un orden (precio, novedades), se respeta; si no, va por relevancia.
 		if ( empty( $_GET['orderby'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$query->set( 'orderby', 'post__in' );
@@ -304,23 +307,134 @@ final class CVD_Product_Search {
 				$best = max( $best, $extra - $penalty );
 			}
 		}
-		if ( ! $best && mb_strlen( $term ) >= 4 ) { // 3.14.97: escrito como suena («nebera», «telebisor»)
+		if ( mb_strlen( $term ) >= 4 ) { // Escrito como suena («nebera», «bentilador»).
 			$s = self::sound( $term );
-			foreach ( $row['words'] as $word ) { if ( self::sound( $word ) === $s ) { return 5; } }
+			// Un tipo de producto escrito fonéticamente prima sobre menciones accesorias.
+			if ( ! empty( $row['first'] ) && self::sound( $row['first'] ) === $s ) {
+				return max( $best, 10 );
+			}
+			if ( ! $best ) {
+				foreach ( $row['words'] as $word ) { if ( self::sound( $word ) === $s ) { return 5; } }
+			}
 		}
 		return $best;
 	}
 
-	/** @return int[] IDs ordenados por relevancia (disponibles primero a igual puntuación). */
+	/** Restricción explícita en USD; no interpreta medidas, modelos ni otras monedas. */
+	public static function usd_budget( string $query ): ?array {
+		$plain = mb_strtolower( remove_accents( $query ), 'UTF-8' );
+		$pattern = '/\b(menos\s+de|hasta|como\s+maximo|maximo)\s+(\d{1,7}(?:[.,]\d{1,2})?)\s*(?:usd|dolares?)\b/u';
+		if ( 1 !== preg_match_all( $pattern, $plain, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
+			return null;
+		}
+		$match = $matches[0];
+		$amount = (float) str_replace( ',', '.', $match[2][0] );
+		return array(
+			'query'     => trim( substr_replace( $plain, ' ', $match[0][1], strlen( $match[0][0] ) ) ),
+			'amount'    => $amount,
+			'inclusive' => 'menos de' !== preg_replace( '/\s+/', ' ', $match[1][0] ),
+		);
+	}
+
+	/** Precio mostrado en esta sesión, nunca almacenado en el índice compartido. */
+	private static function within_budget( int $id, array $budget ): bool {
+		$product = wc_get_product( $id );
+		if ( ! $product || 'publish' !== $product->get_status() || 'hidden' === $product->get_catalog_visibility() || ! is_numeric( $product->get_price() ) ) {
+			return false;
+		}
+		$price = round( (float) wc_get_price_to_display( $product ), wc_get_price_decimals() );
+		return is_finite( $price ) && $price >= 0 && ( $budget['inclusive'] ? $price <= $budget['amount'] : $price < $budget['amount'] );
+	}
+
+	/** Solo expresiones positivas inequívocas al final de la consulta. */
+	public static function availability_requested( string $query ): bool {
+		$plain = self::normalize( $query );
+		return ! preg_match( '/\b(?:no|sin)\s+(?:esta[n]?\s+)?(?:disponibles?|stock|existencias?|en\s+tienda)\b/u', $plain )
+			&& (bool) preg_match( '/\b(?:disponibles?|en stock|en existencia|en tienda)$/u', $plain );
+	}
+
+	private static function available_now( int $id ): bool {
+		$product = wc_get_product( $id );
+		return $product && 'publish' === $product->get_status()
+			&& 'hidden' !== $product->get_catalog_visibility()
+			&& 'instock' === $product->get_stock_status()
+			&& $product->is_in_stock() && $product->is_purchasable()
+			&& ! ( class_exists( 'CVD_Datos_A_Mano' ) && CVD_Datos_A_Mano::is_bajo_pedido( $product ) );
+	}
+
+	/**
+	 * Conserva la selección nativa de relacionados por categoría/etiqueta.
+	 * No inventa afinidad ni promete disponibilidad de encargos.
+	 * Los IDs pueden venir de la caché de WooCommerce: comprobar cada producto en vivo.
+	 */
+	public static function eligible_related_products( array $ids, int $source_id ): array {
+		$eligible = array();
+		foreach ( $ids as $id ) {
+			$id = absint( $id );
+			if ( $id && $id !== $source_id && ! isset( $eligible[ $id ] ) && self::available_now( $id ) ) {
+				$eligible[ $id ] = $id;
+			}
+		}
+		return array_values( $eligible );
+	}
+
+	/** Complementos elegidos explícitamente en WooCommerce; no inferir compatibilidad. */
+	public static function complement_ids( WC_Product $source ): array {
+		return array_slice( self::eligible_related_products( $source->get_cross_sell_ids(), $source->get_id() ), 0, 4 );
+	}
+
+	/** Ficha clásica: precios de WooCommerce en esta sesión, sin almacenar HTML. */
+	public static function render_complements(): void {
+		global $product;
+		if ( ! $product instanceof WC_Product || ! is_product() || 'publish' !== $product->get_status() ) {
+			return;
+		}
+		$ids = self::complement_ids( $product );
+		if ( ! $ids ) { return; }
+		echo '<section class="cvd-complements" aria-label="Completa tu compra"><h2>Completa tu compra</h2><ul class="cvd-complements-list">';
+		foreach ( $ids as $id ) {
+			$item = wc_get_product( $id );
+			if ( ! $item ) { continue; }
+			echo '<li><a href="' . esc_url( $item->get_permalink() ) . '">'
+				. wp_kses_post( $item->get_image( 'woocommerce_thumbnail', array( 'loading' => 'lazy' ) ) )
+				. '<span>' . esc_html( $item->get_name() ) . '</span>'
+				. '<strong>' . wp_kses_post( $item->get_price_html() ) . '</strong></a></li>';
+		}
+		echo '</ul></section>';
+	}
+
+	/** @return int[] IDs ordenados por relevancia y disponibilidad. */
 	public static function search( string $query, int $limit = 6 ): array {
-		$terms = self::terms( $query );
+		$budget = self::usd_budget( $query );
+		if ( null !== $budget && 'USD' !== get_woocommerce_currency() ) {
+			return array(); // No convertir ni comparar monedas distintas.
+		}
+		$text = null !== $budget ? $budget['query'] : $query;
+		$available = self::availability_requested( $text );
+		if ( $available ) {
+			$text = preg_replace( '/\b(?:disponibles?|en stock|en existencia|en tienda)\s*$/u', '', self::normalize( $text ) );
+		}
+		$terms = self::terms( $text );
 		if ( ! $terms ) {
 			return array();
 		}
 		$aliases = self::aliases();
 		$all = array();
 		$partial = array();
-		foreach ( self::index() as $row ) {
+		$rows = self::index();
+		$typed = array();
+		// En una consulta compuesta, si el catálogo reconoce el primer término como
+		// tipo de producto, no dejar que menciones de accesorios sustituyan dicho tipo.
+		if ( $available || count( $terms ) > 1 ) {
+			$head = $terms[0];
+			$typed = array_values( array_filter( $rows, static function ( $row ) use ( $head, $aliases ) {
+				return self::term_score( $head, $row, $aliases ) >= 10;
+			} ) );
+			if ( $typed ) {
+				$rows = $typed;
+			}
+		}
+		foreach ( $rows as $row ) {
 			$total = 0;
 			$matched = 0;
 			foreach ( $terms as $term ) {
@@ -331,7 +445,7 @@ final class CVD_Product_Search {
 			if ( ! $matched ) {
 				continue;
 			}
-			$entry = array( $row['id'], $total + $row['stock'], $matched );
+			$entry = array( $row['id'], $total + $row['stock'], $matched, $row['stock'] );
 			if ( $matched === count( $terms ) ) {
 				$all[] = $entry;
 			} else {
@@ -339,9 +453,24 @@ final class CVD_Product_Search {
 			}
 		}
 		// Primero lo que cumple todas las palabras; si no hay nada, lo que cumple más palabras.
-		$results = $all ?: $partial;
-		usort( $results, static fn( $a, $b ) => array( $b[2], $b[1] ) <=> array( $a[2], $a[1] ) );
-		return array_slice( array_map( static fn( $r ) => (int) $r[0], $results ), 0, $limit );
+		$results = ( null !== $budget || $available ) ? $all : ( $all ?: $partial );
+		// Dentro del mismo tipo y cobertura de palabras, favorecer stock indexado.
+		usort( $results, static fn( $a, $b ) => $typed
+			? array( $b[2], $b[3], $b[1] ) <=> array( $a[2], $a[3], $a[1] )
+			: array( $b[2], $b[1] ) <=> array( $a[2], $a[1] ) );
+		if ( null === $budget && ! $available ) {
+			return array_slice( array_map( static fn( $r ) => (int) $r[0], $results ), 0, $limit );
+		}
+		$ids = array();
+		foreach ( $results as $row ) {
+			if ( ( ! $available || self::available_now( (int) $row[0] ) ) && ( null === $budget || self::within_budget( (int) $row[0], $budget ) ) ) {
+				$ids[] = (int) $row[0];
+				if ( count( $ids ) >= $limit ) {
+					break;
+				}
+			}
+		}
+		return $ids;
 	}
 
 	/**

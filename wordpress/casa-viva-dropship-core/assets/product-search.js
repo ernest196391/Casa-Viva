@@ -3,7 +3,7 @@
   const config = window.cvdProductSearch;
   if (!config || !config.url || !window.fetch) return;
   const SELECTOR = '[data-cvd-product-search] input[name="s"],form.woocommerce-product-search input[name="s"],form[role="search"] input[name="s"],form.search-form input[name="s"]';
-  const cache = new Map();
+
   let uid = 0;
 
   function el(tag, className, text) {
@@ -41,10 +41,17 @@
     let active = -1;
     let timer = 0;
     let controller = null;
+    let generation = 0;
+    function invalidate() {
+      generation++;
+      window.clearTimeout(timer);
+      controller?.abort();
+      controller = null;
+    }
 
     function place() {
       const r = input.getBoundingClientRect();
-      const width = Math.max(r.width, Math.min(360, window.innerWidth - 24));
+      const width = Math.min(window.innerWidth - 24, Math.max(r.width, Math.min(360, window.innerWidth - 24)));
       const left = Math.min(Math.max(12, r.left), window.innerWidth - width - 12);
       list.style.top = `${r.bottom + window.scrollY + 6}px`;
       list.style.left = `${left + window.scrollX}px`;
@@ -106,37 +113,47 @@
       list.hidden = false;
       input.setAttribute("aria-expanded", "true");
     }
+    function showMessage(message) {
+      list.replaceChildren(el("li", "cvd-search-empty", message));
+      items = [];
+      active = -1;
+      input.removeAttribute("aria-activedescendant");
+      status.textContent = message;
+      place();
+      list.hidden = false;
+      input.setAttribute("aria-expanded", "true");
+    }
     async function lookup() {
       const query = input.value.trim();
       if (query.length < 2) { close(); return; }
-      if (cache.has(query)) { render(query, cache.get(query)); return; }
-      controller?.abort();
+      invalidate();
+      const current = generation;
       controller = new AbortController();
+      showMessage("Buscando…");
       try {
         const url = new URL(config.url, window.location.origin);
         url.searchParams.set("q", query);
         url.searchParams.set("limit", "6");
-        const response = await fetch(url, { signal: controller.signal, credentials: "same-origin" });
+        const response = await fetch(url, { signal: controller.signal, credentials: "same-origin", cache: "no-store" });
         if (!response.ok) throw new Error();
         const data = await response.json();
         const products = Array.isArray(data.products) ? data.products : [];
-        cache.set(query, products);
-        if (input.value.trim() === query) render(query, products);
+        if (current === generation && document.activeElement === input && input.value.trim() === query) render(query, products);
       } catch (error) {
         if (error && error.name === "AbortError") return;
-        close();
+        if (current === generation && document.activeElement === input) showMessage("No se pudo conectar. Pulsa ↓ o modifica la búsqueda para reintentar.");
       }
     }
 
-    input.addEventListener("input", () => { window.clearTimeout(timer); timer = window.setTimeout(lookup, 220); });
+    input.addEventListener("input", () => { invalidate(); close(); if (input.value.trim().length >= 2) timer = window.setTimeout(lookup, 220); });
     input.addEventListener("focus", () => { if (input.value.trim().length >= 2) lookup(); });
-    input.addEventListener("blur", () => window.setTimeout(close, 120));
+    input.addEventListener("blur", () => { invalidate(); window.setTimeout(() => { if (document.activeElement !== input) close(); }, 120); });
     input.addEventListener("keydown", (event) => {
-      if (list.hidden && event.key === "ArrowDown") { lookup(); return; }
+      if ((list.hidden || !items.length) && event.key === "ArrowDown") { event.preventDefault(); lookup(); return; }
       if (list.hidden) return;
       if (event.key === "ArrowDown") { event.preventDefault(); setActive(items.length ? (active + 1) % items.length : -1); }
       else if (event.key === "ArrowUp") { event.preventDefault(); setActive(items.length ? (active <= 0 ? items.length - 1 : active - 1) : -1); }
-      else if (event.key === "Escape") { close(); }
+      else if (event.key === "Escape") { invalidate(); close(); }
       else if (event.key === "Enter" && active >= 0) { event.preventDefault(); window.location.href = items[active].dataset.href; }
     });
     window.addEventListener("resize", () => { if (!list.hidden) place(); }, { passive: true });

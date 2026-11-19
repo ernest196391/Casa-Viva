@@ -1,0 +1,169 @@
+<?php
+defined( 'ABSPATH' ) || exit;
+if ( wp_get_environment_type() !== 'local' ) { throw new RuntimeException( 'Disposable environment only' ); }
+update_option( 'woocommerce_currency', 'USD' );
+function cvamz_product( $name, $sku, $price, $status = 'instock', $visibility = 'visible' ) {
+    $product = new WC_Product_Simple();
+    $product->set_name( $name );
+    $product->set_sku( $sku );
+    $product->set_regular_price( (string) $price );
+    $product->set_status( 'publish' );
+    $product->set_catalog_visibility( $visibility );
+    $product->set_stock_status( $status );
+    return $product->save();
+}
+$ids = array(
+    'fan' => cvamz_product( 'Ventilador CVAMZ', 'CVAMZ-FAN', 100 ),
+    'accessory' => cvamz_product( 'Aceite para ventilador CVAMZ', 'CVAMZ-OIL', 20 ),
+    'supplier' => cvamz_product( 'Ventilador CVAMZ proveedor', 'MK-CVAMZ-FAN', 80 ),
+    'out' => cvamz_product( 'Ventilador CVAMZ agotado', 'CVAMZ-OUT', 70, 'outofstock' ),
+    'hidden' => cvamz_product( 'Ventilador CVAMZ oculto', 'CVAMZ-HIDDEN', 60, 'instock', 'hidden' ),
+);
+$user_id = wp_create_user( 'cvamz_gestora', 'Synthetic-Only-CVAMZ!', 'cvamz@example.invalid' );
+if ( is_wp_error( $user_id ) ) { throw new RuntimeException( $user_id->get_error_message() ); }
+$user = new WP_User( $user_id );
+$user->set_role( 'cvd_gestora' );
+update_user_meta( $user_id, '_cvd_account_status', 'approved' );
+update_user_meta( $user_id, '_cvd_program_type', 'gestora' );
+update_user_meta( $user_id, '_cvd_referral_code', 'CVAMZTEST' );
+update_user_meta( $user_id, '_cvd_global_markup_percent', 20 );
+if ( ! CVD_Datos_A_Mano::is_bajo_pedido( wc_get_product( $ids['supplier'] ) ) ) { throw new RuntimeException( 'Supplier fixture not recognized' ); }
+// Native related-product eligibility, including stale cached candidate IDs.
+if ( ! has_filter( 'woocommerce_related_products', array( 'CVD_Product_Search', 'eligible_related_products' ) ) ) {
+    throw new RuntimeException( 'Related products hook not registered' );
+}
+$candidates = array( $ids['fan'], $ids['accessory'], $ids['supplier'], $ids['out'], $ids['hidden'], $ids['fan'], 0 );
+$related = apply_filters( 'woocommerce_related_products', $candidates, $ids['accessory'], array() );
+if ( $related !== array( $ids['fan'] ) ) { throw new RuntimeException( 'Ineligible related products: ' . wp_json_encode( $related ) ); }
+$fan = wc_get_product( $ids['fan'] );
+$fan->set_stock_status( 'outofstock' );
+$fan->save();
+if ( apply_filters( 'woocommerce_related_products', $candidates, $ids['accessory'], array() ) !== array() ) {
+    throw new RuntimeException( 'Stale recommendation survived live stock change' );
+}
+$fan->set_stock_status( 'instock' );
+$fan->save();
+// Explicit cross-sell configuration is the only source of complement affinity.
+$fan->set_cross_sell_ids( array( $ids['accessory'], $ids['supplier'], $ids['out'], $ids['hidden'] ) );
+$fan->save();
+if ( CVD_Product_Search::complement_ids( wc_get_product( $ids['fan'] ) ) !== array( $ids['accessory'] ) ) {
+    throw new RuntimeException( 'Complement must be explicitly configured and available' );
+}
+if ( CVD_Product_Search::complement_ids( wc_get_product( $ids['accessory'] ) ) !== array() ) {
+    throw new RuntimeException( 'Unconfigured complement must not be invented' );
+}
+if ( ! has_action( 'woocommerce_after_single_product_summary', array( 'CVD_Product_Search', 'render_complements' ) ) ) {
+    throw new RuntimeException( 'Complement card hook not registered' );
+}
+// Exercise the actual renderer in a product-query context, then restore globals.
+$prior_query = $GLOBALS['wp_query'];
+$prior_product = $GLOBALS['product'] ?? null;
+$GLOBALS['wp_query'] = new WP_Query( array( 'post_type' => 'product', 'p' => $ids['fan'] ) );
+$GLOBALS['product'] = wc_get_product( $ids['fan'] );
+try {
+    ob_start();
+    CVD_Product_Search::render_complements();
+    $markup = ob_get_clean();
+    if ( ! str_contains( $markup, 'Completa tu compra' ) || ! str_contains( $markup, 'Aceite para ventilador CVAMZ' )
+        || str_contains( $markup, 'proveedor' ) || ! str_contains( $markup, 'cvd-complements-list' ) ) {
+        throw new RuntimeException( 'Complement markup differs from eligible set' );
+    }
+} finally {
+    $GLOBALS['wp_query'] = $prior_query;
+    $GLOBALS['product'] = $prior_product;
+}
+// Offline affinity candidate, intentionally not registered in the live plugin.
+require_once WP_PLUGIN_DIR . '/casa-viva-dropship-core/includes/class-cvd-purchase-affinity.php';
+$basket_order = new WC_Order();
+$basket_order->set_status( 'completed' );
+$basket_order->update_meta_data( '_cvd_operation_status', 'delivered' );
+$basket_order->update_meta_data( '_cvd_fulfillment_type', 'pickup' );
+foreach ( array( $ids['fan'], $ids['fan'], $ids['accessory'] ) as $id ) {
+    $line = new WC_Order_Item_Product();
+    $line->set_product( wc_get_product( $id ) );
+    $line->set_quantity( 1 );
+    $basket_order->add_item( $line );
+}
+$basket = CVD_Purchase_Affinity::basket( $basket_order );
+if ( $basket !== array( $ids['fan'], $ids['accessory'] ) ) { throw new RuntimeException( 'Canonical basket or dedupe failed' ); }
+$basket_order->update_meta_data( '_cvd_operation_incident_active', 'yes' );
+if ( CVD_Purchase_Affinity::basket( $basket_order ) ) { throw new RuntimeException( 'Incident order counted' ); }
+$basket_order->update_meta_data( '_cvd_operation_incident_active', 'no' );
+$basket_order->set_status( 'cancelled' );
+if ( CVD_Purchase_Affinity::basket( $basket_order ) ) { throw new RuntimeException( 'Cancelled order counted' ); }
+$ranked = CVD_Purchase_Affinity::rank( array( array( 1, 1, 2, 3 ), array( 1, 2 ), array( 1, 2 ), array( 1, 3 ) ) );
+if ( $ranked !== array( 1 => array( 2 ), 2 => array( 1 ) ) ) { throw new RuntimeException( 'Support threshold or dedupe failed' ); }
+$rare = array_merge( array_fill( 0, 3, array( 1, 2 ) ), array_fill( 0, 20, array( 1 ) ) );
+if ( isset( CVD_Purchase_Affinity::rank( $rare )[1] ) ) { throw new RuntimeException( 'Low confidence pair counted' ); }
+$empty_snapshot = CVD_Purchase_Affinity::snapshot();
+if ( $empty_snapshot !== array( 'scanned' => 0, 'eligible' => 0, 'truncated' => false, 'recommendations' => array() ) ) {
+    throw new RuntimeException( 'Empty disposable order history should produce no recommendations' );
+}
+// Persisted synthetic histories: local disposable DB only; never send mail or charge.
+global $wpdb;
+if ( $wpdb->prefix !== 'cvt_' ) { throw new RuntimeException( 'Synthetic database required' ); }
+add_filter( 'pre_wp_mail', '__return_true', PHP_INT_MAX );
+add_filter( 'pre_http_request', static fn() => new WP_Error( 'cvamz_network_disabled', 'Synthetic order fixture blocks outbound HTTP' ), PHP_INT_MAX );
+function cvamz_history_order( array $product_ids, string $status, string $operation, int $age_days = 0 ): WC_Order {
+    $order = new WC_Order();
+    $order->set_currency( 'USD' );
+    $order->set_created_via( 'cvamz-synthetic' );
+    $order->set_status( $status );
+    $order->set_date_created( time() - $age_days * DAY_IN_SECONDS );
+    if ( $status === 'completed' ) { $order->set_date_completed( time() - $age_days * DAY_IN_SECONDS ); }
+    $order->update_meta_data( '_cvd_operation_status', $operation );
+    $order->update_meta_data( '_cvd_fulfillment_type', 'pickup' );
+    foreach ( $product_ids as $id ) {
+        $line = new WC_Order_Item_Product();
+        $line->set_product( wc_get_product( $id ) );
+        $line->set_quantity( 1 );
+        $line->set_subtotal( 10 );
+        $line->set_total( 10 );
+        $order->add_item( $line );
+    }
+    $order->set_total( count( $product_ids ) * 10 );
+    $order->save();
+    return wc_get_order( $order->get_id() );
+}
+for ( $i = 0; $i < 3; $i++ ) {
+    cvamz_history_order( array( $ids['fan'], $ids['accessory'] ), 'completed', 'delivered' );
+}
+cvamz_history_order( array( $ids['fan'], $ids['supplier'] ), 'completed', 'confirmed' );
+cvamz_history_order( array( $ids['fan'], $ids['supplier'] ), 'completed', 'delivered', 100 );
+cvamz_history_order( array( $ids['fan'], $ids['supplier'] ), 'cancelled', 'cancelled' );
+$refund_order = cvamz_history_order( array( $ids['fan'], $ids['supplier'] ), 'completed', 'delivered' );
+$refund = wc_create_refund( array( 'order_id' => $refund_order->get_id(), 'amount' => 1, 'refund_payment' => false, 'restock_items' => false ) );
+if ( is_wp_error( $refund ) ) { throw new RuntimeException( 'Synthetic partial refund failed' ); }
+$history = CVD_Purchase_Affinity::snapshot();
+$expected = array( $ids['fan'] => array( $ids['accessory'] ), $ids['accessory'] => array( $ids['fan'] ) );
+if ( $history['scanned'] !== 5 || $history['eligible'] !== 3 || $history['truncated'] || $history['recommendations'] !== $expected ) {
+    throw new RuntimeException( 'Unexpected aggregate snapshot counts or recommendations' );
+}
+if ( CVD_Product_Search::eligible_related_products( $history['recommendations'][ $ids['fan'] ], $ids['fan'] ) !== array( $ids['accessory'] ) ) {
+    throw new RuntimeException( 'Affinity recommendation not commercially eligible' );
+}
+$accessory = wc_get_product( $ids['accessory'] );
+$accessory->set_stock_status( 'outofstock' );
+$accessory->save();
+if ( CVD_Product_Search::eligible_related_products( $history['recommendations'][ $ids['fan'] ], $ids['fan'] ) ) {
+    throw new RuntimeException( 'Historical affinity must not bypass live stock' );
+}
+$accessory->set_stock_status( 'instock' );
+$accessory->save();
+// Optional scale benchmark; never run against a real store.
+if ( getenv( 'CVAMZ_SCALE' ) === '1000' ) {
+    global $wpdb;
+    if ( $wpdb->prefix !== 'cvt_' ) { throw new RuntimeException( 'Synthetic database required' ); }
+    $types = array( 'Nevera', 'Ventilador', 'Sartén', 'Licuadora', 'Toalla', 'Generador', 'Lámpara', 'Alfombra', 'Cocina', 'Batería' );
+    for ( $i = 0; $i < 995; $i++ ) {
+        $type = $types[ $i % count( $types ) ];
+        cvamz_product( $type . ' Modelo ensayo ' . $i, 'CVBENCH-' . $i,
+            15 + ( $i % 400 ), $i % 7 === 0 ? 'outofstock' : 'instock',
+            $i % 23 === 0 ? 'hidden' : 'visible' );
+    }
+    $count = (int) wp_count_posts( 'product' )->publish;
+    if ( $count !== 1000 ) { throw new RuntimeException( 'Expected exactly 1000 synthetic products, got ' . $count ); }
+    $ids['catalog_size'] = $count;
+}
+CVD_Product_Search::flush();
+echo wp_json_encode( $ids ) . PHP_EOL;
