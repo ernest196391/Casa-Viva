@@ -277,3 +277,24 @@ cvt_check($replay['success'] && $replay['idempotent_replay'] && $r['event_id']==
 cvt_check(!CVD_Order_Transition_Service::correct_custody(459,21,20,'otro motivo','p0-1',true)['success'],'P0 misma referencia con otro contenido falla');
 $order->meta['_cvd_delivery_status']='delivered';
 cvt_check(!CVD_Order_Transition_Service::correct_custody(459,21,20,'otro motivo','p0-2',true)['success'],'P0 entrega final no se modifica');
+
+// P0: relevo físico de VivaBot comparte bloqueo y no puede ganar con titular obsoleto.
+$order=cvt_reset();
+$order->meta=array('_cvd_operation_status'=>'with_courier','_cvd_delivery_status'=>'picked_up','_cvd_messenger_user_id'=>20,'_cvd_bot_eta'=>'mañana');
+$GLOBALS['wpdb']->lock_available=false;
+cvt_check(!CVD_Order_Transition_Service::handover_custody(459,20,21,'')['success'] && 20===$order->get_meta('_cvd_messenger_user_id'),'P0 relevo no escribe con bloqueo ocupado');
+$GLOBALS['wpdb']->lock_available=true;
+$r=CVD_Order_Transition_Service::handover_custody(459,20,21,'');
+cvt_check($r['success'] && 21===$order->get_meta('_cvd_messenger_user_id') && 'picked_up'===$order->get_meta('_cvd_delivery_status') && ''===$order->get_meta('_cvd_bot_eta'),'P0 relevo mantiene etapa y actualiza titular');
+cvt_check(!CVD_Order_Transition_Service::handover_custody(459,20,21,'')['success'],'P0 relevo repetido con titular obsoleto no escribe');
+$GLOBALS['cvt_user_id']=11;
+cvt_check(!CVD_Order_Transition_Service::correct_custody(459,20,21,'confirmado','p0-race',true)['success'],'P0 corrección no pisa relevo confirmado');
+cvt_check(1===CVD_Order_Event_Timeline::read(459,array(),1,20)['total'],'P0 solo un evento si compiten relevo y corrección');
+$order=cvt_reset();
+$order->meta=array('_cvd_operation_status'=>'with_courier','_cvd_delivery_status'=>'picked_up','_cvd_messenger_user_id'=>20);
+$GLOBALS['cvt_user_id']=11;
+cvt_check(CVD_Order_Transition_Service::correct_custody(459,20,21,'confirmado','p0-race2',true)['success'],'P0 corrección gana primero');
+cvt_check(!CVD_Order_Transition_Service::handover_custody(459,20,21,'')['success'],'P0 relevo no pisa corrección confirmada');
+$order=cvt_reset();
+$order->meta=array('_cvd_delivery_status'=>'picked_up','_cvd_messenger_user_id'=>20,'_cvd_delivery_incident_active'=>'yes');
+cvt_check(!CVD_Order_Transition_Service::handover_custody(459,20,21,'')['success'],'P0 relevo no cruza incidencia abierta');
