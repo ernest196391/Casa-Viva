@@ -1,3 +1,9 @@
+# CURRENT — CV-AMZ-003G: escala de búsqueda (2026-11-19)
+
+- 003F 13c445c: CI focal 44588356367 3/3 verde (PHP, móvil Chromium, WooCommerce HTTP); general 44588356613 falla lint únicamente por imports CJS en fixture propio; corregido f2db363 con excepción localizada. Browser, integración, content-studio, postgres verdes. 003G ffaff32: fixture local con prefijo cvt_ añade 995 productos sintéticos, valida 1000 publicados, diez tipos con precios, stock y visibilidad variados. Conserva todos los asserts espejo/privacidad y añade 45 consultas mixtas; mide frío, mediana caliente, p95 y máximo. CI pendiente; no extrapolar a Hostinger ni cambiar motor sin medición. CV-03 revisión pendiente. Sin merge, producción ni gasto adicional.
+
+---
+
 # CURRENT — CV-AMZ-003F: ajuste de prueba móvil (2026-11-19)
 
 - 6e6a6a0: CI focal 44587671848: PHP y HTTP WooCommerce verdes; browser falla únicamente al intentar tocar botón sintético cubierto por el desplegable (timeout, log job 135784906362). Corregido fixture 321d1b5 colocando target fuera del desplegable; no se fuerza click ni cambia código comercial. Reejecución pendiente. HTTP 5 productos: primera 0.598 s, mediana posterior 0.079 s, máximo 0.598 s (job 135784906965); no extrapolar. No despliegue. Siguiente: certificar browser antes de benchmark catálogo grande.
