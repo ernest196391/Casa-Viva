@@ -36,3 +36,36 @@ check( 'sartén', array( 8, 9 ) );
 check( 'sarten', array( 8, 9 ) );
 check( 'HotChef 20', array( 8 ) );
 check( 'xyzqwerty987', array() );
+
+ // Session price stub: the same indexed product can have a different displayed price for a gestora.
+class SearchBudgetProduct {
+    private $id;
+    public function __construct( $id ) { $this->id = $id; }
+    public function get_status() { return 'publish'; }
+    public function get_catalog_visibility() { return 'visible'; }
+    public function get_price() { return $GLOBALS['prices'][$this->id] ?? ''; }
+}
+function wc_get_product( $id ) { return new SearchBudgetProduct( $id ); }
+function wc_get_price_to_display( $product ) { return $product->get_price(); }
+function wc_get_price_decimals() { return 2; }
+function get_woocommerce_currency() { return $GLOBALS['currency']; }
+$GLOBALS['currency'] = 'USD';
+$GLOBALS['prices'] = array( 8 => 18, 9 => 24 );
+check( 'sartén por menos de 20 dólares', array( 8 ) );
+check( 'sarten hasta 18 USD', array( 8 ) );
+check( 'sarten menos de 18 USD', array() );
+check( 'sarten hasta 17 USD', array() );
+check( 'HotChef 20', array( 8 ) );
+check( 'sarten hasta 18,50 USD', array( 8 ) );
+$GLOBALS['prices'][8] = 21; // Mirror session, same transient.
+check( 'sarten hasta 20 USD', array() );
+$GLOBALS['prices'][8] = 18; // Ordinary shopper, no cached mirror price.
+check( 'sarten hasta 20 USD', array( 8 ) );
+$GLOBALS['prices'][8] = ''; // Price unavailable: never assume zero.
+check( 'sarten hasta 20 USD', array() );
+$GLOBALS['currency'] = 'CUP';
+check( 'sarten hasta 100 USD', array() );
+if ( null !== CVD_Product_Search::usd_budget( 'HotChef 20 cm' ) || null !== CVD_Product_Search::usd_budget( 'sarten hasta 20000 CUP' ) ) {
+    throw new RuntimeException( 'Model/other currency must not be interpreted as USD' );
+}
+echo "OK: budget syntax and currency boundary\n";
