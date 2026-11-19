@@ -7,7 +7,7 @@ test('mobile search: bounded dropdown, cancellation, failure recovery and fresh 
   let fail = false;
   await page.route('http://cvamz.test/**', async route => {
     const url = new URL(route.request().url());
-    if (url.pathname === '/') return route.fulfill({ contentType: 'text/html', body: '<meta name="viewport" content="width=device-width, initial-scale=1"><form role="search"><input name="s" type="search" style="width:100%;box-sizing:border-box"></form><button id="outside">Outside</button>' });
+    if (url.pathname === '/') return route.fulfill({ contentType: 'text/html', body: '<meta name="viewport" content="width=device-width, initial-scale=1"><form role="search"><input name="s" type="search" style="width:100%;box-sizing:border-box"></form><button id="outside" style="position:fixed;bottom:12px;left:12px">Outside</button>' });
     if (url.pathname !== '/search') return route.fulfill({ status: 404 });
     calls++;
     const query = url.searchParams.get('q');
