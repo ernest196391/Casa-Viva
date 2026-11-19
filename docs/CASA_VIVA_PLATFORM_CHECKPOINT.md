@@ -696,3 +696,34 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 - Revisión visual del PNG: quedan restos claros de fondo inferior/halo; no aprobar publicación aunque la máscara diga fiable=true. No bloquea certificar el transporte/recorte real, sí impide declarar calidad fotográfica automática. Se mantiene revisión humana y autonomía desactivada.
 - Estado: implementación estabilizada y verificada, PRs en borrador para revisión del propietario. Ningún merge ni despliegue. `costo_actual`: infraestructura existente; `costo_nuevo_requerido`: 0; `alternativa_gratuita`: recorte local y revisión humana; `momento_de_escalar`: fase posterior expresamente aprobada.
 - Evidencias, archivos y reversión: docs/EVO_001_CONTENT_STUDIO.md. Siguiente: aprobación explícita de ambos PR/SHA y despliegue controlado con rollback; después EVO-002 de auditoría/score/cola. No incorporar interfaces ni activar publicaciones autónomas.
+
+
+## ENERGY-PILOT-001 — 18 noviembre 2026
+- Prototipo aislado en scripts/ops/energy-pilot; no producción. Base `da28ed6747c2efb631b9415b9ab24f5cc5348a76`.
+- `node --test scripts/ops/energy-pilot/pilot.test.mjs`: 3/3 local. Ingesta HTTP, cálculo, cotización y bot simulado. Sin mensajes reales ni compras.
+- Pendiente: integración Core/CRM, autenticación, deduplicación, notificación real, búsqueda de proveedores, propuesta interactiva, prueba VivaBot aislada, aprobación y despliegue. No usar para clientes todavía.
+
+
+## ENERGY-PILOT-002 — 18 noviembre 2026
+- Registro de fuentes autorizadas, validación de ofertas del día en horario Cuba, stock, cotización en borrador y vista cliente sin costos internos.
+- 6/6 pruebas locales. Datos de prueba únicamente. No se consultaron ni contactaron proveedores reales, no se publicó ni activó VivaBot. Próximo: integración CRM y adaptadores, propuesta web y prueba controlada.
+
+
+## ENERGY-PILOT-003 — 18 noviembre 2026
+- Propuesta privada revocable, vencimiento, selector por vivienda, total y solicitud de visita mediante adaptador; sin costes internos. Almacenamiento temporal en memoria para piloto; pendiente persistencia, autenticación supervisor, revalidación de vigencia, idempotencia de visita y CRM, fotos autorizadas y verificación visual móvil. No publicar ni enviar. 8/8 pruebas locales.
+
+
+## ENERGY-PILOT-004 — 18 noviembre 2026
+- Adaptador privado de expedientes persistentes, referencia para solicitud autenticada existente en Control OS, aprobación vinculada a versión y huella, reapertura. 10/10 pruebas locales. Base f63574c193f2f79b8b6cf513f3106d45d7178029. Sin conexión real a CRM ni suplantación de actor; pendiente validar adaptador autorizado y cola existente en staging, persistir propuestas y revocar en reapertura, prueba integral VivaBot. Producción intacta; cero gasto incremental.
+
+
+## ENERGY-PILOT-005 — 18 noviembre 2026
+- Ensayo integral aislado con dos viviendas, bot simulado, expediente HTTP, proveedores ficticios, aprobación versionada de prueba, propuesta privada y visita; invalidación explícita al reabrir. 11/11 pruebas locales. No equivale a aprobación real ni certificación técnica ni integración CRM/VivaBot. Pendiente persistencia/revocación automática y anti-duplicados, conexión autorizada y smoke controlado. Costo incremental cero.
+
+
+## ENERGY-PILOT-006 — 18 noviembre 2026
+- CRM real verificado solo lectura: ops_tasks, ops_threads, ops_approvals, crm_ops_bridge y RPCs existentes. VivaBot PR #53, SHA 3aa82ff382bafc8125b1f89676cff533725e1b92: ruta determinista exclusiva de teléfono autorizado, flag desactivado por defecto, enlace exacto, reutiliza escalación; prueba de regla 1/1 local. No producción ni datos reales escritos. Pendiente CI, persistencia/revocación, deduplicación, conexión de expediente a cola, URL desplegada y aprobación para smoke de teléfono controlado. Cero gasto adicional.
+
+
+## ENERGY-PILOT-007 — 18 noviembre 2026
+- CI previa verde Casa Viva (3 workflows) y VivaBot (2 workflows). Persistencia opcional privada de propuestas, validación de versión del caso al servir, deduplicación de visita en proceso y referencia sin token. 13/13 pruebas locales incl. VivaBot. Pendiente CI de este SHA, persistencia/idempotencia de adaptador CRM real, autorización, integración segura de emisión y entrada, comprobación móvil y despliegue. No activar ni fusionar; cero costo incremental.
