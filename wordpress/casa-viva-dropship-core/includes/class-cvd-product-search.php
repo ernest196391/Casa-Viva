@@ -94,6 +94,7 @@ final class CVD_Product_Search {
 	public static function register(): void {
 		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
 		add_filter( 'woocommerce_related_products', array( __CLASS__, 'eligible_related_products' ), 20, 2 );
+		add_action( 'woocommerce_after_single_product_summary', array( __CLASS__, 'render_complements' ), 19 );
 		add_action( 'pre_get_posts', array( __CLASS__, 'tolerant_shop_search' ), 20 );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ), 36 );
 		add_action( 'woocommerce_before_shop_loop', array( __CLASS__, 'render_form' ), 5 );
@@ -375,6 +376,31 @@ final class CVD_Product_Search {
 			}
 		}
 		return array_values( $eligible );
+	}
+
+	/** Complementos elegidos explícitamente en WooCommerce; no inferir compatibilidad. */
+	public static function complement_ids( WC_Product $source ): array {
+		return array_slice( self::eligible_related_products( $source->get_cross_sell_ids(), $source->get_id() ), 0, 4 );
+	}
+
+	/** Ficha clásica: precios de WooCommerce en esta sesión, sin almacenar HTML. */
+	public static function render_complements(): void {
+		global $product;
+		if ( ! $product instanceof WC_Product || ! is_product() || 'publish' !== $product->get_status() ) {
+			return;
+		}
+		$ids = self::complement_ids( $product );
+		if ( ! $ids ) { return; }
+		echo '<section class="cvd-complements" aria-label="Completa tu compra"><h2>Completa tu compra</h2><ul class="cvd-complements-list">';
+		foreach ( $ids as $id ) {
+			$item = wc_get_product( $id );
+			if ( ! $item ) { continue; }
+			echo '<li><a href="' . esc_url( $item->get_permalink() ) . '">'
+				. wp_kses_post( $item->get_image( 'woocommerce_thumbnail', array( 'loading' => 'lazy' ) ) )
+				. '<span>' . esc_html( $item->get_name() ) . '</span>'
+				. '<strong>' . wp_kses_post( $item->get_price_html() ) . '</strong></a></li>';
+		}
+		echo '</ul></section>';
 	}
 
 	/** @return int[] IDs ordenados por relevancia y disponibilidad. */
