@@ -69,3 +69,17 @@ if ( null !== CVD_Product_Search::usd_budget( 'HotChef 20 cm' ) || null !== CVD_
     throw new RuntimeException( 'Model/other currency must not be interpreted as USD' );
 }
 echo "OK: budget syntax and currency boundary\n";
+
+ // Compound intent: primary product before accessories, without inventing a size.
+$GLOBALS['fixture'][] = row( 10, 'Nevera pequeña Milexus' );
+$GLOBALS['fixture'][] = row( 11, 'Estación energética pequeña', 1, array( 'nevera' ) );
+$GLOBALS['fixture'][] = row( 12, 'Aceite para nevera pequeña' );
+check( 'nevera pequeña', array( 10 ) );
+check( 'nebera pequeña', array( 10 ) );
+check( 'aceite para nevera pequeña', array( 12 ) );
+check( 'HotChef 20', array( 8 ) );
+check( 'nevera imaginaria', array( 6, 10 ) );
+$GLOBALS['currency'] = 'USD';
+$GLOBALS['prices'] = array( 10 => 275, 11 => 100, 12 => 15, 6 => 310 );
+check( 'nevera pequeña hasta 300 USD', array( 10 ) );
+check( 'nevera pequeña hasta 200 USD', array() );
