@@ -1,3 +1,13 @@
+# CURRENT — EVO-FLUX-PILOT: vista previa gratuita aislada (2026-11-19)
+
+- Base main 0bc7570b3d7ed4543212586d120e2638f7965bf1. Cuenta Cloudflare autenticada: Workers Free, 0/10.000 neuronas al observar el dashboard; Klein 4B en catálogo. No se han revelado claves ni invocado inferencia. Producción no modificada ni reconsultada en este bloque.
+- Candidato: método CLI exclusivo `CVD_Photo_AI::cloudflare_free_pilot()`, sin REST, prompt sintético fijo de fondo, formato 1024×1024, sin imagen privada. Reutiliza almacenamiento de claves y transporte del Core. Attestation privada del operador (plan Free, hash de cuenta coincidente, uso conocido ≤9750, antigüedad ≤1 h, aprobación estricta). Reserva persistente por cuenta de un solo piloto; no se libera ni cambia con el día. Sin gateway, fallback, reintentos, publicación ni alteración de catálogo. No habilita generate/poll/vps_image/suggest.
+- La attestation representa comprobación humana, no consulta automática de facturación (requiere permiso Billing Read). No usar si el plan cambió. La futura ejecución diaria necesitará verificación automatizada y revisión separada. No ampliar permisos.
+- Pruebas con transporte sintético: bloqueo sin CLI/attestation, plan pago, evidencia vencida, cuenta diferente, cuota, falta de aprobación, respuesta válida y repetición; CI pendiente. No certificar token o modelo real hasta smoke autorizado con el Core instalado y evidencia fresca. No se instala código en producción aún. Coste nuevo cero, alternativa montaje local.
+- Siguiente: certificar CI y revisar candidato; el despliegue/ensayo productivo requiere aprobación del SHA y evidencia de plan fresca mediante canal privado. No publicar imágenes ni iniciar radar/proveedores.
+
+---
+
 # CURRENT — CV-INC-250: ajuste de puntos (2026-11-18)
 
 - Fase 0, corrección operativa aislada. Comisión ya aclarada; solo puntos. No se modifica pedido, comisión, cobro, inventario ni liquidaciones. Producción no cambiada por esta unidad; último SHA certificado según registro anterior.

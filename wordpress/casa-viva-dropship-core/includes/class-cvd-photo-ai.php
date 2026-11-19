@@ -148,6 +148,56 @@ final class CVD_Photo_AI {
 		return array( 'background' => 'data:' . $size['mime'] . ';base64,' . base64_encode( $bytes ) );
 	}
 
+
+	/**
+	 * One supervised synthetic smoke only. CLI attestation must be provisioned
+	 * by the operator after inspecting the matching account's Free plan and usage.
+	 * No REST exposure, no catalogue mutation, no paid fallback or retries.
+	 */
+	public static function cloudflare_free_pilot() {
+		if ( ! defined( 'WP_CLI' ) || ! WP_CLI || ! defined( 'CVD_FLUX_FREE_PILOT_ATTESTATION' ) ) {
+			return CVD_Content_Policy::billable();
+		}
+		$a = CVD_FLUX_FREE_PILOT_ATTESTATION;
+		$account = self::key( 'account' );
+		$token = self::key( 'cloudflare' );
+		$now = time();
+		if ( ! is_array( $a ) || ! preg_match( '/^[a-f0-9]{32}$/i', $account ) || ! $token
+			|| ( $a['plan'] ?? null ) !== 'Workers Free'
+			|| ! is_string( $a['account_hash'] ?? null ) || ! hash_equals( hash( 'sha256', strtolower( $account ) ), $a['account_hash'] )
+			|| ! is_int( $a['checked_at'] ?? null ) || $a['checked_at'] > $now || $now - $a['checked_at'] > 3600
+			|| ! is_int( $a['neurons_used'] ?? null ) || $a['neurons_used'] < 0 || $a['neurons_used'] > 9750
+			|| ( $a['approved'] ?? null ) !== true ) {
+			return self::error( 'Piloto gratuito sin certificación reciente de cuenta y cuota.', 403 );
+		}
+		// A fixed, account-scoped reservation is never released, even on timeout.
+		// Identical value avoids competing add_option updates; no retries across UTC days.
+		$reservation = 'cvd_flux_free_pilot_v1_' . hash( 'sha256', strtolower( $account ) );
+		if ( ! add_option( $reservation, 'reserved', '', false ) ) {
+			return self::error( 'Piloto ya reservado; verificar evidencia antes de otra operación.', 429 );
+		}
+		$boundary = wp_generate_uuid4();
+		$body = '';
+		foreach ( array( 'prompt' => 'Empty pale stone tabletop, natural soft window light, no products, people, lettering or watermark.', 'width' => 1024, 'height' => 1024 ) as $key => $value ) {
+			$body .= "--$boundary\r\nContent-Disposition: form-data; name=\"$key\"\r\n\r\n$value\r\n";
+		}
+		$body .= "--$boundary--\r\n";
+		$url = 'https://api.cloudflare.com/client/v4/accounts/' . $account . '/ai/run/@cf/black-forest-labs/flux-2-klein-4b';
+		$out = self::request( $url, array( 'method' => 'POST', 'headers' => array( 'Authorization' => 'Bearer ' . $token, 'Content-Type' => 'multipart/form-data; boundary=' . $boundary ), 'body' => $body ) );
+		if ( is_wp_error( $out ) ) { return $out; }
+		$bytes = $out;
+		if ( ! @getimagesizefromstring( $bytes ) ) {
+			$data = json_decode( $out, true );
+			$encoded = $data['result']['image'] ?? $data['image'] ?? null;
+			$bytes = is_string( $encoded ) ? base64_decode( $encoded, true ) : false;
+		}
+		$size = is_string( $bytes ) && strlen( $bytes ) <= 8 * MB_IN_BYTES ? @getimagesizefromstring( $bytes ) : false;
+		if ( ! $size || 1024 !== $size[0] || 1024 !== $size[1] ) { return self::error( 'Resultado piloto inválido.', 502 ); }
+		$preview = self::preview( $bytes );
+		if ( is_wp_error( $preview ) ) { return $preview; }
+		return $preview + array( 'mode' => 'preview_only', 'reserved_neurons' => 250, 'sha256' => hash( 'sha256', $bytes ), 'human_review_required' => true );
+	}
+
 	public static function generate( WP_REST_Request $r ) {
 		return CVD_Content_Policy::billable();
 	}
