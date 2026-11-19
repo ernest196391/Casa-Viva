@@ -5,6 +5,8 @@ on:
       - 'wordpress/casa-viva-dropship-core/includes/class-cvd-product-search.php'
       - 'artifacts/tests/test-search-phonetic-cv-amz.php'
       - 'integration/tests/cv-amz-search.php'
+      - 'wordpress/casa-viva-dropship-core/assets/product-search.*'
+      - 'artifacts/tests/cv-amz-search-mobile.spec.cjs'
       - '.github/workflows/cv-amz-search.yml'
 permissions:
   contents: read
@@ -69,3 +71,15 @@ jobs:
         run: scripts/integration.sh logs
       - if: always()
         run: scripts/integration.sh down
+
+  mobile-autocomplete:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install --no-save @playwright/test@1.54.2
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test artifacts/tests/cv-amz-search-mobile.spec.cjs --workers=1 --reporter=line
