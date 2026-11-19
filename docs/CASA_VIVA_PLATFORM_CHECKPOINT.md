@@ -1,3 +1,9 @@
+# CURRENT — CV-AMZ-004D: historial persistido sintético (2026-11-19)
+
+- 004C 6b3e734: 4/4 workflows verdes (44605398490, 44605398651, 44605398463, 44605398708). 004D 996ca28: fixture WooCommerce local prefijo cvt_ crea siete pedidos sintéticos persistidos: 3 válidos, 1 inconsistente, 1 antiguo, 1 cancelado y 1 con reembolso parcial sin pago ni reposición. Bloquea WP mail y HTTP saliente durante fixture; afirma 5 encontrados en ventana, 3 elegibles y dos IDs de producto recomendados recíprocamente, prueba exclusión por stock vivo y restaura stock sintético. CI pendiente; motor sigue sin registro, sin cron/persistencia en producción ni UI. CV-03 revisar. Cero gasto, no mensajes reales/producción. Siguiente: verificar CI y preparar snapshot compartido con TTL y activación protegida.
+
+---
+
 # CURRENT — CV-AMZ-004C: afinidad histórica offline (2026-11-19)
 
 - 004B 339bbdd: 4/4 workflows verdes (44600710931, 44600710950, 44600710942, 44600711026). 004C 0c200ea: clase independiente NO registrada en runtime; snapshot explícito WC de hasta 500 pedidos completados recientes (90 días, informa truncamiento), reutiliza lector canónico para excluir conflictos, incidencias, no completados y reembolsos. IDs padre únicos por cesta, límite 40; mínimo 3 pedidos juntos y 20% de las cestas del producto, máximo 4 sugerencias. Devuelve IDs agregados, no identidades ni persistencia. Pruebas con objetos WooCommerce sin guardar, umbrales, dedupe, cancelación/incidencia y consulta vacía desechable; CI pendiente. No se ha leído historial real ni mostrado «comprados juntos». Siguiente: comprobar snapshot no vacío contra pedidos sintéticos persistidos y aplicar elegibilidad viva/privacidad antes de habilitar visualización. CV-03 revisión y autorización; cero gasto, sin despliegue o mensajes.
