@@ -1,3 +1,9 @@
+# CURRENT — CV-AMZ-004B: complementos comerciales (2026-11-19)
+
+- 004B 9c88bfc: sección «Completa tu compra» en ficha clásica, exclusivamente cross-sells configurados en WooCommerce, máximo 4, disponibilidad comercial viva y precio HTML WooCommerce por sesión. Sin recomendaciones inventadas, compra automática ni nuevos datos. CSS responsive, enlaces a fichas; no altera carrito/checkout ni upsells manuales. Fixture prueba relaciones explícitas, exclusiones, ausencia sin configuración, registro y render con consulta producto; CI nueva pendiente. 004A PHP/release/staging anteriores verdes, HTTP/mobile pendientes al inicio. CV-03 revisión y autorización antes de merge/despliegue; no gastos ni mensajes. Siguiente: validar UI real y diseñar afinidad agregada con pedidos confirmados sin exponer datos personales.
+
+---
+
 # CURRENT — CV-AMZ-004A: recomendaciones comerciales (2026-11-19)
 
 - 003G e87a35a: 4/4 workflows verdes; HTTP 1000 productos (44598555503/job 135823393845): frío 1.529s, objetivo caliente mediana .133s; 45 mixtas mediana .149s, p95 .244s, máximo .268s. No extrapolar al hosting. 004A 2a907d4: reutiliza selección nativa de relacionados WooCommerce por categoría/etiqueta y filtra IDs con disponibilidad comercial viva, excluye fuente, duplicados, ocultos, agotados y bajo pedido. No cambia upsells/cross-sells manuales, precio, inventario ni afinidad histórica. Fixture real verifica hook, exclusiones y cambio stock con candidatos antiguos; CI pendiente. No afirmar recomendador personalizado ni desplegado; CV-03 revisión y autorización pendientes. Reversión: retirar filtro antes de release. Cero gasto.
