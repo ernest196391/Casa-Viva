@@ -1,3 +1,9 @@
+# CURRENT — CV-AMZ-003D: disponibilidad comercial (2026-11-19)
+
+- #261 head anterior 0eb8e71 con 4/4 workflows verdes (44576460852, 44576460210, 44576460001, 44576460194). Candidato: prioridad stock indexado dentro de tipo y cobertura iguales, no garantía de stock vivo salvo consulta explícita positiva final (disponible/en tienda/en stock/en existencia). Esta verifica WooCommerce actual, producto comprable publicado visible, instock, y excluye bajo pedido reutilizando CVD_Datos_A_Mano; no altera etiquetas ni inventario. Sin fallback parcial para disponibilidad explícita y presupuesto; pruebas de stock desactualizado, proveedor, backorder, negación y combinación USD. Siete regresiones añadidas; CI nuevo pendiente. No fusionar/desplegar hasta CV-03, integración y autorización. 0 USD adicionales. Reversión: PR antes de release. Siguiente: benchmark en staging y prueba móvil/espejo; no activar radar inventario.
+
+---
+
 # CURRENT — CV-AMZ-003C: intención de producto (2026-11-19)
 
 - #261: 003B head 2f01d9d, CI focal presupuesto 44576146992 verde, release/staging verdes; validación general en curso al comprobar. Candidato 003C: si una consulta compuesta empieza por tipo reconocido (peso >=10 por título exacto, alias o fonética), limita candidatos a esos tipos. «nevera pequeña» no mezcla aceite/estaciones; «aceite para nevera» conserva intención de accesorio. Sin tipo reconocido mantiene ranking actual. Las coincidencias parciales sin presupuesto no certifican atributos; presupuesto mantiene coincidencia completa. Siete regresiones sintéticas adicionales; CI nuevo pendiente. Sin precios/stock/caché modificados, sin despliegue, costo 0 USD. CV-03 debe revisar y certificar el candidato conjunto antes de producción. Siguiente: disponibilidad explícita con WooCommerce, sin cambiar inventario.
