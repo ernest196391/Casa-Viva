@@ -357,7 +357,19 @@ final class CVD_Product_Search {
 		$aliases = self::aliases();
 		$all = array();
 		$partial = array();
-		foreach ( self::index() as $row ) {
+		$rows = self::index();
+		// En una consulta compuesta, si el catálogo reconoce el primer término como
+		// tipo de producto, no dejar que menciones de accesorios sustituyan dicho tipo.
+		if ( count( $terms ) > 1 ) {
+			$head = $terms[0];
+			$typed = array_values( array_filter( $rows, static function ( $row ) use ( $head, $aliases ) {
+				return self::term_score( $head, $row, $aliases ) >= 10;
+			} ) );
+			if ( $typed ) {
+				$rows = $typed;
+			}
+		}
+		foreach ( $rows as $row ) {
 			$total = 0;
 			$matched = 0;
 			foreach ( $terms as $term ) {
