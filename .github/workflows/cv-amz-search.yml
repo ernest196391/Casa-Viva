@@ -1,0 +1,20 @@
+name: CV-AMZ search regression
+on:
+  pull_request:
+    paths:
+      - 'wordpress/casa-viva-dropship-core/includes/class-cvd-product-search.php'
+      - 'artifacts/tests/test-search-phonetic-cv-amz.php'
+      - '.github/workflows/cv-amz-search.yml'
+permissions:
+  contents: read
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: mbstring
+      - run: php -l wordpress/casa-viva-dropship-core/includes/class-cvd-product-search.php
+      - run: php artifacts/tests/test-search-phonetic-cv-amz.php
