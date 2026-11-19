@@ -382,7 +382,7 @@ final class CVD_Product_Search {
 		$typed = array();
 		// En una consulta compuesta, si el catálogo reconoce el primer término como
 		// tipo de producto, no dejar que menciones de accesorios sustituyan dicho tipo.
-		if ( count( $terms ) > 1 ) {
+		if ( $available || count( $terms ) > 1 ) {
 			$head = $terms[0];
 			$typed = array_values( array_filter( $rows, static function ( $row ) use ( $head, $aliases ) {
 				return self::term_score( $head, $row, $aliases ) >= 10;
@@ -410,7 +410,7 @@ final class CVD_Product_Search {
 			}
 		}
 		// Primero lo que cumple todas las palabras; si no hay nada, lo que cumple más palabras.
-		$results = null !== $budget ? $all : ( $all ?: $partial );
+		$results = ( null !== $budget || $available ) ? $all : ( $all ?: $partial );
 		// Dentro del mismo tipo y cobertura de palabras, favorecer stock indexado.
 		usort( $results, static fn( $a, $b ) => $typed
 			? array( $b[2], $b[3], $b[1] ) <=> array( $a[2], $a[3], $a[1] )
