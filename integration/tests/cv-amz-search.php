@@ -55,6 +55,23 @@ if ( CVD_Product_Search::complement_ids( wc_get_product( $ids['accessory'] ) ) !
 if ( ! has_action( 'woocommerce_after_single_product_summary', array( 'CVD_Product_Search', 'render_complements' ) ) ) {
     throw new RuntimeException( 'Complement card hook not registered' );
 }
+// Exercise the actual renderer in a product-query context, then restore globals.
+$prior_query = $GLOBALS['wp_query'];
+$prior_product = $GLOBALS['product'] ?? null;
+$GLOBALS['wp_query'] = new WP_Query( array( 'post_type' => 'product', 'p' => $ids['fan'] ) );
+$GLOBALS['product'] = wc_get_product( $ids['fan'] );
+try {
+    ob_start();
+    CVD_Product_Search::render_complements();
+    $markup = ob_get_clean();
+    if ( ! str_contains( $markup, 'Completa tu compra' ) || ! str_contains( $markup, 'Aceite para ventilador CVAMZ' )
+        || str_contains( $markup, 'proveedor' ) || ! str_contains( $markup, 'cvd-complements-list' ) ) {
+        throw new RuntimeException( 'Complement markup differs from eligible set' );
+    }
+} finally {
+    $GLOBALS['wp_query'] = $prior_query;
+    $GLOBALS['product'] = $prior_product;
+}
 // Optional scale benchmark; never run against a real store.
 if ( getenv( 'CVAMZ_SCALE' ) === '1000' ) {
     global $wpdb;
