@@ -28,5 +28,20 @@ update_user_meta( $user_id, '_cvd_program_type', 'gestora' );
 update_user_meta( $user_id, '_cvd_referral_code', 'CVAMZTEST' );
 update_user_meta( $user_id, '_cvd_global_markup_percent', 20 );
 if ( ! CVD_Datos_A_Mano::is_bajo_pedido( wc_get_product( $ids['supplier'] ) ) ) { throw new RuntimeException( 'Supplier fixture not recognized' ); }
+// Optional scale benchmark; never run against a real store.
+if ( getenv( 'CVAMZ_SCALE' ) === '1000' ) {
+    global $wpdb;
+    if ( $wpdb->prefix !== 'cvt_' ) { throw new RuntimeException( 'Synthetic database required' ); }
+    $types = array( 'Nevera', 'Ventilador', 'Sartén', 'Licuadora', 'Toalla', 'Generador', 'Lámpara', 'Alfombra', 'Cocina', 'Batería' );
+    for ( $i = 0; $i < 995; $i++ ) {
+        $type = $types[ $i % count( $types ) ];
+        cvamz_product( $type . ' Modelo ensayo ' . $i, 'CVBENCH-' . $i,
+            15 + ( $i % 400 ), $i % 7 === 0 ? 'outofstock' : 'instock',
+            $i % 23 === 0 ? 'hidden' : 'visible' );
+    }
+    $count = (int) wp_count_posts( 'product' )->publish;
+    if ( $count !== 1000 ) { throw new RuntimeException( 'Expected exactly 1000 synthetic products, got ' . $count ); }
+    $ids['catalog_size'] = $count;
+}
 CVD_Product_Search::flush();
 echo wp_json_encode( $ids ) . PHP_EOL;
