@@ -1,3 +1,12 @@
+# P0 — corrección administrativa de custodia (2026-11-19, candidato)
+
+- Fase 7D, subfase integridad de reparto. Base main c1bfdf196b15a2a0a27a950f096e3fd9e2b9b222; producción sin modificación. Método interno, sin ruta ni UI.
+- Conserva picked_up/with_courier, historial físico, cobro y comisiones; exige administrador, titular esperado, nuevo mensajero, confirmación explícita de custodia, motivo e idempotencia. Evento separado delivery.custody_corrected. No emite vales ni avisos.
+- Pruebas unitarias añadidas al runner existente; CI pendiente. PHP no disponible en entorno local. NO GO: el relevo legacy del bot escribe directamente sin el mismo bloqueo; antes de habilitar, migrar esa escritura al bloqueo canónico, verificar contabilidad y cachés, CRM sincronizado e identidad de actor en portal; certificar concurrencia, reversión y entrega real con un único aviso. No usar sobre pedidos reales hasta aprobación.
+- Próximo bloque: unificar relevo legacy, validar con CI y preparar UI con nonce, confirmación y resultado verificable. Cero gasto adicional.
+
+---
+
 # CURRENT — EVO-FLUX-PILOT: vista previa gratuita aislada (2026-11-19)
 
 - Base main 0bc7570b3d7ed4543212586d120e2638f7965bf1. Cuenta Cloudflare autenticada: Workers Free, 0/10.000 neuronas al observar el dashboard; Klein 4B en catálogo. No se han revelado claves ni invocado inferencia. Producción no modificada ni reconsultada en este bloque.
