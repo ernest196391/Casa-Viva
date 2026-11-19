@@ -223,6 +223,61 @@ final class CVD_Order_Transition_Service {
 		finally{self::release_lock($wpdb,$lock_key);}
 	}
 
+
+	/**
+	 * Corrección administrativa de titular, no relevo físico ni nueva asignación.
+	 * Candidato interno: no exponer a REST/portal hasta certificar las escrituras concurrentes legacy.
+	 */
+	public static function correct_custody( int $order_id, int $expected_holder, int $new_holder, string $reason, string $request_id, bool $custody_confirmed ): array {
+		$actor_id=get_current_user_id();
+		$actor=$actor_id?get_userdata($actor_id):null;
+		if(!$actor||!user_can($actor,'manage_woocommerce')){return self::failure(self::UNAUTHORIZED);}
+		$reason=trim(sanitize_textarea_field($reason));
+		$request_id=trim($request_id);
+		if(!$custody_confirmed||!$expected_holder||!$new_holder||$expected_holder===$new_holder||''===$reason||''===$request_id){return self::failure(self::PRECONDITION_FAILED);}
+		$target=get_userdata($new_holder);
+		if(!$target||!in_array('cvd_messenger',(array)$target->roles,true)){return self::failure(self::PRECONDITION_FAILED);}
+		$hash=hash('sha256','custody:'.$request_id);
+		$fingerprint=hash('sha256',wp_json_encode(array($actor_id,$expected_holder,$new_holder,$reason)));
+		global $wpdb;$lock_key='cvd_transition_'.$order_id;
+		if(!self::acquire_lock($wpdb,$lock_key)){return self::failure(self::CONFLICT);}
+		$started=false;
+		try{
+			$order=self::fresh_order($order_id);
+			if(!$order){return self::failure(self::ORDER_NOT_FOUND);}
+			$state=self::state($order,'delivery');$receipts=self::receipts($order);
+			if(isset($receipts[$hash])){
+				$r=$receipts[$hash];
+				if(($r['fingerprint']??'')!==$fingerprint){return self::failure(self::CONFLICT,$state);}
+				return self::success('picked_up','picked_up',(string)$r['event_id'],true,self::ALREADY_APPLIED);
+			}
+			if($expected_holder!==absint($order->get_meta('_cvd_messenger_user_id',true))){return self::failure(self::CONFLICT,$state);}
+			if('picked_up'!==$state||'with_courier'!==self::state($order,'operation')||
+				in_array($order->get_status(),array('completed','cancelled','refunded','failed'),true)||
+				'yes'===$order->get_meta('_cvd_delivery_incident_active',true)||
+				''!==(string)$order->get_meta('_cvd_delivered_at',true)||
+				''!==(string)$order->get_meta('_cvd_cash_status',true)||
+				!in_array((string)$order->get_meta('_cvd_messenger_earning_status',true),array('','pending'),true)||
+				(class_exists('CVD_Delivery')&&CVD_Delivery::is_test_order($order))){
+				return self::failure(self::PRECONDITION_FAILED,$state);
+			}
+			if(false===$wpdb->query('START TRANSACTION')){return self::failure(self::SIDE_EFFECT_FAILED);}
+			$started=true;$at=current_time('mysql',true);
+			$order->update_meta_data('_cvd_messenger_user_id',$new_holder);
+			$order->delete_meta_data('_cvd_bot_eta');
+			$order->delete_meta_data('_cvd_bot_eta_at');
+			$order->add_order_note('Corrección administrativa del titular del reparto. No registra una nueva recogida ni entrega.');
+			$event=self::record_event($order_id,'delivery.custody_corrected','delivery',$state,$state,$actor,$actor_id,$at,'cvd_admin_custody_correction',array('centralized'=>true,'previous_holder'=>$expected_holder,'new_holder'=>$new_holder,'reason'=>$reason,'custody_confirmed'=>true),$hash);
+			$receipts[$hash]=array('domain'=>'custody','from'=>$state,'to'=>$state,'event_id'=>$event['event_id'],'fingerprint'=>$fingerprint);
+			$order->update_meta_data(self::RECEIPTS_META,array_slice($receipts,-50,null,true));
+			$order->save();
+			if(false===$wpdb->query('COMMIT')){throw new RuntimeException('custody_commit_failed');}
+			$started=false;
+			return self::success($state,$state,(string)$event['event_id']);
+		}catch(Throwable $error){if($started){$wpdb->query('ROLLBACK');}if(function_exists('clean_post_cache')){clean_post_cache($order_id);}return self::failure(self::SIDE_EFFECT_FAILED);}
+		finally{self::release_lock($wpdb,$lock_key);}
+	}
+
 	private static function authorized( WC_Order $order,string $domain,string $from,string $to,WP_User $actor,array $context=array() ): bool {
 		$is_admin=user_can($actor,'manage_woocommerce'); $is_staff=user_can($actor,'cvd_manage_sales');
 		if('operation'===$domain){return $is_admin||$is_staff;} if('delivery'!==$domain){return false;}
