@@ -44,6 +44,10 @@ class SearchBudgetProduct {
     public function get_status() { return 'publish'; }
     public function get_catalog_visibility() { return 'visible'; }
     public function get_price() { return $GLOBALS['prices'][$this->id] ?? ''; }
+    public function get_stock_status() { return $GLOBALS['live_stock'][$this->id] ?? 'outofstock'; }
+    public function is_in_stock() { return 'outofstock' !== $this->get_stock_status(); }
+    public function is_purchasable() { return true; }
+    public function get_id() { return $this->id; }
 }
 function wc_get_product( $id ) { return new SearchBudgetProduct( $id ); }
 function wc_get_price_to_display( $product ) { return $product->get_price(); }
@@ -83,3 +87,23 @@ $GLOBALS['currency'] = 'USD';
 $GLOBALS['prices'] = array( 10 => 275, 11 => 100, 12 => 15, 6 => 310 );
 check( 'nevera pequeña hasta 300 USD', array( 10 ) );
 check( 'nevera pequeña hasta 200 USD', array() );
+
+class CVD_Datos_A_Mano {
+    public static function is_bajo_pedido( $product ) { return in_array( $product->get_id(), $GLOBALS['supplier_ids'], true ); }
+}
+$GLOBALS['fixture'][] = row( 13, 'Ventilador recargable para apagones', 0 );
+$GLOBALS['fixture'][] = row( 14, 'Ventilador recargable Eco para apagones', 1 );
+$GLOBALS['fixture'][] = row( 15, 'Ventilador recargable Solar para apagones', 1 );
+$GLOBALS['live_stock'] = array( 13 => 'instock', 14 => 'outofstock', 15 => 'instock', 3 => 'onbackorder' );
+$GLOBALS['supplier_ids'] = array( 15 );
+check( 'ventilador recargable para apagones', array( 14, 15, 13 ) );
+check( 'ventilador recargable disponible', array( 13 ) );
+check( 'ventilador en tienda', array( 13 ) );
+check( 'ventilador imaginario disponible', array() );
+$GLOBALS['prices'][13] = 85;
+check( 'ventilador disponible hasta 90 USD', array( 13 ) );
+check( 'ventilador disponible hasta 80 USD', array() );
+if ( CVD_Product_Search::availability_requested( 'ventilador no disponible' ) || CVD_Product_Search::availability_requested( 'ventilador sin stock' ) ) {
+    throw new RuntimeException( 'Negative availability must not become a positive filter' );
+}
+echo "OK: negative availability\n";
