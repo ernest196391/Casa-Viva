@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- CommonJS Playwright fixture; production modules remain subject to lint. */
 const { test, expect } = require('@playwright/test');
 const path = require('node:path');
 test.use({ viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true });
