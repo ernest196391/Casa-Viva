@@ -29,12 +29,13 @@ jobs:
       - uses: actions/checkout@v4
       - run: scripts/integration.sh up
       - name: Seed synthetic catalog
-        run: docker compose -f integration/compose.yml run --rm --no-deps cli wp eval-file /var/www/html/integration-tests/cv-amz-search.php | tail -n 1 > /tmp/cvamz-fixture.json
+        run: docker compose -f integration/compose.yml run --rm --no-deps -e CVAMZ_SCALE=1000 cli wp eval-file /var/www/html/integration-tests/cv-amz-search.php | tail -n 1 > /tmp/cvamz-fixture.json
       - name: Certify HTTP search and mirror isolation
         run: |
           python3 - <<'PY'
           import json, urllib.request, urllib.parse, time, statistics
           fixture = json.load(open('/tmp/cvamz-fixture.json'))
+          assert fixture['catalog_size'] == 1000
           durations = []
           def search(q, ref=None):
               params = {'rest_route': '/casa-viva/v1/products/search', 'q': q, 'limit': 12}
@@ -64,8 +65,23 @@ jobs:
           assert ids == [], ids
           for _ in range(10):
               assert search(q)[0] == [fixture['fan']]
-          print('HTTP synthetic fixture timings: first %.3fs, median %.3fs, max %.3fs' %
-                (durations[0], statistics.median(durations[1:]), max(durations)))
+          cold = durations[0]
+          warm = durations[1:]
+          print('HTTP 1000-product targeted timings: cold %.3fs, warm median %.3fs, max %.3fs' %
+                (cold, statistics.median(warm), max(warm)))
+          durations.clear()
+          queries = ['ventilador', 'nevera', 'sarten', 'licuadora', 'toalla',
+                     'generador', 'lampara', 'alfombra', 'cocina', 'bateria',
+                     'ventilador disponible hasta 110 USD', 'nevera hasta 200 USD',
+                     'toalla disponible', 'bentilador', 'nevera pequena']
+          for _ in range(3):
+              for query in queries:
+                  ids, _ = search(query)
+                  assert ids and len(ids) <= 12, (query, ids)
+          ordered = sorted(durations)
+          p95 = ordered[(95 * len(ordered) + 99) // 100 - 1]
+          print('HTTP 1000-product mixed warm timings: n=%d, median %.3fs, p95 %.3fs, max %.3fs' %
+                (len(ordered), statistics.median(ordered), p95, max(ordered)))
           PY
       - if: failure()
         run: scripts/integration.sh logs
