@@ -1,3 +1,9 @@
+# CURRENT — CV-AMZ-003B: presupuesto explícito (2026-11-19)
+
+- #261 anterior 1ef1401: cuatro workflows verdes, incluido fixture fonético 8/8 (44574386057). Candidato ampliado: presupuesto máximo USD explícito (menos de / hasta / máximo), se retira la frase monetaria antes del ranking; precios mostrados por WooCommerce en la sesión, sin persistencia compartida; menos de estricto, hasta inclusivo. Sin resultados no hay fallback textual. No conversión CUP, sin cambios de inventario o precio. Fixtures adicionales de límite, precio espejo simulado, precio ausente y moneda diferente; pendiente CI del nuevo SHA e integración de precios espejo autenticada. Producción intacta, 0 USD nuevos, reversión por revert del PR. No fusionar ni desplegar hasta CV-03 y aprobación.
+
+---
+
 # CURRENT — CV-AMZ-003A: búsqueda fonética (2026-11-19)
 
 - Issue #260: 20 consultas públicas; «bentilador» mezclaba accesorios. Candidato limitado al peso fonético del tipo (10), conservando coincidencia exacta (11), sin tocar precios, stock, contratos ni caché. Ocho regresiones sintéticas y workflow dedicado, CI pendiente; PHP no disponible localmente. No fusionar ni desplegar hasta revisión CV-03 y certificación. Presupuesto y disponibilidad explícita quedan separados. Coste incremental 0 USD; reversión por revert del PR antes de release.
