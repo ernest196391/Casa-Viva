@@ -1,3 +1,9 @@
+# CURRENT — CV-AMZ-003F: búsqueda móvil (2026-11-19)
+
+- 003E a677347: CI focal 44586883540 verde (HTTP WooCommerce real + regresiones), staging/release verdes; validación general en curso al comprobar. 003F b6a5b65 corrige ancho de sugerencias, invalida peticiones al borrar/cambiar/cerrar, impide repintado tardío al perder foco, elimina caché JS de tarjetas con precios, muestra búsqueda y error recuperable. Prueba Chromium 320x568 con HTTP simulado para latencia, fallo, actualización de precio, escape/desenfoque y ancho; CI pendiente. No equivale a hardware físico ni staging desplegado. CV-03 revisión pendiente, sin merge/despliegue, mensajes ni gasto incremental.
+
+---
+
 # CURRENT — CV-AMZ-003E: certificación de integración (2026-11-19)
 
 - 003D head 008d299: 4/4 workflows verdes (44584345683, 44584345696, 44584345702, 44584345701). Nuevo candidato c7ca8fa: entorno WordPress/MariaDB/WooCommerce desechable, cinco productos sintéticos y gestora sintética; prueba HTTP de fonética, tipo, presupuesto, stock, proveedor, ocultos, aislamiento de espejo y ausencia de cantidades exactas públicas. Reporta primera consulta, mediana y máximo de HTTP local, no extrapolables a producción. CI pendiente; no es certificación móvil ni staging desplegado. CV-03 revisión pendiente; sin merge/despliegue ni gasto incremental autorizado.
