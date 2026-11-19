@@ -278,6 +278,38 @@ final class CVD_Order_Transition_Service {
 		finally{self::release_lock($wpdb,$lock_key);}
 	}
 
+
+	/** Relevo físico declarado por el titular autenticado del bot. Comparte el bloqueo de correcciones. */
+	public static function handover_custody( int $order_id, int $holder_id, int $new_holder, string $by ): array {
+		$actor=get_userdata($holder_id);$target=get_userdata($new_holder);
+		if(!$actor||!in_array('cvd_messenger',(array)$actor->roles,true)){return self::failure(self::UNAUTHORIZED);}
+		if(!$target||!in_array('cvd_messenger',(array)$target->roles,true)||$holder_id===$new_holder){return self::failure(self::PRECONDITION_FAILED);}
+		global $wpdb;$lock_key='cvd_transition_'.$order_id;
+		if(!self::acquire_lock($wpdb,$lock_key)){return self::failure(self::CONFLICT);}
+		$started=false;
+		try{
+			$order=self::fresh_order($order_id);
+			if(!$order){return self::failure(self::ORDER_NOT_FOUND);}
+			$state=self::state($order,'delivery');
+			if($holder_id!==absint($order->get_meta('_cvd_messenger_user_id',true))){return self::failure(self::UNAUTHORIZED,$state);}
+			if('yes'===$order->get_meta('_cvd_delivery_incident_active',true)){return self::failure(self::PRECONDITION_FAILED,'incident');}
+			if('picked_up'!==$state||in_array($order->get_status(),array('completed','cancelled','refunded','failed'),true)){return self::failure(self::PRECONDITION_FAILED,$state);}
+			if(false===$wpdb->query('START TRANSACTION')){return self::failure(self::SIDE_EFFECT_FAILED);}
+			$started=true;$at=current_time('mysql',true);
+			$order->update_meta_data('_cvd_messenger_user_id',$new_holder);
+			$order->delete_meta_data('_cvd_bot_eta');
+			$order->delete_meta_data('_cvd_bot_eta_at');
+			$by=sanitize_textarea_field($by);
+			$order->add_order_note(sprintf('Paquete pasado de %1$s a %2$s después de recogerlo en la tienda%3$s (WhatsApp). Lo entrega y devuelve el dinero %2$s.', $actor->display_name??(string)$holder_id, $target->display_name??(string)$new_holder, ''!==$by?' · lo pidió '.$by:''));
+			$order->save();
+			$event=self::record_event($order_id,'delivery.custody_handed_over','delivery',$state,$state,$actor,$holder_id,$at,'cvd_bot_custody_handover',array('centralized'=>true,'previous_holder'=>$holder_id,'new_holder'=>$new_holder),wp_generate_uuid4());
+			if(false===$wpdb->query('COMMIT')){throw new RuntimeException('custody_commit_failed');}
+			$started=false;
+			return self::success($state,$state,(string)$event['event_id']);
+		}catch(Throwable $error){if($started){$wpdb->query('ROLLBACK');}if(function_exists('clean_post_cache')){clean_post_cache($order_id);}return self::failure(self::SIDE_EFFECT_FAILED);}
+		finally{self::release_lock($wpdb,$lock_key);}
+	}
+
 	private static function authorized( WC_Order $order,string $domain,string $from,string $to,WP_User $actor,array $context=array() ): bool {
 		$is_admin=user_can($actor,'manage_woocommerce'); $is_staff=user_can($actor,'cvd_manage_sales');
 		if('operation'===$domain){return $is_admin||$is_staff;} if('delivery'!==$domain){return false;}
