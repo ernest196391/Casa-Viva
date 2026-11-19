@@ -1,3 +1,9 @@
+# CURRENT — CV-AMZ-004C: afinidad histórica offline (2026-11-19)
+
+- 004B 339bbdd: 4/4 workflows verdes (44600710931, 44600710950, 44600710942, 44600711026). 004C 0c200ea: clase independiente NO registrada en runtime; snapshot explícito WC de hasta 500 pedidos completados recientes (90 días, informa truncamiento), reutiliza lector canónico para excluir conflictos, incidencias, no completados y reembolsos. IDs padre únicos por cesta, límite 40; mínimo 3 pedidos juntos y 20% de las cestas del producto, máximo 4 sugerencias. Devuelve IDs agregados, no identidades ni persistencia. Pruebas con objetos WooCommerce sin guardar, umbrales, dedupe, cancelación/incidencia y consulta vacía desechable; CI pendiente. No se ha leído historial real ni mostrado «comprados juntos». Siguiente: comprobar snapshot no vacío contra pedidos sintéticos persistidos y aplicar elegibilidad viva/privacidad antes de habilitar visualización. CV-03 revisión y autorización; cero gasto, sin despliegue o mensajes.
+
+---
+
 # CURRENT — CV-AMZ-004B: complementos comerciales (2026-11-19)
 
 - 004B 9c88bfc: sección «Completa tu compra» en ficha clásica, exclusivamente cross-sells configurados en WooCommerce, máximo 4, disponibilidad comercial viva y precio HTML WooCommerce por sesión. Sin recomendaciones inventadas, compra automática ni nuevos datos. CSS responsive, enlaces a fichas; no altera carrito/checkout ni upsells manuales. Fixture prueba relaciones explícitas, exclusiones, ausencia sin configuración, registro y render con consulta producto; CI nueva pendiente. 004A PHP/release/staging anteriores verdes, HTTP/mobile pendientes al inicio. CV-03 revisión y autorización antes de merge/despliegue; no gastos ni mensajes. Siguiente: validar UI real y diseñar afinidad agregada con pedidos confirmados sin exponer datos personales.
