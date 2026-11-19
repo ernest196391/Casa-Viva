@@ -1,3 +1,9 @@
+# CURRENT — CV-AMZ-003C: intención de producto (2026-11-19)
+
+- #261: 003B head 2f01d9d, CI focal presupuesto 44576146992 verde, release/staging verdes; validación general en curso al comprobar. Candidato 003C: si una consulta compuesta empieza por tipo reconocido (peso >=10 por título exacto, alias o fonética), limita candidatos a esos tipos. «nevera pequeña» no mezcla aceite/estaciones; «aceite para nevera» conserva intención de accesorio. Sin tipo reconocido mantiene ranking actual. Las coincidencias parciales sin presupuesto no certifican atributos; presupuesto mantiene coincidencia completa. Siete regresiones sintéticas adicionales; CI nuevo pendiente. Sin precios/stock/caché modificados, sin despliegue, costo 0 USD. CV-03 debe revisar y certificar el candidato conjunto antes de producción. Siguiente: disponibilidad explícita con WooCommerce, sin cambiar inventario.
+
+---
+
 # CURRENT — CV-AMZ-003B: presupuesto explícito (2026-11-19)
 
 - #261 anterior 1ef1401: cuatro workflows verdes, incluido fixture fonético 8/8 (44574386057). Candidato ampliado: presupuesto máximo USD explícito (menos de / hasta / máximo), se retira la frase monetaria antes del ranking; precios mostrados por WooCommerce en la sesión, sin persistencia compartida; menos de estricto, hasta inclusivo. Sin resultados no hay fallback textual. No conversión CUP, sin cambios de inventario o precio. Fixtures adicionales de límite, precio espejo simulado, precio ausente y moneda diferente; pendiente CI del nuevo SHA e integración de precios espejo autenticada. Producción intacta, 0 USD nuevos, reversión por revert del PR. No fusionar ni desplegar hasta CV-03 y aprobación.
