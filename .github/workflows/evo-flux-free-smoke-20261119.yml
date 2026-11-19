@@ -1,0 +1,77 @@
+name: EVO FLUX free one-shot smoke
+on:
+  push:
+    branches: ['evo/flux-free-smoke-20261119']
+    paths: ['.github/workflows/evo-flux-free-smoke-20261119.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: evo-flux-free-one-shot-20261119
+  cancel-in-progress: false
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require approved deployment success
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..140}; do
+            remaining=$((1795093272 + 3600 - $(date +%s)))
+            test "$remaining" -gt 120 || exit 1
+            result="$(gh api repos/ernest196391/Casa-Viva/actions/runs/44529097252)"
+            test "$(jq -r .head_sha <<<"$result")" = c1bfdf196b15a2a0a27a950f096e3fd9e2b9b222
+            if [[ "$(jq -r .status <<<"$result")" == completed ]]; then
+              test "$(jq -r .conclusion <<<"$result")" = success
+              exit 0
+            fi
+            sleep 15
+          done
+          exit 1
+      - name: Prepare existing Hostinger SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+      - name: One synthetic free preview with exact installed SHA
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          wp_path='/home/u824654880/domains/casaviva.company/public_html'
+          file='wp-content/plugins/casa-viva-dropship-core/includes/class-cvd-photo-ai.php'
+          expected="$(sha256sum wordpress/casa-viva-dropship-core/includes/class-cvd-photo-ai.php | cut -d' ' -f1)"
+          # Cross-check both deployment marker and actual class bytes before any inference.
+          ssh -o BatchMode=yes -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cd '$wp_path' && test \"\$(cat wp-content/plugins/casa-viva-dropship-core/.cvd-deployed-sha)\" = c1bfdf196b15a2a0a27a950f096e3fd9e2b9b222 && printf '%s  %s\\n' '$expected' '$file' | sha256sum -c - >/dev/null"
+          # Dashboard attestation: irreversible account digest, not account ID or credential.
+          { printf '%s\n' "<?php define( 'CVD_FLUX_FREE_PILOT_ATTESTATION', array( 'plan' => 'Workers Free', 'account_hash' => '3c850c0491c585a180a6e41cebba2c2266a07c2c68a2d95037bd5bbed2e05539', 'checked_at' => 1795093272, 'neurons_used' => 0, 'approved' => true ) );"; tail -n +2 scripts/catalog/evo-flux-pilot-live.php; } |
+            ssh -o BatchMode=yes -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cd '$wp_path' && wp eval-file -" > pilot-private.log
+          tail -n 1 pilot-private.log > pilot-report.json
+          jq -e '.mode == "preview_only" and .catalog_modified == false and .human_review_required == true and .reserved_neurons == 250' pilot-report.json >/dev/null
+          output="$(jq -r .path pilot-report.json)"
+          [[ "$output" =~ ^/tmp/cvd-flux-[A-Za-z0-9]+$ ]]
+          scp -P "$SSH_PORT" "$SSH_USER@$SSH_HOST:$output" pilot-image
+          printf '%s  %s\n' "$(jq -r .sha256 pilot-report.json)" pilot-image | sha256sum -c -
+          ssh -o BatchMode=yes -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "rm -f -- '$output'"
+          jq 'del(.path)' pilot-report.json > pilot-public.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flux-free-synthetic-preview
+          path: |
+            pilot-public.json
+            pilot-image
+          if-no-files-found: error
+          retention-days: 7
