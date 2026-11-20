@@ -34,10 +34,32 @@ final class CVD_Caja_Bridge {
 
 	public static function routes(): void {
 		$auth = array( 'CVD_Panel_Bridge', 'authorized' );
+		register_rest_route( self::NS, '/panel/caja/recovery-orders', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'recovery_orders' ), 'permission_callback' => array( __CLASS__, 'recovery_authorized' ) ) );
 		register_rest_route( self::NS, '/panel/caja/web-orders', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'web_orders' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/caja/web-orders/(?P<id>\d+)/charge', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'charge' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/caja/web-orders/(?P<id>\d+)/change', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'change' ), 'permission_callback' => $auth ) );
 		register_rest_route( self::NS, '/panel/caja/cash-collections', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'cash_collections' ), 'permission_callback' => $auth ) );
+	}
+
+	/** Credencial independiente: desactivada hasta configurar el hash de 256 bits fuera del código. */
+	public static function recovery_authorized( WP_REST_Request $request ): bool {
+		if ( 'GET' !== $request->get_method() || '/casa-viva/v1/panel/caja/recovery-orders' !== $request->get_route() ) { return false; }
+		$key = (string) $request->get_header( 'x_nexo_caja_read_key' );
+		$hash = (string) get_option( 'cvd_caja_read_key_hash', '' );
+		return 1 === preg_match( '/\\A[0-9a-f]{64}\\z/', $key )
+			&& 1 === preg_match( '/\\A[0-9a-f]{64}\\z/', $hash )
+			&& hash_equals( $hash, hash( 'sha256', $key ) );
+	}
+
+	/** Solo lectura. No autoriza cambios, cobros, stock ni otros endpoints del panel. */
+	public static function recovery_orders(): WP_REST_Response {
+		$data = self::web_orders()->get_data();
+		foreach ( $data['orders'] as &$row ) {
+			$row['chargeable'] = false;
+		}
+		unset( $row );
+		$data['recoveryReadOnly'] = true;
+		return self::no_cache( $data );
 	}
 
 	private static function no_cache( array $data ): WP_REST_Response {
