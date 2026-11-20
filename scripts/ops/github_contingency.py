@@ -58,7 +58,7 @@ def command(comment, now):
         data = json.loads(body[len(PREFIX):])
         action = data.get('action')
         fields = {'action', 'nonce', 'expires_at', 'sha'} if action == 'release_apply' else {'action', 'nonce', 'expires_at'}
-        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
             return None
         if action == 'release_apply' and (not isinstance(data['sha'], str) or not re.fullmatch(r'[0-9a-f]{40}', data['sha'])):
             return None
@@ -214,6 +214,50 @@ def agent_inventory():
     return {'tools': tools, 'services': services}
 
 
+# Fixed local snapshot probe; no caller-supplied SQL, table, or container.
+DB_SNAPSHOT_SQL = """BEGIN READ ONLY;
+SET LOCAL statement_timeout = '5s';
+SET LOCAL TIME ZONE 'UTC';
+SELECT json_build_object(
+ 'crm_messages', (SELECT count(*) FROM public.crm_messages),
+ 'wa_messages', (SELECT count(*) FROM public.crm_wa_messages),
+ 'dispatch', (SELECT count(*) FROM public.crm_dispatch),
+ 'outbox', (SELECT count(*) FROM public.crm_outbox),
+ 'devices', (SELECT count(*) FROM nexo_business.devices),
+ 'sync_events', (SELECT count(*) FROM nexo_business.sync_events),
+ 'last_crm_day', (SELECT max(created_at)::date FROM public.crm_messages),
+ 'last_dispatch_day', (SELECT max(updated_at)::date FROM public.crm_dispatch)
+);
+COMMIT;"""
+DB_COUNT_FIELDS = {'crm_messages', 'wa_messages', 'dispatch', 'outbox', 'devices', 'sync_events'}
+DB_DAY_FIELDS = {'last_crm_day', 'last_dispatch_day'}
+
+
+def db_snapshot():
+    try:
+        p = subprocess.run(['/usr/bin/docker', 'exec', '-u', 'postgres',
+            'vivabot-recovery-db', 'psql', '-X', '-q', '-A', '-t',
+            '-v', 'ON_ERROR_STOP=1', '-d', 'postgres', '-c', DB_SNAPSHOT_SQL],
+            env={'PATH': '/usr/bin:/bin', 'HOME': '/root'}, capture_output=True,
+            timeout=20, check=False)
+        if p.returncode != 0 or len(p.stdout) > 2048:
+            raise ValueError('probe failed')
+        data = json.loads(p.stdout)
+        if not isinstance(data, dict) or set(data) != DB_COUNT_FIELDS | DB_DAY_FIELDS:
+            raise ValueError('invalid shape')
+        for name in DB_COUNT_FIELDS:
+            if type(data[name]) is not int or not 0 <= data[name] <= 10**12:
+                raise ValueError('invalid count')
+        for name in DB_DAY_FIELDS:
+            if data[name] is not None:
+                if not isinstance(data[name], str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', data[name]):
+                    raise ValueError('invalid date')
+                dt.date.fromisoformat(data[name])
+        return {'ok': True, 'snapshot': data}
+    except (OSError, ValueError, TypeError, subprocess.SubprocessError):
+        return {'ok': False, 'reason': 'snapshot_unavailable'}
+
+
 class Contingency:
     def __init__(self, env, health, directory=Path('/var/lib/cv-ops-bridge-contingency'), api=github_api, clock=time.time):
         self.cfg = config(env)
@@ -275,6 +319,8 @@ class Contingency:
                 safe = dispatch_preflight()
             elif data['action'] == 'agent_inventory':
                 safe = agent_inventory()
+            elif data['action'] == 'db_snapshot':
+                safe = db_snapshot()
             else:
                 try:
                     from github_release_gate import apply_release

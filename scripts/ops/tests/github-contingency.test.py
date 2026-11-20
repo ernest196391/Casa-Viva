@@ -32,6 +32,24 @@ def request(**overrides):
 
 
 class Tests(unittest.TestCase):
+    def test_db_snapshot_fixed_read_only_and_redaction(self):
+        good = {k: 1 for k in mod.DB_COUNT_FIELDS}
+        good.update({k: '2026-11-19' for k in mod.DB_DAY_FIELDS})
+        with patch.object(mod.subprocess, 'run', return_value=Mock(returncode=0, stdout=json.dumps(good).encode())) as run:
+            self.assertEqual(mod.db_snapshot(), {'ok': True, 'snapshot': good})
+            args, kw = run.call_args
+            self.assertEqual(args[0][:6], ['/usr/bin/docker','exec','-u','postgres','vivabot-recovery-db','psql'])
+            self.assertIn('BEGIN READ ONLY', args[0][-1])
+            self.assertEqual(set(kw['env']), {'PATH', 'HOME'})
+        for bad in [dict(good, password='private'), dict(good, devices=True), dict(good, last_crm_day='private')]:
+            with patch.object(mod.subprocess, 'run', return_value=Mock(returncode=0, stdout=json.dumps(bad).encode())):
+                self.assertEqual(mod.db_snapshot(), {'ok': False, 'reason': 'snapshot_unavailable'})
+
+    def test_db_snapshot_command_rejects_parameters(self):
+        payload = {'action':'db_snapshot','nonce':'syntheticnonce1234','expires_at':'2026-11-20T16:10:00Z'}
+        self.assertIsNotNone(mod.command(request(body=mod.PREFIX+json.dumps(payload)), NOW))
+        self.assertIsNone(mod.command(request(body=mod.PREFIX+json.dumps(dict(payload, sql='SELECT secret'))), NOW))
+
     def test_release_command_only_exact_sha(self):
         payload = {'action': 'release_apply', 'nonce': 'syntheticnonce1234', 'expires_at': '2026-11-20T16:10:00Z', 'sha': 'a'*40}
         self.assertIsNotNone(mod.command(request(body=mod.PREFIX + json.dumps(payload)), NOW))

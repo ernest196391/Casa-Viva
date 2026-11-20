@@ -1,3 +1,9 @@
+# CURRENT — CV-RECOVERY-007: diagnóstico agregado PostgreSQL (2026-11-20)
+
+- Inventario remoto confirmado 7048899873; contenedor vivabot-recovery-db aislado, copia poblada. Acción fija db_snapshot sin argumentos, Docker/psql de solo lectura, conteos y fechas UTC, sin datos personales, secretos, SQL libre, puertos nuevos ni reinicios. No implica frescura ni permiso vigente. Pruebas de contrato y redacción añadidas; CI pendiente, sin instalar. Rollback: restaurar módulo previo. Próximo: certificar snapshot y puerta de actualización, luego reconciliar Caja y reparto.
+
+---
+
 # CURRENT — P0 NEXO Caja: reconciliación lectura Core (2026-11-20)
 
 - Zahymi no ve pedidos: fallo documentado de ruta dependiente de Supabase HTTP402. Corrección #264 CI anterior verde, conflicto con main por documentación/CI. Reconciliado sobre 3e177084 conservando exactamente clase PHP blob fe90597d y test #264; workflow mantiene pruebas existentes del puente. Sin cambio a pedidos/cobros ni credenciales, ruta desactivada por defecto hasta autorización y configuración legítima.
