@@ -2371,11 +2371,42 @@ def main():
             return 0
 
         env = load_env_files()
+        contingency = None
+        if env.get("CV_GITHUB_CONTINGENCY_ENABLED") == "1":
+            try:
+                from github_contingency import Contingency
+                def health():
+                    status = run(["systemctl", "is-active", "cv-ops-bridge.service"], timeout=10)
+                    return action_pm2_status({}), status.get("output", "").strip()
+                contingency = Contingency(env, health)
+                active = contingency.active()
+            except Exception:
+                # A broken optional module must not disable the normal bridge.
+                print("[ops-bridge] contingency unavailable", file=sys.stderr)
+                contingency = None
+                active = False
+            if active:
+                try:
+                    contingency.poll()
+                except Exception:
+                    print("[ops-bridge] contingency poll unavailable", file=sys.stderr)
+                return 0
         base, key = find_supabase(env)
-        rows = api_request(
-            base, key, "GET",
-            "/rest/v1/crm_ops_bridge?status=eq.queued&select=id,action,args&order=created_at.asc&limit=1",
-        )
+        try:
+            rows = api_request(
+                base, key, "GET",
+                "/rest/v1/crm_ops_bridge?status=eq.queued&select=id,action,args&order=created_at.asc&limit=1",
+            )
+        except urllib.error.HTTPError as exc:
+            # Only this first read may enter contingency. Never replay an uncertain write.
+            if exc.code != 402 or contingency is None or not contingency.cfg:
+                raise
+            try:
+                contingency.activate()
+                contingency.poll()
+            except Exception:
+                print("[ops-bridge] contingency poll unavailable", file=sys.stderr)
+            return 0
         if not rows:
             return 0
 
