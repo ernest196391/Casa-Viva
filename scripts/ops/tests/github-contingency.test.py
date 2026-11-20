@@ -32,6 +32,52 @@ def request(**overrides):
 
 
 class Tests(unittest.TestCase):
+    def test_preflight_requires_opt_in_and_redacts_payload(self):
+        row = request(body=mod.PREFIX + json.dumps({'action': 'dispatch_preflight', 'nonce': 'syntheticnonce1234', 'expires_at': '2026-11-20T16:10:00Z'}))
+        posts = []
+        def api(token, method, path, body=None):
+            if method == 'POST':
+                posts.append(body)
+                return {}
+            if '/comments?' in path: return [row]
+            if path.endswith('/issues/22'): return {'title': 'CV contingency — diagnostic mailbox', 'state': 'open'}
+            return {'private': True, 'full_name': mod.REPO}
+        with tempfile.TemporaryDirectory() as d, patch.object(mod, 'dispatch_preflight', return_value={'ok': False, 'reason': 'missing_config'}) as runner:
+            c = mod.Contingency(ENV, lambda: self.fail('health'), Path(d), api, lambda: NOW)
+            self.assertEqual(c.poll(), 'idle'); runner.assert_not_called()
+            c = mod.Contingency(dict(ENV, CV_GITHUB_DISPATCH_PREFLIGHT_ENABLED='1'), lambda: self.fail('health'), Path(d), api, lambda: NOW + 61)
+            self.assertEqual(c.poll(), 'reported'); runner.assert_called_once()
+            self.assertIn('dispatch_preflight', posts[0]['body'])
+            self.assertEqual(c.poll(), 'cooldown')
+
+    def test_preflight_summary_strict_allowlist(self):
+        checks = {name: {'ok': True, **{key: 1 for key in mod.PREFLIGHT_COUNTS.get(name, set())}, 'secret': 'private'} for name in mod.PREFLIGHT_CHECKS}
+        data = {'ok': True, 'checks': checks, 'raw': 'private'}
+        result = mod.preflight_summary(json.dumps(data))
+        self.assertTrue(result['ok']); self.assertNotIn('private', str(result))
+        checks['core_direct']['pending'] = 'secret'
+        self.assertFalse(mod.preflight_summary(json.dumps(data))['ok'])
+        del checks['group']
+        self.assertFalse(mod.preflight_summary(json.dumps(data))['ok'])
+
+    def test_preflight_mismatch_never_executes(self):
+        with patch.object(mod, 'private_bytes', return_value=b'untrusted'), patch.object(mod.subprocess, 'run') as run:
+            self.assertEqual(mod.dispatch_preflight(), {'ok': False, 'reason': 'script_mismatch'})
+            run.assert_not_called()
+
+    def test_preflight_uses_fixed_command_and_scoped_environment(self):
+        source = b'export async function preflight() {}'
+        blob = mod.hashlib.sha1(b'blob ' + str(len(source)).encode() + b'\0' + source).hexdigest()
+        cfg = '\n'.join(k + '=synthetic' for k in sorted(mod.PREFLIGHT_KEYS)) + '\nNODE_OPTIONS=--require=unsafe\nCV_GITHUB_CONTINGENCY_TOKEN=private'
+        result = Mock(returncode=0, stdout=b'{"ok":false,"checks":{}}')
+        with patch.object(mod, 'PREFLIGHT_BLOB', blob), patch.object(mod, 'private_bytes', side_effect=[source, cfg.encode()]), patch.object(mod.subprocess, 'run', return_value=result) as run:
+            self.assertFalse(mod.dispatch_preflight()['ok'])
+            args, kw = run.call_args
+            self.assertEqual(args[0], ['/usr/bin/node', '--input-type=module'])
+            self.assertEqual(set(kw['env']), mod.PREFLIGHT_KEYS | {'PATH', 'RECOVERY_RECONCILE'})
+            self.assertEqual(kw['env']['RECOVERY_RECONCILE'], '1')
+            self.assertNotIn('private', str(kw))
+
     def test_command_allowlist(self):
         self.assertIsNotNone(mod.command(request(), NOW))
         for row in [request(author_association='MEMBER'), request(user={'login': 'unknown', 'type': 'User'}),
