@@ -1,3 +1,12 @@
+# CURRENT — CV-RECOVERY-003: credencial de lectura Caja aislada (2026-11-20)
+
+- Base main c1bfdf196b15a2a0a27a950f096e3fd9e2b9b222. Autorización explícita de Ernesto para preparar credencial de servicio separada. Core existente comparte X-Nexo-Panel-Key entre administración, cobros y stock; no rotarlo ni reutilizarlo en recuperación.
+- Candidato agrega GET exclusivo `/panel/caja/recovery-orders`, hash separado `cvd_caja_read_key_hash`, cabecera `X-Nexo-Caja-Read-Key`, desactivado por defecto. Reusa lector canónico, marca `recoveryReadOnly` y desactiva `chargeable`. Las rutas previas permanecen intactas. No provisiona secreto ni expone valor. Revocación por desactivar hash.
+- Pruebas focales registradas en CI: negar método/ruta/clave incorrectos, clave global separada, no-cache, revocación. PHP no está disponible en entorno local: CI pendiente. NO desplegar hasta QA; además validar dispositivo vigente y adaptar cliente POS sin cambiar ruta global ni permitir vuelto/cobro. Cero cambios en datos/pagos, cero coste.
+- Reversión: revertir PR y desactivar hash exclusivo mediante configuración administrativa autorizada. Registro Maestro: https://github.com/ernest196391/casa-viva-centro-control/issues/1#issuecomment-7043181119.
+
+---
+
 # CURRENT — EVO-FLUX-PILOT: vista previa gratuita aislada (2026-11-19)
 
 - Base main 0bc7570b3d7ed4543212586d120e2638f7965bf1. Cuenta Cloudflare autenticada: Workers Free, 0/10.000 neuronas al observar el dashboard; Klein 4B en catálogo. No se han revelado claves ni invocado inferencia. Producción no modificada ni reconsultada en este bloque.
