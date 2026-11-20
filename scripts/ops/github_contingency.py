@@ -9,6 +9,8 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
+import subprocess
 import time
 import urllib.request
 
@@ -17,6 +19,12 @@ OWNER = 'ernest196391'
 PREFIX = 'CV-CONTINGENCY-V1 '
 STATES = {'online', 'stopped', 'errored', 'launching', 'stopping', 'active', 'inactive', 'failed', 'unknown'}
 PROCESSES = {'vivabot', 'vivabot-recovery-receiver', 'nexofirma'}
+PREFLIGHT_SCRIPT = Path('/root/supervisor/recovery-dispatch-preflight.mjs')
+PREFLIGHT_ENV = Path('/root/supervisor/.dispatch-preflight.env')
+PREFLIGHT_BLOB = '5dfafab9d7120f8c002999c30f1dd31e5eff5754'
+PREFLIGHT_KEYS = {'SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'DISPATCH_GROUP', 'BUSINESS_SLUG', 'WOO_URL', 'CURRU_KEY'}
+PREFLIGHT_COUNTS = {'core_offers': {'offers', 'unannounced'}, 'reconcile_offers': {'ready', 'recorded', 'uncertain', 'ownershipConflict'}, 'core_direct': {'pending'}, 'core_palla': {'pending'}}
+PREFLIGHT_CHECKS = {'local_config', 'business', 'group', 'dispatch_schema', 'outbox_schema'} | set(PREFLIGHT_COUNTS)
 
 
 def config(env):
@@ -46,7 +54,7 @@ def command(comment, now):
         if not isinstance(body, str) or not body.startswith(PREFIX) or len(body) > 400:
             return None
         data = json.loads(body[len(PREFIX):])
-        if set(data) != {'action', 'nonce', 'expires_at'} or data['action'] != 'health' or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        if set(data) != {'action', 'nonce', 'expires_at'} or data['action'] not in ('health', 'dispatch_preflight') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
             return None
         created, expires = timestamp(comment['created_at']), timestamp(data['expires_at'])
         if not created <= now < expires <= created + 1800:
@@ -126,9 +134,69 @@ def health_summary(pm2_result, service_status):
     return {'pm2': {name: processes.get(name, {'status': 'unknown'}) for name in sorted(PROCESSES)}, 'bridge': active}
 
 
+def private_bytes(path, limit):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, 'rb') as f:
+        info = os.fstat(f.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+            raise ValueError('insecure preflight file')
+        value = f.read(limit + 1)
+        if len(value) > limit:
+            raise ValueError('oversized preflight file')
+        return value
+
+
+def preflight_summary(raw):
+    data = json.loads(raw)
+    checks = data['checks']
+    if not isinstance(checks, dict) or type(data['ok']) is not bool:
+        raise ValueError('invalid preflight response')
+    safe = {}
+    for name in sorted(PREFLIGHT_CHECKS):
+        row = checks.get(name, {})
+        if not isinstance(row, dict) or type(row.get('ok')) is not bool:
+            safe[name] = {'ok': False}
+            continue
+        safe[name] = {'ok': row['ok']}
+        for key in PREFLIGHT_COUNTS.get(name, set()):
+            value = row.get(key)
+            if type(value) is int and 0 <= value <= 1000000:
+                safe[name][key] = value
+            elif row['ok']:
+                safe[name]['ok'] = False
+    return {'ok': data['ok'] and all(row['ok'] for row in safe.values()), 'checks': safe}
+
+
+def dispatch_preflight():
+    """Exact merged VivaBot source, fixed command, no inherited secrets or output."""
+    try:
+        script = private_bytes(PREFLIGHT_SCRIPT, 65536)
+        blob = hashlib.sha1(b'blob ' + str(len(script)).encode() + b'\0' + script).hexdigest()
+        if blob != PREFLIGHT_BLOB:
+            return {'ok': False, 'reason': 'script_mismatch'}
+        env = {'PATH': '/usr/bin:/bin', 'RECOVERY_RECONCILE': '1'}
+        for line in private_bytes(PREFLIGHT_ENV, 65536).decode().splitlines():
+            key, sep, value = line.partition('=')
+            if sep and key in PREFLIGHT_KEYS:
+                if key in env:
+                    raise ValueError('duplicate config')
+                env[key] = value.strip().strip('"').strip("'")
+        if not PREFLIGHT_KEYS <= env.keys():
+            return {'ok': False, 'reason': 'missing_config'}
+        result = subprocess.run(['/usr/bin/node', '--input-type=module'],
+            input=script + b'\nconsole.log(JSON.stringify(await preflight(process.env)));\n',
+            env=env, cwd='/root/supervisor', capture_output=True, timeout=100, check=False)
+        if result.returncode or len(result.stdout) > 16384:
+            return {'ok': False, 'reason': 'execution_failed'}
+        return preflight_summary(result.stdout)
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        return {'ok': False, 'reason': 'preflight_unavailable'}
+
+
 class Contingency:
     def __init__(self, env, health, directory=Path('/var/lib/cv-ops-bridge-contingency'), api=github_api, clock=time.time):
         self.cfg = config(env)
+        self.preflight_enabled = env.get('CV_GITHUB_DISPATCH_PREFLIGHT_ENABLED') == '1'
         self.health, self.directory, self.api, self.clock = health, Path(directory), api, clock
 
     def state(self):
@@ -175,12 +243,15 @@ class Contingency:
             return 'blocked'
         for comment in comments:
             data = command(comment, now)
-            if not data or not reserve(self.directory, data['nonce'], comment['id']):
+            if not data or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
                 continue
             # One fixed read-only diagnostic. No retry if post outcome is uncertain.
-            summary = self.health()
-            safe = health_summary(summary[0], summary[1])
-            report = {'action': 'health', 'request_id': comment['id'], 'result': safe}
+            if data['action'] == 'health':
+                summary = self.health()
+                safe = health_summary(summary[0], summary[1])
+            else:
+                safe = dispatch_preflight()
+            report = {'action': data['action'], 'request_id': comment['id'], 'result': safe}
             self.api(token, 'POST', path, {'body': 'CV-CONTINGENCY-RESULT-V1 ' + json.dumps(report, ensure_ascii=False, separators=(',', ':'))})
             return 'reported'
         return 'idle'
