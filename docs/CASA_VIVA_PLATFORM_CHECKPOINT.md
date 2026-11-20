@@ -1,3 +1,11 @@
+# CURRENT — CV-RECOVERY-005: reparto diagnóstico remoto (2026-11-20)
+
+- Puente GitHub–VPS certificado: #265 main 269f4285, solicitud 7047216297 respondida en buzón privado #3; servicio active, receptor recovery online, VivaBot principal stopped. Backoff #263 preservado en VPS. No envíos ni cobros.
+- Candidato opt-in `CV_GITHUB_DISPATCH_PREFLIGHT_ENABLED=1`: acción fija sin argumentos, reutiliza VivaBot #85 main 6ce7a0e (blob 5dfafab9), script local con permisos privados, configuración dedicada `.dispatch-preflight.env`, seis claves allowlist, Node fijo con ambiente limpio y timeout, solo GET y respuesta de booleanos/conteos. Conserva propietario/TTL/nonce, no repite reservas, no ejecuta comandos arbitrarios ni expone datos. No cambia servicio existente hasta instalar módulo revisado, script exacto y configuración local legítima.
+- 10/10 pruebas locales PASS; CI pendiente. Costo adicional 0. Próximo: validar CI, revisar e instalar de forma reversible con acceso SSH, comprobar reconciliación real; sin reactivar sockets ni publicar pedidos hasta certificar. Rollback: desactivar flag y restaurar módulo anterior, conservar estado/nonce.
+
+---
+
 # CURRENT — EVO-FLUX-PILOT: vista previa gratuita aislada (2026-11-19)
 
 - Base main 0bc7570b3d7ed4543212586d120e2638f7965bf1. Cuenta Cloudflare autenticada: Workers Free, 0/10.000 neuronas al observar el dashboard; Klein 4B en catálogo. No se han revelado claves ni invocado inferencia. Producción no modificada ni reconsultada en este bloque.
