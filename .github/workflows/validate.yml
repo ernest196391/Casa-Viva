@@ -26,6 +26,11 @@ jobs:
           extensions: gd
           coverage: none
 
+      - name: Validar autorización aislada de recuperación Caja
+        run: |
+          php -l wordpress/casa-viva-dropship-core/includes/class-cvd-caja-bridge.php
+          php artifacts/tests/test-caja-recovery-read-auth.php
+
       - name: Validar ajustes de puntos del programa de gestoras
         run: |
           php -l wordpress/casa-viva-dropship-core/includes/class-cvd-programa.php
