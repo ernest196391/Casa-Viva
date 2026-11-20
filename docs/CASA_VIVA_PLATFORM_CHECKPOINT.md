@@ -1,3 +1,10 @@
+# CURRENT — CV-RECOVERY-006: actualización remota certificada (2026-11-20)
+
+- Ernesto pide una instalación permanente para operar desde móvil/chat/voz. Reutiliza puente certificado y supervisor, no shell root remoto. Candidato: inventario fijo de agentes y `release_apply` opt-in, puerta local inmutable que verifica SHA exacto de main protegido, tres CI push exitosas y artefacto único; copia previa por hash, reemplazo atómico, sin tocar servicio/credenciales/cobros. Token separado Actions/Metadata Read, no ampliar Issues.
+- 15/15 pruebas locales, py_compile PASS. CI pendiente. No instalado ni permisos nuevos. #266 integrado 3e177084, preflight aún no instalado/configurado. Ver docs/CV_RECOVERY_006_REMOTE_CONTROL_GATE.md. Próximo: CI y una sola instalación controlada para habilitar diagnóstico, inventario y actualización. Coste cero; sin cambios de pedido ni cobros.
+
+---
+
 # CURRENT — CV-RECOVERY-005: reparto diagnóstico remoto (2026-11-20)
 
 - Puente GitHub–VPS certificado: #265 main 269f4285, solicitud 7047216297 respondida en buzón privado #3; servicio active, receptor recovery online, VivaBot principal stopped. Backoff #263 preservado en VPS. No envíos ni cobros.
