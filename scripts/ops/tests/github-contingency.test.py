@@ -32,6 +32,62 @@ def request(**overrides):
 
 
 class Tests(unittest.TestCase):
+    def test_release_command_only_exact_sha(self):
+        payload = {'action': 'release_apply', 'nonce': 'syntheticnonce1234', 'expires_at': '2026-11-20T16:10:00Z', 'sha': 'a'*40}
+        self.assertIsNotNone(mod.command(request(body=mod.PREFIX + json.dumps(payload)), NOW))
+        for bad in [dict(payload, sha='main'), dict(payload, sha='a'*39), dict(payload, command='reboot'), dict(payload, path='/root')]:
+            self.assertIsNone(mod.command(request(body=mod.PREFIX + json.dumps(bad)), NOW))
+
+    def test_release_requires_local_opt_in(self):
+        row = request(body=mod.PREFIX + json.dumps({'action':'release_apply','sha':'a'*40,'nonce':'syntheticnonce1234','expires_at':'2026-11-20T16:10:00Z'}))
+        def api(token, method, path, body=None):
+            self.assertEqual(method, 'GET')
+            if '/comments?' in path: return [row]
+            if path.endswith('/issues/22'): return {'title':'CV contingency — diagnostic mailbox','state':'open'}
+            return {'private':True,'full_name':mod.REPO}
+        with tempfile.TemporaryDirectory() as d:
+            c = mod.Contingency(ENV, lambda: self.fail('health'), Path(d), api, lambda: NOW)
+            self.assertEqual(c.poll(), 'idle')
+            self.assertEqual(list(Path(d).glob('nonce-*')), [])
+
+    def test_release_gate_ci_requires_exact_push(self):
+        spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
+        gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate)
+        sha = 'a'*40
+        rows = [dict(workflow_id=wid, head_sha=sha, head_branch='main', event='push', status='completed', conclusion='success', run_number=1) for wid in gate.CHECKS]
+        api = lambda *a: {'total_count': len(rows), 'workflow_runs': rows}
+        self.assertTrue(gate.verified_checks(api, 'synthetic', sha))
+        rows[0]['event'] = 'pull_request'
+        self.assertFalse(gate.verified_checks(api, 'synthetic', sha))
+        rows[0]['event'] = 'push'; rows[0]['conclusion'] = 'failure'
+        self.assertFalse(gate.verified_checks(api, 'synthetic', sha))
+
+    def test_release_gate_blocks_unprotected_main(self):
+        spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
+        gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate)
+        sha = 'a'*40
+        with patch.object(gate, 'read_private', return_value=b'CV_GITHUB_RELEASE_TOKEN=synthetic'), patch.object(gate, 'git', side_effect=[b'', sha.encode()]), patch.object(gate, 'atomic_file') as write:
+            self.assertEqual(gate.apply_release(sha, lambda *a: {'protected': False, 'commit': {'sha': sha}}), {'ok': False, 'reason': 'main_not_protected'})
+            write.assert_not_called()
+
+    def test_release_gate_atomic_backup_and_main_recheck(self):
+        spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
+        gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate)
+        sha = 'a'*40
+        body = b'# Synthetic compiled module\n' + b'# x\n'*300
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d); target = root/'github_contingency.py'; token = root/'.github-release.env'
+            target.write_bytes(b'old'); target.chmod(0o600)
+            token.write_bytes(b'CV_GITHUB_RELEASE_TOKEN=synthetic'); token.chmod(0o600)
+            api = lambda *a: {'protected': True, 'commit': {'sha': sha}}
+            with patch.object(gate, 'ROOT', root), patch.object(gate, 'TARGET', target), patch.object(gate, 'TOKEN_FILE', token), patch.object(gate, 'verified_checks', return_value=True), patch.object(gate, 'git', side_effect=[b'', sha.encode(), body, b'', b'b'*40]):
+                self.assertEqual(gate.apply_release(sha, api)['reason'], 'main_moved')
+                self.assertEqual(target.read_bytes(), b'old')
+            with patch.object(gate, 'ROOT', root), patch.object(gate, 'TARGET', target), patch.object(gate, 'TOKEN_FILE', token), patch.object(gate, 'verified_checks', return_value=True), patch.object(gate, 'git', side_effect=[b'', sha.encode(), body, b'', sha.encode()]):
+                self.assertEqual(gate.apply_release(sha, api), {'ok': True, 'changed': True, 'sha': sha})
+                self.assertEqual(target.read_bytes(), body)
+                self.assertEqual(next(root.glob('github_contingency.backup.*')).read_bytes(), b'old')
+
     def test_preflight_requires_opt_in_and_redacts_payload(self):
         row = request(body=mod.PREFIX + json.dumps({'action': 'dispatch_preflight', 'nonce': 'syntheticnonce1234', 'expires_at': '2026-11-20T16:10:00Z'}))
         posts = []
