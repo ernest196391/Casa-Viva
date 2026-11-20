@@ -722,14 +722,20 @@ final class CVD_Bot_Bridge {
 		if ( 'yes' === $order->get_meta( '_cvd_delivery_incident_active', true ) ) { return self::no_cache( array( 'result' => 'too_late', 'status' => 'incident' ) ); }
 		$status = CVD_Delivery::status( $order );
 		if ( 'picked_up' !== $status ) { return self::no_cache( array( 'result' => 'wrong_status', 'status' => $status ) ); }
-		$by = sanitize_text_field( (string) $request->get_param( 'by' ) );
-		$order->update_meta_data( '_cvd_messenger_user_id', $to->ID );
-		$order->delete_meta_data( '_cvd_bot_eta' );
-		$order->delete_meta_data( '_cvd_bot_eta_at' );
-		$order->add_order_note( sprintf( 'Paquete pasado de %1$s a %2$s después de recogerlo en la tienda%3$s (WhatsApp). Lo entrega y devuelve el dinero %2$s.', $holder->display_name, $to->display_name, '' !== $by ? ' · lo pidió ' . $by : '' ) );
-		$order->save();
+		$result = CVD_Order_Transition_Service::handover_custody( $order->get_id(), $holder->ID, $to->ID, (string) $request->get_param( 'by' ) );
+		if ( empty( $result['success'] ) ) {
+			if ( CVD_Order_Transition_Service::UNAUTHORIZED === $result['error_code'] ) { return new WP_Error( 'cvd_not_assigned', 'Ese pedido no está asignado a este mensajero.', array( 'status' => 403 ) ); }
+			if ( CVD_Order_Transition_Service::PRECONDITION_FAILED === $result['error_code'] ) {
+				$status = $result['previous_state'];
+				return self::no_cache( array( 'result' => 'incident' === $status ? 'too_late' : 'wrong_status', 'status' => $status ) );
+			}
+			return new WP_Error( 'cvd_handover_conflict', 'No se confirmó el relevo. Consulta el titular actual antes de reintentar.', array( 'status' => 409 ) );
+		}
+		$fresh = wc_get_order( $order->get_id() );
+		if ( $fresh && method_exists( $fresh, 'read_meta_data' ) ) { $fresh->read_meta_data( true ); }
+		if ( ! $fresh || $to->ID !== absint( $fresh->get_meta( '_cvd_messenger_user_id', true ) ) ) { return new WP_Error( 'cvd_handover_conflict', 'El titular cambió. Consulta el pedido.', array( 'status' => 409 ) ); }
 		if ( class_exists( 'CVD_Messenger_Reputation' ) ) { CVD_Messenger_Reputation::invalidate( $holder->ID ); CVD_Messenger_Reputation::invalidate( $to->ID ); }
-		return self::no_cache( array( 'result' => 'handed', 'from' => $holder->display_name, 'messenger' => $to->display_name, 'voucher' => self::voucher( wc_get_order( $order->get_id() ) ) ) );
+		return self::no_cache( array( 'result' => 'handed', 'from' => $holder->display_name, 'messenger' => $to->display_name, 'voucher' => self::voucher( $fresh ) ) );
 	}
 
 	/**

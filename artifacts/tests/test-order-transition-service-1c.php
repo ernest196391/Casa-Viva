@@ -257,3 +257,76 @@ $order->meta['_cvd_messenger_user_id']=20;
 $order->meta['_cvd_delivery_history']=array(array('from'=>'offered','to'=>'cancelled','actor_user_id'=>11,'at'=>'2026-11-01 10:00:00','data'=>array()));
 CVD_Order_Transition_Service::reopen_after_cancel($order,'ready',11);
 cvt_check('unassigned'===$order->get_meta('_cvd_delivery_status',true),'#162 reactivación no resucita una oferta vieja al grupo');
+
+// P0: corrección administrativa, no simula recogida ni entrega.
+$order=cvt_reset();
+$order->meta=array('_cvd_operation_status'=>'with_courier','_cvd_delivery_status'=>'picked_up','_cvd_messenger_user_id'=>20,'_cvd_handed_over_at'=>'2026-08-15 20:00:00','_cvd_bot_eta'=>'mañana','_cvd_messenger_earning_status'=>'pending');
+$before=$order->snapshot();
+cvt_check(!CVD_Order_Transition_Service::correct_custody(459,20,21,'titular confirmado','p0-1',true)['success'] && $before===$order->snapshot(),'P0 personal sin permiso no corrige');
+$GLOBALS['cvt_user_id']=11;
+cvt_check(!CVD_Order_Transition_Service::correct_custody(459,20,21,'titular confirmado','p0-1',false)['success'] && $before===$order->snapshot(),'P0 exige confirmación');
+cvt_check(!CVD_Order_Transition_Service::correct_custody(459,21,20,'titular confirmado','p0-1',true)['success'],'P0 titular obsoleto falla');
+cvt_check(!CVD_Order_Transition_Service::correct_custody(459,20,12,'titular confirmado','p0-1',true)['success'],'P0 destino no mensajero falla');
+$GLOBALS['wpdb']->lock_available=false;
+cvt_check(!CVD_Order_Transition_Service::correct_custody(459,20,21,'titular confirmado','p0-1',true)['success'] && $before===$order->snapshot(),'P0 bloqueo ocupado no escribe');
+$GLOBALS['wpdb']->lock_available=true;
+$r=CVD_Order_Transition_Service::correct_custody(459,20,21,'titular confirmado','p0-1',true);
+cvt_check($r['success'] && 21===$order->get_meta('_cvd_messenger_user_id') && 'picked_up'===$order->get_meta('_cvd_delivery_status') && 'with_courier'===$order->get_meta('_cvd_operation_status') && '2026-08-15 20:00:00'===$order->get_meta('_cvd_handed_over_at') && ''===$order->get_meta('_cvd_bot_eta') && 'pending'===$order->get_meta('_cvd_messenger_earning_status'),'P0 titular corregido sin alterar estado ni cobro');
+$replay=CVD_Order_Transition_Service::correct_custody(459,20,21,'titular confirmado','p0-1',true);
+cvt_check($replay['success'] && $replay['idempotent_replay'] && $r['event_id']===$replay['event_id'] && 1===CVD_Order_Event_Timeline::read(459,array(),1,20)['total'],'P0 replay conserva un evento');
+cvt_check(!CVD_Order_Transition_Service::correct_custody(459,21,20,'otro motivo','p0-1',true)['success'],'P0 misma referencia con otro contenido falla');
+$order->meta['_cvd_delivery_status']='delivered';
+cvt_check(!CVD_Order_Transition_Service::correct_custody(459,21,20,'otro motivo','p0-2',true)['success'],'P0 entrega final no se modifica');
+
+// P0: relevo físico de VivaBot comparte bloqueo y no puede ganar con titular obsoleto.
+$order=cvt_reset();
+$order->meta=array('_cvd_operation_status'=>'with_courier','_cvd_delivery_status'=>'picked_up','_cvd_messenger_user_id'=>20,'_cvd_bot_eta'=>'mañana');
+$GLOBALS['wpdb']->lock_available=false;
+cvt_check(!CVD_Order_Transition_Service::handover_custody(459,20,21,'')['success'] && 20===$order->get_meta('_cvd_messenger_user_id'),'P0 relevo no escribe con bloqueo ocupado');
+$GLOBALS['wpdb']->lock_available=true;
+$r=CVD_Order_Transition_Service::handover_custody(459,20,21,'');
+cvt_check($r['success'] && 21===$order->get_meta('_cvd_messenger_user_id') && 'picked_up'===$order->get_meta('_cvd_delivery_status') && ''===$order->get_meta('_cvd_bot_eta'),'P0 relevo mantiene etapa y actualiza titular');
+cvt_check(!CVD_Order_Transition_Service::handover_custody(459,20,21,'')['success'],'P0 relevo repetido con titular obsoleto no escribe');
+$GLOBALS['cvt_user_id']=11;
+cvt_check(!CVD_Order_Transition_Service::correct_custody(459,20,21,'confirmado','p0-race',true)['success'],'P0 corrección no pisa relevo confirmado');
+cvt_check(1===CVD_Order_Event_Timeline::read(459,array(),1,20)['total'],'P0 solo un evento si compiten relevo y corrección');
+$order=cvt_reset();
+$order->meta=array('_cvd_operation_status'=>'with_courier','_cvd_delivery_status'=>'picked_up','_cvd_messenger_user_id'=>20);
+$GLOBALS['cvt_user_id']=11;
+cvt_check(CVD_Order_Transition_Service::correct_custody(459,20,21,'confirmado','p0-race2',true)['success'],'P0 corrección gana primero');
+cvt_check(!CVD_Order_Transition_Service::handover_custody(459,20,21,'')['success'],'P0 relevo no pisa corrección confirmada');
+$order=cvt_reset();
+$order->meta=array('_cvd_delivery_status'=>'picked_up','_cvd_messenger_user_id'=>20,'_cvd_delivery_incident_active'=>'yes');
+cvt_check(!CVD_Order_Transition_Service::handover_custody(459,20,21,'')['success'],'P0 relevo no cruza incidencia abierta');
+
+// P0: Pa'llá comparte bloqueo, no acepta pases desactualizados ni revive ofertas pendientes.
+$order=cvt_reset();
+$order->meta=array('_cvd_operation_status'=>'with_courier','_cvd_delivery_status'=>'picked_up','_cvd_messenger_user_id'=>20,'_cvd_palla_pase'=>wp_json_encode(array('from'=>20,'to'=>21,'at'=>'2026-08-15 20:00:00')),'_cvd_palla_pase_to'=>21);
+$accept=static function(WC_Order $locked):array{
+	$pass=json_decode((string)$locked->get_meta('_cvd_palla_pase'),true);
+	if(!$pass){return array('result'=>'gone');}
+	$locked->update_meta_data('_cvd_messenger_user_id',21);
+	$locked->delete_meta_data('_cvd_palla_pase');
+	$locked->delete_meta_data('_cvd_palla_pase_to');
+	$locked->update_meta_data('_cvd_palla_bot','1');
+	$locked->save();
+	return array('result'=>'pass_accepted');
+};
+$GLOBALS['wpdb']->lock_available=false;
+cvt_check(null===CVD_Order_Transition_Service::with_palla_pass_lock(459,21,$accept)&&20===$order->get_meta('_cvd_messenger_user_id'),'P0 Pa’llá ocupado no ejecuta');
+$GLOBALS['wpdb']->lock_available=true;
+cvt_check(null===CVD_Order_Transition_Service::with_palla_pass_lock(459,12,$accept),'P0 Pa’llá rechaza actor sin rol');
+$r=CVD_Order_Transition_Service::with_palla_pass_lock(459,21,$accept);
+cvt_check('pass_accepted'===$r['result']&&21===$order->get_meta('_cvd_messenger_user_id')&&'picked_up'===$order->get_meta('_cvd_delivery_status')&&'1'===$order->get_meta('_cvd_palla_bot'),'P0 pase conserva etapa y señal al bot');
+$r=CVD_Order_Transition_Service::with_palla_pass_lock(459,21,$accept);
+cvt_check('gone'===$r['result']&&1===CVD_Order_Event_Timeline::read(459,array(),1,20)['total'],'P0 aceptación repetida no duplica evento');
+$order=cvt_reset();
+$order->meta=array('_cvd_operation_status'=>'with_courier','_cvd_delivery_status'=>'picked_up','_cvd_messenger_user_id'=>20,'_cvd_palla_pase'=>wp_json_encode(array('from'=>20,'to'=>21)),'_cvd_palla_pase_to'=>21);
+$GLOBALS['cvt_user_id']=11;
+cvt_check(CVD_Order_Transition_Service::correct_custody(459,20,21,'confirmado','palla-race',true)['success']&&''===$order->get_meta('_cvd_palla_pase'),'P0 corrección invalida pase antiguo');
+$r=CVD_Order_Transition_Service::with_palla_pass_lock(459,21,$accept);
+cvt_check('gone'===$r['result']&&1===CVD_Order_Event_Timeline::read(459,array(),1,20)['total'],'P0 pase antiguo no ejecuta tras corrección');
+$order=cvt_reset();
+$order->meta=array('_cvd_delivery_status'=>'picked_up','_cvd_messenger_user_id'=>20);
+$invalid=static function(WC_Order $locked):array{$locked->update_meta_data('_cvd_messenger_user_id',21);$locked->save();return array('result'=>'pass_accepted');};
+cvt_check(null===CVD_Order_Transition_Service::with_palla_pass_lock(459,21,$invalid)&&20===$order->get_meta('_cvd_messenger_user_id'),'P0 no acepta transferencia sin pase autorizado');

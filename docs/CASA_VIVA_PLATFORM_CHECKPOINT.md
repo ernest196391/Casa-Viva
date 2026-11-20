@@ -1,3 +1,14 @@
+# P0 — corrección administrativa de custodia (2026-11-19, candidato)
+
+- Fase 7D, subfase integridad de reparto. Base main c1bfdf196b15a2a0a27a950f096e3fd9e2b9b222; producción sin modificación. Método interno, sin ruta ni UI.
+- Conserva picked_up/with_courier, historial físico, cobro y comisiones; exige administrador, titular esperado, nuevo mensajero, confirmación explícita de custodia, motivo e idempotencia. Evento separado delivery.custody_corrected. No emite vales ni avisos.
+- Pruebas unitarias añadidas al runner existente; PHP no disponible en entorno local. NO GO hasta certificar CI, auditar otros escritores legacy, verificar contabilidad y cachés, CRM sincronizado e identidad de actor en portal; certificar concurrencia, reversión y entrega real con un único aviso. No usar sobre pedidos reales hasta aprobación.
+- Relevo WhatsApp migrado al mismo bloqueo canónico, con comprobación del titular bajo bloqueo, evento separado y rechazo de titular obsoleto. Regresiones añadidas para ambos órdenes de ejecución y bloqueo ocupado; CI pendiente. No se modifica el protocolo de éxito del bot. Pa’llá ahora serializa solicitud y respuesta bajo el mismo bloqueo y relectura; aceptación genera evento canónico separado y conserva la señal existente al bot. Corrección y relevo WhatsApp invalidan pases pendientes y ETA. Siete comprobaciones nuevas; pruebas de integración REST, reintentos CID y otros escritores aún pendientes. Próximo bloque: auditar escritores restantes, certificar CI y luego UI con nonce. Cero gasto adicional.
+
+- Auditoría de escritores (SHA 20f5567834ff9ebacd504d623ad7e91a0ee1805b): CI aplicación, release y staging 3/3 verdes (44617877745, 44617877788, 44617878047). Asignación positiva, oferta/aceptación y cadena usan mutaciones bajo transición canónica; quedan dos riesgos legacy comprobados: CVD_Delivery::assign(0) borra titular y fuerza unassigned sin bloqueo ni filtro de etapa; CVD_Order_Edit::reactivate elimina titular después de reopen_after_cancel, que puede restaurar etapa asignada. Este segundo caso podría dejar etapa/titular incoherentes y reofertar. No exponer corrección hasta proteger ambos con pruebas, más integración REST/CID/CRM y contabilidad. Siguiente: desasignación segura solo antes de recogida con titular esperado, estado y resultado explícitos; reactivación en bloque separado. Producción intacta.
+
+---
+
 # CURRENT — EVO-FLUX-PILOT: vista previa gratuita aislada (2026-11-19)
 
 - Base main 0bc7570b3d7ed4543212586d120e2638f7965bf1. Cuenta Cloudflare autenticada: Workers Free, 0/10.000 neuronas al observar el dashboard; Klein 4B en catálogo. No se han revelado claves ni invocado inferencia. Producción no modificada ni reconsultada en este bloque.

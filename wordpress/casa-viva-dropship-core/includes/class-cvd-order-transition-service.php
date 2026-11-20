@@ -223,6 +223,133 @@ final class CVD_Order_Transition_Service {
 		finally{self::release_lock($wpdb,$lock_key);}
 	}
 
+
+	/**
+	 * Corrección administrativa de titular, no relevo físico ni nueva asignación.
+	 * Candidato interno: no exponer a REST/portal hasta certificar las escrituras concurrentes legacy.
+	 */
+	public static function correct_custody( int $order_id, int $expected_holder, int $new_holder, string $reason, string $request_id, bool $custody_confirmed ): array {
+		$actor_id=get_current_user_id();
+		$actor=$actor_id?get_userdata($actor_id):null;
+		if(!$actor||!user_can($actor,'manage_woocommerce')){return self::failure(self::UNAUTHORIZED);}
+		$reason=trim(sanitize_textarea_field($reason));
+		$request_id=trim($request_id);
+		if(!$custody_confirmed||!$expected_holder||!$new_holder||$expected_holder===$new_holder||''===$reason||''===$request_id){return self::failure(self::PRECONDITION_FAILED);}
+		$target=get_userdata($new_holder);
+		if(!$target||!in_array('cvd_messenger',(array)$target->roles,true)){return self::failure(self::PRECONDITION_FAILED);}
+		$hash=hash('sha256','custody:'.$request_id);
+		$fingerprint=hash('sha256',wp_json_encode(array($actor_id,$expected_holder,$new_holder,$reason)));
+		global $wpdb;$lock_key='cvd_transition_'.$order_id;
+		if(!self::acquire_lock($wpdb,$lock_key)){return self::failure(self::CONFLICT);}
+		$started=false;
+		try{
+			$order=self::fresh_order($order_id);
+			if(!$order){return self::failure(self::ORDER_NOT_FOUND);}
+			$state=self::state($order,'delivery');$receipts=self::receipts($order);
+			if(isset($receipts[$hash])){
+				$r=$receipts[$hash];
+				if(($r['fingerprint']??'')!==$fingerprint){return self::failure(self::CONFLICT,$state);}
+				return self::success('picked_up','picked_up',(string)$r['event_id'],true,self::ALREADY_APPLIED);
+			}
+			if($expected_holder!==absint($order->get_meta('_cvd_messenger_user_id',true))){return self::failure(self::CONFLICT,$state);}
+			if('picked_up'!==$state||'with_courier'!==self::state($order,'operation')||
+				in_array($order->get_status(),array('completed','cancelled','refunded','failed'),true)||
+				'yes'===$order->get_meta('_cvd_delivery_incident_active',true)||
+				''!==(string)$order->get_meta('_cvd_delivered_at',true)||
+				''!==(string)$order->get_meta('_cvd_cash_status',true)||
+				!in_array((string)$order->get_meta('_cvd_messenger_earning_status',true),array('','pending'),true)||
+				(class_exists('CVD_Delivery')&&CVD_Delivery::is_test_order($order))){
+				return self::failure(self::PRECONDITION_FAILED,$state);
+			}
+			if(false===$wpdb->query('START TRANSACTION')){return self::failure(self::SIDE_EFFECT_FAILED);}
+			$started=true;$at=current_time('mysql',true);
+			$order->update_meta_data('_cvd_messenger_user_id',$new_holder);
+			$order->delete_meta_data('_cvd_bot_eta');
+			$order->delete_meta_data('_cvd_bot_eta_at');
+			$order->delete_meta_data('_cvd_palla_eta_at');
+			$order->delete_meta_data('_cvd_palla_pase');
+			$order->delete_meta_data('_cvd_palla_pase_to');
+			$order->add_order_note('Corrección administrativa del titular del reparto. No registra una nueva recogida ni entrega.');
+			$event=self::record_event($order_id,'delivery.custody_corrected','delivery',$state,$state,$actor,$actor_id,$at,'cvd_admin_custody_correction',array('centralized'=>true,'previous_holder'=>$expected_holder,'new_holder'=>$new_holder,'reason'=>$reason,'custody_confirmed'=>true),$hash);
+			$receipts[$hash]=array('domain'=>'custody','from'=>$state,'to'=>$state,'event_id'=>$event['event_id'],'fingerprint'=>$fingerprint);
+			$order->update_meta_data(self::RECEIPTS_META,array_slice($receipts,-50,null,true));
+			$order->save();
+			if(false===$wpdb->query('COMMIT')){throw new RuntimeException('custody_commit_failed');}
+			$started=false;
+			return self::success($state,$state,(string)$event['event_id']);
+		}catch(Throwable $error){if($started){$wpdb->query('ROLLBACK');}if(function_exists('clean_post_cache')){clean_post_cache($order_id);}return self::failure(self::SIDE_EFFECT_FAILED);}
+		finally{self::release_lock($wpdb,$lock_key);}
+	}
+
+
+	/** Relevo físico declarado por el titular autenticado del bot. Comparte el bloqueo de correcciones. */
+	public static function handover_custody( int $order_id, int $holder_id, int $new_holder, string $by ): array {
+		$actor=get_userdata($holder_id);$target=get_userdata($new_holder);
+		if(!$actor||!in_array('cvd_messenger',(array)$actor->roles,true)){return self::failure(self::UNAUTHORIZED);}
+		if(!$target||!in_array('cvd_messenger',(array)$target->roles,true)||$holder_id===$new_holder){return self::failure(self::PRECONDITION_FAILED);}
+		global $wpdb;$lock_key='cvd_transition_'.$order_id;
+		if(!self::acquire_lock($wpdb,$lock_key)){return self::failure(self::CONFLICT);}
+		$started=false;
+		try{
+			$order=self::fresh_order($order_id);
+			if(!$order){return self::failure(self::ORDER_NOT_FOUND);}
+			$state=self::state($order,'delivery');
+			if($holder_id!==absint($order->get_meta('_cvd_messenger_user_id',true))){return self::failure(self::UNAUTHORIZED,$state);}
+			if('yes'===$order->get_meta('_cvd_delivery_incident_active',true)){return self::failure(self::PRECONDITION_FAILED,'incident');}
+			if('picked_up'!==$state||in_array($order->get_status(),array('completed','cancelled','refunded','failed'),true)){return self::failure(self::PRECONDITION_FAILED,$state);}
+			if(false===$wpdb->query('START TRANSACTION')){return self::failure(self::SIDE_EFFECT_FAILED);}
+			$started=true;$at=current_time('mysql',true);
+			$order->update_meta_data('_cvd_messenger_user_id',$new_holder);
+			$order->delete_meta_data('_cvd_bot_eta');
+			$order->delete_meta_data('_cvd_bot_eta_at');
+			$order->delete_meta_data('_cvd_palla_eta_at');
+			$order->delete_meta_data('_cvd_palla_pase');
+			$order->delete_meta_data('_cvd_palla_pase_to');
+			$by=sanitize_textarea_field($by);
+			$order->add_order_note(sprintf('Paquete pasado de %1$s a %2$s después de recogerlo en la tienda%3$s (WhatsApp). Lo entrega y devuelve el dinero %2$s.', $actor->display_name??(string)$holder_id, $target->display_name??(string)$new_holder, ''!==$by?' · lo pidió '.$by:''));
+			$order->save();
+			$event=self::record_event($order_id,'delivery.custody_handed_over','delivery',$state,$state,$actor,$holder_id,$at,'cvd_bot_custody_handover',array('centralized'=>true,'previous_holder'=>$holder_id,'new_holder'=>$new_holder),wp_generate_uuid4());
+			if(false===$wpdb->query('COMMIT')){throw new RuntimeException('custody_commit_failed');}
+			$started=false;
+			return self::success($state,$state,(string)$event['event_id']);
+		}catch(Throwable $error){if($started){$wpdb->query('ROLLBACK');}if(function_exists('clean_post_cache')){clean_post_cache($order_id);}return self::failure(self::SIDE_EFFECT_FAILED);}
+		finally{self::release_lock($wpdb,$lock_key);}
+	}
+
+
+	/** Serializa solicitudes y respuestas de pase de Pa'llá con las demás escrituras de custodia. */
+	public static function with_palla_pass_lock( int $order_id, int $actor_id, callable $action ): ?array {
+		$actor=get_userdata($actor_id);
+		if(!$actor||!in_array('cvd_messenger',(array)$actor->roles,true)){return null;}
+		global $wpdb;$lock_key='cvd_transition_'.$order_id;
+		if(!self::acquire_lock($wpdb,$lock_key)){return null;}
+		$started=false;
+		try{
+			$order=self::fresh_order($order_id);
+			if(!$order||in_array($order->get_status(),array('completed','cancelled','refunded','failed'),true)){return null;}
+			$before=absint($order->get_meta('_cvd_messenger_user_id',true));
+			$state=self::state($order,'delivery');
+			$pass=json_decode((string)$order->get_meta('_cvd_palla_pase',true),true);
+			if(false===$wpdb->query('START TRANSACTION')){return null;}
+			$started=true;
+			$result=$action($order);
+			$after=absint($order->get_meta('_cvd_messenger_user_id',true));
+			if($after!==$before){
+				if('pass_accepted'!==($result['result']??'')||$after!==$actor_id||!$before||
+					!is_array($pass)||$before!==absint($pass['from']??0)||$after!==absint($pass['to']??0)||
+					!in_array($state,array('assigned','accepted','to_store','picked_up','handed_over'),true)||
+					$state!==self::state($order,'delivery')||'yes'===$order->get_meta('_cvd_delivery_incident_active',true)){
+					throw new RuntimeException('invalid_palla_pass');
+				}
+				self::record_event($order_id,'delivery.custody_passed','delivery',$state,$state,$actor,$actor_id,current_time('mysql',true),'cvd_palla_pass',array('centralized'=>true,'previous_holder'=>$before,'new_holder'=>$after),wp_generate_uuid4());
+			}
+			if(false===$wpdb->query('COMMIT')){throw new RuntimeException('palla_pass_commit_failed');}
+			$started=false;
+			return $result;
+		}catch(Throwable $error){if($started){$wpdb->query('ROLLBACK');}if(function_exists('clean_post_cache')){clean_post_cache($order_id);}return null;}
+		finally{self::release_lock($wpdb,$lock_key);}
+	}
+
 	private static function authorized( WC_Order $order,string $domain,string $from,string $to,WP_User $actor,array $context=array() ): bool {
 		$is_admin=user_can($actor,'manage_woocommerce'); $is_staff=user_can($actor,'cvd_manage_sales');
 		if('operation'===$domain){return $is_admin||$is_staff;} if('delivery'!==$domain){return false;}
