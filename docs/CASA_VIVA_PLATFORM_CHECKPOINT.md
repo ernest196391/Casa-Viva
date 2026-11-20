@@ -1,3 +1,11 @@
+# CURRENT — CV-RECOVERY-002: pausa ante cuota remota (2026-11-20)
+
+- P0 continuidad: 175 errores 402 de bridge y 57 de dev-worker en 10 minutos, observados en VPS. Cambios operativos previos con respaldo y evidencia `CV_REMOTE_BACKOFF status=402 seconds=300`; servicios siguieron activos. No implica recuperación de la cuota.
+- Esta rama versiona la corrección exacta de los puntos de entrada: 402/429 esperan 300 s, 401/403/500 se propagan. No se cambian permisos, contratos de cola, tareas ni pedidos. Prueba AST aislada contra ambos archivos, 3 pruebas (12 casos) PASS; py_compile PASS. CI pendiente; no desplegar esta rama sin validar SHA. Reversión: revertir commits o recuperar backups `.pre-quota-backoff-20261120` del VPS.
+- Próximo: integrar autorización Caja y Hermes sin ampliar permisos; preservar cola cloud bloqueada y supervisores locales. Costo nuevo cero. Registro maestro: https://github.com/ernest196391/casa-viva-centro-control/issues/1#issuecomment-7042900955
+
+---
+
 # CURRENT — EVO-FLUX-PILOT: vista previa gratuita aislada (2026-11-19)
 
 - Base main 0bc7570b3d7ed4543212586d120e2638f7965bf1. Cuenta Cloudflare autenticada: Workers Free, 0/10.000 neuronas al observar el dashboard; Klein 4B en catálogo. No se han revelado claves ni invocado inferencia. Producción no modificada ni reconsultada en este bloque.
