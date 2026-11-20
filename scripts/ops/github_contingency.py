@@ -25,6 +25,8 @@ PREFLIGHT_BLOB = '5dfafab9d7120f8c002999c30f1dd31e5eff5754'
 PREFLIGHT_KEYS = {'SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'DISPATCH_GROUP', 'BUSINESS_SLUG', 'WOO_URL', 'CURRU_KEY'}
 PREFLIGHT_COUNTS = {'core_offers': {'offers', 'unannounced'}, 'reconcile_offers': {'ready', 'recorded', 'uncertain', 'ownershipConflict'}, 'core_direct': {'pending'}, 'core_palla': {'pending'}}
 PREFLIGHT_CHECKS = {'local_config', 'business', 'group', 'dispatch_schema', 'outbox_schema'} | set(PREFLIGHT_COUNTS)
+AGENT_TOOLS = {'hermes', 'opencode', 'ollama', 'git', 'node', 'python3'}
+AGENT_SERVICES = {'cv-dev-worker.service', 'cv-control-sync.service', 'cv-ops-bridge.service'}
 
 
 def config(env):
@@ -54,7 +56,11 @@ def command(comment, now):
         if not isinstance(body, str) or not body.startswith(PREFIX) or len(body) > 400:
             return None
         data = json.loads(body[len(PREFIX):])
-        if set(data) != {'action', 'nonce', 'expires_at'} or data['action'] not in ('health', 'dispatch_preflight') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        action = data.get('action')
+        fields = {'action', 'nonce', 'expires_at', 'sha'} if action == 'release_apply' else {'action', 'nonce', 'expires_at'}
+        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+            return None
+        if action == 'release_apply' and (not isinstance(data['sha'], str) or not re.fullmatch(r'[0-9a-f]{40}', data['sha'])):
             return None
         created, expires = timestamp(comment['created_at']), timestamp(data['expires_at'])
         if not created <= now < expires <= created + 1800:
@@ -193,10 +199,26 @@ def dispatch_preflight():
         return {'ok': False, 'reason': 'preflight_unavailable'}
 
 
+def agent_inventory():
+    import shutil
+    path = '/usr/local/bin:/usr/bin:/bin:/root/.local/bin'
+    tools = {name: bool(shutil.which(name, path=path)) for name in sorted(AGENT_TOOLS)}
+    services = {}
+    for name in sorted(AGENT_SERVICES):
+        try:
+            p = subprocess.run(['/usr/bin/systemctl', 'is-active', name], capture_output=True, text=True, timeout=5, check=False)
+            value = p.stdout.strip()
+            services[name] = value if value in STATES else 'unknown'
+        except (OSError, subprocess.SubprocessError):
+            services[name] = 'unknown'
+    return {'tools': tools, 'services': services}
+
+
 class Contingency:
     def __init__(self, env, health, directory=Path('/var/lib/cv-ops-bridge-contingency'), api=github_api, clock=time.time):
         self.cfg = config(env)
         self.preflight_enabled = env.get('CV_GITHUB_DISPATCH_PREFLIGHT_ENABLED') == '1'
+        self.release_enabled = env.get('CV_GITHUB_RELEASE_ENABLED') == '1'
         self.health, self.directory, self.api, self.clock = health, Path(directory), api, clock
 
     def state(self):
@@ -243,14 +265,22 @@ class Contingency:
             return 'blocked'
         for comment in comments:
             data = command(comment, now)
-            if not data or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
+            if not data or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
                 continue
             # One fixed read-only diagnostic. No retry if post outcome is uncertain.
             if data['action'] == 'health':
                 summary = self.health()
                 safe = health_summary(summary[0], summary[1])
-            else:
+            elif data['action'] == 'dispatch_preflight':
                 safe = dispatch_preflight()
+            elif data['action'] == 'agent_inventory':
+                safe = agent_inventory()
+            else:
+                try:
+                    from github_release_gate import apply_release
+                    safe = apply_release(data['sha'], self.api)
+                except ImportError:
+                    safe = {'ok': False, 'reason': 'release_unavailable'}
             report = {'action': data['action'], 'request_id': comment['id'], 'result': safe}
             self.api(token, 'POST', path, {'body': 'CV-CONTINGENCY-RESULT-V1 ' + json.dumps(report, ensure_ascii=False, separators=(',', ':'))})
             return 'reported'
