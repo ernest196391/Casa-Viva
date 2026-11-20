@@ -2414,4 +2414,10 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except urllib.error.HTTPError as exc:
+        if exc.code not in (402, 429):
+            raise
+        print(f"CV_REMOTE_BACKOFF status={exc.code} seconds=300", flush=True)
+        time.sleep(300)
