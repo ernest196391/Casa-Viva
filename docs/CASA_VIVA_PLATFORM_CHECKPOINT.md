@@ -1,3 +1,10 @@
+# CURRENT — P0 NEXO Caja: reconciliación lectura Core (2026-11-20)
+
+- Zahymi no ve pedidos: fallo documentado de ruta dependiente de Supabase HTTP402. Corrección #264 CI anterior verde, conflicto con main por documentación/CI. Reconciliado sobre 3e177084 conservando exactamente clase PHP blob fe90597d y test #264; workflow mantiene pruebas existentes del puente. Sin cambio a pedidos/cobros ni credenciales, ruta desactivada por defecto hasta autorización y configuración legítima.
+- Cliente #151 bloquea cobros/vuelto en recuperación (CI previa verde); falta enlace autenticado, aprobación/dispositivos y prueba real. No declarar operativo por CI. Costo cero. Próximo: certificar CI y release Core, preparar adaptador autorizado Caja, proteger SQLite offline; #267 puente control remoto en paralelo, sin reiniciar VivaBot.
+
+---
+
 # CURRENT — CV-RECOVERY-005: reparto diagnóstico remoto (2026-11-20)
 
 - Puente GitHub–VPS certificado: #265 main 269f4285, solicitud 7047216297 respondida en buzón privado #3; servicio active, receptor recovery online, VivaBot principal stopped. Backoff #263 preservado en VPS. No envíos ni cobros.
