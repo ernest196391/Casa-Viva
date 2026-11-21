@@ -257,3 +257,23 @@ $order->meta['_cvd_messenger_user_id']=20;
 $order->meta['_cvd_delivery_history']=array(array('from'=>'offered','to'=>'cancelled','actor_user_id'=>11,'at'=>'2026-11-01 10:00:00','data'=>array()));
 CVD_Order_Transition_Service::reopen_after_cancel($order,'ready',11);
 cvt_check('unassigned'===$order->get_meta('_cvd_delivery_status',true),'#162 reactivación no resucita una oferta vieja al grupo');
+
+
+// P0: una edición administrativa ajena al reparto no modifica la oferta.
+function current_user_can( $cap, ...$args ): bool { return $cap === 'edit_shop_order'; }
+function wp_verify_nonce( $nonce, $action ): bool { return $nonce === 'fixture'; }
+function sanitize_text_field( $value ): string { return (string) $value; }
+function wp_unslash( $value ) { return $value; }
+require_once __DIR__ . '/../../wordpress/casa-viva-dropship-core/includes/class-cvd-delivery.php';
+foreach ( array( array('offered',0,'0','0'), array('accepted',20,'0','0'), array('accepted',20,'21','0'), array('offered',0,'0',null), array('offered',0,'0','invalid'), array('accepted',20,'20','20') ) as $case ) {
+	$order=cvt_reset();
+	[$status,$messenger,$original,$requested]=$case;
+	$order->meta['_cvd_delivery_status']=$status;
+	$order->meta['_cvd_messenger_user_id']=$messenger;
+	$before=$order->snapshot();
+	$_POST=array('cvd_assign_messenger_nonce'=>'fixture','cvd_messenger_original'=>$original);
+	if ( null !== $requested ) { $_POST['cvd_messenger_user_id']=$requested; }
+	CVD_Delivery::save_assignment(459);
+	cvt_check($before===$order->snapshot(),'edición administrativa conserva reparto: '.json_encode($case));
+}
+$_POST=array();

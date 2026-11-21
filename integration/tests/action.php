@@ -16,8 +16,12 @@ if ( 'operation' === $kind ) {
 if ( 'assign' === $kind ) {
 	wp_set_current_user( absint( $fixture['admin_id'] ) );
 	$_POST['cvd_assign_messenger_nonce'] = wp_create_nonce( 'cvd_assign_messenger_' . $order_id );
-	$_POST['cvd_messenger_user_id'] = absint( $fixture['messenger_id'] );
-	CVD_Delivery::save_assignment( $order_id ); echo "delivery=assigned\n"; return;
+	$_POST['cvd_messenger_original'] = (string) absint( wc_get_order( $order_id )->get_meta( '_cvd_messenger_user_id', true ) );
+	$_POST['cvd_messenger_user_id'] = (string) absint( $fixture['messenger_id'] );
+	CVD_Delivery::save_assignment( $order_id );
+	$order = wc_get_order( $order_id );
+	if ( 'assigned' !== $order->get_meta( '_cvd_delivery_status', true ) || absint( $fixture['messenger_id'] ) !== absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { throw new RuntimeException( 'La asignación administrativa no se aplicó.' ); }
+	echo "delivery=assigned\n"; return;
 }
 
 if ( 'handover' === $kind ) {

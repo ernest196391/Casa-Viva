@@ -1,3 +1,10 @@
+# CURRENT — P0 preservar ofertas al editar pedidos (2026-11-21)
+
+- Base fb5bdce6b324a6e1719b2c7a604e5f293d627015. Incidente #6790: guardar datos administrativos podía resetear una oferta abierta a «Por ofertar» por selección 0 sin cambio. Usuario confirmó liberación y republicación automática; conservar esa ruta.
+- Candidato: formulario conserva valor inicial, no escribe si no hay cambio, rechaza selección inválida o mensajero inicial desactualizado; mantiene opción de mensajero actual si no figura en listado. Sin cambios en pagos, inventario, pedidos ni WhatsApp reales.
+- Regresión en test-order-transition-service-1c.php: oferta abierta, asignación existente, formulario antiguo, campos ausentes/invalidos. Pendiente CI, revisión, despliegue y verificación funcional. Reversión: revertir commit.
+- Puente health confirma receptor recovery online, vivabot anterior stopped, bridge active; no certifica socket ni versión. Siguiente: validar receptor y variantes YO, sin mensajes de prueba reales.
+
 # CURRENT — P0 comisión pendiente después de corrección de precio (2026-11-20)
 
 - #273 integrado con tres CI verdes. #6790 corregido por administrador WooCommerce, 57,75 USD y pago efectivo 57,75 verificados; comisión pendiente aún obsoleta. Candidato: al guardar estado pendiente por vía administrativa existente, reconciliar únicamente línea que coincide con precio acordado, propietario, base y cantidad históricos, sin extra, conflicto, payout o devolución. Conserva comisión base, registra nota e idempotencia. Prueba 4E. CI pendiente, no desplegado; no cambia cobro, stock, reparto ni comisión aprobada. Próximo: certificar, desplegar y guardar pendiente; verificar comisión 8,75 antes del vale. Costo cero. Rollback revertir PR.
