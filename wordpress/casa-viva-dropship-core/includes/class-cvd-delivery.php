@@ -251,14 +251,26 @@ final class CVD_Delivery {
 	public static function assignment_field( WC_Order $order ): void {
 		$messengers = self::messengers(); $current = absint( $order->get_meta( '_cvd_messenger_user_id', true ) );
 		wp_nonce_field( 'cvd_assign_messenger_' . $order->get_id(), 'cvd_assign_messenger_nonce' );
+		echo '<input type="hidden" name="cvd_messenger_original" value="' . esc_attr( $current ) . '">';
 		echo '<p class="form-field form-field-wide"><label for="cvd_messenger_user_id"><strong>Mensajero asignado</strong></label><select id="cvd_messenger_user_id" name="cvd_messenger_user_id" style="width:100%"><option value="0">Sin asignar</option>';
+		if ( $current && ! in_array( $current, array_map( 'absint', wp_list_pluck( $messengers, 'ID' ) ), true ) ) {
+			echo '<option value="' . esc_attr( $current ) . '" selected>Mensajero actual (no disponible)</option>';
+		}
 		foreach ( $messengers as $messenger ) { echo '<option value="' . esc_attr( $messenger->ID ) . '" ' . selected( $current, $messenger->ID, false ) . '>' . esc_html( $messenger->display_name ) . '</option>'; }
 		echo '</select></p>';
 	}
 
 	public static function save_assignment( int $order_id ): void {
 		if ( ! current_user_can( 'edit_shop_order', $order_id ) || ! isset( $_POST['cvd_assign_messenger_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['cvd_assign_messenger_nonce'] ) ), 'cvd_assign_messenger_' . $order_id ) ) { return; }
-		self::assign( $order_id, absint( $_POST['cvd_messenger_user_id'] ?? 0 ) );
+		// Guardar precio, comisión u otros datos no debe modificar el reparto.
+		$original = $_POST['cvd_messenger_original'] ?? null;
+		$requested = $_POST['cvd_messenger_user_id'] ?? null;
+		if ( ! is_string( $original ) || ! is_string( $requested ) || ! ctype_digit( $original ) || ! ctype_digit( $requested ) ) { return; }
+		$original = absint( $original ); $requested = absint( $requested );
+		if ( $original === $requested ) { return; }
+		$order = wc_get_order( $order_id );
+		if ( ! $order || $original !== absint( $order->get_meta( '_cvd_messenger_user_id', true ) ) ) { return; }
+		self::assign( $order_id, $requested );
 	}
 
 	public static function assign_from_portal(): void {
