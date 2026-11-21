@@ -32,6 +32,23 @@ def request(**overrides):
 
 
 class Tests(unittest.TestCase):
+    def test_order_lookup_rejects_injection_and_unknown_fields(self):
+        data={'action':'order_lookup','nonce':'syntheticnonce1234','expires_at':'2026-11-20T16:10:00Z','product':'puerta corredera'}
+        self.assertIsNotNone(mod.command(request(body=mod.PREFIX+json.dumps(data)),NOW))
+        for bad in ["x' OR 1=1", "12345678", "a"*49, "a_b", "a%", "a\nb"]:
+            self.assertIsNone(mod.command(request(body=mod.PREFIX+json.dumps(dict(data,product=bad))),NOW))
+        self.assertIsNone(mod.command(request(body=mod.PREFIX+json.dumps(dict(data,phone='private'))),NOW))
+
+    def test_order_lookup_only_safe_metadata(self):
+        good={'tenant_ok':True,'matches':2,'chats':1,'order_ids':[1234],'audio_notes':1,'last_day':'2026-11-20'}
+        with patch.object(mod.subprocess,'run',return_value=Mock(returncode=0,stdout=json.dumps(good).encode())) as run:
+            self.assertEqual(mod.order_lookup('corredera'),{'ok':True,'evidence':good})
+            self.assertIn("BEGIN READ ONLY",run.call_args.args[0][-1])
+            self.assertIn("LIKE '%corredera%'",run.call_args.args[0][-1])
+        for bad in [dict(good,body='private'),dict(good,tenant_ok=False),dict(good,order_ids=['private']),dict(good,last_day='private')]:
+            with patch.object(mod.subprocess,'run',return_value=Mock(returncode=0,stdout=json.dumps(bad).encode())):
+                self.assertFalse(mod.order_lookup('corredera')['ok'])
+
     def test_urgent_triage_counts_only(self):
         good={k:1 for k in mod.TRIAGE_FIELDS}
         with patch.object(mod.subprocess,'run',return_value=Mock(returncode=0,stdout=json.dumps(good).encode())) as run:
