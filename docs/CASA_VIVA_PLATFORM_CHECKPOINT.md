@@ -1,3 +1,9 @@
+# CURRENT — CV-RECOVERY-008: señales urgentes (2026-11-20)
+
+- Puerta release certificada no-op 7054628844, main protegido; snapshot 7049450593 certificado. Ernesto solicita priorizar dinero/pedidos y bot. Acción urgent_triage fija, solo conteos de escalaciones abiertas, estados de errores y señales de texto en copia local; coincidencias no equivalen a casos confirmados, WhatsApp fecha ISO solamente. No mensajes privados, SQL libre, cobros, pedidos ni envíos. Pruebas añadidas; CI y despliegue pendientes. Próximo certificar y reconciliar Core/Caja. Rollback módulo previo.
+
+---
+
 # CURRENT — CV-RECOVERY-007: diagnóstico agregado PostgreSQL (2026-11-20)
 
 - Inventario remoto confirmado 7048899873; contenedor vivabot-recovery-db aislado, copia poblada. Acción fija db_snapshot sin argumentos, Docker/psql de solo lectura, conteos y fechas UTC, sin datos personales, secretos, SQL libre, puertos nuevos ni reinicios. No implica frescura ni permiso vigente. Pruebas de contrato y redacción añadidas; CI pendiente, sin instalar. Rollback: restaurar módulo previo. Próximo: certificar snapshot y puerta de actualización, luego reconciliar Caja y reparto.

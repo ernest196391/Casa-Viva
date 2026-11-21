@@ -58,7 +58,7 @@ def command(comment, now):
         data = json.loads(body[len(PREFIX):])
         action = data.get('action')
         fields = {'action', 'nonce', 'expires_at', 'sha'} if action == 'release_apply' else {'action', 'nonce', 'expires_at'}
-        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'urgent_triage', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
             return None
         if action == 'release_apply' and (not isinstance(data['sha'], str) or not re.fullmatch(r'[0-9a-f]{40}', data['sha'])):
             return None
@@ -256,6 +256,148 @@ def db_snapshot():
         return {'ok': True, 'snapshot': data}
     except (OSError, ValueError, TypeError, subprocess.SubprocessError):
         return {'ok': False, 'reason': 'snapshot_unavailable'}
+
+
+# Counts of potential signals, not verified individual incidents. No text leaves VPS.
+TRIAGE_SQL = """BEGIN READ ONLY;
+SET LOCAL statement_timeout = '10s';
+SET LOCAL TIME ZONE 'UTC';
+WITH esc AS (
+ SELECT lower(concat_ws(' ',kind,reason,client_message)) AS txt
+ FROM public.crm_escalations WHERE status='abierta'
+), messages AS (
+ SELECT lower(coalesce(body,'')) AS txt FROM public.crm_messages
+ WHERE direction='in' AND created_at >= now()-interval '48 hours'
+), errors AS (
+ SELECT lower(coalesce(to_jsonb(e)->>'status',to_jsonb(e)->>'estado','unknown')) AS state
+ FROM public.crm_errores e
+), wa AS (
+ SELECT to_jsonb(w) AS j FROM public.crm_wa_messages w
+), wa_days AS (
+ SELECT left(coalesce(j->>'created_at',j->>'timestamp',j->>'sent_at',''),10) AS day,
+ lower(concat_ws(' ',j->>'body',j->>'text',j->>'content',j->>'message')) AS txt FROM wa
+), wa_recent AS (
+ SELECT txt FROM wa_days WHERE day ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}
+    def __init__(self, env, health, directory=Path('/var/lib/cv-ops-bridge-contingency'), api=github_api, clock=time.time):
+        self.cfg = config(env)
+        self.preflight_enabled = env.get('CV_GITHUB_DISPATCH_PREFLIGHT_ENABLED') == '1'
+        self.release_enabled = env.get('CV_GITHUB_RELEASE_ENABLED') == '1'
+        self.health, self.directory, self.api, self.clock = health, Path(directory), api, clock
+
+    def state(self):
+        path = private_dir(self.directory) / 'state.json'
+        if not path.exists():
+            return {}
+        if path.is_symlink():
+            raise ValueError('invalid state')
+        return json.loads(path.read_text())
+
+    def active(self):
+        return bool(self.cfg and self.state().get('remote_retry_at', 0) > self.clock())
+
+    def activate(self):
+        if not self.cfg:
+            return False
+        state = self.state()
+        state['remote_retry_at'] = self.clock() + 300
+        atomic_state(self.directory / 'state.json', state)
+        return True
+
+    def poll(self):
+        if not self.cfg:
+            return 'disabled'
+        now = self.clock()
+        state = self.state()
+        if state.get('next_poll_at', 0) > now:
+            return 'cooldown'
+        # Throttle prior to network access, including failed API calls.
+        state['next_poll_at'] = now + 60
+        atomic_state(self.directory / 'state.json', state)
+        issue, token = self.cfg
+        root = '/repos/' + REPO
+        repo = self.api(token, 'GET', root)
+        if repo.get('private') is not True or repo.get('full_name') != REPO:
+            return 'blocked'
+        target = self.api(token, 'GET', f'{root}/issues/{issue}')
+        if target.get('state') != 'open' or target.get('title') != 'CV contingency — diagnostic mailbox' or 'pull_request' in target:
+            return 'blocked'
+        since = dt.datetime.fromtimestamp(now - 1800, dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        path = f'{root}/issues/{issue}/comments'
+        comments = self.api(token, 'GET', f'{path}?per_page=100&since={since}')
+        if not isinstance(comments, list) or len(comments) >= 100:
+            return 'blocked'
+        for comment in comments:
+            data = command(comment, now)
+            if not data or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
+                continue
+            # One fixed read-only diagnostic. No retry if post outcome is uncertain.
+            if data['action'] == 'health':
+                summary = self.health()
+                safe = health_summary(summary[0], summary[1])
+            elif data['action'] == 'dispatch_preflight':
+                safe = dispatch_preflight()
+            elif data['action'] == 'agent_inventory':
+                safe = agent_inventory()
+            elif data['action'] == 'db_snapshot':
+                safe = db_snapshot()
+            elif data['action'] == 'urgent_triage':
+                safe = urgent_triage()
+            else:
+                try:
+                    from github_release_gate import apply_release
+                    safe = apply_release(data['sha'], self.api)
+                except ImportError:
+                    safe = {'ok': False, 'reason': 'release_unavailable'}
+            report = {'action': data['action'], 'request_id': comment['id'], 'result': safe}
+            self.api(token, 'POST', path, {'body': 'CV-CONTINGENCY-RESULT-V1 ' + json.dumps(report, ensure_ascii=False, separators=(',', ':'))})
+            return 'reported'
+        return 'idle'
+
+ AND day >= (current_date-2)::text AND day <= current_date::text
+)
+SELECT json_build_object(
+ 'escalations_open',(SELECT count(*) FROM esc),
+ 'escalations_money',(SELECT count(*) FROM esc WHERE txt ~ 'cobro|dinero|pago|transfer|zelle|vuelto|efectivo|reembolso|devoluci'),
+ 'escalations_orders',(SELECT count(*) FROM esc WHERE txt ~ 'pedido|vale|mensaj|entrega|caja|recog'),
+ 'escalations_bot',(SELECT count(*) FROM esc WHERE txt ~ 'bot|error|no responde|no contesta'),
+ 'crm_in_48h',(SELECT count(*) FROM messages),
+ 'crm_money_signals',(SELECT count(*) FROM messages WHERE txt ~ 'cobro|dinero|pago|transfer|zelle|vuelto|efectivo|reembolso|devoluci'),
+ 'crm_order_signals',(SELECT count(*) FROM messages WHERE txt ~ 'pedido|vale|mensaj|entrega|caja|recog'),
+ 'errors_total',(SELECT count(*) FROM errors),
+ 'errors_open',(SELECT count(*) FROM errors WHERE state IN ('abierta','abierto','open','pendiente','pending')),
+ 'errors_unknown_state',(SELECT count(*) FROM errors WHERE state='unknown'),
+ 'wa_recent_dated',(SELECT count(*) FROM wa_recent),
+ 'wa_money_signals',(SELECT count(*) FROM wa_recent WHERE txt ~ 'cobro|dinero|pago|transfer|zelle|vuelto|efectivo|reembolso|devoluci'),
+ 'wa_order_signals',(SELECT count(*) FROM wa_recent WHERE txt ~ 'pedido|vale|mensaj|entrega|caja|recog'),
+ 'wa_bot_signals',(SELECT count(*) FROM wa_recent WHERE txt ~ 'bot|error|no responde|no contesta')
+);
+COMMIT;"""
+TRIAGE_FIELDS = {'escalations_open','escalations_money','escalations_orders','escalations_bot',
+    'crm_in_48h','crm_money_signals','crm_order_signals','errors_total','errors_open',
+    'errors_unknown_state','wa_recent_dated','wa_money_signals','wa_order_signals','wa_bot_signals'}
+
+
+def urgent_triage():
+    try:
+        p = subprocess.run(['/usr/bin/docker','exec','-u','postgres','vivabot-recovery-db',
+            'psql','-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-d','postgres','-c',TRIAGE_SQL],
+            env={'PATH':'/usr/bin:/bin','HOME':'/root'},capture_output=True,timeout=25,check=False)
+        if p.returncode or len(p.stdout)>2048:
+            raise ValueError('triage unavailable')
+        data=json.loads(p.stdout)
+        if not isinstance(data,dict) or set(data)!=TRIAGE_FIELDS:
+            raise ValueError('shape')
+        if any(type(v) is not int or not 0<=v<=10**12 for v in data.values()):
+            raise ValueError('count')
+        for key,parent in [('escalations_money','escalations_open'),('escalations_orders','escalations_open'),
+            ('escalations_bot','escalations_open'),('crm_money_signals','crm_in_48h'),('crm_order_signals','crm_in_48h'),
+            ('errors_open','errors_total'),('errors_unknown_state','errors_total'),
+            ('wa_money_signals','wa_recent_dated'),('wa_order_signals','wa_recent_dated'),('wa_bot_signals','wa_recent_dated')]:
+            if data[key]>data[parent]:
+                raise ValueError('count relation')
+        return {'ok':True,'signals':data}
+    except (OSError,ValueError,TypeError,subprocess.SubprocessError):
+        return {'ok':False,'reason':'triage_unavailable'}
 
 
 class Contingency:

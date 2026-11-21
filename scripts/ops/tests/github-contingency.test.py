@@ -32,6 +32,23 @@ def request(**overrides):
 
 
 class Tests(unittest.TestCase):
+    def test_urgent_triage_counts_only(self):
+        good={k:1 for k in mod.TRIAGE_FIELDS}
+        with patch.object(mod.subprocess,'run',return_value=Mock(returncode=0,stdout=json.dumps(good).encode())) as run:
+            self.assertEqual(mod.urgent_triage(),{'ok':True,'signals':good})
+            args,kw=run.call_args
+            self.assertEqual(args[0][-1],mod.TRIAGE_SQL)
+            self.assertIn('BEGIN READ ONLY',mod.TRIAGE_SQL)
+            self.assertEqual(set(kw['env']),{'PATH','HOME'})
+        for bad in [dict(good,raw='private'),dict(good,errors_open=2),dict(good,wa_money_signals='private')]:
+            with patch.object(mod.subprocess,'run',return_value=Mock(returncode=0,stdout=json.dumps(bad).encode())):
+                self.assertEqual(mod.urgent_triage(),{'ok':False,'reason':'triage_unavailable'})
+
+    def test_urgent_triage_no_arguments(self):
+        payload={'action':'urgent_triage','nonce':'syntheticnonce1234','expires_at':'2026-11-20T16:10:00Z'}
+        self.assertIsNotNone(mod.command(request(body=mod.PREFIX+json.dumps(payload)),NOW))
+        self.assertIsNone(mod.command(request(body=mod.PREFIX+json.dumps(dict(payload,sql='SELECT private'))),NOW))
+
     def test_db_snapshot_fixed_read_only_and_redaction(self):
         good = {k: 1 for k in mod.DB_COUNT_FIELDS}
         good.update({k: '2026-11-19' for k in mod.DB_DAY_FIELDS})
