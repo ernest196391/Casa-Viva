@@ -1,0 +1,10 @@
+{
+  "expected_sha": "6695231f1077f9e1d8033cd761af75fdfdb52aaa",
+  "requested_by": "Casa Viva Control OS",
+  "reason": "Deploy certified P0 dispatch preservation after full main CI. Protect active offers on unrelated administrative edits; no payment or stock changes.",
+  "evidence": {
+    "pr": 275,
+    "full_ci_run": 44919685018,
+    "rollback": "deploy-prototype.yml automatic rollback"
+  }
+}
