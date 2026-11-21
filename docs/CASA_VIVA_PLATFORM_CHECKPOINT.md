@@ -1,3 +1,9 @@
+# CURRENT — P0 #272 precio de gestora (2026-11-20)
+
+- Base main 94da7384. Pedido histórico #6790: 55 × 1,05 = 57,75 USD, pero get_price vuelve a aplicar margen tras set_price → 60,64. Candidato: marca por instancia WeakMap, no por ID; conserva filtros de catálogo y regular/sale, restauración de precio original al desbloquear; recalculación repetible. Regresión integración 4E con precio bloqueado, cambio, aislamiento y salida. CI pendiente; sin despliegue, sin modificación histórica ni mensajería. Reversión: revertir PR. Próximo: certificar CI, corregir el pedido y su snapshot de comisión por transición autorizada antes de asignación. Costo adicional cero.
+
+---
+
 # CURRENT — CV-RECOVERY-009: búsqueda de pedidos y señales de audio (2026-11-20)
 
 - Puente remoto #270 instalado y confirmado por buzón 7054815743 (changed:true). Se agrega order_lookup de solo lectura en copia local, producto limitado, 72h, un único negocio, chats privados, IDs explícitos de pedido en mensajes coincidentes y conteo de señales de audio en chats relacionados. Sin textos, nombres, teléfonos, archivos, transcripciones, SQL libre ni cambios de pedidos/cobros. 21/21 pruebas Python locales; PostgreSQL real y CI pendientes. No equivale a lectura del vale ni a escucha del audio, requiere un canal privado autorizado distinto de GitHub para contenido. Rollback módulo previo; cero costo adicional. Siguiente: certificar CI, instalar vía release_apply y validar consulta real; luego consultar Core y habilitar vista privada.
