@@ -270,7 +270,30 @@ final class CVD_Commissions {
 		$order = wc_get_order( $order_id );
 		$current = $order ? ( sanitize_key( $order->get_meta( '_cvd_commission_status', true ) ) ?: 'pending' ) : '';
 		if ( $order && array_key_exists( $status, self::allowed_admin_statuses( $current ) ) ) {
+			if ( 'pending' === $current && 'pending' === $status ) { self::reconcile_corrected_mirror_price( $order ); }
 			self::store( $order_id, $status, true );
+		}
+	}
+
+	/** Reconciliar solo una comisión pendiente cuando el administrador ya corrigió la línea al precio original acordado. */
+	private static function reconcile_corrected_mirror_price( WC_Order $order ): void {
+		if ( 'pending' !== $order->get_meta( '_cvd_commission_status', true ) || $order->get_meta( '_cvd_payout_id', true ) || (float) $order->get_total_refunded() > 0 ) { return; }
+		$owner = absint( $order->get_meta( '_cvd_owner_user_id', true ) );
+		if ( ! $owner || 'gestora' !== $order->get_meta( '_cvd_owner_type', true ) || $owner !== absint( $order->get_meta( '_cvd_pricing_gestora_user_id', true ) ) || $order->get_meta( '_cvd_pricing_conflict', true ) ) { return; }
+		foreach ( $order->get_items( 'line_item' ) as $item ) {
+			$snap = $item->get_meta( '_cvd_commission_snapshot', true );
+			if ( ! is_array( $snap ) || ! isset( $snap['sale_amount'], $snap['base_amount'], $snap['base_commission'], $snap['markup'], $snap['quantity'], $snap['owner_user_id'] ) || ! empty( $snap['staff_zero'] ) || ! empty( $snap['owner_supplier'] ) || ! empty( $snap['extra'] ) || $item->get_meta( self::EXTRA_META, true ) ) { continue; }
+			$qty = (int) $item->get_quantity();
+			$base = (float) $item->get_meta( '_cvd_base_unit_price', true ) * $qty;
+			$agreed = (float) $item->get_meta( '_cvd_sale_unit_price', true ) * $qty;
+			$line = (float) $item->get_total();
+			if ( $qty < 1 || $qty !== (int) $snap['quantity'] || $owner !== (int) $snap['owner_user_id'] || $owner !== absint( $item->get_meta( '_cvd_pricing_gestora_user_id', true ) ) || $base <= 0 || $agreed < $base || abs( $base - (float) $snap['base_amount'] ) > 0.0001 || abs( $line - $agreed ) > 0.0001 || abs( $line - (float) $item->get_subtotal() ) > 0.0001 || (float) $snap['sale_amount'] <= $line || abs( (float) $snap['markup'] - ( (float) $snap['sale_amount'] - $base ) ) > 0.0001 ) { continue; }
+			$before = (float) $snap['sale_amount'];
+			$snap['sale_amount'] = wc_format_decimal( $line, 4 );
+			$snap['markup'] = wc_format_decimal( $line - $base, 4 );
+			$item->update_meta_data( '_cvd_commission_snapshot', $snap );
+			$item->save_meta_data();
+			$order->add_order_note( sprintf( 'Comisión pendiente: precio de gestora corregido de %s a %s; comisión base histórica conservada.', wc_format_decimal( $before, 2 ), wc_format_decimal( $line, 2 ) ) );
 		}
 	}
 

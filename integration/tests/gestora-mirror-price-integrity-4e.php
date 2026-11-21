@@ -137,3 +137,28 @@ CVD_Gestora_Store::apply_locked_cart_prices( $cart );
 cvt_4e_assert( 55.0 === (float) $cart_product->get_price(), 'Salir de la tienda no restauró el precio base.' );
 $active->setValue( null, $original_active );
 echo "OK #272: precio de carrito, recalculaciones, aislamiento y salida.\\n";
+
+// Corrección de un precio de gestora ya acordado: conservar la comisión base histórica.
+$repair = cvt_4e_order_with_margin_line( $gestora_a, $gestora_a->ID );
+$repair->update_meta_data( '_cvd_commission_status', 'pending' );
+$repair->save();
+$before = CVD_Commissions::calculate( $repair, $gestora_a->ID );
+$repair_item = current( $repair->get_items( 'line_item' ) );
+$repair_item->set_subtotal( 110 );
+$repair_item->set_total( 110 );
+$repair_item->update_meta_data( '_cvd_sale_unit_price', '110.0000' );
+$repair_item->update_meta_data( '_cvd_margin_unit', '10.0000' );
+$repair_item->save();
+$method = new ReflectionMethod( CVD_Commissions::class, 'reconcile_corrected_mirror_price' );
+$method->setAccessible( true );
+$repair->update_meta_data( '_cvd_commission_status', 'approved' );
+$method->invoke( null, $repair );
+cvt_4e_assert( 120.0 === (float) $repair_item->get_meta( '_cvd_commission_snapshot', true )['sale_amount'], 'Una comisión aprobada se modificó.' );
+$repair->update_meta_data( '_cvd_commission_status', 'pending' );
+$method->invoke( null, $repair );
+$after = CVD_Commissions::calculate( $repair, $gestora_a->ID );
+cvt_4e_assert( 110.0 === (float) $after['sale_amount'] && 10.0 === (float) $after['margin_amount'], 'Importe pendiente no reconciliado.' );
+cvt_4e_assert( $before['commission_amount'] === $after['commission_amount'], 'La comisión base histórica no se conservó.' );
+$method->invoke( null, $repair );
+cvt_4e_assert( $after === CVD_Commissions::calculate( $repair, $gestora_a->ID ), 'La reconciliación no es idempotente.' );
+echo "OK: comisión pendiente reconciliada sin modificar base histórica.\n";

@@ -1,3 +1,9 @@
+# CURRENT — P0 comisión pendiente después de corrección de precio (2026-11-20)
+
+- #273 integrado con tres CI verdes. #6790 corregido por administrador WooCommerce, 57,75 USD y pago efectivo 57,75 verificados; comisión pendiente aún obsoleta. Candidato: al guardar estado pendiente por vía administrativa existente, reconciliar únicamente línea que coincide con precio acordado, propietario, base y cantidad históricos, sin extra, conflicto, payout o devolución. Conserva comisión base, registra nota e idempotencia. Prueba 4E. CI pendiente, no desplegado; no cambia cobro, stock, reparto ni comisión aprobada. Próximo: certificar, desplegar y guardar pendiente; verificar comisión 8,75 antes del vale. Costo cero. Rollback revertir PR.
+
+---
+
 # CURRENT — P0 #272 precio de gestora (2026-11-20)
 
 - Base main 94da7384. Pedido histórico #6790: 55 × 1,05 = 57,75 USD, pero get_price vuelve a aplicar margen tras set_price → 60,64. Candidato: marca por instancia WeakMap, no por ID; conserva filtros de catálogo y regular/sale, restauración de precio original al desbloquear; recalculación repetible. Regresión integración 4E con precio bloqueado, cambio, aislamiento y salida. CI pendiente; sin despliegue, sin modificación histórica ni mensajería. Reversión: revertir PR. Próximo: certificar CI, corregir el pedido y su snapshot de comisión por transición autorizada antes de asignación. Costo adicional cero.
