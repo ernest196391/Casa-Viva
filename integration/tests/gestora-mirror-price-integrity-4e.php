@@ -103,3 +103,37 @@ cvt_4e_assert( 0.0 === (float) $mismatch['margin_amount'], 'Se acreditó margen 
 cvt_4e_assert( 13.0 === (float) $mismatch['commission_amount'], 'La propietaria permanente perdió su comisión base por un conflicto de precio.' );
 
 echo "OK 4E: carrito mixto y coherencia propietaria/precio fallan cerrado sin perder comisión base.\n";
+
+// Regresión #272: WooCommerce aplica el filtro get_price después de set_price.
+update_user_meta( $gestora_a->ID, '_cvd_global_markup_percent', 5 );
+$active = new ReflectionProperty( CVD_Gestora_Store::class, 'active' );
+$active->setAccessible( true );
+$original_active = $active->getValue();
+$active->setValue( null, array( 'wp' => $gestora_a, 'loaded' => $gestora_a ) );
+$product = new WC_Product_Simple();
+$product->set_name( 'Synthetic price lock' );
+$product->set_regular_price( '55' );
+$product->set_price( '55' );
+$product->save();
+$catalog = wc_get_product( $product->get_id() );
+$cart_product = clone $catalog;
+$cart = new WC_Cart();
+$line = array( 'data' => $cart_product, 'product_id' => $product->get_id(), 'variation_id' => 0, 'quantity' => 1, '_cvd_locked_price' => 57.75 );
+$cart->set_cart_contents( array( 'test-lock' => $line ) );
+cvt_4e_assert( 57.75 === (float) $catalog->get_price(), 'El catálogo no aplica el 5% una sola vez.' );
+for ( $i = 0; $i < 4; $i++ ) {
+	CVD_Gestora_Store::apply_locked_cart_prices( $cart );
+	cvt_4e_assert( 57.75 === (float) $cart_product->get_price(), 'Recargo duplicado en el carrito.' );
+}
+cvt_4e_assert( 57.75 === (float) $catalog->get_price(), 'El bloqueo del carrito alteró otra instancia del catálogo.' );
+$line['_cvd_locked_price'] = 60.50;
+$cart->set_cart_contents( array( 'test-lock' => $line ) );
+CVD_Gestora_Store::apply_locked_cart_prices( $cart );
+cvt_4e_assert( 60.50 === (float) $cart_product->get_price(), 'El nuevo precio bloqueado no se aplicó.' );
+unset( $line['_cvd_locked_price'] );
+$active->setValue( null, array( 'wp' => null, 'loaded' => null ) );
+$cart->set_cart_contents( array( 'test-lock' => $line ) );
+CVD_Gestora_Store::apply_locked_cart_prices( $cart );
+cvt_4e_assert( 55.0 === (float) $cart_product->get_price(), 'Salir de la tienda no restauró el precio base.' );
+$active->setValue( null, $original_active );
+echo "OK #272: precio de carrito, recalculaciones, aislamiento y salida.\\n";

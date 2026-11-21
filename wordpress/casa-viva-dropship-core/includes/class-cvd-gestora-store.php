@@ -5,6 +5,8 @@ defined( 'ABSPATH' ) || exit;
 /** Tienda espejo y precios de reventa sin duplicar el catálogo. */
 final class CVD_Gestora_Store {
 	private static bool $resolving_price = false;
+	// Solo instancias de producto del carrito, nunca IDs compartidos con el catálogo.
+	private static ?WeakMap $locked_cart_products = null;
 	private static array $price_maps = array();
 	private static ?array $contact = null;
 	/** Gestora de la tienda de esta visita ya calculada, por etapa de la petición (null = tienda de Casa Viva). */
@@ -79,9 +81,19 @@ final class CVD_Gestora_Store {
 	}
 
 	public static function apply_locked_cart_prices( WC_Cart $cart ): void {
-		if ( did_action( 'woocommerce_before_calculate_totals' ) > 2 ) { return; }
+		self::$locked_cart_products ??= new WeakMap();
 		foreach ( $cart->get_cart() as $cart_item ) {
-			if ( isset( $cart_item['_cvd_locked_price'], $cart_item['data'] ) && $cart_item['data'] instanceof WC_Product ) { $cart_item['data']->set_price( (float) $cart_item['_cvd_locked_price'] ); }
+			$product = $cart_item['data'] ?? null;
+			if ( ! $product instanceof WC_Product ) { continue; }
+			if ( isset( $cart_item['_cvd_locked_price'] ) ) {
+				if ( ! isset( self::$locked_cart_products[ $product ] ) ) {
+					self::$locked_cart_products[ $product ] = $product->get_price( 'edit' );
+				}
+				$product->set_price( (float) $cart_item['_cvd_locked_price'] );
+			} elseif ( isset( self::$locked_cart_products[ $product ] ) ) {
+				$product->set_price( self::$locked_cart_products[ $product ] );
+				unset( self::$locked_cart_products[ $product ] );
+			}
 		}
 	}
 
@@ -261,6 +273,8 @@ final class CVD_Gestora_Store {
 
 	public static function customer_price( $price, WC_Product $product ) {
 		if ( self::$resolving_price || '' === $price || null === $price ) { return $price; }
+		// WooCommerce lee get_price() después de set_price(): no sumar el margen por segunda vez.
+		if ( isset( self::$locked_cart_products[ $product ] ) && in_array( current_filter(), array( 'woocommerce_product_get_price', 'woocommerce_product_variation_get_price' ), true ) ) { return $price; }
 		$gestora = self::active_gestora();
 		if ( ! $gestora ) { return $price; }
 		return self::resolve_price( $product, $gestora->ID, (float) $price );
