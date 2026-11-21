@@ -1,3 +1,9 @@
+# CURRENT — CV-RECOVERY-009: búsqueda de pedidos y señales de audio (2026-11-20)
+
+- Puente remoto #270 instalado y confirmado por buzón 7054815743 (changed:true). Se agrega order_lookup de solo lectura en copia local, producto limitado, 72h, un único negocio, chats privados, IDs explícitos de pedido en mensajes coincidentes y conteo de señales de audio en chats relacionados. Sin textos, nombres, teléfonos, archivos, transcripciones, SQL libre ni cambios de pedidos/cobros. 21/21 pruebas Python locales; PostgreSQL real y CI pendientes. No equivale a lectura del vale ni a escucha del audio, requiere un canal privado autorizado distinto de GitHub para contenido. Rollback módulo previo; cero costo adicional. Siguiente: certificar CI, instalar vía release_apply y validar consulta real; luego consultar Core y habilitar vista privada.
+
+---
+
 # CURRENT — CV-RECOVERY-008: señales urgentes (2026-11-20)
 
 - Puerta release certificada no-op 7054628844, main protegido; snapshot 7049450593 certificado. Ernesto solicita priorizar dinero/pedidos y bot. Acción urgent_triage fija, solo conteos de escalaciones abiertas, estados de errores y señales de texto en copia local; coincidencias no equivalen a casos confirmados, WhatsApp fecha ISO solamente. No mensajes privados, SQL libre, cobros, pedidos ni envíos. Pruebas añadidas; CI y despliegue pendientes. Próximo certificar y reconciliar Core/Caja. Rollback módulo previo.

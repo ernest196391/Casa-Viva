@@ -58,7 +58,11 @@ def command(comment, now):
         data = json.loads(body[len(PREFIX):])
         action = data.get('action')
         fields = {'action', 'nonce', 'expires_at', 'sha'} if action == 'release_apply' else {'action', 'nonce', 'expires_at'}
-        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'urgent_triage', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        if action == 'order_lookup':
+            fields = fields | {'product'}
+            if not valid_product(data.get('product')):
+                return None
+        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'urgent_triage', 'order_lookup', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
             return None
         if action == 'release_apply' and (not isinstance(data['sha'], str) or not re.fullmatch(r'[0-9a-f]{40}', data['sha'])):
             return None
@@ -342,6 +346,8 @@ WITH esc AS (
                 safe = db_snapshot()
             elif data['action'] == 'urgent_triage':
                 safe = urgent_triage()
+            elif data['action'] == 'order_lookup':
+                safe = order_lookup(data['product'])
             else:
                 try:
                     from github_release_gate import apply_release
@@ -398,6 +404,71 @@ def urgent_triage():
         return {'ok':True,'signals':data}
     except (OSError,ValueError,TypeError,subprocess.SubprocessError):
         return {'ok':False,'reason':'triage_unavailable'}
+
+
+
+# Only product phrases (no digits, punctuation, SQL, contact IDs or raw chat export).
+def valid_product(value):
+    return isinstance(value, str) and re.fullmatch(r'[a-z]{3,24}(?: [a-z]{2,24}){0,2}', value) is not None and len(value) <= 48
+
+
+ORDER_LOOKUP_SQL = """BEGIN READ ONLY;
+SET LOCAL statement_timeout = '8s';
+SET LOCAL TIME ZONE 'UTC';
+WITH tenant AS (
+ SELECT id FROM public.crm_businesses
+ WHERE (SELECT count(*) FROM public.crm_businesses)=1
+), recent AS (
+ SELECT w.chat_jid,w.body,w.sent_at FROM public.crm_wa_messages w
+ JOIN tenant t ON t.id=w.business_id
+ WHERE w.is_group=false AND w.sent_at>=now()-interval '72 hours'
+), matches AS (
+ SELECT chat_jid,body FROM recent WHERE lower(body) LIKE '%{product}%'
+), chats AS (
+ SELECT DISTINCT chat_jid FROM matches LIMIT 21
+), refs AS (
+ SELECT DISTINCT (m)[1]::integer AS id FROM matches
+ CROSS JOIN LATERAL regexp_matches(lower(body),'pedido[[:space:]]*#?[[:space:]]*([1-9][0-9]{2,8})([^0-9]|$)','g') m
+ ORDER BY id LIMIT 21
+)
+SELECT json_build_object(
+ 'tenant_ok',(SELECT count(*)=1 FROM tenant),
+ 'matches',(SELECT count(*) FROM matches),
+ 'chats',(SELECT count(*) FROM chats),
+ 'order_ids',coalesce((SELECT json_agg(id ORDER BY id) FROM refs),'[]'::json),
+ 'audio_notes',(SELECT count(*) FROM recent r JOIN chats c USING(chat_jid)
+ WHERE lower(r.body) LIKE '[nota de voz%' OR lower(r.body) LIKE '[audio%'),
+ 'last_day',(SELECT max(sent_at)::date FROM recent));
+COMMIT;"""
+
+
+def order_lookup(product):
+    if not valid_product(product):
+        return {'ok':False,'reason':'invalid_product'}
+    try:
+        p = subprocess.run(['/usr/bin/docker','exec','-u','postgres','vivabot-recovery-db',
+            'psql','-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-d','postgres','-c',
+            ORDER_LOOKUP_SQL.replace('{product}',product)],
+            env={'PATH':'/usr/bin:/bin','HOME':'/root'},capture_output=True,timeout=20,check=False)
+        if p.returncode or len(p.stdout)>2048:
+            raise ValueError('lookup failed')
+        d=json.loads(p.stdout)
+        if not isinstance(d,dict) or set(d)!={'tenant_ok','matches','chats','order_ids','audio_notes','last_day'} or d['tenant_ok'] is not True:
+            raise ValueError('tenant or shape')
+        if any(type(d[k]) is not int or not 0<=d[k]<=10**9 for k in ('matches','chats','audio_notes')):
+            raise ValueError('counts')
+        ids=d['order_ids']
+        if not isinstance(ids,list) or len(ids)>21 or any(type(i) is not int or not 100<=i<=999999999 for i in ids) or ids!=sorted(set(ids)):
+            raise ValueError('ids')
+        if d['chats']>20 or len(ids)>20:
+            return {'ok':False,'reason':'too_many_candidates'}
+        if d['last_day'] is not None:
+            if not isinstance(d['last_day'],str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}',d['last_day']):
+                raise ValueError('date')
+            dt.date.fromisoformat(d['last_day'])
+        return {'ok':True,'evidence':d}
+    except (OSError,ValueError,TypeError,subprocess.SubprocessError):
+        return {'ok':False,'reason':'lookup_unavailable'}
 
 
 class Contingency:
