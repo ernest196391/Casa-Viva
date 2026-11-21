@@ -157,6 +157,16 @@ def _parse_probe(stdout: bytes):
     return None
 
 
+def classify_bootstrap_error(stderr: bytes) -> str:
+    """Return a fixed diagnostic code; never expose arbitrary stderr."""
+    if isinstance(stderr, bytes):
+        if b"loopback: Failed RTM_NEWADDR: Operation not permitted" in stderr:
+            return "loopback-rtnetlink-denied"
+        if b"setting up uid map" in stderr and b"Permission denied" in stderr:
+            return "uid-map-denied"
+    return "bootstrap-unclassified"
+
+
 def run_checks(workspace: str, runner, **kwargs) -> dict:
     """Ejecuta todas las pruebas con el runner dado (inyectable en CI).
 
@@ -186,6 +196,8 @@ def run_checks(workspace: str, runner, **kwargs) -> dict:
                 "detail": f"sin respuesta válida (returncode {returncode}); "
                           "si esto ocurre en bootstrap, la jaula no arranca",
             }
+            if check == "bootstrap":
+                results[check]["diagnostic_code"] = classify_bootstrap_error(_stderr)
             verdict = VERDICT_NO_OPERATIVO if check == "bootstrap" else VERDICT_FAILED
             break
         results[check] = {"ok": bool(probe["ok"]), "detail": probe["detail"]}
