@@ -1,5 +1,10 @@
 # CURRENT — P0 preservar ofertas al editar pedidos (2026-11-21)
 
+## P0 VivaBot — prueba sintética del clasificador
+
+- El VPS devolvió la huella `b4c6477d…a92f` por el buzón de solo lectura. El nuevo diagnóstico offline simula dos sobres Baileys y devuelve clasificación y huella, con catálogo y respuesta expresamente pendientes.
+- Pruebas locales sobre código ficticio: saludo detectado, ventiladores sin intención, dependencia externa no soportada y módulo completo no ejecutado. Ejecutar solo sobre fuente propia y en entorno de pruebas aislado; `node:vm` no es una frontera de seguridad. El diagnóstico aún no se instaló ni se conectó al VPS.
+
 ## P0 VivaBot — versión del receptor por el puente
 
 - PR #277 añade `receiver_contract`, acción de solo lectura del buzón privado con opt-in local. Devuelve SHA-256 e indicadores de código sin ejecutar el módulo. Prueba de contrato añadida para opt-in y permisos del archivo.
