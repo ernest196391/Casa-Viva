@@ -158,6 +158,49 @@ class Tests(unittest.TestCase):
             self.assertIn('dispatch_preflight', posts[0]['body'])
             self.assertEqual(c.poll(), 'cooldown')
 
+    def test_receiver_contract_requires_opt_in_and_filters_source(self):
+        body = mod.PREFIX + json.dumps({
+            'action': 'receiver_contract', 'nonce': 'syntheticnonce1234',
+            'expires_at': '2026-11-20T16:10:00Z',
+        })
+        posts = []
+
+        def api(token, method, path, body=None):
+            if method == 'POST':
+                posts.append(json.loads(body['body'].split(' ', 1)[1]))
+                return {}
+            if '/comments?' in path:
+                return [request(body=test_request)]
+            if path.endswith('/issues/22'):
+                return {'title': 'CV contingency — diagnostic mailbox', 'state': 'open'}
+            return {'private': True, 'full_name': mod.REPO}
+
+        test_request = body
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            file = root / 'recovery-replies.mjs'
+            file.write_text('function classify(m) {}\nfunction respond(m) {}\n// fixture-private')
+            file.chmod(0o600)
+            with patch.object(mod, 'RECEIVER_REPLIES', file):
+                inactive = mod.Contingency(ENV, lambda: self.fail('health'), root, api, lambda: NOW)
+                self.assertEqual(inactive.poll(), 'idle')
+                self.assertEqual(posts, [])
+                env = dict(ENV, CV_GITHUB_RECEIVER_CONTRACT_ENABLED='1')
+                active = mod.Contingency(env, lambda: self.fail('health'), root, api, lambda: NOW + 61)
+                self.assertEqual(active.poll(), 'reported')
+                result = posts[0]['result']
+                self.assertEqual(result, {
+                    'ok': True,
+                    'sha256': mod.hashlib.sha256(file.read_bytes()).hexdigest(),
+                    'mentions_classify': True,
+                    'mentions_respond': True,
+                    'mentions_send_message': False,
+                })
+                file.chmod(0o644)
+                self.assertEqual(mod.receiver_contract(), {
+                    'ok': False, 'reason': 'receiver_source_unavailable',
+                })
+
     def test_preflight_summary_strict_allowlist(self):
         checks = {name: {'ok': True, **{key: 1 for key in mod.PREFLIGHT_COUNTS.get(name, set())}, 'secret': 'private'} for name in mod.PREFLIGHT_CHECKS}
         data = {'ok': True, 'checks': checks, 'raw': 'private'}
