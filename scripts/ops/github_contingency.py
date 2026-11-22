@@ -25,6 +25,7 @@ PREFLIGHT_BLOB = '5dfafab9d7120f8c002999c30f1dd31e5eff5754'
 PREFLIGHT_KEYS = {'SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'DISPATCH_GROUP', 'BUSINESS_SLUG', 'WOO_URL', 'CURRU_KEY'}
 PREFLIGHT_COUNTS = {'core_offers': {'offers', 'unannounced'}, 'reconcile_offers': {'ready', 'recorded', 'uncertain', 'ownershipConflict'}, 'core_direct': {'pending'}, 'core_palla': {'pending'}}
 PREFLIGHT_CHECKS = {'local_config', 'business', 'group', 'dispatch_schema', 'outbox_schema'} | set(PREFLIGHT_COUNTS)
+RECEIVER_REPLIES = Path('/root/backups/nexo-recovery/receiver/recovery-replies.mjs')
 AGENT_TOOLS = {'hermes', 'opencode', 'ollama', 'git', 'node', 'python3'}
 AGENT_SERVICES = {'cv-dev-worker.service', 'cv-control-sync.service', 'cv-ops-bridge.service'}
 
@@ -62,7 +63,7 @@ def command(comment, now):
             fields = fields | {'product'}
             if not valid_product(data.get('product')):
                 return None
-        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'urgent_triage', 'order_lookup', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'urgent_triage', 'order_lookup', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
             return None
         if action == 'release_apply' and (not isinstance(data['sha'], str) or not re.fullmatch(r'[0-9a-f]{40}', data['sha'])):
             return None
@@ -201,6 +202,22 @@ def dispatch_preflight():
         return preflight_summary(result.stdout)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         return {'ok': False, 'reason': 'preflight_unavailable'}
+
+
+def receiver_contract():
+    """Read the deployed reply module without importing or executing it."""
+    try:
+        raw = private_bytes(RECEIVER_REPLIES, 262144)
+        source = raw.decode('utf-8')
+    except (OSError, ValueError):
+        return {'ok': False, 'reason': 'receiver_source_unavailable'}
+    return {
+        'ok': True,
+        'sha256': hashlib.sha256(raw).hexdigest(),
+        'mentions_classify': bool(re.search(r'\bclassify\s*\(', source)),
+        'mentions_respond': bool(re.search(r'\brespond\s*\(', source)),
+        'mentions_send_message': bool(re.search(r'\bsendMessage\s*\(', source)),
+    }
 
 
 def agent_inventory():
@@ -474,6 +491,7 @@ def order_lookup(product):
 class Contingency:
     def __init__(self, env, health, directory=Path('/var/lib/cv-ops-bridge-contingency'), api=github_api, clock=time.time):
         self.cfg = config(env)
+        self.receiver_contract_enabled = env.get('CV_GITHUB_RECEIVER_CONTRACT_ENABLED') == '1'
         self.preflight_enabled = env.get('CV_GITHUB_DISPATCH_PREFLIGHT_ENABLED') == '1'
         self.release_enabled = env.get('CV_GITHUB_RELEASE_ENABLED') == '1'
         self.health, self.directory, self.api, self.clock = health, Path(directory), api, clock
@@ -522,12 +540,14 @@ class Contingency:
             return 'blocked'
         for comment in comments:
             data = command(comment, now)
-            if not data or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
+            if not data or (data['action'] == 'receiver_contract' and not self.receiver_contract_enabled) or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
                 continue
             # One fixed read-only diagnostic. No retry if post outcome is uncertain.
             if data['action'] == 'health':
                 summary = self.health()
                 safe = health_summary(summary[0], summary[1])
+            elif data['action'] == 'receiver_contract':
+                safe = receiver_contract()
             elif data['action'] == 'dispatch_preflight':
                 safe = dispatch_preflight()
             elif data['action'] == 'agent_inventory':

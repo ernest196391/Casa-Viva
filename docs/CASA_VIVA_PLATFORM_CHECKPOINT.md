@@ -1,5 +1,10 @@
 # CURRENT — P0 preservar ofertas al editar pedidos (2026-11-21)
 
+## P0 VivaBot — versión del receptor por el puente
+
+- PR #277 añade `receiver_contract`, acción de solo lectura del buzón privado con opt-in local. Devuelve SHA-256 e indicadores de código sin ejecutar el módulo. Prueba de contrato añadida para opt-in y permisos del archivo.
+- Inventario del VPS confirmado por el resultado 7083571245. Pendiente CI del último commit, confirmar lectura con propietario y permisos válidos e instalar el diagnóstico con reversión. Sin despliegue ni pruebas conversacionales sobre el VPS en este bloque.
+
 - Base fb5bdce6b324a6e1719b2c7a604e5f293d627015. Incidente #6790: guardar datos administrativos podía resetear una oferta abierta a «Por ofertar» por selección 0 sin cambio. Usuario confirmó liberación y republicación automática; conservar esa ruta.
 - Candidato: formulario conserva valor inicial, no escribe si no hay cambio, rechaza selección inválida o mensajero inicial desactualizado; mantiene opción de mensajero actual si no figura en listado. Sin cambios en pagos, inventario, pedidos ni WhatsApp reales.
 - Regresión en test-order-transition-service-1c.php: oferta abierta, asignación existente, formulario antiguo, campos ausentes/invalidos. Pendiente CI, revisión, despliegue y verificación funcional. Reversión: revertir commit.
