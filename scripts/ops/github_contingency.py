@@ -26,6 +26,10 @@ PREFLIGHT_KEYS = {'SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'DISPATCH_GROUP', 'BUS
 PREFLIGHT_COUNTS = {'core_offers': {'offers', 'unannounced'}, 'reconcile_offers': {'ready', 'recorded', 'uncertain', 'ownershipConflict'}, 'core_direct': {'pending'}, 'core_palla': {'pending'}}
 PREFLIGHT_CHECKS = {'local_config', 'business', 'group', 'dispatch_schema', 'outbox_schema'} | set(PREFLIGHT_COUNTS)
 RECEIVER_REPLIES = Path('/root/backups/nexo-recovery/receiver/recovery-replies.mjs')
+RECEIVER_TEST_RUNNER = Path('/root/supervisor/receiver-classification-isolated.py')
+RECEIVER_TEST_RUNNER_SHA256 = 'e1bbcb9b5ea10c502bde48206964fc262b363459d465477a89d4700a139b71f0'
+RECEIVER_TEST_OUTCOMES = {'detected', 'none', 'unsupported'}
+RECEIVER_TEST_ERRORS = {'private_input_unavailable', 'probe_mismatch', 'source_changed', 'isolated_probe_unavailable'}
 AGENT_TOOLS = {'hermes', 'opencode', 'ollama', 'git', 'node', 'python3'}
 AGENT_SERVICES = {'cv-dev-worker.service', 'cv-control-sync.service', 'cv-ops-bridge.service'}
 
@@ -59,11 +63,15 @@ def command(comment, now):
         data = json.loads(body[len(PREFIX):])
         action = data.get('action')
         fields = {'action', 'nonce', 'expires_at', 'sha'} if action == 'release_apply' else {'action', 'nonce', 'expires_at'}
+        if action == 'receiver_classification':
+            fields = fields | {'sha256'}
+            if not isinstance(data.get('sha256'), str) or not re.fullmatch(r'[0-9a-f]{64}', data['sha256']):
+                return None
         if action == 'order_lookup':
             fields = fields | {'product'}
             if not valid_product(data.get('product')):
                 return None
-        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'urgent_triage', 'order_lookup', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
             return None
         if action == 'release_apply' and (not isinstance(data['sha'], str) or not re.fullmatch(r'[0-9a-f]{40}', data['sha'])):
             return None
@@ -218,6 +226,33 @@ def receiver_contract():
         'mentions_respond': bool(re.search(r'\brespond\s*\(', source)),
         'mentions_send_message': bool(re.search(r'\bsendMessage\s*\(', source)),
     }
+
+
+def receiver_classification(expected):
+    """Run the exact installed diagnostic and report only fixed result fields."""
+    try:
+        runner = private_bytes(RECEIVER_TEST_RUNNER, 65536)
+        if hashlib.sha256(runner).hexdigest() != RECEIVER_TEST_RUNNER_SHA256:
+            return {'ok': False, 'reason': 'runner_mismatch'}
+        code = '__file__ = ' + repr(str(RECEIVER_TEST_RUNNER)) + '\n' + runner.decode('utf-8')
+        result = subprocess.run(
+            ['/usr/bin/python3', '-I', '-c', code, expected],
+            env={'PATH': '/usr/bin:/bin'}, capture_output=True, timeout=15, check=False)
+        if result.returncode or len(result.stdout) > 2048:
+            raise ValueError('invalid runner response')
+        data = json.loads(result.stdout)
+        if data.get('ok') is False and data.get('reason') in RECEIVER_TEST_ERRORS:
+            return {'ok': False, 'reason': data['reason']}
+        cases = data['classification']
+        if (data.get('ok') is not True or data.get('sha256') != expected or
+                not isinstance(cases, dict) or set(cases) != {'saludo', 'ventiladores'} or
+                any(not isinstance(value, str) or value not in RECEIVER_TEST_OUTCOMES
+                    for value in cases.values())):
+            raise ValueError('invalid classification')
+        return {'ok': True, 'sha256': expected, 'classification': cases,
+                'catalog': 'not_tested', 'reply': 'not_tested'}
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, subprocess.SubprocessError):
+        return {'ok': False, 'reason': 'runner_unavailable'}
 
 
 def agent_inventory():
@@ -491,6 +526,7 @@ def order_lookup(product):
 class Contingency:
     def __init__(self, env, health, directory=Path('/var/lib/cv-ops-bridge-contingency'), api=github_api, clock=time.time):
         self.cfg = config(env)
+        self.receiver_classification_enabled = env.get('CV_GITHUB_RECEIVER_CLASSIFICATION_ENABLED') == '1'
         self.receiver_contract_enabled = env.get('CV_GITHUB_RECEIVER_CONTRACT_ENABLED') == '1'
         self.preflight_enabled = env.get('CV_GITHUB_DISPATCH_PREFLIGHT_ENABLED') == '1'
         self.release_enabled = env.get('CV_GITHUB_RELEASE_ENABLED') == '1'
@@ -540,12 +576,14 @@ class Contingency:
             return 'blocked'
         for comment in comments:
             data = command(comment, now)
-            if not data or (data['action'] == 'receiver_contract' and not self.receiver_contract_enabled) or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
+            if not data or (data['action'] == 'receiver_classification' and not self.receiver_classification_enabled) or (data['action'] == 'receiver_contract' and not self.receiver_contract_enabled) or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
                 continue
             # One fixed read-only diagnostic. No retry if post outcome is uncertain.
             if data['action'] == 'health':
                 summary = self.health()
                 safe = health_summary(summary[0], summary[1])
+            elif data['action'] == 'receiver_classification':
+                safe = receiver_classification(data['sha256'])
             elif data['action'] == 'receiver_contract':
                 safe = receiver_contract()
             elif data['action'] == 'dispatch_preflight':

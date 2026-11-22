@@ -1,5 +1,14 @@
 # CURRENT — P0 preservar ofertas al editar pedidos (2026-11-21)
 
+## P0 VivaBot — prueba sintética del clasificador
+
+- Buzón: `receiver_classification` acepta únicamente SHA-256 del módulo más el sobre habitual del propietario. Opt-in independiente `CV_GITHUB_RECEIVER_CLASSIFICATION_ENABLED=1`. La acción verifica SHA-256 del ejecutor y éste la de la prueba Node. Resultados enumerados y sin salida cruda. El instalador vigente solo instala `github_contingency.py`: antes de activar se requieren ambos auxiliares certificados, privados, propiedad del usuario efectivo del puente en `/root/supervisor/`, y validación de aislamiento en VPS. Reversión: desactivar opt-in. Prueba de buzón y proceso simulados: entrada, huella incorrecta, filtrado y opt-in aprobados.
+
+- El PR incluye un ejecutor transitorio `systemd-run` que exige la huella esperada y entrega el archivo por stdin a Node. Usuario dinámico, red privada, familias de socket limitadas y límites de tiempo y memoria. Respuesta limitada a resultados enumerados. Cuatro comprobaciones locales con datos ficticios, Node real y lanzador systemd simulado. El entorno Work carece de systemd como PID 1. Validación pendiente: prueba de las restricciones en el host y conexión al buzón mediante una acción fija autorizada.
+
+- El VPS devolvió la huella `b4c6477d…a92f` por el buzón de solo lectura. El nuevo diagnóstico offline simula dos sobres Baileys y devuelve clasificación y huella, con catálogo y respuesta expresamente pendientes.
+- Pruebas locales sobre código ficticio: saludo detectado, ventiladores sin intención, dependencia externa no soportada y módulo completo no ejecutado. Ejecutar solo sobre fuente propia y en entorno de pruebas aislado; `node:vm` no es una frontera de seguridad. El diagnóstico aún no se instaló ni se conectó al VPS.
+
 ## P0 VivaBot — versión del receptor por el puente
 
 - PR #277 añade `receiver_contract`, acción de solo lectura del buzón privado con opt-in local. Devuelve SHA-256 e indicadores de código sin ejecutar el módulo. Prueba de contrato añadida para opt-in y permisos del archivo.
