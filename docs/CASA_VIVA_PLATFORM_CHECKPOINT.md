@@ -1,5 +1,10 @@
 # CURRENT — P0 preservar ofertas al editar pedidos (2026-11-21)
 
+## P0 VivaBot — consulta comercial con catálogo real
+
+- VPS run-u34758 exit 0. Receptor b4c6477d…a92f y diálogo df60609d…77f8. Base: la pregunta compuesta daba null; Woo Store API vacía en plural. Candidato aplica cambio en memoria, preserva saludo y clasifica traspaso de carrera sin ejecutarlo.
+- GET público WooCommerce reproducido desde VPS; el fetch inyectado en Node aislado validó la URL y reprodujo los datos reales. El formateador real devolvió 72.00 USD y bajo pedido para Royal RA12RSL. El parser de confirmación mediante OK se sustituyó por stub, no se ejecutó respond, chatAllowed o envío de WhatsApp. Sin cambios persistentes VPS. Reversión de eventual cambio: restaurar natural-dialog.mjs desde copia verificada. Pendiente desplegar por separado y certificar adaptador completo.
+
 ## P0 VivaBot — prueba sintética del clasificador
 
 - Buzón: `receiver_classification` acepta únicamente SHA-256 del módulo más el sobre habitual del propietario. Opt-in independiente `CV_GITHUB_RECEIVER_CLASSIFICATION_ENABLED=1`. La acción verifica SHA-256 del ejecutor y éste la de la prueba Node. Resultados enumerados y sin salida cruda. El instalador vigente solo instala `github_contingency.py`: antes de activar se requieren ambos auxiliares certificados, privados, propiedad del usuario efectivo del puente en `/root/supervisor/`, y validación de aislamiento en VPS. Reversión: desactivar opt-in. Prueba de buzón y proceso simulados: entrada, huella incorrecta, filtrado y opt-in aprobados.
