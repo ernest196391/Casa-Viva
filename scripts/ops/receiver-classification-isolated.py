@@ -10,6 +10,7 @@ import sys
 
 SOURCE = Path('/root/backups/nexo-recovery/receiver/recovery-replies.mjs')
 PROBE = Path(__file__).with_name('receiver-classification-probe.mjs')
+PROBE_SHA256 = '6749c474685d3c8d4560b0affff1ce0f18810941c5422c3be55bc775b6ff27b2'
 LIMIT = 262144
 CASES = {'saludo', 'ventiladores'}
 OUTCOMES = {'detected', 'none', 'unsupported'}
@@ -32,7 +33,10 @@ def run(expected):
         return {'ok': False, 'reason': 'invalid_hash'}
     try:
         source = read_private(SOURCE)
-        harness = read_private(PROBE).decode('utf-8')
+        harness_bytes = read_private(PROBE)
+        if hashlib.sha256(harness_bytes).hexdigest() != PROBE_SHA256:
+            return {'ok': False, 'reason': 'probe_mismatch'}
+        harness = harness_bytes.decode('utf-8')
     except (OSError, ValueError):
         return {'ok': False, 'reason': 'private_input_unavailable'}
     if hashlib.sha256(source).hexdigest() != expected:
