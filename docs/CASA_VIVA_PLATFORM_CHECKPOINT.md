@@ -2,6 +2,8 @@
 
 ## P0 VivaBot — prueba sintética del clasificador
 
+- El PR incluye un ejecutor transitorio `systemd-run` que exige la huella esperada y entrega el archivo por stdin a Node. Usuario dinámico, red privada, familias de socket limitadas y límites de tiempo y memoria. Respuesta limitada a resultados enumerados. Cuatro comprobaciones locales con datos ficticios, Node real y lanzador systemd simulado. El entorno Work carece de systemd como PID 1. Validación pendiente: prueba de las restricciones en el host y conexión al buzón mediante una acción fija autorizada.
+
 - El VPS devolvió la huella `b4c6477d…a92f` por el buzón de solo lectura. El nuevo diagnóstico offline simula dos sobres Baileys y devuelve clasificación y huella, con catálogo y respuesta expresamente pendientes.
 - Pruebas locales sobre código ficticio: saludo detectado, ventiladores sin intención, dependencia externa no soportada y módulo completo no ejecutado. Ejecutar solo sobre fuente propia y en entorno de pruebas aislado; `node:vm` no es una frontera de seguridad. El diagnóstico aún no se instaló ni se conectó al VPS.
 
