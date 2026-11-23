@@ -10,7 +10,7 @@ import sys
 
 SOURCE = Path('/root/backups/nexo-recovery/receiver/recovery-replies.mjs')
 PROBE = Path(__file__).with_name('receiver-classification-probe.mjs')
-PROBE_SHA256 = '6749c474685d3c8d4560b0affff1ce0f18810941c5422c3be55bc775b6ff27b2'
+PROBE_SHA256 = 'db2c28e0809df590586d298424028372a86ec1c3c9e56e8de4498b9030a13859'
 LIMIT = 262144
 CASES = {'saludo', 'ventiladores'}
 OUTCOMES = {'detected', 'none', 'unsupported'}
