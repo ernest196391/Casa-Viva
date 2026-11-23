@@ -1,5 +1,11 @@
 # CURRENT — P0 preservar ofertas al editar pedidos (2026-11-21)
 
+## Infraestructura VPS durante HTTP 402 (2026-11-23)
+
+- Reutiliza el sincronizador y el SSH a Hostinger existentes. Si Supabase responde 402, publica solo el estado local de PM2 y del puente con su propia fecha en `control-private/infrastructure.json`. La instantánea principal, los controles de vigencia y las aprobaciones existentes conservan su fecha y sus permisos.
+- Reversión: restaurar sincronizador y archivos web previos. El diagnóstico local queda fuera del directorio público. Verificar HTTP 401 sin sesión y lectura autenticada con fechas distintas antes de cerrar.
+
+
 ## Centro de Control — Infraestructura VPS (2026-11-23)
 
 - Base `a28a3e7145516855e426e68d6593a4568650c8e8`. `/control/` reutiliza el acceso WordPress vigente y la instantánea privada del sincronizador. La vista muestra por separado el receptor y el proceso principal, indica datos vencidos y enlaza a hPanel. Sin credenciales, acciones nuevas ni ampliación de permisos. Estado operativo PM2 no certifica conexión WhatsApp.
