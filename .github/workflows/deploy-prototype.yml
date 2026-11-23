@@ -114,6 +114,34 @@ jobs:
           live_version="$(ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cd '$WP_PATH' && wp plugin get '$PLUGIN_SLUG' --field=version")"
           php -r '[$live,$repo]=[$argv[1],$argv[2]]; if(version_compare($repo,$live,"<")){fwrite(STDERR,"Downgrade bloqueado: repo $repo < live $live\n"); exit(3);} echo "Version OK: repo $repo >= live $live\n";' "$live_version" "$repo_version"
 
+      - name: Esperar disponibilidad real de NEXO antes de alterar producción
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+        run: |
+          set -euo pipefail
+          check="$(base64 -w 0 <<'PHP'
+          <?php
+          $base = untrailingslashit( esc_url_raw( (string) get_option( 'cvd_nexo_service_url', 'https://ernesto-rondon-nexo.onrender.com' ) ) );
+          if ( ! $base || 'https' !== wp_parse_url( $base, PHP_URL_SCHEME ) ) {
+              throw new RuntimeException( 'NEXO no está configurado de forma segura.' );
+          }
+          // GET on the POST-only route must be rejected by Next.js without invoking AI.
+          $response = wp_safe_remote_get( $base . '/api/messaging/parse-voucher', array(
+              'timeout' => 120,
+              'redirection' => 0,
+              'headers' => array( 'Cache-Control' => 'no-cache', 'Connection' => 'close' ),
+          ) );
+          if ( is_wp_error( $response ) || 405 !== wp_remote_retrieve_response_code( $response ) ) {
+              throw new RuntimeException( 'NEXO aún no está listo; despliegue cancelado antes de alterar el plugin.' );
+          }
+          echo "NEXO disponible; sin invocar IA.\n";
+          PHP
+          )"
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "cd '$WP_PATH' && printf '%s' '$check' | base64 -d | wp eval-file -"
+
       - name: Copiar release al servidor
         shell: bash
         env:
