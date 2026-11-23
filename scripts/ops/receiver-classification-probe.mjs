@@ -54,7 +54,7 @@ function classify(definitions, text, now) {
       return runInNewContext(
         code + '\n{ const result = classify(' + JSON.stringify(message) +
           ', undefined, "10000000002@s.whatsapp.net"); ' +
-          'result?.then ? "unsupported" : result == null || result === false ? "none" : "detected"; }',
+          'result?.then ? (result.then(undefined, () => {}), "unsupported") : result == null || result === false ? "none" : "detected"; }',
         Object.create(null),
         { timeout: 250, contextCodeGeneration: { strings: false, wasm: false } },
       );
