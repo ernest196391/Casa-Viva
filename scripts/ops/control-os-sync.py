@@ -336,7 +336,10 @@ def snapshot():
     except Exception:
         vivabot_sha = 'unknown'
 
-    system_ok = bot_status == 'online' and bridge_active == 'active'
+    receiver = next((p for p in processes if p.get('name') == 'vivabot-recovery-receiver'), {})
+    receiver_status = receiver.get('pm2_env', {}).get('status', 'unknown')
+    active_vivabot_count = (bot_status == 'online') + (receiver_status == 'online')
+    system_ok = active_vivabot_count == 1 and bridge_active == 'active'
     # Read only the public heartbeat. Never send arbitrary crm_settings to the browser.
     heartbeat = None
     try:
@@ -373,6 +376,7 @@ def snapshot():
         'system': {
             'ok': system_ok,
             'vivabot': {'status': bot_status, 'sha': vivabot_sha},
+            'receiver': {'status': receiver_status},
             'bridge': {'status': bridge_active, 'enabled': bridge_enabled, 'version': bridge_version, 'poll_seconds': 3},
             'control_sync': {'status': 'online', 'at': now.isoformat()},
         },

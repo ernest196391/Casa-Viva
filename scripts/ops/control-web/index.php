@@ -162,7 +162,8 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
   <section id="developers" class="view" hidden><h2>Programadores</h2><p id="developer-status" class="section-copy">Esperando estado del servicio.</p><p id="local-status" class="section-copy">Esperando último aviso local.</p><p class="section-copy">Tareas identificadas por estado o ejecutor registrado. No certifica ejecución en vivo.</p><div id="developer-list" class="stack"></div></section>
   <section id="ai" class="view" hidden><h2>Inteligencia artificial</h2><p id="ai-status" class="section-copy">Esperando estado.</p><div id="ai-list" class="stack"></div></section>
   <section id="system" class="view" hidden>
-    <div class="section-head"><h2>Estado de los servicios</h2><span id="system-badge" class="health-badge">Comprobando</span></div>
+    <div class="section-head"><h2>Infraestructura · VPS</h2><span id="system-badge" class="health-badge">Comprobando</span></div>
+    <p><a class="primary" href="https://hpanel.hostinger.com/" target="_blank" rel="noopener noreferrer">Abrir Hostinger</a></p>
     <div id="system-grid" class="system-grid"></div>
     <p class="section-copy">Estos indicadores muestran la conexión de los servicios; no certifican el ciclo automático de programación.</p>
     <details><summary>Información técnica y actividad</summary><div id="activity-list" class="stack compact"></div></details>
