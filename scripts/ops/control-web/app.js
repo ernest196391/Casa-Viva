@@ -122,11 +122,16 @@ function render(data){
  renderTasks();
  const l=Array.isArray(data.lennys)?data.lennys:[];$('lennys-list').replaceChildren(...l.map(lennysCard));
  if(!l.length)empty($('lennys-list'),'No hay mensajes anteriores en esta muestra.');
- const sys=data.system||{};$('system-badge').textContent=stale?'Sin estado reciente':sys.ok?'Servicios conectados':'Revisar conexión';
- $('system-badge').classList.toggle('bad',stale||!sys.ok);
- const labels={online:'Conectado',active:'Activo',offline:'Desconectado',stopped:'Detenido',inactive:'Inactivo'};
- const rows=[['Receptor VivaBot',sys.receiver?.status],['VivaBot principal',sys.vivabot?.status],['Puente de operaciones',sys.bridge?.status],['Sincronización del panel',sys.control_sync?.status]];
- $('system-grid').replaceChildren(...rows.map(([name,status])=>{const a=el('article','', 'system-card');a.append(el('small',name),el('strong',(stale?'Sin estado reciente':labels[status])||'Sin comprobar'));return a;}));
+ const local=data.infrastructure;
+ const useLocal=fresh(local?.at)&&Date.parse(local.at)>Date.parse(data.at);
+ const sys=useLocal?local:(data.system||{});
+ const infraStale=stale&&!useLocal;
+ $('infra-freshness').textContent=useLocal?'VPS actualizado '+stamp(local.at)+' · datos del panel con fecha independiente':infraStale?'Sin diagnóstico reciente':'VPS actualizado '+stamp(data.at);
+$('system-badge').textContent=infraStale?'Sin estado reciente':sys.ok?'Procesos operativos':'Revisar conexión';
+ $('system-badge').classList.toggle('bad',infraStale||!sys.ok);
+ const labels={online:'En ejecución',stale:'Sin estado reciente',active:'Activo',offline:'Desconectado',stopped:'Detenido',inactive:'Inactivo'};
+ const rows=[['Receptor VivaBot',sys.receiver?.status],['VivaBot principal',sys.vivabot?.status],['Puente de operaciones',sys.bridge?.status],['Sincronización del panel',stale?'stale':data.system?.control_sync?.status]];
+ $('system-grid').replaceChildren(...rows.map(([name,status])=>{const a=el('article','', 'system-card');a.append(el('small',name),el('strong',(infraStale?'Sin estado reciente':labels[status])||'Sin comprobar'));return a;}));
  const act=Array.isArray(data.activity)?data.activity:[];$('activity-list').replaceChildren(...act.map(activityCard));
  if(state.pending){
   const task=(data.tasks||[]).find(x=>x.request_id===state.pending.id);

@@ -191,6 +191,37 @@ def query(path):
     return api('GET', path) or []
 
 
+def local_infrastructure():
+    processes = json.loads(subprocess.check_output(['pm2','jlist'], text=True, timeout=10))
+    bot = next((p for p in processes if p.get('name') == 'vivabot'), {})
+    bot_status = bot.get('pm2_env', {}).get('status', 'unknown')
+
+    bridge_active = subprocess.run(
+        ['systemctl','is-active','cv-ops-bridge.service'],
+        capture_output=True,text=True,timeout=10
+    ).stdout.strip()
+    receiver = next((p for p in processes if p.get('name') == 'vivabot-recovery-receiver'), {})
+    receiver_status = receiver.get('pm2_env', {}).get('status', 'unknown')
+    active_vivabot_count = (bot_status == 'online') + (receiver_status == 'online')
+    system_ok = active_vivabot_count == 1 and bridge_active == 'active'
+    return {
+        'at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        'ok': system_ok,
+        'vivabot': {'status': bot_status},
+        'receiver': {'status': receiver_status},
+        'bridge': {'status': bridge_active},
+    }
+
+
+def push_local_infrastructure():
+    command = (
+        'umask 077; cd ' + STORE +
+        ' && cat > infrastructure.json.tmp && mv -f infrastructure.json.tmp infrastructure.json'
+    )
+    subprocess.run(SSH + [command], input=json.dumps(local_infrastructure()), text=True,
+                   capture_output=True, timeout=25, check=True)
+
+
 def snapshot():
     now = datetime.datetime.now(datetime.timezone.utc)
     task_fields = 'id,public_id,thread_id,title,status,priority,risk,result,error,created_at,started_at,finished_at,source,source_ref,executor,task_type,requested_by_name,approval_required'
@@ -310,14 +341,10 @@ def snapshot():
         'detail': x.get('detail') or {},
     } for x in events_raw]
 
-    processes = json.loads(subprocess.check_output(['pm2','jlist'], text=True, timeout=10))
-    bot = next((p for p in processes if p.get('name') == 'vivabot'), {})
-    bot_status = bot.get('pm2_env', {}).get('status', 'unknown')
-
-    bridge_active = subprocess.run(
-        ['systemctl','is-active','cv-ops-bridge.service'],
-        capture_output=True,text=True,timeout=10
-    ).stdout.strip()
+    diagnostics = local_infrastructure()
+    bot_status = diagnostics['vivabot']['status']
+    system_ok = diagnostics['ok']
+    bridge_active = diagnostics['bridge']['status']
     bridge_enabled = subprocess.run(
         ['systemctl','is-enabled','cv-ops-bridge.service'],
         capture_output=True,text=True,timeout=10
@@ -336,10 +363,6 @@ def snapshot():
     except Exception:
         vivabot_sha = 'unknown'
 
-    receiver = next((p for p in processes if p.get('name') == 'vivabot-recovery-receiver'), {})
-    receiver_status = receiver.get('pm2_env', {}).get('status', 'unknown')
-    active_vivabot_count = (bot_status == 'online') + (receiver_status == 'online')
-    system_ok = active_vivabot_count == 1 and bridge_active == 'active'
     # Read only the public heartbeat. Never send arbitrary crm_settings to the browser.
     heartbeat = None
     try:
@@ -376,7 +399,7 @@ def snapshot():
         'system': {
             'ok': system_ok,
             'vivabot': {'status': bot_status, 'sha': vivabot_sha},
-            'receiver': {'status': receiver_status},
+            'receiver': diagnostics['receiver'],
             'bridge': {'status': bridge_active, 'enabled': bridge_enabled, 'version': bridge_version, 'poll_seconds': 3},
             'control_sync': {'status': 'online', 'at': now.isoformat()},
         },
@@ -417,14 +440,19 @@ def main():
             fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
-        rows = read_portal_requests()
-        known = read_state()
-        added = ingest(rows, known)
-        decisions = read_portal_decisions()
-        known_decisions = read_decision_state()
-        decisions_added = ingest_decisions(decisions, known_decisions)
-        state = snapshot()
-        push_snapshot(state)
+        try:
+            rows = read_portal_requests()
+            known = read_state()
+            added = ingest(rows, known)
+            decisions = read_portal_decisions()
+            known_decisions = read_decision_state()
+            decisions_added = ingest_decisions(decisions, known_decisions)
+            state = snapshot()
+            push_snapshot(state)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 402:
+                push_local_infrastructure()
+            raise
         print(json.dumps({
             'ok': True,
             'portal_requests': len(rows),
