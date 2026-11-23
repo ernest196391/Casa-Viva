@@ -1,5 +1,11 @@
 # CURRENT — P0 preservar ofertas al editar pedidos (2026-11-21)
 
+## Centro de Control — Infraestructura VPS (2026-11-23)
+
+- Base `a28a3e7145516855e426e68d6593a4568650c8e8`. `/control/` reutiliza el acceso WordPress vigente y la instantánea privada del sincronizador. La vista muestra por separado el receptor y el proceso principal, indica datos vencidos y enlaza a hPanel. Sin credenciales, acciones nuevas ni ampliación de permisos. Estado operativo PM2 no certifica conexión WhatsApp.
+- Reversión: restaurar los archivos web y el sincronizador desde el respaldo previo al eventual despliegue. Validar lectura con sesión autorizada, rechazo de usuarios sin acceso y estado contrastado con el VPS antes de cerrar. Costo adicional cero.
+
+
 ## P0 VivaBot — consulta comercial con catálogo real
 
 - VPS run-u34758 exit 0. Receptor b4c6477d…a92f y diálogo df60609d…77f8. Base: la pregunta compuesta daba null; Woo Store API vacía en plural. Candidato aplica cambio en memoria, preserva saludo y clasifica traspaso de carrera sin ejecutarlo.
