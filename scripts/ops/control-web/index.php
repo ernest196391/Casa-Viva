@@ -32,6 +32,19 @@ if ($action === 'state') {
     if (!is_file($path)) { wp_send_json_error(['message' => 'Esperando la primera actualización.'], 503); }
     $state = json_decode((string) file_get_contents($path), true);
     if (!is_array($state)) { wp_send_json_error(['message' => 'El estado no es válido.'], 503); }
+    $localPath = $store . '/infrastructure.json';
+    if (is_file($localPath)) {
+        $local = json_decode((string) file_get_contents($localPath, false, null, 0, 4096), true);
+        if (is_array($local) && is_string($local['at'] ?? null)) {
+            $state['infrastructure'] = ['at' => $local['at'], 'ok' => ($local['ok'] ?? false) === true];
+            foreach (['vivabot', 'receiver', 'bridge'] as $service) {
+                $status = $local[$service]['status'] ?? '';
+                if (in_array($status, ['online', 'stopped', 'active', 'inactive', 'failed'], true)) {
+                    $state['infrastructure'][$service] = ['status' => $status];
+                }
+            }
+        }
+    }
     wp_send_json_success($state);
 }
 if ($action === 'task') {
@@ -164,6 +177,7 @@ if ($action !== '') { wp_send_json_error(['message' => 'Acción desconocida.'], 
   <section id="system" class="view" hidden>
     <div class="section-head"><h2>Infraestructura · VPS</h2><span id="system-badge" class="health-badge">Comprobando</span></div>
     <p><a class="primary" href="https://hpanel.hostinger.com/" target="_blank" rel="noopener noreferrer">Abrir Hostinger</a></p>
+    <p id="infra-freshness" class="section-copy" aria-live="polite"></p>
     <div id="system-grid" class="system-grid"></div>
     <p class="section-copy">Estos indicadores muestran la conexión de los servicios; no certifican el ciclo automático de programación.</p>
     <details><summary>Información técnica y actividad</summary><div id="activity-list" class="stack compact"></div></details>
