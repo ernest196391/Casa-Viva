@@ -125,8 +125,8 @@ function render(data){
  const sys=data.system||{};$('system-badge').textContent=stale?'Sin estado reciente':sys.ok?'Servicios conectados':'Revisar conexión';
  $('system-badge').classList.toggle('bad',stale||!sys.ok);
  const labels={online:'Conectado',active:'Activo',offline:'Desconectado',stopped:'Detenido',inactive:'Inactivo'};
- const rows=[['WhatsApp · VivaBot',sys.vivabot?.status],['Puente de operaciones',sys.bridge?.status],['Sincronización del panel',sys.control_sync?.status]];
- $('system-grid').replaceChildren(...rows.map(([name,status])=>{const a=el('article','', 'system-card');a.append(el('small',name),el('strong',labels[status]||'Sin comprobar'));return a;}));
+ const rows=[['Receptor VivaBot',sys.receiver?.status],['VivaBot principal',sys.vivabot?.status],['Puente de operaciones',sys.bridge?.status],['Sincronización del panel',sys.control_sync?.status]];
+ $('system-grid').replaceChildren(...rows.map(([name,status])=>{const a=el('article','', 'system-card');a.append(el('small',name),el('strong',(stale?'Sin estado reciente':labels[status])||'Sin comprobar'));return a;}));
  const act=Array.isArray(data.activity)?data.activity:[];$('activity-list').replaceChildren(...act.map(activityCard));
  if(state.pending){
   const task=(data.tasks||[]).find(x=>x.request_id===state.pending.id);
