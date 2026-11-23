@@ -27,7 +27,8 @@ class CleanPanelTests(unittest.TestCase):
             raise AssertionError(path)
         self.paths = []
         tree = ast.parse(SOURCE.read_text(encoding='utf-8'))
-        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'snapshot')
+        functions = [n for n in tree.body if isinstance(n, ast.FunctionDef)
+                     and n.name in {'local_infrastructure', 'snapshot'}]
         process = Mock()
         process.run.return_value.stdout = 'active'
         process.check_output.side_effect = lambda cmd, **kw: (
@@ -36,7 +37,7 @@ class CleanPanelTests(unittest.TestCase):
         fake_path = Mock()
         fake_path.return_value.read_text.return_value = 'BRIDGE_VERSION = "test"'
         env = dict(datetime=datetime,json=json,re=re,subprocess=process,Path=fake_path,query=query,urllib=urllib)
-        exec(compile(ast.Module(body=[fn],type_ignores=[]),str(SOURCE),'exec'),env)
+        exec(compile(ast.Module(body=functions,type_ignores=[]),str(SOURCE),'exec'),env)
         return env['snapshot']()
 
     def task(self, n, **extra):
