@@ -456,8 +456,9 @@ WITH incoming AS (
  FROM public.crm_wa_messages w
  JOIN public.crm_businesses b ON b.id=w.business_id
  WHERE b.slug='casa-viva' AND w.is_group=false AND w.from_me=false
- AND w.sent_at >= '2026-11-23 23:40:00+00' AND w.sent_at < '2026-11-23 23:55:00+00'
- AND lower(btrim(w.body, ' ¿?!'))='hay mesitas auxiliares disponibles'
+ AND w.sent_at >= now()-interval '72 hours'
+ AND regexp_replace(lower(btrim(w.body)), '[[:space:]¿?!]+', ' ', 'g')
+     ~ '^ ?hay mesitas auxiliares disponibles ?$'
  LIMIT 2
 )
 SELECT json_build_object(
