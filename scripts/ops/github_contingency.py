@@ -394,11 +394,13 @@ WITH tenant AS (
  SELECT id FROM public.crm_businesses
  WHERE (SELECT count(*) FROM public.crm_businesses)=1
 ), recent AS (
- SELECT w.chat_jid,w.body,w.sent_at FROM public.crm_wa_messages w
+ SELECT w.id,w.chat_jid,w.body,w.sent_at,w.from_me FROM public.crm_wa_messages w
  JOIN tenant t ON t.id=w.business_id
  WHERE w.is_group=false AND w.sent_at>=now()-interval '72 hours'
 ), matches AS (
- SELECT chat_jid,body FROM recent WHERE lower(body) LIKE '%{product}%'
+ SELECT id,chat_jid,body,sent_at FROM recent WHERE from_me=false AND lower(body) LIKE '%{product}%'
+), latest AS (
+ SELECT chat_jid,sent_at FROM matches ORDER BY sent_at DESC,id DESC LIMIT 1
 ), chats AS (
  SELECT DISTINCT chat_jid FROM matches LIMIT 21
 ), refs AS (
@@ -413,7 +415,12 @@ SELECT json_build_object(
  'order_ids',coalesce((SELECT json_agg(id ORDER BY id) FROM refs),'[]'::json),
  'audio_notes',(SELECT count(*) FROM recent r JOIN chats c USING(chat_jid)
  WHERE lower(r.body) LIKE '[nota de voz%' OR lower(r.body) LIKE '[audio%'),
- 'last_day',(SELECT max(sent_at)::date FROM recent));
+ 'last_day',(SELECT max(sent_at)::date FROM recent),
+ 'match_age_seconds',(SELECT greatest(0,floor(extract(epoch FROM now()-sent_at)))::int FROM latest),
+ 'outbound_observed',(SELECT EXISTS (
+   SELECT 1 FROM recent r WHERE r.chat_jid=l.chat_jid AND r.from_me=true
+   AND r.sent_at>l.sent_at AND r.sent_at<l.sent_at+interval '2 minutes'
+ ) FROM latest));
 COMMIT;"""
 
 
@@ -428,10 +435,16 @@ def order_lookup(product):
         if p.returncode or len(p.stdout)>2048:
             raise ValueError('lookup failed')
         d=json.loads(p.stdout)
-        if not isinstance(d,dict) or set(d)!={'tenant_ok','matches','chats','order_ids','audio_notes','last_day'} or d['tenant_ok'] is not True:
+        if not isinstance(d,dict) or set(d)!={'tenant_ok','matches','chats','order_ids','audio_notes','last_day','match_age_seconds','outbound_observed'} or d['tenant_ok'] is not True:
             raise ValueError('tenant or shape')
         if any(type(d[k]) is not int or not 0<=d[k]<=10**9 for k in ('matches','chats','audio_notes')):
             raise ValueError('counts')
+        age, outbound = d['match_age_seconds'], d['outbound_observed']
+        if d['matches']:
+            if type(age) is not int or not 0 <= age <= 72 * 3600 or type(outbound) is not bool:
+                raise ValueError('match evidence')
+        elif age is not None or outbound is not None:
+            raise ValueError('unexpected match evidence')
         ids=d['order_ids']
         if not isinstance(ids,list) or len(ids)>21 or any(type(i) is not int or not 100<=i<=999999999 for i in ids) or ids!=sorted(set(ids)):
             raise ValueError('ids')
