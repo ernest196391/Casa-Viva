@@ -361,9 +361,35 @@ TRIAGE_FIELDS = {'escalations_open','escalations_money','escalations_orders','es
 def urgent_triage():
     try:
         p = subprocess.run(['/usr/bin/docker','exec','-u','postgres','vivabot-recovery-db',
-            'psql','-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-d','postgres','-c',TRIAGE_SQL],
+            'psql','-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-v','VERBOSITY=sqlstate','-d','postgres','-c',TRIAGE_SQL],
             env={'PATH':'/usr/bin:/bin','HOME':'/root'},capture_output=True,timeout=25,check=False)
-        if p.returncode or len(p.stdout)>2048:
+        if p.returncode:
+            states = {
+                b'42P01': 'missing_relation', b'42703': 'missing_column',
+                b'42501': 'permission', b'57014': 'query_cancelled',
+            }
+            state = re.search(rb'^ERROR:\s+([0-9A-Z]{5})\s*
+        data=json.loads(p.stdout)
+        if not isinstance(data,dict) or set(data)!=TRIAGE_FIELDS:
+            raise ValueError('shape')
+        if any(type(v) is not int or not 0<=v<=10**12 for v in data.values()):
+            raise ValueError('count')
+        for key,parent in [('escalations_money','escalations_open'),('escalations_orders','escalations_open'),
+            ('escalations_bot','escalations_open'),('crm_money_signals','crm_in_48h'),('crm_order_signals','crm_in_48h'),
+            ('errors_open','errors_total'),('errors_unknown_state','errors_total'),
+            ('wa_money_signals','wa_recent_dated'),('wa_order_signals','wa_recent_dated'),('wa_bot_signals','wa_recent_dated')]:
+            if data[key]>data[parent]:
+                raise ValueError('count relation')
+        return {'ok':True,'signals':data}
+    except (OSError,ValueError,TypeError,subprocess.SubprocessError):
+        return {'ok':False,'reason':'triage_unavailable'}
+
+
+
+, p.stderr, re.M)
+            return {'ok':False,'reason':'triage_unavailable',
+                    'stage':states.get(state[1], 'database') if state else 'database'}
+        if len(p.stdout)>2048:
             raise ValueError('triage unavailable')
         data=json.loads(p.stdout)
         if not isinstance(data,dict) or set(data)!=TRIAGE_FIELDS:
