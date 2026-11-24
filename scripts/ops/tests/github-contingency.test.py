@@ -61,6 +61,12 @@ class Tests(unittest.TestCase):
             with patch.object(mod.subprocess,'run',return_value=Mock(returncode=0,stdout=json.dumps(bad).encode())):
                 self.assertEqual(mod.urgent_triage(),{'ok':False,'reason':'triage_unavailable'})
 
+    def test_urgent_triage_does_not_export_database_errors(self):
+        result = mod.subprocess.CompletedProcess([], 1, b'', b'ERROR:  42P01\nDETAIL: private\n')
+        with patch.object(mod.subprocess, 'run', return_value=result):
+            self.assertEqual(mod.urgent_triage(),
+                             {'ok': False, 'reason': 'triage_unavailable', 'stage': 'missing_relation'})
+
     def test_urgent_triage_no_arguments(self):
         payload={'action':'urgent_triage','nonce':'syntheticnonce1234','expires_at':'2026-11-20T16:10:00Z'}
         self.assertIsNotNone(mod.command(request(body=mod.PREFIX+json.dumps(payload)),NOW))
