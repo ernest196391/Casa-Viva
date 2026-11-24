@@ -333,84 +333,7 @@ WITH esc AS (
  SELECT left(coalesce(j->>'created_at',j->>'timestamp',j->>'sent_at',''),10) AS day,
  lower(concat_ws(' ',j->>'body',j->>'text',j->>'content',j->>'message')) AS txt FROM wa
 ), wa_recent AS (
- SELECT txt FROM wa_days WHERE day ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}
-    def __init__(self, env, health, directory=Path('/var/lib/cv-ops-bridge-contingency'), api=github_api, clock=time.time):
-        self.cfg = config(env)
-        self.preflight_enabled = env.get('CV_GITHUB_DISPATCH_PREFLIGHT_ENABLED') == '1'
-        self.release_enabled = env.get('CV_GITHUB_RELEASE_ENABLED') == '1'
-        self.health, self.directory, self.api, self.clock = health, Path(directory), api, clock
-
-    def state(self):
-        path = private_dir(self.directory) / 'state.json'
-        if not path.exists():
-            return {}
-        if path.is_symlink():
-            raise ValueError('invalid state')
-        return json.loads(path.read_text())
-
-    def active(self):
-        return bool(self.cfg and self.state().get('remote_retry_at', 0) > self.clock())
-
-    def activate(self):
-        if not self.cfg:
-            return False
-        state = self.state()
-        state['remote_retry_at'] = self.clock() + 300
-        atomic_state(self.directory / 'state.json', state)
-        return True
-
-    def poll(self):
-        if not self.cfg:
-            return 'disabled'
-        now = self.clock()
-        state = self.state()
-        if state.get('next_poll_at', 0) > now:
-            return 'cooldown'
-        # Throttle prior to network access, including failed API calls.
-        state['next_poll_at'] = now + 60
-        atomic_state(self.directory / 'state.json', state)
-        issue, token = self.cfg
-        root = '/repos/' + REPO
-        repo = self.api(token, 'GET', root)
-        if repo.get('private') is not True or repo.get('full_name') != REPO:
-            return 'blocked'
-        target = self.api(token, 'GET', f'{root}/issues/{issue}')
-        if target.get('state') != 'open' or target.get('title') != 'CV contingency — diagnostic mailbox' or 'pull_request' in target:
-            return 'blocked'
-        since = dt.datetime.fromtimestamp(now - 1800, dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-        path = f'{root}/issues/{issue}/comments'
-        comments = self.api(token, 'GET', f'{path}?per_page=100&since={since}')
-        if not isinstance(comments, list) or len(comments) >= 100:
-            return 'blocked'
-        for comment in comments:
-            data = command(comment, now)
-            if not data or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
-                continue
-            # One fixed read-only diagnostic. No retry if post outcome is uncertain.
-            if data['action'] == 'health':
-                summary = self.health()
-                safe = health_summary(summary[0], summary[1])
-            elif data['action'] == 'dispatch_preflight':
-                safe = dispatch_preflight()
-            elif data['action'] == 'agent_inventory':
-                safe = agent_inventory()
-            elif data['action'] == 'db_snapshot':
-                safe = db_snapshot()
-            elif data['action'] == 'urgent_triage':
-                safe = urgent_triage()
-            elif data['action'] == 'order_lookup':
-                safe = order_lookup(data['product'])
-            else:
-                try:
-                    from github_release_gate import apply_release
-                    safe = apply_release(data['sha'], self.api)
-                except ImportError:
-                    safe = {'ok': False, 'reason': 'release_unavailable'}
-            report = {'action': data['action'], 'request_id': comment['id'], 'result': safe}
-            self.api(token, 'POST', path, {'body': 'CV-CONTINGENCY-RESULT-V1 ' + json.dumps(report, ensure_ascii=False, separators=(',', ':'))})
-            return 'reported'
-        return 'idle'
-
+ SELECT txt FROM wa_days WHERE day ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
  AND day >= (current_date-2)::text AND day <= current_date::text
 )
 SELECT json_build_object(
@@ -592,12 +515,18 @@ class Contingency:
                 safe = agent_inventory()
             elif data['action'] == 'db_snapshot':
                 safe = db_snapshot()
-            else:
+            elif data['action'] == 'urgent_triage':
+                safe = urgent_triage()
+            elif data['action'] == 'order_lookup':
+                safe = order_lookup(data['product'])
+            elif data['action'] == 'release_apply':
                 try:
                     from github_release_gate import apply_release
                     safe = apply_release(data['sha'], self.api)
                 except ImportError:
                     safe = {'ok': False, 'reason': 'release_unavailable'}
+            else:
+                continue
             report = {'action': data['action'], 'request_id': comment['id'], 'result': safe}
             self.api(token, 'POST', path, {'body': 'CV-CONTINGENCY-RESULT-V1 ' + json.dumps(report, ensure_ascii=False, separators=(',', ':'))})
             return 'reported'
