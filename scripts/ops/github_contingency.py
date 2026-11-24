@@ -71,7 +71,7 @@ def command(comment, now):
             fields = fields | {'product'}
             if not valid_product(data.get('product')):
                 return None
-        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
             return None
         if action == 'release_apply' and (not isinstance(data['sha'], str) or not re.fullmatch(r'[0-9a-f]{40}', data['sha'])):
             return None
@@ -446,6 +446,57 @@ def order_lookup(product):
         return {'ok':False,'reason':'lookup_unavailable'}
 
 
+# Fixed case approved for diagnosis. No chat IDs, names, or message bodies
+# cross the bridge. The category is evidence, not attribution to a bot.
+WA_CATALOG_CASE_SQL = """BEGIN READ ONLY;
+SET LOCAL statement_timeout = '8s';
+SET LOCAL TIME ZONE 'UTC';
+WITH incoming AS (
+ SELECT w.business_id,w.chat_jid,w.sent_at
+ FROM public.crm_wa_messages w
+ JOIN public.crm_businesses b ON b.id=w.business_id
+ WHERE b.slug='casa-viva' AND w.is_group=false AND w.from_me=false
+ AND w.sent_at >= '2026-11-23 23:40:00+00' AND w.sent_at < '2026-11-23 23:55:00+00'
+ AND lower(btrim(w.body, ' ¿?!'))='hay mesitas auxiliares disponibles'
+ LIMIT 2
+)
+SELECT json_build_object(
+ 'matches', (SELECT count(*) FROM incoming),
+ 'reply', CASE WHEN (SELECT count(*) FROM incoming)=1 THEN COALESCE((
+   SELECT CASE WHEN lower(w.body) LIKE 'no encontré una coincidencia en la búsqueda.%'
+               THEN 'catalog_no_match' ELSE 'other_outbound' END
+   FROM incoming i JOIN public.crm_wa_messages w
+     ON w.business_id=i.business_id AND w.chat_jid=i.chat_jid
+   WHERE w.from_me=true AND w.sent_at>=i.sent_at AND w.sent_at<i.sent_at+interval '2 minutes'
+   ORDER BY w.sent_at, w.id LIMIT 1
+ ), 'no_outbound') ELSE 'not_checked' END
+);
+COMMIT;"""
+
+
+def wa_catalog_case():
+    try:
+        p = subprocess.run([
+            '/usr/bin/docker', 'exec', '-u', 'postgres', 'vivabot-recovery-db',
+            'psql', '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-d', 'postgres',
+            '-c', WA_CATALOG_CASE_SQL],
+            env={'PATH': '/usr/bin:/bin', 'HOME': '/root'}, capture_output=True,
+            timeout=20, check=False)
+        if p.returncode or len(p.stdout) > 512:
+            raise ValueError('query failed')
+        result = json.loads(p.stdout)
+        if not isinstance(result, dict) or set(result) != {'matches', 'reply'}:
+            raise ValueError('shape')
+        if type(result['matches']) is not int or not 0 <= result['matches'] <= 2:
+            raise ValueError('count')
+        allowed = ('catalog_no_match', 'other_outbound', 'no_outbound') if result['matches'] == 1 else ('not_checked',)
+        if result['reply'] not in allowed:
+            raise ValueError('category')
+        return {'ok': True, **result}
+    except (OSError, ValueError, TypeError, subprocess.SubprocessError):
+        return {'ok': False, 'reason': 'wa_catalog_case_unavailable'}
+
+
 class Contingency:
     def __init__(self, env, health, directory=Path('/var/lib/cv-ops-bridge-contingency'), api=github_api, clock=time.time):
         self.cfg = config(env)
@@ -517,6 +568,8 @@ class Contingency:
                 safe = db_snapshot()
             elif data['action'] == 'urgent_triage':
                 safe = urgent_triage()
+            elif data['action'] == 'wa_catalog_case':
+                safe = wa_catalog_case()
             elif data['action'] == 'order_lookup':
                 safe = order_lookup(data['product'])
             elif data['action'] == 'release_apply':
