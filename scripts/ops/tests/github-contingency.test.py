@@ -280,6 +280,7 @@ class Tests(unittest.TestCase):
         self.assertNotIn('def __init__', mod.TRIAGE_SQL)
         for action, handler, fields, expected in [
             ('urgent_triage', 'urgent_triage', {}, ()),
+            ('wa_catalog_case', 'wa_catalog_case', {}, ()),
             ('order_lookup', 'order_lookup', {'product': 'puerta corredera'}, ('puerta corredera',)),
         ]:
             with self.subTest(action=action), tempfile.TemporaryDirectory() as d:
@@ -304,6 +305,19 @@ class Tests(unittest.TestCase):
                     diagnosis.assert_called_once_with(*expected)
                 self.assertEqual(json.loads(posts[0].split(' ', 1)[1]),
                                  {'action': action, 'request_id': 1, 'result': result})
+
+    def test_fixed_wa_case_rejects_raw_output(self):
+        for payload, expected in [
+            ({'matches': 1, 'reply': 'catalog_no_match'}, True),
+            ({'matches': 0, 'reply': 'not_checked'}, True),
+            ({'matches': 2, 'reply': 'catalog_no_match'}, False),
+            ({'matches': 1, 'reply': 'private text'}, False),
+            ({'matches': 1, 'reply': 'no_outbound', 'body': 'private'}, False),
+        ]:
+            result = Mock(returncode=0, stdout=json.dumps(payload).encode())
+            with patch.object(mod.subprocess, 'run', return_value=result):
+                self.assertIs(mod.wa_catalog_case()['ok'], expected)
+        self.assertIn('BEGIN READ ONLY', mod.WA_CATALOG_CASE_SQL)
 
     def test_public_repo_blocks_before_health(self):
         with tempfile.TemporaryDirectory() as d:
