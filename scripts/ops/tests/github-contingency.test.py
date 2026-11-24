@@ -40,12 +40,12 @@ class Tests(unittest.TestCase):
         self.assertIsNone(mod.command(request(body=mod.PREFIX+json.dumps(dict(data,phone='private'))),NOW))
 
     def test_order_lookup_only_safe_metadata(self):
-        good={'tenant_ok':True,'matches':2,'chats':1,'order_ids':[1234],'audio_notes':1,'last_day':'2026-11-20'}
+        good={'tenant_ok':True,'matches':2,'chats':1,'order_ids':[1234],'audio_notes':1,'last_day':'2026-11-20','match_age_seconds':42,'outbound_observed':True}
         with patch.object(mod.subprocess,'run',return_value=Mock(returncode=0,stdout=json.dumps(good).encode())) as run:
             self.assertEqual(mod.order_lookup('corredera'),{'ok':True,'evidence':good})
             self.assertIn("BEGIN READ ONLY",run.call_args.args[0][-1])
             self.assertIn("LIKE '%corredera%'",run.call_args.args[0][-1])
-        for bad in [dict(good,body='private'),dict(good,tenant_ok=False),dict(good,order_ids=['private']),dict(good,last_day='private')]:
+        for bad in [dict(good,body='private'),dict(good,tenant_ok=False),dict(good,order_ids=['private']),dict(good,last_day='private'),dict(good,match_age_seconds=True),dict(good,outbound_observed='private'),dict(good,matches=0)]:
             with patch.object(mod.subprocess,'run',return_value=Mock(returncode=0,stdout=json.dumps(bad).encode())):
                 self.assertFalse(mod.order_lookup('corredera')['ok'])
 
@@ -60,6 +60,12 @@ class Tests(unittest.TestCase):
         for bad in [dict(good,raw='private'),dict(good,errors_open=2),dict(good,wa_money_signals='private')]:
             with patch.object(mod.subprocess,'run',return_value=Mock(returncode=0,stdout=json.dumps(bad).encode())):
                 self.assertEqual(mod.urgent_triage(),{'ok':False,'reason':'triage_unavailable'})
+
+    def test_urgent_triage_does_not_export_database_errors(self):
+        result = mod.subprocess.CompletedProcess([], 1, b'', b'ERROR:  42P01\nDETAIL: private\n')
+        with patch.object(mod.subprocess, 'run', return_value=result):
+            self.assertEqual(mod.urgent_triage(),
+                             {'ok': False, 'reason': 'triage_unavailable', 'stage': 'missing_relation'})
 
     def test_urgent_triage_no_arguments(self):
         payload={'action':'urgent_triage','nonce':'syntheticnonce1234','expires_at':'2026-11-20T16:10:00Z'}
