@@ -477,6 +477,63 @@ class VerifyGuardTests(unittest.TestCase):
         self.assertEqual(json.loads(proc.stdout)["verdict"], "refused")
 
 
+class BootstrapDiagnosticTests(unittest.TestCase):
+    def test_loopback_error_classified_without_leaking_stderr(self):
+        def runner(_cmd):
+            return 1, b"", b"bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted\nSYNTHETIC_SECRET"
+        report = verify.run_checks(WORKSPACE, runner)
+        self.assertEqual(report["verdict"], verify.VERDICT_NO_OPERATIVO)
+        self.assertEqual(report["checks"]["bootstrap"]["diagnostic_code"], "loopback-rtnetlink-denied")
+        self.assertNotIn("SYNTHETIC_SECRET", json.dumps(report))
+
+    def test_unrecognized_error_is_not_disclosed(self):
+        def runner(_cmd):
+            return 1, b"", b"SYNTHETIC_SECRET"
+        report = verify.run_checks(WORKSPACE, runner)
+        self.assertEqual(report["checks"]["bootstrap"]["diagnostic_code"], "bootstrap-unclassified")
+        self.assertNotIn("SYNTHETIC_SECRET", json.dumps(report))
+
+    def test_uid_map_error_is_classified(self):
+        self.assertEqual(verify.classify_bootstrap_error(b"bwrap: setting up uid map: Permission denied"),
+                         "uid-map-denied")
+
+
+class SystemdCalibrationSpecTests(unittest.TestCase):
+    def setUp(self):
+        import runpy
+        self.spec = runpy.run_path(str(REPO / "scripts/ops/sandbox/systemd-probe-spec.py"))
+
+    def test_fixed_command_has_no_user_supplied_payload(self):
+        root = self.spec["WORK_ROOT"]
+        cmd = self.spec["build_probe_command"](root + "/run-e3-good", root + "/run-e3-other", "cv-e3-test")
+        self.assertEqual(cmd[0], "/usr/bin/systemd-run")
+        self.assertEqual(cmd[-4:], ["/usr/bin/python3", "-B", "-c", self.spec["PROBE"]])
+        for prop in ("PrivateNetwork=yes", "PrivateIPC=yes", "RestrictAddressFamilies=AF_UNIX",
+                     "CapabilityBoundingSet=", "NoNewPrivileges=yes", "TemporaryFileSystem=/var:ro",
+                     "TemporaryFileSystem=/etc:ro", "TemporaryFileSystem=/run:ro",
+                     "MemoryMax=256M", "TasksMax=16", "CPUQuota=25%",
+                     "RuntimeMaxSec=30s", "KillMode=control-group"):
+            self.assertIn(prop, cmd)
+
+    def test_rejects_traversal_and_option_injection(self):
+        root = self.spec["WORK_ROOT"]
+        build = self.spec["build_probe_command"]
+        for bad in ("/root", root + "/../run-e3-escape", root + "/run-e3-x/child",
+                    root + "/run-e3-x --property=User=root", root + "/run-e3-x\n"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                build(bad, root + "/run-e3-other", "cv-e3-test")
+        with self.assertRaises(ValueError):
+            build(root + "/run-e3-good", root + "/run-e3-good", "cv-e3-test")
+        with self.assertRaises(ValueError):
+            build(root + "/run-e3-good", root + "/run-e3-other", "--uid=root")
+
+    def test_spec_only_constructs_no_execution(self):
+        source = (REPO / "scripts/ops/sandbox/systemd-probe-spec.py").read_text()
+        self.assertNotIn("subprocess", source)
+        self.assertNotIn("os.system", source)
+        compile(source, "systemd-probe-spec.py", "exec")
+
+
 class StaticScanTests(unittest.TestCase):
     spec_tree = ast.parse(SPEC_TEXT)
     verify_tree = ast.parse(VERIFY_TEXT)
@@ -566,6 +623,134 @@ class StaticScanTests(unittest.TestCase):
         doc = (REPO / "docs" / "CONTROL_OS_SANDBOX_PROPOSAL.md").read_text(encoding="utf-8")
         self.assertIn("/etc/ssl/private", doc)
         self.assertIn("/etc/ssl/certs", doc)
+
+
+
+import os
+import tempfile
+
+_e3pf_spec = importlib.util.spec_from_file_location('cv_e3_preflight', SANDBOX_DIR / 'e3-preflight.py')
+_e3pf = importlib.util.module_from_spec(_e3pf_spec)
+_e3pf_spec.loader.exec_module(_e3pf)
+
+class PreflightTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.root.chmod(0o755)
+        self.work = self.root / 'run-e3-work'
+        self.sibling = self.root / 'run-e3-other'
+        self.work.mkdir(mode=0o700)
+        self.sibling.mkdir(mode=0o755)
+        self.canary = self.sibling / 'canary'
+        self.canary.write_bytes(_e3pf.CANARY)
+        self.canary.chmod(0o644)
+        self.fd = _e3pf._open_dir(self.root)
+        self.addCleanup(os.close, self.fd)
+
+    def inspect(self, workspace='run-e3-work', sibling='run-e3-other', worker_uid=None):
+        uid = os.getuid()
+        _e3pf._inspect(self.fd, workspace, sibling, uid, uid if worker_uid is None else worker_uid)
+
+    def test_valid(self):
+        self.inspect()
+
+    def test_traversal(self):
+        with self.assertRaises(ValueError): self.inspect('../run-e3-work')
+
+    def test_same_directory(self):
+        with self.assertRaises(ValueError): self.inspect(sibling=self.work.name)
+
+    def test_wrong_owner(self):
+        with self.assertRaises(ValueError): self.inspect(worker_uid=os.getuid()+1)
+
+    def test_wrong_mode(self):
+        self.work.chmod(0o777)
+        with self.assertRaises(ValueError): self.inspect()
+
+    def test_nonempty_workspace(self):
+        (self.work / 'unexpected').touch()
+        with self.assertRaises(ValueError): self.inspect()
+
+    def test_workspace_symlink(self):
+        self.work.rmdir()
+        self.work.symlink_to(self.sibling, target_is_directory=True)
+        with self.assertRaises(OSError): self.inspect()
+
+    def test_canary_symlink(self):
+        self.canary.unlink()
+        self.canary.symlink_to(self.work)
+        with self.assertRaises(ValueError): self.inspect()
+
+    def test_canary_hardlink(self):
+        os.link(self.canary, self.root / 'alias')
+        with self.assertRaises(ValueError): self.inspect()
+
+    def test_canary_content(self):
+        self.canary.write_bytes(b'not a synthetic canary')
+        with self.assertRaises(ValueError): self.inspect()
+
+    def test_canary_fifo(self):
+        self.canary.unlink()
+        os.mkfifo(self.canary)
+        with self.assertRaises(ValueError): self.inspect()
+
+
+
+
+_e3report_spec = importlib.util.spec_from_file_location('cv_e3_report', SANDBOX_DIR / 'e3-report.py')
+_e3report = importlib.util.module_from_spec(_e3report_spec)
+_e3report_spec.loader.exec_module(_e3report)
+
+class E3ReportTests(unittest.TestCase):
+    def setUp(self):
+        self.result = {'checks': {k: True for k in _e3report.CHECKS},
+                       'limits': {'memory.max': '268435456', 'pids.max': '16', 'cpu.max': '25000 100000'}}
+
+    def validate(self, code=0):
+        return _e3report.validate_report(json.dumps(self.result).encode(), code)
+
+    def test_valid(self):
+        self.assertEqual(self.validate(), 'synthetic-probe-passed')
+
+    def test_failed_exit(self):
+        self.assertEqual(self.validate(5), 'probe-failed')
+
+    def test_missing_check(self):
+        del self.result['checks']['root_hidden']
+        self.assertEqual(self.validate(), 'invalid-report')
+
+    def test_false_check(self):
+        self.result['checks']['root_hidden'] = False
+        self.assertEqual(self.validate(), 'probe-failed')
+
+    def test_integer_check(self):
+        self.result['checks']['root_hidden'] = 1
+        self.assertEqual(self.validate(), 'invalid-report')
+
+    def test_cpu_excess(self):
+        self.result['limits']['cpu.max'] = '25001 100000'
+        self.assertEqual(self.validate(), 'probe-failed')
+
+    def test_unlimited(self):
+        self.result['limits']['memory.max'] = 'max'
+        self.assertEqual(self.validate(), 'probe-failed')
+
+    def test_duplicate(self):
+        raw = json.dumps(self.result).replace('"root_hidden": true', '"root_hidden": false, "root_hidden": true')
+        self.assertEqual(_e3report.validate_report(raw.encode(), 0), 'invalid-report')
+
+    def test_raw_secret(self):
+        self.assertEqual(_e3report.validate_report(b'SYNTHETIC_SECRET', 0), 'invalid-report')
+
+    def test_oversize(self):
+        self.assertEqual(_e3report.validate_report(b' '*8193, 0), 'invalid-report')
+
+    def test_extra_key(self):
+        self.result['payload'] = 'SYNTHETIC_SECRET'
+        self.assertEqual(self.validate(), 'invalid-report')
+
 
 
 if __name__ == "__main__":
