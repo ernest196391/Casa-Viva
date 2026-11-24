@@ -276,6 +276,35 @@ class Tests(unittest.TestCase):
             now[0] += 240
             self.assertFalse(c.active())
 
+    def test_triage_and_lookup_route_to_read_only_handlers(self):
+        self.assertNotIn('def __init__', mod.TRIAGE_SQL)
+        for action, handler, fields, expected in [
+            ('urgent_triage', 'urgent_triage', {}, ()),
+            ('order_lookup', 'order_lookup', {'product': 'puerta corredera'}, ('puerta corredera',)),
+        ]:
+            with self.subTest(action=action), tempfile.TemporaryDirectory() as d:
+                data = {'action': action, 'nonce': 'syntheticnonce1234',
+                        'expires_at': '2026-11-20T16:10:00Z', **fields}
+                posts = []
+
+                def api(token, method, path, body=None):
+                    if method == 'POST':
+                        posts.append(body['body'])
+                        return {}
+                    if '/comments?' in path:
+                        return [request(body=mod.PREFIX + json.dumps(data))]
+                    if path.endswith('/issues/22'):
+                        return {'title': 'CV contingency — diagnostic mailbox', 'state': 'open'}
+                    return {'private': True, 'full_name': mod.REPO}
+
+                result = {'ok': True}
+                with patch.object(mod, handler, return_value=result) as diagnosis:
+                    bridge = mod.Contingency(ENV, lambda: self.fail('health'), Path(d), api, lambda: NOW)
+                    self.assertEqual(bridge.poll(), 'reported')
+                    diagnosis.assert_called_once_with(*expected)
+                self.assertEqual(json.loads(posts[0].split(' ', 1)[1]),
+                                 {'action': action, 'request_id': 1, 'result': result})
+
     def test_public_repo_blocks_before_health(self):
         with tempfile.TemporaryDirectory() as d:
             c = mod.Contingency(ENV, lambda: self.fail('health'), Path(d), lambda *a: {'private': False, 'full_name': mod.REPO}, lambda: NOW)
