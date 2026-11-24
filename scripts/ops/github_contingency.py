@@ -534,7 +534,7 @@ class Contingency:
         atomic_state(self.directory / 'state.json', state)
         return True
 
-    def poll(self):
+    def poll(self, *, health_only=False):
         if not self.cfg:
             return 'disabled'
         now = self.clock()
@@ -559,6 +559,8 @@ class Contingency:
             return 'blocked'
         for comment in comments:
             data = command(comment, now)
+            if health_only and (not data or data['action'] != 'health'):
+                continue
             if not data or (data['action'] == 'receiver_classification' and not self.receiver_classification_enabled) or (data['action'] == 'receiver_contract' and not self.receiver_contract_enabled) or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
                 continue
             # One fixed read-only diagnostic. No retry if post outcome is uncertain.

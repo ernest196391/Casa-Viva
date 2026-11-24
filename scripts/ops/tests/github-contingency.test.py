@@ -325,6 +325,32 @@ class Tests(unittest.TestCase):
                 self.assertIs(mod.wa_catalog_case()['ok'], expected)
         self.assertIn('BEGIN READ ONLY', mod.WA_CATALOG_CASE_SQL)
 
+    def test_online_poll_only_acknowledges_health(self):
+        other = request(id=2, body=mod.PREFIX + json.dumps({
+            'action': 'db_snapshot',
+            'nonce': 'syntheticnonce5678',
+            'expires_at': '2026-11-20T16:10:00Z',
+        }))
+        posts = []
+        def api(token, method, path, body=None):
+            if method == 'POST':
+                posts.append(body['body'])
+                return {}
+            if '/comments?' in path:
+                return [other, request()]
+            if path.endswith('/issues/22'):
+                return {'title': 'CV contingency — diagnostic mailbox', 'state': 'open'}
+            return {'private': True, 'full_name': mod.REPO}
+
+        with tempfile.TemporaryDirectory() as d:
+            health = lambda: ({'returncode': 1, 'output': ''}, 'active')
+            c = mod.Contingency(ENV, health, Path(d), api, lambda: NOW)
+            with patch.object(mod, 'db_snapshot') as snapshot:
+                self.assertEqual(c.poll(health_only=True), 'reported')
+                snapshot.assert_not_called()
+            self.assertEqual(len(posts), 1)
+            self.assertEqual(json.loads(posts[0].split(' ', 1)[1])['request_id'], 1)
+
     def test_public_repo_blocks_before_health(self):
         with tempfile.TemporaryDirectory() as d:
             c = mod.Contingency(ENV, lambda: self.fail('health'), Path(d), lambda *a: {'private': False, 'full_name': mod.REPO}, lambda: NOW)

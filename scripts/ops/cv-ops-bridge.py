@@ -2407,6 +2407,11 @@ def main():
             except Exception:
                 print("[ops-bridge] contingency poll unavailable", file=sys.stderr)
             return 0
+        if contingency is not None:
+            try:
+                contingency.poll(health_only=True)
+            except Exception:
+                print("[ops-bridge] GitHub health poll unavailable", file=sys.stderr)
         if not rows:
             return 0
 
