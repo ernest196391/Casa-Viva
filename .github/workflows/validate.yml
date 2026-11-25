@@ -407,3 +407,4 @@ jobs:
         run: |
           psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/opencode-result-receipts.fixture.sql
           psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/owner-bot-error-review.fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/github-test-only-enqueue.fixture.sql
