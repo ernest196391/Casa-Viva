@@ -50,7 +50,7 @@ class Tests(unittest.TestCase):
             (root/'bin').mkdir()
             (root/'bin'/'pm2').touch()
             (root/'package.json').write_text('{"name":"pm2"}')
-            for rc,expected in ((21,'rpc_socket_error'),(22,'rpc_timeout'),(23,'rpc_method_error'),(24,'rpc_unexpected_shape'),(1,'rpc_runtime_error')):
+            for rc,expected in ((21,'rpc_socket_error'),(22,'rpc_timeout'),(23,'rpc_method_error'),(24,'rpc_unexpected_shape'),(25,'rpc_transport_unavailable'),(1,'rpc_runtime_error')):
                 diagnostics=[]
                 run=Mock(side_effect=[Mock(returncode=rc,stdout=b'private data'),Mock(returncode=0,stdout=b'active\n')])
                 o.collect_summary(run=run,present=lambda:True,locate=lambda n,**k:str(root/'bin'/'pm2') if n=='pm2' else '/usr/bin/node',diagnostics=diagnostics)
@@ -101,6 +101,25 @@ class Tests(unittest.TestCase):
                     s=o.collect_summary(run=run,present=present,
                         locate=lambda n,**k:str(root/'bin'/'pm2') if n=='pm2' else '/usr/bin/node')
                     self.assertTrue(all(r['status']=='unknown' for r in s['pm2'].values()))
+
+    def test_node_transport_resolution(self):
+        import shutil
+        import subprocess
+        node=shutil.which('node')
+        if not node:
+            self.skipTest('Node unavailable')
+        # Execute only the transport loader, not the socket connection.
+        code=o.RPC.split('const socket =')[0]
+        for layout in ('modules','node_modules','missing'):
+            with self.subTest(layout=layout), tempfile.TemporaryDirectory() as d:
+                root=Path(d)
+                if layout!='missing':
+                    for name in ('pm2-axon','pm2-axon-rpc'):
+                        folder=root/layout/name
+                        folder.mkdir(parents=True)
+                        (folder/'index.js').write_text('module.exports = {};')
+                r=subprocess.run([node,'-e',code,str(root)],capture_output=True,timeout=5)
+                self.assertEqual(r.returncode,25 if layout=='missing' else 0)
 
     def test_rpc_malformed_or_sensitive_fields_rejected(self):
         with tempfile.TemporaryDirectory() as d:
