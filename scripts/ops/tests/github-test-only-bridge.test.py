@@ -17,7 +17,7 @@ def stamp(sec):
 
 def sample():
     import json
-    return dict(id=99, user={"login":"ernest196391","type":"User"},
+    return dict(id=99, user={"login":"ernest196391","id":175450950,"type":"User"},
       author_association="OWNER", created_at=stamp(NOW - 30),
       updated_at=stamp(NOW - 30),
       body=m.PREFIX + json.dumps({"nonce":"A" * 20, "expires_at":stamp(NOW + 300),
