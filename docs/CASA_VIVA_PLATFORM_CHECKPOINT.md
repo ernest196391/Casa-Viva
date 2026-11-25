@@ -1,3 +1,9 @@
+## CV-AUTO-002 — lifecycle transaccional test-only (2026-11-25)
+
+- aeac7f5: SQL candidato agrega mode test-only, claim exclusivo con FOR UPDATE SKIP LOCKED, run único, lease máximo 180 s, expiración terminal sin replay, cierre atómico con fence task/run/worker y resultado enumerado; SECURITY INVOKER/service_role. No modifica claim legacy.
+- ae4c9e1: fixture desechable de permisos, doble claim, fence incorrecto, replay terminal, conflicto y expiración. ebd0015 integra fixture en CI. Pendiente ejecución real y revisión de concurrencia.
+- Siguiente: ejecutar perfil fijo por SHA local exacto, copia sin .git, sandbox cvdev sin red ni secretos, límites cgroup CPU/memoria/pids y salida, retorno terminal. No se ha instalado ni ejecutado en VPS. No aplicar SQL en producción. Costo nuevo cero.
+
 ## CV-AUTO-002 — contrato SQL real y entrada transaccional (2026-11-25)
 
 - Consultas SELECT en nexo-production confirman columnas, índices, constraints de ops_tasks/ops_dev_runs/ops_events y definición de ops_claim_dev_task(p_worker text). Claim legacy solo acepta deterministic/ai, filtra payload.dev.ready=true; constraint de runs también solo permite deterministic/ai. No introducir test-only en ese recorrido.
