@@ -53,6 +53,7 @@ jobs:
           python3 scripts/ops/tests/github-release-transaction.test.py
           python3 scripts/ops/tests/github-release-supervisor.test.py
           python3 scripts/ops/tests/github-release-health-adapter.test.py
+          python3 scripts/ops/tests/github-release-health-emitter.test.py
           python3 scripts/ops/tests/planner-probe.test.py
           python3 scripts/ops/tests/vivabot-rollback.test.py
           python3 scripts/ops/tests/dev-worker.test.py
