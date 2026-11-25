@@ -1,6 +1,7 @@
 import sys
 import os
 import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -92,11 +93,29 @@ class Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             b.confined_command('a'*64,{'token':'synthetic'})
 
+    def transcript(self,status='healthy',**changes):
+        measurement=dict(digest=hashlib.sha256(b.SYNTHETIC_SOURCE).hexdigest(),
+            uid=1000,pid=2,label='cv-release-pilot-bootstrap//&cv-release-pilot-candidate (enforce)',
+            nnp=True,caps_zero=True)
+        measurement.update(changes)
+        return json.dumps({'pilot_measurement':measurement})+'\n'+json.dumps({'status':status})
+    def test_measured_fixture_rejects_bad_evidence(self):
+        digest=hashlib.sha256(b.SYNTHETIC_SOURCE).hexdigest()
+        result, measurement=b.parse_measured_fixture(self.transcript(),digest,1000)
+        self.assertEqual(result['status'],'healthy')
+        self.assertEqual(measurement['uid'],1000)
+        for changes in (dict(uid=0),dict(pid=True),dict(nnp=False),dict(caps_zero=False),dict(label='unconfined'),dict(digest='0'*64)):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                b.parse_measured_fixture(self.transcript(**changes),digest,1000)
+        with self.assertRaises(ValueError):
+            b.parse_measured_fixture('{"status":"healthy"}',digest,1000)
+        with self.assertRaises(ValueError):
+            b.parse_measured_fixture(self.transcript(), '0'*64,1000)
     def test_synthetic_pilot_observer_and_cleanup(self):
         from unittest.mock import patch
         with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
             root=Path(tmp)
-            self.box.run_release_pilot.side_effect=[(0,'{"status":"healthy"}'),(0,'{"status":"degraded"}'),(0,'{"status":"unknown"}')]
+            self.box.run_release_pilot.side_effect=[(0,self.transcript(status)) for status in ('healthy','degraded','unknown')]
             real_uid=os.geteuid()
             # stage owner validation still uses actual uid in non-root CI.
             original=b.stage_candidate
