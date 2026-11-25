@@ -25,6 +25,20 @@ class Tests(unittest.TestCase):
     def test_closed(self):
         with patch.dict(la.os.environ,{},clear=True):
             self.assertEqual(la.launch("a"*40,60),125)
+    def test_preflight_before_candidate_bytes(self):
+        prefix=la.CONFINED_TEST_PREFIX
+        self.assertLess(prefix.index('stack cv-release-pilot-candidate'),prefix.index('runpy.run_path'))
+        self.assertLess(prefix.index('NoNewPrivs'),prefix.index('runpy.run_path'))
+        for key in ('CapEff','CapPrm','CapInh','CapAmb','CapBnd'):
+            self.assertIn(key,prefix)
+        self.assertIn(' (enforce)',prefix)
+        self.assertIn("sys.argv[1:]!=['--fixed-test']",prefix)
+    def test_host_unit_rejects_privileges(self):
+        unit=(HERE/'sandbox/cv-test-only-candidate.service').read_text()
+        for key in ('NoNewPrivileges=yes','CapabilityBoundingSet=','AmbientCapabilities=',
+                    'MemoryMax=256M','TasksMax=32','ConditionPathExists=/etc/control-os/test-only-certified'):
+            self.assertIn(key,unit)
+        self.assertNotIn('\\n[Install]\\n',unit)
     def test_fence(self):
         c=self.claim();calls=[]
         def api(method,path,data):
