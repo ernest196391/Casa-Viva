@@ -30,7 +30,7 @@ def execute_claim(claim, launch, now=None):
         rc = launch(sha, budget)
         if type(rc) is not int:
             return "blocked"
-        return {0:"passed",124:"timeout",125:"blocked"}.get(rc,"failed")
+        return {0:"passed",124:"timeout",125:"blocked",126:"blocked"}.get(rc,"failed")
     except Exception:
         return "blocked"
 
