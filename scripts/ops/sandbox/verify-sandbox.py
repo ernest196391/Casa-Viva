@@ -135,7 +135,7 @@ elif name == "candidate_no_capabilities":
 elif name == "candidate_profile":
     try:
         label = open("/proc/self/attr/current").read().strip()
-        done(label == "cv-release-pilot-candidate (enforce)", label)
+        done(label == "cv-release-pilot-bootstrap//&cv-release-pilot-candidate (enforce)", label)
     except OSError:
         done(False, "missing AppArmor label")
 else:
