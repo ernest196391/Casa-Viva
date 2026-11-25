@@ -1,3 +1,10 @@
+## CV-AUTO-002 — contrato SQL real y entrada transaccional (2026-11-25)
+
+- Consultas SELECT en nexo-production confirman columnas, índices, constraints de ops_tasks/ops_dev_runs/ops_events y definición de ops_claim_dev_task(p_worker text). Claim legacy solo acepta deterministic/ai, filtra payload.dev.ready=true; constraint de runs también solo permite deterministic/ai. No introducir test-only en ese recorrido.
+- e09f6a3: propuesta SQL github-test-only-enqueue.sql usa columnas reales source_ref, dedupe_key, deadline_at, public_id; índices únicos parciales de comentario y nonce, fingerprint validado, TTL máximo 15 min, RPC SECURITY INVOKER y permiso service_role; una transacción crea tarea y evento. Payload test_only sin dev.ready impide claim legacy.
+- d487382: fixture PostgreSQL desechable para duplicados, conflictos, nonce reutilizado, expiración y permisos. 13575eb: CI fixture y trigger de rama. Pendiente comprobar ejecución; no se ha aplicado migración.
+- Siguiente: claim específico test-only con run mode y lease/fencing, cierre atómico y ejecutor aislado revisión exacta, sin Git push/deploy; retorno terminal GitHub. Verificar triggers y grants reales antes de instalación. No activación ni gastos. Reversión de rama; ninguna modificación DB productiva.
+
 ## CV-AUTO-002 — receptor GitHub test-only (2026-11-25; fase 1, SIN ACTIVAR)
 
 - Base certificada d4b25bf534e07c9c5bd64581706a0f0cc6327b67; rama cv-auto-002-bridge; depende del PR #298 (CV-AUTO-001).
