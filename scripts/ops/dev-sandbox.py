@@ -116,8 +116,11 @@ def _launch(argv, *, cwd, env, timeout, uid, gid, spawn=subprocess.Popen, prefli
                     break
                 if not approved and b'\n' in out:
                     line = bytes(out).split(b'\n', 1)[0]
-                    if not preflight(line):
+                    if len(line)>2048 or not preflight(line):
                         reason = 125
+                        break
+                    if time.monotonic() >= deadline:
+                        reason = 124
                         break
                     proc.stdin.write(b'G')
                     proc.stdin.flush()
@@ -130,7 +133,7 @@ def _launch(argv, *, cwd, env, timeout, uid, gid, spawn=subprocess.Popen, prefli
                 proc.wait(timeout=max(0, deadline-time.monotonic()))
             except subprocess.TimeoutExpired:
                 reason = 124
-    except (OSError, ValueError):
+    except (OSError, ValueError, TypeError, RuntimeError):
         reason = 125
     finally:
         if reason is not None:
