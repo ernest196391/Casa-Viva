@@ -79,4 +79,17 @@ class Tests(unittest.TestCase):
     def test_public_entry_refuses_same_identity(self):
         self.assertFalse(b.evaluate('/not-used',self.facts,expected_digest='0'*64,uid=os.geteuid(),gid=1001,sandbox=self.box)['ok'])
         self.box.run_in_box.assert_not_called()
+    def test_confined_command_fixed_and_compiles(self):
+        cmd=b.confined_command('a'*64,self.facts)
+        self.assertEqual(cmd[:5],['/usr/bin/python3.12','-I','-S','-B','-c'])
+        compile(cmd[5],'<trusted-prefix>','exec')
+        self.assertEqual(cmd[6],'a'*64)
+        self.assertLess(cmd[5].index('stack cv-release-pilot-candidate'),cmd[5].index('open("candidate.py"'))
+        self.assertLess(cmd[5].index('CapBnd'),cmd[5].index('open("candidate.py"'))
+    def test_confined_command_refuses_bad_digest_and_facts(self):
+        with self.assertRaises(ValueError):
+            b.confined_command('bad',self.facts)
+        with self.assertRaises(ValueError):
+            b.confined_command('a'*64,{'token':'synthetic'})
+
 if __name__=='__main__': unittest.main()
