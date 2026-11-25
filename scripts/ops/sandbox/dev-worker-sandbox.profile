@@ -57,3 +57,71 @@ profile cv-dev-worker-bwrap /usr/local/lib/control-os/bwrap-dev flags=(attach_di
   # net_admin), debe proponerse aquí y pasar revisión humana; nunca se
   # resuelve instalando un perfil unconfined.
 }
+
+# CV_RELEASE_PILOT_BEGIN
+# Named profiles only: no automatic attachment and no replacement of E2.
+# Trusted bwrap setup runs as cvdev, never with host capabilities.
+profile cv-release-pilot-bootstrap flags=(attach_disconnected,mediate_deleted) {
+  include <abstractions/base>
+  userns,
+  capability setpcap,
+  capability sys_admin,
+  capability net_admin,
+  capability sys_chroot,
+  capability setuid,
+  capability setgid,
+  mount,
+  umount,
+  pivot_root,
+  network netlink raw,
+  deny network inet,
+  deny network inet6,
+  signal (send,receive) peer=cv-release-pilot-bootstrap,
+  signal (receive) peer=unconfined,
+  /proc/sys/kernel/{overflowuid,overflowgid} r,
+  /proc/sys/user/max_user_namespaces r,
+  /proc/[0-9]*/{uid_map,gid_map,setgroups} rw,
+  /proc/{,**} r,
+  /usr/{,**} r,
+  /usr/lib/** mr,
+  /usr/lib64/** mr,
+  /usr/bin/python3.12 Px -> cv-release-pilot-candidate,
+  /usr/local/lib/control-os/bwrap-dev ix,
+  /newroot/ rw,
+  /newroot/** rwkm,
+  /newroot/usr/bin/python3.12 Px -> cv-release-pilot-candidate,
+  /tmp/{,**} rw,
+  /dev/{null,zero,random,urandom,tty} rw,
+  /etc/{localtime,ld.so.cache,ld.so.preload} r,
+  /etc/ssl/certs/{,**} r,
+  @{CV_CONTROL_OS}/work/{,**} rw,
+  deny /root/{,**} rwklmx,
+  deny /home/{,**} rwklmx,
+  deny /var/lib/control-os-auth/{,**} rwklmx,
+  deny /etc/ssl/private/{,**} rwklmx,
+  deny /newroot/root/{,**} rwklmx,
+  deny /newroot/home/{,**} rwklmx,
+  deny /newroot/etc/ssl/private/{,**} rwklmx,
+}
+profile cv-release-pilot-candidate flags=(attach_disconnected,mediate_deleted) {
+  include <abstractions/base>
+  deny capability,
+  deny userns,
+  deny network,
+  deny mount,
+  deny umount,
+  deny pivot_root,
+  /usr/bin/python3.12 rix,
+  /usr/lib/** mr,
+  /usr/lib64/** mr,
+  /usr/share/** r,
+  /proc/{self,[0-9]*}/status r,
+  /proc/{self,[0-9]*}/attr/current r,
+  /etc/{localtime,ld.so.cache} r,
+  /tmp/{,**} rw,
+  @{CV_CONTROL_OS}/work/{,**} rw,
+  deny /root/{,**} rwklmx,
+  deny /home/{,**} rwklmx,
+  deny /var/lib/control-os-auth/{,**} rwklmx,
+  deny /etc/ssl/private/{,**} rwklmx,
+}
