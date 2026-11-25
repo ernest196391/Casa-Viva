@@ -5,6 +5,11 @@ The trusted caller stages the reviewed candidate in a disposable workspace.
 Candidate output is advisory, never release approval or a host command.
 """
 import json
+import hashlib
+import os
+import stat
+import tempfile
+import contextlib
 import re
 from pathlib import Path
 
@@ -54,3 +59,45 @@ def evaluate(workspace, facts, *, uid, gid, sandbox):
         return {'ok':True,'result':parse_response(out)}
     except (OSError,ValueError,TypeError,RuntimeError):
         return {'ok':False,'reason':'candidate_unavailable'}
+
+@contextlib.contextmanager
+def stage_candidate(source, expected_digest, *, uid, gid, work_root=Path('/var/lib/control-os-dev/work')):
+    """Stage exact reviewed bytes; never import candidate or follow source links.
+
+    The root-owned workspace is not writable by the candidate identity. No
+    secrets, Git metadata or other files are copied. Cleanup is limited to
+    the one directory created here; unexpected contents fail closed.
+    """
+    if type(uid) is not int or type(gid) is not int or uid<=0 or gid<=0:
+        raise ValueError('invalid_identity')
+    if not isinstance(expected_digest,str) or not re.fullmatch(r'[0-9a-f]{64}',expected_digest):
+        raise ValueError('invalid_digest')
+    root=Path(work_root)
+    for parent in (root,*root.parents):
+        st=parent.lstat()
+        if not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.geteuid() or st.st_mode & 0o022:
+            raise ValueError('unsafe_workspace_root')
+    fd=os.open(source,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+    with os.fdopen(fd,'rb') as f:
+        st=os.fstat(f.fileno())
+        if not stat.S_ISREG(st.st_mode) or st.st_uid!=os.geteuid() or st.st_mode & 0o022 or st.st_nlink!=1:
+            raise ValueError('unsafe_source')
+        body=f.read(65537)
+    if not body or len(body)>65536 or hashlib.sha256(body).hexdigest()!=expected_digest:
+        raise ValueError('artifact_mismatch')
+    compile(body,'candidate.py','exec')
+    work=Path(tempfile.mkdtemp(prefix='run-release-',dir=root))
+    target=work/'candidate.py'
+    try:
+        fd=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+        with os.fdopen(fd,'wb') as f:
+            f.write(body)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(target,0o444)
+        os.chmod(work,0o555)
+        yield work
+    finally:
+        os.chmod(work,0o700)
+        target.unlink(missing_ok=True)
+        work.rmdir()
