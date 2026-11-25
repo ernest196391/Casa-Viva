@@ -78,6 +78,15 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.check(True)['reason'],'supervision_unavailable')
     def test_invalid_epoch_rejected(self):
         self.assertEqual(self.check(True,identity=lambda:(0,0))['reason'],'process_unknown')
+    def test_concurrent_supervisor_rejected(self):
+        with s.supervisor_lock(self.root):
+            self.assertEqual(self.check()['reason'],'supervisor_busy')
+        self.assertEqual(self.calls,0)
+    def test_older_epoch_rejected(self):
+        self.epoch=(100,10)
+        self.assertEqual(self.check()['reason'],'restart_unverified')
+    def test_boolean_epoch_rejected(self):
+        self.assertEqual(self.check(identity=lambda:(True,True))['reason'],'process_unknown')
     def test_invalid_probe_fails_closed(self):
         self.assertEqual(self.check(probe=lambda d,sha,e:"healthy")['reason'],'health_unknown')
 
