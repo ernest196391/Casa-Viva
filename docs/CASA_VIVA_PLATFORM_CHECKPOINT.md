@@ -1,3 +1,12 @@
+## CV-AUTO-002 — separación de privilegios y recepción periódica (2026-11-25)
+
+- CI base ee0f28f run 45720264359: cinco jobs completos SUCCESS.
+- 8a06d08: unidad conserva CHOWN, SETUID, SETGID, DAC_READ_SEARCH, DAC_OVERRIDE, KILL para padre de confianza; NNP y ambiente sin capacidades; candidato cvdev mantiene bwrap cap-drop ALL, AppArmor stacked y cinco sets cero antes del test. Regresión de lista exacta. Pendiente kernel real: no asumir que cap-drop vacía CapBnd hasta observarlo.
+- aa75aba: recepción opt-in en worker dedicado bajo lock existente, procesa solicitudes admitidas dentro de límite de página, evita inanición y recibos de ingreso repetidos; retorno terminal durable existente. Aísla fallos para permitir reconciliación. Regresión de dos solicitudes y repoll sin POST.
+- f1e3131: timer candidato sin Install, staging y procedimiento de certificación/reversión con contrato Hermes documentados. No instalador productivo terminado ni ejecución real Hermes.
+- CI 45721833978 y 45721874808 en curso al consultar. Browser list_tabs devolvió ChatGPT, YouTube y Actions; no consola Hostinger; herramientas Browser son lectura, no shell. Sin piloto real, SQL, activación o gastos nuevos.
+- Siguiente: confirmar CI, completar instalador reversible y piloto sintético con kernel, transporte autorizado y Hermes. No certificar sin evidencia.
+
 ## CV-AUTO-002 — preparación reversible y auditoría read-only (2026-11-25)
 
 - edec53d: `github_test_only_host_preflight.py` audita sin mutaciones binarios git/python3.12/aa-exec/bwrap, perfiles E3 AppArmor en enforce, Git local y sintaxis de unidad con systemd-analyze verify; devuelve `runtime_certified=false` y `activation=false` siempre. Un resultado positivo permite solo preparar piloto reversible, nunca activar producción.
