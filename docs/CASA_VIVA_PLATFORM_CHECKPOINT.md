@@ -1,3 +1,11 @@
+## CV-AUTO-002 — least privilege and host diagnostics (2026-11-25)
+
+- 0a26c5c: synthetic pilot removes CAP_SYS_PTRACE and CAP_DAC_READ_SEARCH; no automatic privilege escalation on failed observation.
+- 628ec45: regression requires exact five-capability supervisor bounding set. Runtime minimum remains unverified.
+- CI runs 45722765904 and 45722791546: all five jobs passed. Run 45723074904: validate, control-os-postgres, integration passed; browser and content-studio pending at observation.
+- Hostinger read-only terminal: clean local checkout a3a761d38f06ed81df81b4c07037ba66f3857b32; bridge and dev-worker active; python3.12, systemd-run, dedicated bwrap root-owned 0755, cvdev uid 1000 gid 1001, work root root:root 0755. Only cv-dev-worker-bwrap appeared in loaded profile filter; pilot profiles not observed. Hermes not in current PATH; installation location unconfirmed. Second diagnostic recursive search still incomplete at observation.
+- No installation, profile load, production migration or activation. Host pilot remains blocked pending reviewed profiles and isolated staging; zero new spend.
+
 ## CV-AUTO-002 — piloto fijo local con evidencia de host (2026-11-25)
 
 - Confirmado GitHub: solicitud health 7177709087 → respuesta 7177723956 a los 39s, bridge active, recovery receiver y nexofirma online, principal stopped. No repetir health. Inventario 7177710544 aún sin respuesta correlacionada al consultar.
