@@ -40,7 +40,8 @@ if any(int(fields.get(k,'1').strip(),16) for k in ('CapEff','CapPrm','CapInh','C
     raise SystemExit(126)
 if sys.argv[1:]!=['--fixed-test']:
     raise SystemExit(126)
-runpy.run_path('scripts/ops/tests/github-test-only-bridge.test.py',run_name='__main__')
+sys.argv=['scripts/ops/tests/github-test-only-bridge.test.py']
+runpy.run_path(sys.argv[0],run_name='__main__')
 """
 
 def load(name,file):
@@ -107,6 +108,13 @@ def extract(sha,workspace,deadline):
         with dst.open("xb") as f: f.write(data)
 
 def launch(sha,budget):
+    return _launch_exact(sha,budget,UNIT)
+
+def _launch_exact(sha,budget,unit):
+    # Internal operator harness may use a separately named transient unit.
+    # The normal worker entrypoint always supplies the production candidate name.
+    if unit!=UNIT and not re.fullmatch(r"cv-test-only-cert-[0-9]+-[0-9]+\.service",unit):
+        return 125
     # This gate is deliberately fail-closed until a trusted host unit exists.
     # A root-owned receipt is not a substitute for independently verified cgroups.
     if os.environ.get("CV_TEST_ONLY_SANDBOX_CERTIFIED")!="1":
@@ -120,7 +128,7 @@ def launch(sha,budget):
         return 125
     # The current process must already be in the dedicated bounded unit.
     # Do not run a candidate in the shared worker cgroup.
-    expected="/system.slice/"+UNIT
+    expected="/system.slice/"+unit
     if "0::"+expected not in Path("/proc/self/cgroup").read_text().splitlines():
         return 125
     cg=Path("/sys/fs/cgroup"+expected)
