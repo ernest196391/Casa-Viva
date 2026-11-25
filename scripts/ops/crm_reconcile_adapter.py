@@ -116,17 +116,22 @@ def simulate(local=local_snapshot,remote=remote_snapshot,config=read_config):
         key=config()
         a,local_rows=local()
         b,remote_rows=remote(key)
-        # Compare compact per-key fingerprints rather than retaining a second raw snapshot.
         from crm_reconcile_dryrun import index_rows
-        first=index_rows(remote_rows,b)
-        c,second=remote(key)
-        second_index=index_rows(second,c)
-        if b!=c or first!=second_index:
-            return {'ok':False,'reason':'remote_changed','eligible':0}
-        del second, second_index, first
         if a!=b:
             return {'ok':False,'reason':'tenant_mapping_unverified','eligible':0}
-        return reconcile(local_rows,remote_rows,a,b,identity_verified=True,snapshot_complete=True)
+        first=index_rows(remote_rows,b)
+        report=reconcile(local_rows,remote_rows,a,b,identity_verified=True,snapshot_complete=True)
+        del remote_rows, local_rows
+        c,second=remote(key)
+        second_index=index_rows(second,c)
+        del second
+        if b!=c or first!=second_index:
+            return {'ok':False,'reason':'remote_changed','eligible':0}
+        # REST is not a transactional remote snapshot. Never authorize a backfill.
+        report['snapshot_quality']='repeated_observation_not_transactional'
+        report['candidate_count']=report.pop('eligible',0)
+        report['eligible']=0
+        return report
     except urllib.error.HTTPError as exc:
         status=exc.code
         exc.close()
@@ -136,4 +141,6 @@ def simulate(local=local_snapshot,remote=remote_snapshot,config=read_config):
         return {'ok':False,'reason':'snapshot_unavailable','eligible':0}
 
 if __name__=='__main__':
+    import resource
+    resource.setrlimit(resource.RLIMIT_AS,(384*1024*1024,384*1024*1024))
     print(json.dumps(simulate(),separators=(',',':')))
