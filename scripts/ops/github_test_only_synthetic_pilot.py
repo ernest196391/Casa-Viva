@@ -13,11 +13,13 @@ import time
 
 HERE=Path(__file__).resolve().parent
 DIGEST="ad56c87fba9c5ccb77906f2ab143b7ca1fe53ca0b14beffbfac17e4e76ac777e"
-CAPS="CAP_CHOWN CAP_SETUID CAP_SETGID CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_KILL CAP_SYS_PTRACE"
+CAPS="CAP_CHOWN CAP_SETUID CAP_SETGID CAP_DAC_OVERRIDE CAP_KILL"
 ENV={"PATH":"/usr/bin:/bin","LANG":"C","HOME":"/nonexistent"}
 UNIT_RE=re.compile(r"cv-release-pilot-[0-9]+-[0-9]+\.service")
 
 def command(unit):
+    # No ptrace grant by default. If procfs observation fails, the pilot
+    # must fail closed; never automatically retry with broader privileges.
     if not UNIT_RE.fullmatch(unit):raise ValueError("invalid unit")
     return ["/usr/bin/systemd-run","--wait","--pipe","--collect","--quiet",
             "--unit="+unit,"--service-type=exec",
