@@ -56,6 +56,52 @@ class Tests(unittest.TestCase):
                 o.collect_summary(run=run,present=lambda:True,locate=lambda n,**k:str(root/'bin'/'pm2') if n=='pm2' else '/usr/bin/node',diagnostics=diagnostics)
                 self.assertEqual(diagnostics,[expected])
 
+    def test_daemon_identity_without_pid_file_and_rejects_changes(self):
+        import stat
+        from unittest.mock import patch
+        home=Path('/root/.pm2')
+        proc=Path('/proc')
+        pid=2429462
+        directory=Mock(st_mode=stat.S_IFDIR|0o700,st_uid=0)
+        endpoint=Mock(st_mode=stat.S_IFSOCK|0o775,st_uid=0,st_dev=1,st_ino=22)
+        replaced=Mock(st_mode=stat.S_IFSOCK|0o775,st_uid=0,st_dev=1,st_ino=23)
+        def stat_line(ticks):
+            return '2429462 (PM2 daemon) '+' '.join(['S']+['0']*18+[str(ticks)])
+        def probe(*, peer=(pid,0,0), changed=False, reused=False, title=None, absent=False):
+            calls=[]
+            def lstat(p):
+                if p==home/'rpc.sock':
+                    if absent:
+                        raise FileNotFoundError()
+                    calls.append(p)
+                    return replaced if changed and len(calls)>1 else endpoint
+                self.assertIn(p,(home,*home.parents))
+                return directory
+            with patch.object(Path,'lstat',lstat), \
+                 patch.object(Path,'read_text',side_effect=[stat_line(123),stat_line(124 if reused else 123)]), \
+                 patch.object(Path,'read_bytes',return_value=title or b'PM2 v7.0.4: God Daemon (/root/.pm2)\0'):
+                return o.daemon_identity(home=home,proc=proc,connect=lambda _:peer)
+        self.assertEqual(probe(),(pid,123,1,22))
+        for kwargs in (dict(peer=(pid,1000,1000)),dict(peer=(1,0,0)),dict(changed=True),
+                       dict(reused=True),dict(title=b'not pm2\0'),dict(absent=True)):
+            with self.subTest(kwargs=kwargs):
+                self.assertIsNone(probe(**kwargs))
+
+    def test_rpc_rejects_changed_daemon_identity(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/'bin').mkdir()
+            (root/'bin'/'pm2').touch()
+            (root/'package.json').write_text('{"name":"pm2"}')
+            for after in ((42,124,1,22),(42,123,1,23),None):
+                with self.subTest(after=after):
+                    present=Mock(side_effect=[(42,123,1,22),after])
+                    run=Mock(side_effect=[Mock(returncode=0,stdout=b'[{"name":"vivabot","status":"online"}]'),
+                                          Mock(returncode=0,stdout=b'active\n')])
+                    s=o.collect_summary(run=run,present=present,
+                        locate=lambda n,**k:str(root/'bin'/'pm2') if n=='pm2' else '/usr/bin/node')
+                    self.assertTrue(all(r['status']=='unknown' for r in s['pm2'].values()))
+
     def test_rpc_malformed_or_sensitive_fields_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)
