@@ -1,3 +1,12 @@
+## CV-AUTO-002 — AppArmor/NNP hardening, 2026-11-25 (SIN INSTALAR)
+
+- Base a5289639, PR #299 draft. CI base run 45700124954 COMPLETO SUCCESS: validate, integration, postgres, browser y content-studio. No equiparar CI con certificación VPS.
+- d911155: el launcher de prueba fija usa el mismo bootstrap E3 `cv-release-pilot-bootstrap` (aa-exec) y la transición apilada obligatoria `cv-release-pilot-candidate`. Prefijo confiable verifica etiqueta enforce exacta, UID no root, NoNewPrivs=1 y CapEff/CapPrm/CapInh/CapAmb/CapBnd=0 ANTES de runpy.run_path. No abrir/importar código candidato antes de checks.
+- 592d4fb + 13b97a8: unidad propuesta exige NNP y sets vacíos de capacidades, límites existentes; corrige incompatibilidad: ProtectHome=read-only permite leer Git local /root/Casa-Viva; se retira RestrictAddressFamilies=AF_UNIX porque dev-worker requiere RPC HTTPS. El test permanece sin red por Bubblewrap, no por el servicio host.
+- 99438e4: regresiones de orden del prefijo y unit; 50e07c8: exit 126 de preflight se registra blocked. Estos tests son de contrato, NO una medición del kernel.
+- CI nuevo de la rama: run 45720043025 en curso sobre 99438e4 al consultar. Todavía no hay CI confirmado del último HEAD. Pendientes: comprobar resultado, posibles reparaciones, validar dependencias/instalador staging, host AppArmor real (stacking y aa-exec), cgroup, NNP/caps en /proc y reversión; no afirmar certificación E2E ni Hermes hasta evidencia real.
+- Cero migraciones Supabase, cero instalación en Hostinger, cero activación de servicios, cero cambios en pedidos/pagos/inventario y cero gasto adicional. Mantener dependencia PR #298. Revertir solo estos commits en rama si se rechaza; sin modificaciones VPS que revertir.
+
 ## CV-AUTO-002 — retorno persistente y staging candidato (2026-11-25)
 
 - c67ead3/1634c80: owner ID fijo, JSON sin claves duplicadas, UTC y fixture.
