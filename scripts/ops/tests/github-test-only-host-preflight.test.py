@@ -11,7 +11,7 @@ class Probe(unittest.TestCase):
     def test_all_deps_are_not_runtime_certification(self):
         expected={*m.BINARIES,m.SOURCE_REPO/".git/HEAD"}
         out=m.inspect(exists=lambda p:p in expected,
-                      read=lambda p:"\\n".join(m.REQUIRED_PROFILES),
+                      read=lambda p:chr(10).join(m.REQUIRED_PROFILES),
                       run=lambda argv:0)
         self.assertTrue(out["ready_for_reversible_host_pilot"])
         self.assertFalse(out["runtime_certified"])
@@ -21,7 +21,7 @@ class Probe(unittest.TestCase):
         self.assertFalse(out["ready_for_reversible_host_pilot"])
     def test_invalid_unit_fails_closed(self):
         out=m.inspect(exists=lambda p:True,
-                      read=lambda p:"\\n".join(m.REQUIRED_PROFILES),
+                      read=lambda p:chr(10).join(m.REQUIRED_PROFILES),
                       run=lambda argv:1)
         self.assertFalse(out["ready_for_reversible_host_pilot"])
     def test_unavailable_kernel_profile_fails_closed(self):
