@@ -53,6 +53,7 @@ jobs:
           python3 scripts/ops/tests/github-test-only-executor.test.py
           python3 scripts/ops/tests/github-test-only-reporter.test.py
           python3 scripts/ops/tests/github-test-only-e2e.test.py
+          python3 scripts/ops/tests/github-test-only-extraction.test.py
           python3 scripts/ops/tests/github-test-only-staging.test.py
           python3 scripts/ops/tests/github-test-only-host-preflight.test.py
           python3 scripts/ops/tests/github-test-only-install.test.py
