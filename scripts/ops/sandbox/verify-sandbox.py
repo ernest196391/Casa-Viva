@@ -68,6 +68,7 @@ CHECKS = (
     "home_masked",
     "etc_shadow_absent",
     "net_denied",
+    "candidate_no_capabilities",
 )
 
 INNER_PROBE = r'''
@@ -122,6 +123,14 @@ elif name == "net_denied":
         done(False, "conexión TCP permitida (inesperado)")
     except OSError as exc:
         done(True, type(exc).__name__)
+elif name == "candidate_no_capabilities":
+    try:
+        fields = dict(line.split(":", 1) for line in open("/proc/self/status") if ":" in line)
+        keys = ("CapEff", "CapPrm", "CapInh", "CapAmb", "CapBnd")
+        done(all(int(fields[k].strip(), 16) == 0 for k in keys)
+             and fields["NoNewPrivs"].strip() == "1", "capability sets and NNP")
+    except (OSError, ValueError, KeyError):
+        done(False, "missing capability evidence")
 else:
     done(False, "prueba desconocida")
 '''
