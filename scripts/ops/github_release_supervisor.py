@@ -115,7 +115,11 @@ def _supervise(*, root=ROOT, process_identity, restart, health_probe):
             return {'ok': False, 'state': state, 'reason': 'restart_unverified'}
         if _identity(root) != expected_digest or load_state(root) != before:
             return {'ok': False, 'reason': 'observation_stale'}
-        observation = health_probe(expected_digest, before['sha'], epoch_after)
+        # The journal's sha identifies the candidate transaction, not the backup.
+        # During rollback use the verified previous digest as the revision identity;
+        # do not falsely attribute the restored artifact to the candidate commit.
+        revision = before['sha'] if state == 'pending_health' else 'sha256:' + before['previous']
+        observation = health_probe(expected_digest, revision, epoch_after)
         if observation not in (True, False, None) or type(observation) not in (bool, type(None)):
             observation = None
         if process_identity() != epoch_after or _identity(root) != expected_digest:
