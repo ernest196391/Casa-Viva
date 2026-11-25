@@ -273,7 +273,7 @@ def run_synthetic_pilot(*, sandbox, uid, gid, unit=None, host_sampler=None, obse
 
 def main(argv):
     """Explicit, fixed fixture entrypoint; never accepts source or commands."""
-    if argv != ['--synthetic-pilot']:
+    if argv not in (['--synthetic-pilot'], ['--local-observation']):
         return 2
     import importlib.util
     import pwd
@@ -298,10 +298,16 @@ def main(argv):
         spec.loader.exec_module(sandbox)
         account=pwd.getpwnam('cvdev')
         from github_release_host_observer import sample_unit
+        observation=None
+        if argv == ['--local-observation']:
+            if os.geteuid()!=0:
+                raise ValueError('trusted_collector_required')
+            from github_release_local_observation import collect_summary
+            observation=collect_summary()
         report=run_synthetic_pilot(sandbox=sandbox,uid=account.pw_uid,gid=account.pw_gid,
-            unit=lines[0].split('/')[-1],host_sampler=sample_unit)
+            unit=lines[0].split('/')[-1],host_sampler=sample_unit,observation=observation)
     except (OSError,ValueError,KeyError,RuntimeError,ImportError):
-        report={'ok':False,'scope':'synthetic_only','reason':'pilot_preconditions_failed','production_authorized':False}
+        report={'ok':False,'scope':'observation_only' if argv == ['--local-observation'] else 'synthetic_only','reason':'pilot_preconditions_failed','production_authorized':False}
     print(json.dumps(report,sort_keys=True))
     return 0 if report['ok'] else 4
 
