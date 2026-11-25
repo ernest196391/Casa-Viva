@@ -55,6 +55,7 @@ jobs:
           python3 scripts/ops/tests/github-release-health-adapter.test.py
           python3 scripts/ops/tests/github-release-health-emitter.test.py
           python3 scripts/ops/tests/github-release-health-projection.test.py
+          python3 scripts/ops/tests/github-release-local-observation.test.py
           python3 scripts/ops/tests/github-release-host-observer.test.py
           python3 scripts/ops/tests/github-release-candidate-boundary.test.py
           python3 scripts/ops/tests/github-release-candidate-limits.test.py
