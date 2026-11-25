@@ -112,6 +112,9 @@ class ProfileFileTests(unittest.TestCase):
         text = (SANDBOX_DIR / "dev-worker-sandbox.profile").read_text(encoding="utf-8")
         bootstrap, candidate = text.split("# CV_RELEASE_PILOT_BEGIN")[1].split("profile cv-release-pilot-candidate flags=")
         self.assertIn("/usr/bin/python3.12 Px -> cv-release-pilot-candidate,", bootstrap)
+        self.assertIn("/ r,", spec._profile_rules(bootstrap))
+        self.assertNotIn("/** r,", spec._profile_rules(bootstrap))
+        self.assertNotIn("/ r,", spec._profile_rules(candidate))
         rules = spec._profile_rules(candidate)
         for rule in ("deny capability,", "deny userns,", "deny network,", "deny mount,", "deny pivot_root,"):
             self.assertIn(rule, rules)
