@@ -1,4 +1,5 @@
 import sys
+import os
 import hashlib
 import tempfile
 import unittest
@@ -13,7 +14,7 @@ class Tests(unittest.TestCase):
         self.box=Mock()
         self.box.run_in_box.return_value=(0,'{"status":"degraded"}')
     def evaluate(self,**kw):
-        return b.evaluate('/var/lib/control-os-dev/work/run-pilot',self.facts,uid=kw.get('uid',1000),gid=kw.get('gid',1001),sandbox=self.box)
+        return b._evaluate('/var/lib/control-os-dev/work/run-pilot',self.facts,uid=kw.get('uid',1000),gid=kw.get('gid',1001),sandbox=self.box)
     def test_fixed_command_and_advisory(self):
         self.assertEqual(self.evaluate(),{'ok':True,'result':{'status':'degraded','advisory_only':True}})
         args,kw=self.box.run_in_box.call_args
@@ -61,4 +62,17 @@ class Tests(unittest.TestCase):
                 self.assertEqual(work.stat().st_mode & 0o777,0o555)
                 self.assertEqual((work/'candidate.py').stat().st_mode & 0o777,0o444)
             self.assertFalse(work.exists())
+    def test_public_entry_requires_verified_staging(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+            root=Path(tmp)
+            source=root/'source.py'
+            data=b'x=1\n'
+            source.write_bytes(data)
+            uid=1001 if os.geteuid()==1000 else 1000
+            self.assertFalse(b.evaluate(source,self.facts,expected_digest='0'*64,uid=uid,gid=1001,sandbox=self.box,work_root=root)['ok'])
+            self.box.run_in_box.assert_not_called()
+            self.assertTrue(b.evaluate(source,self.facts,expected_digest=hashlib.sha256(data).hexdigest(),uid=uid,gid=1001,sandbox=self.box,work_root=root)['ok'])
+    def test_public_entry_refuses_same_identity(self):
+        self.assertFalse(b.evaluate('/not-used',self.facts,expected_digest='0'*64,uid=os.geteuid(),gid=1001,sandbox=self.box)['ok'])
+        self.box.run_in_box.assert_not_called()
 if __name__=='__main__': unittest.main()
