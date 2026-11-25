@@ -1,3 +1,10 @@
+## CV-AUTO-002 — cross-component integration and bounded Git extraction (2026-11-25)
+
+- 08fd8cb/3531d63: offline receiver/executor/reporter round trip and ambiguous POST recovery wired into validate CI.
+- 6f67c29/e0ae446/110317d: actual four RPCs exercised via psql against disposable CI PostgreSQL, simulated GitHub transport and candidate launch. Run 45723834934 was nonterminal at observation; no certification claim.
+- 71a552d: streaming Git stdout bounded before allocation, shared monotonic deadline, per-object limits. New regressions and exact launcher host certification pending.
+- Prior real synthetic host pilot remains certified only for its fixed fixture. No production migration, installation or activation. Zero additional spend.
+
 ## CV-AUTO-002 — real synthetic host pilot PASS (2026-11-25)
 
 - VPS srv2034193, staged exact revision 902289d1167243523b00fbd68992f67176a4e624, /tmp/cv-auto-002.JeoODd. Observed directly via connected Hostinger terminal after operator execution.
