@@ -1,3 +1,11 @@
+## CV-AUTO-002 — executable integral coordinator (2026-11-25)
+
+- 26ed40c/5912f7b: exact selected mailbox comment scope and successful launcher outcome required.
+- 5dc12d8: operator-only CLI connects existing real GitHub adapter, temporary local PostgreSQL cluster (Unix socket only) and certified launcher.
+- 0b349e8/148665b: six scope and fail-closed regressions integrated in validate CI.
+- Earlier run 45724003737 all five jobs passed; 45724354740 validate and control-os-postgres passed at last observation. New integration CI and actual host end-to-end run not yet certified.
+- Remaining before host invocation: verify installed PostgreSQL server binaries and postgres account, enforce actual outer launcher lease deadline including startup/cleanup, verify scoped read/reconciliation and isolated database cleanup. No production activation or migration, no additional spend.
+
 ## CV-AUTO-002 — real exact launcher Hostinger certification PASS (2026-11-25)
 
 - Directly observed Hostinger terminal, staged revision 9f74fbd3a4e2e1eeb3e4806366e7f6dd1cc70358, disposable clone /tmp/cv-exact-cert.09TQQ3/source.
