@@ -142,6 +142,13 @@ with open("candidate.py", "rb") as f:
     body = f.read(65537)
 if not body or len(body) > 65536 or hashlib.sha256(body).hexdigest() != expected:
     raise SystemExit(126)
+# Fixed synthetic fixture only: emit a pre-execution measurement from the
+# trusted prefix, not from the fixture. This is not a production receipt.
+import json
+if expected == "ad56c87fba9c5ccb77906f2ab143b7ca1fe53ca0b14beffbfac17e4e76ac777e":
+    print(json.dumps({"pilot_measurement":{"digest":hashlib.sha256(body).hexdigest(),
+        "uid":os.geteuid(),"pid":os.getpid(),"label":"cv-release-pilot-bootstrap//&cv-release-pilot-candidate (enforce)",
+        "nnp":True,"caps_zero":True}},sort_keys=True),flush=True)
 sys.argv = ["candidate.py", payload]
 exec(compile(body, "candidate.py", "exec"), {"__name__":"__main__", "__file__":"candidate.py"})
 '''
@@ -163,6 +170,32 @@ status = "unknown" if "unknown" in values or facts["bridge"] == "unknown" else (
 print(json.dumps({"status":status}))
 """
 
+def parse_measured_fixture(raw, digest, uid):
+    """Only accept the fixed fixture's two-line pilot transcript.
+
+    The trusted prefix measured bytes before execution. The stream is shared
+    with the fixture, so this is NOT attestation for arbitrary candidate code.
+    PID is namespace-local, not a host process epoch.
+    """
+    if type(raw) is not str or len(raw)>MAX_OUTPUT:
+        raise ValueError('invalid_pilot_transcript')
+    lines=raw.splitlines()
+    if len(lines)!=2:
+        raise ValueError('invalid_pilot_transcript')
+    envelope=json.loads(lines[0])
+    if type(envelope) is not dict or set(envelope)!={'pilot_measurement'}:
+        raise ValueError('missing_measurement')
+    m=envelope['pilot_measurement']
+    if (type(m) is not dict or set(m)!={'digest','uid','pid','label','nnp','caps_zero'}
+        or digest!=hashlib.sha256(SYNTHETIC_SOURCE).hexdigest()
+        or m['digest']!=digest or type(m['uid']) is not int or m['uid']!=uid or uid<=0
+        or type(m['pid']) is not int or m['pid']<=0
+        or m['label']!='cv-release-pilot-bootstrap//&cv-release-pilot-candidate (enforce)'
+        or m['nnp'] is not True or m['caps_zero'] is not True):
+        raise ValueError('invalid_measurement')
+    return parse_response(lines[1]),m
+
+
 def run_synthetic_pilot(*, sandbox, uid, gid, work_root=Path('/var/lib/control-os-dev/work')):
     """Run only the fixed fixture; never issue production health receipts."""
     from github_release_health_emitter import measure_synthetic_contract
@@ -181,16 +214,19 @@ def run_synthetic_pilot(*, sandbox, uid, gid, work_root=Path('/var/lib/control-o
                     return hashlib.sha256((work/'candidate.py').read_bytes()).hexdigest()
                 def identity():
                     return epoch if os.getpid()==epoch[0] else None
+                measurements=[]
                 def run_case(facts):
                     rc,out=sandbox.run_release_pilot(work,facts,digest,uid=uid,gid=gid)
                     if rc != 0:
                         print('PILOT_CHILD_EXIT='+str(rc), file=__import__('sys').stderr)
                         return None
-                    return parse_response(out)
+                    result,measurement=parse_measured_fixture(out,digest,uid)
+                    measurements.append(measurement)
+                    return result
                 outcome=measure_synthetic_contract(digest,'sha256:'+digest,epoch,
                     identity=identity,artifact_digest=artifact_digest,run_case=run_case)
         return {'ok':outcome is True,'scope':'synthetic_only','functional_ok':outcome,
-                'digest':digest,'production_authorized':False}
+                'digest':digest,'production_authorized':False,'measurements':measurements}
     except (OSError,ValueError,TypeError,RuntimeError):
         return {'ok':False,'scope':'synthetic_only','functional_ok':None,'production_authorized':False}
 
