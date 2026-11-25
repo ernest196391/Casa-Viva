@@ -1102,7 +1102,21 @@ def main():
                 return
             from github_test_only_executor import worker_once
             from github_test_only_launcher import launch
-            worker_once(api, launch)
+            # Intake is opt-in and uses the same locked, bounded invocation.
+            # A provider outage must not prevent terminal reconciliation.
+            if os.environ.get("CV_GITHUB_TEST_ONLY_ENABLED") == "1":
+                try:
+                    spec = importlib.util.spec_from_file_location(
+                        "cv_test_intake", Path(__file__).with_name("github-test-only-bridge.py"))
+                    intake = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(intake)
+                    intake.receive_once(queue=lambda path, payload: api("POST", path, payload))
+                except Exception:
+                    print("test-only intake blocked", file=sys.stderr)
+            try:
+                worker_once(api, launch)
+            except Exception:
+                print("test-only execution blocked", file=sys.stderr)
             if os.environ.get("CV_GITHUB_TEST_ONLY_REPORT_ENABLED") == "1":
                 from github_contingency import config, github_api
                 from github_test_only_reporter import deliver

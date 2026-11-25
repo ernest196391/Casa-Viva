@@ -81,9 +81,25 @@ class TestAdmission(unittest.TestCase):
             if path.endswith("/issues/3"):return {"state":"open","title":"CV contingency — diagnostic mailbox"}
             if verb=="GET":return [sample()]
             return {}
-        self.assertEqual(m.receive_once(env,NOW,gh,lambda *_:{"status":"duplicate","task_public_id":91}),"reported")
-        self.assertEqual(calls[-1][0],"POST")
+        self.assertEqual(m.receive_once(env,NOW,gh,lambda *_:{"status":"duplicate","task_public_id":91}),"queued")
+        self.assertEqual(calls[-1][0],"GET")
 
+    def test_poll_does_not_starve_or_post_duplicate_receipts(self):
+        env={"CV_GITHUB_TEST_ONLY_ENABLED":"1","CV_GITHUB_CONTINGENCY_ENABLED":"1","CV_GITHUB_CONTINGENCY_ISSUE":"3","CV_GITHUB_CONTINGENCY_TOKEN":"fixture"}
+        first=sample(); second=sample(); second["id"]=100
+        second["body"]=second["body"].replace("A"*20,"B"*20)
+        seen=[]
+        def gh(token,verb,path,body=None):
+            self.assertEqual(verb,"GET")
+            if path=="/repos/"+m.REPO:return {"private":True,"full_name":m.REPO}
+            if path.endswith("/issues/3"):return {"state":"open","title":"CV contingency — diagnostic mailbox"}
+            return [second,first]
+        def queue(path,payload):
+            seen.append(payload["p_comment_id"])
+            return {"status":"duplicate","task_public_id":91}
+        for _ in range(2):
+            self.assertEqual(m.receive_once(env,NOW,gh,queue),"queued")
+        self.assertEqual(seen,[99,100,99,100])
 
 if __name__ == "__main__":
     unittest.main()

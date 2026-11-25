@@ -123,17 +123,21 @@ def receive_once(env=None, now=None, gh=None, queue=None):
     valid = [p for comment in comments if (p := parse_comment(comment, now))]
     if not valid:
         return "idle"
-    request = sorted(valid, key=lambda x: x["comment_id"])[0]
+    requests = sorted(valid, key=lambda x: x["comment_id"])
     if queue is None:
         worker = _load("cv_auto_dev_worker", "dev-worker.py")
         worker.load_credentials()
         queue = lambda path, payload: worker.api("POST", path, payload)
-    receipt = enqueue_request(request, queue)
-    # No retry of an ambiguous POST acknowledgement: the DB unique constraint
-    # must make retries idempotent. If GitHub POST fails, next poll can re-report.
-    gh(token, "POST", f"{root}/issues/{issue}/comments",
-       {"body": RESULT_PREFIX + json.dumps(receipt, separators=(",", ":"), sort_keys=True)})
-    return "reported"
+    # Process every bounded request, including duplicates, so an old valid
+    # comment cannot starve later requests. Only terminal reporter posts
+    # durable results; repeated polling never floods the mailbox with receipts.
+    errors = 0
+    for request in requests:
+        try:
+            enqueue_request(request, queue)
+        except Exception:
+            errors += 1
+    return "blocked" if errors else "queued"
 
 
 if __name__ == "__main__":
