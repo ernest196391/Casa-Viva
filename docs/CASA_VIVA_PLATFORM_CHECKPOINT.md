@@ -1,3 +1,7 @@
+## CV-AUTO-001 — observador kernel del piloto (2026-11-25)
+
+- c9e6b52 añade muestreo de PID host, NSpid, start ticks, UID, NNP, capacidades, AppArmor y cgroup, con InvocationID estable y rechazo de múltiples coincidencias. 07ef808 añade pruebas; 2f71687 integra CI. Aún no conectado al lanzador ni vinculado a bytes cargados: requiere piloto específico y correlación temporal independiente. No autoriza producción. Hostinger 16:16:31 -04:00: principal stopped exit 0, recovery online PID 2441402, ambos unstable_restarts 0; no reiniciar sin verificar rol WhatsApp. Costo nuevo cero.
+
 ## CV-AUTO-001 — medición previa del fixture (2026-11-25)
 
 - 41a556d mide bytes exactos y restricciones dentro del prefijo confiable antes de ejecutar el fixture fijo; 6b34adf prueba el contrato de salida y rechaza evidencias incompletas. PID interno del namespace, no identidad de host; canal compartido con fixture, no sirve para candidatos arbitrarios ni recibos productivos. Pendiente CI y piloto VPS; separación del bridge root aún no instalada. Reversión: revertir commits de rama. Costo actual: infraestructura existente; nuevo costo 0; alternativa gratuita: sandbox existente; sin escalado autorizado.
