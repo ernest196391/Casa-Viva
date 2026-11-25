@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import stat
+import selectors
 import subprocess
 import tempfile
 import time
@@ -48,22 +49,41 @@ def load(name,file):
     spec.loader.exec_module(mod)
     return mod
 
-def git(args,timeout=10):
-    return subprocess.run(["/usr/bin/git","--no-replace-objects","-C",str(REPO),*args],
-        env=ENV,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
-        timeout=timeout,check=True).stdout
+def git(args,timeout=10,max_output=MAX_BLOB):
+    # Bound stdout while reading, not after allocating the full Git response.
+    deadline=time.monotonic()+timeout
+    with subprocess.Popen(["/usr/bin/git","--no-replace-objects","-C",str(REPO),*args],
+            env=ENV,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL) as p:
+        try:
+            out=bytearray()
+            with selectors.DefaultSelector() as sel:
+                sel.register(p.stdout,selectors.EVENT_READ)
+                while True:
+                    remaining=deadline-time.monotonic()
+                    if remaining<=0 or not sel.select(remaining):
+                        raise TimeoutError("git output deadline")
+                    data=os.read(p.stdout.fileno(),min(65536,max_output+1-len(out)))
+                    if not data:break
+                    out.extend(data)
+                    if len(out)>max_output:raise ValueError("git output budget")
+            if p.wait(timeout=max(0,deadline-time.monotonic())):raise ValueError("git object unavailable")
+            return bytes(out)
+        finally:
+            if p.poll() is None:
+                p.kill()
+                p.wait(timeout=2)
 
 def extract(sha,workspace,deadline):
-    def bounded_git(args):
+    def bounded_git(args,max_output):
         remaining=deadline-time.monotonic()
         if remaining<=0: raise TimeoutError('extraction deadline')
-        return git(args,timeout=min(10,remaining))
+        return git(args,timeout=min(10,remaining),max_output=max_output)
     if not isinstance(sha,str) or not SHA.fullmatch(sha):
         raise ValueError("invalid revision")
-    if bounded_git(["cat-file","-t",sha]).strip()!=b"commit":
+    if bounded_git(["cat-file","-t",sha],32).strip()!=b"commit":
         raise ValueError("not a commit")
     # Only the fixed test subtree; no hooks, archive filters, symlinks or submodules.
-    listing=bounded_git(["ls-tree","-r","-l","-z",sha,"--","scripts/ops"])
+    listing=bounded_git(["ls-tree","-r","-l","-z",sha,"--","scripts/ops"],1024*1024)
     records=listing.split(b"\0")[:-1]
     if not records or len(records)>MAX_FILES or len(listing)>1024*1024:
         raise ValueError("tree size")
@@ -80,7 +100,7 @@ def extract(sha,workspace,deadline):
         parts=rel.split("/")
         if parts[:2]!=["scripts","ops"] or any(not re.fullmatch(r"[A-Za-z0-9_.-]+",p) or p in (".","..",".git") or p.startswith(".env") for p in parts):
             raise ValueError("unsafe path")
-        data=bounded_git(["cat-file","blob",oid.decode("ascii")])
+        data=bounded_git(["cat-file","blob",oid.decode("ascii")],size)
         if len(data)!=size: raise ValueError("blob mismatch")
         dst=workspace.joinpath(*parts)
         dst.parent.mkdir(parents=True,exist_ok=True)
