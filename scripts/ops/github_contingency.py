@@ -667,6 +667,8 @@ def hermes_caja_probe():
             continue
         category = ('unexpected_public_success' if 200 <= status < 300 else
                     'auth_required' if status in (401, 403) else
+                    'payment_required' if status == 402 else
+                    'rate_limited' if status == 429 else
                     'unavailable' if status >= 500 else
                     'redirect_blocked' if 300 <= status < 400 else 'other_http')
         result[label] = {'status': status, 'category': category}
@@ -699,6 +701,7 @@ def hermes_crm_writer_audit():
                 raise ValueError('source limit')
             hits = {k: 0 for k in CRM_MARKERS}
             skipped = 0
+            writer_candidates = 0
             for name in candidates:
                 try:
                     fd = os.open(root / name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -710,11 +713,12 @@ def hermes_crm_writer_audit():
                         if len(raw) > 262144:
                             raise ValueError('source limit')
                     source = raw.decode('utf-8').lower()
+                    writer_candidates += int('crm_wa_messages' in source and any(x in source for x in ('upsert', 'insert', '/rest/v1/')))
                     for key, marker in CRM_MARKERS.items():
                         hits[key] += int(marker in source)
                 except (OSError, ValueError):
                     skipped += 1
-            result[label] = {'files': len(candidates), 'skipped': skipped, 'marker_counts': hits}
+            result[label] = {'files': len(candidates), 'skipped': skipped, 'marker_counts': hits, 'writer_candidates': writer_candidates}
         except (OSError, ValueError):
             return {'ok': False, 'reason': 'writer_sources_unavailable'}
     return {'ok': True, 'scope': 'static_nonrecursive', **result}
@@ -755,7 +759,9 @@ def hermes_crm_sync_status():
         if d['latest'] is not None:
             if not isinstance(d['latest'],str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z',d['latest']):
                 return failure
-            timestamp(d['latest'])
+            latest = timestamp(d['latest'])
+            if (d['since_cut'] > 0) != (latest > timestamp('2026-11-19T22:43:06Z')):
+                return failure
         return {'ok':True,'scope':'local_recovery_db','messages':d['messages'],
                 'since_cut':d['since_cut'],'latest':d['latest']}
     except (OSError,ValueError,TypeError,subprocess.SubprocessError):
