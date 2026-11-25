@@ -5,6 +5,8 @@ may be a short-lived job, so absence of MainPID is UNKNOWN, not failure.
 This adapter deliberately cannot certify functional health by itself.
 """
 import subprocess
+import re
+import time
 
 UNIT = 'cv-ops-bridge.service'
 PROPERTIES = ('MainPID', 'ExecMainStartTimestampMonotonic', 'InvocationID', 'Type', 'ActiveState', 'Result')
@@ -42,6 +44,36 @@ def process_identity():
         return pid, started * 1000
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
         return None
+
+def validate_observation(report, expected_digest, expected_commit, epoch, nonce, *, now_ns=None):
+    """Validate evidence from a trusted external observer, never candidate output.
+
+    The caller must authenticate the observer transport separately. This
+    validator does not make an unauthenticated receipt trustworthy.
+    """
+    if not isinstance(report, dict) or set(report) != {
+        'digest','commit','epoch','nonce','observed_ns','functional_ok'
+    }:
+        return None
+    if not isinstance(expected_digest,str) or not re.fullmatch(r'[0-9a-f]{64}',expected_digest):
+        return None
+    if not isinstance(expected_commit,str) or not re.fullmatch(r'[0-9a-f]{40}',expected_commit):
+        return None
+    if not isinstance(nonce,str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}',nonce):
+        return None
+    if not isinstance(epoch,tuple) or len(epoch)!=2 or any(type(v) is not int or v<=0 for v in epoch):
+        return None
+    if (report['digest'],report['commit'],report['epoch'],report['nonce']) != (
+        expected_digest,expected_commit,list(epoch),nonce
+    ):
+        return None
+    if not isinstance(report['epoch'],list) or any(type(v) is not int for v in report['epoch']):
+        return None
+    observed=report['observed_ns']
+    now=time.monotonic_ns() if now_ns is None else now_ns
+    if type(observed) is not int or not epoch[1] <= observed <= now or now-observed > 30_000_000_000:
+        return None
+    return report['functional_ok'] if type(report['functional_ok']) is bool else None
 
 def health_probe(expected_digest, expected_commit, epoch):
     # A process epoch is not proof that the module was loaded or that the
