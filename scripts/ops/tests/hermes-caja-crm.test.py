@@ -85,10 +85,14 @@ class DiagnosticsTests(unittest.TestCase):
                 self.assertEqual(r['receiver']['skipped'],1)
                 self.assertEqual(r['receiver']['marker_counts']['wa_table'],1)
                 self.assertEqual(r['receiver']['writer_candidates'],1)
+                self.assertTrue(r['receiver']['known_sources']['receiver.mjs']['writer_marker'])
                 self.assertNotIn('SECRET_FIXTURE',str(r))
     def test_writer_missing_directory(self):
         with tempfile.TemporaryDirectory() as d,patch.object(m,'CRM_RECEIVER',Path(d)/'missing'):
-            self.assertFalse(m.hermes_crm_writer_audit()['ok'])
+            r=m.hermes_crm_writer_audit()
+            self.assertFalse(r['ok'])
+            self.assertEqual(r['receiver']['reason'],'directory_missing')
+            self.assertIn('original',r)
     @patch.object(m.subprocess,'run')
     def test_sync_fixed_read_only(self,run):
         run.return_value=subprocess.CompletedProcess([],0,b'{"tenant_matches":1,"messages":10,"since_cut":2,"latest":"2026-11-25T12:00:00Z"}',b'private')
