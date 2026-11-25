@@ -35,6 +35,27 @@ class Tests(unittest.TestCase):
         self.assertEqual(run.call_count,1)
         self.assertEqual(run.call_args.args[0][0],'/usr/bin/systemctl')
         self.assertTrue(all(r['status']=='unknown' for r in s['pm2'].values()))
+    def test_diagnostic_categories_are_redacted(self):
+        diagnostics=[]
+        run=Mock(return_value=Mock(returncode=0,stdout=b'active\n'))
+        o.collect_summary(run=run,present=lambda:False,locate=lambda *a,**k:'/usr/bin/pm2',
+                          diagnostics=diagnostics)
+        self.assertEqual(diagnostics,['existing_daemon_not_verified'])
+        diagnostics=[]
+        o.collect_summary(run=run,present=lambda:True,locate=lambda *a,**k:None,
+                          diagnostics=diagnostics)
+        self.assertEqual(diagnostics,['pm2_or_node_not_in_fixed_path'])
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/'bin').mkdir()
+            (root/'bin'/'pm2').touch()
+            (root/'package.json').write_text('{"name":"pm2"}')
+            for rc,expected in ((21,'rpc_socket_error'),(22,'rpc_timeout'),(23,'rpc_method_error'),(24,'rpc_unexpected_shape'),(1,'rpc_runtime_error')):
+                diagnostics=[]
+                run=Mock(side_effect=[Mock(returncode=rc,stdout=b'private data'),Mock(returncode=0,stdout=b'active\n')])
+                o.collect_summary(run=run,present=lambda:True,locate=lambda n,**k:str(root/'bin'/'pm2') if n=='pm2' else '/usr/bin/node',diagnostics=diagnostics)
+                self.assertEqual(diagnostics,[expected])
+
     def test_rpc_malformed_or_sensitive_fields_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)
