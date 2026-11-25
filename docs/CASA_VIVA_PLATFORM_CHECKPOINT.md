@@ -1,3 +1,9 @@
+## CV-AUTO-002 — ejecutor candidato y conexión worker (2026-11-25)
+
+- a275ef4: executor perfil fijo, presupuesto lease, RPC claim/finish. 6739a73: launcher local Git exact SHA, copia regular scripts/ops sin .git, límites de extracción, cgroup dedicado verificado (256 MiB, CPU 50%, PIDs 32), Bubblewrap cap-drop, tiempo/salida existentes. 09fadd6: mismo dev-worker en modo dedicado opt-in, sin entrar a ruta legacy. 9e261c4: regresiones contrato, 699702c CI.
+- No se ha provisionado unidad cv-test-only-candidate.service ni certificado su AppArmor/aislamiento real; opt-ins apagados. Falta verificar límite total de extracción, comportamiento de montaje, límites de disco, retorno terminal al buzón, instalador y E2E. Solo objetos Git locales; no fetch automático. No interpretar el resultado de candidato como evidencia independiente de salud.
+- CI run 45698560148 completo success (entrada). Lifecycle run 45698869326: integration=in_progress, control-os-postgres=success, content-studio=in_progress, browser=in_progress, validate=success. CI executor pendiente. Sin migración ni instalación, producción intacta, costo nuevo cero. Reversión: revertir rama; no recursos instalados.
+
 ## CV-AUTO-002 — lifecycle transaccional test-only (2026-11-25)
 
 - aeac7f5: SQL candidato agrega mode test-only, claim exclusivo con FOR UPDATE SKIP LOCKED, run único, lease máximo 180 s, expiración terminal sin replay, cierre atómico con fence task/run/worker y resultado enumerado; SECURITY INVOKER/service_role. No modifica claim legacy.
