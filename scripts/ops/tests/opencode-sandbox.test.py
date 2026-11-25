@@ -405,6 +405,25 @@ class VerifyLogicTests(unittest.TestCase):
             self.assertEqual(Path(cmd[0]).name, "bwrap")
             self.assertEqual(spec.validate_command(cmd), [])
 
+    def test_split_runner_compiles_fixed_prefix_and_rejects_arbitrary_code(self):
+        root = verify.DEV_WORK_ROOT
+        cmd = verify.build_probe_command(root + "/run-e3", "bootstrap",
+                                         work_root=root, bwrap_binary=verify.DEV_BWRAP,
+                                         drop_capabilities=True)
+        original = verify.real_runner
+        try:
+            verify.real_runner = lambda argv: argv
+            actual = verify.split_profile_runner(cmd)
+            self.assertIn("--cap-drop", actual)
+            self.assertIn("stack cv-release-pilot-candidate", actual[-2])
+            self.assertTrue(actual[-2].endswith(verify.INNER_PROBE))
+            compile(actual[-2], "<synthetic-probe>", "exec")
+            cmd[-2] = "print('arbitrary')"
+            with self.assertRaises(ValueError):
+                verify.split_profile_runner(cmd)
+        finally:
+            verify.real_runner = original
+
     def test_network_failure_reported(self):
         outcomes = {"write_usr_denied": (0, probe("write_usr_denied", ok=False, detail="wrote"), b"")}
         report = verify.run_checks(WORKSPACE, fake_runner(outcomes))
