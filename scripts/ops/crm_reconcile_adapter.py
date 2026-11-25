@@ -2,6 +2,7 @@
 import json
 import os
 import subprocess
+import time
 import urllib.request
 import urllib.parse
 from pathlib import Path
@@ -62,19 +63,25 @@ def remote_snapshot(key,get=remote_get):
     tenant=tenant_id(tenants[0]['id'])
     rows=[]
     expected=None
-    last=None
+    deadline=time.monotonic()+180
     while True:
+        if time.monotonic()>deadline:
+            raise ValueError('snapshot_deadline')
         params={'select':COLUMNS,'business_id':'eq.'+tenant,'order':'id.asc','limit':str(PAGE),'offset':str(len(rows))}
         page,count=get(key,'crm_wa_messages',params)
         if expected is None:
             expected=count
         if count!=expected or count>MAX_ROWS or len(page)>PAGE or len(rows)+len(page)>count:
             raise ValueError('snapshot_changed')
+        if any(not isinstance(row,dict) or set(row)!=ROW_KEYS or row['business_id']!=tenant for row in page):
+            raise ValueError('invalid_page')
         if not page and len(rows)!=count:
             raise ValueError('truncated_snapshot')
         rows.extend(page)
         if len(rows)==count:
             break
+    if len({row['wa_id'] for row in rows if isinstance(row['wa_id'],str)})!=len(rows):
+        raise ValueError('duplicate_or_invalid_key')
     return tenant,rows
 
 # One read-only transaction, fixed columns; CSV/JSON never goes to stdout of the caller.
