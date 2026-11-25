@@ -1,3 +1,11 @@
+## CV-AUTO-002 — integral certification lease budget (2026-11-25)
+
+- 45fe1f0: transient launcher accepts bounded caller budget, uses monotonic deadline and reserves stop/show time; systemd RuntimeMaxSec reduced accordingly.
+- 302a9c0: integral coordinator passes actual queue budget, checks temporary PostgreSQL postmaster PID removal.
+- d18ea67: updated certification command regression and budget rejection cases.
+- CI 45724775684 still nonterminal at observation. Host PostgreSQL server binaries/account availability not yet established. No host E2E execution or new certification claim.
+- Next operator preflight must check installed PostgreSQL binaries and postgres account without installing anything; verify existing mailbox credential availability without disclosure, then use only selected fresh owner request. No production migration or activation, zero extra spend.
+
 ## CV-AUTO-002 — executable integral coordinator (2026-11-25)
 
 - 26ed40c/5912f7b: exact selected mailbox comment scope and successful launcher outcome required.
