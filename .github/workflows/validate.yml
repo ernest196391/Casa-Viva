@@ -2,7 +2,7 @@ name: Validar aplicación
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, cv-auto-001-guardrails]
   push:
     branches: [main]
   workflow_dispatch:
