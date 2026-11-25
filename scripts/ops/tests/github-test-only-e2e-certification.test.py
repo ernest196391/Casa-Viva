@@ -49,4 +49,33 @@ class ScopeTests(unittest.TestCase):
         with self.assertRaises(ValueError):m.FixtureDB.literal(None)
     def test_live_root_rejected(self):
         with self.assertRaises(ValueError):m.FixtureDB("/","/usr/bin")
+class DockerTests(unittest.TestCase):
+    def test_reject_mutable_image(self):
+        with self.assertRaises(ValueError):m.DockerFixtureDB("postgres:17")
+    def test_isolated_create_and_cleanup(self):
+        db=m.DockerFixtureDB("sha256:"+"a"*64)
+        calls=[]
+        def docker(*args,**kw):
+            calls.append(args)
+        with patch.object(db,"docker",side_effect=docker),patch.object(db,"sql",return_value=""):
+            with db: self.assertTrue(db.created)
+        create=next(c for c in calls if c[0]=="create")
+        for option in ("--pull=never","--network=none","--memory=256m","--memory-swap=256m","--cpus=0.5","--pids-limit=64","--read-only","--security-opt=no-new-privileges"):
+            self.assertIn(option,create)
+        self.assertNotIn("-v",create)
+        self.assertNotIn("-p",create)
+        self.assertNotIn("--privileged",create)
+        self.assertEqual(calls[-1],("rm","-f","-v",db.name))
+        self.assertFalse(db.created)
+    def test_cleanup_after_start_failure(self):
+        db=m.DockerFixtureDB("sha256:"+"a"*64)
+        calls=[]
+        def docker(*args,**kw):
+            calls.append(args)
+            if args[0]=="start":raise RuntimeError("fixture startup failure")
+        with patch.object(db,"docker",side_effect=docker):
+            with self.assertRaises(RuntimeError):db.__enter__()
+        self.assertEqual(calls[-1],("rm","-f","-v",db.name))
+        self.assertFalse(db.created)
+
 if __name__=="__main__":unittest.main()
