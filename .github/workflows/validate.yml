@@ -69,6 +69,7 @@ jobs:
           python3 scripts/ops/tests/local-runner.test.py
           python3 scripts/ops/tests/dev-worker-env.test.py
           python3 scripts/ops/tests/dev-sandbox.test.py
+          python3 scripts/ops/tests/dev-sandbox-streaming.test.py
           python3 scripts/ops/tests/dev-worker-sandbox.test.py
           python3 scripts/ops/tests/opencode-demo-e2e.test.py
           php -l scripts/ops/control-web/index.php
