@@ -1,3 +1,7 @@
+## CV-AUTO-001 — identidad PM2 sin archivo PID (2026-11-25)
+
+- Hostinger: PM2 7.0.4 daemon PID 2429462, rpc.sock y pub.sock escuchando, rpc.sock root:root 775, pm2.pid ausente. Causa confirmada del rechazo anterior. 8fe9a79 sustituye dependencia PID por SO_PEERCRED, inicio de proceso, título PM2 y dev/inode socket; exige identidad estable antes/después del RPC. 383e74a regresiones sin archivo PID, socket sustituido, epoch cambiado, daemon ausente y peer incorrecto. Pendiente CI nuevo y prueba real --local-observation; no producción, no reinicio, no gasto. Reversión: revertir rama y limpiar solo recursos temporales. No confundir identidad observada en dos conexiones con autenticación de cada conexión RPC.
+
 ## CV-AUTO-001 — observación real bloqueada por RPC (2026-11-25)
 
 - Hostinger revisión c7a398f84ff2212b36295ee6224d5c80ad02dd53: bridge active; tres PM2 unknown; precheck bloqueó antes de candidato y perfiles temporales; perfil original OK, limpieza finalizada. Causa exacta no determinada. 4a6476a añade categorías de diagnóstico RPC sin salida cruda ni secretos; 016c978 añade regresiones. No se cambia política ni se inicia PM2; siguiente paso diagnóstico local únicamente, no repetir piloto. CI base foundation/staging correctos, validate/integration/content-studio/postgres correctos, browser en curso al consultar. Sin producción ni gasto.
