@@ -13,7 +13,9 @@ def row(k,tenant=A):
 class Tests(unittest.TestCase):
     def test_real_adapter_composition(self):
         r=m.simulate(lambda:(A,[row('a'),row('b')]),lambda key:(A,[row('a')]),lambda:'fixture')
-        self.assertEqual(r['eligible'],1)
+        self.assertEqual(r['candidate_count'],1)
+        self.assertEqual(r['eligible'],0)
+        self.assertEqual(r['snapshot_quality'],'repeated_observation_not_transactional')
         self.assertNotIn('PRIVATE_FIXTURE',str(r))
     def test_changed_remote(self):
         from unittest.mock import Mock
