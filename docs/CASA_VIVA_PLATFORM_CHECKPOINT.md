@@ -1,3 +1,10 @@
+## CV-AUTO-002 — Hostinger integral preflight and Docker fixture (2026-11-25)
+
+- Hostinger terminal directly observed: postgres OS account unavailable, Docker binary /usr/bin/docker available, mailbox credential key present in /root/supervisor/.env (value not accessed), available RAM 2730 MiB, disk free 12 GB.
+- 7cdce1e5: optional Docker disposable PostgreSQL adapter, immutable local image only, pull never, no network, no host mounts, bounded CPU/memory/PIDs, temporary data and cleanup.
+- CI 45724775684 control-os-postgres success; other jobs nonterminal at observation.
+- Docker daemon/image availability, Docker adapter regressions and actual integral test pending. Do not install packages, pull images automatically, or activate production. Zero additional spend.
+
 ## CV-AUTO-002 — integral certification lease budget (2026-11-25)
 
 - 45fe1f0: transient launcher accepts bounded caller budget, uses monotonic deadline and reserves stop/show time; systemd RuntimeMaxSec reduced accordingly.
