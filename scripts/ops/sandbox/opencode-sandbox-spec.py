@@ -131,6 +131,7 @@ def build_bwrap_command(
     bwrap_binary: str = BWRAP_BIN,
     work_root: str = DEFAULT_WORK_ROOT,
     child_env=None,
+    drop_capabilities=False,
 ) -> list:
     """Comando Bubblewrap de la propuesta (montaje mínimo).
 
@@ -152,6 +153,10 @@ def build_bwrap_command(
         "--new-session",
         "--clearenv",
     ]
+    if type(drop_capabilities) is not bool:
+        raise SandboxSpecError("invalid capability policy")
+    if drop_capabilities:
+        cmd.extend(["--cap-drop", "ALL"])
     for key in sorted(env):
         cmd.extend(["--setenv", key, env[key]])
     for source in RO_BIND_SYSTEM:
@@ -191,7 +196,7 @@ def validate_command(cmd, work_root: str = DEFAULT_WORK_ROOT, *, bwrap_binary: s
     for required in ("--unshare-all", "--die-with-parent", "--new-session", "--clearenv"):
         if flag_count(required) != 1:
             violations.append(f"falta {required} (exactamente una vez)")
-    for forbidden in ("--share-net", "--dev-bind", "--dev-bind-try", "--bind-try"):
+    for forbidden in ("--share-net", "--dev-bind", "--dev-bind-try", "--bind-try", "--cap-add"):
         if flag_count(forbidden):
             violations.append(f"bandera prohibida presente: {forbidden}")
 
