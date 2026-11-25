@@ -82,6 +82,8 @@ profile cv-release-pilot-bootstrap flags=(attach_disconnected,mediate_deleted) {
   /proc/sys/user/max_user_namespaces r,
   /proc/[0-9]*/{uid_map,gid_map,setgroups} rw,
   /proc/{,**} r,
+  # Opening the root directory is necessary for trusted mount setup.
+  / r,
   /usr/{,**} r,
   /usr/lib/** mr,
   /usr/lib64/** mr,
