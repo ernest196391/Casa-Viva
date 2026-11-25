@@ -1,3 +1,9 @@
+## CV-AUTO-002 — Docker image confirmed and integral request preparation (2026-11-25)
+
+- Hostinger directly observed Docker active and local postgres:17.6-alpine image sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94; no pull needed.
+- 2f715cb adds immutable-image, container isolation and startup-failure cleanup regressions. CI 45725133048 queued at observation; earlier 45724775684 validate and PostgreSQL passed.
+- Operator integral run must use exact reviewed revision, private temporary clone, one fresh owner-authored request, existing mailbox credential locally only, temporary AppArmor profiles and disposable Docker DB. No activation/migration of production. Actual integration not yet certified.
+
 ## CV-AUTO-002 — Hostinger integral preflight and Docker fixture (2026-11-25)
 
 - Hostinger terminal directly observed: postgres OS account unavailable, Docker binary /usr/bin/docker available, mailbox credential key present in /root/supervisor/.env (value not accessed), available RAM 2730 MiB, disk free 12 GB.
