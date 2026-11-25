@@ -131,6 +131,46 @@ class Tests(unittest.TestCase):
             self.assertFalse(result['production_authorized'])
             self.assertEqual(self.box.run_release_pilot.call_count,3)
             self.assertEqual(list(root.iterdir()),[])
+    def test_host_observed_command_requires_ack(self):
+        cmd=b.confined_command(hashlib.sha256(b.SYNTHETIC_SOURCE).hexdigest(),self.facts,host_observed=True)
+        self.assertEqual(cmd[-1],'--host-observed')
+        self.assertLess(cmd[5].index('sys.stdin.buffer.read(1)'),cmd[5].index('exec(compile(body'))
+    def test_host_observed_pilot_rejects_missing_and_mismatched_identity(self):
+        from unittest.mock import patch
+        from contextlib import contextmanager
+        real_uid=os.geteuid()
+        original=b.stage_candidate
+        @contextmanager
+        def stage(*args,**kwargs):
+            with patch.object(b.os,'geteuid',return_value=real_uid):
+                with original(*args,**kwargs) as work:
+                    yield work
+        for mode in ('valid','wrong_pid','missing','changed_invocation'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+                statuses=iter(('healthy','degraded','unknown'))
+                count=[0]
+                def launch(*args,**kwargs):
+                    transcript=self.transcript(next(statuses))
+                    accepted=kwargs['preflight'](transcript.splitlines()[0].encode())
+                    return (0,transcript) if accepted else (125,'rejected')
+                def sample(unit,uid):
+                    count[0]+=1
+                    if mode=='missing':
+                        return None
+                    return dict(host_pid=10+count[0],namespace_pid=3 if mode=='wrong_pid' else 2,
+                                start_ticks=123+count[0],uid=uid,invocation=('b' if mode=='changed_invocation' and count[0]>1 else 'a')*32,
+                                scope='synthetic_only',production_authorized=False)
+                self.box.run_release_pilot.side_effect=launch
+                with patch.object(b.os,'geteuid',return_value=0), patch.object(b,'stage_candidate',stage):
+                    result=b.run_synthetic_pilot(sandbox=self.box,uid=1000,gid=1001,
+                        work_root=Path(tmp),unit='cv-release-pilot-1-2.service',host_sampler=sample)
+                self.assertEqual(result['ok'],mode=='valid')
+                self.assertFalse(result['production_authorized'])
+                self.assertEqual(list(Path(tmp).iterdir()),[])
+                if mode=='valid':
+                    self.assertEqual(len(result['host_measurements']),3)
+                    self.assertEqual(result['host_measurements'][0]['host_pid'],11)
+
     def test_synthetic_pilot_refuses_root_child(self):
         self.assertFalse(b.run_synthetic_pilot(sandbox=self.box,uid=0,gid=1001)['ok'])
         self.box.run_release_pilot.assert_not_called()
