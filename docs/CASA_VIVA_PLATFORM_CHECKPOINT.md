@@ -1,3 +1,10 @@
+## CV-AUTO-002 — real mailbox round trip PASS receipt (2026-11-25)
+
+- Exact revision 0ba3f16387aa28440b9569e004d5690aff3df79e, Hostinger disposable clone /tmp/cv-integral.5GSAOi/source.
+- Request issue #3 comment 7178243950 created 23:57:36 UTC, immutable owner ID 175450950, OWNER association, unedited. Real automatic terminal result comment 7178255793 created 23:58:17 UTC, outcome passed, task_public_id 1, matching request and SHA. Round trip 41 seconds from request creation to result publication.
+- At observation the terminal had not yet emitted INTEGRAL_EXIT or final cleanup. Remote receipt proves publication, not final database acknowledgement or Docker/AppArmor cleanup. Full integral certification pending those observations.
+- No production activation or migration requested; disposable fixture only. CI 45725133048 nonterminal. Zero additional spend.
+
 ## CV-AUTO-002 — Docker image confirmed and integral request preparation (2026-11-25)
 
 - Hostinger directly observed Docker active and local postgres:17.6-alpine image sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94; no pull needed.
