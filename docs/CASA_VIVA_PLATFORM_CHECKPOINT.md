@@ -1,3 +1,7 @@
+## CV-AUTO-001 — proyección y observación advisory (2026-11-25)
+
+- Base 422db02. 3e39e3e conecta summary normalizado al mismo lanzador con handshake host obligatorio en modo observation_only, contrasta resultado con referencia y no autoriza producción; 2e487a2 añade 6561 combinaciones del contrato original y entradas inválidas, 2e4aa34 CI, 1683d0e prueba handshake y discrepancias. El contrato del buzón y puente root permanecen intactos. Pruebas pendientes de CI y observación real; no se ha conectado a producción ni existe entrada remota nueva. Reversión: revertir commits de rama. Costo nuevo cero.
+
 ## CV-AUTO-001 — piloto sincronizado con observador host (2026-11-25)
 
 - f3dbc60, 9281589, 0b9f574: el prefijo confiable del fixture mide bytes, espera ACK por stdin; el lanzador observa PID host/NSpid/UID, InvocationID y hash de staging antes de ACK. 9bf587c regresiones de identidad, fba479a rechazo en errores o vencimiento, 7f68ad4 pruebas de tuberías reales. Solo fixture fijo, no recibo productivo; CI y ejecución VPS pendientes. El puente root sigue sin separación instalada. No cambios de producción ni gasto adicional. Reversión: revertir commits en rama y retirar únicamente perfiles y workspace temporales del piloto.
