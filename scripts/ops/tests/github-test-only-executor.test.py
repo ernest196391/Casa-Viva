@@ -33,12 +33,12 @@ class Tests(unittest.TestCase):
             self.assertIn(key,prefix)
         self.assertIn(' (enforce)',prefix)
         self.assertIn("sys.argv[1:]!=['--fixed-test']",prefix)
-    def test_host_unit_rejects_privileges(self):
+    def test_host_unit_has_minimal_parent_capabilities(self):
         unit=(HERE/'sandbox/cv-test-only-candidate.service').read_text()
-        for key in ('NoNewPrivileges=yes','CapabilityBoundingSet=','AmbientCapabilities=',
+        for key in ('NoNewPrivileges=yes','CapabilityBoundingSet=CAP_CHOWN CAP_SETUID CAP_SETGID CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_KILL','AmbientCapabilities=',
                     'MemoryMax=256M','TasksMax=32','ConditionPathExists=/etc/control-os/test-only-certified'):
             self.assertIn(key,unit)
-        self.assertNotIn('\\n[Install]\\n',unit)
+        self.assertNotIn('\n[Install]\n',unit)
     def test_fence(self):
         c=self.claim();calls=[]
         def api(method,path,data):

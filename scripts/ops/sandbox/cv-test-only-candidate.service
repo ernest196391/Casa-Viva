@@ -22,7 +22,10 @@ TimeoutStopSec=5
 KillMode=control-group
 UMask=0077
 NoNewPrivileges=yes
-CapabilityBoundingSet=
+# Trusted parent only: hand_over (CHOWN), Popen identity switch (SETUID/SETGID),
+# read root-owned Git/credentials (DAC_READ_SEARCH), cleanup (DAC_OVERRIDE),
+# signal the distinct cvdev child on timeout (KILL). Candidate drops ALL in bwrap.
+CapabilityBoundingSet=CAP_CHOWN CAP_SETUID CAP_SETGID CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_KILL
 AmbientCapabilities=
 PrivateDevices=yes
 ProtectHome=read-only

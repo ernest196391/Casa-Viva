@@ -34,6 +34,7 @@ with open('/proc/self/status') as f:
     fields=dict(line.split(':',1) for line in f if ':' in line)
 if os.getuid()==0 or os.geteuid()==0 or fields.get('NoNewPrivs','').strip()!='1':
     raise SystemExit(126)
+# bwrap --cap-drop ALL must clear all five sets. No candidate bytes on failure.
 if any(int(fields.get(k,'1').strip(),16) for k in ('CapEff','CapPrm','CapInh','CapAmb','CapBnd')):
     raise SystemExit(126)
 if sys.argv[1:]!=['--fixed-test']:
