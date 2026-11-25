@@ -1,3 +1,10 @@
+## CV-AUTO-002 — piloto fijo local con evidencia de host (2026-11-25)
+
+- Confirmado GitHub: solicitud health 7177709087 → respuesta 7177723956 a los 39s, bridge active, recovery receiver y nexofirma online, principal stopped. No repetir health. Inventario 7177710544 aún sin respuesta correlacionada al consultar.
+- CI 45722238330 (instalador 716b56d) y 45722279157 (9272c362) completos SUCCESS; cinco trabajos, paso Python incluido.
+- 5c117ed: piloto ejecutable SOLO operador local, systemd-run transitorio sin red, límites memoria/CPU/PIDs, NNP, reusa CV-AUTO-001 fixture fijo, observer host y sandbox; valida tres mediciones, misma InvocationID, UID no root, cinco conjuntos caps cero, label enforce, y exige limpieza de unidad única. Dependencias añadidas al staging, seis regresiones en CI. No modifica receptor existente ni Hermes, no toca DB ni release_apply. CAP_SYS_PTRACE del observador confiable propuesto para lectura de /proc ajeno; no se ha certificado su necesidad ni suficiencia, candidato sigue obligado a cero capacidades; revisar antes de cualquier instalación.
+- Pendiente CI del piloto, ejecución real supervisada desde bundle revisado, confirmar perfiles y compatibilidad kernel/systemd. No existe acción remota piloto instalada y no se ha ejecutado en Hostinger. No certificar retorno automático del piloto todavía. Sin migración, activación ni gasto.
+
 ## CV-AUTO-002 — buzón existente e instalación reversible offline (2026-11-25)
 
 - Buzón privado #3 verificado abierto, nombre exacto y repo privado. Última salud histórica 7172321110 (19:27:23Z) bridge active, recovery receiver y nexofirma online, vivabot principal stopped; no equivale a conexión WhatsApp certificada. Nuevas solicitudes read-only health 7177709087 y agent_inventory 7177710544 (23:32Z, TTL 15min), sin resultado correlacionado al consultar. No repetir antes de expirar.
