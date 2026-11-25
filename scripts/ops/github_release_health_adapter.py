@@ -99,7 +99,7 @@ def authenticated_observer_probe(observer, key, expected_digest, expected_commit
         payload = json.dumps(report, sort_keys=True, separators=(',',':'), allow_nan=False).encode('utf-8')
         if len(payload)>2048:
             return None
-        expected_mac = hmac.new(key, b'CV-RELEASE-HEALTH-V1\\x00'+payload, hashlib.sha256).hexdigest()
+        expected_mac = hmac.new(key, b'CV-RELEASE-HEALTH-V1\x00'+payload, hashlib.sha256).hexdigest()
         if not hmac.compare_digest(mac,expected_mac):
             return None
         return validate_observation(report,expected_digest,expected_commit,epoch,nonce,now_ns=now_ns)
