@@ -1,3 +1,7 @@
+## CV-AUTO-001 — compatibilidad transporte PM2 7 (2026-11-25)
+
+- Hostinger d8540db49e82c06a75367ceac2fad48ab74f97a4: 6 regresiones OK (0.012s), daemon_identity (2429462,241763921,2049,262257) verificada; RPC runtime_error, tres unknown, bridge active; precheck bloqueó candidato, perfil original OK y limpieza. PM2 7.0.4 distribuye transportes en modules/pm2-axon y modules/pm2-axon-rpc, no necesariamente dependencias npm externas. 5bd1f5d prioriza módulos internos, conserva compatibilidad legacy y añade diagnóstico 25; b6f268c prueba ambos layouts y ausencia mediante Node real. Hipótesis causal apoyada por distribución pública, pendiente confirmar ejecución real. No reinicio ni producción ni gasto. Reversión: revertir rama y eliminar recursos temporales únicamente.
+
 ## CV-AUTO-001 — identidad PM2 sin archivo PID (2026-11-25)
 
 - Hostinger: PM2 7.0.4 daemon PID 2429462, rpc.sock y pub.sock escuchando, rpc.sock root:root 775, pm2.pid ausente. Causa confirmada del rechazo anterior. 8fe9a79 sustituye dependencia PID por SO_PEERCRED, inicio de proceso, título PM2 y dev/inode socket; exige identidad estable antes/después del RPC. 383e74a regresiones sin archivo PID, socket sustituido, epoch cambiado, daemon ausente y peer incorrecto. Pendiente CI nuevo y prueba real --local-observation; no producción, no reinicio, no gasto. Reversión: revertir rama y limpiar solo recursos temporales. No confundir identidad observada en dos conexiones con autenticación de cada conexión RPC.
