@@ -55,7 +55,7 @@ begin
  or r.auto_merge or r.base_sha is distinct from t.payload->'test_only'->>'sha'
  then raise exception 'invalid fence'; end if;
  packet:=jsonb_build_object('outcome',p_outcome,'run_id',r.id,'sha',r.base_sha);
- if t.status in ('done','failed') and t.result=packet then return packet; end if;
+ if t.status in ('done','failed') and (t.result-'github_report_id')=packet then return packet; end if;
  if t.status is distinct from 'running' or r.status is distinct from 'testing'
  or t.claimed_by is distinct from p_worker or t.claim_expires_at is null
  or t.claim_expires_at<=moment or t.deadline_at<=moment then raise exception 'stale fence'; end if;
