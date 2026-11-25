@@ -1,3 +1,10 @@
+## CV-AUTO-002 — preparación reversible y auditoría read-only (2026-11-25)
+
+- edec53d: `github_test_only_host_preflight.py` audita sin mutaciones binarios git/python3.12/aa-exec/bwrap, perfiles E3 AppArmor en enforce, Git local y sintaxis de unidad con systemd-analyze verify; devuelve `runtime_certified=false` y `activation=false` siempre. Un resultado positivo permite solo preparar piloto reversible, nunca activar producción.
+- b56016d + 1ddd968: regresiones de dependencias completas, perfil ausente, unidad inválida, acceso a perfil denegado; fe9555f agrega inspector al staging offline; 324f061 integra nuevo test en CI.
+- Estado evidencia: run 45720043025 sobre 99438e4 tenía test Python Ops verde y SQL desechable verde, resto en curso; nuevo HEAD 324f061 pendiente de CI al consultar. No hay resultados Hostinger de auditoría ni ejecución de un candidato test-only con NNP/5 capacidades cero comprobados en el kernel. No migraciones, no activación, cero gasto nuevo.
+- Seguimiento: recopilar resultados de CI hasta terminal, corregir fallos verificables, ejecutar inspector solo lectura en VPS a través del puente autorizado, verificar compatibilidad de perfiles y captura independiente en el kernel antes de certificar E2E. El servicio dedicado continúa sin [Install], condicionado a marca explícita y apagado.
+
 ## CV-AUTO-002 — AppArmor/NNP hardening, 2026-11-25 (SIN INSTALAR)
 
 - Base a5289639, PR #299 draft. CI base run 45700124954 COMPLETO SUCCESS: validate, integration, postgres, browser y content-studio. No equiparar CI con certificación VPS.
