@@ -203,12 +203,14 @@ def parse_measured_fixture(raw, digest, uid):
     return parse_response(lines[1]),m
 
 
-def run_synthetic_pilot(*, sandbox, uid, gid, unit=None, host_sampler=None, work_root=Path('/var/lib/control-os-dev/work')):
+def run_synthetic_pilot(*, sandbox, uid, gid, unit=None, host_sampler=None, observation=None, work_root=Path('/var/lib/control-os-dev/work')):
     """Run only the fixed fixture; never issue production health receipts."""
     from github_release_health_emitter import measure_synthetic_contract
     import time
     if os.geteuid() != 0 or type(uid) is not int or type(gid) is not int or uid<=0 or gid<=0:
         return {'ok':False,'scope':'synthetic_only','reason':'identity_required'}
+    if observation is not None and (unit is None or not callable(host_sampler)):
+        return {'ok':False,'scope':'observation_only','production_authorized':False}
     digest = hashlib.sha256(SYNTHETIC_SOURCE).hexdigest()
     epoch = (os.getpid(), time.monotonic_ns())
     try:
@@ -252,8 +254,18 @@ def run_synthetic_pilot(*, sandbox, uid, gid, unit=None, host_sampler=None, work
                         host_measurements.append(observed[0])
                     measurements.append(measurement)
                     return result
-                outcome=measure_synthetic_contract(digest,'sha256:'+digest,epoch,
-                    identity=identity,artifact_digest=artifact_digest,run_case=run_case)
+                if observation is None:
+                    outcome=measure_synthetic_contract(digest,'sha256:'+digest,epoch,
+                        identity=identity,artifact_digest=artifact_digest,run_case=run_case)
+                else:
+                    from github_release_health_projection import project_summary, advisory_reference
+                    facts=project_summary(observation)
+                    expected=advisory_reference(facts)
+                    result=run_case(facts)
+                    outcome=(result['status']==expected) if result is not None and artifact_digest()==digest else None
+                    return {'ok':outcome is True,'scope':'observation_only','functional_ok':outcome,
+                            'status':result['status'] if outcome is True else 'unknown',
+                            'digest':digest,'production_authorized':False,'host_measurements':host_measurements}
         return {'ok':outcome is True,'scope':'synthetic_only','functional_ok':outcome,
                 'digest':digest,'production_authorized':False,'measurements':measurements,'host_measurements':host_measurements}
     except (OSError,ValueError,TypeError,RuntimeError):
