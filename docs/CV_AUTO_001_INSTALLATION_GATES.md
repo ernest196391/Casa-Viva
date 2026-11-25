@@ -45,3 +45,7 @@ This pilot tests E3 only. The current health_summary candidate is advisory;
 do not use a receipt from this pilot to confirm the production bridge.
 The full contingency module is still privileged and its release entry
 must remain blocked.
+
+## E3 synthetic evidence — 2026-11-25
+
+Revision `f76fb687eef1413aefc1697438bb961eb3f85996`: Hostinger pilot exit 0, limits OK, 7.058 s, reported memory peak 764 KiB. Visible checks confirm network denial, all capability sets zero and NoNewPrivileges, and exact `cv-release-pilot-bootstrap//&cv-release-pilot-candidate (enforce)` label. Overall verdict implies all ten checks passed. Original profile hash OK; temporary profiles removed. The synthetic Python prefix self-stacks before fixed test logic, not before interpreter startup. This is **not** certification of arbitrary candidate execution, production release, or independent functional health. Public candidate execution and release application must remain closed. A production observer needs independent evidence of the exact loaded revision and functional path; process active/status or a signed self-report is insufficient. Do not copy or install the pilot policies as production rules.
