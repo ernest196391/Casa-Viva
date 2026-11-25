@@ -387,6 +387,11 @@ class VerifyLogicTests(unittest.TestCase):
         report = verify.run_checks(WORKSPACE, fake_runner(outcomes))
         self.assertEqual(report["verdict"], verify.VERDICT_NO_OPERATIVO)
         self.assertEqual(set(report["checks"]), {"bootstrap"})
+        self.assertEqual(report["checks"]["bootstrap"]["stderr"], "bwrap: setting up uid map: Permission denied")
+
+    def test_bootstrap_diagnostic_is_bounded(self):
+        report = verify.run_checks(WORKSPACE, fake_runner({"bootstrap": (1, b"", b"x"*4096)}))
+        self.assertEqual(len(report["checks"]["bootstrap"]["stderr"]), 512)
 
     def test_mid_check_without_answer_is_failed(self):
         outcomes = {"home_masked": (1, b"", b"cualquier error")}
