@@ -17,6 +17,10 @@ class Tests(unittest.TestCase):
     def test_fixed_command(self):
         cmd=m.command("cv-release-pilot-123-456.service")
         self.assertEqual(cmd[-1],"--synthetic-pilot")
+        caps=next(x for x in cmd if x.startswith("--property=CapabilityBoundingSet="))
+        self.assertNotIn("CAP_SYS_PTRACE",caps)
+        self.assertNotIn("CAP_DAC_READ_SEARCH",caps)
+        self.assertEqual(set(caps.split("=",2)[-1].split()), {"CAP_CHOWN","CAP_SETUID","CAP_SETGID","CAP_DAC_OVERRIDE","CAP_KILL"})
         for p in ("NoNewPrivileges=yes","PrivateNetwork=yes","MemoryMax=256M","TasksMax=32","CPUQuota=50%"):
             self.assertIn("--property="+p,cmd)
         with self.assertRaises(ValueError):m.command("cv-ops-bridge.service")
