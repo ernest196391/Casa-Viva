@@ -57,7 +57,7 @@ def validate_observation(report, expected_digest, expected_commit, epoch, nonce,
         return None
     if not isinstance(expected_digest,str) or not re.fullmatch(r'[0-9a-f]{64}',expected_digest):
         return None
-    if not isinstance(expected_commit,str) or not re.fullmatch(r'[0-9a-f]{40}',expected_commit):
+    if not isinstance(expected_commit,str) or not (re.fullmatch(r'[0-9a-f]{40}',expected_commit) or expected_commit == 'sha256:' + expected_digest):
         return None
     if not isinstance(nonce,str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}',nonce):
         return None
