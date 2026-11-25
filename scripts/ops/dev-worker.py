@@ -1093,6 +1093,17 @@ def main():
             fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
+        # Dedicated invocation of the SAME worker; never claim legacy work in
+        # the bounded test-only unit. The ordinary service remains unchanged.
+        if os.environ.get("CV_DEV_TEST_ONLY_MODE") == "1":
+            if os.environ.get("CV_TEST_ONLY_SANDBOX_CERTIFIED") != "1":
+                return
+            if "0::/system.slice/cv-test-only-candidate.service" not in Path("/proc/self/cgroup").read_text().splitlines():
+                return
+            from github_test_only_executor import worker_once
+            from github_test_only_launcher import launch
+            worker_once(api, launch)
+            return
         monitor_runs()
         claims = api("POST", "rpc/ops_claim_dev_task", {"p_worker": WORKER}) or []
         if claims:
