@@ -61,7 +61,24 @@ def supervise(*, root=ROOT, process_identity, restart, health_probe):
         epoch_before = process_identity()
         if not _valid_process(epoch_before):
             return {'ok': False, 'state': state, 'reason': 'process_unknown'}
-        # Persist one restart attempt per revision/state to prevent unattended loops.\n        # Hold the release lock while claiming the attempt; the updater uses it too.\n        marker = root / '.github-release-supervisor-attempt'\n        key = (before['sha'] + ' ' + state + ' ' + expected_digest + '\\n').encode()\n        try:\n            with release_lock(root):\n                if load_state(root) != before or _identity(root) != expected_digest:\n                    return {'ok': False, 'reason': 'observation_stale'}\n                try:\n                    existing = read_private(marker, 256)\n                except FileNotFoundError:\n                    existing = None\n                if existing == key:\n                    return {'ok': False, 'state': state, 'reason': 'restart_already_attempted'}\n                atomic_file(marker, key)\n        except BlockingIOError:\n            return {'ok': False, 'reason': 'release_busy'}\n        # Cannot assume that a still-running old process serves the newly installed file.
+        # Persist one restart attempt per revision/state to prevent unattended loops.
+        # Hold the release lock while claiming the attempt; the updater uses it too.
+        marker = root / '.github-release-supervisor-attempt'
+        key = (before['sha'] + ' ' + state + ' ' + expected_digest + '\n').encode()
+        try:
+            with release_lock(root):
+                if load_state(root) != before or _identity(root) != expected_digest:
+                    return {'ok': False, 'reason': 'observation_stale'}
+                try:
+                    existing = read_private(marker, 256)
+                except FileNotFoundError:
+                    existing = None
+                if existing == key:
+                    return {'ok': False, 'state': state, 'reason': 'restart_already_attempted'}
+                atomic_file(marker, key)
+        except BlockingIOError:
+            return {'ok': False, 'reason': 'release_busy'}
+        # Cannot assume that a still-running old process serves the newly installed file.
         # The independent adapter must restart explicitly for each verification attempt.
         # A restart failure is unknown, not a candidate failure.
         if restart() is not True:
