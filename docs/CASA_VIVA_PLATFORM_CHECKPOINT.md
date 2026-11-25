@@ -1,3 +1,7 @@
+## CV-AUTO-001 — entrada local de observación (2026-11-25)
+
+- 29770cd/cbc58b9 recolector fijo PM2 RPC getMonitorData sin CLI ni arranque de daemon, Systemd ActiveState; 3e26b77 entrada --local-observation reutiliza fixture fijo y handshake; bd90798 regresiones y c0972f9 CI. Pendiente verificar compatibilidad real de RPC del PM2 instalado y CI, no instalado en producción. No repetir piloto sintético; prueba reversible con datos reales solo tras CI. Reversión: retirar recursos temporales y revertir commits de rama. Costo nuevo cero.
+
 ## CV-AUTO-001 — proyección y observación advisory (2026-11-25)
 
 - Base 422db02. 3e39e3e conecta summary normalizado al mismo lanzador con handshake host obligatorio en modo observation_only, contrasta resultado con referencia y no autoriza producción; 2e487a2 añade 6561 combinaciones del contrato original y entradas inválidas, 2e4aa34 CI, 1683d0e prueba handshake y discrepancias. El contrato del buzón y puente root permanecen intactos. Pruebas pendientes de CI y observación real; no se ha conectado a producción ni existe entrada remota nueva. Reversión: revertir commits de rama. Costo nuevo cero.
