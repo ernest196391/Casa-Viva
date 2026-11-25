@@ -71,12 +71,14 @@ def command(comment, now):
             fields = fields | {'product'}
             if not valid_product(data.get('product')):
                 return None
-        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply', 'hermes_probe_card') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
             return None
         if action == 'release_apply' and (not isinstance(data['sha'], str) or not re.fullmatch(r'[0-9a-f]{40}', data['sha'])):
             return None
         created, expires = timestamp(comment['created_at']), timestamp(data['expires_at'])
         if not created <= now < expires <= created + 1800:
+            return None
+        if action == 'hermes_probe_card' and expires > created + 600:
             return None
         return data
     except (KeyError, TypeError, ValueError, AttributeError):
@@ -506,9 +508,48 @@ def wa_catalog_case():
         return {'ok': False, 'reason': 'wa_catalog_case_unavailable'}
 
 
+def hermes_probe_card(data, now):
+    """Fixed blocked card; never dispatch. Return only allowlisted metadata."""
+    failure = {'ok': False, 'reason': 'hermes_probe_unavailable'}
+    try:
+        if data.get('action') != 'hermes_probe_card' or set(data) != {'action', 'nonce', 'expires_at'}:
+            return failure
+        nonce = data['nonce']
+        if not isinstance(nonce, str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', nonce):
+            return failure
+        if not 0 < timestamp(data['expires_at']) - now <= 600:
+            return failure
+        argv = ['/usr/bin/sudo', '-n', '-u', 'hermes', '-H', '--',
+                '/home/hermes/.local/bin/hermes', 'kanban', '--board', 'default',
+                'create', 'CV bridge connectivity probe', '--body',
+                'Inert connectivity test. Keep blocked. Do not dispatch.',
+                '--assignee', 'default', '--workspace', 'scratch',
+                '--initial-status', 'blocked', '--idempotency-key', 'cv-probe-' + nonce,
+                '--max-runtime', '90s', '--max-retries', '1',
+                '--completion-contract', 'local-only', '--json']
+        result = subprocess.run(argv, cwd='/home/hermes', env={'PATH': '/usr/bin:/bin', 'HOME': '/root'},
+                                stdin=subprocess.DEVNULL, capture_output=True, timeout=20, check=False)
+        if result.returncode != 0 or len(result.stdout) > 16384:
+            return failure
+        card = json.loads(result.stdout)
+        if not isinstance(card, dict) or not isinstance(card.get('id'), str) or not re.fullmatch(r't_[0-9a-f]{8}', card['id']):
+            return failure
+        if any(card.get(k) != v for k, v in {'title': 'CV bridge connectivity probe',
+                'body': 'Inert connectivity test. Keep blocked. Do not dispatch.',
+                'assignee': 'default', 'status': 'blocked', 'workspace_kind': 'scratch',
+                'max_runtime_seconds': 90, 'max_retries': 1, 'completion_contract': 'local-only'}.items()):
+            return failure
+        if any(k not in card or card[k] is not None for k in ('started_at', 'session_id', 'result')):
+            return failure
+        return {'ok': True, 'card_id': card['id'], 'status': 'blocked'}
+    except (OSError, ValueError, TypeError, AttributeError, KeyError, subprocess.TimeoutExpired):
+        return failure
+
+
 class Contingency:
     def __init__(self, env, health, directory=Path('/var/lib/cv-ops-bridge-contingency'), api=github_api, clock=time.time):
         self.cfg = config(env)
+        self.hermes_probe_enabled = env.get('CV_GITHUB_HERMES_PROBE_ENABLED') == '1'
         self.receiver_classification_enabled = env.get('CV_GITHUB_RECEIVER_CLASSIFICATION_ENABLED') == '1'
         self.receiver_contract_enabled = env.get('CV_GITHUB_RECEIVER_CONTRACT_ENABLED') == '1'
         self.preflight_enabled = env.get('CV_GITHUB_DISPATCH_PREFLIGHT_ENABLED') == '1'
@@ -559,7 +600,11 @@ class Contingency:
             return 'blocked'
         for comment in comments:
             data = command(comment, now)
-            if health_only and (not data or data['action'] != 'health'):
+            if not data:
+                continue
+            if data['action'] == 'hermes_probe_card' and not self.hermes_probe_enabled:
+                continue
+            if health_only and data['action'] not in ('health', 'hermes_probe_card'):
                 continue
             if not data or (data['action'] == 'receiver_classification' and not self.receiver_classification_enabled) or (data['action'] == 'receiver_contract' and not self.receiver_contract_enabled) or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
                 continue
@@ -567,6 +612,8 @@ class Contingency:
             if data['action'] == 'health':
                 summary = self.health()
                 safe = health_summary(summary[0], summary[1])
+            elif data['action'] == 'hermes_probe_card':
+                safe = hermes_probe_card(data, self.clock())
             elif data['action'] == 'receiver_classification':
                 safe = receiver_classification(data['sha256'])
             elif data['action'] == 'receiver_contract':
