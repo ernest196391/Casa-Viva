@@ -85,7 +85,6 @@ def stage_candidate(source, expected_digest, *, uid, gid, work_root=Path('/var/l
         body=f.read(65537)
     if not body or len(body)>65536 or hashlib.sha256(body).hexdigest()!=expected_digest:
         raise ValueError('artifact_mismatch')
-    compile(body,'candidate.py','exec')
     work=Path(tempfile.mkdtemp(prefix='run-release-',dir=root))
     target=work/'candidate.py'
     try:
@@ -154,3 +153,40 @@ def confined_command(expected_digest, facts):
     payload=request_bytes('health_summary',facts)
     return ['/usr/bin/python3.12','-I','-S','-B','-c',PREFLIGHT_PREFIX,
             expected_digest,payload.decode('ascii')]
+
+# This exact harmless fixture is the only artifact admitted by the pilot API.
+SYNTHETIC_SOURCE = b"""import json, sys
+facts = json.loads(sys.argv[1])["facts"]
+values = list(facts["pm2"].values())
+status = "unknown" if "unknown" in values or facts["bridge"] == "unknown" else (
+    "healthy" if all(v == "online" for v in values) and facts["bridge"] == "active" else "degraded")
+print(json.dumps({"status":status}))
+"""
+
+def run_synthetic_pilot(*, sandbox, uid, gid, work_root=Path('/var/lib/control-os-dev/work')):
+    """Run only the fixed fixture; never issue production health receipts."""
+    from github_release_health_emitter import measure_synthetic_contract
+    import time
+    if os.geteuid() != 0 or type(uid) is not int or type(gid) is not int or uid<=0 or gid<=0:
+        return {'ok':False,'scope':'synthetic_only','reason':'identity_required'}
+    digest = hashlib.sha256(SYNTHETIC_SOURCE).hexdigest()
+    epoch = (os.getpid(), time.monotonic_ns())
+    try:
+        with tempfile.TemporaryDirectory(prefix='cv-release-fixture-') as temp:
+            source=Path(temp)/'candidate.py'
+            source.write_bytes(SYNTHETIC_SOURCE)
+            source.chmod(0o600)
+            with stage_candidate(source,digest,uid=uid,gid=gid,work_root=work_root) as work:
+                def artifact_digest():
+                    return hashlib.sha256((work/'candidate.py').read_bytes()).hexdigest()
+                def identity():
+                    return epoch if os.getpid()==epoch[0] else None
+                def run_case(facts):
+                    rc,out=sandbox.run_release_pilot(work,facts,digest,uid=uid,gid=gid)
+                    return parse_response(out) if rc==0 else None
+                outcome=measure_synthetic_contract(digest,'sha256:'+digest,epoch,
+                    identity=identity,artifact_digest=artifact_digest,run_case=run_case)
+        return {'ok':outcome is True,'scope':'synthetic_only','functional_ok':outcome,
+                'digest':digest,'production_authorized':False}
+    except (OSError,ValueError,TypeError,RuntimeError):
+        return {'ok':False,'scope':'synthetic_only','functional_ok':None,'production_authorized':False}
