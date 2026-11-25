@@ -72,14 +72,14 @@ def command(comment, now):
             fields = fields | {'product'}
             if not valid_product(data.get('product')):
                 return None
-        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply', 'hermes_probe_card', 'hermes_offline_tests') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply', 'hermes_probe_card', 'hermes_offline_tests', 'hermes_dialog_tests', 'hermes_fin_contract') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
             return None
         if action == 'release_apply' and (not isinstance(data['sha'], str) or not re.fullmatch(r'[0-9a-f]{40}', data['sha'])):
             return None
         created, expires = timestamp(comment['created_at']), timestamp(data['expires_at'])
         if not created <= now < expires <= created + 1800:
             return None
-        if action in ('hermes_probe_card', 'hermes_offline_tests') and expires > created + 600:
+        if action in ('hermes_probe_card', 'hermes_offline_tests', 'hermes_dialog_tests', 'hermes_fin_contract') and expires > created + 600:
             return None
         return data
     except (KeyError, TypeError, ValueError, AttributeError):
@@ -552,19 +552,24 @@ OFFLINE_FILES = ('test/helpers/cv-fin-receiver.mjs', 'test/helpers/cv-fin-summar
                  'test/cv-fin-receiver.test.mjs', 'test/cv-fin-summary.test.mjs')
 
 
+DIALOG_COMMIT = 'd0720b0d4fd5b2ce1006f5ed3d20786d4565f852'
+DIALOG_FILES = ('test/helpers/cv-bot-dialog.mjs', 'test/cv-bot-dialog.test.mjs')
+
+
 def hermes_offline_tests(data, now):
     """Fixed local revision, no fetch, no model, no raw output."""
     failure = {'ok': False, 'reason': 'offline_tests_failed'}
     try:
-        if set(data) != {'action', 'nonce', 'expires_at'} or data['action'] != 'hermes_offline_tests':
+        if set(data) != {'action', 'nonce', 'expires_at'} or data['action'] not in ('hermes_offline_tests', 'hermes_dialog_tests'):
             return failure
         if not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']) or not 0 < timestamp(data['expires_at']) - now <= 600:
             return failure
+        commit, files, expected = (DIALOG_COMMIT, DIALOG_FILES, 14) if data['action'] == 'hermes_dialog_tests' else (OFFLINE_COMMIT, OFFLINE_FILES, 17)
         env = {'PATH': '/usr/bin:/bin', 'HOME': '/root', 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_TERMINAL_PROMPT': '0'}
         with tempfile.TemporaryDirectory(prefix='cv-offline-', dir='/var/tmp') as tmp:
             stage = Path(tmp)
-            for name in OFFLINE_FILES:
-                r = subprocess.run(['/usr/bin/git', '--no-replace-objects', '-C', '/root/vivabot', 'show', OFFLINE_COMMIT + ':' + name],
+            for name in files:
+                r = subprocess.run(['/usr/bin/git', '--no-replace-objects', '-C', '/root/vivabot', 'show', commit + ':' + name],
                                    env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=5)
                 if r.returncode or not 0 < len(r.stdout) <= 65536:
                     return failure
@@ -586,24 +591,57 @@ def hermes_offline_tests(data, now):
                     '-p', 'SystemCallErrorNumber=EPERM',
                     '-p', 'BindReadOnlyPaths=' + tmp + ':/opt/cv-offline-tests',
                     '/usr/bin/node', '--test', '--test-reporter=tap',
-                    '/opt/cv-offline-tests/test/cv-fin-receiver.test.mjs',
-                    '/opt/cv-offline-tests/test/cv-fin-summary.test.mjs']
+                    *('/opt/cv-offline-tests/' + name for name in files if name.endswith('.test.mjs'))]
             result = subprocess.run(argv, env={'PATH': '/usr/bin:/bin', 'HOME': '/root'},
                                     stdin=subprocess.DEVNULL, capture_output=True, timeout=45)
             if result.returncode or len(result.stdout) > 65536:
                 return failure
             out = result.stdout.decode('utf-8', errors='strict')
-            for line in ('# tests 17', '# pass 17', '# fail 0', '# skipped 0', '# cancelled 0', '# todo 0'):
+            for line in (f'# tests {expected}', f'# pass {expected}', '# fail 0', '# skipped 0', '# cancelled 0', '# todo 0'):
                 if out.splitlines().count(line) != 1:
                     return failure
-            return {'ok': True, 'commit': OFFLINE_COMMIT, 'tests': 17, 'passed': 17, 'failed': 0}
+            return {'ok': True, 'commit': commit, 'tests': expected, 'passed': expected, 'failed': 0}
     except (OSError, ValueError, TypeError, KeyError, subprocess.TimeoutExpired):
         return failure
+
+
+FIN_SOURCE = Path('/root/backups/nexo-recovery/receiver/operational-queries.mjs')
+FIN_RENDERER = Path('/root/vivabot/src/gestora-payout-status-rules.js')
+
+
+def hermes_fin_contract():
+    """Static indicators only; never import modules, query Core or return source."""
+    result = {}
+    for label, path, patterns in (
+        ('operations', FIN_SOURCE, {'partners_route': '/partners', 'orders_route': '/gestora/orders',
+          'payout_notice_route': '/payout-avisos', 'finance_handler': 'financeAnswer',
+          'cash_close_marker': 'cashclose', 'currency_marker': '_cvd_commission_currency'}),
+        ('renderer', FIN_RENDERER, {'summary_handler': 'commissionSummaryText',
+          'usd_literal': ' USD', 'number_coercion_marker': 'Number('}),
+    ):
+        try:
+            # Source code may be world-readable; require root-owned regular file, no symlink or group/other writes.
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(fd, 'rb') as f:
+                info = os.fstat(f.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+                    raise ValueError('unsafe source')
+                raw = f.read(262145)
+                if len(raw) > 262144:
+                    raise ValueError('oversized source')
+            source = raw.decode('utf-8')
+            result[label] = {'sha256': hashlib.sha256(raw).hexdigest(),
+                             'markers': {k: v in source for k, v in patterns.items()}}
+        except (OSError, ValueError):
+            return {'ok': False, 'reason': 'finance_source_unavailable'}
+    return {'ok': True, 'scope': 'static_only', **result}
 
 
 class Contingency:
     def __init__(self, env, health, directory=Path('/var/lib/cv-ops-bridge-contingency'), api=github_api, clock=time.time):
         self.cfg = config(env)
+        self.hermes_dialog_enabled = env.get('CV_GITHUB_HERMES_DIALOG_ENABLED') == '1'
+        self.hermes_fin_contract_enabled = env.get('CV_GITHUB_HERMES_FIN_CONTRACT_ENABLED') == '1'
         self.hermes_offline_enabled = env.get('CV_GITHUB_HERMES_OFFLINE_ENABLED') == '1'
         self.hermes_probe_enabled = env.get('CV_GITHUB_HERMES_PROBE_ENABLED') == '1'
         self.receiver_classification_enabled = env.get('CV_GITHUB_RECEIVER_CLASSIFICATION_ENABLED') == '1'
@@ -662,7 +700,11 @@ class Contingency:
                 continue
             if data['action'] == 'hermes_offline_tests' and not self.hermes_offline_enabled:
                 continue
-            if health_only and data['action'] not in ('health', 'hermes_probe_card', 'hermes_offline_tests'):
+            if data['action'] == 'hermes_dialog_tests' and not self.hermes_dialog_enabled:
+                continue
+            if data['action'] == 'hermes_fin_contract' and not self.hermes_fin_contract_enabled:
+                continue
+            if health_only and data['action'] not in ('health', 'hermes_probe_card', 'hermes_offline_tests', 'hermes_dialog_tests', 'hermes_fin_contract'):
                 continue
             if not data or (data['action'] == 'receiver_classification' and not self.receiver_classification_enabled) or (data['action'] == 'receiver_contract' and not self.receiver_contract_enabled) or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
                 continue
@@ -672,8 +714,10 @@ class Contingency:
                 safe = health_summary(summary[0], summary[1])
             elif data['action'] == 'hermes_probe_card':
                 safe = hermes_probe_card(data, self.clock())
-            elif data['action'] == 'hermes_offline_tests':
+            elif data['action'] in ('hermes_offline_tests', 'hermes_dialog_tests'):
                 safe = hermes_offline_tests(data, self.clock())
+            elif data['action'] == 'hermes_fin_contract':
+                safe = hermes_fin_contract()
             elif data['action'] == 'receiver_classification':
                 safe = receiver_classification(data['sha256'])
             elif data['action'] == 'receiver_contract':
