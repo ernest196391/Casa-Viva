@@ -190,3 +190,39 @@ def run_synthetic_pilot(*, sandbox, uid, gid, work_root=Path('/var/lib/control-o
                 'digest':digest,'production_authorized':False}
     except (OSError,ValueError,TypeError,RuntimeError):
         return {'ok':False,'scope':'synthetic_only','functional_ok':None,'production_authorized':False}
+
+def main(argv):
+    """Explicit, fixed fixture entrypoint; never accepts source or commands."""
+    if argv != ['--synthetic-pilot']:
+        return 2
+    import importlib.util
+    import pwd
+    import sys
+    try:
+        # Check actual inherited constraints before the root harness spawns cvdev.
+        lines=Path('/proc/self/cgroup').read_text().splitlines()
+        if len(lines)!=1 or not re.fullmatch(r'0::/system.slice/cv-release-pilot-[0-9]+-[0-9]+\.service',lines[0]):
+            raise ValueError('dedicated_cgroup_required')
+        cg=Path('/sys/fs/cgroup') / lines[0][3:].lstrip('/')
+        memory=int((cg/'memory.max').read_text())
+        tasks=int((cg/'pids.max').read_text())
+        quota,period=map(int,(cg/'cpu.max').read_text().split())
+        if not (0<memory<=268435456 and 0<tasks<=32 and period>0 and 0<quota<=period/2):
+            raise ValueError('resource_limits_required')
+        fields=dict(line.split(':',1) for line in Path('/proc/self/status').read_text().splitlines() if ':' in line)
+        if fields['NoNewPrivs'].strip()!='1':
+            raise ValueError('nnp_required')
+        sys.path.insert(0,str(Path(__file__).resolve().parent))
+        spec=importlib.util.spec_from_file_location('cv_dev_sandbox',Path(__file__).with_name('dev-sandbox.py'))
+        sandbox=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sandbox)
+        account=pwd.getpwnam('cvdev')
+        report=run_synthetic_pilot(sandbox=sandbox,uid=account.pw_uid,gid=account.pw_gid)
+    except (OSError,ValueError,KeyError,RuntimeError,ImportError):
+        report={'ok':False,'scope':'synthetic_only','reason':'pilot_preconditions_failed','production_authorized':False}
+    print(json.dumps(report,sort_keys=True))
+    return 0 if report['ok'] else 4
+
+if __name__=='__main__':
+    import sys
+    sys.exit(main(sys.argv[1:]))
