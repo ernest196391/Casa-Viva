@@ -138,10 +138,10 @@ class Tests(unittest.TestCase):
             target.write_bytes(b'old'); target.chmod(0o600)
             token.write_bytes(b'CV_GITHUB_RELEASE_TOKEN=synthetic'); token.chmod(0o600)
             api = lambda *a: {'protected': True, 'commit': {'sha': sha}}
-            with patch.object(gate, 'ROOT', root), patch.object(gate, 'TARGET', target), patch.object(gate, 'TOKEN_FILE', token), patch.object(gate, 'verified_checks', return_value=True), patch.object(gate, 'git', side_effect=[b'', sha.encode(), body, b'', b'b'*40]):
+            with patch.object(gate, 'ROOT', root), patch.object(gate, 'TARGET', target), patch.object(gate, 'TOKEN_FILE', token), patch.object(gate, 'verified_checks', return_value=True), patch.object(gate, 'approved_revision', return_value=True), patch.object(gate, 'git', side_effect=[b'', sha.encode(), body, b'', b'b'*40]):
                 self.assertEqual(gate.apply_release(sha, api)['reason'], 'main_moved')
                 self.assertEqual(target.read_bytes(), b'old')
-            with patch.object(gate, 'ROOT', root), patch.object(gate, 'TARGET', target), patch.object(gate, 'TOKEN_FILE', token), patch.object(gate, 'verified_checks', return_value=True), patch.object(gate, 'git', side_effect=[b'', sha.encode(), body, b'', sha.encode()]):
+            with patch.object(gate, 'ROOT', root), patch.object(gate, 'TARGET', target), patch.object(gate, 'TOKEN_FILE', token), patch.object(gate, 'verified_checks', return_value=True), patch.object(gate, 'approved_revision', return_value=True), patch.object(gate, 'git', side_effect=[b'', sha.encode(), body, b'', sha.encode()]):
                 self.assertEqual(gate.apply_release(sha, api), {'ok': True, 'changed': True, 'sha': sha})
                 self.assertEqual(target.read_bytes(), body)
                 self.assertEqual(next(root.glob('github_contingency.backup.*')).read_bytes(), b'old')
