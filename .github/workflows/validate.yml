@@ -416,3 +416,5 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/owner-bot-error-review.fixture.sql
           psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/github-test-only-enqueue.fixture.sql
           psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/github-test-only-lifecycle.fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/github-test-only-e2e.fixture.sql
+          python3 scripts/ops/tests/github-test-only-postgres-e2e.test.py
