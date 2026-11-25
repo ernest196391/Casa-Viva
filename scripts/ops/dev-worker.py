@@ -1103,6 +1103,14 @@ def main():
             from github_test_only_executor import worker_once
             from github_test_only_launcher import launch
             worker_once(api, launch)
+            if os.environ.get("CV_GITHUB_TEST_ONLY_REPORT_ENABLED") == "1":
+                from github_contingency import config, github_api
+                from github_test_only_reporter import deliver
+                cfg = config(os.environ)
+                if cfg and cfg[0] == 3:
+                    author = os.environ.get("CV_GITHUB_TEST_ONLY_REPORTER_ID", "")
+                    if author.isascii() and author.isdecimal():
+                        deliver(api, github_api, cfg[1], int(author))
             return
         monitor_runs()
         claims = api("POST", "rpc/ops_claim_dev_task", {"p_worker": WORKER}) or []
