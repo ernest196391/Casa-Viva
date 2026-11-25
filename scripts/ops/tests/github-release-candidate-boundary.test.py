@@ -62,16 +62,20 @@ class Tests(unittest.TestCase):
                 self.assertEqual(work.stat().st_mode & 0o777,0o555)
                 self.assertEqual((work/'candidate.py').stat().st_mode & 0o777,0o444)
             self.assertFalse(work.exists())
-    def test_public_entry_requires_verified_staging(self):
+    def test_internal_entry_requires_verified_staging(self):
         with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
             root=Path(tmp)
             source=root/'source.py'
             data=b'x=1\n'
             source.write_bytes(data)
             uid=1001 if os.geteuid()==1000 else 1000
-            self.assertFalse(b.evaluate(source,self.facts,expected_digest='0'*64,uid=uid,gid=1001,sandbox=self.box,work_root=root)['ok'])
+            self.assertFalse(b._evaluate_staged(source,self.facts,expected_digest='0'*64,uid=uid,gid=1001,sandbox=self.box,work_root=root)['ok'])
             self.box.run_in_box.assert_not_called()
-            self.assertTrue(b.evaluate(source,self.facts,expected_digest=hashlib.sha256(data).hexdigest(),uid=uid,gid=1001,sandbox=self.box,work_root=root)['ok'])
+            self.assertTrue(b._evaluate_staged(source,self.facts,expected_digest=hashlib.sha256(data).hexdigest(),uid=uid,gid=1001,sandbox=self.box,work_root=root)['ok'])
+    def test_public_entry_stays_closed_even_with_successful_adapter(self):
+        self.assertEqual(b.evaluate('/not-used',self.facts,expected_digest='a'*64,uid=1000,gid=1001,sandbox=self.box),
+                         {'ok':False,'reason':'candidate_execution_boundary_not_certified'})
+        self.box.run_in_box.assert_not_called()
     def test_public_entry_refuses_same_identity(self):
         self.assertFalse(b.evaluate('/not-used',self.facts,expected_digest='0'*64,uid=os.geteuid(),gid=1001,sandbox=self.box)['ok'])
         self.box.run_in_box.assert_not_called()
