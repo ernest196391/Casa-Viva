@@ -36,3 +36,33 @@ def emit_receipt(key, measure, digest, revision, epoch, nonce):
         return dict(report=report,mac=hmac.new(key,DOMAIN+payload,hashlib.sha256).hexdigest())
     except (OSError,ValueError,TypeError,OverflowError):
         return None
+
+def measure_synthetic_contract(digest, revision, epoch, *, identity, artifact_digest, run_case):
+    """Independent expected-value oracle for the isolated health_summary pilot.
+
+    Dependencies are supplied by the trusted harness, not the candidate.
+    run_case must execute a bounded, independently confined candidate and
+    return its typed advisory result; absence or malformed data is UNKNOWN.
+    This does not establish that the live bridge loaded a revision.
+    """
+    cases = (
+        ({"pm2":{"vivabot":"online","vivabot-recovery-receiver":"online","nexofirma":"online"},"bridge":"active"}, "healthy"),
+        ({"pm2":{"vivabot":"stopped","vivabot-recovery-receiver":"online","nexofirma":"online"},"bridge":"active"}, "degraded"),
+        ({"pm2":{"vivabot":"unknown","vivabot-recovery-receiver":"unknown","nexofirma":"unknown"},"bridge":"unknown"}, "unknown"),
+    )
+    try:
+        if identity() != epoch or artifact_digest() != digest:
+            return None
+        matches = []
+        for facts, expected in cases:
+            result = run_case(facts)
+            if identity() != epoch or artifact_digest() != digest:
+                return None
+            if type(result) is not dict or set(result) != {"status","advisory_only"}:
+                return None
+            if result["advisory_only"] is not True or result["status"] not in {"healthy","degraded","unknown"}:
+                return None
+            matches.append(result["status"] == expected)
+        return all(matches)
+    except (OSError, ValueError, TypeError, RuntimeError):
+        return None
