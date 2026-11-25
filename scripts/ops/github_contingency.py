@@ -72,14 +72,14 @@ def command(comment, now):
             fields = fields | {'product'}
             if not valid_product(data.get('product')):
                 return None
-        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply', 'hermes_probe_card', 'hermes_offline_tests', 'hermes_dialog_tests', 'hermes_fin_contract') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply', 'hermes_probe_card', 'hermes_offline_tests', 'hermes_dialog_tests', 'hermes_fin_contract', 'hermes_caja_probe', 'hermes_crm_writer_audit', 'hermes_crm_sync_status') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
             return None
         if action == 'release_apply' and (not isinstance(data['sha'], str) or not re.fullmatch(r'[0-9a-f]{40}', data['sha'])):
             return None
         created, expires = timestamp(comment['created_at']), timestamp(data['expires_at'])
         if not created <= now < expires <= created + 1800:
             return None
-        if action in ('hermes_probe_card', 'hermes_offline_tests', 'hermes_dialog_tests', 'hermes_fin_contract') and expires > created + 600:
+        if action in ('hermes_probe_card', 'hermes_offline_tests', 'hermes_dialog_tests', 'hermes_fin_contract', 'hermes_caja_probe', 'hermes_crm_writer_audit', 'hermes_crm_sync_status') and expires > created + 600:
             return None
         return data
     except (KeyError, TypeError, ValueError, AttributeError):
@@ -637,9 +637,139 @@ def hermes_fin_contract():
     return {'ok': True, 'scope': 'static_only', **result}
 
 
+
+# Fixed unauthenticated probes. No response bodies, redirects, proxies or credentials.
+CAJA_PROBES = (
+    ('render', 'https://ernesto-rondon-nexo.onrender.com/api/business/caja-recovery', 'POST'),
+    ('core', 'https://casaviva.company/wp-json/casa-viva/v1/panel/caja/recovery-orders', 'GET'),
+)
+
+
+def hermes_caja_probe():
+    import urllib.error
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    result = {}
+    for label, url, method in CAJA_PROBES:
+        request = urllib.request.Request(url, method=method,
+            data=b'{"action":"list"}' if method == 'POST' else None,
+            headers={'Content-Type': 'application/json', 'User-Agent': 'CasaViva-diagnostic'})
+        try:
+            with opener.open(request, timeout=8) as response:
+                status = response.status
+        except urllib.error.HTTPError as exc:
+            status = exc.code
+            exc.close()
+        except (OSError, ValueError):
+            result[label] = {'status': None, 'category': 'transport_error'}
+            continue
+        if type(status) is not int or not 100 <= status <= 599:
+            result[label] = {'status': None, 'category': 'invalid_status'}
+            continue
+        category = ('unexpected_public_success' if 200 <= status < 300 else
+                    'auth_required' if status in (401, 403) else
+                    'unavailable' if status >= 500 else
+                    'redirect_blocked' if 300 <= status < 400 else 'other_http')
+        result[label] = {'status': status, 'category': category}
+    return {'ok': all(v['category'] == 'auth_required' for v in result.values()),
+            'scope': 'unauthenticated_only', **result}
+
+
+CRM_RECEIVER = Path('/root/backups/nexo-recovery/receiver')
+CRM_ORIGINAL = Path('/root/vivabot/src')
+CRM_MARKERS = {'wa_table': 'crm_wa_messages', 'supabase': 'supabase',
+               'upsert': 'upsert', 'message_event': 'messages.upsert',
+               'rest_api': '/rest/v1/', 'insert': 'insert'}
+
+
+def hermes_crm_writer_audit():
+    """Bounded static scan of immediate JS sources only; no env/logs/content."""
+    result = {}
+    for label, root in (('receiver', CRM_RECEIVER), ('original', CRM_ORIGINAL)):
+        try:
+            if root.is_symlink() or not root.is_dir():
+                raise ValueError('invalid directory')
+            candidates = []
+            with os.scandir(root) as entries:
+                for i, entry in enumerate(entries):
+                    if i >= 256:
+                        raise ValueError('directory limit')
+                    if re.fullmatch(r'[A-Za-z0-9_-]{1,80}\.(?:mjs|js|cjs)', entry.name):
+                        candidates.append(entry.name)
+            if len(candidates) > 64:
+                raise ValueError('source limit')
+            hits = {k: 0 for k in CRM_MARKERS}
+            skipped = 0
+            for name in candidates:
+                try:
+                    fd = os.open(root / name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                    with os.fdopen(fd, 'rb') as f:
+                        st = os.fstat(f.fileno())
+                        if not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o022:
+                            raise ValueError('unsafe source')
+                        raw = f.read(262145)
+                        if len(raw) > 262144:
+                            raise ValueError('source limit')
+                    source = raw.decode('utf-8').lower()
+                    for key, marker in CRM_MARKERS.items():
+                        hits[key] += int(marker in source)
+                except (OSError, ValueError):
+                    skipped += 1
+            result[label] = {'files': len(candidates), 'skipped': skipped, 'marker_counts': hits}
+        except (OSError, ValueError):
+            return {'ok': False, 'reason': 'writer_sources_unavailable'}
+    return {'ok': True, 'scope': 'static_nonrecursive', **result}
+
+
+CRM_SYNC_SQL = """BEGIN READ ONLY;
+SET LOCAL statement_timeout='5s';
+SET LOCAL TIME ZONE 'UTC';
+SELECT json_build_object(
+ 'tenant_matches',(SELECT count(*) FROM public.crm_businesses WHERE slug='casa-viva'),
+ 'messages',count(*),
+ 'since_cut',count(*) FILTER (WHERE w.sent_at > '2026-11-19T22:43:06Z'::timestamptz),
+ 'latest',to_char(max(w.sent_at),'YYYY-MM-DD"T"HH24:MI:SS"Z"'))
+ FROM public.crm_wa_messages w JOIN public.crm_businesses b ON b.id=w.business_id
+ WHERE b.slug='casa-viva';
+COMMIT;"""
+
+
+def hermes_crm_sync_status():
+    """Reuse local recovery database read-only; never return IDs or messages."""
+    failure = {'ok': False, 'reason': 'local_sync_unavailable'}
+    try:
+        p = subprocess.run(['/usr/bin/docker','exec','-u','postgres','vivabot-recovery-db',
+            'psql','-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-d','postgres','-c',CRM_SYNC_SQL],
+            env={'PATH':'/usr/bin:/bin','HOME':'/root'}, stdin=subprocess.DEVNULL,
+            capture_output=True,timeout=15,check=False)
+        if p.returncode or len(p.stdout)>1024:
+            return failure
+        d=json.loads(p.stdout)
+        if not isinstance(d,dict) or set(d)!={'tenant_matches','messages','since_cut','latest'}:
+            return failure
+        if type(d['tenant_matches']) is not int or d['tenant_matches']!=1:
+            return failure
+        if any(type(d[k]) is not int or not 0<=d[k]<=10**12 for k in ('messages','since_cut')):
+            return failure
+        if d['since_cut']>d['messages'] or (d['messages']==0)!=(d['latest'] is None):
+            return failure
+        if d['latest'] is not None:
+            if not isinstance(d['latest'],str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z',d['latest']):
+                return failure
+            timestamp(d['latest'])
+        return {'ok':True,'scope':'local_recovery_db','messages':d['messages'],
+                'since_cut':d['since_cut'],'latest':d['latest']}
+    except (OSError,ValueError,TypeError,subprocess.SubprocessError):
+        return failure
+
+
 class Contingency:
     def __init__(self, env, health, directory=Path('/var/lib/cv-ops-bridge-contingency'), api=github_api, clock=time.time):
         self.cfg = config(env)
+        self.diagnostics_enabled = {action for action, flag in (
+            ('hermes_caja_probe', 'CV_GITHUB_HERMES_CAJA_PROBE_ENABLED'),
+            ('hermes_crm_writer_audit', 'CV_GITHUB_HERMES_CRM_WRITER_ENABLED'),
+            ('hermes_crm_sync_status', 'CV_GITHUB_HERMES_CRM_SYNC_ENABLED'),
+        ) if env.get(flag) == '1'}
         self.hermes_dialog_enabled = env.get('CV_GITHUB_HERMES_DIALOG_ENABLED') == '1'
         self.hermes_fin_contract_enabled = env.get('CV_GITHUB_HERMES_FIN_CONTRACT_ENABLED') == '1'
         self.hermes_offline_enabled = env.get('CV_GITHUB_HERMES_OFFLINE_ENABLED') == '1'
@@ -704,7 +834,9 @@ class Contingency:
                 continue
             if data['action'] == 'hermes_fin_contract' and not self.hermes_fin_contract_enabled:
                 continue
-            if health_only and data['action'] not in ('health', 'hermes_probe_card', 'hermes_offline_tests', 'hermes_dialog_tests', 'hermes_fin_contract'):
+            if data['action'] in ('hermes_caja_probe', 'hermes_crm_writer_audit', 'hermes_crm_sync_status') and data['action'] not in self.diagnostics_enabled:
+                continue
+            if health_only and data['action'] not in ('health', 'hermes_probe_card', 'hermes_offline_tests', 'hermes_dialog_tests', 'hermes_fin_contract', 'hermes_caja_probe', 'hermes_crm_writer_audit', 'hermes_crm_sync_status'):
                 continue
             if not data or (data['action'] == 'receiver_classification' and not self.receiver_classification_enabled) or (data['action'] == 'receiver_contract' and not self.receiver_contract_enabled) or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
                 continue
@@ -718,6 +850,12 @@ class Contingency:
                 safe = hermes_offline_tests(data, self.clock())
             elif data['action'] == 'hermes_fin_contract':
                 safe = hermes_fin_contract()
+            elif data['action'] == 'hermes_caja_probe':
+                safe = hermes_caja_probe()
+            elif data['action'] == 'hermes_crm_writer_audit':
+                safe = hermes_crm_writer_audit()
+            elif data['action'] == 'hermes_crm_sync_status':
+                safe = hermes_crm_sync_status()
             elif data['action'] == 'receiver_classification':
                 safe = receiver_classification(data['sha256'])
             elif data['action'] == 'receiver_contract':
