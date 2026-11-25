@@ -26,3 +26,22 @@ Current blocker: the observer emitter and verifier are protocol primitives, not 
 Hostinger shows both cv-ops-bridge and cv-dev-worker as Type=simple, User=root, ProtectHome=no, ProtectSystem=no, NoNewPrivileges=yes. Repository bridge imports Contingency in-process; a root candidate could bypass HMAC and modify the journal/approval. The public release gate therefore refuses all remote releases until an actual separate execution boundary exists. The private transaction primitive is retained for disposable tests only. Do not use it as an alternate entrypoint in production.
 
 Reuse E2/E3/E4 runbook for Dev Worker; do not change current service users wholesale. Dedicated bwrap-dev and loaded enforcing profile must be checked, not inferred from /usr/bin/bwrap. Existing verify-sandbox.py --dev-worker is the harness; run only on a disposable workspace under cvdev after explicit E2 authorization. E3 must validate effective capabilities, cgroup limits, canaries and absence of production secrets. Candidate execution for release requires a separate unprivileged process with a minimal typed interface; privileged existing bridge operations must stay on trusted fixed code. The observer key, journal and approval must be outside candidate access, including via inherited descriptors and IPC. This architecture is not yet implemented or certified. Installation is blocked; no production activation or restart is authorized by this document.
+
+## Disposable E3 pilot (no existing service changes)
+
+Use only the already installed dedicated bwrap-dev/profile, a reviewed exact
+checkout, and a newly created run- directory. Run the existing verify-sandbox.py
+as cvdev within a transient systemd unit, with MemoryMax=256M, TasksMax=32,
+CPUQuota=50%, RuntimeMaxSec=120s and KillMode=control-group. Never run as root
+inside the sandbox. The trusted harness must be readable by cvdev but not
+writable by it. Verify the live cgroup from the host while the unit runs;
+use assess_cgroup_limits or the fixed candidate limits checker. An exited
+unit or missing measurements are not a pass. Record actual uid, AppArmor
+label and capability evidence, and all negative checks. Remove only the
+new disposable workspace and transient unit after completion. Do not
+change cv-dev-worker or cv-ops-bridge, their flags, profiles or credentials.
+
+This pilot tests E3 only. The current health_summary candidate is advisory;
+do not use a receipt from this pilot to confirm the production bridge.
+The full contingency module is still privileged and its release entry
+must remain blocked.
