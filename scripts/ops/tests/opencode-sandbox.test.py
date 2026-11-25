@@ -388,17 +388,17 @@ class VerifyLogicTests(unittest.TestCase):
         self.assertEqual(set(report["checks"]), set(verify.CHECKS))
 
     def test_probe_commands_use_bwrap_and_workspace(self):
-        captured = {}
+        captured = []
 
         def runner(cmd):
-            captured["cmd"] = cmd
+            captured.append(cmd)
             return 0, probe(cmd[-1]), b""
 
         verify.run_checks(WORKSPACE, runner)
-        cmd = captured["cmd"]
-        self.assertEqual(Path(cmd[0]).name, "bwrap")
-        self.assertEqual(spec.validate_command(cmd), [])
-        self.assertIn("net_denied", cmd)
+        self.assertEqual([cmd[-1] for cmd in captured], list(verify.CHECKS))
+        for cmd in captured:
+            self.assertEqual(Path(cmd[0]).name, "bwrap")
+            self.assertEqual(spec.validate_command(cmd), [])
 
     def test_network_failure_reported(self):
         outcomes = {"write_usr_denied": (0, probe("write_usr_denied", ok=False, detail="wrote"), b"")}
