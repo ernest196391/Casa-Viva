@@ -1,3 +1,11 @@
+## CV-AUTO-002 — real synthetic host pilot PASS (2026-11-25)
+
+- VPS srv2034193, staged exact revision 902289d1167243523b00fbd68992f67176a4e624, /tmp/cv-auto-002.JeoODd. Observed directly via connected Hostinger terminal after operator execution.
+- Both named pilot profiles loaded temporarily in enforce; PILOT_EXIT=0, cases=3, host_observed=true, cleanup_confirmed=true, ok=true, production_authorized=false, scope=synthetic_only. Digest ad56c87fba9c5ccb77906f2ab143b7ca1fe53ca0b14beffbfac17e4e76ac777e.
+- Reduced supervisor bounding set worked without CAP_SYS_PTRACE or CAP_DAC_READ_SEARCH. Existing cv-ops-bridge and cv-dev-worker active after run; original cv-dev-worker-bwrap enforce; temporary profiles removed.
+- This certifies only the fixed synthetic fixture path, not arbitrary candidate tests, production health, database lifecycle or end-to-end mailbox execution. No permanent unit/profile installed, no migration, no timer enabled, zero additional cost.
+- Next: isolated end-to-end receiver/queue/worker/reporter fixture and exact test-only launcher host certification; no production activation. Hermes not found in earlier checked paths.
+
 ## CV-AUTO-002 — least privilege and host diagnostics (2026-11-25)
 
 - 0a26c5c: synthetic pilot removes CAP_SYS_PTRACE and CAP_DAC_READ_SEARCH; no automatic privilege escalation on failed observation.
