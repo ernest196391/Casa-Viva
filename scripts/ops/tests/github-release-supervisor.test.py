@@ -42,6 +42,10 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.check(None)['reason'],'health_unknown')
         self.assertEqual(tx.load_state(self.root)['state'],'pending_health')
         self.assertEqual((self.root/'github_contingency.py').read_bytes(),self.new)
+    def test_unknown_does_not_loop_restart(self):
+        self.assertEqual(self.check(None)['reason'],'health_unknown')
+        self.assertEqual(self.check(True)['reason'],'restart_already_attempted')
+        self.assertEqual(self.calls,1)
     def test_no_restart_no_approval(self):
         self.assertEqual(self.check(True,restart=lambda:False)['reason'],'restart_unavailable')
     def test_same_process_not_accepted(self):
