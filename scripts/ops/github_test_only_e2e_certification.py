@@ -105,9 +105,10 @@ class FixtureDB:
     def __exit__(self,*_):
         if self.started or (self.data/"postmaster.pid").exists():
             self.pg([self.bin/"pg_ctl","-D",self.data,"-m","fast","-w","stop"])
+        if (self.data/"postmaster.pid").exists():raise RuntimeError("postgres cleanup unconfirmed")
         self.started=False
     def sql(self,query):
-        return self.pg([self.bin/"psql","-X","-qAt","-v","ON_ERROR_STOP=1","-h",self.sock,"-d","postgres"],input=query,text=True).stdout.strip()
+        return self.pg([self.bin/"psql","-X","-qAt","-v","ON_ERROR_STOP=1","-h",self.sock,"-p","5432","-d","postgres"],input=query,text=True).stdout.strip()
     @staticmethod
     def literal(v):
         if type(v) is int:return str(v)
@@ -138,8 +139,8 @@ def main():
         with FixtureDB(tmp,sys.argv[5]) as db:
             def launch(s,b):
                 # Do not exceed the lease budget with an unbounded outer invocation.
-                if b<85:return 125
-                report=cert.run(repo,s)
+                if b<45:return 125
+                report=cert.run(repo,s,budget=b)
                 return 0 if report.get("ok") is True and report.get("cleanup_confirmed") is True else 125
             result=run(db.api,ghmod.github_api,env,cid,sha,launch)
             result["durable_rows"]=int(db.sql("select count(*) from public.ops_tasks where result->>'github_report_id' is not null"))
