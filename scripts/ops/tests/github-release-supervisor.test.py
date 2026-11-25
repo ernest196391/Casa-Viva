@@ -38,6 +38,13 @@ class Tests(unittest.TestCase):
         self.assertEqual((self.root/'github_contingency.py').read_bytes(),self.old)
         self.assertEqual(tx.load_state(self.root)['state'],'rollback_pending')
         self.assertEqual(self.check(True)['state'],'restored')
+    def test_restored_revision_uses_backup_digest_not_candidate_sha(self):
+        self.assertEqual(self.check(False)['state'],'rollback_pending')
+        def probe(d,revision,e):
+            self.assertEqual(d,tx.digest(self.old))
+            self.assertEqual(revision,'sha256:'+d)
+            return True
+        self.assertEqual(self.check(probe=probe)['state'],'restored')
     def test_unknown_not_confirmation_or_rollback(self):
         self.assertEqual(self.check(None)['reason'],'health_unknown')
         self.assertEqual(tx.load_state(self.root)['state'],'pending_health')
