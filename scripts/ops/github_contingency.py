@@ -583,6 +583,7 @@ def hermes_offline_tests(data, now):
                     # Mask sensitive sockets individually: masking all /run breaks systemd namespaces.
                     '-p', 'InaccessiblePaths=/var/lib /var/log /srv /mnt /media -/run/systemd/private -/run/dbus -/run/docker.sock -/run/containerd -/run/user -/run/redis -/run/postgresql',
                     '-p', 'SystemCallFilter=~connect',
+                    '-p', 'SystemCallErrorNumber=EPERM',
                     '-p', 'BindReadOnlyPaths=' + tmp + ':/opt/cv-offline-tests',
                     '/usr/bin/node', '--test', '--test-reporter=tap',
                     '/opt/cv-offline-tests/test/cv-fin-receiver.test.mjs',
