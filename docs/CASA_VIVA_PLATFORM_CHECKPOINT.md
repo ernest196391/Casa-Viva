@@ -1,3 +1,9 @@
+## CV-AUTO-002 — integral receipt follow-up (2026-11-25)
+
+- CI 45724775684 all five jobs passed; Docker regression run 45725133048 PostgreSQL passed, remaining jobs nonterminal.
+- Hostinger terminal still displays same pre-final output; INTEGRAL_EXIT, durable_rows and cleanup not observed. Do not replay request 7178243950.
+- Isolated unattended receiver acceptance and rollback gates documented; no timer activation, no production change or new expense.
+
 ## CV-AUTO-002 — real mailbox round trip PASS receipt (2026-11-25)
 
 - Exact revision 0ba3f16387aa28440b9569e004d5690aff3df79e, Hostinger disposable clone /tmp/cv-integral.5GSAOi/source.
