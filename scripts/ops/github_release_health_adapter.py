@@ -5,6 +5,10 @@ may be a short-lived job, so absence of MainPID is UNKNOWN, not failure.
 This adapter deliberately cannot certify functional health by itself.
 """
 import subprocess
+import hashlib
+import hmac
+import json
+import secrets
 import re
 import time
 
@@ -74,6 +78,33 @@ def validate_observation(report, expected_digest, expected_commit, epoch, nonce,
     if type(observed) is not int or not epoch[1] <= observed <= now or now-observed > 30_000_000_000:
         return None
     return report['functional_ok'] if type(report['functional_ok']) is bool else None
+
+def authenticated_observer_probe(observer, key, expected_digest, expected_commit, epoch, *, now_ns=None):
+    """Challenge a separately installed trusted observer and verify its receipt.
+
+    The observer callback is a local dependency, not a mailbox input. Its
+    transport must enforce bounded execution and isolate the signing key from
+    the candidate. No production observer is wired by this module.
+    """
+    if not isinstance(key, bytes) or len(key) != 32:
+        return None
+    nonce = secrets.token_hex(24)
+    try:
+        envelope = observer(expected_digest, expected_commit, epoch, nonce)
+        if not isinstance(envelope, dict) or set(envelope) != {'report','mac'}:
+            return None
+        report, mac = envelope['report'], envelope['mac']
+        if not isinstance(report, dict) or not isinstance(mac, str) or not re.fullmatch(r'[0-9a-f]{64}',mac):
+            return None
+        payload = json.dumps(report, sort_keys=True, separators=(',',':'), allow_nan=False).encode('utf-8')
+        if len(payload)>2048:
+            return None
+        expected_mac = hmac.new(key, b'CV-RELEASE-HEALTH-V1\\x00'+payload, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(mac,expected_mac):
+            return None
+        return validate_observation(report,expected_digest,expected_commit,epoch,nonce,now_ns=now_ns)
+    except (OSError,ValueError,TypeError,OverflowError,subprocess.SubprocessError):
+        return None
 
 def health_probe(expected_digest, expected_commit, epoch):
     # A process epoch is not proof that the module was loaded or that the
