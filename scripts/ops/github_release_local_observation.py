@@ -29,34 +29,51 @@ def daemon_present():
     except (OSError,ValueError):
         return False
 
-def collect_summary(*, run=subprocess.run, present=daemon_present, locate=shutil.which):
-    """Do not expose raw PM2 JSON to the candidate or to stdout.
+# Connect only to the existing PM2 RPC socket. Never import PM2's CLI/API,
+# which can start a daemon. Resolve dependencies from the installed package.
+RPC = r"""
+const path = require('path');
+const root = process.argv[1];
+const axon = require(require.resolve('pm2-axon', {paths:[root]}));
+const rpc = require(require.resolve('pm2-axon-rpc', {paths:[root]}));
+const socket = axon.socket('req');
+const client = new rpc.Client(socket);
+const names = new Set(['vivabot','vivabot-recovery-receiver','nexofirma']);
+const timer = setTimeout(() => process.exit(2), 4000);
+socket.on('error', () => process.exit(2));
+socket.connect('/root/.pm2/rpc.sock');
+client.call('getMonitorData', {}, (err, rows) => {
+  if (err || !Array.isArray(rows)) process.exit(2);
+  const safe = rows.filter(r => r && names.has(r.name)).map(r => ({
+    name:r.name, status:typeof r.pm2_env?.status === 'string' ? r.pm2_env.status : 'unknown'
+  }));
+  clearTimeout(timer);
+  process.stdout.write(JSON.stringify(safe), () => process.exit(0));
+});
+"""
 
-    PM2 CLI may auto-start a missing daemon. Use only an existing daemon,
-    and PM2's no-daemon-start alternative below: read its live dump via
-    existing RPC is not implemented here. The local CLI check is guarded
-    but not atomic, so this collector remains a manually supervised pilot.
-    """
+def collect_summary(*, run=subprocess.run, present=daemon_present, locate=shutil.which):
+    """Only the fixed read-only RPC method and systemd property are queried."""
     pm = {'returncode':1,'output':'[]'}
     service = 'unknown'
     env={'PATH':PATH,'HOME':'/root','PM2_HOME':str(PM2_HOME),'LANG':'C'}
     try:
         binary=locate('pm2',path=PATH)
-        if binary and present():
-            proc=run([binary,'jlist'],env=env,stdin=subprocess.DEVNULL,
-                     stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=10,check=False)
-            if proc.returncode==0 and len(proc.stdout)<=2_000_000 and present():
+        node=locate('node',path=PATH)
+        if binary and node and present():
+            root=Path(binary).resolve().parent.parent
+            metadata=json.loads((root/'package.json').read_text())
+            if metadata.get('name')!='pm2':
+                raise ValueError('not_pm2_package')
+            proc=run([node,'-e',RPC,str(root)],env=env,stdin=subprocess.DEVNULL,
+                     stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=6,check=False)
+            if proc.returncode==0 and len(proc.stdout)<=4096 and present():
                 rows=json.loads(proc.stdout)
-                if type(rows) is list:
-                    slim=[]
-                    for row in rows:
-                        if type(row) is not dict or type(row.get('name')) is not str or row['name'] not in PROCESSES:
-                            continue
-                        data=row.get('pm2_env')
-                        status=data.get('status') if type(data) is dict else None
-                        slim.append({'name':row['name'],'status':status if type(status) is str else 'unknown'})
-                    pm={'returncode':0,'output':json.dumps(slim)}
-    except (OSError,ValueError,TypeError,subprocess.SubprocessError):
+                if type(rows) is list and all(type(r) is dict and set(r)=={'name','status'}
+                    and type(r['name']) is str and r['name'] in PROCESSES
+                    and type(r['status']) is str for r in rows):
+                    pm={'returncode':0,'output':json.dumps(rows)}
+    except (OSError,ValueError,TypeError,AttributeError,subprocess.SubprocessError):
         pass
     try:
         proc=run(['/usr/bin/systemctl','show','--no-pager','--property=ActiveState','--value','cv-ops-bridge.service'],
