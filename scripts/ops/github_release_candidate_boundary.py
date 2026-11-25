@@ -137,7 +137,10 @@ if os.getuid() == 0 or os.geteuid() == 0 or fields["NoNewPrivs"].strip() != "1":
 if any(int(fields[k].strip(), 16) for k in ("CapEff","CapPrm","CapInh","CapAmb","CapBnd")):
     raise SystemExit(126)
 import hashlib
-expected, payload = sys.argv[1:]
+expected, payload = sys.argv[1:3]
+require_host = sys.argv[3:] == ['--host-observed']
+if sys.argv[3:] and not require_host:
+    raise SystemExit(126)
 with open("candidate.py", "rb") as f:
     body = f.read(65537)
 if not body or len(body) > 65536 or hashlib.sha256(body).hexdigest() != expected:
@@ -149,17 +152,21 @@ if expected == "ad56c87fba9c5ccb77906f2ab143b7ca1fe53ca0b14beffbfac17e4e76ac777e
     print(json.dumps({"pilot_measurement":{"digest":hashlib.sha256(body).hexdigest(),
         "uid":os.geteuid(),"pid":os.getpid(),"label":"cv-release-pilot-bootstrap//&cv-release-pilot-candidate (enforce)",
         "nnp":True,"caps_zero":True}},sort_keys=True),flush=True)
+if require_host:
+    if expected != "ad56c87fba9c5ccb77906f2ab143b7ca1fe53ca0b14beffbfac17e4e76ac777e" or sys.stdin.buffer.read(1) != b"G":
+        raise SystemExit(126)
+    sys.stdin.close()
 sys.argv = ["candidate.py", payload]
 exec(compile(body, "candidate.py", "exec"), {"__name__":"__main__", "__file__":"candidate.py"})
 '''
 
-def confined_command(expected_digest, facts):
+def confined_command(expected_digest, facts, *, host_observed=False):
     """Fixed command for supervised certification; never a host execution API."""
     if not isinstance(expected_digest,str) or not re.fullmatch(r'[0-9a-f]{64}',expected_digest):
         raise ValueError('invalid_digest')
     payload=request_bytes('health_summary',facts)
     return ['/usr/bin/python3.12','-I','-S','-B','-c',PREFLIGHT_PREFIX,
-            expected_digest,payload.decode('ascii')]
+            expected_digest,payload.decode('ascii')] + (['--host-observed'] if host_observed else [])
 
 # This exact harmless fixture is the only artifact admitted by the pilot API.
 SYNTHETIC_SOURCE = b"""import json, sys
@@ -196,7 +203,7 @@ def parse_measured_fixture(raw, digest, uid):
     return parse_response(lines[1]),m
 
 
-def run_synthetic_pilot(*, sandbox, uid, gid, work_root=Path('/var/lib/control-os-dev/work')):
+def run_synthetic_pilot(*, sandbox, uid, gid, unit=None, host_sampler=None, work_root=Path('/var/lib/control-os-dev/work')):
     """Run only the fixed fixture; never issue production health receipts."""
     from github_release_health_emitter import measure_synthetic_contract
     import time
@@ -215,18 +222,40 @@ def run_synthetic_pilot(*, sandbox, uid, gid, work_root=Path('/var/lib/control-o
                 def identity():
                     return epoch if os.getpid()==epoch[0] else None
                 measurements=[]
+                host_measurements=[]
                 def run_case(facts):
-                    rc,out=sandbox.run_release_pilot(work,facts,digest,uid=uid,gid=gid)
+                    observed=[]
+                    def preflight(line):
+                        try:
+                            _, measured = parse_measured_fixture(line.decode('ascii')+'\n'+
+                                '{"status":"unknown"}',digest,uid)
+                            host = host_sampler(unit,uid)
+                            if (not host or host['namespace_pid'] != measured['pid']
+                                or host['uid'] != measured['uid']
+                                or host['production_authorized'] is not False
+                                or artifact_digest() != digest
+                                or (host_measurements and host['invocation'] != host_measurements[0]['invocation'])):
+                                return False
+                            observed.append(dict(host,digest=digest,measurement=measured))
+                            return True
+                        except (OSError, ValueError, TypeError, KeyError):
+                            return False
+                    opts = {'preflight':preflight} if unit is not None else {}
+                    rc,out=sandbox.run_release_pilot(work,facts,digest,uid=uid,gid=gid,**opts)
                     if rc != 0:
                         print('PILOT_CHILD_EXIT='+str(rc), file=__import__('sys').stderr)
                         return None
                     result,measurement=parse_measured_fixture(out,digest,uid)
+                    if unit is not None:
+                        if len(observed)!=1 or observed[0]['measurement']!=measurement:
+                            return None
+                        host_measurements.append(observed[0])
                     measurements.append(measurement)
                     return result
                 outcome=measure_synthetic_contract(digest,'sha256:'+digest,epoch,
                     identity=identity,artifact_digest=artifact_digest,run_case=run_case)
         return {'ok':outcome is True,'scope':'synthetic_only','functional_ok':outcome,
-                'digest':digest,'production_authorized':False,'measurements':measurements}
+                'digest':digest,'production_authorized':False,'measurements':measurements,'host_measurements':host_measurements}
     except (OSError,ValueError,TypeError,RuntimeError):
         return {'ok':False,'scope':'synthetic_only','functional_ok':None,'production_authorized':False}
 
@@ -256,7 +285,9 @@ def main(argv):
         sandbox=importlib.util.module_from_spec(spec)
         spec.loader.exec_module(sandbox)
         account=pwd.getpwnam('cvdev')
-        report=run_synthetic_pilot(sandbox=sandbox,uid=account.pw_uid,gid=account.pw_gid)
+        from github_release_host_observer import sample_unit
+        report=run_synthetic_pilot(sandbox=sandbox,uid=account.pw_uid,gid=account.pw_gid,
+            unit=lines[0].split('/')[-1],host_sampler=sample_unit)
     except (OSError,ValueError,KeyError,RuntimeError,ImportError):
         report={'ok':False,'scope':'synthetic_only','reason':'pilot_preconditions_failed','production_authorized':False}
     print(json.dumps(report,sort_keys=True))
