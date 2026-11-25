@@ -38,6 +38,7 @@ SystemCallArchitectures=native
 PrivateTmp=no
 ProtectSystem=strict
 ReadWritePaths=/var/lib/control-os-dev/work /tmp
+# Keep the host lock shared with the legacy worker; no private /tmp.
 TemporaryFileSystem=/var/lib/control-os-dev/work:rw,size=64M,nr_inodes=4096,mode=0755
 LimitFSIZE=33554432
 LimitCORE=0
