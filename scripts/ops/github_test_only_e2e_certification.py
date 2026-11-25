@@ -125,6 +125,55 @@ class FixtureDB:
         value=self.sql("select to_jsonb(public."+name+"("+",".join(self.literal(data[k]) for k in args)+"));")
         return json.loads(value) if value else None
 
+class DockerFixtureDB(FixtureDB):
+    """Disposable local-image-only PostgreSQL, no network or host mounts."""
+    def __init__(self,image):
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}",image):
+            raise ValueError("immutable local image required")
+        self.image=image
+        self.name=f"cv-e2e-pg-{os.getpid()}-{time.monotonic_ns()}"
+        self.created=False
+    def docker(self,*args,**kw):
+        return subprocess.run(["/usr/bin/docker",*args],env={"PATH":"/usr/bin:/bin","HOME":"/nonexistent"},check=True,capture_output=True,timeout=30,**kw)
+    def __enter__(self):
+        self.docker("image","inspect",self.image)
+        try:
+            self.docker("create","--name",self.name,"--pull=never","--network=none",
+                "--memory=256m","--memory-swap=256m","--cpus=0.5","--pids-limit=64",
+                "--security-opt=no-new-privileges","--read-only",
+                "--tmpfs","/var/lib/postgresql/data:rw,size=128m",
+                "--tmpfs","/var/run/postgresql:rw,size=8m",
+                "--tmpfs","/tmp:rw,size=16m",
+                "-e","PGDATA=/var/lib/postgresql/data/fixture",
+                "-e","POSTGRES_HOST_AUTH_METHOD=trust",self.image,
+                "postgres","-c","listen_addresses=","-c","shared_buffers=16MB",
+                "-c","max_connections=5")
+            self.created=True
+            self.docker("start",self.name)
+            deadline=time.monotonic()+30
+            while True:
+                try:
+                    self.docker("exec","-u","postgres",self.name,"pg_isready","-q","-h","/var/run/postgresql","-U","postgres")
+                    break
+                except subprocess.CalledProcessError:
+                    if time.monotonic()>=deadline:raise
+                    time.sleep(0.5)
+            self.sql("create role anon; create role authenticated; create role service_role bypassrls;")
+            raw=(HERE/"sql"/"github-test-only-e2e.fixture.sql").read_text()
+            for migration in ("github-test-only-enqueue.sql","github-test-only-lifecycle.sql","github-test-only-report.sql"):
+                raw=raw.replace("\\ir "+migration,(HERE/"sql"/migration).read_text())
+            self.sql(raw)
+            return self
+        except BaseException:
+            self.__exit__(None,None,None)
+            raise
+    def __exit__(self,*_):
+        if self.created:
+            self.docker("rm","-f","-v",self.name)
+            self.created=False
+    def sql(self,query):
+        return self.docker("exec","-i","-u","postgres",self.name,"psql","-X","-qAt","-v","ON_ERROR_STOP=1","-h","/var/run/postgresql","-U","postgres","-d","postgres",input=query,text=True).stdout.strip()
+
 def main():
     import tempfile
     if os.geteuid()!=0 or len(sys.argv)!=6 or sys.argv[1]!="--certify":raise ValueError("operator invocation required")
@@ -136,7 +185,7 @@ def main():
     env={"CV_GITHUB_CONTINGENCY_TOKEN":token,"CV_GITHUB_CONTINGENCY_ENABLED":"1","CV_GITHUB_CONTINGENCY_ISSUE":"3","CV_GITHUB_TEST_ONLY_ENABLED":"1"}
     # No token in child environment; cert.run itself starts a clean unit.
     with tempfile.TemporaryDirectory(prefix="cv-e2e-pg-",dir="/tmp") as tmp:
-        with FixtureDB(tmp,sys.argv[5]) as db:
+        with (DockerFixtureDB(sys.argv[5]) if sys.argv[5].startswith('sha256:') else FixtureDB(tmp,sys.argv[5])) as db:
             def launch(s,b):
                 # Do not exceed the lease budget with an unbounded outer invocation.
                 if b<45:return 125
