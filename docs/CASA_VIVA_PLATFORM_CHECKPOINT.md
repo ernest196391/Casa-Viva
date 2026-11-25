@@ -1,3 +1,7 @@
+## CV-AUTO-001 — piloto sincronizado con observador host (2026-11-25)
+
+- f3dbc60, 9281589, 0b9f574: el prefijo confiable del fixture mide bytes, espera ACK por stdin; el lanzador observa PID host/NSpid/UID, InvocationID y hash de staging antes de ACK. 9bf587c regresiones de identidad, fba479a rechazo en errores o vencimiento, 7f68ad4 pruebas de tuberías reales. Solo fixture fijo, no recibo productivo; CI y ejecución VPS pendientes. El puente root sigue sin separación instalada. No cambios de producción ni gasto adicional. Reversión: revertir commits en rama y retirar únicamente perfiles y workspace temporales del piloto.
+
 ## CV-AUTO-001 — observador kernel del piloto (2026-11-25)
 
 - c9e6b52 añade muestreo de PID host, NSpid, start ticks, UID, NNP, capacidades, AppArmor y cgroup, con InvocationID estable y rechazo de múltiples coincidencias. 07ef808 añade pruebas; 2f71687 integra CI. Aún no conectado al lanzador ni vinculado a bytes cargados: requiere piloto específico y correlación temporal independiente. No autoriza producción. Hostinger 16:16:31 -04:00: principal stopped exit 0, recovery online PID 2441402, ambos unstable_restarts 0; no reiniciar sin verificar rol WhatsApp. Costo nuevo cero.
