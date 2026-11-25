@@ -103,7 +103,8 @@ class ProfileFileTests(unittest.TestCase):
         self.assertIn("/proc/sys/kernel/overflowuid r,", rules)
         self.assertIn("/proc/sys/kernel/overflowgid r,", rules)
         self.assertEqual([rule for rule in rules if rule.startswith("/proc/")],
-                         ["/proc/sys/kernel/overflowuid r,", "/proc/sys/kernel/overflowgid r,"])
+                         ["/proc/sys/kernel/overflowuid r,", "/proc/sys/kernel/overflowgid r,",
+                          "/proc/sys/user/max_user_namespaces r,"])
         self.assertIn("deny network,", rules)
         self.assertFalse(any(rule.startswith("capability") for rule in rules))
 
