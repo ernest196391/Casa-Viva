@@ -174,3 +174,16 @@ def install_deps(workspace, timeout: int, *, uid: int, gid: int, environ=None,
                 "NPM_CONFIG_CACHE": str(home / "cache")})
     argv = ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"]
     return _launch(argv, cwd=workspace, env=env, timeout=timeout, uid=uid, gid=gid, spawn=spawn)
+
+def run_release_pilot(workspace, facts, expected_digest, *, uid, gid, spawn=subprocess.Popen):
+    """Fixed candidate pilot only; caller must supply disposable cgroup and profiles."""
+    boundary = _load("cv_release_boundary", "github_release_candidate_boundary.py")
+    if type(uid) is not int or type(gid) is not int or uid <= 0 or gid <= 0:
+        raise SandboxError("unprivileged identity required")
+    cmd = boundary.confined_command(expected_digest, facts)
+    argv = spec.build_bwrap_command(workspace, cmd, bwrap_binary=DEDICATED_BWRAP,
+                                    work_root=WORK_ROOT, child_env=BOX_ENV, drop_capabilities=True)
+    if spec.validate_command(argv, WORK_ROOT, bwrap_binary=DEDICATED_BWRAP, require_cap_drop=True):
+        raise SandboxError("invalid release pilot command")
+    return _launch(["/usr/bin/aa-exec", "-p", "cv-release-pilot-bootstrap", "--", *argv],
+                   cwd=str(workspace), env={}, timeout=10, uid=uid, gid=gid, spawn=spawn)
