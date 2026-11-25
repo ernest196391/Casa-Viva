@@ -63,4 +63,10 @@ class Tests(unittest.TestCase):
     def test_local_truncated(self,run):
         run.return_value=subprocess.CompletedProcess([],0,b'{"tenants":[],"count":2,"rows":[]}',b'')
         with self.assertRaises(ValueError): m.local_snapshot()
+    def test_config_status_redacted(self):
+        for exc,reason in [(FileNotFoundError('PRIVATE_FIXTURE'),'config_missing'),(PermissionError('PRIVATE_FIXTURE'),'config_access_denied'),(ValueError('wrong_project'),'wrong_project'),(ValueError('PRIVATE_FIXTURE'),'config_invalid')]:
+            with patch.object(m,'read_config',side_effect=exc):
+                self.assertEqual(m.config_status(),dict(ok=False,reason=reason))
+        with patch.object(m,'read_config',return_value='PRIVATE_FIXTURE'):
+            self.assertEqual(m.config_status(),dict(ok=True,scope='configuration_only',permission_scope='not_verified'))
 if __name__=='__main__': unittest.main()
