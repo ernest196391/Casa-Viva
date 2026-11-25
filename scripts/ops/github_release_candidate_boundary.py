@@ -183,7 +183,10 @@ def run_synthetic_pilot(*, sandbox, uid, gid, work_root=Path('/var/lib/control-o
                     return epoch if os.getpid()==epoch[0] else None
                 def run_case(facts):
                     rc,out=sandbox.run_release_pilot(work,facts,digest,uid=uid,gid=gid)
-                    return parse_response(out) if rc==0 else None
+                    if rc != 0:
+                        print('PILOT_CHILD_EXIT='+str(rc), file=__import__('sys').stderr)
+                        return None
+                    return parse_response(out)
                 outcome=measure_synthetic_contract(digest,'sha256:'+digest,epoch,
                     identity=identity,artifact_digest=artifact_digest,run_case=run_case)
         return {'ok':outcome is True,'scope':'synthetic_only','functional_ok':outcome,
