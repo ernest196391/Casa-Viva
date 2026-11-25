@@ -104,7 +104,12 @@ def stage_candidate(source, expected_digest, *, uid, gid, work_root=Path('/var/l
 
 def evaluate(source, facts, *, expected_digest, uid, gid, sandbox,
              work_root=Path('/var/lib/control-os-dev/work')):
-    """Only the verified staging path can reach the sandbox."""
+    """Public boundary remains closed until a mandatory pre-execution confinement is certified."""
+    return {'ok':False,'reason':'candidate_execution_boundary_not_certified'}
+
+def _evaluate_staged(source, facts, *, expected_digest, uid, gid, sandbox,
+                     work_root=Path('/var/lib/control-os-dev/work')):
+    """Internal staging primitive for controlled tests; not a production entrypoint."""
     try:
         if type(uid) is not int or type(gid) is not int or uid<=0 or gid<=0:
             return {'ok':False,'reason':'unprivileged_identity_required'}
