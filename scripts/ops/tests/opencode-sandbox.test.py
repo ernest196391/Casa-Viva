@@ -322,6 +322,17 @@ class CommandNegativeTests(unittest.TestCase):
         violations = spec.validate_command(tampered)
         self.assertTrue(any("/etc/ssl" in v for v in violations))
 
+    def test_explicit_capability_drop_required(self):
+        cmd = spec.build_bwrap_command(WORKSPACE, self.inner, drop_capabilities=True)
+        self.assertEqual(spec.validate_command(cmd, require_cap_drop=True), [])
+        self.assertTrue(spec.validate_command(self.cmd, require_cap_drop=True))
+        cmd[cmd.index("--cap-drop")+1] = "CAP_NET_ADMIN"
+        self.assertTrue(spec.validate_command(cmd, require_cap_drop=True))
+
+    def test_capability_addition_rejected(self):
+        cmd = self.cmd[:1] + ["--cap-add", "CAP_SYS_ADMIN"] + self.cmd[1:]
+        self.assertTrue(spec.validate_command(cmd))
+
     def test_rejects_share_net(self):
         tampered = self.cmd[:1] + ["--share-net"] + self.cmd[1:]
         violations = spec.validate_command(tampered)
