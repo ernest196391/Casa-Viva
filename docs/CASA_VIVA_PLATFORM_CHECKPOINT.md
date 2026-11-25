@@ -1,3 +1,12 @@
+## CV-AUTO-002 — exact launcher certification harness (2026-11-25)
+
+- 84dca39/62a3daf: seven local real-Git extraction regressions and CI integration.
+- 5a31f20: shared exact launcher implementation with strictly named transient certification units, fixed unittest argv.
+- d90aefa: operator-only exact launcher certification harness, private network, bounded transient unit, temporary Git clone, no database or mailbox access, cleanup required.
+- 1d616fe/3817b41/d4f924c: five harness regressions, staging and CI integration.
+- PostgreSQL integration run 45723834934 previously passed control-os-postgres and validate. New harness CI and actual Hostinger exact launcher execution remain pending. Existing synthetic host pilot is not a substitute.
+- No production installation, migration, marker, timer activation or additional spend.
+
 ## CV-AUTO-002 — cross-component integration and bounded Git extraction (2026-11-25)
 
 - 08fd8cb/3531d63: offline receiver/executor/reporter round trip and ambiguous POST recovery wired into validate CI.
