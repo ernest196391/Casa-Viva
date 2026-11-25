@@ -1,3 +1,7 @@
+## CV-AUTO-001 — contrato de observación independiente (2026-11-25)
+
+- Base 70287a101300f4ec3afe94eea3fdb2d1c3714b2a. 8737cbb añade contrato de observador con revisión, hash, epoch, InvocationID, uid no root y confinamiento; ab0e043 añade regresiones de cambios de identidad, fallo confirmado y evidencia desconocida. Las dependencias son callbacks confiables de prueba, no proveedor productivo instalado. No acredita bytes cargados por sí mismo. Mantener release cerrado; pendiente proveedor independiente, separación real del puente root y pruebas de recuperación. Reversión: revertir commits en rama, sin cambios VPS. Costo actual: infraestructura existente; costo nuevo requerido 0; alternativa gratuita: sandbox y systemd existentes; escalar solo si se demuestra necesidad y se autoriza.
+
 # CURRENT — P0 preservar ofertas al editar pedidos (2026-11-21)
 
 ## Infraestructura VPS durante HTTP 402 (2026-11-23)
