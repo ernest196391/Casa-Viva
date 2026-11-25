@@ -171,6 +171,39 @@ class Tests(unittest.TestCase):
                     self.assertEqual(len(result['host_measurements']),3)
                     self.assertEqual(result['host_measurements'][0]['host_pid'],11)
 
+    def test_projected_observation_uses_host_handshake(self):
+        from unittest.mock import patch
+        from contextlib import contextmanager
+        real_uid=os.geteuid()
+        original=b.stage_candidate
+        @contextmanager
+        def stage(*args,**kwargs):
+            with patch.object(b.os,'geteuid',return_value=real_uid):
+                with original(*args,**kwargs) as work:
+                    yield work
+        summary={'pm2':{n:{'status':'errored' if n=='vivabot' else 'online'} for n in b.PROCESSES},
+                 'bridge':'active'}
+        for status in ('degraded','healthy'):
+            with self.subTest(status=status), tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+                def launch(work,facts,digest,**kwargs):
+                    self.assertEqual(facts['pm2']['vivabot'],'stopped')
+                    transcript=self.transcript(status)
+                    self.assertTrue(kwargs['preflight'](transcript.splitlines()[0].encode()))
+                    return 0,transcript
+                self.box.run_release_pilot.side_effect=launch
+                def sample(unit,uid):
+                    return dict(host_pid=11,namespace_pid=2,start_ticks=123,uid=uid,
+                                invocation='a'*32,scope='synthetic_only',production_authorized=False)
+                with patch.object(b.os,'geteuid',return_value=0),patch.object(b,'stage_candidate',stage):
+                    result=b.run_synthetic_pilot(sandbox=self.box,uid=1000,gid=1001,
+                        work_root=Path(tmp),unit='cv-release-pilot-1-2.service',host_sampler=sample,
+                        observation=summary)
+                self.assertEqual(result['ok'],status=='degraded')
+                self.assertEqual(result['scope'],'observation_only')
+                self.assertEqual(result['status'],'degraded' if status=='degraded' else 'unknown')
+                self.assertFalse(result['production_authorized'])
+                self.assertEqual(list(Path(tmp).iterdir()),[])
+
     def test_synthetic_pilot_refuses_root_child(self):
         self.assertFalse(b.run_synthetic_pilot(sandbox=self.box,uid=0,gid=1001)['ok'])
         self.box.run_release_pilot.assert_not_called()
