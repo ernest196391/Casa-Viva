@@ -50,6 +50,7 @@ jobs:
           python3 scripts/ops/tests/control-sync-panel.test.py
           python3 scripts/ops/tests/github-contingency.test.py
           python3 scripts/ops/tests/github-test-only-bridge.test.py
+          python3 scripts/ops/tests/github-test-only-executor.test.py
           python3 scripts/ops/tests/github-release-rollback.test.py
           python3 scripts/ops/tests/github-release-transaction.test.py
           python3 scripts/ops/tests/github-release-supervisor.test.py
