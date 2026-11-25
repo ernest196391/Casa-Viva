@@ -17,6 +17,7 @@ create table public.ops_dev_runs(id bigint generated always as identity primary 
 create table public.ops_events(task_id uuid,thread_id uuid,event_type text,actor_type text,actor_ref text,detail jsonb);
 \ir github-test-only-enqueue.sql
 \ir github-test-only-lifecycle.sql
+\ir github-test-only-report.sql
 do $$
 declare a jsonb; b jsonb; c jsonb; t uuid; rid bigint; nonce text:=repeat('A',20);
 begin
@@ -40,6 +41,14 @@ begin
  perform public.ops_finish_github_test_only(t,rid,'cv-dev-worker-v1','failed');
  raise exception 'accepted conflicting terminal outcome' using errcode='ZX001';
  exception when sqlstate 'ZX001' then raise; when others then null; end;
+ if not public.ops_ack_github_test_only(t,901) or not public.ops_ack_github_test_only(t,901) then raise exception 'ack failed'; end if;
+ if public.ops_finish_github_test_only(t,rid,'cv-dev-worker-v1','passed') is distinct from b then raise exception 'finish after ack'; end if;
+ if (select count(*) from public.ops_events where event_type='github_test_reported')<>1 then raise exception 'duplicate ack event'; end if;
+ begin
+ perform public.ops_ack_github_test_only(t,902);
+ raise exception 'accepted conflicting ack' using errcode='ZX001';
+ exception when sqlstate 'ZX001' then raise; when others then null; end;
+ if has_function_privilege('anon','public.ops_ack_github_test_only(uuid,bigint)','execute') then raise exception 'public ack'; end if;
  nonce:=repeat('B',20);
  perform public.ops_enqueue_github_test_only(124,nonce,'casa-viva',repeat('b',40),'ops-python-contract',
  clock_timestamp()+interval '10 minutes',encode(sha256(convert_to('124:'||nonce,'UTF8')),'hex'));
