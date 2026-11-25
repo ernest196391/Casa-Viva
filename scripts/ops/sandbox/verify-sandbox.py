@@ -173,7 +173,7 @@ def run_checks(workspace: str, runner, **kwargs) -> dict:
                                                bwrap_binary=kwargs.get("bwrap_binary"))
             if violations:
                 raise ValueError("comando de prueba rechazado")
-            returncode, stdout, _stderr = runner(cmd)
+            returncode, stdout, stderr = runner(cmd)
         except Exception as exc:
             results[check] = {"ok": False, "detail": f"runner falló: {exc}"}
             verdict = VERDICT_NO_OPERATIVO if check == "bootstrap" else VERDICT_FAILED
@@ -185,6 +185,7 @@ def run_checks(workspace: str, runner, **kwargs) -> dict:
                 "ok": False,
                 "detail": f"sin respuesta válida (returncode {returncode}); "
                           "si esto ocurre en bootstrap, la jaula no arranca",
+                "stderr": stderr[:512].decode("utf-8", errors="replace") if isinstance(stderr, bytes) else "",
             }
             verdict = VERDICT_NO_OPERATIVO if check == "bootstrap" else VERDICT_FAILED
             break
