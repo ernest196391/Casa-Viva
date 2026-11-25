@@ -20,6 +20,26 @@ MAX_TOTAL=32*1024*1024
 MAX_FILES=1500
 ENV={"PATH":"/usr/bin:/bin","HOME":"/nonexistent","GIT_CONFIG_NOSYSTEM":"1","GIT_CONFIG_GLOBAL":"/dev/null","GIT_NO_REPLACE_OBJECTS":"1","GIT_NO_LAZY_FETCH":"1","GIT_TERMINAL_PROMPT":"0"}
 UNIT="cv-test-only-candidate.service"
+# Reuse the existing E3 AppArmor stacked transition. Test bytes are never
+# imported, opened, or compiled before the in-child mandatory preflight.
+CONFINED_TEST_PREFIX = r"""
+import os,sys,runpy
+with open('/proc/self/attr/current','w') as f:
+    f.write('stack cv-release-pilot-candidate')
+with open('/proc/self/attr/current') as f:
+    label=f.read().strip()
+if label!='cv-release-pilot-bootstrap//&cv-release-pilot-candidate (enforce)':
+    raise SystemExit(126)
+with open('/proc/self/status') as f:
+    fields=dict(line.split(':',1) for line in f if ':' in line)
+if os.getuid()==0 or os.geteuid()==0 or fields.get('NoNewPrivs','').strip()!='1':
+    raise SystemExit(126)
+if any(int(fields.get(k,'1').strip(),16) for k in ('CapEff','CapPrm','CapInh','CapAmb','CapBnd')):
+    raise SystemExit(126)
+if sys.argv[1:]!=['--fixed-test']:
+    raise SystemExit(126)
+runpy.run_path('scripts/ops/tests/github-test-only-bridge.test.py',run_name='__main__')
+"""
 
 def load(name,file):
     spec=importlib.util.spec_from_file_location(name,HERE/file)
@@ -92,11 +112,11 @@ def launch(sha,budget):
         remaining=min(60,int(budget-(time.monotonic()-started)))
         if remaining<5:return 124
         box.hand_over(workspace,ids["uid"],ids["gid"])
-        argv=box.spec.build_bwrap_command(workspace,["/usr/bin/python3","-I","-B","scripts/ops/tests/github-test-only-bridge.test.py"],
+        argv=box.spec.build_bwrap_command(workspace,["/usr/bin/python3.12","-I","-S","-B","-c",CONFINED_TEST_PREFIX,"--fixed-test"],
             bwrap_binary=box.DEDICATED_BWRAP,work_root=box.WORK_ROOT,child_env=box.BOX_ENV,drop_capabilities=True)
         if box.spec.validate_command(argv,box.WORK_ROOT,bwrap_binary=box.DEDICATED_BWRAP,require_cap_drop=True):
             return 125
-        rc,_=box._launch(argv,cwd=str(workspace),env={},timeout=remaining,**ids)
+        rc,_=box._launch(["/usr/bin/aa-exec","-p","cv-release-pilot-bootstrap","--",*argv],cwd=str(workspace),env={},timeout=remaining,**ids)
         return rc
     except (TimeoutError,subprocess.TimeoutExpired):
         return 124
