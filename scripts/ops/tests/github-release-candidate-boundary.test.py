@@ -92,4 +92,28 @@ class Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             b.confined_command('a'*64,{'token':'synthetic'})
 
+    def test_synthetic_pilot_observer_and_cleanup(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+            root=Path(tmp)
+            self.box.run_release_pilot.side_effect=[(0,'{"status":"healthy"}'),(0,'{"status":"degraded"}'),(0,'{"status":"unknown"}')]
+            real_uid=os.geteuid()
+            # stage owner validation still uses actual uid in non-root CI.
+            original=b.stage_candidate
+            from contextlib import contextmanager
+            @contextmanager
+            def stage(*args,**kwargs):
+                with patch.object(b.os,'geteuid',return_value=real_uid):
+                    with original(*args,**kwargs) as work:
+                        yield work
+            with patch.object(b.os,'geteuid',return_value=0), patch.object(b,'stage_candidate',stage):
+                result=b.run_synthetic_pilot(sandbox=self.box,uid=1000,gid=1001,work_root=root)
+            self.assertTrue(result['ok'])
+            self.assertFalse(result['production_authorized'])
+            self.assertEqual(self.box.run_release_pilot.call_count,3)
+            self.assertEqual(list(root.iterdir()),[])
+    def test_synthetic_pilot_refuses_root_child(self):
+        self.assertFalse(b.run_synthetic_pilot(sandbox=self.box,uid=0,gid=1001)['ok'])
+        self.box.run_release_pilot.assert_not_called()
+
 if __name__=='__main__': unittest.main()
