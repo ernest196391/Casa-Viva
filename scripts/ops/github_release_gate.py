@@ -84,6 +84,21 @@ def approved_revision(sha, artifact_digest):
 
 
 def apply_release(sha, api):
+    # Imported lazily: the transaction module shares our private file primitives.
+    from github_release_transaction import release_lock, load_state, TERMINAL
+    try:
+        with release_lock(ROOT):
+            state = load_state(ROOT)
+            if state and state['state'] not in TERMINAL:
+                return {'ok': False, 'reason': 'release_pending'}
+            return _apply_release_locked(sha, api)
+    except BlockingIOError:
+        return {'ok': False, 'reason': 'release_busy'}
+    except (OSError, ValueError, TypeError):
+        return {'ok': False, 'reason': 'release_unavailable'}
+
+
+def _apply_release_locked(sha, api):
     if not isinstance(sha, str) or not re.fullmatch(r'[0-9a-f]{40}', sha):
         return {'ok': False, 'reason': 'invalid_sha'}
     try:
@@ -121,7 +136,10 @@ def apply_release(sha, api):
         git('fetch', 'origin', 'main')
         if git('rev-parse', 'origin/main').decode().strip() != sha:
             return {'ok': False, 'reason': 'main_moved'}
+        from github_release_transaction import prepare, save_state
+        transaction = prepare(sha, previous, body, ROOT)
         atomic_file(TARGET, body)
-        return {'ok': True, 'changed': True, 'sha': sha}
+        save_state(transaction, 'pending_health', ROOT)
+        return {'ok': True, 'changed': True, 'sha': sha, 'state': 'pending_health'}
     except (OSError, ValueError, TypeError, KeyError, AttributeError, SyntaxError, subprocess.SubprocessError):
         return {'ok': False, 'reason': 'release_unavailable'}
