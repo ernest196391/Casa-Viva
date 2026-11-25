@@ -70,7 +70,7 @@ def prepare(sha,previous,candidate,root=ROOT):
     save_state(data,'prepared',root)
     return data
 
-def recover(observed_health=None,root=ROOT):
+def recover(observed_health=None,root=ROOT,*,expected=None):
     """Only the independent local supervisor may supply a health observation.
 
     None means unknown. A failed candidate restores the old file but leaves the
@@ -79,6 +79,8 @@ def recover(observed_health=None,root=ROOT):
     try:
         with release_lock(root):
             data=load_state(root)
+            if expected is not None and data != expected:
+                return {'ok':False,'reason':'observation_stale'}
             if not data or data['state'] in TERMINAL:
                 return {'ok':True,'state':'idle' if not data else data['state']}
             target=root/'github_contingency.py'
