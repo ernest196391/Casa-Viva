@@ -580,7 +580,9 @@ def hermes_offline_tests(data, now):
                     '-p', 'PrivateTmp=yes', '-p', 'NoNewPrivileges=yes',
                     '-p', 'RestrictAddressFamilies=AF_UNIX', '-p', 'MemoryMax=256M',
                     '-p', 'CPUQuota=50%', '-p', 'TasksMax=32', '-p', 'RuntimeMaxSec=30',
-                    '-p', 'InaccessiblePaths=/run /var/lib /var/log /srv /mnt /media',
+                    # Mask sensitive sockets individually: masking all /run breaks systemd namespaces.
+                    '-p', 'InaccessiblePaths=/var/lib /var/log /srv /mnt /media -/run/systemd/private -/run/dbus -/run/docker.sock -/run/containerd -/run/user -/run/redis -/run/postgresql',
+                    '-p', 'SystemCallFilter=~connect',
                     '-p', 'BindReadOnlyPaths=' + tmp + ':/opt/cv-offline-tests',
                     '/usr/bin/node', '--test', '--test-reporter=tap',
                     '/opt/cv-offline-tests/test/cv-fin-receiver.test.mjs',
