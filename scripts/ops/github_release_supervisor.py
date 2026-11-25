@@ -5,8 +5,10 @@ from the untrusted checkout. Its restart and functional probe are supplied by
 an independently installed, fixed-scope service adapter. No mailbox commands.
 Unknown health never authorizes a release or a rollback.
 """
-import hashlib
+import contextlib
+import fcntl
 import os
+import stat
 from pathlib import Path
 from github_release_gate import read_private, atomic_file
 from github_release_transaction import load_state, recover, digest, TERMINAL, release_lock
@@ -30,10 +32,35 @@ def _snapshot(root):
 def _valid_process(value):
     """An independently collected process epoch: PID + monotonic start time."""
     return (isinstance(value, tuple) and len(value) == 2
-            and isinstance(value[0], int) and value[0] > 0
-            and isinstance(value[1], int) and value[1] > 0)
+            and type(value[0]) is int and value[0] > 0
+            and type(value[1]) is int and value[1] > 0)
+
+@contextlib.contextmanager
+def supervisor_lock(root):
+    fd = os.open(root / '.github-release-supervisor.lock',
+                 os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid() or st.st_mode & 0o077 or st.st_nlink != 1:
+            raise ValueError('unsafe_supervisor_lock')
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+    finally:
+        os.close(fd)
 
 def supervise(*, root=ROOT, process_identity, restart, health_probe):
+    # Serialize the entire probe, including external callbacks, without nesting
+    # the transaction lock used internally by recover().
+    try:
+        with supervisor_lock(root):
+            return _supervise(root=root, process_identity=process_identity,
+                              restart=restart, health_probe=health_probe)
+    except BlockingIOError:
+        return {'ok': False, 'reason': 'supervisor_busy'}
+    except (OSError, ValueError, TypeError):
+        return {'ok': False, 'reason': 'supervision_unavailable'}
+
+def _supervise(*, root=ROOT, process_identity, restart, health_probe):
     """Reconcile one transaction; callbacks are locally trusted, never user input.
 
     process_identity() -> (pid, start_monotonic_ns), not just systemd 'active'.
@@ -84,7 +111,7 @@ def supervise(*, root=ROOT, process_identity, restart, health_probe):
         if restart() is not True:
             return {'ok': False, 'state': state, 'reason': 'restart_unavailable'}
         epoch_after = process_identity()
-        if not _valid_process(epoch_after) or epoch_after == epoch_before:
+        if not _valid_process(epoch_after) or epoch_after[1] <= epoch_before[1]:
             return {'ok': False, 'state': state, 'reason': 'restart_unverified'}
         if _identity(root) != expected_digest or load_state(root) != before:
             return {'ok': False, 'reason': 'observation_stale'}
