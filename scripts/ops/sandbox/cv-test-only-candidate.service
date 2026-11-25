@@ -1,0 +1,29 @@
+# Candidate only. No [Install], timer, or activation.
+[Unit]
+Description=Casa Viva isolated test-only candidate
+ConditionPathExists=/etc/control-os/test-only-certified
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/control-os-test-only
+Environment=CV_DEV_SANDBOX=1
+Environment=CV_DEV_TEST_ONLY_MODE=1
+Environment=CV_TEST_ONLY_SANDBOX_CERTIFIED=1
+EnvironmentFile=-/etc/control-os/test-only.env
+ExecStart=/usr/bin/python3 /opt/control-os-test-only/dev-worker.py
+MemoryMax=256M
+MemorySwapMax=0
+CPUQuota=50%
+TasksMax=32
+TimeoutStartSec=150
+TimeoutStopSec=5
+KillMode=control-group
+UMask=0077
+PrivateTmp=no
+ProtectSystem=strict
+ReadWritePaths=/var/lib/control-os-dev/work /tmp
+TemporaryFileSystem=/var/lib/control-os-dev/work:rw,size=64M,nr_inodes=4096,mode=0755
+LimitFSIZE=33554432
+LimitCORE=0
