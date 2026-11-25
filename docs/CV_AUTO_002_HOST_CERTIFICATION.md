@@ -16,3 +16,7 @@ Never remove or overwrite an existing live unit or profile. For a future install
 
 ## Hermes
 Hermes must use the existing authorized owner mailbox and fixed test-only envelope, not a second command transport. Do not give Hermes a service-role key, shell endpoint or credentials for production. The terminal result is correlated by comment id and SHA; absence of a result is unknown, not success. Hermes integration remains unverified until its existing runtime and identity can be observed on the host.
+
+## Autonomous receiver acceptance gate — isolated only
+
+Do not start the existing candidate timer or create /etc/control-os/test-only-certified. The integral one-shot fixture has a real passed mailbox receipt but final acknowledgement and cleanup remain unobserved. Before any unattended pilot, require final INTEGRAL_EXIT=0, durable_rows=1, no fixture containers, temporary profiles removed, CI green and a reviewed immutable bundle. Use a separate disposable queue and a fixed reviewed revision, never the production database or a dynamically fetched executable. The operator must explicitly authorize an isolated timer pilot with a bounded lifetime, unique namespace, one request maximum, durable replay fence and automatic expiry/rollback. The existing production worker and diagnostic mailbox services must remain unchanged. Do not interpret a passed receipt as authority to activate production. If any precondition fails, stop and retain redacted evidence.
