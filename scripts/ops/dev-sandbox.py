@@ -25,6 +25,8 @@ from __future__ import annotations
 import importlib.util
 import os
 import signal
+import selectors
+import time
 import subprocess
 from pathlib import Path
 
@@ -90,16 +92,51 @@ def _launch(argv, *, cwd, env, timeout, uid, gid, spawn=subprocess.Popen):
         argv, cwd=cwd, env=env, user=uid, group=gid, extra_groups=[],
         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True,
     )
+    # Drain incrementally: never accumulate unbounded child output in RAM.
+    # A child that exceeds the byte budget is terminated, not truncated into
+    # an apparently valid success response. Deadline includes pipe drainage.
+    deadline = time.monotonic() + timeout
+    out = bytearray()
+    reason = None
     try:
-        out, _ = proc.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        try:
-            os.killpg(proc.pid, _SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            proc.kill()
-        out, _ = proc.communicate()
-        return 124, _cap(out or b"") + f"\n[tiempo agotado a los {timeout} s; grupo de procesos terminado]"
-    return proc.returncode, _cap(out or b"")
+        with selectors.DefaultSelector() as selector:
+            selector.register(proc.stdout, selectors.EVENT_READ)
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not selector.select(remaining):
+                    reason = 124
+                    break
+                chunk = os.read(proc.stdout.fileno(), min(4096, MAX_OUT + 1 - len(out)))
+                if not chunk:
+                    break
+                out.extend(chunk)
+                if len(out) > MAX_OUT:
+                    reason = 125
+                    break
+        if reason is None:
+            try:
+                proc.wait(timeout=max(0, deadline-time.monotonic()))
+            except subprocess.TimeoutExpired:
+                reason = 124
+    except (OSError, ValueError):
+        reason = 125
+    finally:
+        if reason is not None:
+            try:
+                os.killpg(proc.pid, _SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                proc.kill()
+        proc.stdout.close()
+        if reason is not None:
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                raise SandboxError("no se confirmó la terminación del proceso")
+    if reason == 124:
+        return 124, "[tiempo agotado; grupo de procesos terminado]"
+    if reason == 125:
+        return 125, "[salida excesiva o no verificable; ejecución rechazada]"
+    return proc.returncode, _cap(bytes(out))
 
 
 def run_in_box(cmd, workspace, timeout: int, *, uid: int, gid: int, bwrap_binary: str = DEDICATED_BWRAP,
