@@ -120,3 +120,37 @@ def _evaluate_staged(source, facts, *, expected_digest, uid, gid, sandbox,
             return _evaluate(workspace,facts,uid=uid,gid=gid,sandbox=sandbox)
     except (OSError,ValueError,TypeError,RuntimeError,SyntaxError):
         return {'ok':False,'reason':'candidate_unavailable'}
+
+# Trusted interpreter prefix. The candidate is not opened, imported or compiled
+# by this interpreter until the mandatory confinement checks have passed.
+# Only a separately certified launcher may invoke this command.
+PREFLIGHT_PREFIX = r'''
+import os, sys
+with open("/proc/self/attr/current", "w") as f:
+    f.write("stack cv-release-pilot-candidate")
+with open("/proc/self/attr/current") as f:
+    if f.read().strip() != "cv-release-pilot-bootstrap//&cv-release-pilot-candidate (enforce)":
+        raise SystemExit(126)
+with open("/proc/self/status") as f:
+    fields = dict(line.split(":", 1) for line in f if ":" in line)
+if os.getuid() == 0 or os.geteuid() == 0 or fields["NoNewPrivs"].strip() != "1":
+    raise SystemExit(126)
+if any(int(fields[k].strip(), 16) for k in ("CapEff","CapPrm","CapInh","CapAmb","CapBnd")):
+    raise SystemExit(126)
+import hashlib
+expected, payload = sys.argv[1:]
+with open("candidate.py", "rb") as f:
+    body = f.read(65537)
+if not body or len(body) > 65536 or hashlib.sha256(body).hexdigest() != expected:
+    raise SystemExit(126)
+sys.argv = ["candidate.py", payload]
+exec(compile(body, "candidate.py", "exec"), {"__name__":"__main__", "__file__":"candidate.py"})
+'''
+
+def confined_command(expected_digest, facts):
+    """Fixed command for supervised certification; never a host execution API."""
+    if not isinstance(expected_digest,str) or not re.fullmatch(r'[0-9a-f]{64}',expected_digest):
+        raise ValueError('invalid_digest')
+    payload=request_bytes('health_summary',facts)
+    return ['/usr/bin/python3.12','-I','-S','-B','-c',PREFLIGHT_PREFIX,
+            expected_digest,payload.decode('ascii')]
