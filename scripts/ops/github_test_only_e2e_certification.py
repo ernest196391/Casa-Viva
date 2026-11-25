@@ -35,7 +35,7 @@ def run(api,gh,env,comment_id,sha,launch,now=None):
         if verb=="GET" and p.startswith(path+"?") and "&since=" in p:
             comment=gh(t,"GET",root+"/issues/comments/"+str(comment_id))
             request=rx.parse_comment(comment,now)
-            if not request or request["sha"]!=sha or comment.get("issue_url")!="https://api.github.com"+root+"/issues/3":
+            if not request or request["comment_id"]!=comment_id or request["sha"]!=sha or comment.get("issue_url")!="https://api.github.com"+root+"/issues/3":
                 raise ValueError("request mismatch")
             return [comment]
         if verb=="POST":
@@ -48,12 +48,15 @@ def run(api,gh,env,comment_id,sha,launch,now=None):
     for _ in range(2):
         if rx.receive_once(env,now,scoped,lambda p,d:api("POST",p,d))!="queued":raise ValueError("intake blocked")
     calls=[]
+    outcomes=[]
     def execute(s,b):
         if s!=sha or calls:raise ValueError("unexpected claim")
         calls.append(s)
-        return launch(s,b)
+        rc=launch(s,b)
+        outcomes.append(rc)
+        return rc
     if not ex.worker_once(api,execute):raise ValueError("missing claim")
     if ex.worker_once(api,execute):raise ValueError("second claim")
     if not rp.deliver(api,scoped,token,rx.OWNER_ID):raise ValueError("missing acknowledgement")
     if rp.deliver(api,scoped,token,rx.OWNER_ID):raise ValueError("duplicate acknowledgement")
-    return {"scope":"isolated_e2e","requests":1,"launches":len(calls),"acknowledged":True,"production_authorized":False}
+    return {"ok":outcomes==[0],"scope":"isolated_e2e","requests":1,"launches":len(calls),"acknowledged":True,"production_authorized":False}
