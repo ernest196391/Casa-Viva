@@ -32,13 +32,17 @@ def git(args,timeout=10):
         env=ENV,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
         timeout=timeout,check=True).stdout
 
-def extract(sha,workspace):
+def extract(sha,workspace,deadline):
+    def bounded_git(args):
+        remaining=deadline-time.monotonic()
+        if remaining<=0: raise TimeoutError('extraction deadline')
+        return git(args,timeout=min(10,remaining))
     if not isinstance(sha,str) or not SHA.fullmatch(sha):
         raise ValueError("invalid revision")
-    if git(["cat-file","-t",sha]).strip()!=b"commit":
+    if bounded_git(["cat-file","-t",sha]).strip()!=b"commit":
         raise ValueError("not a commit")
     # Only the fixed test subtree; no hooks, archive filters, symlinks or submodules.
-    listing=git(["ls-tree","-r","-l","-z",sha,"--","scripts/ops"])
+    listing=bounded_git(["ls-tree","-r","-l","-z",sha,"--","scripts/ops"])
     records=listing.split(b"\0")[:-1]
     if not records or len(records)>MAX_FILES or len(listing)>1024*1024:
         raise ValueError("tree size")
@@ -55,7 +59,7 @@ def extract(sha,workspace):
         parts=rel.split("/")
         if parts[:2]!=["scripts","ops"] or any(not re.fullmatch(r"[A-Za-z0-9_.-]+",p) or p in (".","..",".git") or p.startswith(".env") for p in parts):
             raise ValueError("unsafe path")
-        data=git(["cat-file","blob",oid.decode("ascii")])
+        data=bounded_git(["cat-file","blob",oid.decode("ascii")])
         if len(data)!=size: raise ValueError("blob mismatch")
         dst=workspace.joinpath(*parts)
         dst.parent.mkdir(parents=True,exist_ok=True)
@@ -84,7 +88,7 @@ def launch(sha,budget):
     started=time.monotonic()
     workspace=Path(tempfile.mkdtemp(prefix="run-test-",dir=root))
     try:
-        extract(sha,workspace)
+        extract(sha,workspace,started+min(25,budget-15))
         remaining=min(60,int(budget-(time.monotonic()-started)))
         if remaining<5:return 124
         box.hand_over(workspace,ids["uid"],ids["gid"])
@@ -94,5 +98,7 @@ def launch(sha,budget):
             return 125
         rc,_=box._launch(argv,cwd=str(workspace),env={},timeout=remaining,**ids)
         return rc
+    except (TimeoutError,subprocess.TimeoutExpired):
+        return 124
     finally:
         shutil.rmtree(workspace)
