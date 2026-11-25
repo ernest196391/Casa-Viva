@@ -5,12 +5,11 @@ may be a short-lived job, so absence of MainPID is UNKNOWN, not failure.
 This adapter deliberately cannot certify functional health by itself.
 """
 import subprocess
-from pathlib import Path
 
 UNIT = 'cv-ops-bridge.service'
-PROPERTIES = ('MainPID', 'ExecMainStartTimestampMonotonic', 'InvocationID')
+PROPERTIES = ('MainPID', 'ExecMainStartTimestampMonotonic', 'InvocationID', 'Type', 'ActiveState', 'Result')
 
-def process_identity():
+def _properties():
     try:
         p = subprocess.run(
             ['/usr/bin/systemctl', 'show', '--no-pager',
@@ -21,6 +20,20 @@ def process_identity():
         if len(p.stdout) > 4096:
             return None
         fields = dict(line.split('=', 1) for line in p.stdout.decode('ascii').splitlines())
+        return fields
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        return None
+
+def service_type():
+    fields = _properties()
+    value = fields.get('Type') if fields else None
+    return value if value in {'simple','exec','forking','oneshot','notify','notify-reload','dbus','idle'} else None
+
+def process_identity():
+    try:
+        fields = _properties()
+        if fields is None:
+            return None
         pid = int(fields['MainPID'])
         started = int(fields['ExecMainStartTimestampMonotonic'])
         if pid <= 0 or started <= 0 or not fields['InvocationID']:
