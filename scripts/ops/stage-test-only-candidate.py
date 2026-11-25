@@ -11,6 +11,7 @@ import tempfile
 HERE=Path(__file__).resolve().parent
 FILES=("dev-worker.py","dev-sandbox.py","github_contingency.py","github-test-only-bridge.py",
        "github_test_only_executor.py","github_test_only_launcher.py","github_test_only_reporter.py",
+       "github_test_only_host_preflight.py",
        "github_release_candidate_limits.py","sandbox/opencode-sandbox-spec.py",
        "sandbox/dev-worker-sandbox.profile","sandbox/cv-test-only-candidate.service")
 def stage(destination):
