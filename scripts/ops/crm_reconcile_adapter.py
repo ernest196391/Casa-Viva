@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import time
+import urllib.error
 import urllib.request
 import urllib.parse
 from pathlib import Path
@@ -10,7 +11,8 @@ from crm_reconcile_dryrun import reconcile, tenant_id, ROW_KEYS, MAX_ROWS
 
 HOST = 'https://viwwlriwlwodrfukbgbj.supabase.co'
 CONFIG = Path('/root/supervisor/.dispatch-preflight.env')
-PAGE = 200
+PAGE = 500
+MAX_BYTES = 32 * 1024 * 1024
 COLUMNS = ','.join(sorted(ROW_KEYS))
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -62,6 +64,7 @@ def remote_snapshot(key,get=remote_get):
         raise ValueError('tenant_ambiguous')
     tenant=tenant_id(tenants[0]['id'])
     rows=[]
+    used_bytes=0
     expected=None
     deadline=time.monotonic()+180
     while True:
@@ -77,6 +80,9 @@ def remote_snapshot(key,get=remote_get):
             raise ValueError('invalid_page')
         if not page and len(rows)!=count:
             raise ValueError('truncated_snapshot')
+        used_bytes += len(json.dumps(page,ensure_ascii=True,separators=(',',':')).encode())
+        if used_bytes>MAX_BYTES:
+            raise ValueError('snapshot_byte_budget')
         rows.extend(page)
         if len(rows)==count:
             break
@@ -110,12 +116,22 @@ def simulate(local=local_snapshot,remote=remote_snapshot,config=read_config):
         key=config()
         a,local_rows=local()
         b,remote_rows=remote(key)
+        # Compare compact per-key fingerprints rather than retaining a second raw snapshot.
+        from crm_reconcile_dryrun import index_rows
+        first=index_rows(remote_rows,b)
         c,second=remote(key)
-        if b!=c or remote_rows!=second:
+        second_index=index_rows(second,c)
+        if b!=c or first!=second_index:
             return {'ok':False,'reason':'remote_changed','eligible':0}
+        del second, second_index, first
         if a!=b:
             return {'ok':False,'reason':'tenant_mapping_unverified','eligible':0}
         return reconcile(local_rows,remote_rows,a,b,identity_verified=True,snapshot_complete=True)
+    except urllib.error.HTTPError as exc:
+        status=exc.code
+        exc.close()
+        reason={401:'remote_auth',403:'remote_permission',402:'remote_quota',429:'remote_rate_limit'}.get(status,'remote_http')
+        return {'ok':False,'reason':reason,'eligible':0}
     except Exception:
         return {'ok':False,'reason':'snapshot_unavailable','eligible':0}
 
