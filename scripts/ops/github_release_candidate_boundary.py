@@ -40,7 +40,7 @@ def parse_response(raw):
         raise ValueError('invalid_response')
     return {'status':data['status'],'advisory_only':True}
 
-def evaluate(workspace, facts, *, uid, gid, sandbox):
+def _evaluate(workspace, facts, *, uid, gid, sandbox):
     """Use existing sandbox API; no arbitrary commands or candidate-selected paths."""
     try:
         if type(uid) is not int or type(gid) is not int or uid<=0 or gid<=0:
@@ -75,7 +75,7 @@ def stage_candidate(source, expected_digest, *, uid, gid, work_root=Path('/var/l
     root=Path(work_root)
     for parent in (root,*root.parents):
         st=parent.lstat()
-        if not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.geteuid() or st.st_mode & 0o022:
+        if not stat.S_ISDIR(st.st_mode) or st.st_uid not in (0,os.geteuid()) or st.st_mode & 0o022:
             raise ValueError('unsafe_workspace_root')
     fd=os.open(source,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
     with os.fdopen(fd,'rb') as f:
@@ -101,3 +101,17 @@ def stage_candidate(source, expected_digest, *, uid, gid, work_root=Path('/var/l
         os.chmod(work,0o700)
         target.unlink(missing_ok=True)
         work.rmdir()
+
+def evaluate(source, facts, *, expected_digest, uid, gid, sandbox,
+             work_root=Path('/var/lib/control-os-dev/work')):
+    """Only the verified staging path can reach the sandbox."""
+    try:
+        if type(uid) is not int or type(gid) is not int or uid<=0 or gid<=0:
+            return {'ok':False,'reason':'unprivileged_identity_required'}
+        if uid==os.geteuid():
+            return {'ok':False,'reason':'distinct_identity_required'}
+        request_bytes('health_summary',facts)
+        with stage_candidate(source,expected_digest,uid=uid,gid=gid,work_root=work_root) as workspace:
+            return _evaluate(workspace,facts,uid=uid,gid=gid,sandbox=sandbox)
+    except (OSError,ValueError,TypeError,RuntimeError,SyntaxError):
+        return {'ok':False,'reason':'candidate_unavailable'}
