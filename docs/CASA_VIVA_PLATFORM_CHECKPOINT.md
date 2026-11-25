@@ -1,3 +1,11 @@
+## CV-AUTO-002 — real exact launcher Hostinger certification PASS (2026-11-25)
+
+- Directly observed Hostinger terminal, staged revision 9f74fbd3a4e2e1eeb3e4806366e7f6dd1cc70358, disposable clone /tmp/cv-exact-cert.09TQQ3/source.
+- CERTIFICATION_EXIT=0; launcher_exit=0; ok=true; cleanup_confirmed=true; scope=exact_launcher_fixture; production_authorized=false. Same internal launcher executed fixed test profile within bounded transient unit, private network, temporary workspace and AppArmor stacked preflight.
+- Existing cv-ops-bridge and cv-dev-worker services remained active, original cv-dev-worker-bwrap profile enforce, both temporary profiles removed.
+- This is a fixture-path certification, not independent host observation of every candidate process nor live mailbox/DB integration. No production marker, migrations, timer activation or permanent profiles installed. Temporary evidence clone retained. Zero additional spend.
+- Next: isolated real transport/queue/launcher/report end-to-end certification using disposable database and narrowly authorized mailbox, before any live enablement; Hermes location unresolved.
+
 ## CV-AUTO-002 — exact launcher certification harness (2026-11-25)
 
 - 84dca39/62a3daf: seven local real-Git extraction regressions and CI integration.
