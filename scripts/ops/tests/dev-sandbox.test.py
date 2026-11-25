@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Pruebas del módulo de ejecución en caja (EVO-LOCAL-001, E1). Sin bwrap, sin root, sin procesos reales."""
 import ast
+import io
+from unittest.mock import patch
 import importlib.util
 import os
 import signal
@@ -28,14 +30,27 @@ WS = box.WORK_ROOT + "/run-task-150"
 class FakeProc:
     def __init__(self, rc=0, out=b"ok", hang=False):
         self.returncode, self.out, self.hang, self.pid, self.killed = rc, out, hang, 4242, False
+        self.stdout = io.BytesIO(out)
+        self.stdout.fileno = lambda: 12345
 
-    def communicate(self, timeout=None):
-        if self.hang and timeout is not None:
-            raise subprocess.TimeoutExpired("x", timeout)
-        return self.out, None
+    def wait(self, timeout=None):
+        return self.returncode
 
     def kill(self):
         self.killed = True
+
+
+class FakeSelector:
+    def __init__(self):
+        self.proc = None
+    def __enter__(self):
+        return self
+    def __exit__(self, *args):
+        pass
+    def register(self, stream, *args):
+        self.proc = stream
+    def select(self, timeout):
+        return [] if self.proc.hang else [True]
 
 
 class FakePopen:
@@ -45,10 +60,18 @@ class FakePopen:
     def __call__(self, argv, **kw):
         self.calls.append((argv, kw))
         self.last = FakeProc(**self.proc_kw)
+        self.last.stdout.hang = self.last.hang
+        self.last.stdout.fileno = lambda: self.last.stdout
         return self.last
 
 
 class BoxTests(unittest.TestCase):
+    def setUp(self):
+        for obj, name, value in ((box.selectors,'DefaultSelector',FakeSelector),(box.os,'read',lambda stream,n: stream.read(n)),(box.os,'killpg',lambda *args: None)):
+            p=patch.object(obj,name,value)
+            p.start()
+            self.addCleanup(p.stop)
+
     def test_comando_de_la_caja(self):
         spawn = FakePopen()
         rc, out = box.run_in_box(["npm", "run", "lint"], WS, 60, uid=1000, gid=1001, spawn=spawn)
@@ -135,7 +158,8 @@ class BoxTests(unittest.TestCase):
     def test_salida_limitada(self):
         spawn = FakePopen(rc=1, out=b"x" * (box.MAX_OUT * 3))
         rc, out = box.run_in_box(["npm", "test"], WS, 60, uid=1000, gid=1001, spawn=spawn)
-        self.assertEqual(rc, 1)
+        self.assertEqual(rc, 125)
+        self.assertIn('salida excesiva',out)
         self.assertLessEqual(len(out), box.MAX_OUT)
 
     def test_instalacion_con_red_pero_sin_secretos(self):
