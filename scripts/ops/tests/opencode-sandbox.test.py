@@ -98,6 +98,15 @@ class ProfileFileTests(unittest.TestCase):
         rules = spec._profile_rules(PROFILE_TEXT)
         self.assertNotIn("unconfined", "\n".join(rules).lower())
 
+    def test_dev_worker_bootstrap_constants_are_read_only(self):
+        rules = spec._profile_rules((SANDBOX_DIR / "dev-worker-sandbox.profile").read_text(encoding="utf-8"))
+        self.assertIn("/proc/sys/kernel/overflowuid r,", rules)
+        self.assertIn("/proc/sys/kernel/overflowgid r,", rules)
+        self.assertEqual([rule for rule in rules if rule.startswith("/proc/")],
+                         ["/proc/sys/kernel/overflowuid r,", "/proc/sys/kernel/overflowgid r,"])
+        self.assertIn("deny network,", rules)
+        self.assertFalse(any(rule.startswith("capability") for rule in rules))
+
     def test_profile_grants_no_capability(self):
         rules = spec._profile_rules(PROFILE_TEXT)
         for rule in rules:
