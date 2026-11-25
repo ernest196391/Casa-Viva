@@ -72,6 +72,17 @@ def atomic_file(path, data):
         if temp.exists(): temp.unlink()
 
 
+def approved_revision(sha, artifact_digest):
+    """Local, independent approval bound to exact commit and artifact.
+    No issue comment or worker task can create this approval.
+    """
+    try:
+        raw = read_private(ROOT / '.github-release-approval', 256).decode()
+        return raw == sha + ' ' + artifact_digest + '\n'
+    except (OSError, ValueError, UnicodeError):
+        return False
+
+
 def apply_release(sha, api):
     if not isinstance(sha, str) or not re.fullmatch(r'[0-9a-f]{40}', sha):
         return {'ok': False, 'reason': 'invalid_sha'}
@@ -93,6 +104,8 @@ def apply_release(sha, api):
         body = git('show', f'{sha}:{SOURCE}')
         if len(body) > 65536 or len(body) < 1000:
             return {'ok': False, 'reason': 'invalid_artifact'}
+        if not approved_revision(sha, hashlib.sha256(body).hexdigest()):
+            return {'ok': False, 'reason': 'independent_approval_required'}
         compile(body, str(TARGET), 'exec')
         previous = read_private(TARGET)
         if previous == body:
