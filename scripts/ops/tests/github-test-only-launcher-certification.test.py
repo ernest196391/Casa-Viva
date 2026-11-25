@@ -13,7 +13,13 @@ class CertTests(unittest.TestCase):
             self.assertIn("--property="+prop,cmd)
         self.assertNotIn("CAP_SYS_PTRACE"," ".join(cmd))
         self.assertNotIn("dev-worker.py",cmd)
-        self.assertEqual(cmd[-4:],["--child","cv-test-only-cert-1-2.service","/tmp/fixture","a"*40])
+        self.assertEqual(cmd[-5:],["--child","cv-test-only-cert-1-2.service","/tmp/fixture","a"*40,"70"])
+    def test_budget(self):
+        cmd=m.command("cv-test-only-cert-1-2.service",Path("/tmp/fixture"),"a"*40,60)
+        self.assertIn("--property=RuntimeMaxSec=43",cmd)
+        self.assertEqual(cmd[-1],"40")
+        for budget in (0,24,91,True):
+            with self.assertRaises(ValueError):m.command("cv-test-only-cert-1-2.service",Path("/tmp/fixture"),"a"*40,budget)
     def test_reject_live_unit(self):
         with self.assertRaises(ValueError):m.command("cv-dev-worker.service",Path("/tmp/fixture"),"a"*40)
     def test_reject_revision(self):
