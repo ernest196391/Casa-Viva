@@ -12,6 +12,7 @@ import re
 import stat
 import subprocess
 import time
+import tempfile
 import urllib.request
 
 REPO = 'ernest196391/casa-viva-centro-control'
@@ -71,14 +72,14 @@ def command(comment, now):
             fields = fields | {'product'}
             if not valid_product(data.get('product')):
                 return None
-        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply', 'hermes_probe_card') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply', 'hermes_probe_card', 'hermes_offline_tests') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
             return None
         if action == 'release_apply' and (not isinstance(data['sha'], str) or not re.fullmatch(r'[0-9a-f]{40}', data['sha'])):
             return None
         created, expires = timestamp(comment['created_at']), timestamp(data['expires_at'])
         if not created <= now < expires <= created + 1800:
             return None
-        if action == 'hermes_probe_card' and expires > created + 600:
+        if action in ('hermes_probe_card', 'hermes_offline_tests') and expires > created + 600:
             return None
         return data
     except (KeyError, TypeError, ValueError, AttributeError):
@@ -546,9 +547,64 @@ def hermes_probe_card(data, now):
         return failure
 
 
+OFFLINE_COMMIT = '2478a5a7cd8b82c1b0a9dbe8ff2fb46189cd7649'
+OFFLINE_FILES = ('test/helpers/cv-fin-receiver.mjs', 'test/helpers/cv-fin-summary.mjs',
+                 'test/cv-fin-receiver.test.mjs', 'test/cv-fin-summary.test.mjs')
+
+
+def hermes_offline_tests(data, now):
+    """Fixed local revision, no fetch, no model, no raw output."""
+    failure = {'ok': False, 'reason': 'offline_tests_failed'}
+    try:
+        if set(data) != {'action', 'nonce', 'expires_at'} or data['action'] != 'hermes_offline_tests':
+            return failure
+        if not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']) or not 0 < timestamp(data['expires_at']) - now <= 600:
+            return failure
+        env = {'PATH': '/usr/bin:/bin', 'HOME': '/root', 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_TERMINAL_PROMPT': '0'}
+        with tempfile.TemporaryDirectory(prefix='cv-offline-', dir='/var/tmp') as tmp:
+            stage = Path(tmp)
+            for name in OFFLINE_FILES:
+                r = subprocess.run(['/usr/bin/git', '--no-replace-objects', '-C', '/root/vivabot', 'show', OFFLINE_COMMIT + ':' + name],
+                                   env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=5)
+                if r.returncode or not 0 < len(r.stdout) <= 65536:
+                    return failure
+                dest = stage / name
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(r.stdout)
+                dest.chmod(0o444)
+            for directory in (stage, stage / 'test', stage / 'test/helpers'):
+                directory.chmod(0o755)
+            argv = ['/usr/bin/systemd-run', '--wait', '--pipe', '--collect', '--quiet',
+                    '-p', 'DynamicUser=yes', '-p', 'PrivateNetwork=yes',
+                    '-p', 'ProtectSystem=strict', '-p', 'ProtectHome=yes',
+                    '-p', 'PrivateTmp=yes', '-p', 'NoNewPrivileges=yes',
+                    '-p', 'RestrictAddressFamilies=AF_UNIX', '-p', 'MemoryMax=256M',
+                    '-p', 'CPUQuota=50%', '-p', 'TasksMax=32', '-p', 'RuntimeMaxSec=30',
+                    # Mask sensitive sockets individually: masking all /run breaks systemd namespaces.
+                    '-p', 'InaccessiblePaths=/var/lib /var/log /srv /mnt /media -/run/systemd/private -/run/dbus -/run/docker.sock -/run/containerd -/run/user -/run/redis -/run/postgresql',
+                    '-p', 'SystemCallFilter=~connect',
+                    '-p', 'SystemCallErrorNumber=EPERM',
+                    '-p', 'BindReadOnlyPaths=' + tmp + ':/opt/cv-offline-tests',
+                    '/usr/bin/node', '--test', '--test-reporter=tap',
+                    '/opt/cv-offline-tests/test/cv-fin-receiver.test.mjs',
+                    '/opt/cv-offline-tests/test/cv-fin-summary.test.mjs']
+            result = subprocess.run(argv, env={'PATH': '/usr/bin:/bin', 'HOME': '/root'},
+                                    stdin=subprocess.DEVNULL, capture_output=True, timeout=45)
+            if result.returncode or len(result.stdout) > 65536:
+                return failure
+            out = result.stdout.decode('utf-8', errors='strict')
+            for line in ('# tests 17', '# pass 17', '# fail 0', '# skipped 0', '# cancelled 0', '# todo 0'):
+                if out.splitlines().count(line) != 1:
+                    return failure
+            return {'ok': True, 'commit': OFFLINE_COMMIT, 'tests': 17, 'passed': 17, 'failed': 0}
+    except (OSError, ValueError, TypeError, KeyError, subprocess.TimeoutExpired):
+        return failure
+
+
 class Contingency:
     def __init__(self, env, health, directory=Path('/var/lib/cv-ops-bridge-contingency'), api=github_api, clock=time.time):
         self.cfg = config(env)
+        self.hermes_offline_enabled = env.get('CV_GITHUB_HERMES_OFFLINE_ENABLED') == '1'
         self.hermes_probe_enabled = env.get('CV_GITHUB_HERMES_PROBE_ENABLED') == '1'
         self.receiver_classification_enabled = env.get('CV_GITHUB_RECEIVER_CLASSIFICATION_ENABLED') == '1'
         self.receiver_contract_enabled = env.get('CV_GITHUB_RECEIVER_CONTRACT_ENABLED') == '1'
@@ -604,7 +660,9 @@ class Contingency:
                 continue
             if data['action'] == 'hermes_probe_card' and not self.hermes_probe_enabled:
                 continue
-            if health_only and data['action'] not in ('health', 'hermes_probe_card'):
+            if data['action'] == 'hermes_offline_tests' and not self.hermes_offline_enabled:
+                continue
+            if health_only and data['action'] not in ('health', 'hermes_probe_card', 'hermes_offline_tests'):
                 continue
             if not data or (data['action'] == 'receiver_classification' and not self.receiver_classification_enabled) or (data['action'] == 'receiver_contract' and not self.receiver_contract_enabled) or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
                 continue
@@ -614,6 +672,8 @@ class Contingency:
                 safe = health_summary(summary[0], summary[1])
             elif data['action'] == 'hermes_probe_card':
                 safe = hermes_probe_card(data, self.clock())
+            elif data['action'] == 'hermes_offline_tests':
+                safe = hermes_offline_tests(data, self.clock())
             elif data['action'] == 'receiver_classification':
                 safe = receiver_classification(data['sha256'])
             elif data['action'] == 'receiver_contract':
