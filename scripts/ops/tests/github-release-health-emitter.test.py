@@ -48,4 +48,32 @@ class Tests(unittest.TestCase):
                 identity=lambda:next(epochs),artifact_digest=lambda:next(hashes),
                 run_case=lambda facts:dict(status="healthy",advisory_only=True)))
 
+
+    def bound_snapshot(self):
+        return dict(digest=self.d,revision=self.r,epoch=self.epoch,
+                    invocation='1'*32,uid=1001,confined=True)
+    def bound_check(self,snapshot,statuses=("healthy","degraded","unknown")):
+        values=iter(statuses)
+        return e.measure_bound_contract(self.d,self.r,self.epoch,
+            snapshot=snapshot,run_case=lambda facts:dict(status=next(values),advisory_only=True))
+    def test_bound_contract_success_and_confirmed_failure(self):
+        self.assertIs(self.bound_check(self.bound_snapshot),True)
+        self.assertIs(self.bound_check(self.bound_snapshot,("healthy","healthy","unknown")),False)
+    def test_bound_contract_rejects_untrusted_identity(self):
+        for changes in (dict(uid=0),dict(uid=True),dict(confined=False),
+                        dict(invocation='0'*32),dict(revision='c'*40),
+                        dict(digest='c'*64),dict(epoch=(124,100))):
+            with self.subTest(changes=changes):
+                self.assertIsNone(self.bound_check(lambda:dict(self.bound_snapshot(),**changes)))
+    def test_bound_contract_rejects_invocation_change(self):
+        count=0
+        def snapshot():
+            nonlocal count
+            count+=1
+            return dict(self.bound_snapshot(),invocation=('1' if count<4 else '2')*32)
+        self.assertIsNone(self.bound_check(snapshot))
+    def test_bound_contract_unknown_is_not_signed(self):
+        self.assertIsNone(self.check(lambda *args:e.measure_bound_contract(
+            self.d,self.r,self.epoch,snapshot=lambda:None,run_case=lambda facts:None)))
+
 if __name__=='__main__': unittest.main()
