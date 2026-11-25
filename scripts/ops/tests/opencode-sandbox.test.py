@@ -111,7 +111,9 @@ class ProfileFileTests(unittest.TestCase):
     def test_split_pilot_candidate_denies_privileged_operations(self):
         text = (SANDBOX_DIR / "dev-worker-sandbox.profile").read_text(encoding="utf-8")
         bootstrap, candidate = text.split("# CV_RELEASE_PILOT_BEGIN")[1].split("profile cv-release-pilot-candidate flags=")
-        self.assertIn("/usr/bin/python3.12 Px -> &cv-release-pilot-candidate,", bootstrap)
+        self.assertIn("/usr/bin/python3.12 ix,", bootstrap)
+        self.assertIn("change_profile -> cv-release-pilot-candidate,", bootstrap)
+        self.assertNotIn("change_profile", candidate)
         self.assertIn("/ r,", spec._profile_rules(bootstrap))
         self.assertNotIn("/** r,", spec._profile_rules(bootstrap))
         self.assertNotIn("/ r,", spec._profile_rules(candidate))
