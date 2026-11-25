@@ -43,6 +43,23 @@ def read_config():
         raise ValueError('missing_key')
     return key
 
+def config_status():
+    """Report only fixed categories, never configuration values or exception text."""
+    try:
+        read_config()
+        return {'ok':True,'scope':'configuration_only','permission_scope':'not_verified'}
+    except FileNotFoundError:
+        reason='config_missing'
+    except PermissionError:
+        reason='config_access_denied'
+    except ValueError as exc:
+        allowed={'config_permissions','config_size','duplicate_config','wrong_project','missing_key'}
+        reason=str(exc) if str(exc) in allowed else 'config_invalid'
+    except OSError:
+        reason='config_unavailable'
+    return {'ok':False,'reason':reason}
+
+
 def remote_get(key,table,params):
     if table not in ('crm_businesses','crm_wa_messages'):
         raise ValueError('invalid_table')
