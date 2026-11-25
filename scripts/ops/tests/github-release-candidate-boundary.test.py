@@ -1,4 +1,6 @@
 import sys
+import hashlib
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock
@@ -40,4 +42,23 @@ class Tests(unittest.TestCase):
     def test_invalid_status_refused(self):
         self.facts['pm2']['vivabot']='arbitrary'
         self.assertFalse(self.evaluate()['ok'])
+    def test_stage_refuses_wrong_digest(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+            root=Path(tmp)
+            source=root/'source.py'
+            source.write_bytes(b'x=1\n')
+            with self.assertRaises(ValueError):
+                with b.stage_candidate(source,'0'*64,uid=1000,gid=1001,work_root=root):
+                    self.fail('unexpected stage')
+    def test_stage_exact_bytes_readonly_and_cleanup(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
+            root=Path(tmp)
+            source=root/'source.py'
+            data=b'x=1\n'
+            source.write_bytes(data)
+            with b.stage_candidate(source,hashlib.sha256(data).hexdigest(),uid=1000,gid=1001,work_root=root) as work:
+                self.assertEqual((work/'candidate.py').read_bytes(),data)
+                self.assertEqual(work.stat().st_mode & 0o777,0o555)
+                self.assertEqual((work/'candidate.py').stat().st_mode & 0o777,0o444)
+            self.assertFalse(work.exists())
 if __name__=='__main__': unittest.main()
