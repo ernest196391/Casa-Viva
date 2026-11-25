@@ -58,8 +58,18 @@ def daemon_present():
 RPC = r"""
 const path = require('path');
 const root = process.argv[1];
-const axon = require(require.resolve('pm2-axon', {paths:[root]}));
-const rpc = require(require.resolve('pm2-axon-rpc', {paths:[root]}));
+// PM2 7 vendors these modules; older releases declare npm dependencies.
+const fs = require('fs');
+function loadTransport(name) {
+  const bundled = path.join(root, 'modules', name);
+  if (fs.existsSync(bundled)) return require(bundled);
+  return require(require.resolve(name, {paths:[root]}));
+}
+let axon, rpc;
+try {
+  axon = loadTransport('pm2-axon');
+  rpc = loadTransport('pm2-axon-rpc');
+} catch (_) { process.exit(25); }
 const socket = axon.socket('req');
 const client = new rpc.Client(socket);
 const names = new Set(['vivabot','vivabot-recovery-receiver','nexofirma']);
@@ -99,7 +109,7 @@ def collect_summary(*, run=subprocess.run, present=daemon_identity, locate=shuti
                 raise ValueError('not_pm2_package')
             proc=run([node,'-e',RPC,str(root)],env=env,stdin=subprocess.DEVNULL,
                      stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=6,check=False)
-            note({0:'rpc_response_received',21:'rpc_socket_error',22:'rpc_timeout',23:'rpc_method_error',24:'rpc_unexpected_shape'}.get(proc.returncode,'rpc_runtime_error'))
+            note({0:'rpc_response_received',21:'rpc_socket_error',22:'rpc_timeout',23:'rpc_method_error',24:'rpc_unexpected_shape',25:'rpc_transport_unavailable'}.get(proc.returncode,'rpc_runtime_error'))
             if proc.returncode==0 and len(proc.stdout)<=4096 and present()==identity:
                 rows=json.loads(proc.stdout)
                 if type(rows) is list and all(type(r) is dict and set(r)=={'name','status'}
