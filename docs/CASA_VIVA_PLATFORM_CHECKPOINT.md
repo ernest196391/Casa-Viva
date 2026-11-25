@@ -1,3 +1,10 @@
+## CV-AUTO-002 — retorno persistente y staging candidato (2026-11-25)
+
+- c67ead3/1634c80: owner ID fijo, JSON sin claves duplicadas, UTC y fixture.
+- 5e08cc6 reporter terminal con reconciliación remota acotada; c6d44e3 RPC ack transaccional; 3fdd703 integración opt-in worker; 69bdabb deadline extracción; cef627b cierre repetido después de ack; 1b2867e fixture SQL ack.
+- ee71bd3 unidad dedicada sin timer ni instalación, tmpfs 64 MiB, 4096 inodos, límites CPU/RAM/PIDs; 4ebbb0d staging offline con manifiesto SHA256, no instalador productivo; 77ab516 regresión POST ambiguo.
+- Pendiente integrar regresiones reporter/staging en CI, revisar compatibilidad systemd/AppArmor, límites reales y retorno; certificar en host antes de cualquier activación. No migración aplicada, no instalación ni gasto nuevo. PR #299 sigue candidato dependiente de #298.
+
 ## CV-AUTO-002 — ejecutor candidato y conexión worker (2026-11-25)
 
 - a275ef4: executor perfil fijo, presupuesto lease, RPC claim/finish. 6739a73: launcher local Git exact SHA, copia regular scripts/ops sin .git, límites de extracción, cgroup dedicado verificado (256 MiB, CPU 50%, PIDs 32), Bubblewrap cap-drop, tiempo/salida existentes. 09fadd6: mismo dev-worker en modo dedicado opt-in, sin entrar a ruta legacy. 9e261c4: regresiones contrato, 699702c CI.
