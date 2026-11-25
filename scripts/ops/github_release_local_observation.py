@@ -13,21 +13,45 @@ from github_contingency import health_summary, PROCESSES
 PM2_HOME = Path('/root/.pm2')
 PATH = '/usr/local/bin:/usr/bin:/bin'
 
-def daemon_present():
-    """Avoid PM2 CLI auto-start if the existing daemon is not available."""
+def daemon_identity(*, home=PM2_HOME, proc=Path('/proc'), connect=None):
+    """Verify the actual listening peer via Linux SO_PEERCRED, not a PID file."""
+    import socket
+    import struct
+    import re
     try:
-        p = PM2_HOME/'rpc.sock'
-        s = p.lstat()
-        pid_file = PM2_HOME/'pm2.pid'
-        t = pid_file.lstat()
-        if not stat.S_ISSOCK(s.st_mode) or s.st_uid != 0 or not stat.S_ISREG(t.st_mode) or t.st_uid != 0:
-            return False
-        pid = int(pid_file.read_text().strip())
-        if pid <= 1:
-            return False
-        return Path('/proc',str(pid)).stat().st_uid == 0 and Path('/proc',str(pid),'stat').exists()
-    except (OSError,ValueError):
-        return False
+        p=home/'rpc.sock'
+        for parent in (home,*home.parents):
+            st=parent.lstat()
+            if not stat.S_ISDIR(st.st_mode) or st.st_uid!=0 or st.st_mode & 0o022:
+                return None
+        before=p.lstat()
+        if not stat.S_ISSOCK(before.st_mode) or before.st_uid!=0:
+            return None
+        if connect is None:
+            def connect(path):
+                with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as sock:
+                    sock.settimeout(1)
+                    sock.connect(str(path))
+                    return struct.unpack('3i',sock.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,struct.calcsize('3i')))
+        pid,uid,gid=connect(p)
+        if pid<=1 or uid!=0 or gid!=0:
+            return None
+        process=proc/str(pid)
+        def epoch():
+            return int((process/'stat').read_text().rsplit(')',1)[1].split()[19])
+        started=epoch()
+        title=(process/'cmdline').read_bytes().split(b'\0',1)[0]
+        if not re.fullmatch(rb'PM2 v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?: God Daemon \('+re.escape(os.fsencode(home))+rb'\)',title):
+            return None
+        after=p.lstat()
+        if started<=0 or epoch()!=started or (before.st_dev,before.st_ino)!=(after.st_dev,after.st_ino):
+            return None
+        return (pid,started,before.st_dev,before.st_ino)
+    except (OSError,ValueError,TypeError,IndexError,AttributeError):
+        return None
+
+def daemon_present():
+    return daemon_identity() is not None
 
 # Connect only to the existing PM2 RPC socket. Never import PM2's CLI/API,
 # which can start a daemon. Resolve dependencies from the installed package.
@@ -53,7 +77,7 @@ client.call('getMonitorData', {}, (err, rows) => {
 });
 """
 
-def collect_summary(*, run=subprocess.run, present=daemon_present, locate=shutil.which, diagnostics=None):
+def collect_summary(*, run=subprocess.run, present=daemon_identity, locate=shutil.which, diagnostics=None):
     """Only the fixed read-only RPC method and systemd property are queried."""
     def note(value):
         if diagnostics is not None:
@@ -66,7 +90,7 @@ def collect_summary(*, run=subprocess.run, present=daemon_present, locate=shutil
         node=locate('node',path=PATH)
         if not binary or not node:
             note('pm2_or_node_not_in_fixed_path')
-        elif not present():
+        elif not (identity := present()):
             note('existing_daemon_not_verified')
         else:
             root=Path(binary).resolve().parent.parent
@@ -76,7 +100,7 @@ def collect_summary(*, run=subprocess.run, present=daemon_present, locate=shutil
             proc=run([node,'-e',RPC,str(root)],env=env,stdin=subprocess.DEVNULL,
                      stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=6,check=False)
             note({0:'rpc_response_received',21:'rpc_socket_error',22:'rpc_timeout',23:'rpc_method_error',24:'rpc_unexpected_shape'}.get(proc.returncode,'rpc_runtime_error'))
-            if proc.returncode==0 and len(proc.stdout)<=4096 and present():
+            if proc.returncode==0 and len(proc.stdout)<=4096 and present()==identity:
                 rows=json.loads(proc.stdout)
                 if type(rows) is list and all(type(r) is dict and set(r)=={'name','status'}
                     and type(r['name']) is str and r['name'] in PROCESSES
