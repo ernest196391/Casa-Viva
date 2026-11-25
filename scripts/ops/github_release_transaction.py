@@ -89,6 +89,10 @@ def recover(observed_health=None,root=ROOT):
             if data['state']=='prepared' and current==previous:
                 save_state(data,'aborted',root)
                 return {'ok':True,'state':'aborted'}
+            if data['state']=='prepared' and current==candidate:
+                save_state(data,'pending_health',root)
+                # A health observation from before this transition is stale.
+                return {'ok':False,'state':'pending_health','restart_required':True}
             if data['state']=='rollback_pending':
                 if current==previous:
                     if observed_health is True:
