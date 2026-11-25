@@ -99,7 +99,7 @@ class ProfileFileTests(unittest.TestCase):
         self.assertNotIn("unconfined", "\n".join(rules).lower())
 
     def test_dev_worker_bootstrap_constants_are_read_only(self):
-        rules = spec._profile_rules((SANDBOX_DIR / "dev-worker-sandbox.profile").read_text(encoding="utf-8"))
+        rules = spec._profile_rules((SANDBOX_DIR / "dev-worker-sandbox.profile").read_text(encoding="utf-8").split("# CV_RELEASE_PILOT_BEGIN")[0])
         self.assertIn("/proc/sys/kernel/overflowuid r,", rules)
         self.assertIn("/proc/sys/kernel/overflowgid r,", rules)
         self.assertEqual([rule for rule in rules if rule.startswith("/proc/")],
@@ -107,6 +107,15 @@ class ProfileFileTests(unittest.TestCase):
                           "/proc/sys/user/max_user_namespaces r,"])
         self.assertIn("deny network,", rules)
         self.assertFalse(any(rule.startswith("capability") for rule in rules))
+
+    def test_split_pilot_candidate_denies_privileged_operations(self):
+        text = (SANDBOX_DIR / "dev-worker-sandbox.profile").read_text(encoding="utf-8")
+        bootstrap, candidate = text.split("# CV_RELEASE_PILOT_BEGIN")[1].split("profile cv-release-pilot-candidate flags=")
+        self.assertIn("/usr/bin/python3.12 Px -> cv-release-pilot-candidate,", bootstrap)
+        rules = spec._profile_rules(candidate)
+        for rule in ("deny capability,", "deny userns,", "deny network,", "deny mount,", "deny pivot_root,"):
+            self.assertIn(rule, rules)
+        self.assertFalse(any(rule.startswith("capability ") for rule in rules))
 
     def test_profile_grants_no_capability(self):
         rules = spec._profile_rules(PROFILE_TEXT)
