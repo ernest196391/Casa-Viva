@@ -66,3 +66,39 @@ def measure_synthetic_contract(digest, revision, epoch, *, identity, artifact_di
         return all(matches)
     except (OSError, ValueError, TypeError, RuntimeError):
         return None
+
+
+def measure_bound_contract(digest, revision, epoch, *, snapshot, run_case):
+    """Observer-side contract; dependencies must be trusted, independently installed.
+
+    snapshot must attest bytes actually loaded by a confined worker, not merely
+    hash a file on disk or repeat a candidate claim. No production provider is
+    installed here. Never use the synthetic pilot epoch as production evidence.
+    """
+    def bound(value):
+        return (type(value) is dict and set(value) == {
+            'digest', 'revision', 'epoch', 'invocation', 'uid', 'confined'
+        } and value['digest'] == digest and value['revision'] == revision
+            and type(value['epoch']) is tuple and value['epoch'] == epoch
+            and all(type(v) is int and v > 0 for v in value['epoch'])
+            and type(value['invocation']) is str
+            and re.fullmatch(r'[0-9a-f]{32}', value['invocation']) is not None
+            and value['invocation'] != '0' * 32
+            and type(value['uid']) is int and value['uid'] > 0
+            and value['confined'] is True)
+    try:
+        first = snapshot()
+        if not bound(first):
+            return None
+        # Copy the attestation; a callback must not mutate our baseline.
+        first = dict(first)
+        def unchanged():
+            current = snapshot()
+            return bound(current) and current == first
+        return measure_synthetic_contract(
+            digest, revision, epoch,
+            identity=lambda: epoch if unchanged() else None,
+            artifact_digest=lambda: digest if unchanged() else None,
+            run_case=run_case)
+    except (OSError, ValueError, TypeError, RuntimeError, KeyError):
+        return None
