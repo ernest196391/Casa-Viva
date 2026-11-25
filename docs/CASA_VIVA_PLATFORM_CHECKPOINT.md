@@ -1,3 +1,13 @@
+## CV-AUTO-002 — receptor GitHub test-only (2026-11-25; fase 1, SIN ACTIVAR)
+
+- Base certificada d4b25bf534e07c9c5bd64581706a0f0cc6327b67; rama cv-auto-002-bridge; depende del PR #298 (CV-AUTO-001).
+- Se añadió scripts/ops/github-test-only-bridge.py: aprovecha autenticación/issue privado #3 del módulo github_contingency y cliente API de dev-worker, validación owner, edición, SHA 40 caracteres, perfil fijo, TTL <=900 s, nonce, whitelist de campos, y solo llama RPC transaccional ops_enqueue_github_test_only. No ejecuta comandos. Opt-in CV_GITHUB_TEST_ONLY_ENABLED=1; apagado por defecto; retorno GitHub con recibo limitado.
+- Regresiones Python negativas en scripts/ops/tests/github-test-only-bridge.test.py e integración en validate.yml. Pruebas CI pendientes de resultado real.
+- Bloqueador confirmado: el repositorio muestra consumo de ops_claim_dev_task(p_worker), pero NO su definición SQL productiva ni la RPC de inserción; la RPC ops_enqueue_github_test_only es contrato propuesto, TODAVÍA NO INSTALADO. No cambiar esquema ni instalar mientras no exista migración transaccional aprobada y fixture PostgreSQL certificado. Ninguna ejecución autónoma VPS demostrada.
+- Dev Worker determinista sigue siendo ruta de edición/push: NO introducir test-only como tarea reclamable antes de agregar una ruta confinada de solo pruebas y demostrar ausencia de push/deploy, revisión exacta y límites.
+- Producción intacta, sin instalación VPS, sin mensajes, pedidos, inventario ni pagos. costo_actual: infraestructura existente; costo_nuevo_requerido: 0; alternativa_gratuita: cola, bunker cvdev, GitHub y CI; momento_de_escalar: solo autorización explícita.
+- Reversión: revertir los commits de esta rama; no hay servicios ni migraciones instaladas.
+
 ## CV-AUTO-001 — compatibilidad transporte PM2 7 (2026-11-25)
 
 - Hostinger d8540db49e82c06a75367ceac2fad48ab74f97a4: 6 regresiones OK (0.012s), daemon_identity (2429462,241763921,2049,262257) verificada; RPC runtime_error, tres unknown, bridge active; precheck bloqueó candidato, perfil original OK y limpieza. PM2 7.0.4 distribuye transportes en modules/pm2-axon y modules/pm2-axon-rpc, no necesariamente dependencias npm externas. 5bd1f5d prioriza módulos internos, conserva compatibilidad legacy y añade diagnóstico 25; b6f268c prueba ambos layouts y ausencia mediante Node real. Hipótesis causal apoyada por distribución pública, pendiente confirmar ejecución real. No reinicio ni producción ni gasto. Reversión: revertir rama y eliminar recursos temporales únicamente.
