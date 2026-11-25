@@ -88,7 +88,7 @@ profile cv-release-pilot-bootstrap flags=(attach_disconnected,mediate_deleted) {
   /usr/lib/** mr,
   /usr/lib64/** mr,
   # Only the fixed synthetic E3 probe requests the additional confinement.
-  change_profile -> cv-release-pilot-candidate,
+  change_profile -> &cv-release-pilot-candidate,
   owner /proc/[0-9]*/attr/current w,
   /usr/bin/python3.12 ix,
   /usr/local/lib/control-os/bwrap-dev ix,
