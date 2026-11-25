@@ -179,7 +179,8 @@ def run_checks(workspace: str, runner, **kwargs) -> dict:
         try:
             cmd = build_probe_command(workspace, check, **kwargs)
             violations = spec.validate_command(cmd, kwargs.get("work_root", spec.DEFAULT_WORK_ROOT),
-                                               bwrap_binary=kwargs.get("bwrap_binary"))
+                                               bwrap_binary=kwargs.get("bwrap_binary"),
+                                               require_cap_drop=kwargs.get("drop_capabilities", False))
             if violations:
                 raise ValueError("comando de prueba rechazado")
             returncode, stdout, stderr = runner(cmd)
@@ -269,7 +270,8 @@ def main(argv: list) -> int:
                       "esta herramienta no se ejecuta automáticamente ni en CI",
         }))
         return EXIT_REFUSED
-    options = {"bwrap_binary": DEV_BWRAP, "work_root": DEV_WORK_ROOT} if args.dev_worker else {}
+    options = {"bwrap_binary": DEV_BWRAP, "work_root": DEV_WORK_ROOT,
+               "drop_capabilities": True} if args.dev_worker else {}
     try:
         spec.validate_workspace(args.workspace, options.get("work_root", spec.DEFAULT_WORK_ROOT))
     except spec.SandboxSpecError as exc:
