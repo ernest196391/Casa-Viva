@@ -158,7 +158,7 @@ def split_profile_runner(cmd: list):
     if cmd[index+1:index+3] != ["-c", INNER_PROBE] or len(cmd[index:]) != 4 or cmd[-1] not in CHECKS:
         raise ValueError("only fixed synthetic probes permitted")
     cmd[index] = "/usr/bin/python3.12"
-    prefix = """with open("/proc/self/attr/current", "w") as f:\\n    f.write("stack cv-release-pilot-candidate")\\nwith open("/proc/self/attr/current") as f:\\n    label = f.read().strip()\\nif label != "cv-release-pilot-bootstrap//&cv-release-pilot-candidate (enforce)":\\n    raise SystemExit("stack verification failed")\\n"""
+    prefix = """with open("/proc/self/attr/current", "w") as f:\n    f.write("stack cv-release-pilot-candidate")\nwith open("/proc/self/attr/current") as f:\n    label = f.read().strip()\nif label != "cv-release-pilot-bootstrap//&cv-release-pilot-candidate (enforce)":\n    raise SystemExit("stack verification failed")\n"""
     cmd[index+2] = prefix + INNER_PROBE
     return real_runner(["/usr/bin/aa-exec", "-p", "cv-release-pilot-bootstrap", "--", *cmd])
 
