@@ -52,6 +52,7 @@ jobs:
           python3 scripts/ops/tests/github-test-only-bridge.test.py
           python3 scripts/ops/tests/github-test-only-executor.test.py
           python3 scripts/ops/tests/github-test-only-reporter.test.py
+          python3 scripts/ops/tests/github-test-only-staging.test.py
           python3 scripts/ops/tests/github-release-rollback.test.py
           python3 scripts/ops/tests/github-release-transaction.test.py
           python3 scripts/ops/tests/github-release-supervisor.test.py
