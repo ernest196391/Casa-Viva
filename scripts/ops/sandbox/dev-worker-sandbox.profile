@@ -12,6 +12,10 @@ profile cv-dev-worker-bwrap /usr/local/lib/control-os/bwrap-dev flags=(attach_di
   # nada del VPS.
   userns,
 
+  # Read-only kernel ID mapping constants required during bwrap bootstrap.
+  /proc/sys/kernel/overflowuid r,
+  /proc/sys/kernel/overflowgid r,
+
   # Defensa en profundidad: el proceso aislado no usa red (el namespace
   # de red ya está aislado por bwrap). La regla cubre inet/inet6/raw y
   # no afecta a sockets UNIX de abi 4.0.
