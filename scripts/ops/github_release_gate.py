@@ -84,6 +84,13 @@ def approved_revision(sha, artifact_digest):
 
 
 def apply_release(sha, api):
+    # The current contingency module is imported by the root bridge in-process.
+    # No independently enforced privilege boundary exists for candidate code.
+    # Preserve the tested transaction primitive, but do not expose it remotely.
+    return {'ok': False, 'reason': 'independent_execution_boundary_required'}
+
+
+def _apply_release_transaction(sha, api):
     # Imported lazily: the transaction module shares our private file primitives.
     from github_release_transaction import release_lock, load_state, TERMINAL
     try:
