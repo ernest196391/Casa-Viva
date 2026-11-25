@@ -60,6 +60,13 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(r['core']['category'],'unexpected_public_success')
         response.read.assert_not_called()
     @patch.object(m.urllib.request,'build_opener')
+    def test_quota_classification(self,build):
+        build.return_value.open.side_effect=[urllib.error.HTTPError('https://example.invalid',402,'secret',{},None),urllib.error.HTTPError('https://example.invalid',429,'secret',{},None)]
+        r=m.hermes_caja_probe()
+        self.assertEqual(r['render']['category'],'payment_required')
+        self.assertEqual(r['core']['category'],'rate_limited')
+        self.assertFalse(r['ok'])
+    @patch.object(m.urllib.request,'build_opener')
     def test_transport_redacted(self,build):
         build.return_value.open.side_effect=OSError('secret')
         r=m.hermes_caja_probe()
@@ -68,7 +75,7 @@ class DiagnosticsTests(unittest.TestCase):
     @unittest.skipUnless(os.geteuid()==0,'requires root-owned fixtures')
     def test_writer_bounded_redacted(self):
         with tempfile.TemporaryDirectory() as d:
-            p=Path(d);(p/'receiver.mjs').write_text('crm_wa_messages SUPABASE SECRET_FIXTURE')
+            p=Path(d);(p/'receiver.mjs').write_text('crm_wa_messages SUPABASE upsert SECRET_FIXTURE')
             (p/'.env').write_text('crm_wa_messages')
             (p/'linked.js').symlink_to(p/'receiver.mjs')
             with patch.object(m,'CRM_RECEIVER',p),patch.object(m,'CRM_ORIGINAL',p):
@@ -77,6 +84,7 @@ class DiagnosticsTests(unittest.TestCase):
                 self.assertEqual(r['receiver']['files'],2)
                 self.assertEqual(r['receiver']['skipped'],1)
                 self.assertEqual(r['receiver']['marker_counts']['wa_table'],1)
+                self.assertEqual(r['receiver']['writer_candidates'],1)
                 self.assertNotIn('SECRET_FIXTURE',str(r))
     def test_writer_missing_directory(self):
         with tempfile.TemporaryDirectory() as d,patch.object(m,'CRM_RECEIVER',Path(d)/'missing'):
@@ -90,7 +98,7 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertNotIn('body',run.call_args.args[0][-1])
     @patch.object(m.subprocess,'run')
     def test_sync_rejects_ambiguous_tenant_and_extra_fields(self,run):
-        for d in (dict(tenant_matches=2,messages=10,since_cut=2,latest='2026-11-25T12:00:00Z'),dict(tenant_matches=1,messages=10,since_cut=11,latest='2026-11-25T12:00:00Z'),dict(tenant_matches=1,messages=10,since_cut=2,latest='2026-11-25T12:00:00Z',body='secret')):
+        for d in (dict(tenant_matches=2,messages=10,since_cut=2,latest='2026-11-25T12:00:00Z'),dict(tenant_matches=1,messages=10,since_cut=11,latest='2026-11-25T12:00:00Z'),dict(tenant_matches=1,messages=10,since_cut=2,latest='2026-11-25T12:00:00Z',body='secret'),dict(tenant_matches=1,messages=10,since_cut=0,latest='2026-11-25T12:00:00Z')):
             run.return_value=subprocess.CompletedProcess([],0,json.dumps(d).encode(),b'')
             self.assertEqual(m.hermes_crm_sync_status(),dict(ok=False,reason='local_sync_unavailable'))
 if __name__=='__main__':
