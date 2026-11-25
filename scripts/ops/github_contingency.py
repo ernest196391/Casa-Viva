@@ -684,25 +684,28 @@ CRM_MARKERS = {'wa_table': 'crm_wa_messages', 'supabase': 'supabase',
 
 
 def hermes_crm_writer_audit():
-    """Bounded static scan of immediate JS sources only; no env/logs/content."""
+    """Bounded static scan; independent per-root status, never source or arbitrary filenames."""
     result = {}
     for label, root in (('receiver', CRM_RECEIVER), ('original', CRM_ORIGINAL)):
         try:
-            if root.is_symlink() or not root.is_dir():
-                raise ValueError('invalid directory')
+            st = root.lstat()
+            if not stat.S_ISDIR(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o022:
+                result[label] = {'ok': False, 'reason': 'unsafe_directory'}
+                continue
             candidates = []
             with os.scandir(root) as entries:
                 for i, entry in enumerate(entries):
-                    if i >= 256:
-                        raise ValueError('directory limit')
+                    if i >= 2048:
+                        raise ValueError('directory_limit')
                     if re.fullmatch(r'[A-Za-z0-9_-]{1,80}\.(?:mjs|js|cjs)', entry.name):
                         candidates.append(entry.name)
-            if len(candidates) > 64:
-                raise ValueError('source limit')
+            if len(candidates) > 256:
+                raise ValueError('source_limit')
             hits = {k: 0 for k in CRM_MARKERS}
             skipped = 0
             writer_candidates = 0
-            for name in candidates:
+            known_writers = {}
+            for name in sorted(candidates):
                 try:
                     fd = os.open(root / name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
                     with os.fdopen(fd, 'rb') as f:
@@ -713,15 +716,25 @@ def hermes_crm_writer_audit():
                         if len(raw) > 262144:
                             raise ValueError('source limit')
                     source = raw.decode('utf-8').lower()
-                    writer_candidates += int('crm_wa_messages' in source and any(x in source for x in ('upsert', 'insert', '/rest/v1/')))
+                    writer = 'crm_wa_messages' in source and any(x in source for x in ('upsert', 'insert', '/rest/v1/'))
+                    writer_candidates += int(writer)
+                    if name in ('receiver.mjs', 'index.js', 'crm.js', 'supabase.js', 'recovery-replies.mjs', 'operational-queries.mjs', 'reconcile-dispatch.mjs'):
+                        known_writers[name] = {'writer_marker': writer, 'supabase_marker': 'supabase' in source}
                     for key, marker in CRM_MARKERS.items():
                         hits[key] += int(marker in source)
                 except (OSError, ValueError):
                     skipped += 1
-            result[label] = {'files': len(candidates), 'skipped': skipped, 'marker_counts': hits, 'writer_candidates': writer_candidates}
-        except (OSError, ValueError):
-            return {'ok': False, 'reason': 'writer_sources_unavailable'}
-    return {'ok': True, 'scope': 'static_nonrecursive', **result}
+            result[label] = {'ok': True, 'files': len(candidates), 'skipped': skipped,
+                'marker_counts': hits, 'writer_candidates': writer_candidates, 'known_sources': known_writers}
+        except FileNotFoundError:
+            result[label] = {'ok': False, 'reason': 'directory_missing'}
+        except PermissionError:
+            result[label] = {'ok': False, 'reason': 'directory_permission'}
+        except ValueError as exc:
+            result[label] = {'ok': False, 'reason': str(exc) if str(exc) in ('directory_limit', 'source_limit') else 'directory_invalid'}
+        except OSError:
+            result[label] = {'ok': False, 'reason': 'directory_unavailable'}
+    return {'ok': all(v['ok'] for v in result.values()), 'scope': 'static_nonrecursive', **result}
 
 
 CRM_SYNC_SQL = """BEGIN READ ONLY;
