@@ -194,7 +194,7 @@ def run_release_pilot(workspace, facts, expected_digest, *, uid, gid, spawn=subp
     boundary = _load("cv_release_boundary", "github_release_candidate_boundary.py")
     if type(uid) is not int or type(gid) is not int or uid <= 0 or gid <= 0:
         raise SandboxError("unprivileged identity required")
-    cmd = boundary.confined_command(expected_digest, facts)
+    cmd = boundary.confined_command(expected_digest, facts, host_observed=preflight is not None)
     argv = spec.build_bwrap_command(workspace, cmd, bwrap_binary=DEDICATED_BWRAP,
                                     work_root=WORK_ROOT, child_env=BOX_ENV, drop_capabilities=True)
     if spec.validate_command(argv, WORK_ROOT, bwrap_binary=DEDICATED_BWRAP, require_cap_drop=True):
