@@ -19,6 +19,16 @@ import importlib.util
 HERE = Path(__file__).resolve().parent
 PREFIX = "CV-TEST-ONLY-V1 "
 RESULT_PREFIX = "CV-TEST-ONLY-RECEIPT-V1 "
+TERMINAL_PREFIX = "CV-TEST-ONLY-RESULT-V1 "
+OWNER_ID = 175450950
+
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate key")
+        result[key] = value
+    return result
 OWNER = "ernest196391"
 REPO = "ernest196391/casa-viva-centro-control"
 ALLOWED_REPOS = {"casa-viva": "ernest196391/Casa-Viva"}
@@ -39,7 +49,7 @@ def parse_comment(comment, now):
     """Fail closed on edited, stale, unauthorized, extended or ambiguous input."""
     try:
         user = comment["user"]
-        if (user.get("login") != OWNER or user.get("type") != "User"
+        if (user.get("login") != OWNER or user.get("id") != OWNER_ID or user.get("type") != "User"
                 or comment.get("author_association") != "OWNER"
                 or comment["created_at"] != comment["updated_at"]):
             return None
@@ -47,10 +57,12 @@ def parse_comment(comment, now):
         body = comment["body"]
         if type(cid) is not int or cid <= 0 or type(body) is not str or len(body) > 600 or not body.startswith(PREFIX):
             return None
-        obj = json.loads(body[len(PREFIX):])
+        obj = json.loads(body[len(PREFIX):], object_pairs_hook=unique_object)
         if type(obj) is not dict or set(obj) != {"nonce", "expires_at", "repo", "sha", "profile"}:
             return None
         if not NONCE.fullmatch(obj["nonce"]) or obj["repo"] not in ALLOWED_REPOS or not SHA.fullmatch(obj["sha"]) or obj["profile"] not in ALLOWED_PROFILES:
+            return None
+        if not all(isinstance(v,str) and v.endswith("Z") for v in (comment["created_at"],obj["expires_at"])):
             return None
         created = dt.datetime.fromisoformat(comment["created_at"].replace("Z", "+00:00")).timestamp()
         expiry = dt.datetime.fromisoformat(obj["expires_at"].replace("Z", "+00:00")).timestamp()
