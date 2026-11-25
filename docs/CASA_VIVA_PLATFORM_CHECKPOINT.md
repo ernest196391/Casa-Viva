@@ -1,3 +1,7 @@
+## CV-AUTO-001 — observación real bloqueada por RPC (2026-11-25)
+
+- Hostinger revisión c7a398f84ff2212b36295ee6224d5c80ad02dd53: bridge active; tres PM2 unknown; precheck bloqueó antes de candidato y perfiles temporales; perfil original OK, limpieza finalizada. Causa exacta no determinada. 4a6476a añade categorías de diagnóstico RPC sin salida cruda ni secretos; 016c978 añade regresiones. No se cambia política ni se inicia PM2; siguiente paso diagnóstico local únicamente, no repetir piloto. CI base foundation/staging correctos, validate/integration/content-studio/postgres correctos, browser en curso al consultar. Sin producción ni gasto.
+
 ## CV-AUTO-001 — entrada local de observación (2026-11-25)
 
 - 29770cd/cbc58b9 recolector fijo PM2 RPC getMonitorData sin CLI ni arranque de daemon, Systemd ActiveState; 3e26b77 entrada --local-observation reutiliza fixture fijo y handshake; bd90798 regresiones y c0972f9 CI. Pendiente verificar compatibilidad real de RPC del PM2 instalado y CI, no instalado en producción. No repetir piloto sintético; prueba reversible con datos reales solo tras CI. Reversión: retirar recursos temporales y revertir commits de rama. Costo nuevo cero.
