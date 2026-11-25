@@ -49,3 +49,22 @@ must remain blocked.
 ## E3 synthetic evidence — 2026-11-25
 
 Revision `f76fb687eef1413aefc1697438bb961eb3f85996`: Hostinger pilot exit 0, limits OK, 7.058 s, reported memory peak 764 KiB. Visible checks confirm network denial, all capability sets zero and NoNewPrivileges, and exact `cv-release-pilot-bootstrap//&cv-release-pilot-candidate (enforce)` label. Overall verdict implies all ten checks passed. Original profile hash OK; temporary profiles removed. The synthetic Python prefix self-stacks before fixed test logic, not before interpreter startup. This is **not** certification of arbitrary candidate execution, production release, or independent functional health. Public candidate execution and release application must remain closed. A production observer needs independent evidence of the exact loaded revision and functional path; process active/status or a signed self-report is insufficient. Do not copy or install the pilot policies as production rules.
+
+## Piloto funcional integrado — evidencia observada en Hostinger (2026-11-25)
+
+Revisión exacta: `7b3b125ea1a1e5f8dc079b9236c769e13ae2e5cb`.
+Unidad transitoria: `cv-release-pilot-1795637241-2914606.service`.
+InvocationID: `f9ef84e18f274151b2ece2a7a99a57e4`.
+SHA-256 del candidato sintético: `ad56c87fba9c5ccb77906f2ab143b7ca1fe53ca0b14beffbfac17e4e76ac777e`.
+
+Resultado registrado desde salida real del VPS (no reejecutado por este cambio documental):
+
+```json
+{"digest":"ad56c87fba9c5ccb77906f2ab143b7ca1fe53ca0b14beffbfac17e4e76ac777e","functional_ok":true,"ok":true,"production_authorized":false,"scope":"synthetic_only"}
+```
+
+Exit 0; 708 ms de duración; CPU 250 ms; pico reportado 1,2 MiB; swap 0 B. La prueba del observador sintético comprobó `healthy` (servicios operativos), `degraded` (VivaBot detenido) y `unknown` (información insuficiente). Los perfiles temporales fueron retirados; el perfil original conservó su integridad; limpieza finalizada. No es prueba funcional de la revisión cargada en el puente de producción.
+
+**CI para esa revisión, verificado mediante GitHub Actions el 2026-11-25:** aplicación `45691787291` success; fundación de release `45691787436` success; contrato de staging `45691787440` success. Evidencia registrada en el [Registro Maestro](https://github.com/ernest196391/casa-viva-centro-control/issues/1#issuecomment-7173338851).
+
+**Bloqueador y siguiente puerta:** `cv-ops-bridge.service` se ejecuta privilegiado y carga contingencia en el mismo proceso. El observador actual tiene contrato HMAC, epoch y nonce, pero `health_probe` retorna `None` y el supervisor `main()` retorna `independent_adapter_required`. Antes de permitir un release real, separar el proceso candidato sin acceso a claves/journal/backup/servicios, fijar la revisión realmente cargada y verificar una prueba funcional inocua desde un observador protegido; probar rollback e interrupciones. No interpretar CI verde, proceso activo o resultado del piloto como autorización productiva. Mantener PR #298 en draft, release cerrado, sin gasto adicional ni cambios de producción.
