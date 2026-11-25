@@ -1,3 +1,10 @@
+## CV-AUTO-002 — buzón existente e instalación reversible offline (2026-11-25)
+
+- Buzón privado #3 verificado abierto, nombre exacto y repo privado. Última salud histórica 7172321110 (19:27:23Z) bridge active, recovery receiver y nexofirma online, vivabot principal stopped; no equivale a conexión WhatsApp certificada. Nuevas solicitudes read-only health 7177709087 y agent_inventory 7177710544 (23:32Z, TTL 15min), sin resultado correlacionado al consultar. No repetir antes de expirar.
+- PR #295 (29e22c3) amplía github_contingency con Hermes; resultados históricos reales 7171543774, 7171565663, 7171589048 demuestran diagnósticos fijos, no permiso de ejecución arbitraria. Rama #299 tiene versión anterior: no sustituir receptor vivo ni usar release_apply para piloto. Falta confirmar versión instalada y cualquier ruta de certificación específicamente autorizada.
+- 716b56d: instalador ejecutable de bundle inactivo en prefijo privado /tmp, manifiesto SHA256 externo, no symlinks, no sobrescritura, rollback verifica identidad y rechaza archivos ajenos; cinco regresiones integradas CI. No instala unidades de sistema ni activa nada; no equivale a instalador productivo. CI run 45722238330 en cola; run 45721943656 de ddc94a7 validate y postgres success, otros pendientes al consultar.
+- Sin mutación VPS, migración, gasto ni activación. Próximo: correlacionar respuestas #3, verificar CI terminal, certificar piloto sintético reversible sin secretos con E3, conservar funciones Hermes existentes. No habilitar ejecución remota genérica.
+
 ## CV-AUTO-002 — separación de privilegios y recepción periódica (2026-11-25)
 
 - CI base ee0f28f run 45720264359: cinco jobs completos SUCCESS.
