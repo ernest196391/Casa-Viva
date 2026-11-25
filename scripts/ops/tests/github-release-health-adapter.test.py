@@ -26,6 +26,14 @@ class Tests(unittest.TestCase):
     def test_timeout_unknown(self,run):
         run.side_effect=subprocess.TimeoutExpired('systemctl',5)
         self.assertIsNone(a.process_identity())
+    @patch.object(a.subprocess,'run')
+    def test_oneshot_type(self,run):
+        run.return_value.stdout=b'Type=oneshot\nMainPID=0\n'
+        self.assertEqual(a.service_type(),'oneshot')
+    @patch.object(a.subprocess,'run')
+    def test_unrecognized_type_unknown(self,run):
+        run.return_value.stdout=b'Type=unexpected\n'
+        self.assertIsNone(a.service_type())
     def test_no_functional_evidence_never_approves(self):
         self.assertIsNone(a.health_probe('a'*64,'b'*40,(123,456)))
 if __name__=='__main__': unittest.main()
