@@ -55,6 +55,7 @@ jobs:
           python3 scripts/ops/tests/github-test-only-staging.test.py
           python3 scripts/ops/tests/github-test-only-host-preflight.test.py
           python3 scripts/ops/tests/github-test-only-install.test.py
+          python3 scripts/ops/tests/github-test-only-synthetic-pilot.test.py
           python3 scripts/ops/tests/github-release-rollback.test.py
           python3 scripts/ops/tests/github-release-transaction.test.py
           python3 scripts/ops/tests/github-release-supervisor.test.py

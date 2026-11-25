@@ -12,7 +12,9 @@ HERE=Path(__file__).resolve().parent
 FILES=("dev-worker.py","dev-sandbox.py","github_contingency.py","github-test-only-bridge.py",
        "github_test_only_executor.py","github_test_only_launcher.py","github_test_only_reporter.py",
        "github_test_only_host_preflight.py",
-       "github_release_candidate_limits.py","sandbox/opencode-sandbox-spec.py",
+       "github_release_candidate_limits.py","github_release_candidate_boundary.py",
+       "github_release_host_observer.py","github_release_health_emitter.py",
+       "github_test_only_synthetic_pilot.py","sandbox/opencode-sandbox-spec.py",
        "sandbox/dev-worker-sandbox.profile","sandbox/cv-test-only-candidate.service",
        "sandbox/cv-test-only-candidate.timer")
 def stage(destination):
