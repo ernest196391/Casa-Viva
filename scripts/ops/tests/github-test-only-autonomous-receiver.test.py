@@ -115,5 +115,33 @@ class LeaseTests(unittest.TestCase):
         self.release()
         self.assertFalse(self.lease.LEASE.exists())
 
+class RemoteDeadlineTests(unittest.TestCase):
+    def setUp(self):
+        self.fixture=MagicMock()
+        self.fixture.rx.REPO="ernest196391/casa-viva-centro-control"
+        self.fixture.ghmod.github_api.return_value={"issue_url":"https://api.github.com/repos/ernest196391/casa-viva-centro-control/issues/3"}
+        self.fixture.rx.parse_comment.return_value={"comment_id":7,"sha":"a"*40,"expires_at":"1970-01-01T00:26:40Z"}
+    def check(self,local=1600,now=1100):
+        return m.remote_deadline(self.fixture,"token",7,"a"*40,local,now)
+    def test_remote_earlier(self):
+        self.assertEqual(self.check(1700),1600)
+    def test_local_earlier(self):
+        self.assertEqual(self.check(1500),1500)
+    def test_remote_short(self):
+        with self.assertRaises(ValueError):self.check(now=1300)
+    def test_local_short(self):
+        with self.assertRaises(ValueError):self.check(1400)
+    def test_wrong_revision(self):
+        self.fixture.rx.parse_comment.return_value["sha"]="b"*40
+        with self.assertRaises(ValueError):self.check()
+    def test_wrong_mailbox(self):
+        self.fixture.ghmod.github_api.return_value["issue_url"]="https://api.github.com/repos/other/repo/issues/3"
+        with self.assertRaises(ValueError):self.check()
+    def test_invalid_comment(self):
+        self.fixture.rx.parse_comment.return_value=None
+        with self.assertRaises(ValueError):self.check()
+    def test_exact_margin(self):
+        self.assertEqual(self.check(now=1270),1600)
+
 if __name__=="__main__":unittest.main()
 
