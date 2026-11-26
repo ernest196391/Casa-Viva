@@ -143,5 +143,28 @@ class RemoteDeadlineTests(unittest.TestCase):
     def test_exact_margin(self):
         self.assertEqual(self.check(now=1270),1600)
 
+class InstallerTests(unittest.TestCase):
+    def setUp(self):
+        self.script=Path(m.__file__).parent/"install-isolated-autonomous-pilot.sh"
+        self.source=self.script.read_text()
+    def test_shell_syntax(self):
+        import subprocess
+        subprocess.run(["bash","-n",str(self.script)],check=True)
+    def test_success_after_rollback(self):
+        cleanup=self.source.split("cleanup() {",1)[1].split("trap cleanup EXIT",1)[0]
+        self.assertLess(cleanup.index('rm -f "$ROOT/mailbox.token"'),cleanup.index('systemctl stop'))
+        self.assertLess(cleanup.index('(( clean == 0 )) || exit 4'),cleanup.index("AUTONOMOUS_PILOT_EXIT=0"))
+        self.assertEqual(self.source.count("AUTONOMOUS_PILOT_EXIT=0"),1)
+    def test_temporary_units_only(self):
+        self.assertIn("systemd-analyze verify",self.source)
+        self.assertIn('systemctl start "$TIMER"',self.source)
+        self.assertNotIn("systemctl enable",self.source)
+        self.assertNotIn('systemctl start "$SERVICE"',self.source)
+    def test_failed_rollback_preserves_units(self):
+        self.assertIn('if (( clean == 0 )); then\n      rm -f "/run/systemd/system/$SERVICE"',self.source)
+    def test_host_evidence(self):
+        for value in ('r["durable_rows"]==1','r["production_authorized"] is False','cv-dev-worker-bwrap (enforce)','cv-autonomous-apparmor.owner'):
+            self.assertIn(value,self.source)
+
 if __name__=="__main__":unittest.main()
 
