@@ -566,6 +566,8 @@ def provision_local_sql_artifact():
                 # never remove a replacement by another process.
                 try:
                     current = os.lstat(target)
+                    if inode != (current.st_dev, current.st_ino):
+                        return {'ok': False, 'reason': 'rollback_conflict'}
                     if inode == (current.st_dev, current.st_ino):
                         os.unlink(target)
                         directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
