@@ -512,6 +512,46 @@ LOCAL_SQL_BRIDGE_BLOB = '84bc0eb4a57a3dc5c4f1ea5377c50eb952446a3a'
 LOCAL_SQL_BRIDGE_PATH = Path('/root/supervisor/cv-local-sql-certified.py')
 
 
+def provision_local_sql_artifact():
+    """Offline installer only; never called by the mailbox or worker queue."""
+    import tempfile
+    target = LOCAL_SQL_BRIDGE_PATH
+    def valid(raw):
+        return hashlib.sha1(b'blob ' + str(len(raw)).encode() + bytes([0]) + raw).hexdigest() == LOCAL_SQL_BRIDGE_BLOB
+    try:
+        if os.geteuid() != 0:
+            raise ValueError('root required')
+        parent = target.parent.lstat()
+        if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or parent.st_mode & 0o022:
+            raise ValueError('unsafe parent')
+        try:
+            return {'ok': valid(private_bytes(target, 262144)), 'changed': False}
+        except FileNotFoundError:
+            pass
+        raw = private_bytes(target.with_name('cv-ops-bridge.py.prev'), 262144)
+        if not valid(raw):
+            return {'ok': False, 'reason': 'source_integrity_mismatch'}
+        fd, name = tempfile.mkstemp(prefix='.cv-sql-', dir=target.parent)
+        try:
+            with os.fdopen(fd, 'wb') as out:
+                os.fchmod(out.fileno(), 0o600)
+                out.write(raw)
+                out.flush()
+                os.fsync(out.fileno())
+            # Atomic publication without replacing any existing destination.
+            os.link(name, target, follow_symlinks=False)
+            directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            os.unlink(name)
+        return {'ok': valid(private_bytes(target, 262144)), 'changed': True}
+    except Exception:
+        return {'ok': False, 'reason': 'pinned_install_unavailable'}
+
+
 def local_sql_reconcile():
     """Execute only the exact certified worker bytes, never reopen the path."""
     try:
