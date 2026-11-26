@@ -18,4 +18,9 @@ class Certification(unittest.TestCase):
         self.assertIn('c:"interrupted"',s)
         self.assertIn('PERIODIC_ROLLBACK_EXIT',s)
         self.assertIn('cv-ops-bridge.service cv-dev-worker.service',s)
+    def test_credential_path_consistent(self):
+        expected="/var/lib/cv-test-only-periodic/mailbox.token"
+        for name in ("install-isolated-periodic.sh","certify-isolated-periodic.sh","sandbox/cv-test-only-periodic.service"):
+            self.assertIn(expected,(ROOT/name).read_text())
+        self.assertIn('mkdir -m 700 "$STATE"',(ROOT/"install-isolated-periodic.sh").read_text())
 if __name__=="__main__":unittest.main()
