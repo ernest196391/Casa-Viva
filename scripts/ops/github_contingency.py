@@ -532,22 +532,40 @@ def provision_local_sql_artifact():
         if not valid(raw):
             return {'ok': False, 'reason': 'source_integrity_mismatch'}
         fd, name = tempfile.mkstemp(prefix='.cv-sql-', dir=target.parent)
+        published = False
         try:
             with os.fdopen(fd, 'wb') as out:
                 os.fchmod(out.fileno(), 0o600)
                 out.write(raw)
                 out.flush()
                 os.fsync(out.fileno())
-            # Atomic publication without replacing any existing destination.
             os.link(name, target, follow_symlinks=False)
+            published = True
+            if not valid(private_bytes(target, 262144)):
+                raise ValueError('publication mismatch')
             directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
             try:
                 os.fsync(directory)
             finally:
                 os.close(directory)
+            return {'ok': True, 'changed': True}
+        except Exception:
+            if published:
+                # Only remove the inode created by this invocation.
+                try:
+                    original, current = os.lstat(name), os.lstat(target)
+                    if (original.st_dev, original.st_ino) == (current.st_dev, current.st_ino):
+                        os.unlink(target)
+                        directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+                        try:
+                            os.fsync(directory)
+                        finally:
+                            os.close(directory)
+                except OSError:
+                    return {'ok': False, 'reason': 'rollback_unconfirmed'}
+            raise
         finally:
             os.unlink(name)
-        return {'ok': valid(private_bytes(target, 262144)), 'changed': True}
     except Exception:
         return {'ok': False, 'reason': 'pinned_install_unavailable'}
 
