@@ -79,6 +79,17 @@ def execute_integral(repo, image, token, cid, sha, owner=None):
         result["ok"]=result["ok"] and result["durable_rows"]==1
     return result
 
+def remote_deadline(m,token,cid,sha,local_expiry,now):
+    import datetime as dt
+    comment=m.ghmod.github_api(token,"GET","/repos/"+m.rx.REPO+"/issues/comments/"+str(cid))
+    request=m.rx.parse_comment(comment,now)
+    if not request or request["comment_id"]!=cid or request["sha"]!=sha or comment.get("issue_url")!="https://api.github.com/repos/"+m.rx.REPO+"/issues/3":
+        raise ValueError("remote authorization mismatch")
+    expiry=dt.datetime.fromisoformat(request["expires_at"].replace("Z","+00:00")).timestamp()
+    deadline=min(expiry,local_expiry)
+    if deadline-now<330:raise ValueError("insufficient remote authorization lifetime")
+    return deadline
+
 def main(argv):
     import subprocess
     if os.geteuid()!=0 or len(argv)!=2 or argv[0]!="--tick":
@@ -117,6 +128,7 @@ def main(argv):
         if not token:raise ValueError("mailbox credential missing")
         owner=root.name.removeprefix('cv-autonomous-')
         if root.name!='cv-autonomous-'+owner or not re.fullmatch(r'[0-9]{1,12}-[0-9]{1,20}',owner):raise ValueError('invalid pilot owner')
+        remote_deadline(load(),token,cid,sha,config["arm"]["expires_at"],time.time())
         spec=importlib.util.spec_from_file_location("lease",HERE/"github_test_only_apparmor_lease.py")
         lease=importlib.util.module_from_spec(spec);spec.loader.exec_module(lease)
         lease.acquire(root,owner)
