@@ -2338,7 +2338,10 @@ def action_local_sql_reconcile(args):
           'dispatch_schema',(SELECT count(*)=8 FROM information_schema.columns WHERE table_schema='public' AND table_name='crm_dispatch' AND column_name IN ('business_id','order_id','stage','messenger_phone','announce_msg_id','announced_at','updated_at','log')),
           'outbox_schema',(SELECT count(*)=2 FROM information_schema.columns WHERE table_schema='public' AND table_name='crm_outbox' AND column_name IN ('id','business_id')),
           'dispatch',(SELECT coalesce(json_agg(row_to_json(d)),'[]'::json) FROM (SELECT c.order_id,c.stage,(CASE WHEN coalesce(c.messenger_phone,'')<>'' THEN 'present' ELSE NULL END) AS messenger_phone,(CASE WHEN coalesce(c.announce_msg_id,'')<>'' THEN 'present' ELSE NULL END) AS announce_msg_id,c.announced_at FROM public.crm_dispatch c JOIN public.crm_businesses b ON b.id=c.business_id WHERE b.slug='casa-viva' LIMIT 1001) d))""")
-        if (not isinstance(snapshot,dict) or any(not isinstance(snapshot.get(k),list) for k in ('businesses','groups','dispatch'))\n                or type(snapshot.get('dispatch_schema')) is not bool or type(snapshot.get('outbox_schema')) is not bool\n                or len(snapshot['businesses'])!=1 or not snapshot['businesses'][0]\n                or len(snapshot['groups'])>1000 or len(snapshot['dispatch'])>1000):
+        if (not isinstance(snapshot,dict) or any(not isinstance(snapshot.get(k),list) for k in ('businesses','groups','dispatch'))
+                or type(snapshot.get('dispatch_schema')) is not bool or type(snapshot.get('outbox_schema')) is not bool
+                or len(snapshot['businesses'])!=1 or not snapshot['businesses'][0]
+                or len(snapshot['groups'])>1000 or len(snapshot['dispatch'])>1000):
             return {"returncode":1,"output":json.dumps({"reason":"local_snapshot_ambiguous_or_exceeds_bound"})}
         # Inject a local SQL-backed response adapter into the original preflight.
         # The original JS bytes and reconciliation algorithm are unchanged.
