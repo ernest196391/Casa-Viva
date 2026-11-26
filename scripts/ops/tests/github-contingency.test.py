@@ -32,6 +32,50 @@ def request(**overrides):
 
 
 class Tests(unittest.TestCase):
+    def test_offline_supervised_sql_requires_verified_installed_release(self):
+        release_path = PATH.parent / 'github_release_gate.py'
+        gate_spec = importlib.util.spec_from_file_location('release_gate_offline_sql', release_path)
+        gate = importlib.util.module_from_spec(gate_spec)
+        gate_spec.loader.exec_module(gate)
+        sha = 'a' * 40
+        source = ("from pathlib import Path\n"
+                  "LOCAL_SQL_BRIDGE_PATH = Path('/root/supervisor/cv-local-sql-certified.py')\n"
+                  "LOCAL_SQL_BRIDGE_BLOB = '84bc0eb4a57a3dc5c4f1ea5377c50eb952446a3a'\n"
+                  "def provision_local_sql_artifact():\n"
+                  "    return {'ok': True, 'changed': False}\n"
+                  + '# reviewed fixture\n' * 90).encode()
+        def api(token, method, uri):
+            self.assertEqual(method, 'GET')
+            return {'protected': True, 'commit': {'sha': sha}}
+        def git_ok(*args):
+            if args[:2] == ('rev-parse', 'origin/main'):
+                return (sha + '\n').encode()
+            if args[0] == 'show':
+                return source
+            if args[0] == 'fetch':
+                return b''
+            self.fail('unexpected git call')
+        def read_ok(path, limit=65536):
+            if path == gate.TOKEN_FILE:
+                return b'CV_GITHUB_RELEASE_TOKEN=synthetic'
+            if path == gate.TARGET:
+                return source
+            self.fail('unexpected private read')
+        with patch.object(gate, 'read_private', side_effect=read_ok), \
+             patch.object(gate, 'git', side_effect=git_ok), \
+             patch.object(gate, 'verified_checks', return_value=True):
+            self.assertEqual(gate.offline_provision_certified_sql(sha, api), {'ok': True, 'changed': False})
+        with patch.object(gate, 'git', side_effect=AssertionError('unexpected fetch')):
+            self.assertEqual(gate.offline_provision_certified_sql('invalid', api)['reason'], 'invalid_sha')
+        with patch.object(gate, 'read_private', side_effect=read_ok), \
+             patch.object(gate, 'git', side_effect=git_ok), \
+             patch.object(gate, 'verified_checks', return_value=False):
+            self.assertEqual(gate.offline_provision_certified_sql(sha, api)['reason'], 'ci_not_certified')
+        with patch.object(gate, 'read_private', side_effect=lambda path, limit=65536: b'wrong' if path == gate.TARGET else read_ok(path, limit)), \
+             patch.object(gate, 'git', side_effect=git_ok), \
+             patch.object(gate, 'verified_checks', return_value=True):
+            self.assertEqual(gate.offline_provision_certified_sql(sha, api)['reason'], 'release_not_installed')
+
     def test_order_lookup_rejects_injection_and_unknown_fields(self):
         data={'action':'order_lookup','nonce':'syntheticnonce1234','expires_at':'2026-11-20T16:10:00Z','product':'puerta corredera'}
         self.assertIsNotNone(mod.command(request(body=mod.PREFIX+json.dumps(data)),NOW))
