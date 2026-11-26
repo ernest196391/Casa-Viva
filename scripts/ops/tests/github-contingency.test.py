@@ -454,6 +454,26 @@ class Tests(unittest.TestCase):
             write.assert_not_called()
             self.assertEqual(bridge.action_restore_recovery_config({'path':'other'})['returncode'],2)
 
+    def test_effective_recovery_missing_keys_safe(self):
+        import hashlib
+        raw=b'canonical script'
+        blob=hashlib.sha1(b'blob '+str(len(raw)).encode()+bytes([0])+raw).hexdigest()
+        keys={'SUPABASE_URL','SUPABASE_SERVICE_KEY','DISPATCH_GROUP','BUSINESS_SLUG','WOO_URL','CURRU_KEY'}
+        script=Path('/root/supervisor/recovery-dispatch-preflight.mjs')
+        def read(path,limit):
+            return raw if path==script else b'SUPABASE_URL=http://localhost:3000\\nSUPABASE_SERVICE_KEY=file-private\\n'
+        rows=[{'name':'vivabot-recovery-receiver','pm2_env':{'status':'online','pm_cwd':'/root/backups/nexo-recovery/receiver','SUPABASE_URL':'https://cloud.example','SUPABASE_SERVICE_KEY':'pm2-private'}}]
+        contract=Mock(PREFLIGHT_ENV=Path('/root/supervisor/.dispatch-preflight.env'),PREFLIGHT_KEYS=keys,PREFLIGHT_SCRIPT=script,PREFLIGHT_BLOB=blob,private_bytes=read)
+        with patch.dict(sys.modules,{'github_contingency':contract}), patch.object(Path,'exists',return_value=False), patch.object(bridge.subprocess,'run',return_value=Mock(returncode=0,stdout=json.dumps(rows).encode())) as run, patch.object(bridge.os,'open') as write:
+            result=bridge.action_restore_effective_recovery({})
+            self.assertEqual(result['returncode'],1)
+            self.assertEqual(json.loads(result['output'])['reason'],'effective_config_incomplete')
+            self.assertNotIn('private',result['output'])
+            self.assertNotIn('cloud.example',result['output'])
+            self.assertEqual(run.call_count,1)
+            write.assert_not_called()
+            self.assertEqual(bridge.action_restore_effective_recovery({'pid':123})['returncode'],2)
+
 
 if __name__ == '__main__':
     unittest.main()
