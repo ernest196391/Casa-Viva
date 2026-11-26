@@ -682,6 +682,9 @@ globalThis.fetch=async(raw,options)=>{
         def blob(b):
             return hashlib.sha1(b'blob ' + str(len(b)).encode() + bytes([0]) + b).hexdigest()
         self.assertEqual(result['worker_git_blob'], blob(raw))
+        self.assertFalse(result['startup_matches_installed'])
+        self.assertFalse(result['runtime_artifact_certified'])
+        self.assertFalse(result['isolation']['functional_isolation_certified'])
         self.assertEqual(result['backup_git_blob'], blob(prior))
         self.assertTrue(result['worker_owner_only'])
         self.assertTrue(result['backup_present'])
@@ -699,6 +702,19 @@ globalThis.fetch=async(raw,options)=>{
         self.assertEqual(receipt['returncode'], 1)
         self.assertEqual(json.loads(receipt['output']), {'reason': 'guardian_evidence_unavailable'})
         self.assertNotIn('sensitive-worker-content', receipt['output'])
+
+    def test_guardian_isolation_metadata_never_certifies_functional_isolation(self):
+        good = b'NoNewPrivileges=yes\nAppArmorProfile=cv-receiver\nResult=success\nExecMainStatus=0\n'
+        for raw, rc, available in ((good, 0, True), (b'', 0, False), (good, 1, False)):
+            with self.subTest(raw=raw, rc=rc), patch.object(
+                    bridge.subprocess, 'run', return_value=Mock(stdout=raw, returncode=rc)):
+                result = bridge.guardian_isolation_metadata()
+                self.assertEqual(result['metadata_available'], available)
+                self.assertFalse(result['functional_isolation_certified'])
+
+    def test_guardian_startup_identity_rejects_noninstalled_path(self):
+        with patch.object(bridge, '__file__', '/tmp/untrusted-worker.py'):
+            self.assertIsNone(bridge.guardian_startup_blob())
 
     def test_guardian_runtime_evidence_rejects_unknown_flags(self):
         valid = {
