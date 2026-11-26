@@ -469,7 +469,7 @@ def guardian_startup_blob():
 
 
 def guardian_artifact_binding(installed, startup, approved):
-    """Compare observed identity with the existing pinned release contract."""
+    """Compare hashes only within one artifact role."""
     valid = all(isinstance(v, str) and re.fullmatch(r"[0-9a-f]{40}", v)
                 for v in (installed, startup, approved))
     return bool(valid and installed == startup == approved)
@@ -559,7 +559,10 @@ def action_guardian_runtime_evidence(args):
             "startup_git_blob": _GUARDIAN_STARTUP_BLOB,
             "startup_matches_installed": _GUARDIAN_STARTUP_BLOB is not None and _GUARDIAN_STARTUP_BLOB == actual,
             "approved_sql_worker_blob": approved if isinstance(approved, str) and re.fullmatch(r"[0-9a-f]{40}", approved) else None,
-            "approved_artifact_matches": guardian_artifact_binding(actual, _GUARDIAN_STARTUP_BLOB, approved),
+            "sql_pin_matches_installed": guardian_artifact_binding(actual, actual, approved),
+            "sql_pin_matches_backup": guardian_artifact_binding(backup_hash, backup_hash, approved),
+            # The backup is evidence only: the SQL loader still reads the installed path.
+            "guardian_release_approval_verified": False,
             "runtime_artifact_certified": False,
             "isolation": isolation,
             "worker_owner_only": bool(owner_only),
