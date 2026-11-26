@@ -6,7 +6,7 @@ ConditionPathExists=!/var/lib/cv-test-only-periodic/STOP
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/cv-test-only-periodic/source
-LoadCredential=mailbox:/etc/control-os/test-only-periodic.mailbox
+LoadCredential=mailbox:/var/lib/cv-test-only-periodic/mailbox.token
 ExecStart=/usr/bin/python3.12 -I -B /opt/cv-test-only-periodic/source/scripts/ops/github_test_only_periodic_host.py
 TimeoutStartSec=240
 TimeoutStopSec=90
