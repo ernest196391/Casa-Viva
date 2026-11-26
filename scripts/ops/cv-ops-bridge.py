@@ -2399,6 +2399,69 @@ def action_install_recovery_preflight(args):
         return {"returncode":1,"output":json.dumps({"installed":False,"reason":"pinned_install_unavailable"})}
 
 
+def action_restore_recovery_config(args):
+    """Recover a complete, already-authorized local config; never mint or export credentials."""
+    if args:
+        return {"returncode":2,"output":"No arguments accepted"}
+    try:
+        from github_contingency import PREFLIGHT_ENV, PREFLIGHT_KEYS, private_bytes
+        keys={"SUPABASE_URL","SUPABASE_SERVICE_KEY","DISPATCH_GROUP","BUSINESS_SLUG","WOO_URL","CURRU_KEY"}
+        if PREFLIGHT_KEYS!=keys or PREFLIGHT_ENV!=Path("/root/supervisor/.dispatch-preflight.env"):
+            raise ValueError("contract mismatch")
+        def parse(raw):
+            cfg={}
+            for line in raw.decode("utf-8").splitlines():
+                key,sep,val=line.partition("=")
+                if sep and key in keys:
+                    if key in cfg:
+                        raise ValueError("duplicate")
+                    cfg[key]=val.strip().strip('"').strip("'")
+            return cfg
+        def allowed(cfg):
+            if set(cfg)!=keys or any(not v or any(c in v for c in ("\n","\r","\x00")) for v in cfg.values()):
+                return False
+            u=urllib.parse.urlsplit(cfg["SUPABASE_URL"])
+            w=urllib.parse.urlsplit(cfg["WOO_URL"])
+            return (u.scheme in ("http","https") and u.hostname in ("127.0.0.1","localhost","::1")
+                and not (u.username or u.password or u.query or u.fragment)
+                and w.scheme=="https" and w.netloc=="casaviva.company"
+                and not (w.query or w.fragment) and cfg["BUSINESS_SLUG"]=="casa-viva"
+                and not any(c in cfg["DISPATCH_GROUP"] for c in "%_*\\"))
+        installed=action_install_recovery_preflight({})
+        if installed["returncode"]!=0:
+            return installed
+        if PREFLIGHT_ENV.exists():
+            if not allowed(parse(private_bytes(PREFLIGHT_ENV,65536))):
+                return {"returncode":1,"output":json.dumps({"reason":"existing_config_invalid"})}
+            return action_recovery_dispatch_auth({})
+        # Fixed, application-owned files only; never traverse backups or inspect unrelated secrets.
+        # Do not combine credentials with a different endpoint.
+        for source in (Path("/root/backups/nexo-recovery/receiver/.env"),Path("/root/vivabot/.env")):
+            try:
+                cfg=parse(private_bytes(source,65536))
+                if not allowed(cfg):
+                    continue
+            except (OSError,ValueError):
+                continue
+            # Validate with the original pinned preflight before persisting anything.
+            p=subprocess.run(["/usr/bin/node","/root/supervisor/recovery-dispatch-preflight.mjs"],
+                env=dict(cfg,PATH="/usr/bin:/bin",RECOVERY_RECONCILE="1"),capture_output=True,timeout=100,check=False)
+            from github_contingency import preflight_summary
+            safe=preflight_summary(p.stdout)
+            if p.returncode or not safe["ok"]:
+                return {"returncode":1,"output":json.dumps({"reason":"local_source_preflight_failed","checks":safe})}
+            fd=os.open(PREFLIGHT_ENV,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+            with os.fdopen(fd,"w") as out:
+                for k in sorted(keys):
+                    out.write(k+"="+cfg[k]+"\n")
+                out.flush()
+                os.fsync(out.fileno())
+            return {"returncode":0,"output":json.dumps({"restored":True,"checks":safe})}
+        return {"returncode":1,"output":json.dumps({"reason":"no_complete_authorized_local_config"})}
+    except Exception:
+        return {"returncode":1,"output":json.dumps({"reason":"local_config_restore_unavailable"})}
+
+
 def action_recovery_preflight_evidence(args):
     """Classify missing preflight prerequisites without returning file contents."""
     if args:
@@ -2455,6 +2518,7 @@ def action_recovery_dispatch_auth(args):
 
 
 ACTIONS = {
+    "restore_recovery_config": action_restore_recovery_config,
     "install_recovery_preflight": action_install_recovery_preflight,
     "recovery_preflight_evidence": action_recovery_preflight_evidence,
     "recovery_dispatch_auth": action_recovery_dispatch_auth,
