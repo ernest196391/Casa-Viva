@@ -52,7 +52,7 @@ def tick(directory,arm,execute,now=None):
         except BlockingIOError:return {"state":"busy","production_authorized":False}
         # One attempt per armed directory, even if the caller changes the ID.
         if (root/"attempt.json").exists():return {"state":"already_reserved","production_authorized":False}
-        if end-now<180:return {"state":"insufficient_time","production_authorized":False}
+        if end-now<240:return {"state":"insufficient_time","production_authorized":False}
         atomic(root/"attempt.json",{"comment_id":cid,"sha":sha,"state":"reserved"})
         try:
             report=execute(cid,sha)
@@ -60,6 +60,7 @@ def tick(directory,arm,execute,now=None):
         except Exception:
             ok=False
         result={"state":"passed" if ok else "blocked","comment_id":cid,"sha":sha,"production_authorized":False}
+        if ok:result["durable_rows"]=report.get("durable_rows",0)
         atomic(root/"terminal.json",result)
         return result
     finally:os.close(fd)
