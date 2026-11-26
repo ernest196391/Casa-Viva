@@ -33,7 +33,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "4.1.7"
+BRIDGE_VERSION = "4.1.8"
 
 
 def load_env_files() -> dict[str, str]:
@@ -2368,6 +2368,36 @@ COMMIT;"""
         return {"returncode":1,"output":"local_recovery_preflight_unavailable"}
 
 
+def action_install_recovery_preflight(args):
+    """Install only the missing canonical script; never replace a different local file."""
+    if args:
+        return {"returncode":2,"output":"No arguments accepted"}
+    import hashlib
+    try:
+        from github_contingency import PREFLIGHT_SCRIPT, PREFLIGHT_BLOB, private_bytes
+        expected="5dfafab9d7120f8c002999c30f1dd31e5eff5754"
+        if PREFLIGHT_BLOB!=expected or PREFLIGHT_SCRIPT!=Path("/root/supervisor/recovery-dispatch-preflight.mjs"):
+            raise ValueError("contract mismatch")
+        def valid(raw):
+            return hashlib.sha1(b"blob "+str(len(raw)).encode()+bytes([0])+raw).hexdigest()==expected
+        if PREFLIGHT_SCRIPT.exists():
+            return {"returncode":0 if valid(private_bytes(PREFLIGHT_SCRIPT,65536)) else 1,"output":json.dumps({"already_present":True,"hash_ok":valid(private_bytes(PREFLIGHT_SCRIPT,65536))})}
+        url="https://raw.githubusercontent.com/ernest196391/vivabot/6eeeb36c53f3a508b2ed2a7a2cefd2fdf748c9fd/scripts/recovery-dispatch-preflight.mjs"
+        with urllib.request.urlopen(url,timeout=20) as response:
+            raw=response.read(65537)
+        if len(raw)>65536 or not valid(raw):
+            raise ValueError("hash mismatch")
+        # Exclusive creation; no existing configuration or script is overwritten.
+        fd=os.open(PREFLIGHT_SCRIPT,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+        with os.fdopen(fd,"wb") as out:
+            out.write(raw)
+            out.flush()
+            os.fsync(out.fileno())
+        return {"returncode":0,"output":json.dumps({"installed":True,"hash_ok":valid(private_bytes(PREFLIGHT_SCRIPT,65536))})}
+    except Exception:
+        return {"returncode":1,"output":json.dumps({"installed":False,"reason":"pinned_install_unavailable"})}
+
+
 def action_recovery_preflight_evidence(args):
     """Classify missing preflight prerequisites without returning file contents."""
     if args:
@@ -2424,6 +2454,7 @@ def action_recovery_dispatch_auth(args):
 
 
 ACTIONS = {
+    "install_recovery_preflight": action_install_recovery_preflight,
     "recovery_preflight_evidence": action_recovery_preflight_evidence,
     "recovery_dispatch_auth": action_recovery_dispatch_auth,
     "local_recovery_preflight": action_local_recovery_preflight,
