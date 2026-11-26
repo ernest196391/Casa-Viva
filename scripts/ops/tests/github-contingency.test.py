@@ -165,7 +165,7 @@ class Tests(unittest.TestCase):
             with self.assertRaises(OSError):
                 mod.private_bytes(link, 262144)
 
-    def test_sql_provision_rolls_back_only_its_own_publication(self):
+    def test_sql_provision_never_deletes_publication_after_uncertainty(self):
         import hashlib
         raw = b'certified fixture'
         pin = hashlib.sha1(b'blob ' + str(len(raw)).encode() + bytes([0]) + raw).hexdigest()
@@ -182,11 +182,11 @@ class Tests(unittest.TestCase):
                         raise ValueError('post-publication failure')
                     return p.read_bytes()
                 with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod, 'private_bytes', side_effect=read), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)):
-                    self.assertFalse(mod.provision_local_sql_artifact()['ok'])
+                    self.assertEqual(mod.provision_local_sql_artifact(), {'ok': False, 'reason': 'publication_unconfirmed'})
                 if replace:
                     self.assertEqual(target.read_bytes(), b'concurrent replacement')
                 else:
-                    self.assertFalse(target.exists())
+                    self.assertEqual(target.read_bytes(), raw)
 
     def test_offline_sql_provision_is_idempotent_and_never_overwrites(self):
         import hashlib
