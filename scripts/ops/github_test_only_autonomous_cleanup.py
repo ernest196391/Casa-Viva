@@ -7,6 +7,12 @@ import re
 import stat
 import subprocess
 import sys
+import importlib.util
+
+def release_profiles(root,owner):
+    spec=importlib.util.spec_from_file_location('lease',Path(__file__).resolve().parent/'github_test_only_apparmor_lease.py')
+    mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+    mod.release(root,owner)
 
 ENV={"PATH":"/usr/bin:/bin","HOME":"/nonexistent","LANG":"C"}
 OWNER=re.compile(r"[0-9]{1,12}-[0-9]{1,20}")
@@ -32,9 +38,8 @@ def cleanup(owner,run=command):
     if len(ids)>1 or any(not re.fullmatch("[0-9a-f]{64}",i) for i in ids):raise ValueError("invalid Docker identity")
     if ids:run(["/usr/bin/docker","rm","-f","-v",ids[0]])
     if run(["/usr/bin/docker","ps","-aq","--filter","name=^/"+name+"$"]):raise ValueError("container cleanup unconfirmed")
-    # AppArmor profiles are shared fixed names. Never unload profiles unless
-    # the operator-owned lifecycle explicitly reserved them. No blanket removal.
-    return {"ok":True,"state":"resources_removed","profile_cleanup":"operator_gate","production_authorized":False}
+    release_profiles(root,owner)
+    return {"ok":True,"state":"resources_removed","profile_cleanup":"confirmed","production_authorized":False}
 
 if __name__=="__main__":
     try:
