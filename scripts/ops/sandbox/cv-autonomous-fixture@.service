@@ -1,0 +1,24 @@
+# Inactive template. Install/start only after separate isolated-pilot review.
+[Unit]
+Description=Casa Viva isolated one-attempt fixture receiver %i
+ConditionPathExists=/tmp/cv-autonomous-%i/arm.json
+ConditionPathExists=!/tmp/cv-autonomous-%i/attempt.json
+
+[Service]
+Type=oneshot
+WorkingDirectory=/tmp/cv-autonomous-%i/source
+EnvironmentFile=/tmp/cv-autonomous-%i/mailbox.env
+ExecStart=/usr/bin/python3.12 -I -B /tmp/cv-autonomous-%i/source/scripts/ops/github_test_only_autonomous_receiver.py --tick /tmp/cv-autonomous-%i
+TimeoutStartSec=210
+TimeoutStopSec=10
+KillMode=control-group
+UMask=0077
+MemoryMax=256M
+CPUQuota=50%
+TasksMax=32
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/tmp/cv-autonomous-%i /run
+PrivateTmp=no
+LimitCORE=0
