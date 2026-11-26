@@ -1,3 +1,9 @@
+## CV-AUTO-002 — isolated receiver CLI and one-shot timer (2026-11-25)
+
+- cb98118 connects receiver to existing disposable Docker integral coordinator, root-owned arm and exact clean local revision.
+- 0339e46 reserves 240s arm margin and records acknowledgement count; a458a5c/9f98808 add inactive instance service and one-shot timer templates without Install section.
+- Added three adapter/ack/timer regressions to existing CI suite. No host activation. Before pilot: validate systemd nesting, Docker resource cleanup on forced timeout, profile ownership/cleanup, credential file handling, timer expiry and rollback; final previous host exit still unobserved. No production activation, zero extra spend.
+
 ## CV-AUTO-002 — integral receipt follow-up (2026-11-25)
 
 - CI 45724775684 all five jobs passed; Docker regression run 45725133048 PostgreSQL passed, remaining jobs nonterminal.
