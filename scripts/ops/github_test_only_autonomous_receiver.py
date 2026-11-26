@@ -73,6 +73,8 @@ def execute_integral(repo, image, token, cid, sha, owner=None):
         def launch(s,b):
             if b<45:return 125
             result=m.cert.run(repo,s,budget=b,owner=owner)
+            # Local journal only, fixed numeric exit and cleanup status.
+            print(json.dumps({"stage":"certification","launcher_exit":result.get("launcher_exit",125),"cleanup_confirmed":result.get("cleanup_confirmed") is True,"reason":result.get("reason","unknown")}),flush=True)
             return 0 if result.get("ok") is True and result.get("cleanup_confirmed") is True else 125
         result=m.run(db.api,m.ghmod.github_api,env,cid,sha,launch)
         result["durable_rows"]=int(db.sql("select count(*) from public.ops_tasks where result->>'github_report_id' is not null"))
