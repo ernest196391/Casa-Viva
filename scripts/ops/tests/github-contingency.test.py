@@ -700,6 +700,26 @@ globalThis.fetch=async(raw,options)=>{
         self.assertEqual(json.loads(receipt['output']), {'reason': 'guardian_evidence_unavailable'})
         self.assertNotIn('sensitive-worker-content', receipt['output'])
 
+    def test_guardian_runtime_evidence_rejects_unknown_flags(self):
+        valid = {
+            'CV_GITHUB_CONTINGENCY_ENABLED': '1',
+            'CV_GITHUB_RELEASE_ENABLED': '0',
+            'CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED': '0',
+        }
+        cases = [({}, None), ({**valid, 'CV_GITHUB_RELEASE_ENABLED': 'false'}, None),
+                 (valid, OSError('private-config-error'))]
+        for name in valid:
+            cases.append(({k: v for k, v in valid.items() if k != name}, None))
+        for config, error in cases:
+            with self.subTest(config=config, error=type(error).__name__), \
+                 patch.dict(sys.modules, {'github_contingency': Mock(private_bytes=Mock(return_value=b'fixture'))}), \
+                 patch.object(bridge, 'load_env_files', return_value=config, side_effect=error), \
+                 patch.object(bridge.subprocess, 'run') as run:
+                receipt = bridge.action_guardian_runtime_evidence({})
+                self.assertEqual(receipt['returncode'], 1)
+                self.assertEqual(json.loads(receipt['output']), {'reason': 'guardian_flags_unknown'})
+                run.assert_not_called()
+
     def test_guardian_only_metadata_queue_migration(self):
         sql_root = PATH.parent / 'sql'
         allow = (sql_root / 'allow-guardian-runtime-evidence.sql').read_text()
