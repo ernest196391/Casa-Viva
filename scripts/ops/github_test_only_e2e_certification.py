@@ -127,18 +127,20 @@ class FixtureDB:
 
 class DockerFixtureDB(FixtureDB):
     """Disposable local-image-only PostgreSQL, no network or host mounts."""
-    def __init__(self,image):
+    def __init__(self,image,owner=None):
         if not re.fullmatch(r"sha256:[0-9a-f]{64}",image):
             raise ValueError("immutable local image required")
         self.image=image
-        self.name=f"cv-e2e-pg-{os.getpid()}-{time.monotonic_ns()}"
+        if owner is not None and not re.fullmatch(r"[0-9]{1,12}-[0-9]{1,20}",owner):raise ValueError("invalid fixture owner")
+        self.owner=owner or f"{os.getpid()}-{time.monotonic_ns()}"
+        self.name="cv-e2e-pg-"+self.owner
         self.created=False
     def docker(self,*args,**kw):
         return subprocess.run(["/usr/bin/docker",*args],env={"PATH":"/usr/bin:/bin","HOME":"/nonexistent"},check=True,capture_output=True,timeout=30,**kw)
     def __enter__(self):
         self.docker("image","inspect",self.image)
         try:
-            self.docker("create","--name",self.name,"--pull=never","--network=none",
+            self.docker("create","--name",self.name,"--label","com.casaviva.fixture="+self.owner,"--pull=never","--network=none",
                 "--memory=256m","--memory-swap=256m","--cpus=0.5","--pids-limit=64",
                 "--security-opt=no-new-privileges","--read-only",
                 "--tmpfs","/var/lib/postgresql/data:rw,size=128m",
