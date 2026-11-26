@@ -500,6 +500,31 @@ class Tests(unittest.TestCase):
         self.assertIn("count(*)=8",source)
         self.assertIn("BEGIN READ ONLY",inspect.getsource(bridge.local_crm_readonly))
 
+    def test_local_sql_adapter_executes_pinned_preflight_fixtures(self):
+        import subprocess
+        import shutil
+        node=shutil.which('node')
+        if not node:
+            self.skipTest('Node unavailable')
+        core_fixture = """
+globalThis.fetch=async(raw,options)=>{
+ const u=new URL(raw);
+ if(u.origin!=='https://casaviva.company'||options.headers['X-VivaBot-Key']!=='fixture-key') throw Error('auth');
+ const data=u.pathname.endsWith('/direct')?{direct:[]}:u.pathname.endsWith('/palla')?{palla:[]}:{offers:[{id:1,offeredAt:'2026-11-20T10:00:00',announced:false}]};
+ return {ok:true,json:async()=>data};
+};
+"""
+        config={'WOO_URL':'https://casaviva.company','CURRU_KEY':'fixture-key','BUSINESS_SLUG':'casa-viva','DISPATCH_GROUP':'Dispatch'}
+        snapshot={'businesses':['tenant'],'groups':[{'jid':'fixture@g.us','name':'Dispatch'}],'dispatch_schema':True,'outbox_schema':True,'dispatch':[]}
+        row={'order_id':1,'stage':'announced','messenger_phone':None,'announce_msg_id':'present','announced_at':'2026-11-20T11:00:00Z'}
+        for rows,expected in [([],True),([row],True),([dict(row,messenger_phone='present')],False),([row,row],False)]:
+            payload=json.dumps({'snapshot':dict(snapshot,dispatch=rows),'config':config})
+            p=subprocess.run([node,'--input-type=module','-e',bridge.BUNDLED_RECOVERY_PREFLIGHT+core_fixture+bridge.LOCAL_SQL_PREFLIGHT_WRAPPER],input=payload,text=True,capture_output=True,timeout=10)
+            self.assertEqual(p.returncode,0,p.stderr)
+            result=json.loads(p.stdout)
+            self.assertEqual(result['ok'],expected)
+            self.assertTrue(result['checks']['core_offers']['ok'])
+
     def test_local_sql_transport_readonly(self):
         with patch.object(bridge.subprocess,'run',return_value=Mock(returncode=0,stdout=b'{"ok":true}')) as run:
             self.assertEqual(bridge.local_crm_readonly('SELECT json_build_object()'),{'ok':True})
