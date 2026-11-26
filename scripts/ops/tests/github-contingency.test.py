@@ -150,6 +150,44 @@ class Tests(unittest.TestCase):
             self.assertEqual(receipt['action'], 'local_sql_reconcile')
             self.assertEqual(receipt['request_id'], row['id'])
 
+    def test_private_sql_reader_rejects_permissions_and_symlinks(self):
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / 'artifact'
+            target.write_bytes(b'fixture')
+            target.chmod(0o600)
+            self.assertEqual(mod.private_bytes(target, 262144), b'fixture')
+            target.chmod(0o644)
+            with self.assertRaises(ValueError):
+                mod.private_bytes(target, 262144)
+            target.chmod(0o600)
+            link = Path(d) / 'link'
+            link.symlink_to(target)
+            with self.assertRaises(OSError):
+                mod.private_bytes(link, 262144)
+
+    def test_sql_provision_rolls_back_only_its_own_publication(self):
+        import hashlib
+        raw = b'certified fixture'
+        pin = hashlib.sha1(b'blob ' + str(len(raw)).encode() + bytes([0]) + raw).hexdigest()
+        for replace in (False, True):
+            with self.subTest(replace=replace), tempfile.TemporaryDirectory() as d:
+                target = Path(d) / 'cv-local-sql-certified.py'
+                source = target.with_name('cv-ops-bridge.py.prev')
+                source.write_bytes(raw)
+                def read(p, n):
+                    if p == target and p.exists():
+                        if replace:
+                            p.unlink()
+                            p.write_bytes(b'concurrent replacement')
+                        raise ValueError('post-publication failure')
+                    return p.read_bytes()
+                with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod, 'private_bytes', side_effect=read), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)):
+                    self.assertFalse(mod.provision_local_sql_artifact()['ok'])
+                if replace:
+                    self.assertEqual(target.read_bytes(), b'concurrent replacement')
+                else:
+                    self.assertFalse(target.exists())
+
     def test_offline_sql_provision_is_idempotent_and_never_overwrites(self):
         import hashlib
         raw = b'certified fixture'
