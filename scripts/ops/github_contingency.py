@@ -71,7 +71,7 @@ def command(comment, now):
             fields = fields | {'product'}
             if not valid_product(data.get('product')):
                 return None
-        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply', 'local_sql_reconcile') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
             return None
         if action == 'release_apply' and (not isinstance(data['sha'], str) or not re.fullmatch(r'[0-9a-f]{40}', data['sha'])):
             return None
@@ -506,6 +506,15 @@ def wa_catalog_case():
         return {'ok': False, 'reason': 'wa_catalog_case_unavailable'}
 
 
+def local_sql_reconcile():
+    """Invoke only the existing, fixed read-only bridge action; return sanitized evidence."""
+    try:
+        from cv_ops_bridge_local_sql import run_local_sql_reconcile
+        return run_local_sql_reconcile()
+    except (ImportError, OSError, ValueError, TypeError):
+        return {'ok': False, 'reason': 'local_sql_reconcile_unavailable'}
+
+
 class Contingency:
     def __init__(self, env, health, directory=Path('/var/lib/cv-ops-bridge-contingency'), api=github_api, clock=time.time):
         self.cfg = config(env)
@@ -513,6 +522,7 @@ class Contingency:
         self.receiver_contract_enabled = env.get('CV_GITHUB_RECEIVER_CONTRACT_ENABLED') == '1'
         self.preflight_enabled = env.get('CV_GITHUB_DISPATCH_PREFLIGHT_ENABLED') == '1'
         self.release_enabled = env.get('CV_GITHUB_RELEASE_ENABLED') == '1'
+        self.local_sql_enabled = env.get('CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED') == '1'
         self.health, self.directory, self.api, self.clock = health, Path(directory), api, clock
 
     def state(self):
@@ -559,7 +569,7 @@ class Contingency:
             return 'blocked'
         for comment in comments:
             data = command(comment, now)
-            if not data or (data['action'] == 'receiver_classification' and not self.receiver_classification_enabled) or (data['action'] == 'receiver_contract' and not self.receiver_contract_enabled) or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
+            if not data or (data['action'] == 'receiver_classification' and not self.receiver_classification_enabled) or (data['action'] == 'receiver_contract' and not self.receiver_contract_enabled) or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or (data['action'] == 'local_sql_reconcile' and not self.local_sql_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
                 continue
             # One fixed read-only diagnostic. No retry if post outcome is uncertain.
             if data['action'] == 'health':
@@ -581,6 +591,8 @@ class Contingency:
                 safe = wa_catalog_case()
             elif data['action'] == 'order_lookup':
                 safe = order_lookup(data['product'])
+            elif data['action'] == 'local_sql_reconcile':
+                safe = local_sql_reconcile()
             elif data['action'] == 'release_apply':
                 try:
                     from github_release_gate import apply_release
