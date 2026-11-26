@@ -1,0 +1,10 @@
+# No Install section; never enabled by staging.
+[Unit]
+Description=Casa Viva restricted periodic fixture timer
+ConditionPathExists=/var/lib/cv-test-only-periodic/approved.json
+ConditionPathExists=!/var/lib/cv-test-only-periodic/STOP
+[Timer]
+OnActiveSec=60s
+OnUnitInactiveSec=60s
+AccuracySec=5s
+Unit=cv-test-only-periodic.service
