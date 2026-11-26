@@ -94,6 +94,19 @@ def apply_release(sha, api):
         if len(body) > 65536 or len(body) < 1000:
             return {'ok': False, 'reason': 'invalid_artifact'}
         compile(body, str(TARGET), 'exec')
+        # Provision only the fixed, pinned artifact from the reviewed release.
+        # This does not execute the worker or change any authorization flags.
+        import types
+        candidate = types.ModuleType('cv_release_candidate')
+        candidate.__file__ = str(TARGET)
+        exec(compile(body, str(TARGET), 'exec'), candidate.__dict__)
+        provision = getattr(candidate, 'provision_local_sql_artifact', None)
+        if provision is not None:
+            if git('rev-parse', 'origin/main').decode().strip() != sha:
+                return {'ok': False, 'reason': 'main_moved'}
+            receipt = provision()
+            if not isinstance(receipt, dict) or receipt.get('ok') is not True:
+                return {'ok': False, 'reason': 'artifact_provision_unconfirmed'}
         previous = read_private(TARGET)
         if previous == body:
             return {'ok': True, 'changed': False, 'sha': sha}
