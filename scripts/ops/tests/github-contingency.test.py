@@ -164,9 +164,9 @@ class Tests(unittest.TestCase):
                 for name in mod.PREFLIGHT_CHECKS}},
         }
         # Synthetic executable source: mocked digest identifies exactly these bytes.
-        source = ("def action_local_sql_reconcile(args):\\n"
-                  "    assert args == {}\\n"
-                  "    return {'returncode': 0, 'output': " + repr(json.dumps(payload)) + "}\\n").encode()
+        source = ("def action_local_sql_reconcile(args):\n"
+                  "    assert args == {}\n"
+                  "    return {'returncode': 0, 'output': " + repr(json.dumps(payload)) + "}\n").encode()
         blob = hashlib.sha1(b'blob ' + str(len(source)).encode() + bytes([0]) + source).hexdigest()
         calls = []
         def private_once(path, limit):
@@ -185,7 +185,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
         # A modified blob must fail closed and never execute injected code.
-        tampered = source + b"\\nraise RuntimeError('worker executed')\\n"
+        tampered = source + b"\nraise RuntimeError('worker executed')\n"
         with patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', blob), \
              patch.object(mod, 'private_bytes', return_value=tampered), \
              patch.object(builtins, 'exec', side_effect=AssertionError('must not execute')) as executor:
@@ -193,10 +193,10 @@ class Tests(unittest.TestCase):
             executor.assert_not_called()
 
         # Worker failure output must not leak credentials or data.
-        failure_source = ("def action_local_sql_reconcile(args):\\n"
-                          "    assert args == {}\\n"
+        failure_source = ("def action_local_sql_reconcile(args):\n"
+                          "    assert args == {}\n"
                           "    return {'returncode': 1, 'output': "
-                          + repr(json.dumps({'reason': 'private-credential-do-not-leak'})) + "}\\n").encode()
+                          + repr(json.dumps({'reason': 'private-credential-do-not-leak'})) + "}\n").encode()
         failure_blob = hashlib.sha1(b'blob ' + str(len(failure_source)).encode() + bytes([0]) + failure_source).hexdigest()
         with patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', failure_blob), \
              patch.object(mod, 'private_bytes', return_value=failure_source):
