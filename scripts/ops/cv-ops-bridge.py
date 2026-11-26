@@ -33,7 +33,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "4.1.9"
+BRIDGE_VERSION = "4.1.10"
 
 
 def load_env_files() -> dict[str, str]:
@@ -2462,6 +2462,99 @@ def action_restore_recovery_config(args):
         return {"returncode":1,"output":json.dumps({"reason":"local_config_restore_unavailable"})}
 
 
+def action_restore_effective_recovery(args):
+    """Use only the named active receiver configuration, keeping secrets on the VPS."""
+    if args:
+        return {"returncode":2,"output":"No arguments accepted"}
+    try:
+        from github_contingency import PREFLIGHT_ENV, PREFLIGHT_KEYS, PREFLIGHT_SCRIPT, PREFLIGHT_BLOB, private_bytes
+        import hashlib
+        keys={"SUPABASE_URL","SUPABASE_SERVICE_KEY","DISPATCH_GROUP","BUSINESS_SLUG","WOO_URL","CURRU_KEY"}
+        if PREFLIGHT_KEYS!=keys or PREFLIGHT_ENV!=Path("/root/supervisor/.dispatch-preflight.env"):
+            raise ValueError("contract mismatch")
+        def parse(raw):
+            cfg={}
+            for line in raw.decode("utf-8").splitlines():
+                key,sep,val=line.partition("=")
+                if sep and key in keys:
+                    if key in cfg:
+                        raise ValueError("duplicate")
+                    cfg[key]=val.strip().strip('"').strip("'")
+            return cfg
+        def allowed(cfg):
+            if set(cfg)!=keys or any(not v or any(c in v for c in ("\n","\r","\x00")) for v in cfg.values()):
+                return False
+            u=urllib.parse.urlsplit(cfg["SUPABASE_URL"])
+            w=urllib.parse.urlsplit(cfg["WOO_URL"])
+            return (u.scheme in ("http","https") and u.hostname in ("127.0.0.1","localhost","::1")
+                and not (u.username or u.password or u.query or u.fragment)
+                and w.scheme=="https" and w.netloc=="casaviva.company"
+                and not (w.query or w.fragment) and cfg["BUSINESS_SLUG"]=="casa-viva"
+                and not any(c in cfg["DISPATCH_GROUP"] for c in "%_*\\"))
+        raw=private_bytes(PREFLIGHT_SCRIPT,65536)
+        if hashlib.sha1(b"blob "+str(len(raw)).encode()+bytes([0])+raw).hexdigest()!=PREFLIGHT_BLOB:
+            return {"returncode":1,"output":json.dumps({"reason":"script_integrity_failed"})}
+        if PREFLIGHT_ENV.exists():
+            if not allowed(parse(private_bytes(PREFLIGHT_ENV,65536))):
+                return {"returncode":1,"output":json.dumps({"reason":"existing_config_invalid"})}
+            return action_recovery_dispatch_auth({})
+        p=subprocess.run(["pm2","jlist"],capture_output=True,timeout=15,check=False)
+        if p.returncode or len(p.stdout)>4000000:
+            return {"returncode":1,"output":json.dumps({"reason":"pm2_metadata_unavailable"})}
+        rows=json.loads(p.stdout)
+        matches=[r for r in rows if r.get("name")=="vivabot-recovery-receiver"]
+        if len(matches)!=1:
+            return {"returncode":1,"output":json.dumps({"reason":"receiver_not_unique"})}
+        meta=matches[0].get("pm2_env",{})
+        if meta.get("status")!="online":
+            return {"returncode":1,"output":json.dumps({"reason":"receiver_not_online"})}
+        root=Path("/root/backups/nexo-recovery/receiver").resolve()
+        cwd=Path(meta.get("pm_cwd","/")).resolve()
+        if cwd!=root:
+            return {"returncode":1,"output":json.dumps({"reason":"receiver_cwd_mismatch"})}
+        # Only the six existing contract keys, never arbitrary environment output.
+        nested=meta.get("env",{})
+        candidates=[]
+        for source in (meta,nested):
+            if isinstance(source,dict):
+                candidates.append({k:source[k] for k in keys if isinstance(source.get(k),str)})
+        # A private dotenv in the exact application directory may supplement
+        # non-credential fields; do not mix the endpoint/key or Core URL/key pairs.
+        try:
+            file_cfg=parse(private_bytes(cwd/".env",65536))
+        except (OSError,ValueError):
+            file_cfg={}
+        evidence=[]
+        for cfg in candidates:
+            merged=dict(file_cfg)
+            for pair in (("SUPABASE_URL","SUPABASE_SERVICE_KEY"),("WOO_URL","CURRU_KEY")):
+                if any(k in cfg for k in pair):
+                    for k in pair:
+                        merged.pop(k,None)
+            merged.update(cfg)
+            evidence.append({"present":sorted(k for k,v in merged.items() if v),"local_endpoint":urllib.parse.urlsplit(merged.get("SUPABASE_URL","")).hostname in ("127.0.0.1","localhost","::1")})
+            if not allowed(merged):
+                continue
+            cfg=merged
+            # Validate with the original pinned preflight before persisting anything.
+            p=subprocess.run(["/usr/bin/node",str(PREFLIGHT_SCRIPT)],
+                env=dict(cfg,PATH="/usr/bin:/bin",RECOVERY_RECONCILE="1"),capture_output=True,timeout=100,check=False)
+            from github_contingency import preflight_summary
+            safe=preflight_summary(p.stdout)
+            if p.returncode or not safe["ok"]:
+                return {"returncode":1,"output":json.dumps({"reason":"local_source_preflight_failed","checks":safe})}
+            fd=os.open(PREFLIGHT_ENV,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+            with os.fdopen(fd,"w") as out:
+                for k in sorted(keys):
+                    out.write(k+"="+cfg[k]+"\n")
+                out.flush()
+                os.fsync(out.fileno())
+            return {"returncode":0,"output":json.dumps({"restored":True,"checks":safe})}
+        return {"returncode":1,"output":json.dumps({"reason":"effective_config_incomplete","sources":evidence})}
+    except Exception:
+        return {"returncode":1,"output":json.dumps({"reason":"local_config_restore_unavailable"})}
+
+
 def action_recovery_preflight_evidence(args):
     """Classify missing preflight prerequisites without returning file contents."""
     if args:
@@ -2518,6 +2611,7 @@ def action_recovery_dispatch_auth(args):
 
 
 ACTIONS = {
+    "restore_effective_recovery": action_restore_effective_recovery,
     "restore_recovery_config": action_restore_recovery_config,
     "install_recovery_preflight": action_install_recovery_preflight,
     "recovery_preflight_evidence": action_recovery_preflight_evidence,
