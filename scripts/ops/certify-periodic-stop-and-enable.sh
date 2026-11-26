@@ -48,6 +48,7 @@ rollback() {
     touch "$STATE/STOP"
     if (( installed )); then systemctl stop "$TIMER" "$SERVICE" || true; fi
     if (( started )); then systemctl stop "$CHILD" || true; fi
+    if (( installed )); then /usr/bin/python3.12 -I -B "$SRC/github_test_only_periodic_recover.py" || echo RECOVERY_UNCONFIRMED=1; fi
     rm -f "$TOKEN" "$STATE/approved.json"
     if (( installed )); then rm -f "/etc/systemd/system/$SERVICE" "/etc/systemd/system/$TIMER" "/etc/systemd/system/timers.target.wants/$TIMER"; systemctl daemon-reload || true; fi
     echo "ENABLE_FAILED_STOP_RETAINED=1"
@@ -71,6 +72,11 @@ db.execute("INSERT INTO attempts VALUES (-1,?,?,?,'reserved')",("local-stop-"+ow
 rx.atomic(Path(state)/"owner--1.json",{"cid":-1,"owner":owner})
 rx.atomic(Path(work)/"attempt.json",{"comment_id":-1,"state":"reserved"})
 PY
+systemd-analyze verify "$SRC/sandbox/$SERVICE" "$SRC/sandbox/$TIMER"
+installed=1
+install -m 644 "$SRC/sandbox/$SERVICE" "/etc/systemd/system/$SERVICE"
+install -m 644 "$SRC/sandbox/$TIMER" "/etc/systemd/system/$TIMER"
+systemctl daemon-reload
 started=1
 systemd-run --unit="$CHILD" --property=RuntimeMaxSec=120 --property=NoNewPrivileges=yes --property=PrivateNetwork=yes --property=ProtectSystem=strict --property=ProtectHome=yes --property=MemoryMax=32M --property=TasksMax=4 /usr/bin/sleep 90
 systemctl is-active --quiet "$CHILD"
@@ -102,11 +108,6 @@ fd=os.open(p/"mailbox.token",os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o60
 with os.fdopen(fd,"w") as f:f.write(values[0]);f.flush();os.fsync(f.fileno())
 rx.atomic(p/"approved.json",{"sha":sha,"scope":"isolated_fixture"})
 PY
-systemd-analyze verify "$SRC/sandbox/$SERVICE" "$SRC/sandbox/$TIMER"
-installed=1
-install -m 644 "$SRC/sandbox/$SERVICE" "/etc/systemd/system/$SERVICE"
-install -m 644 "$SRC/sandbox/$TIMER" "/etc/systemd/system/$TIMER"
-systemctl daemon-reload
 rm -- "$STATE/STOP"
 # Explicit operator invocation enables only the reviewed test-only timer.
 systemctl add-wants timers.target "$TIMER"
