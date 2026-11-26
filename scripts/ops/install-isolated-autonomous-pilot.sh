@@ -15,18 +15,22 @@ mkdir -m 700 "$ROOT"
 installed=0
 cleanup() {
   local rc=$? clean=0
+  # Remove the source credential even if subsequent rollback fails.
+  rm -f "$ROOT/mailbox.token" || clean=1
   trap - EXIT INT TERM
   if (( installed )); then
-    systemctl stop "$TIMER" "$SERVICE" || clean=1
+    timeout 120 systemctl stop "$TIMER" "$SERVICE" || clean=1
     if [[ -f "$ROOT/attempt.json" ]]; then
       /usr/bin/python3.12 -I -B "$ROOT/source/scripts/ops/github_test_only_autonomous_cleanup.py" "$OWNER" || clean=1
     fi
-    rm -f "/run/systemd/system/$SERVICE" "/run/systemd/system/$TIMER"
-    systemctl daemon-reload || clean=1
+    if (( clean == 0 )); then
+      rm -f "/run/systemd/system/$SERVICE" "/run/systemd/system/$TIMER" || clean=1
+      timeout 30 systemctl daemon-reload || clean=1
+    fi
   fi
-  rm -f "$ROOT/mailbox.token"
   printf 'PILOT_EVIDENCE=%s\nROLLBACK_EXIT=%s\n' "$ROOT" "$clean"
   (( clean == 0 )) || exit 4
+  if (( rc == 0 )); then echo AUTONOMOUS_PILOT_EXIT=0; fi
   exit "$rc"
 }
 trap cleanup EXIT
@@ -67,6 +71,7 @@ install -m 0644 "$ROOT/$SERVICE" "/run/systemd/system/$SERVICE"
 install -m 0644 "$ROOT/$TIMER" "/run/systemd/system/$TIMER"
 systemctl daemon-reload
 systemctl start "$TIMER"
+# PID 1 owns the receiver lifecycle after this point.
 # The timer, not this shell, invokes the receiver.
 deadline=$((SECONDS+360))
 while (( SECONDS < deadline )); do
@@ -90,4 +95,3 @@ grep -q '^cv-dev-worker-bwrap (enforce)$' "$INDEX"
 [[ -z $(docker ps -aq --filter "name=^/cv-e2e-pg-$OWNER$") ]]
 [[ ! -e /run/cv-autonomous-apparmor.owner ]]
 for unit in cv-ops-bridge.service cv-dev-worker.service; do systemctl is-active --quiet "$unit"; done
-echo AUTONOMOUS_PILOT_EXIT=0
