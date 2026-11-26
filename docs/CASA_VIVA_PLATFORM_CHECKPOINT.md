@@ -1,3 +1,9 @@
+## CV-AUTO-002 — inactive periodic installer prepared
+
+- CI runs 45735185405, 45735332633 and 45735495090 all completed success (15/15 jobs).
+- Discovery regression 1e8a77e, persisted owner regression ee42b11, CI wiring f640e50. Inactive reversible staging installer 60323f8, syntax gate bcc07d3. No credentials, approval, timer start or boot enablement during staging. STOP present; rollback removes only newly created staging resources on failure.
+- Latest CI and real systemd staging verification pending. Successful staging is not permanent execution certification; active cancellation, reboot recovery and persistent result reconciliation still require real isolated validation. No production activation or additional expenditure.
+
 ## CV-AUTO-002 — permanent isolated receiver staging
 
 - Previous ledger and coordinator CI runs 45731437752 and 45731624328: 5/5 each. Host adapter 386c1b1, inactive units ae1ffd9/5253408. Recovery checks exact unit/container and temporary AppArmor absence d4c4e61; local stop 8e30208; credential-free recovery 5c48a33; regressions 20bbb74; CI integration 57c3845.
