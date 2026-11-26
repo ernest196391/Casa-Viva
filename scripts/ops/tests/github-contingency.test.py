@@ -708,7 +708,7 @@ globalThis.fetch=async(raw,options)=>{
         self.assertIn("position('local_sql_reconcile' in prior)>0", allow)
         self.assertIn("substring(prior FROM 8 FOR char_length(prior)-8)", allow)
         self.assertIn("IF EXISTS (SELECT 1 FROM public.crm_ops_bridge", rollback)
-        self.assertIn("status IN ('queued','running')", rollback)
+        self.assertIn("status IN ('queued', 'running')", rollback)
         self.assertIn("unexpected_guardian_constraint_shape", rollback)
         self.assertIn("original_allowlist_missing", rollback)
         self.assertIn("md5(original_def)", rollback)
