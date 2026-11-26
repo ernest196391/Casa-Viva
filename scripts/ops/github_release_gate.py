@@ -72,6 +72,45 @@ def atomic_file(path, data):
         if temp.exists(): temp.unlink()
 
 
+def provision_certified_artifact():
+    """Fixed local operation, never execute the artifact or unlink its public name."""
+    target = ROOT / 'cv-local-sql-certified.py'
+    pin = '84bc0eb4a57a3dc5c4f1ea5377c50eb952446a3a'
+    def valid(raw):
+        return hashlib.sha1(b'blob ' + str(len(raw)).encode() + bytes([0]) + raw).hexdigest() == pin
+    parent = ROOT.lstat()
+    if os.geteuid() != 0 or not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or parent.st_mode & 0o022:
+        return False
+    try:
+        raw = read_private(target, 262144)
+    except FileNotFoundError:
+        raw = read_private(ROOT / 'cv-ops-bridge.py.prev', 262144)
+        if not valid(raw):
+            return False
+        fd, name = tempfile.mkstemp(prefix='.cv-sql-', dir=ROOT)
+        try:
+            with os.fdopen(fd, 'wb') as out:
+                os.fchmod(out.fileno(), 0o600)
+                out.write(raw)
+                out.flush()
+                os.fsync(out.fileno())
+            try:
+                os.link(name, target, follow_symlinks=False)
+            except FileExistsError:
+                pass
+        finally:
+            os.unlink(name)
+        raw = read_private(target, 262144)
+    if not valid(raw):
+        return False
+    fd = os.open(ROOT, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    return True
+
+
 def apply_release(sha, api):
     if not isinstance(sha, str) or not re.fullmatch(r'[0-9a-f]{40}', sha):
         return {'ok': False, 'reason': 'invalid_sha'}
@@ -94,18 +133,13 @@ def apply_release(sha, api):
         if len(body) > 65536 or len(body) < 1000:
             return {'ok': False, 'reason': 'invalid_artifact'}
         compile(body, str(TARGET), 'exec')
-        # Provision only the fixed, pinned artifact from the reviewed release.
-        # This does not execute the worker or change any authorization flags.
-        import types
-        candidate = types.ModuleType('cv_release_candidate')
-        candidate.__file__ = str(TARGET)
-        exec(compile(body, str(TARGET), 'exec'), candidate.__dict__)
-        provision = getattr(candidate, 'provision_local_sql_artifact', None)
-        if provision is not None:
+        # Never execute candidate module top-level code in the release gate.
+        # The locally installed gate owns the fixed provisioning operation.
+        if b'def provision_local_sql_artifact():' in body:
+            git('fetch', 'origin', 'main')
             if git('rev-parse', 'origin/main').decode().strip() != sha:
                 return {'ok': False, 'reason': 'main_moved'}
-            receipt = provision()
-            if not isinstance(receipt, dict) or receipt.get('ok') is not True:
+            if not provision_certified_artifact():
                 return {'ok': False, 'reason': 'artifact_provision_unconfirmed'}
         previous = read_private(TARGET)
         if previous == body:
