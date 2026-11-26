@@ -648,6 +648,58 @@ globalThis.fetch=async(raw,options)=>{
         raw=bridge.BUNDLED_RECOVERY_PREFLIGHT.encode('utf-8')
         self.assertEqual(hashlib.sha1(b'blob '+str(len(raw)).encode()+bytes([0])+raw).hexdigest(),'5dfafab9d7120f8c002999c30f1dd31e5eff5754')
 
+    def test_guardian_runtime_evidence_requires_empty_args(self):
+        self.assertEqual(bridge.action_guardian_runtime_evidence({'path': '/etc/shadow'})['returncode'], 2)
+
+    def test_guardian_runtime_evidence_reports_only_safe_fixed_metadata(self):
+        import hashlib
+        raw = b'certified-worker-fixture'
+        prior = b'previous-known-good-fixture'
+        root = Path('/root/supervisor')
+        class Stat:
+            st_mode = 0o100700
+        def private_mock(path, limit):
+            self.assertEqual(limit, 262144)
+            self.assertIn(path, (root / 'cv-ops-bridge.py', root / 'cv-ops-bridge.py.prev'))
+            return prior if path.name.endswith('.prev') else raw
+        def run_mock(cmd, **kwargs):
+            self.assertEqual(cmd[:2], ['/usr/bin/systemctl', 'is-active'])
+            self.assertIn(cmd[2], ('cv-ops-bridge.service', 'cv-dev-worker.service',
+                                    'cv-control-sync.service', 'cv-receiver-isolation-check.service'))
+            self.assertNotIn('shell', kwargs)
+            return Mock(stdout=b'active\n')
+        with patch.dict(sys.modules, {'github_contingency':Mock(private_bytes=private_mock)}), \
+             patch.object(bridge, 'load_env_files', return_value={
+                 'CV_GITHUB_CONTINGENCY_ENABLED': '1',
+                 'CV_GITHUB_RELEASE_ENABLED': '0',
+                 'CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED': '0',
+                 'SECRET_DO_NOT_EXPORT': 'private-value'}), \
+             patch.object(bridge.Path, 'stat', return_value=Stat()), \
+             patch.object(bridge.subprocess, 'run', side_effect=run_mock):
+            receipt = bridge.action_guardian_runtime_evidence({})
+        self.assertEqual(receipt['returncode'], 0)
+        result = json.loads(receipt['output'])
+        def blob(b):
+            return hashlib.sha1(b'blob ' + str(len(b)).encode() + bytes([0]) + b).hexdigest()
+        self.assertEqual(result['worker_git_blob'], blob(raw))
+        self.assertEqual(result['backup_git_blob'], blob(prior))
+        self.assertTrue(result['worker_owner_only'])
+        self.assertTrue(result['backup_present'])
+        self.assertFalse(result['local_flags']['CV_GITHUB_RELEASE_ENABLED'])
+        self.assertFalse(result['local_flags']['CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED'])
+        self.assertNotIn('private-value', receipt['output'])
+        self.assertNotIn('SECRET_DO_NOT_EXPORT', receipt['output'])
+        self.assertEqual(set(result['services']), {
+            'cv-ops-bridge.service', 'cv-dev-worker.service',
+            'cv-control-sync.service', 'cv-receiver-isolation-check.service'})
+
+    def test_guardian_runtime_evidence_fails_closed_no_worker_source_exposure(self):
+        with patch.dict(sys.modules, {'github_contingency':Mock(private_bytes=Mock(side_effect=ValueError('sensitive-worker-content')))}):
+            receipt = bridge.action_guardian_runtime_evidence({})
+        self.assertEqual(receipt['returncode'], 1)
+        self.assertEqual(json.loads(receipt['output']), {'reason': 'guardian_evidence_unavailable'})
+        self.assertNotIn('sensitive-worker-content', receipt['output'])
+
     def test_local_sql_reconcile_rejects_missing_core_config(self):
         import hashlib
         raw=bridge.BUNDLED_RECOVERY_PREFLIGHT.encode('utf-8')
