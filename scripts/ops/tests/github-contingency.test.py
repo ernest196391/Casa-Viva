@@ -491,6 +491,7 @@ class Tests(unittest.TestCase):
         self.assertIn("if(u.origin!=='http://127.0.0.1')",wrapper)
         self.assertIn("if(u.origin==='https://casaviva.company')",wrapper)
         self.assertIn("q.get('slug')!=='eq.casa-viva'",wrapper)
+        self.assertIn("options?.headers?.[\'X-VivaBot-Key\']!==c.CURRU_KEY",wrapper)
 
     def test_local_sql_schema_includes_tenant_scope(self):
         import inspect
