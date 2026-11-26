@@ -33,7 +33,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "4.1.10"
+BRIDGE_VERSION = "4.1.11"
 
 
 def load_env_files() -> dict[str, str]:
@@ -2462,6 +2462,56 @@ def action_restore_recovery_config(args):
         return {"returncode":1,"output":json.dumps({"reason":"local_config_restore_unavailable"})}
 
 
+def action_receiver_crm_contract(args):
+    """Classify the exact running receiver's local CRM adapter; never return source or env."""
+    if args:
+        return {"returncode":2,"output":"No arguments accepted"}
+    import stat
+    try:
+        p=subprocess.run(["pm2","jlist"],capture_output=True,timeout=15,check=False)
+        if p.returncode or len(p.stdout)>4000000:
+            raise ValueError("pm2")
+        rows=[r for r in json.loads(p.stdout) if r.get("name")=="vivabot-recovery-receiver"]
+        if len(rows)!=1 or rows[0].get("pm2_env",{}).get("status")!="online":
+            raise ValueError("receiver")
+        meta=rows[0]["pm2_env"]
+        root=Path("/root/backups/nexo-recovery/receiver").resolve()
+        entry=Path(meta.get("pm_exec_path","/")).resolve()
+        if Path(meta.get("pm_cwd","/")).resolve()!=root or not entry.is_relative_to(root):
+            raise ValueError("scope")
+        pending=[entry]
+        seen=set()
+        flags={k:False for k in ("postgres_client","docker_psql","postgrest","supabase_client","sqlite","dotenv","process_env","direct_sql","local_http")}
+        env_keys=set()
+        # Only application JS source, at most 12 local static modules; no config or auth files.
+        while pending and len(seen)<12:
+            path=pending.pop()
+            if path in seen or not path.is_relative_to(root) or path.suffix not in (".js",".mjs",".cjs"):
+                continue
+            fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+            with os.fdopen(fd,"rb") as fh:
+                info=os.fstat(fh.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_uid!=os.geteuid() or info.st_mode&0o022:
+                    raise ValueError("source permissions")
+                raw=fh.read(262145)
+            if len(raw)>262144:
+                raise ValueError("source size")
+            source=raw.decode("utf-8")
+            seen.add(path)
+            patterns={"postgres_client":r"""['"](?:pg|postgres)['"]""","docker_psql":r"\bpsql\b","postgrest":r"postgrest|/rest/v1","supabase_client":r"@supabase/supabase-js","sqlite":r"sqlite","dotenv":r"dotenv|loadEnvFile","process_env":r"process\.env","direct_sql":r"\b(?:SELECT|INSERT INTO|UPDATE)\s+","local_http":r"127\.0\.0\.1|localhost"}
+            for k,pattern in patterns.items():
+                flags[k]=flags[k] or bool(re.search(pattern,source,re.I))
+            allowed={"SUPABASE_URL","SUPABASE_SERVICE_KEY","DATABASE_URL","PGHOST","PGPORT","PGDATABASE","PGUSER","PGPASSWORD","POSTGREST_URL","PGRST_JWT_SECRET","CRM_URL","CRM_KEY","BUSINESS_SLUG","DISPATCH_GROUP","WOO_URL","CURRU_KEY"}
+            env_keys.update(set(re.findall(r"process\.env\.([A-Z_][A-Z0-9_]*)",source)) & allowed)
+            for rel in re.findall(r"""(?:from\s*|import\s*\(|require\s*\()\s*['"](\./[^'"\n]+)['"]""",source):
+                child=(path.parent/rel).resolve()
+                if child.is_relative_to(root) and child.suffix in (".js",".mjs",".cjs") and child.is_file():
+                    pending.append(child)
+        return {"returncode":0,"output":json.dumps({"adapter":flags,"contract_keys":sorted(env_keys),"modules_checked":len(seen),"complete":not pending})}
+    except Exception:
+        return {"returncode":1,"output":json.dumps({"reason":"receiver_contract_unavailable"})}
+
+
 def action_restore_effective_recovery(args):
     """Use only the named active receiver configuration, keeping secrets on the VPS."""
     if args:
@@ -2611,6 +2661,7 @@ def action_recovery_dispatch_auth(args):
 
 
 ACTIONS = {
+    "receiver_crm_contract": action_receiver_crm_contract,
     "restore_effective_recovery": action_restore_effective_recovery,
     "restore_recovery_config": action_restore_recovery_config,
     "install_recovery_preflight": action_install_recovery_preflight,
