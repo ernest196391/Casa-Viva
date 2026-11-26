@@ -33,7 +33,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "4.1.12"
+BRIDGE_VERSION = "4.1.13"
 
 
 def load_env_files() -> dict[str, str]:
@@ -449,6 +449,66 @@ def action_deploy_vivabot(args):
         }, ensure_ascii=False),
     }
 
+
+
+def action_guardian_runtime_evidence(args):
+    """Fixed metadata-only attestation. Never return env values or service output."""
+    if args != {}:
+        return {"returncode": 2, "output": json.dumps({"reason": "arguments_rejected"})}
+    try:
+        import hashlib
+        from github_contingency import private_bytes
+        target = Path("/root/supervisor/cv-ops-bridge.py")
+        installed = private_bytes(target, 262144)
+        actual = hashlib.sha1(b"blob " + str(len(installed)).encode("ascii") + bytes([0]) + installed).hexdigest()
+        backup = Path("/root/supervisor/cv-ops-bridge.py.prev")
+        try:
+            previous = private_bytes(backup, 262144)
+            backup_hash = hashlib.sha1(b"blob " + str(len(previous)).encode("ascii") + bytes([0]) + previous).hexdigest()
+            backup_ok = True
+        except (OSError, ValueError):
+            backup_hash, backup_ok = None, False
+        try:
+            env = load_env_files()
+            flags = {name: env.get(name) == "1" for name in (
+                "CV_GITHUB_CONTINGENCY_ENABLED",
+                "CV_GITHUB_RELEASE_ENABLED",
+                "CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED",
+            )}
+        except Exception:
+            flags = {name: False for name in (
+                "CV_GITHUB_CONTINGENCY_ENABLED",
+                "CV_GITHUB_RELEASE_ENABLED",
+                "CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED",
+            )}
+        import stat
+        mode = target.stat().st_mode
+        owner_only = stat.S_ISREG(mode) and not (mode & 0o077)
+        # Public, fixed service names only; do not inspect process commands or env.
+        services = {}
+        for name in ("cv-ops-bridge.service", "cv-dev-worker.service",
+                     "cv-control-sync.service", "cv-receiver-isolation-check.service"):
+            try:
+                p = subprocess.run(["/usr/bin/systemctl", "is-active", name],
+                    capture_output=True, timeout=5, check=False,
+                    env={"PATH": "/usr/bin:/bin"})
+                status = p.stdout.decode(errors="replace").strip()
+                services[name] = status if status in ("active", "inactive", "failed", "unknown") else "unknown"
+            except (OSError, subprocess.SubprocessError):
+                services[name] = "unknown"
+        summary = {
+            "ok": True,
+            "bridge_version": BRIDGE_VERSION,
+            "worker_git_blob": actual,
+            "worker_owner_only": bool(owner_only),
+            "backup_present": backup_ok,
+            "backup_git_blob": backup_hash,
+            "local_flags": flags,
+            "services": services,
+        }
+        return {"returncode": 0, "output": json.dumps(summary, sort_keys=True)}
+    except Exception:
+        return {"returncode": 1, "output": json.dumps({"reason": "guardian_evidence_unavailable"})}
 
 
 def action_bridge_status(args):
@@ -2719,6 +2779,7 @@ def action_recovery_dispatch_auth(args):
 
 
 ACTIONS = {
+    "guardian_runtime_evidence": action_guardian_runtime_evidence,
     "local_sql_reconcile": action_local_sql_reconcile,
     "receiver_crm_contract": action_receiver_crm_contract,
     "restore_effective_recovery": action_restore_effective_recovery,
