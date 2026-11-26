@@ -68,7 +68,10 @@ def main(root=Path("/var/lib/cv-test-only-periodic")):
     root=Path(root)
     if root!=Path("/var/lib/cv-test-only-periodic"):raise ValueError("fixed state root required")
     cfg=json.loads(read_private(root/"approved.json"))
-    if set(cfg)!={"sha","scope"} or cfg["scope"]!="isolated_fixture" or not re.fullmatch("[0-9a-f]{40}",cfg["sha"]):raise ValueError("invalid approval")
+    if set(cfg) not in ({"sha","scope"},{"sha","scope","certification_ids"}) or cfg["scope"]!="isolated_fixture" or not re.fullmatch("[0-9a-f]{40}",cfg["sha"]):raise ValueError("invalid approval")
+    selected=cfg.get("certification_ids")
+    if selected is not None and (type(selected) is not list or not 1<=len(selected)<=3 or any(type(c) is not int or c<=0 for c in selected) or len(set(selected))!=len(selected)):
+        raise ValueError("invalid certification scope")
     sha=cfg["sha"]
     source=HERE.parents[1]
     if source!=Path("/opt/cv-test-only-periodic/source"):raise ValueError("fixed reviewed source required")
@@ -78,7 +81,8 @@ def main(root=Path("/var/lib/cv-test-only-periodic")):
     token=read_private(Path(os.environ["CREDENTIALS_DIRECTORY"])/"mailbox").decode("ascii").strip()
     m=receiver.load()
     def discover():
-        return discovery.discover(m.ghmod.github_api,token,sha)
+        requests=discovery.discover(m.ghmod.github_api,token,sha)
+        return [r for r in requests if selected is None or r["comment_id"] in selected]
     def execute(req):
         cid=req["comment_id"]
         receiver.remote_deadline(m,token,cid,sha,time.time()+900,time.time())
