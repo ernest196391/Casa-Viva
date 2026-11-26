@@ -522,7 +522,7 @@ globalThis.fetch=async(raw,options)=>{
             p=subprocess.run([node,'--input-type=module','-e',bridge.BUNDLED_RECOVERY_PREFLIGHT+core_fixture+bridge.LOCAL_SQL_PREFLIGHT_WRAPPER],input=payload,text=True,capture_output=True,timeout=10)
             self.assertEqual(p.returncode,0,p.stderr)
             result=json.loads(p.stdout)
-            self.assertEqual(result['ok'],expected)
+            self.assertEqual(result['ok'],expected, msg=json.dumps(result,sort_keys=True))
             self.assertTrue(result['checks']['core_offers']['ok'])
 
     def test_local_sql_transport_readonly(self):
