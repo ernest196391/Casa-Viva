@@ -1,0 +1,22 @@
+# Staged only; explicit separate approval required.
+[Unit]
+Description=Casa Viva restricted isolated periodic receiver
+ConditionPathExists=/var/lib/cv-test-only-periodic/approved.json
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/cv-test-only-periodic/source
+LoadCredential=mailbox:/etc/control-os/test-only-periodic.mailbox
+ExecStart=/usr/bin/python3.12 -I -B /opt/cv-test-only-periodic/source/scripts/ops/github_test_only_periodic_host.py
+TimeoutStartSec=240
+TimeoutStopSec=90
+KillMode=control-group
+UMask=0077
+MemoryMax=256M
+CPUQuota=50%
+TasksMax=32
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/cv-test-only-periodic /tmp /run /sys/kernel/security
+PrivateTmp=no
+LimitCORE=0
