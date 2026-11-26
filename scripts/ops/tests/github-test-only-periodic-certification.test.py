@@ -23,4 +23,14 @@ class Certification(unittest.TestCase):
         for name in ("install-isolated-periodic.sh","certify-isolated-periodic.sh","sandbox/cv-test-only-periodic.service"):
             self.assertIn(expected,(ROOT/name).read_text())
         self.assertIn('mkdir -m 700 "$STATE"',(ROOT/"install-isolated-periodic.sh").read_text())
+    def test_independent_stop_enable_gate(self):
+        path=ROOT/"certify-periodic-stop-and-enable.sh"
+        subprocess.run(["bash","-n",str(path)],check=True)
+        s=path.read_text()
+        self.assertIn("/usr/bin/sleep 90",s)
+        self.assertIn("rows[-1]==\"interrupted\"",s)
+        self.assertIn("rows[7180273923]==rows[7180274433]==\"passed\"",s)
+        self.assertLess(s.index("ACTIVE_STOP_SYNTHETIC_CERTIFIED=1"),s.index('rm -- "$STATE/STOP"'))
+        self.assertLess(s.index('rm -- "$STATE/STOP"'),s.index('systemctl start "$TIMER"'))
+        self.assertIn("ENABLE_FAILED_STOP_RETAINED=1",s)
 if __name__=="__main__":unittest.main()
