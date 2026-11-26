@@ -33,7 +33,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "4.1.11"
+BRIDGE_VERSION = "4.1.12"
 
 
 def load_env_files() -> dict[str, str]:
@@ -2298,6 +2298,64 @@ raise SystemExit(0 if all(report.values()) else 1)
         "global_restriction":Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").read_text().strip(),
         "production_changed":False,"model_called":False})}
 
+LOCAL_SQL_PREFLIGHT_WRAPPER = "import {readFileSync} from 'node:fs';\nconst {snapshot:s,config:c}=JSON.parse(readFileSync(0,'utf8'));\nconst env={...c,SUPABASE_URL:'http://127.0.0.1',SUPABASE_SERVICE_KEY:'local-sql-adapter-only',RECOVERY_RECONCILE:'1'};\nconst response=rows=>({ok:true,json:async()=>rows});\nconst requireParams=(q,names)=>{for(const k of q.keys()) if(!names.includes(k)) throw Error('unexpected query parameter');};\nconst request=async(raw,options)=>{\n const u=new URL(raw);\n if(u.origin==='https://casaviva.company') {\n  if(options?.method!=='GET'||options?.redirect!=='error'||options?.headers?.['X-VivaBot-Key']!==c.CURRU_KEY) throw Error('core authentication');\n  return fetch(raw,options);\n }\n if(u.origin!=='http://127.0.0.1') throw Error('unexpected endpoint');\n const q=u.searchParams;\n switch(u.pathname){\n case '/rest/v1/crm_businesses':\n  requireParams(q,['select','slug','limit']);\n  if(q.get('select')!=='id'||q.get('slug')!=='eq.casa-viva'||q.get('limit')!=='2') throw Error('business scope');\n  return response(s.businesses.map(id=>({id})));\n case '/rest/v1/crm_wa_chats':\n  requireParams(q,['select','business_id','is_group','name','limit']);\n  if(q.get('select')!=='jid,name'||q.get('business_id')!=='eq.'+s.businesses[0]||q.get('is_group')!=='eq.true'||q.get('name')!=='ilike.%'+c.DISPATCH_GROUP+'%'||q.get('limit')!=='2') throw Error('group scope');\n  return response(s.groups.filter(x=>String(x.name).toLowerCase().includes(c.DISPATCH_GROUP.toLowerCase())).slice(0,2));\n case '/rest/v1/crm_outbox':\n  requireParams(q,['select','business_id','limit']);\n  if(q.get('select')!=='id'||q.get('business_id')!=='eq.'+s.businesses[0]||q.get('limit')!=='1'||!s.outbox_schema) throw Error('outbox schema or scope');\n  return response([]);\n case '/rest/v1/crm_dispatch':\n  requireParams(q,['select','business_id','order_id','limit']);\n  if(!s.dispatch_schema||q.get('business_id')!=='eq.'+s.businesses[0]) throw Error('dispatch schema or scope');\n  if(!q.has('order_id')) {\n    if(q.get('select')!=='order_id,stage,messenger_phone,announce_msg_id,announced_at,updated_at,log'||q.get('limit')!=='1') throw Error('dispatch projection');\n    return response([]);\n  }\n  if(q.get('select')!=='order_id,stage,messenger_phone,announce_msg_id,announced_at'||q.get('limit')!=='60') throw Error('dispatch reconciliation projection');\n  const m=/^in\\(([0-9,]+)\\)$/.exec(q.get('order_id'));\n  if(!m) throw Error('ids');\n  const ids=new Set(m[1].split(',').map(Number));\n  return response(s.dispatch.filter(x=>ids.has(Number(x.order_id))));\n default: throw Error('unexpected table');\n }\n};\nconsole.log(JSON.stringify(await preflight(env,request)));"
+
+def local_crm_readonly(sql):
+    """Internal fixed-query transport; never register this helper as a queue action."""
+    p=subprocess.run(["/usr/bin/docker","exec","-u","postgres","vivabot-recovery-db","psql","-X","-q","-A","-t","-v","ON_ERROR_STOP=1","-d","postgres","-c","BEGIN READ ONLY; SET LOCAL statement_timeout='8s'; "+sql+"; COMMIT;"],
+                     capture_output=True,timeout=20,check=False,env={"PATH":"/usr/bin:/bin","HOME":"/root"})
+    if p.returncode or len(p.stdout)>65536:
+        raise ValueError("local_sql_unavailable")
+    return json.loads(p.stdout)
+
+
+def action_local_sql_reconcile(args):
+    """Read-only local dispatch reconciliation using the pinned JS algorithm and authenticated Core."""
+    if args != {}:
+        return {"returncode":2,"output":"No arguments accepted"}
+    try:
+        import hashlib
+        from github_contingency import private_bytes, PREFLIGHT_SCRIPT, PREFLIGHT_BLOB, preflight_summary
+        raw=private_bytes(PREFLIGHT_SCRIPT,65536)
+        if hashlib.sha1(b"blob "+str(len(raw)).encode()+bytes([0])+raw).hexdigest()!=PREFLIGHT_BLOB:
+            raise ValueError("script_integrity")
+        # Existing Core credentials, from the same fixed private original bot file.
+        cfg={}
+        for line in private_bytes(Path("/root/vivabot/.env"),65536).decode().splitlines():
+            k,sep,v=line.partition("=")
+            if sep and k in ("WOO_URL","CURRU_KEY","DISPATCH_GROUP","BUSINESS_SLUG"):
+                if k in cfg:
+                    raise ValueError("duplicate config")
+                cfg[k]=v.strip().strip('"').strip("'")
+        if set(cfg)!={"WOO_URL","CURRU_KEY","DISPATCH_GROUP","BUSINESS_SLUG"} or not all(cfg.values()):
+            return {"returncode":1,"output":json.dumps({"reason":"core_config_incomplete"})}
+        if cfg["BUSINESS_SLUG"]!="casa-viva" or not re.fullmatch(r"https://casaviva\.company/?",cfg["WOO_URL"]) or any(c in cfg["DISPATCH_GROUP"] for c in "%_*\\"):
+            raise ValueError("core_config_invalid")
+        # No arbitrary SQL or identifiers: tenant and projection fixed, bounded rows.
+        snapshot=local_crm_readonly("""SELECT json_build_object(
+          'businesses',(SELECT coalesce(json_agg(id),'[]'::json) FROM (SELECT id FROM public.crm_businesses WHERE slug='casa-viva' LIMIT 2) b),
+          'groups',(SELECT coalesce(json_agg(json_build_object('jid',jid,'name',name)),'[]'::json) FROM (SELECT c.jid,c.name FROM public.crm_wa_chats c JOIN public.crm_businesses b ON b.id=c.business_id WHERE b.slug='casa-viva' AND c.is_group=true LIMIT 1001) g),
+          'dispatch_schema',(SELECT count(*)=8 FROM information_schema.columns WHERE table_schema='public' AND table_name='crm_dispatch' AND column_name IN ('business_id','order_id','stage','messenger_phone','announce_msg_id','announced_at','updated_at','log')),
+          'outbox_schema',(SELECT count(*)=2 FROM information_schema.columns WHERE table_schema='public' AND table_name='crm_outbox' AND column_name IN ('id','business_id')),
+          'dispatch',(SELECT coalesce(json_agg(row_to_json(d)),'[]'::json) FROM (SELECT c.order_id,c.stage,(CASE WHEN coalesce(c.messenger_phone,'')<>'' THEN 'present' ELSE NULL END) AS messenger_phone,(CASE WHEN coalesce(c.announce_msg_id,'')<>'' THEN 'present' ELSE NULL END) AS announce_msg_id,c.announced_at FROM public.crm_dispatch c JOIN public.crm_businesses b ON b.id=c.business_id WHERE b.slug='casa-viva' LIMIT 1001) d))""")
+        if (not isinstance(snapshot,dict) or any(not isinstance(snapshot.get(k),list) for k in ('businesses','groups','dispatch'))
+                or type(snapshot.get('dispatch_schema')) is not bool or type(snapshot.get('outbox_schema')) is not bool
+                or len(snapshot['businesses'])!=1 or not snapshot['businesses'][0]
+                or len(snapshot['groups'])>1000 or len(snapshot['dispatch'])>1000):
+            return {"returncode":1,"output":json.dumps({"reason":"local_snapshot_ambiguous_or_exceeds_bound"})}
+        # Inject a local SQL-backed response adapter into the original preflight.
+        # The original JS bytes and reconciliation algorithm are unchanged.
+        wrapper=raw.decode("utf-8")+"\n"+LOCAL_SQL_PREFLIGHT_WRAPPER
+        payload=json.dumps({"snapshot":snapshot,"config":cfg})
+        p=subprocess.run(["/usr/bin/node","--input-type=module","-e",wrapper],input=payload.encode(),capture_output=True,timeout=100,check=False,env={"PATH":"/usr/bin:/bin","HOME":"/root"})
+        if p.returncode or len(p.stdout)>16384:
+            raise ValueError("local_preflight_failed")
+        safe=preflight_summary(p.stdout)
+        return {"returncode":0 if safe["ok"] else 1,"output":json.dumps({"transport":"local_sql_readonly","postgrest_auth_certified":False,"result":safe})}
+    except Exception:
+        return {"returncode":1,"output":json.dumps({"reason":"local_sql_reconcile_unavailable"})}
+
+
 def action_local_crm_status(args):
     """Fixed aggregate probe of the existing recovery database; never export chat text."""
     if args:
@@ -2661,6 +2719,7 @@ def action_recovery_dispatch_auth(args):
 
 
 ACTIONS = {
+    "local_sql_reconcile": action_local_sql_reconcile,
     "receiver_crm_contract": action_receiver_crm_contract,
     "restore_effective_recovery": action_restore_effective_recovery,
     "restore_recovery_config": action_restore_recovery_config,
