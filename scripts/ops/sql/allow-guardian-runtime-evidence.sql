@@ -10,8 +10,8 @@ BEGIN
   WHERE conrelid='public.crm_ops_bridge'::regclass
     AND conname='crm_ops_bridge_action_chk'
     AND contype='c';
-  IF prior IS NULL THEN
-    RAISE EXCEPTION 'missing_bridge_action_constraint';
+  IF prior IS NULL OR md5(prior) <> 'de228436c4c60d8820858cf4dba191dc' THEN
+    RAISE EXCEPTION 'unexpected_existing_bridge_constraint';
   END IF;
   IF position('guardian_runtime_evidence' in prior)>0 THEN
     RAISE EXCEPTION 'guardian_action_already_present';
