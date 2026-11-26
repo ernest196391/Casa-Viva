@@ -33,7 +33,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "4.1.5"
+BRIDGE_VERSION = "4.1.6"
 
 
 def load_env_files() -> dict[str, str]:
@@ -2368,7 +2368,23 @@ COMMIT;"""
         return {"returncode":1,"output":"local_recovery_preflight_unavailable"}
 
 
+def action_recovery_dispatch_auth(args):
+    """Reuse the installed, hash-pinned, read-only recovery preflight."""
+    if args:
+        return {"returncode":2,"output":"No arguments accepted"}
+    try:
+        from github_contingency import dispatch_preflight, preflight_summary
+        result=dispatch_preflight()
+        if isinstance(result,dict) and result.get("ok") is False and result.get("reason") in ("script_mismatch","missing_config","execution_failed","preflight_unavailable"):
+            return {"returncode":1,"output":json.dumps({"ok":False,"reason":result["reason"]})}
+        safe=preflight_summary(json.dumps(result))
+        return {"returncode":0 if safe["ok"] else 1,"output":json.dumps(safe)}
+    except Exception:
+        return {"returncode":1,"output":json.dumps({"ok":False,"reason":"preflight_unavailable"})}
+
+
 ACTIONS = {
+    "recovery_dispatch_auth": action_recovery_dispatch_auth,
     "local_recovery_preflight": action_local_recovery_preflight,
     "local_crm_status": action_local_crm_status,
     "prepare_control_dev_checkout": action_prepare_control_dev_checkout,

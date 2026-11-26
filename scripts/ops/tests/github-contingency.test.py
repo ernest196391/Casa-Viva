@@ -397,6 +397,20 @@ class Tests(unittest.TestCase):
             self.assertEqual(bridge.action_local_recovery_preflight({'command':'anything'})['returncode'],2)
             self.assertEqual(run.call_count,4)
 
+    def test_dispatch_auth_reuses_pinned_preflight_and_rejects_args(self):
+        good={'ok':True,'checks':{name:dict({'ok':True},**{k:0 for k in mod.PREFLIGHT_COUNTS.get(name,set())}) for name in mod.PREFLIGHT_CHECKS}}
+        good['secret']='private'
+        with patch.dict(sys.modules,{'github_contingency':Mock(dispatch_preflight=Mock(return_value=good),preflight_summary=mod.preflight_summary)}) as modules:
+            r=bridge.action_recovery_dispatch_auth({})
+            self.assertEqual(r['returncode'],0)
+            self.assertNotIn('private',r['output'])
+            self.assertEqual(bridge.action_recovery_dispatch_auth({'url':'anything'})['returncode'],2)
+            modules['github_contingency'].dispatch_preflight.assert_called_once()
+        with patch.dict(sys.modules,{'github_contingency':Mock(dispatch_preflight=Mock(return_value={'ok':False,'reason':'missing_config','secret':'private'}),preflight_summary=mod.preflight_summary)}):
+            r=bridge.action_recovery_dispatch_auth({})
+            self.assertEqual(r['returncode'],1)
+            self.assertEqual(json.loads(r['output']),{'ok':False,'reason':'missing_config'})
+
 
 if __name__ == '__main__':
     unittest.main()
