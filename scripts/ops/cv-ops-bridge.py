@@ -33,7 +33,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "4.1.6"
+BRIDGE_VERSION = "4.1.7"
 
 
 def load_env_files() -> dict[str, str]:
@@ -2368,6 +2368,46 @@ COMMIT;"""
         return {"returncode":1,"output":"local_recovery_preflight_unavailable"}
 
 
+def action_recovery_preflight_evidence(args):
+    """Classify missing preflight prerequisites without returning file contents."""
+    if args:
+        return {"returncode":2,"output":"No arguments accepted"}
+    import stat
+    import hashlib
+    result={}
+    try:
+        from github_contingency import private_bytes, PREFLIGHT_SCRIPT, PREFLIGHT_ENV, PREFLIGHT_BLOB, PREFLIGHT_KEYS
+    except ImportError:
+        return {"returncode":1,"output":json.dumps({"module_contract":False})}
+    result["module_contract"]=True
+    for label, filename in (("script",PREFLIGHT_SCRIPT),("config",PREFLIGHT_ENV)):
+        try:
+            info=filename.lstat()
+            result[label+"_present"]=True
+            result[label+"_private"]=stat.S_ISREG(info.st_mode) and info.st_uid==os.geteuid() and not bool(info.st_mode&0o077)
+            if not result[label+"_private"]:
+                continue
+            raw=private_bytes(filename,65536)
+            if label=="script":
+                result["script_hash_ok"]=hashlib.sha1(b"blob "+str(len(raw)).encode()+b"\0"+raw).hexdigest()==PREFLIGHT_BLOB
+            else:
+                keys={}
+                for line in raw.decode().splitlines():
+                    key,sep,value=line.partition("=")
+                    if sep and key in PREFLIGHT_KEYS:
+                        if key in keys:
+                            raise ValueError("duplicate key")
+                        keys[key]=bool(value.strip().strip('"').strip("'"))
+                result["config_keys_present"]=sorted(k for k,v in keys.items() if v)
+                result["config_complete"]=all(keys.get(k,False) for k in PREFLIGHT_KEYS)
+        except FileNotFoundError:
+            result[label+"_present"]=False
+        except (OSError,ValueError):
+            result[label+"_readable"]=False
+    result["node_present"]=Path("/usr/bin/node").is_file()
+    return {"returncode":0,"output":json.dumps(result)}
+
+
 def action_recovery_dispatch_auth(args):
     """Reuse the installed, hash-pinned, read-only recovery preflight."""
     if args:
@@ -2384,6 +2424,7 @@ def action_recovery_dispatch_auth(args):
 
 
 ACTIONS = {
+    "recovery_preflight_evidence": action_recovery_preflight_evidence,
     "recovery_dispatch_auth": action_recovery_dispatch_auth,
     "local_recovery_preflight": action_local_recovery_preflight,
     "local_crm_status": action_local_crm_status,
