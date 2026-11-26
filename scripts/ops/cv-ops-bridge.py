@@ -552,6 +552,10 @@ def action_guardian_runtime_evidence(args):
             approved = LOCAL_SQL_BRIDGE_BLOB
         except (ImportError, AttributeError):
             approved = None
+        try:
+            sql_blob = guardian_blob(private_bytes(Path("/root/supervisor/cv-local-sql-certified.py"), 262144))
+        except (OSError, ValueError):
+            sql_blob = None
         summary = {
             "ok": True,
             "bridge_version": BRIDGE_VERSION,
@@ -559,9 +563,11 @@ def action_guardian_runtime_evidence(args):
             "startup_git_blob": _GUARDIAN_STARTUP_BLOB,
             "startup_matches_installed": _GUARDIAN_STARTUP_BLOB is not None and _GUARDIAN_STARTUP_BLOB == actual,
             "approved_sql_worker_blob": approved if isinstance(approved, str) and re.fullmatch(r"[0-9a-f]{40}", approved) else None,
+            "sql_artifact_blob": sql_blob,
+            "sql_artifact_matches_pin": guardian_artifact_binding(sql_blob, sql_blob, approved),
             "sql_pin_matches_installed": guardian_artifact_binding(actual, actual, approved),
             "sql_pin_matches_backup": guardian_artifact_binding(backup_hash, backup_hash, approved),
-            # The backup is evidence only: the SQL loader still reads the installed path.
+            # The backup is evidence only: the SQL loader uses a dedicated path.
             "guardian_release_approval_verified": False,
             "runtime_artifact_certified": False,
             "isolation": isolation,
