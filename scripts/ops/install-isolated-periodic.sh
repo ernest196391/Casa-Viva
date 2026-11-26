@@ -6,7 +6,7 @@ umask 077
 REV=$1
 BASE=/opt/cv-test-only-periodic
 STATE=/var/lib/cv-test-only-periodic
-TOKEN=/etc/control-os/test-only-periodic.mailbox
+TOKEN=/var/lib/cv-test-only-periodic/mailbox.token
 SERVICE=/run/systemd/system/cv-test-only-periodic.service
 TIMER=/run/systemd/system/cv-test-only-periodic.timer
 for p in "$BASE" "$STATE" "$TOKEN" "$SERVICE" "$TIMER" /etc/systemd/system/cv-test-only-periodic.service /etc/systemd/system/cv-test-only-periodic.timer; do
