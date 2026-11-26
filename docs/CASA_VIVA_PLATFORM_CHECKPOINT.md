@@ -1,3 +1,9 @@
+## CV-AUTO-002 — exclusive AppArmor lease (2026-11-25)
+
+- 5fc0e2f/7947e79: cooperative root-owned global profile lease, digest verification and exact cleanup following unit/Docker removal.
+- 04221cf/cde6fa5: receiver acquisition and service cleanup allowance; five regression cases added to existing CI suite.
+- Host compatibility, full CI and forced interruption test remain pending. Existing profile names are shared; lease is cooperative, not protection against unrelated privileged writers. No production activation or new cost.
+
 ## CV-AUTO-002 — isolated receiver CLI and one-shot timer (2026-11-25)
 
 - cb98118 connects receiver to existing disposable Docker integral coordinator, root-owned arm and exact clean local revision.
