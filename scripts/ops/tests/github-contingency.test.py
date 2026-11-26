@@ -226,7 +226,10 @@ class Tests(unittest.TestCase):
                         raise ValueError('post-publication failure')
                     return p.read_bytes()
                 with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod, 'private_bytes', side_effect=read), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)):
-                    self.assertFalse(mod.provision_local_sql_artifact()['ok'])
+                    receipt = mod.provision_local_sql_artifact()
+                    self.assertFalse(receipt['ok'])
+                    if replace:
+                        self.assertEqual(receipt['reason'], 'rollback_conflict')
                 if replace:
                     self.assertEqual(target.read_bytes(), b'concurrent replacement')
                 else:
