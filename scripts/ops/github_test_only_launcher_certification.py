@@ -44,7 +44,7 @@ def child(unit,repo,sha,budget='70'):
     os.environ.update(ENV,CV_TEST_ONLY_SANDBOX_CERTIFIED="1")
     return launcher._launch_exact(sha,int(budget),unit)
 
-def run(repo,sha,budget=90):
+def run(repo,sha,budget=90,owner=None):
     if type(budget) is not int or not 25<=budget<=90:raise ValueError('invalid budget')
     deadline=time.monotonic()+budget
     def remaining(cap):
@@ -54,7 +54,8 @@ def run(repo,sha,budget=90):
     if os.geteuid()!=0:raise ValueError("operator required")
     repo=Path(repo).resolve(strict=True)
     if not repo.is_relative_to("/tmp") or not (repo/".git").is_dir():raise ValueError("temporary repository required")
-    unit=f"cv-test-only-cert-{os.getpid()}-{time.monotonic_ns()}.service"
+    if owner is not None and not re.fullmatch(r"[0-9]{1,12}-[0-9]{1,20}",owner):raise ValueError("invalid fixture owner")
+    unit="cv-test-only-cert-"+(owner or f"{os.getpid()}-{time.monotonic_ns()}")+".service"
     rc=125;clean=False
     try:
         result=subprocess.run(command(unit,repo,sha,budget),env=ENV,stdin=subprocess.DEVNULL,
