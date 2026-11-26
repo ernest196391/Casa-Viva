@@ -1,3 +1,9 @@
+## CV-AUTO-002 — installer regression gate (2026-11-25)
+
+- CI 45726940437, 45727577753 and 45727839523 completed successfully; AppArmor fixture ownership correction and installer rollback baseline green.
+- f64e0c76 requires exact remote request and at least 330 seconds remaining across local and remote authorization; 4c99390 adds eight deadline regressions.
+- 483c464 adds five installer syntax/static contract regressions. These do not certify real systemd, signal handling or host cleanup. New CI and isolated host pilot pending. Create a fresh mailbox request only after reviewed revision is green. No production activation or new expenditure.
+
 ## CV-AUTO-002 — exclusive AppArmor lease (2026-11-25)
 
 - 5fc0e2f/7947e79: cooperative root-owned global profile lease, digest verification and exact cleanup following unit/Docker removal.
