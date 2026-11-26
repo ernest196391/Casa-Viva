@@ -806,3 +806,11 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 - La ruta SQL **no certifica** autenticación PostgREST. El preflight original `BUNDLED_RECOVERY_PREFLIGHT` y su hash fijo deben permanecer inalterados. Verificar ese invariante en CI.
 - Estado: commits correctivos en PR #308; nueva CI pendiente de conclusión en este checkpoint. No hay certificación de integración ni autorización para transición del receptor principal.
 - Próximo bloque: revisar resultados CI, equivalencia REST/SQL y caso de duplicados/ambigüedad con fixtures; ejecutar piloto reversible **solo** por receptor/puente autorizado existente con evidencia de aislamiento, permisos y rollback; preservar Hermes, coste adicional cero. La conexión GitHub por sí sola no acredita ejecución en VPS.
+
+
+### PR #309 — CI de fixtures (26-nov-2026)
+
+- PR #308 fusionado en `main` (`f6f53bbcf8499ea4d9cfe99a977c1a174e3df941`). PR #309 usa la misma rama y agrega test de ejecución del JS pinned con fixtures sin acceso real al VPS.
+- CI `45847573001` (head `0d6244d`) detectó `reconcile_offers.ok=false` con business/group/dispatch_schema/outbox_schema/Core todos `ok=true`.
+- Defecto localizado en decodificación del filtro PostgREST `order_id=in.(...)` del wrapper simulado. Correcciones commit `6372ff0` y reemplazo por parser numérico estricto en `f529a43e8f9ade243b1970d80e18f26d9f6472e8`. Preflight original intacto; conservar prueba funcional y mantener rechazo de input no numérico.
+- CI de `f529a43`: contrato staging y fundación release PASS; validación aplicación en ejecución al guardar este checkpoint. **NO fusionar** hasta 3/3 PASS; no certificar piloto real hasta evidencia desde puente/receptor autorizado, rollback, aislamiento y permisos. Coste adicional cero, sin cambios de producción ni Hermes.
