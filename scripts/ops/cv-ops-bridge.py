@@ -468,19 +468,18 @@ def action_guardian_runtime_evidence(args):
             backup_ok = True
         except (OSError, ValueError):
             backup_hash, backup_ok = None, False
+        flag_names = (
+            "CV_GITHUB_CONTINGENCY_ENABLED",
+            "CV_GITHUB_RELEASE_ENABLED",
+            "CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED",
+        )
         try:
             env = load_env_files()
-            flags = {name: env.get(name) == "1" for name in (
-                "CV_GITHUB_CONTINGENCY_ENABLED",
-                "CV_GITHUB_RELEASE_ENABLED",
-                "CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED",
-            )}
+            if any(env.get(name) not in ("0", "1") for name in flag_names):
+                raise ValueError("unknown flag")
+            flags = {name: env[name] == "1" for name in flag_names}
         except Exception:
-            flags = {name: False for name in (
-                "CV_GITHUB_CONTINGENCY_ENABLED",
-                "CV_GITHUB_RELEASE_ENABLED",
-                "CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED",
-            )}
+            return {"returncode": 1, "output": json.dumps({"reason": "guardian_flags_unknown"})}
         import stat
         mode = target.stat().st_mode
         owner_only = stat.S_ISREG(mode) and not (mode & 0o077)
