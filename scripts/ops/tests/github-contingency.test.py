@@ -314,6 +314,36 @@ class Tests(unittest.TestCase):
                 self.assertEqual(target.read_bytes(), b'replacement' if concurrent else raw)
                 self.assertEqual(list(root.glob('.cv-sql-*')), [])
 
+    def test_release_gate_fsync_failure_preserves_publication_and_retry(self):
+        spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        raw = b'fixture never executed'
+        for failure in (1, 2):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                source = root / 'cv-ops-bridge.py.prev'
+                target = root / 'cv-local-sql-certified.py'
+                source.write_bytes(raw)
+                source.chmod(0o600)
+                real_fsync = gate.os.fsync
+                calls = []
+                def sync(fd):
+                    calls.append(fd)
+                    if len(calls) == failure:
+                        raise OSError('synthetic persistence failure')
+                    return real_fsync(fd)
+                with patch.object(gate, 'ROOT', root), patch.object(gate.os, 'geteuid', return_value=0), patch.object(gate.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)), patch.object(gate, 'read_private', side_effect=lambda p, n=65536: p.read_bytes()), patch.object(gate.hashlib, 'sha1', return_value=Mock(hexdigest=lambda: '84bc0eb4a57a3dc5c4f1ea5377c50eb952446a3a')):
+                    with patch.object(gate.os, 'fsync', side_effect=sync):
+                        with self.assertRaises(OSError):
+                            gate.provision_certified_artifact()
+                    self.assertEqual(target.exists(), failure == 2)
+                    if target.exists():
+                        self.assertEqual(target.read_bytes(), raw)
+                    self.assertTrue(gate.provision_certified_artifact())
+                self.assertEqual(target.read_bytes(), raw)
+                self.assertEqual(list(root.glob('.cv-sql-*')), [])
+
     def test_release_gate_ci_requires_exact_push(self):
         spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
         gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate)
