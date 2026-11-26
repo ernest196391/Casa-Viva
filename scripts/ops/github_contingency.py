@@ -507,11 +507,36 @@ def wa_catalog_case():
 
 
 def local_sql_reconcile():
-    """Invoke only the existing, fixed read-only bridge action; return sanitized evidence."""
+    """Use the installed bridge's pinned, no-argument, read-only action; redact output."""
     try:
-        from cv_ops_bridge_local_sql import run_local_sql_reconcile
-        return run_local_sql_reconcile()
-    except (ImportError, OSError, ValueError, TypeError):
+        import importlib.util
+        bridge_path = Path('/root/supervisor/cv-ops-bridge.py')
+        source = private_bytes(bridge_path, 262144)
+        # An installed worker must advertise the approved local SQL action.
+        if b'def action_local_sql_reconcile(args):' not in source:
+            return {'ok': False, 'reason': 'bridge_action_unavailable'}
+        spec = importlib.util.spec_from_file_location('cv_local_sql_bridge', bridge_path)
+        if spec is None or spec.loader is None:
+            raise ValueError('bridge_import_unavailable')
+        bridge = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bridge)
+        result = bridge.action_local_sql_reconcile({})
+        if not isinstance(result, dict) or set(result) != {'returncode', 'output'}:
+            raise ValueError('invalid_bridge_response')
+        if type(result['returncode']) is not int or result['returncode'] not in (0, 1):
+            raise ValueError('invalid_bridge_status')
+        output = result['output']
+        if not isinstance(output, str) or len(output) > 16384:
+            raise ValueError('invalid_bridge_output')
+        data = json.loads(output)
+        if result['returncode'] == 0:
+            if not isinstance(data, dict) or set(data) != {'transport', 'postgrest_auth_certified', 'result'} or data['transport'] != 'local_sql_readonly' or data['postgrest_auth_certified'] is not False:
+                raise ValueError('invalid_readonly_proof')
+            safe = preflight_summary(json.dumps(data['result']))
+            return {'ok': safe['ok'], 'transport': 'local_sql_readonly', 'postgrest_auth_certified': False, 'checks': safe['checks']}
+        # Do not leak raw worker error messages; fixed reason only.
+        return {'ok': False, 'reason': 'local_sql_reconcile_unavailable'}
+    except Exception:
         return {'ok': False, 'reason': 'local_sql_reconcile_unavailable'}
 
 
