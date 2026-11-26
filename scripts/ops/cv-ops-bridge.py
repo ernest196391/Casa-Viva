@@ -33,7 +33,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "4.1.4"
+BRIDGE_VERSION = "4.1.5"
 
 
 def load_env_files() -> dict[str, str]:
@@ -2332,7 +2332,44 @@ COMMIT;"""
         return {"returncode":1,"output":"local_crm_probe_unavailable"}
 
 
+def action_local_recovery_preflight(args):
+    """Bounded local diagnostics. Never export credentials, chat text or auth contents."""
+    if args:
+        return {"returncode":2,"output":"No arguments accepted"}
+    result = {}
+    def probe(cmd):
+        return subprocess.run(cmd, capture_output=True, timeout=12, check=False,
+                              env={"PATH":"/usr/bin:/bin","HOME":"/root"})
+    try:
+        for name in ("vivabot-recovery-db","vivabot-postgrest-test"):
+            p=probe(["/usr/bin/docker","inspect","--format","{{.State.Running}}",name])
+            result[name+"_running"]=p.returncode==0 and p.stdout.strip()==b"true"
+        sql="""BEGIN READ ONLY;
+SET LOCAL statement_timeout='5s';
+SELECT json_build_object('tables', (SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('crm_messages','crm_contacts','crm_businesses','crm_settings','crm_wa_messages','crm_outbox','crm_dispatch','crm_escalations')),
+'tenant', (SELECT count(*) FROM public.crm_businesses WHERE slug='casa-viva'),
+'message_columns',(SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='crm_messages' AND column_name IN ('id','business_id','contact_id','direction','author','body','wa_id','created_at')));
+COMMIT;"""
+        p=probe(["/usr/bin/docker","exec","-u","postgres","vivabot-recovery-db","psql","-X","-q","-A","-t","-v","ON_ERROR_STOP=1","-d","postgres","-c",sql])
+        d=json.loads(p.stdout) if p.returncode==0 and len(p.stdout)<1024 else {}
+        result["schema_ok"]=d=={"tables":8,"tenant":1,"message_columns":8}
+        for label, folder in (("primary",Path("/root/vivabot/auth")),("receiver",Path("/root/backups/nexo-recovery/receiver/auth"))):
+            creds=folder/"creds.json"
+            result[label+"_auth_present"]=folder.is_dir() and not folder.is_symlink() and creds.is_file() and not creds.is_symlink()
+        p=probe(["/usr/bin/pm2","jlist"]) if Path("/usr/bin/pm2").is_file() else probe(["pm2","jlist"])
+        rows=json.loads(p.stdout) if p.returncode==0 and len(p.stdout)<1000000 else []
+        for name in ("vivabot","vivabot-recovery-receiver"):
+            states=[x.get("pm2_env",{}).get("status") for x in rows if x.get("name")==name]
+            result[name+"_state"]=states[0] if len(states)==1 and states[0] in ("online","stopped","errored") else "unknown"
+        result["postgrest_auth_certified"]=False
+        result["whatsapp_session_certified"]=False
+        return {"returncode":0,"output":json.dumps(result)}
+    except (OSError,ValueError,TypeError,KeyError,subprocess.SubprocessError):
+        return {"returncode":1,"output":"local_recovery_preflight_unavailable"}
+
+
 ACTIONS = {
+    "local_recovery_preflight": action_local_recovery_preflight,
     "local_crm_status": action_local_crm_status,
     "prepare_control_dev_checkout": action_prepare_control_dev_checkout,
     "control_codex_setup": action_control_codex_setup,
