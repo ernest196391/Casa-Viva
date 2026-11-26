@@ -372,5 +372,16 @@ class Tests(unittest.TestCase):
             fallback.activate.assert_not_called(); fallback.poll.assert_not_called()
 
 
+    def test_permanent_mailbox_polls_even_when_primary_queue_healthy(self):
+        fallback = Mock(cfg=True)
+        fallback.active.return_value = False
+        env = dict(ENV, CV_GITHUB_CONTINGENCY_ALWAYS_POLL='1')
+        with tempfile.TemporaryDirectory() as d, patch.object(bridge, 'LOCK', str(Path(d) / 'lock')), patch.object(bridge, 'load_env_files', return_value=env), patch.object(bridge, 'find_supabase', return_value=('synthetic', 'synthetic')), patch.dict(sys.modules, {'github_contingency': Mock(Contingency=Mock(return_value=fallback))}), patch.object(bridge, 'api_request', return_value=[]) as primary:
+            self.assertEqual(bridge.main(), 0)
+            fallback.poll.assert_called_once()
+            fallback.activate.assert_not_called()
+            primary.assert_called_once()
+
+
 if __name__ == '__main__':
     unittest.main()
