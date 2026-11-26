@@ -117,6 +117,9 @@ def main(argv):
         if not token:raise ValueError("mailbox credential missing")
         owner=root.name.removeprefix('cv-autonomous-')
         if root.name!='cv-autonomous-'+owner or not re.fullmatch(r'[0-9]{1,12}-[0-9]{1,20}',owner):raise ValueError('invalid pilot owner')
+        spec=importlib.util.spec_from_file_location("lease",HERE/"github_test_only_apparmor_lease.py")
+        lease=importlib.util.module_from_spec(spec);spec.loader.exec_module(lease)
+        lease.acquire(root,owner)
         return execute_integral(repo,image,token,cid,sha,owner=owner)
     return tick(root,config["arm"],execute)
 
