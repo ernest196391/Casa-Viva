@@ -814,3 +814,19 @@ Bridge #190 superó las restricciones previas de Bubblewrap y llegó al exec del
 - CI `45847573001` (head `0d6244d`) detectó `reconcile_offers.ok=false` con business/group/dispatch_schema/outbox_schema/Core todos `ok=true`.
 - Defecto localizado en decodificación del filtro PostgREST `order_id=in.(...)` del wrapper simulado. Correcciones commit `6372ff0` y reemplazo por parser numérico estricto en `f529a43e8f9ade243b1970d80e18f26d9f6472e8`. Preflight original intacto; conservar prueba funcional y mantener rechazo de input no numérico.
 - CI de `f529a43`: contrato staging y fundación release PASS; validación aplicación en ejecución al guardar este checkpoint. **NO fusionar** hasta 3/3 PASS; no certificar piloto real hasta evidencia desde puente/receptor autorizado, rollback, aislamiento y permisos. Coste adicional cero, sin cambios de producción ni Hermes.
+
+
+### CV-AUTO-002 — contingencia GitHub SQL local (26-nov-2026)
+
+- Main inicial de este bloque: `43fa538a7eee098410877301609c3c7a1c26ad9a`; PR #309 fusionado, tres CI y Guardian aprobados. Se reutilizó la rama `cv-auto-002-local-sql-reconcile` mediante fast-forward al main, sin nuevas ramas.
+- `github_contingency.py` ahora reconoce `local_sql_reconcile` como comando sin argumentos arbitrarios y exige `CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED=1` **en la máquina**; por defecto está desactivado. Hereda comprobación estricta de OWNER, comentario no editado, nonce único persistente, expiración <= 30 min, throttle, repo privado, issue fijo y emisión de acuse auditado.
+- Ejecución: utiliza el `action_local_sql_reconcile({})` del bridge existente en `/root/supervisor/cv-ops-bridge.py`, no duplica SQL ni preflight; limita y vuelve a validar el resumen sin exfiltrar output crudo. Bloquea versiones antiguas sin la acción. No modifica `BUNDLED_RECOVERY_PREFLIGHT` ni su SHA fijo. Release vía `github_release_gate.py` existente: hash exacto main, checks push, backup y sustitución atómica del módulo contingente.
+- Tests: rechazo de args/ediciones/otros autores/expiración, opt-in desactivado, nonce único, receipt redactado y fallo cerrado. PR y CI pendientes de certificar antes de actualizar módulo en VPS. No activar VivaBot principal, no modificar Hermes, no lanzar piloto real sin comprobar versión instalada, autorización local y reversión. Coste adicional cero.
+
+
+#### CV-AUTO-002 Guardian — pin criptográfico del worker (26-nov-2026)
+
+- PR #310, misma rama `cv-auto-002-local-sql-reconcile`: se corrigió la comprobación de integridad antes de ejecutar el worker de reconciliación SQL local. Se fija el **Git blob SHA-1 completo** `84bc0eb4a57a3dc5c4f1ea5377c50eb952446a3a` correspondiente al archivo `scripts/ops/cv-ops-bridge.py` certificado en `main 43fa538a7eee098410877301609c3c7a1c26ad9a`.
+- `github_contingency.local_sql_reconcile` usa `private_bytes` de un único archivo privado, calcula el hash del contenido completo y **compila/ejecuta exactamente esos mismos bytes**, sin recargar la ruta mediante `importlib` ni una segunda lectura del worker. Si el blob no coincide, falla cerrado con razón fija `bridge_integrity_mismatch` y no ejecuta código.
+- Regresiones agregadas: integridad y bytes verificables, rechazo de alteración, una sola lectura sin reimportación por ruta, rechazo de salida sensible, retorno mínimo auditable. Se conservan las pruebas existentes de identidad/nonce/expiración/argumentos, y el hash original del JS preflight permanece intacto.
+- Bloqueo operativo: aún requiere 3/3 CI Guardian, fusión protegida, verificación local de worker y activación expresa de la bandera de autorización. **Ninguna orden enviada al VPS, ni cambio de Hermes/VivaBot principal**. Cero gastos.

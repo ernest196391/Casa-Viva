@@ -71,7 +71,7 @@ def command(comment, now):
             fields = fields | {'product'}
             if not valid_product(data.get('product')):
                 return None
-        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply', 'local_sql_reconcile') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
             return None
         if action == 'release_apply' and (not isinstance(data['sha'], str) or not re.fullmatch(r'[0-9a-f]{40}', data['sha'])):
             return None
@@ -506,6 +506,44 @@ def wa_catalog_case():
         return {'ok': False, 'reason': 'wa_catalog_case_unavailable'}
 
 
+# Git blob SHA-1 of the full certified worker (not a substring or a path check).
+# A future worker revision requires a separate reviewed change to this pin.
+LOCAL_SQL_BRIDGE_BLOB = '84bc0eb4a57a3dc5c4f1ea5377c50eb952446a3a'
+
+
+def local_sql_reconcile():
+    """Execute only the exact certified worker bytes, never reopen the path."""
+    try:
+        import types
+        bridge_path = Path('/root/supervisor/cv-ops-bridge.py')
+        source = private_bytes(bridge_path, 262144)
+        digest = hashlib.sha1(b'blob ' + str(len(source)).encode() + bytes([0]) + source).hexdigest()
+        if digest != LOCAL_SQL_BRIDGE_BLOB:
+            return {'ok': False, 'reason': 'bridge_integrity_mismatch'}
+        # No importlib path load or second disk read: compilation uses the bytes
+        # just verified. The module is isolated from the import machinery.
+        worker = types.ModuleType('cv_certified_local_sql_bridge')
+        worker.__file__ = str(bridge_path)
+        exec(compile(source, str(bridge_path), 'exec'), worker.__dict__)
+        result = worker.action_local_sql_reconcile({})
+        if not isinstance(result, dict) or set(result) != {'returncode', 'output'}:
+            raise ValueError('invalid_bridge_response')
+        if type(result['returncode']) is not int or result['returncode'] not in (0, 1):
+            raise ValueError('invalid_bridge_status')
+        output = result['output']
+        if not isinstance(output, str) or len(output) > 16384:
+            raise ValueError('invalid_bridge_output')
+        data = json.loads(output)
+        if result['returncode'] == 0:
+            if not isinstance(data, dict) or set(data) != {'transport', 'postgrest_auth_certified', 'result'} or data['transport'] != 'local_sql_readonly' or data['postgrest_auth_certified'] is not False:
+                raise ValueError('invalid_readonly_proof')
+            safe = preflight_summary(json.dumps(data['result']))
+            return {'ok': safe['ok'], 'transport': 'local_sql_readonly', 'postgrest_auth_certified': False, 'checks': safe['checks']}
+        return {'ok': False, 'reason': 'local_sql_reconcile_unavailable'}
+    except Exception:
+        return {'ok': False, 'reason': 'local_sql_reconcile_unavailable'}
+
+
 class Contingency:
     def __init__(self, env, health, directory=Path('/var/lib/cv-ops-bridge-contingency'), api=github_api, clock=time.time):
         self.cfg = config(env)
@@ -513,6 +551,7 @@ class Contingency:
         self.receiver_contract_enabled = env.get('CV_GITHUB_RECEIVER_CONTRACT_ENABLED') == '1'
         self.preflight_enabled = env.get('CV_GITHUB_DISPATCH_PREFLIGHT_ENABLED') == '1'
         self.release_enabled = env.get('CV_GITHUB_RELEASE_ENABLED') == '1'
+        self.local_sql_enabled = env.get('CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED') == '1'
         self.health, self.directory, self.api, self.clock = health, Path(directory), api, clock
 
     def state(self):
@@ -559,7 +598,7 @@ class Contingency:
             return 'blocked'
         for comment in comments:
             data = command(comment, now)
-            if not data or (data['action'] == 'receiver_classification' and not self.receiver_classification_enabled) or (data['action'] == 'receiver_contract' and not self.receiver_contract_enabled) or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
+            if not data or (data['action'] == 'receiver_classification' and not self.receiver_classification_enabled) or (data['action'] == 'receiver_contract' and not self.receiver_contract_enabled) or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or (data['action'] == 'local_sql_reconcile' and not self.local_sql_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
                 continue
             # One fixed read-only diagnostic. No retry if post outcome is uncertain.
             if data['action'] == 'health':
@@ -581,6 +620,8 @@ class Contingency:
                 safe = wa_catalog_case()
             elif data['action'] == 'order_lookup':
                 safe = order_lookup(data['product'])
+            elif data['action'] == 'local_sql_reconcile':
+                safe = local_sql_reconcile()
             elif data['action'] == 'release_apply':
                 try:
                     from github_release_gate import apply_release

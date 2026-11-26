@@ -96,6 +96,114 @@ class Tests(unittest.TestCase):
         for bad in [dict(payload, sha='main'), dict(payload, sha='a'*39), dict(payload, command='reboot'), dict(payload, path='/root')]:
             self.assertIsNone(mod.command(request(body=mod.PREFIX + json.dumps(bad)), NOW))
 
+    def test_local_sql_mailbox_rejects_args_expiry_and_nonowner(self):
+        payload = {'action': 'local_sql_reconcile', 'nonce': 'syntheticnonce1234', 'expires_at': '2026-11-20T16:10:00Z'}
+        good = request(body=mod.PREFIX + json.dumps(payload))
+        self.assertIsNotNone(mod.command(good, NOW))
+        self.assertIsNone(mod.command(good, NOW + 601))
+        for extra in ({'sql': 'SELECT 1'}, {'args': {}}, {'sha': 'a'*40}, {'mode': 'write'}):
+            bad = dict(payload, **extra)
+            self.assertIsNone(mod.command(request(body=mod.PREFIX + json.dumps(bad)), NOW))
+        for invalid in (request(body=good['body'], author_association='MEMBER'),
+                        request(body=good['body'], user={'login': 'intruder', 'type': 'User'}),
+                        request(body=good['body'], updated_at='2026-11-20T15:59:01Z')):
+            self.assertIsNone(mod.command(invalid, NOW))
+
+    def test_local_sql_mailbox_requires_local_opt_in(self):
+        payload = {'action': 'local_sql_reconcile', 'nonce': 'syntheticnonce1234', 'expires_at': '2026-11-20T16:10:00Z'}
+        row = request(body=mod.PREFIX + json.dumps(payload))
+        def api(token, method, path, body=None):
+            self.assertEqual(method, 'GET')
+            if '/comments?' in path: return [row]
+            if path.endswith('/issues/22'): return {'title':'CV contingency — diagnostic mailbox','state':'open'}
+            return {'private':True,'full_name':mod.REPO}
+        with tempfile.TemporaryDirectory() as d, patch.object(mod,'local_sql_reconcile') as action:
+            c = mod.Contingency(ENV, lambda: self.fail('health'), Path(d), api, lambda: NOW)
+            self.assertEqual(c.poll(), 'idle')
+            self.assertEqual(list(Path(d).glob('nonce-*')), [])
+            action.assert_not_called()
+
+    def test_local_sql_mailbox_single_use_and_safe_receipt(self):
+        payload = {'action':'local_sql_reconcile','nonce':'syntheticnonce1234','expires_at':'2026-11-20T16:10:00Z'}
+        row = request(body=mod.PREFIX + json.dumps(payload))
+        posts = []
+        def api(token, method, path, body=None):
+            if method == 'POST':
+                posts.append(body['body'])
+                return {}
+            if '/comments?' in path: return [row]
+            if path.endswith('/issues/22'): return {'title':'CV contingency — diagnostic mailbox','state':'open'}
+            return {'private':True,'full_name':mod.REPO}
+        env = dict(ENV, CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED='1')
+        safe = {'ok':True,'transport':'local_sql_readonly','postgrest_auth_certified':False,
+                'checks': {'local_config': {'ok':True}}}
+        with tempfile.TemporaryDirectory() as d, patch.object(mod,'local_sql_reconcile',return_value=safe) as action:
+            c = mod.Contingency(env, lambda: self.fail('health'), Path(d), api, lambda: NOW)
+            self.assertEqual(c.poll(), 'reported')
+            self.assertEqual(c.poll(), 'cooldown')
+            c2 = mod.Contingency(env, lambda: self.fail('health'), Path(d), api, lambda: NOW+61)
+            self.assertEqual(c2.poll(), 'idle')
+            action.assert_called_once_with()
+            self.assertEqual(len(posts), 1)
+            receipt = json.loads(posts[0].split(' ',1)[1])
+            self.assertEqual(receipt['result'], safe)
+            self.assertEqual(receipt['action'], 'local_sql_reconcile')
+            self.assertEqual(receipt['request_id'], row['id'])
+
+    def test_local_sql_receipt_masks_worker_output(self):
+        import hashlib
+        from unittest.mock import mock_open
+        import builtins
+        # The production pin stays exact, and the worker receives no arguments.
+        self.assertEqual(mod.LOCAL_SQL_BRIDGE_BLOB, '84bc0eb4a57a3dc5c4f1ea5377c50eb952446a3a')
+        payload = {
+            'transport': 'local_sql_readonly',
+            'postgrest_auth_certified': False,
+            'result': {'ok': True, 'checks': {
+                name: {'ok': True, **{key: 0 for key in mod.PREFLIGHT_COUNTS.get(name, set())}}
+                for name in mod.PREFLIGHT_CHECKS}},
+        }
+        # Synthetic executable source: mocked digest identifies exactly these bytes.
+        source = ("def action_local_sql_reconcile(args):\n"
+                  "    assert args == {}\n"
+                  "    return {'returncode': 0, 'output': " + repr(json.dumps(payload)) + "}\n").encode()
+        blob = hashlib.sha1(b'blob ' + str(len(source)).encode() + bytes([0]) + source).hexdigest()
+        calls = []
+        def private_once(path, limit):
+            calls.append((str(path), limit))
+            if len(calls) > 1:
+                raise AssertionError('unexpected second source read')
+            return source
+        with patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', blob), \
+             patch.object(mod, 'private_bytes', side_effect=private_once), \
+             patch('importlib.util.spec_from_file_location', side_effect=AssertionError('unsafe path re-import')):
+            safe = mod.local_sql_reconcile()
+        self.assertTrue(safe['ok'])
+        self.assertEqual(safe['transport'], 'local_sql_readonly')
+        self.assertFalse(safe['postgrest_auth_certified'])
+        self.assertNotIn('output', safe)
+        self.assertEqual(len(calls), 1)
+
+        # A modified blob must fail closed and never execute injected code.
+        tampered = source + b"\nraise RuntimeError('worker executed')\n"
+        with patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', blob), \
+             patch.object(mod, 'private_bytes', return_value=tampered), \
+             patch.object(builtins, 'exec', side_effect=AssertionError('must not execute')) as executor:
+            self.assertEqual(mod.local_sql_reconcile(), {'ok': False, 'reason': 'bridge_integrity_mismatch'})
+            executor.assert_not_called()
+
+        # Worker failure output must not leak credentials or data.
+        failure_source = ("def action_local_sql_reconcile(args):\n"
+                          "    assert args == {}\n"
+                          "    return {'returncode': 1, 'output': "
+                          + repr(json.dumps({'reason': 'private-credential-do-not-leak'})) + "}\n").encode()
+        failure_blob = hashlib.sha1(b'blob ' + str(len(failure_source)).encode() + bytes([0]) + failure_source).hexdigest()
+        with patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', failure_blob), \
+             patch.object(mod, 'private_bytes', return_value=failure_source):
+            safe = mod.local_sql_reconcile()
+        self.assertEqual(safe, {'ok': False, 'reason': 'local_sql_reconcile_unavailable'})
+        self.assertNotIn('private-credential', json.dumps(safe))
+
     def test_release_requires_local_opt_in(self):
         row = request(body=mod.PREFIX + json.dumps({'action':'release_apply','sha':'a'*40,'nonce':'syntheticnonce1234','expires_at':'2026-11-20T16:10:00Z'}))
         def api(token, method, path, body=None):
