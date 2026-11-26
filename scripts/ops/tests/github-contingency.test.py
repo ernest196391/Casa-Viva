@@ -150,6 +150,70 @@ class Tests(unittest.TestCase):
             self.assertEqual(receipt['action'], 'local_sql_reconcile')
             self.assertEqual(receipt['request_id'], row['id'])
 
+    def test_private_sql_reader_rejects_permissions_and_symlinks(self):
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / 'artifact'
+            target.write_bytes(b'fixture')
+            target.chmod(0o600)
+            self.assertEqual(mod.private_bytes(target, 262144), b'fixture')
+            target.chmod(0o644)
+            with self.assertRaises(ValueError):
+                mod.private_bytes(target, 262144)
+            target.chmod(0o600)
+            link = Path(d) / 'link'
+            link.symlink_to(target)
+            with self.assertRaises(OSError):
+                mod.private_bytes(link, 262144)
+
+    def test_sql_provision_rolls_back_only_its_own_publication(self):
+        import hashlib
+        raw = b'certified fixture'
+        pin = hashlib.sha1(b'blob ' + str(len(raw)).encode() + bytes([0]) + raw).hexdigest()
+        for replace in (False, True):
+            with self.subTest(replace=replace), tempfile.TemporaryDirectory() as d:
+                target = Path(d) / 'cv-local-sql-certified.py'
+                source = target.with_name('cv-ops-bridge.py.prev')
+                source.write_bytes(raw)
+                def read(p, n):
+                    if p == target and p.exists():
+                        if replace:
+                            p.unlink()
+                            p.write_bytes(b'concurrent replacement')
+                        raise ValueError('post-publication failure')
+                    return p.read_bytes()
+                with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod, 'private_bytes', side_effect=read), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)):
+                    self.assertFalse(mod.provision_local_sql_artifact()['ok'])
+                if replace:
+                    self.assertEqual(target.read_bytes(), b'concurrent replacement')
+                else:
+                    self.assertFalse(target.exists())
+
+    def test_offline_sql_provision_is_idempotent_and_never_overwrites(self):
+        import hashlib
+        raw = b'certified fixture'
+        pin = hashlib.sha1(b'blob ' + str(len(raw)).encode() + bytes([0]) + raw).hexdigest()
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / 'cv-local-sql-certified.py'
+            source = target.with_name('cv-ops-bridge.py.prev')
+            source.write_bytes(raw)
+            source.chmod(0o600)
+            with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), \
+                 patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), \
+                 patch.object(mod.os, 'geteuid', return_value=0), \
+                 patch.object(mod, 'private_bytes', side_effect=lambda p, n: p.read_bytes()), \
+                 patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)):
+                self.assertEqual(mod.provision_local_sql_artifact(), {'ok': True, 'changed': True})
+                self.assertEqual(target.read_bytes(), raw)
+                self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+                self.assertEqual(mod.provision_local_sql_artifact(), {'ok': True, 'changed': False})
+                target.write_bytes(b'conflict')
+                self.assertFalse(mod.provision_local_sql_artifact()['ok'])
+                self.assertEqual(target.read_bytes(), b'conflict')
+                target.unlink()
+                source.write_bytes(b'tampered')
+                self.assertFalse(mod.provision_local_sql_artifact()['ok'])
+                self.assertFalse(target.exists())
+
     def test_local_sql_receipt_masks_worker_output(self):
         import hashlib
         from unittest.mock import mock_open
@@ -182,7 +246,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(safe['transport'], 'local_sql_readonly')
         self.assertFalse(safe['postgrest_auth_certified'])
         self.assertNotIn('output', safe)
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls, [('/root/supervisor/cv-local-sql-certified.py', 262144)])
 
         # A modified blob must fail closed and never execute injected code.
         tampered = source + b"\nraise RuntimeError('worker executed')\n"
@@ -191,6 +255,14 @@ class Tests(unittest.TestCase):
              patch.object(builtins, 'exec', side_effect=AssertionError('must not execute')) as executor:
             self.assertEqual(mod.local_sql_reconcile(), {'ok': False, 'reason': 'bridge_integrity_mismatch'})
             executor.assert_not_called()
+
+        # Missing or insecure dedicated artifact must never fall back to the worker or backup.
+        for error in (FileNotFoundError(), PermissionError(), ValueError('insecure file')):
+            with patch.object(mod, 'private_bytes', side_effect=error) as reader, \
+                 patch.object(builtins, 'exec') as executor:
+                self.assertFalse(mod.local_sql_reconcile()['ok'])
+                reader.assert_called_once_with(mod.LOCAL_SQL_BRIDGE_PATH, 262144)
+                executor.assert_not_called()
 
         # Worker failure output must not leak credentials or data.
         failure_source = ("def action_local_sql_reconcile(args):\n"
@@ -660,6 +732,8 @@ globalThis.fetch=async(raw,options)=>{
             st_mode = 0o100700
         def private_mock(path, limit):
             self.assertEqual(limit, 262144)
+            if path == root / 'cv-local-sql-certified.py':
+                raise FileNotFoundError()
             self.assertIn(path, (root / 'cv-ops-bridge.py', root / 'cv-ops-bridge.py.prev'))
             return prior if path.name.endswith('.prev') else raw
         def run_mock(cmd, **kwargs):
@@ -682,6 +756,14 @@ globalThis.fetch=async(raw,options)=>{
         def blob(b):
             return hashlib.sha1(b'blob ' + str(len(b)).encode() + bytes([0]) + b).hexdigest()
         self.assertEqual(result['worker_git_blob'], blob(raw))
+        self.assertFalse(result['startup_matches_installed'])
+        self.assertFalse(result['runtime_artifact_certified'])
+        self.assertFalse(result['guardian_release_approval_verified'])
+        self.assertFalse(result['sql_pin_matches_installed'])
+        self.assertFalse(result['sql_pin_matches_backup'])
+        self.assertFalse(result['sql_artifact_matches_pin'])
+        self.assertIsNone(result['sql_artifact_blob'])
+        self.assertFalse(result['isolation']['functional_isolation_certified'])
         self.assertEqual(result['backup_git_blob'], blob(prior))
         self.assertTrue(result['worker_owner_only'])
         self.assertTrue(result['backup_present'])
@@ -699,6 +781,72 @@ globalThis.fetch=async(raw,options)=>{
         self.assertEqual(receipt['returncode'], 1)
         self.assertEqual(json.loads(receipt['output']), {'reason': 'guardian_evidence_unavailable'})
         self.assertNotIn('sensitive-worker-content', receipt['output'])
+
+    def test_guardian_isolation_metadata_never_certifies_functional_isolation(self):
+        good = b'NoNewPrivileges=yes\nAppArmorProfile=cv-receiver\nResult=success\nExecMainStatus=0\n'
+        for raw, rc, available in ((good, 0, True), (b'', 0, False), (good, 1, False)):
+            with self.subTest(raw=raw, rc=rc), patch.object(
+                    bridge.subprocess, 'run', return_value=Mock(stdout=raw, returncode=rc)):
+                result = bridge.guardian_isolation_metadata()
+                self.assertEqual(result['metadata_available'], available)
+                self.assertFalse(result['functional_isolation_certified'])
+
+    def test_guardian_sql_backup_match_does_not_approve_running_worker(self):
+        import hashlib
+        raw, prior = b'new-guardian', b'pinned-sql'
+        pin = hashlib.sha1(b'blob ' + str(len(prior)).encode() + bytes([0]) + prior).hexdigest()
+        contract = Mock(LOCAL_SQL_BRIDGE_BLOB=pin,
+                        private_bytes=lambda path, limit: prior if path.name.endswith('.prev') else raw)
+        flags = dict.fromkeys(('CV_GITHUB_CONTINGENCY_ENABLED', 'CV_GITHUB_RELEASE_ENABLED',
+                               'CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED'), '0')
+        with patch.dict(sys.modules, {'github_contingency': contract}), \
+             patch.object(bridge, 'load_env_files', return_value=flags), \
+             patch.object(bridge.Path, 'stat', return_value=Mock(st_mode=0o100700)), \
+             patch.object(bridge.subprocess, 'run', return_value=Mock(stdout=b'active', returncode=0)), \
+             patch.object(bridge, '_GUARDIAN_STARTUP_BLOB', bridge.guardian_blob(raw)):
+            receipt = bridge.action_guardian_runtime_evidence({})
+        self.assertEqual(receipt['returncode'], 0)
+        result = json.loads(receipt['output'])
+        self.assertTrue(result['startup_matches_installed'])
+        self.assertTrue(result['sql_pin_matches_backup'])
+        self.assertFalse(result['sql_pin_matches_installed'])
+        self.assertFalse(result['guardian_release_approval_verified'])
+        self.assertFalse(result['runtime_artifact_certified'])
+
+    def test_guardian_artifact_binding_requires_three_exact_valid_hashes(self):
+        approved = 'a' * 40
+        other = 'b' * 40
+        self.assertTrue(bridge.guardian_artifact_binding(approved, approved, approved))
+        for values in ((other, approved, approved), (approved, other, approved),
+                       (approved, approved, other), (None, approved, approved),
+                       (approved, None, approved), (approved, approved, None),
+                       ('bad', 'bad', 'bad')):
+            with self.subTest(values=values):
+                self.assertFalse(bridge.guardian_artifact_binding(*values))
+
+    def test_guardian_startup_identity_rejects_noninstalled_path(self):
+        with patch.object(bridge, '__file__', '/tmp/untrusted-worker.py'):
+            self.assertIsNone(bridge.guardian_startup_blob())
+
+    def test_guardian_runtime_evidence_rejects_unknown_flags(self):
+        valid = {
+            'CV_GITHUB_CONTINGENCY_ENABLED': '1',
+            'CV_GITHUB_RELEASE_ENABLED': '0',
+            'CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED': '0',
+        }
+        cases = [({}, None), ({**valid, 'CV_GITHUB_RELEASE_ENABLED': 'false'}, None),
+                 (valid, OSError('private-config-error'))]
+        for name in valid:
+            cases.append(({k: v for k, v in valid.items() if k != name}, None))
+        for config, error in cases:
+            with self.subTest(config=config, error=type(error).__name__), \
+                 patch.dict(sys.modules, {'github_contingency': Mock(private_bytes=Mock(return_value=b'fixture'))}), \
+                 patch.object(bridge, 'load_env_files', return_value=config, side_effect=error), \
+                 patch.object(bridge.subprocess, 'run') as run:
+                receipt = bridge.action_guardian_runtime_evidence({})
+                self.assertEqual(receipt['returncode'], 1)
+                self.assertEqual(json.loads(receipt['output']), {'reason': 'guardian_flags_unknown'})
+                run.assert_not_called()
 
     def test_guardian_only_metadata_queue_migration(self):
         sql_root = PATH.parent / 'sql'

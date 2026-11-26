@@ -451,6 +451,57 @@ def action_deploy_vivabot(args):
 
 
 
+# Startup observation, not a cryptographic measurement of Python bytecode.
+_GUARDIAN_STARTUP_BLOB = None
+
+
+def guardian_blob(raw):
+    import hashlib
+    return hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + bytes([0]) + raw).hexdigest()
+
+
+def guardian_startup_blob():
+    target = Path("/root/supervisor/cv-ops-bridge.py")
+    if Path(__file__).resolve() != target:
+        return None
+    from github_contingency import private_bytes
+    return guardian_blob(private_bytes(target, 262144))
+
+
+def guardian_artifact_binding(installed, startup, approved):
+    """Compare hashes only within one artifact role."""
+    valid = all(isinstance(v, str) and re.fullmatch(r"[0-9a-f]{40}", v)
+                for v in (installed, startup, approved))
+    return bool(valid and installed == startup == approved)
+
+
+def guardian_isolation_metadata():
+    """Read-only unit properties; never treat configuration as a functional denial test."""
+    unit = "cv-receiver-isolation-check.service"
+    properties = ("NoNewPrivileges", "AppArmorProfile", "Result", "ExecMainStatus")
+    try:
+        p = subprocess.run(
+            ["/usr/bin/systemctl", "show", unit] +
+            ["--property=" + name for name in properties],
+            capture_output=True, timeout=5, check=False,
+            env={"PATH": "/usr/bin:/bin"})
+        if p.returncode or len(p.stdout) > 4096:
+            return {"metadata_available": False, "functional_isolation_certified": False}
+        values = dict(line.split("=", 1) for line in p.stdout.decode().splitlines() if "=" in line)
+        if set(values) != set(properties):
+            return {"metadata_available": False, "functional_isolation_certified": False}
+        profile = values["AppArmorProfile"]
+        return {
+            "metadata_available": True,
+            "no_new_privileges": values["NoNewPrivileges"] == "yes",
+            "apparmor_profile_configured": bool(profile) and not profile.startswith("-"),
+            "unit_success": values["Result"] == "success" and values["ExecMainStatus"] == "0",
+            "functional_isolation_certified": False,
+        }
+    except Exception:
+        return {"metadata_available": False, "functional_isolation_certified": False}
+
+
 def action_guardian_runtime_evidence(args):
     """Fixed metadata-only attestation. Never return env values or service output."""
     if args != {}:
@@ -468,19 +519,18 @@ def action_guardian_runtime_evidence(args):
             backup_ok = True
         except (OSError, ValueError):
             backup_hash, backup_ok = None, False
+        flag_names = (
+            "CV_GITHUB_CONTINGENCY_ENABLED",
+            "CV_GITHUB_RELEASE_ENABLED",
+            "CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED",
+        )
         try:
             env = load_env_files()
-            flags = {name: env.get(name) == "1" for name in (
-                "CV_GITHUB_CONTINGENCY_ENABLED",
-                "CV_GITHUB_RELEASE_ENABLED",
-                "CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED",
-            )}
+            if any(env.get(name) not in ("0", "1") for name in flag_names):
+                raise ValueError("unknown flag")
+            flags = {name: env[name] == "1" for name in flag_names}
         except Exception:
-            flags = {name: False for name in (
-                "CV_GITHUB_CONTINGENCY_ENABLED",
-                "CV_GITHUB_RELEASE_ENABLED",
-                "CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED",
-            )}
+            return {"returncode": 1, "output": json.dumps({"reason": "guardian_flags_unknown"})}
         import stat
         mode = target.stat().st_mode
         owner_only = stat.S_ISREG(mode) and not (mode & 0o077)
@@ -496,10 +546,31 @@ def action_guardian_runtime_evidence(args):
                 services[name] = status if status in ("active", "inactive", "failed", "unknown") else "unknown"
             except (OSError, subprocess.SubprocessError):
                 services[name] = "unknown"
+        isolation = guardian_isolation_metadata()
+        try:
+            from github_contingency import LOCAL_SQL_BRIDGE_BLOB
+            approved = LOCAL_SQL_BRIDGE_BLOB
+        except (ImportError, AttributeError):
+            approved = None
+        try:
+            sql_blob = guardian_blob(private_bytes(Path("/root/supervisor/cv-local-sql-certified.py"), 262144))
+        except (OSError, ValueError):
+            sql_blob = None
         summary = {
             "ok": True,
             "bridge_version": BRIDGE_VERSION,
             "worker_git_blob": actual,
+            "startup_git_blob": _GUARDIAN_STARTUP_BLOB,
+            "startup_matches_installed": _GUARDIAN_STARTUP_BLOB is not None and _GUARDIAN_STARTUP_BLOB == actual,
+            "approved_sql_worker_blob": approved if isinstance(approved, str) and re.fullmatch(r"[0-9a-f]{40}", approved) else None,
+            "sql_artifact_blob": sql_blob,
+            "sql_artifact_matches_pin": guardian_artifact_binding(sql_blob, sql_blob, approved),
+            "sql_pin_matches_installed": guardian_artifact_binding(actual, actual, approved),
+            "sql_pin_matches_backup": guardian_artifact_binding(backup_hash, backup_hash, approved),
+            # The backup is evidence only: the SQL loader uses a dedicated path.
+            "guardian_release_approval_verified": False,
+            "runtime_artifact_certified": False,
+            "isolation": isolation,
             "worker_owner_only": bool(owner_only),
             "backup_present": backup_ok,
             "backup_git_blob": backup_hash,
@@ -2942,4 +3013,8 @@ def main():
 
 
 if __name__ == "__main__":
+    try:
+        _GUARDIAN_STARTUP_BLOB = guardian_startup_blob()
+    except Exception:
+        _GUARDIAN_STARTUP_BLOB = None
     raise SystemExit(main())
