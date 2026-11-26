@@ -1,3 +1,9 @@
+## CV-AUTO-002 — bounded permanent receiver certification script
+
+- CI 45736606602 and 45737079717 completed 5/5 each. Staged workspace reclamation and STOP gate approved.
+- ae169fd confines certification to selected mailbox IDs; bf4127c adds single reversible certification script for two successful tasks, duplicate poll, actual active transient launcher stop, interrupted ledger recovery and cleanup. Static/syntax regressions wired to CI.
+- New CI and real host run pending. Active-stop race must fail closed if launcher is not observed. Persistent state and reviewed source retained after rollback as evidence; no credential, approval or active unit retained on successful cleanup. No production activation or additional spend.
+
 ## CV-AUTO-002 — inactive periodic installer prepared
 
 - CI runs 45735185405, 45735332633 and 45735495090 all completed success (15/15 jobs).
