@@ -506,21 +506,26 @@ def wa_catalog_case():
         return {'ok': False, 'reason': 'wa_catalog_case_unavailable'}
 
 
+# Git blob SHA-1 of the full certified worker (not a substring or a path check).
+# A future worker revision requires a separate reviewed change to this pin.
+LOCAL_SQL_BRIDGE_BLOB = '84bc0eb4a57a3dc5c4f1ea5377c50eb952446a3a'
+
+
 def local_sql_reconcile():
-    """Use the installed bridge's pinned, no-argument, read-only action; redact output."""
+    """Execute only the exact certified worker bytes, never reopen the path."""
     try:
-        import importlib.util
+        import types
         bridge_path = Path('/root/supervisor/cv-ops-bridge.py')
         source = private_bytes(bridge_path, 262144)
-        # An installed worker must advertise the approved local SQL action.
-        if b'def action_local_sql_reconcile(args):' not in source:
-            return {'ok': False, 'reason': 'bridge_action_unavailable'}
-        spec = importlib.util.spec_from_file_location('cv_local_sql_bridge', bridge_path)
-        if spec is None or spec.loader is None:
-            raise ValueError('bridge_import_unavailable')
-        bridge = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(bridge)
-        result = bridge.action_local_sql_reconcile({})
+        digest = hashlib.sha1(b'blob ' + str(len(source)).encode() + b'\\0' + source).hexdigest()
+        if digest != LOCAL_SQL_BRIDGE_BLOB:
+            return {'ok': False, 'reason': 'bridge_integrity_mismatch'}
+        # No importlib path load or second disk read: compilation uses the bytes
+        # just verified. The module is isolated from the import machinery.
+        worker = types.ModuleType('cv_certified_local_sql_bridge')
+        worker.__file__ = str(bridge_path)
+        exec(compile(source, str(bridge_path), 'exec'), worker.__dict__)
+        result = worker.action_local_sql_reconcile({})
         if not isinstance(result, dict) or set(result) != {'returncode', 'output'}:
             raise ValueError('invalid_bridge_response')
         if type(result['returncode']) is not int or result['returncode'] not in (0, 1):
@@ -534,7 +539,6 @@ def local_sql_reconcile():
                 raise ValueError('invalid_readonly_proof')
             safe = preflight_summary(json.dumps(data['result']))
             return {'ok': safe['ok'], 'transport': 'local_sql_readonly', 'postgrest_auth_certified': False, 'checks': safe['checks']}
-        # Do not leak raw worker error messages; fixed reason only.
         return {'ok': False, 'reason': 'local_sql_reconcile_unavailable'}
     except Exception:
         return {'ok': False, 'reason': 'local_sql_reconcile_unavailable'}
