@@ -451,6 +451,50 @@ def action_deploy_vivabot(args):
 
 
 
+# Startup observation, not a cryptographic measurement of Python bytecode.
+_GUARDIAN_STARTUP_BLOB = None
+
+
+def guardian_blob(raw):
+    import hashlib
+    return hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + bytes([0]) + raw).hexdigest()
+
+
+def guardian_startup_blob():
+    from github_contingency import private_bytes
+    target = Path("/root/supervisor/cv-ops-bridge.py")
+    if Path(__file__).resolve() != target:
+        return None
+    return guardian_blob(private_bytes(target, 262144))
+
+
+def guardian_isolation_metadata():
+    """Read-only unit properties; never treat configuration as a functional denial test."""
+    unit = "cv-receiver-isolation-check.service"
+    properties = ("NoNewPrivileges", "AppArmorProfile", "Result", "ExecMainStatus")
+    try:
+        p = subprocess.run(
+            ["/usr/bin/systemctl", "show", unit] +
+            ["--property=" + name for name in properties],
+            capture_output=True, timeout=5, check=False,
+            env={"PATH": "/usr/bin:/bin"})
+        if p.returncode or len(p.stdout) > 4096:
+            return {"metadata_available": False, "functional_isolation_certified": False}
+        values = dict(line.split("=", 1) for line in p.stdout.decode().splitlines() if "=" in line)
+        if set(values) != set(properties):
+            return {"metadata_available": False, "functional_isolation_certified": False}
+        profile = values["AppArmorProfile"]
+        return {
+            "metadata_available": True,
+            "no_new_privileges": values["NoNewPrivileges"] == "yes",
+            "apparmor_profile_configured": bool(profile) and not profile.startswith("-"),
+            "unit_success": values["Result"] == "success" and values["ExecMainStatus"] == "0",
+            "functional_isolation_certified": False,
+        }
+    except Exception:
+        return {"metadata_available": False, "functional_isolation_certified": False}
+
+
 def action_guardian_runtime_evidence(args):
     """Fixed metadata-only attestation. Never return env values or service output."""
     if args != {}:
@@ -495,10 +539,15 @@ def action_guardian_runtime_evidence(args):
                 services[name] = status if status in ("active", "inactive", "failed", "unknown") else "unknown"
             except (OSError, subprocess.SubprocessError):
                 services[name] = "unknown"
+        isolation = guardian_isolation_metadata()
         summary = {
             "ok": True,
             "bridge_version": BRIDGE_VERSION,
             "worker_git_blob": actual,
+            "startup_git_blob": _GUARDIAN_STARTUP_BLOB,
+            "startup_matches_installed": _GUARDIAN_STARTUP_BLOB is not None and _GUARDIAN_STARTUP_BLOB == actual,
+            "runtime_artifact_certified": False,
+            "isolation": isolation,
             "worker_owner_only": bool(owner_only),
             "backup_present": backup_ok,
             "backup_git_blob": backup_hash,
@@ -2941,4 +2990,8 @@ def main():
 
 
 if __name__ == "__main__":
+    try:
+        _GUARDIAN_STARTUP_BLOB = guardian_startup_blob()
+    except Exception:
+        _GUARDIAN_STARTUP_BLOB = None
     raise SystemExit(main())
