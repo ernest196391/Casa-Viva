@@ -1,3 +1,8 @@
+## CV-AUTO-002 — permanent isolated receiver staging
+
+- Previous ledger and coordinator CI runs 45731437752 and 45731624328: 5/5 each. Host adapter 386c1b1, inactive units ae1ffd9/5253408. Recovery checks exact unit/container and temporary AppArmor absence d4c4e61; local stop 8e30208; credential-free recovery 5c48a33; regressions 20bbb74; CI integration 57c3845.
+- Latest CI and real host certification pending. Emergency stop is staged only. No installation, no activation, no production authorization. Next: test discovery, exact owner persistence and interrupted execution; verify CI; stage reversible installation with explicit local approval, no boot enablement until tested. Preserve previously certified pilot. Zero extra expenditure.
+
 ## CV-AUTO-002 — autonomous isolated pilot CERTIFIED (2026-11-25)
 
 - Exact tested SHA c69fac929e94714355b25050d3d9d168f2a49204; CI 45730119564 all five jobs passed.
