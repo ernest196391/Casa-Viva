@@ -182,7 +182,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(safe['transport'], 'local_sql_readonly')
         self.assertFalse(safe['postgrest_auth_certified'])
         self.assertNotIn('output', safe)
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls, [('/root/supervisor/cv-local-sql-certified.py', 262144)])
 
         # A modified blob must fail closed and never execute injected code.
         tampered = source + b"\nraise RuntimeError('worker executed')\n"
@@ -191,6 +191,14 @@ class Tests(unittest.TestCase):
              patch.object(builtins, 'exec', side_effect=AssertionError('must not execute')) as executor:
             self.assertEqual(mod.local_sql_reconcile(), {'ok': False, 'reason': 'bridge_integrity_mismatch'})
             executor.assert_not_called()
+
+        # Missing or insecure dedicated artifact must never fall back to the worker or backup.
+        for error in (FileNotFoundError(), PermissionError(), ValueError('insecure file')):
+            with patch.object(mod, 'private_bytes', side_effect=error) as reader, \
+                 patch.object(builtins, 'exec') as executor:
+                self.assertFalse(mod.local_sql_reconcile()['ok'])
+                reader.assert_called_once_with(mod.LOCAL_SQL_BRIDGE_PATH, 262144)
+                executor.assert_not_called()
 
         # Worker failure output must not leak credentials or data.
         failure_source = ("def action_local_sql_reconcile(args):\n"
@@ -660,6 +668,8 @@ globalThis.fetch=async(raw,options)=>{
             st_mode = 0o100700
         def private_mock(path, limit):
             self.assertEqual(limit, 262144)
+            if path == root / 'cv-local-sql-certified.py':
+                raise FileNotFoundError()
             self.assertIn(path, (root / 'cv-ops-bridge.py', root / 'cv-ops-bridge.py.prev'))
             return prior if path.name.endswith('.prev') else raw
         def run_mock(cmd, **kwargs):
@@ -687,6 +697,8 @@ globalThis.fetch=async(raw,options)=>{
         self.assertFalse(result['guardian_release_approval_verified'])
         self.assertFalse(result['sql_pin_matches_installed'])
         self.assertFalse(result['sql_pin_matches_backup'])
+        self.assertFalse(result['sql_artifact_matches_pin'])
+        self.assertIsNone(result['sql_artifact_blob'])
         self.assertFalse(result['isolation']['functional_isolation_certified'])
         self.assertEqual(result['backup_git_blob'], blob(prior))
         self.assertTrue(result['worker_owner_only'])
