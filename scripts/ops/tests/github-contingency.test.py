@@ -411,6 +411,25 @@ class Tests(unittest.TestCase):
             self.assertEqual(r['returncode'],1)
             self.assertEqual(json.loads(r['output']),{'ok':False,'reason':'missing_config'})
 
+    def test_preflight_evidence_reports_only_metadata(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as d:
+            script=Path(d)/'script'; config=Path(d)/'env'
+            raw=b'fixed test script'; script.write_bytes(raw); script.chmod(0o600)
+            config.write_text('SUPABASE_SERVICE_KEY=never-export-this\\n'); config.chmod(0o600)
+            blob=hashlib.sha1(b'blob '+str(len(raw)).encode()+bytes([0])+raw).hexdigest()
+            with patch.dict(sys.modules,{'github_contingency':Mock(private_bytes=mod.private_bytes,PREFLIGHT_SCRIPT=script,PREFLIGHT_ENV=config,PREFLIGHT_BLOB=blob,PREFLIGHT_KEYS={'SUPABASE_SERVICE_KEY','SUPABASE_URL'})}):
+                r=bridge.action_recovery_preflight_evidence({})
+                self.assertEqual(r['returncode'],0)
+                data=json.loads(r['output'])
+                self.assertTrue(data['script_hash_ok'])
+                self.assertFalse(data['config_complete'])
+                self.assertEqual(data['config_keys_present'],['SUPABASE_SERVICE_KEY'])
+                self.assertNotIn('never-export-this',r['output'])
+                config.unlink()
+                self.assertFalse(json.loads(bridge.action_recovery_preflight_evidence({})['output'])['config_present'])
+                self.assertEqual(bridge.action_recovery_preflight_evidence({'path':'x'})['returncode'],2)
+
 
 if __name__ == '__main__':
     unittest.main()
