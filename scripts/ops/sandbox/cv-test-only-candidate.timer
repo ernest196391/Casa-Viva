@@ -1,0 +1,10 @@
+# Proposal only. No Install section; never enabled by staging.
+[Unit]
+Description=Casa Viva test-only bridge periodic candidate (disabled until certified)
+ConditionPathExists=/etc/control-os/test-only-certified
+
+[Timer]
+OnBootSec=60s
+OnUnitInactiveSec=60s
+AccuracySec=5s
+Unit=cv-test-only-candidate.service

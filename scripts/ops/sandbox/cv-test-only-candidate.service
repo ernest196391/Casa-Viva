@@ -1,0 +1,44 @@
+# Candidate only. No [Install], timer, or activation.
+[Unit]
+Description=Casa Viva isolated test-only candidate
+ConditionPathExists=/etc/control-os/test-only-certified
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/control-os-test-only
+Environment=CV_DEV_SANDBOX=1
+Environment=CV_DEV_TEST_ONLY_MODE=1
+Environment=CV_TEST_ONLY_SANDBOX_CERTIFIED=1
+EnvironmentFile=-/etc/control-os/test-only.env
+ExecStart=/usr/bin/python3 /opt/control-os-test-only/dev-worker.py
+MemoryMax=256M
+MemorySwapMax=0
+CPUQuota=50%
+TasksMax=32
+TimeoutStartSec=150
+TimeoutStopSec=5
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=yes
+# Trusted parent only: hand_over (CHOWN), Popen identity switch (SETUID/SETGID),
+# read root-owned Git/credentials (DAC_READ_SEARCH), cleanup (DAC_OVERRIDE),
+# signal the distinct cvdev child on timeout (KILL). Candidate drops ALL in bwrap.
+CapabilityBoundingSet=CAP_CHOWN CAP_SETUID CAP_SETGID CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_KILL
+AmbientCapabilities=
+PrivateDevices=yes
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+PrivateTmp=no
+ProtectSystem=strict
+ReadWritePaths=/var/lib/control-os-dev/work /tmp
+# Keep the host lock shared with the legacy worker; no private /tmp.
+TemporaryFileSystem=/var/lib/control-os-dev/work:rw,size=64M,nr_inodes=4096,mode=0755
+LimitFSIZE=33554432
+LimitCORE=0

@@ -1,3 +1,212 @@
+## CV-AUTO-002 — real periodic success; isolated stop gate
+
+- SHA 9c16db32e6fb6fb1c28e4fd448d155c364ca8bfd, CI 45738355262 5/5. Real requests 7180273923/7180274433 returned PASSED via 7180307555/7180327314. Operator terminal confirms TWO_REQUESTS_AND_REPLAY_CHECK=0, RECOVERY_STATE=stopped, PERIODIC_STOP_CONFIRMED=1, PERIODIC_ROLLBACK_EXIT=0. Third active launcher not observed; do not label active stop certified. No replay of the successful requests.
+- df91e3a/f973288 prepare deterministic independent stop test with inert transient sleep and existing persistent owner recovery; on success explicitly enable reviewed fixed-SHA isolated timer, not production. c2ca163 and certification regressions wired to CI. Synthetic stop tests independent transient process and ledger recovery, not cancellation of real candidate execution. New CI and host execution pending. No production activation, zero additional expenditure.
+
+## CV-AUTO-002 — bounded permanent receiver certification script
+
+- CI 45736606602 and 45737079717 completed 5/5 each. Staged workspace reclamation and STOP gate approved.
+- ae169fd confines certification to selected mailbox IDs; bf4127c adds single reversible certification script for two successful tasks, duplicate poll, actual active transient launcher stop, interrupted ledger recovery and cleanup. Static/syntax regressions wired to CI.
+- New CI and real host run pending. Active-stop race must fail closed if launcher is not observed. Persistent state and reviewed source retained after rollback as evidence; no credential, approval or active unit retained on successful cleanup. No production activation or additional spend.
+
+## CV-AUTO-002 — inactive periodic installer prepared
+
+- CI runs 45735185405, 45735332633 and 45735495090 all completed success (15/15 jobs).
+- Discovery regression 1e8a77e, persisted owner regression ee42b11, CI wiring f640e50. Inactive reversible staging installer 60323f8, syntax gate bcc07d3. No credentials, approval, timer start or boot enablement during staging. STOP present; rollback removes only newly created staging resources on failure.
+- Latest CI and real systemd staging verification pending. Successful staging is not permanent execution certification; active cancellation, reboot recovery and persistent result reconciliation still require real isolated validation. No production activation or additional expenditure.
+
+## CV-AUTO-002 — permanent isolated receiver staging
+
+- Previous ledger and coordinator CI runs 45731437752 and 45731624328: 5/5 each. Host adapter 386c1b1, inactive units ae1ffd9/5253408. Recovery checks exact unit/container and temporary AppArmor absence d4c4e61; local stop 8e30208; credential-free recovery 5c48a33; regressions 20bbb74; CI integration 57c3845.
+- Latest CI and real host certification pending. Emergency stop is staged only. No installation, no activation, no production authorization. Next: test discovery, exact owner persistence and interrupted execution; verify CI; stage reversible installation with explicit local approval, no boot enablement until tested. Preserve previously certified pilot. Zero extra expenditure.
+
+## CV-AUTO-002 — autonomous isolated pilot CERTIFIED (2026-11-25)
+
+- Exact tested SHA c69fac929e94714355b25050d3d9d168f2a49204; CI 45730119564 all five jobs passed.
+- Private mailbox request 7179034207 at 2026-11-26 00:42:31 UTC; automatic response 7179056441 at 00:43:50 UTC, outcome passed, task_public_id 1 (79 seconds).
+- Independently read Hostinger terminal: state passed, durable_rows 1, production_authorized false, resources_removed, profile_cleanup confirmed, ROLLBACK_EXIT=0, AUTONOMOUS_PILOT_EXIT=0. Evidence /tmp/cv-autonomous-3095621-1795653785641486373.
+- One-shot timer, scoped receiver, isolated Docker DB, fixed candidate and cleanup certified together. No production activation. This is not certification of a continuously running receiver or Hermes. Next: bounded persistent polling admission with immutable approved SHA, global replay protection, expiry and explicit separate activation gate. Zero additional expenditure.
+
+## CV-AUTO-002 — autonomous pilot blocker (2026-11-25)
+
+- Host pilot request 7178856863 returned blocked automatically in 78 seconds; rollback 0, profile cleanup confirmed, both existing services active. Journal: transient launcher exited 1 after ~1s, no AppArmor denials in checked interval.
+- db9e038/ae953f0 retain numeric launcher outcome and sanitized reason. 82a1861 fixes concrete regression: exact host-only @.service and @.timer paths rejected by confined Git extractor; exclude only those paths, retain all other validation. Regression added. Cause is consistent with host failure but not confirmed until new isolated pilot. CI pending. No production activation or extra cost.
+
+## CV-AUTO-002 — installer regression gate (2026-11-25)
+
+- CI 45726940437, 45727577753 and 45727839523 completed successfully; AppArmor fixture ownership correction and installer rollback baseline green.
+- f64e0c76 requires exact remote request and at least 330 seconds remaining across local and remote authorization; 4c99390 adds eight deadline regressions.
+- 483c464 adds five installer syntax/static contract regressions. These do not certify real systemd, signal handling or host cleanup. New CI and isolated host pilot pending. Create a fresh mailbox request only after reviewed revision is green. No production activation or new expenditure.
+
+## CV-AUTO-002 — exclusive AppArmor lease (2026-11-25)
+
+- 5fc0e2f/7947e79: cooperative root-owned global profile lease, digest verification and exact cleanup following unit/Docker removal.
+- 04221cf/cde6fa5: receiver acquisition and service cleanup allowance; five regression cases added to existing CI suite.
+- Host compatibility, full CI and forced interruption test remain pending. Existing profile names are shared; lease is cooperative, not protection against unrelated privileged writers. No production activation or new cost.
+
+## CV-AUTO-002 — isolated receiver CLI and one-shot timer (2026-11-25)
+
+- cb98118 connects receiver to existing disposable Docker integral coordinator, root-owned arm and exact clean local revision.
+- 0339e46 reserves 240s arm margin and records acknowledgement count; a458a5c/9f98808 add inactive instance service and one-shot timer templates without Install section.
+- Added three adapter/ack/timer regressions to existing CI suite. No host activation. Before pilot: validate systemd nesting, Docker resource cleanup on forced timeout, profile ownership/cleanup, credential file handling, timer expiry and rollback; final previous host exit still unobserved. No production activation, zero extra spend.
+
+## CV-AUTO-002 — integral receipt follow-up (2026-11-25)
+
+- CI 45724775684 all five jobs passed; Docker regression run 45725133048 PostgreSQL passed, remaining jobs nonterminal.
+- Hostinger terminal still displays same pre-final output; INTEGRAL_EXIT, durable_rows and cleanup not observed. Do not replay request 7178243950.
+- Isolated unattended receiver acceptance and rollback gates documented; no timer activation, no production change or new expense.
+
+## CV-AUTO-002 — real mailbox round trip PASS receipt (2026-11-25)
+
+- Exact revision 0ba3f16387aa28440b9569e004d5690aff3df79e, Hostinger disposable clone /tmp/cv-integral.5GSAOi/source.
+- Request issue #3 comment 7178243950 created 23:57:36 UTC, immutable owner ID 175450950, OWNER association, unedited. Real automatic terminal result comment 7178255793 created 23:58:17 UTC, outcome passed, task_public_id 1, matching request and SHA. Round trip 41 seconds from request creation to result publication.
+- At observation the terminal had not yet emitted INTEGRAL_EXIT or final cleanup. Remote receipt proves publication, not final database acknowledgement or Docker/AppArmor cleanup. Full integral certification pending those observations.
+- No production activation or migration requested; disposable fixture only. CI 45725133048 nonterminal. Zero additional spend.
+
+## CV-AUTO-002 — Docker image confirmed and integral request preparation (2026-11-25)
+
+- Hostinger directly observed Docker active and local postgres:17.6-alpine image sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94; no pull needed.
+- 2f715cb adds immutable-image, container isolation and startup-failure cleanup regressions. CI 45725133048 queued at observation; earlier 45724775684 validate and PostgreSQL passed.
+- Operator integral run must use exact reviewed revision, private temporary clone, one fresh owner-authored request, existing mailbox credential locally only, temporary AppArmor profiles and disposable Docker DB. No activation/migration of production. Actual integration not yet certified.
+
+## CV-AUTO-002 — Hostinger integral preflight and Docker fixture (2026-11-25)
+
+- Hostinger terminal directly observed: postgres OS account unavailable, Docker binary /usr/bin/docker available, mailbox credential key present in /root/supervisor/.env (value not accessed), available RAM 2730 MiB, disk free 12 GB.
+- 7cdce1e5: optional Docker disposable PostgreSQL adapter, immutable local image only, pull never, no network, no host mounts, bounded CPU/memory/PIDs, temporary data and cleanup.
+- CI 45724775684 control-os-postgres success; other jobs nonterminal at observation.
+- Docker daemon/image availability, Docker adapter regressions and actual integral test pending. Do not install packages, pull images automatically, or activate production. Zero additional spend.
+
+## CV-AUTO-002 — integral certification lease budget (2026-11-25)
+
+- 45fe1f0: transient launcher accepts bounded caller budget, uses monotonic deadline and reserves stop/show time; systemd RuntimeMaxSec reduced accordingly.
+- 302a9c0: integral coordinator passes actual queue budget, checks temporary PostgreSQL postmaster PID removal.
+- d18ea67: updated certification command regression and budget rejection cases.
+- CI 45724775684 still nonterminal at observation. Host PostgreSQL server binaries/account availability not yet established. No host E2E execution or new certification claim.
+- Next operator preflight must check installed PostgreSQL binaries and postgres account without installing anything; verify existing mailbox credential availability without disclosure, then use only selected fresh owner request. No production migration or activation, zero extra spend.
+
+## CV-AUTO-002 — executable integral coordinator (2026-11-25)
+
+- 26ed40c/5912f7b: exact selected mailbox comment scope and successful launcher outcome required.
+- 5dc12d8: operator-only CLI connects existing real GitHub adapter, temporary local PostgreSQL cluster (Unix socket only) and certified launcher.
+- 0b349e8/148665b: six scope and fail-closed regressions integrated in validate CI.
+- Earlier run 45724003737 all five jobs passed; 45724354740 validate and control-os-postgres passed at last observation. New integration CI and actual host end-to-end run not yet certified.
+- Remaining before host invocation: verify installed PostgreSQL server binaries and postgres account, enforce actual outer launcher lease deadline including startup/cleanup, verify scoped read/reconciliation and isolated database cleanup. No production activation or migration, no additional spend.
+
+## CV-AUTO-002 — real exact launcher Hostinger certification PASS (2026-11-25)
+
+- Directly observed Hostinger terminal, staged revision 9f74fbd3a4e2e1eeb3e4806366e7f6dd1cc70358, disposable clone /tmp/cv-exact-cert.09TQQ3/source.
+- CERTIFICATION_EXIT=0; launcher_exit=0; ok=true; cleanup_confirmed=true; scope=exact_launcher_fixture; production_authorized=false. Same internal launcher executed fixed test profile within bounded transient unit, private network, temporary workspace and AppArmor stacked preflight.
+- Existing cv-ops-bridge and cv-dev-worker services remained active, original cv-dev-worker-bwrap profile enforce, both temporary profiles removed.
+- This is a fixture-path certification, not independent host observation of every candidate process nor live mailbox/DB integration. No production marker, migrations, timer activation or permanent profiles installed. Temporary evidence clone retained. Zero additional spend.
+- Next: isolated real transport/queue/launcher/report end-to-end certification using disposable database and narrowly authorized mailbox, before any live enablement; Hermes location unresolved.
+
+## CV-AUTO-002 — exact launcher certification harness (2026-11-25)
+
+- 84dca39/62a3daf: seven local real-Git extraction regressions and CI integration.
+- 5a31f20: shared exact launcher implementation with strictly named transient certification units, fixed unittest argv.
+- d90aefa: operator-only exact launcher certification harness, private network, bounded transient unit, temporary Git clone, no database or mailbox access, cleanup required.
+- 1d616fe/3817b41/d4f924c: five harness regressions, staging and CI integration.
+- PostgreSQL integration run 45723834934 previously passed control-os-postgres and validate. New harness CI and actual Hostinger exact launcher execution remain pending. Existing synthetic host pilot is not a substitute.
+- No production installation, migration, marker, timer activation or additional spend.
+
+## CV-AUTO-002 — cross-component integration and bounded Git extraction (2026-11-25)
+
+- 08fd8cb/3531d63: offline receiver/executor/reporter round trip and ambiguous POST recovery wired into validate CI.
+- 6f67c29/e0ae446/110317d: actual four RPCs exercised via psql against disposable CI PostgreSQL, simulated GitHub transport and candidate launch. Run 45723834934 was nonterminal at observation; no certification claim.
+- 71a552d: streaming Git stdout bounded before allocation, shared monotonic deadline, per-object limits. New regressions and exact launcher host certification pending.
+- Prior real synthetic host pilot remains certified only for its fixed fixture. No production migration, installation or activation. Zero additional spend.
+
+## CV-AUTO-002 — real synthetic host pilot PASS (2026-11-25)
+
+- VPS srv2034193, staged exact revision 902289d1167243523b00fbd68992f67176a4e624, /tmp/cv-auto-002.JeoODd. Observed directly via connected Hostinger terminal after operator execution.
+- Both named pilot profiles loaded temporarily in enforce; PILOT_EXIT=0, cases=3, host_observed=true, cleanup_confirmed=true, ok=true, production_authorized=false, scope=synthetic_only. Digest ad56c87fba9c5ccb77906f2ab143b7ca1fe53ca0b14beffbfac17e4e76ac777e.
+- Reduced supervisor bounding set worked without CAP_SYS_PTRACE or CAP_DAC_READ_SEARCH. Existing cv-ops-bridge and cv-dev-worker active after run; original cv-dev-worker-bwrap enforce; temporary profiles removed.
+- This certifies only the fixed synthetic fixture path, not arbitrary candidate tests, production health, database lifecycle or end-to-end mailbox execution. No permanent unit/profile installed, no migration, no timer enabled, zero additional cost.
+- Next: isolated end-to-end receiver/queue/worker/reporter fixture and exact test-only launcher host certification; no production activation. Hermes not found in earlier checked paths.
+
+## CV-AUTO-002 — least privilege and host diagnostics (2026-11-25)
+
+- 0a26c5c: synthetic pilot removes CAP_SYS_PTRACE and CAP_DAC_READ_SEARCH; no automatic privilege escalation on failed observation.
+- 628ec45: regression requires exact five-capability supervisor bounding set. Runtime minimum remains unverified.
+- CI runs 45722765904 and 45722791546: all five jobs passed. Run 45723074904: validate, control-os-postgres, integration passed; browser and content-studio pending at observation.
+- Hostinger read-only terminal: clean local checkout a3a761d38f06ed81df81b4c07037ba66f3857b32; bridge and dev-worker active; python3.12, systemd-run, dedicated bwrap root-owned 0755, cvdev uid 1000 gid 1001, work root root:root 0755. Only cv-dev-worker-bwrap appeared in loaded profile filter; pilot profiles not observed. Hermes not in current PATH; installation location unconfirmed. Second diagnostic recursive search still incomplete at observation.
+- No installation, profile load, production migration or activation. Host pilot remains blocked pending reviewed profiles and isolated staging; zero new spend.
+
+## CV-AUTO-002 — piloto fijo local con evidencia de host (2026-11-25)
+
+- Confirmado GitHub: solicitud health 7177709087 → respuesta 7177723956 a los 39s, bridge active, recovery receiver y nexofirma online, principal stopped. No repetir health. Inventario 7177710544 aún sin respuesta correlacionada al consultar.
+- CI 45722238330 (instalador 716b56d) y 45722279157 (9272c362) completos SUCCESS; cinco trabajos, paso Python incluido.
+- 5c117ed: piloto ejecutable SOLO operador local, systemd-run transitorio sin red, límites memoria/CPU/PIDs, NNP, reusa CV-AUTO-001 fixture fijo, observer host y sandbox; valida tres mediciones, misma InvocationID, UID no root, cinco conjuntos caps cero, label enforce, y exige limpieza de unidad única. Dependencias añadidas al staging, seis regresiones en CI. No modifica receptor existente ni Hermes, no toca DB ni release_apply. CAP_SYS_PTRACE del observador confiable propuesto para lectura de /proc ajeno; no se ha certificado su necesidad ni suficiencia, candidato sigue obligado a cero capacidades; revisar antes de cualquier instalación.
+- Pendiente CI del piloto, ejecución real supervisada desde bundle revisado, confirmar perfiles y compatibilidad kernel/systemd. No existe acción remota piloto instalada y no se ha ejecutado en Hostinger. No certificar retorno automático del piloto todavía. Sin migración, activación ni gasto.
+
+## CV-AUTO-002 — buzón existente e instalación reversible offline (2026-11-25)
+
+- Buzón privado #3 verificado abierto, nombre exacto y repo privado. Última salud histórica 7172321110 (19:27:23Z) bridge active, recovery receiver y nexofirma online, vivabot principal stopped; no equivale a conexión WhatsApp certificada. Nuevas solicitudes read-only health 7177709087 y agent_inventory 7177710544 (23:32Z, TTL 15min), sin resultado correlacionado al consultar. No repetir antes de expirar.
+- PR #295 (29e22c3) amplía github_contingency con Hermes; resultados históricos reales 7171543774, 7171565663, 7171589048 demuestran diagnósticos fijos, no permiso de ejecución arbitraria. Rama #299 tiene versión anterior: no sustituir receptor vivo ni usar release_apply para piloto. Falta confirmar versión instalada y cualquier ruta de certificación específicamente autorizada.
+- 716b56d: instalador ejecutable de bundle inactivo en prefijo privado /tmp, manifiesto SHA256 externo, no symlinks, no sobrescritura, rollback verifica identidad y rechaza archivos ajenos; cinco regresiones integradas CI. No instala unidades de sistema ni activa nada; no equivale a instalador productivo. CI run 45722238330 en cola; run 45721943656 de ddc94a7 validate y postgres success, otros pendientes al consultar.
+- Sin mutación VPS, migración, gasto ni activación. Próximo: correlacionar respuestas #3, verificar CI terminal, certificar piloto sintético reversible sin secretos con E3, conservar funciones Hermes existentes. No habilitar ejecución remota genérica.
+
+## CV-AUTO-002 — separación de privilegios y recepción periódica (2026-11-25)
+
+- CI base ee0f28f run 45720264359: cinco jobs completos SUCCESS.
+- 8a06d08: unidad conserva CHOWN, SETUID, SETGID, DAC_READ_SEARCH, DAC_OVERRIDE, KILL para padre de confianza; NNP y ambiente sin capacidades; candidato cvdev mantiene bwrap cap-drop ALL, AppArmor stacked y cinco sets cero antes del test. Regresión de lista exacta. Pendiente kernel real: no asumir que cap-drop vacía CapBnd hasta observarlo.
+- aa75aba: recepción opt-in en worker dedicado bajo lock existente, procesa solicitudes admitidas dentro de límite de página, evita inanición y recibos de ingreso repetidos; retorno terminal durable existente. Aísla fallos para permitir reconciliación. Regresión de dos solicitudes y repoll sin POST.
+- f1e3131: timer candidato sin Install, staging y procedimiento de certificación/reversión con contrato Hermes documentados. No instalador productivo terminado ni ejecución real Hermes.
+- CI 45721833978 y 45721874808 en curso al consultar. Browser list_tabs devolvió ChatGPT, YouTube y Actions; no consola Hostinger; herramientas Browser son lectura, no shell. Sin piloto real, SQL, activación o gastos nuevos.
+- Siguiente: confirmar CI, completar instalador reversible y piloto sintético con kernel, transporte autorizado y Hermes. No certificar sin evidencia.
+
+## CV-AUTO-002 — preparación reversible y auditoría read-only (2026-11-25)
+
+- edec53d: `github_test_only_host_preflight.py` audita sin mutaciones binarios git/python3.12/aa-exec/bwrap, perfiles E3 AppArmor en enforce, Git local y sintaxis de unidad con systemd-analyze verify; devuelve `runtime_certified=false` y `activation=false` siempre. Un resultado positivo permite solo preparar piloto reversible, nunca activar producción.
+- b56016d + 1ddd968: regresiones de dependencias completas, perfil ausente, unidad inválida, acceso a perfil denegado; fe9555f agrega inspector al staging offline; 324f061 integra nuevo test en CI.
+- Estado evidencia: run 45720043025 sobre 99438e4 tenía test Python Ops verde y SQL desechable verde, resto en curso; nuevo HEAD 324f061 pendiente de CI al consultar. No hay resultados Hostinger de auditoría ni ejecución de un candidato test-only con NNP/5 capacidades cero comprobados en el kernel. No migraciones, no activación, cero gasto nuevo.
+- Seguimiento: recopilar resultados de CI hasta terminal, corregir fallos verificables, ejecutar inspector solo lectura en VPS a través del puente autorizado, verificar compatibilidad de perfiles y captura independiente en el kernel antes de certificar E2E. El servicio dedicado continúa sin [Install], condicionado a marca explícita y apagado.
+
+## CV-AUTO-002 — AppArmor/NNP hardening, 2026-11-25 (SIN INSTALAR)
+
+- Base a5289639, PR #299 draft. CI base run 45700124954 COMPLETO SUCCESS: validate, integration, postgres, browser y content-studio. No equiparar CI con certificación VPS.
+- d911155: el launcher de prueba fija usa el mismo bootstrap E3 `cv-release-pilot-bootstrap` (aa-exec) y la transición apilada obligatoria `cv-release-pilot-candidate`. Prefijo confiable verifica etiqueta enforce exacta, UID no root, NoNewPrivs=1 y CapEff/CapPrm/CapInh/CapAmb/CapBnd=0 ANTES de runpy.run_path. No abrir/importar código candidato antes de checks.
+- 592d4fb + 13b97a8: unidad propuesta exige NNP y sets vacíos de capacidades, límites existentes; corrige incompatibilidad: ProtectHome=read-only permite leer Git local /root/Casa-Viva; se retira RestrictAddressFamilies=AF_UNIX porque dev-worker requiere RPC HTTPS. El test permanece sin red por Bubblewrap, no por el servicio host.
+- 99438e4: regresiones de orden del prefijo y unit; 50e07c8: exit 126 de preflight se registra blocked. Estos tests son de contrato, NO una medición del kernel.
+- CI nuevo de la rama: run 45720043025 en curso sobre 99438e4 al consultar. Todavía no hay CI confirmado del último HEAD. Pendientes: comprobar resultado, posibles reparaciones, validar dependencias/instalador staging, host AppArmor real (stacking y aa-exec), cgroup, NNP/caps en /proc y reversión; no afirmar certificación E2E ni Hermes hasta evidencia real.
+- Cero migraciones Supabase, cero instalación en Hostinger, cero activación de servicios, cero cambios en pedidos/pagos/inventario y cero gasto adicional. Mantener dependencia PR #298. Revertir solo estos commits en rama si se rechaza; sin modificaciones VPS que revertir.
+
+## CV-AUTO-002 — retorno persistente y staging candidato (2026-11-25)
+
+- c67ead3/1634c80: owner ID fijo, JSON sin claves duplicadas, UTC y fixture.
+- 5e08cc6 reporter terminal con reconciliación remota acotada; c6d44e3 RPC ack transaccional; 3fdd703 integración opt-in worker; 69bdabb deadline extracción; cef627b cierre repetido después de ack; 1b2867e fixture SQL ack.
+- ee71bd3 unidad dedicada sin timer ni instalación, tmpfs 64 MiB, 4096 inodos, límites CPU/RAM/PIDs; 4ebbb0d staging offline con manifiesto SHA256, no instalador productivo; 77ab516 regresión POST ambiguo.
+- Pendiente integrar regresiones reporter/staging en CI, revisar compatibilidad systemd/AppArmor, límites reales y retorno; certificar en host antes de cualquier activación. No migración aplicada, no instalación ni gasto nuevo. PR #299 sigue candidato dependiente de #298.
+
+## CV-AUTO-002 — ejecutor candidato y conexión worker (2026-11-25)
+
+- a275ef4: executor perfil fijo, presupuesto lease, RPC claim/finish. 6739a73: launcher local Git exact SHA, copia regular scripts/ops sin .git, límites de extracción, cgroup dedicado verificado (256 MiB, CPU 50%, PIDs 32), Bubblewrap cap-drop, tiempo/salida existentes. 09fadd6: mismo dev-worker en modo dedicado opt-in, sin entrar a ruta legacy. 9e261c4: regresiones contrato, 699702c CI.
+- No se ha provisionado unidad cv-test-only-candidate.service ni certificado su AppArmor/aislamiento real; opt-ins apagados. Falta verificar límite total de extracción, comportamiento de montaje, límites de disco, retorno terminal al buzón, instalador y E2E. Solo objetos Git locales; no fetch automático. No interpretar el resultado de candidato como evidencia independiente de salud.
+- CI run 45698560148 completo success (entrada). Lifecycle run 45698869326: integration=in_progress, control-os-postgres=success, content-studio=in_progress, browser=in_progress, validate=success. CI executor pendiente. Sin migración ni instalación, producción intacta, costo nuevo cero. Reversión: revertir rama; no recursos instalados.
+
+## CV-AUTO-002 — lifecycle transaccional test-only (2026-11-25)
+
+- aeac7f5: SQL candidato agrega mode test-only, claim exclusivo con FOR UPDATE SKIP LOCKED, run único, lease máximo 180 s, expiración terminal sin replay, cierre atómico con fence task/run/worker y resultado enumerado; SECURITY INVOKER/service_role. No modifica claim legacy.
+- ae4c9e1: fixture desechable de permisos, doble claim, fence incorrecto, replay terminal, conflicto y expiración. ebd0015 integra fixture en CI. Pendiente ejecución real y revisión de concurrencia.
+- Siguiente: ejecutar perfil fijo por SHA local exacto, copia sin .git, sandbox cvdev sin red ni secretos, límites cgroup CPU/memoria/pids y salida, retorno terminal. No se ha instalado ni ejecutado en VPS. No aplicar SQL en producción. Costo nuevo cero.
+
+## CV-AUTO-002 — contrato SQL real y entrada transaccional (2026-11-25)
+
+- Consultas SELECT en nexo-production confirman columnas, índices, constraints de ops_tasks/ops_dev_runs/ops_events y definición de ops_claim_dev_task(p_worker text). Claim legacy solo acepta deterministic/ai, filtra payload.dev.ready=true; constraint de runs también solo permite deterministic/ai. No introducir test-only en ese recorrido.
+- e09f6a3: propuesta SQL github-test-only-enqueue.sql usa columnas reales source_ref, dedupe_key, deadline_at, public_id; índices únicos parciales de comentario y nonce, fingerprint validado, TTL máximo 15 min, RPC SECURITY INVOKER y permiso service_role; una transacción crea tarea y evento. Payload test_only sin dev.ready impide claim legacy.
+- d487382: fixture PostgreSQL desechable para duplicados, conflictos, nonce reutilizado, expiración y permisos. 13575eb: CI fixture y trigger de rama. Pendiente comprobar ejecución; no se ha aplicado migración.
+- Siguiente: claim específico test-only con run mode y lease/fencing, cierre atómico y ejecutor aislado revisión exacta, sin Git push/deploy; retorno terminal GitHub. Verificar triggers y grants reales antes de instalación. No activación ni gastos. Reversión de rama; ninguna modificación DB productiva.
+
+## CV-AUTO-002 — receptor GitHub test-only (2026-11-25; fase 1, SIN ACTIVAR)
+
+- Base certificada d4b25bf534e07c9c5bd64581706a0f0cc6327b67; rama cv-auto-002-bridge; depende del PR #298 (CV-AUTO-001).
+- Se añadió scripts/ops/github-test-only-bridge.py: aprovecha autenticación/issue privado #3 del módulo github_contingency y cliente API de dev-worker, validación owner, edición, SHA 40 caracteres, perfil fijo, TTL <=900 s, nonce, whitelist de campos, y solo llama RPC transaccional ops_enqueue_github_test_only. No ejecuta comandos. Opt-in CV_GITHUB_TEST_ONLY_ENABLED=1; apagado por defecto; retorno GitHub con recibo limitado.
+- Regresiones Python negativas en scripts/ops/tests/github-test-only-bridge.test.py e integración en validate.yml. Pruebas CI pendientes de resultado real.
+- Bloqueador confirmado: el repositorio muestra consumo de ops_claim_dev_task(p_worker), pero NO su definición SQL productiva ni la RPC de inserción; la RPC ops_enqueue_github_test_only es contrato propuesto, TODAVÍA NO INSTALADO. No cambiar esquema ni instalar mientras no exista migración transaccional aprobada y fixture PostgreSQL certificado. Ninguna ejecución autónoma VPS demostrada.
+- Dev Worker determinista sigue siendo ruta de edición/push: NO introducir test-only como tarea reclamable antes de agregar una ruta confinada de solo pruebas y demostrar ausencia de push/deploy, revisión exacta y límites.
+- Producción intacta, sin instalación VPS, sin mensajes, pedidos, inventario ni pagos. costo_actual: infraestructura existente; costo_nuevo_requerido: 0; alternativa_gratuita: cola, bunker cvdev, GitHub y CI; momento_de_escalar: solo autorización explícita.
+- Reversión: revertir los commits de esta rama; no hay servicios ni migraciones instaladas.
+
 ## CV-AUTO-001 — compatibilidad transporte PM2 7 (2026-11-25)
 
 - Hostinger d8540db49e82c06a75367ceac2fad48ab74f97a4: 6 regresiones OK (0.012s), daemon_identity (2429462,241763921,2049,262257) verificada; RPC runtime_error, tres unknown, bridge active; precheck bloqueó candidato, perfil original OK y limpieza. PM2 7.0.4 distribuye transportes en modules/pm2-axon y modules/pm2-axon-rpc, no necesariamente dependencias npm externas. 5bd1f5d prioriza módulos internos, conserva compatibilidad legacy y añade diagnóstico 25; b6f268c prueba ambos layouts y ausencia mediante Node real. Hipótesis causal apoyada por distribución pública, pendiente confirmar ejecución real. No reinicio ni producción ni gasto. Reversión: revertir rama y eliminar recursos temporales únicamente.

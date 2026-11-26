@@ -2,7 +2,7 @@ name: Validar aplicación
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, cv-auto-001-guardrails]
   push:
     branches: [main]
   workflow_dispatch:
@@ -46,9 +46,29 @@ jobs:
 
       - name: Validar Ops Bridge Python
         run: |
-          python3 -m py_compile scripts/ops/cv-ops-bridge.py scripts/ops/control-os-sync.py scripts/ops/dev-worker.py scripts/ops/opencode-executor.py scripts/ops/opencode-result-consumer.py scripts/ops/opencode-adapter.py scripts/ops/opencode-proposal.py scripts/ops/opencode-proposal-bridge.py scripts/ops/opencode-demo-e2e.py scripts/ops/sandbox/opencode-sandbox-spec.py scripts/ops/sandbox/verify-sandbox.py
+          python3 -m py_compile scripts/ops/cv-ops-bridge.py scripts/ops/control-os-sync.py scripts/ops/dev-worker.py scripts/ops/github-test-only-bridge.py scripts/ops/opencode-executor.py scripts/ops/opencode-result-consumer.py scripts/ops/opencode-adapter.py scripts/ops/opencode-proposal.py scripts/ops/opencode-proposal-bridge.py scripts/ops/opencode-demo-e2e.py scripts/ops/sandbox/opencode-sandbox-spec.py scripts/ops/sandbox/verify-sandbox.py
           python3 scripts/ops/tests/control-sync-panel.test.py
           python3 scripts/ops/tests/github-contingency.test.py
+          python3 scripts/ops/tests/github-test-only-bridge.test.py
+          python3 scripts/ops/tests/github-test-only-executor.test.py
+          python3 scripts/ops/tests/github-test-only-reporter.test.py
+          python3 scripts/ops/tests/github-test-only-e2e.test.py
+          python3 scripts/ops/tests/github-test-only-extraction.test.py
+          python3 scripts/ops/tests/github-test-only-launcher-certification.test.py
+          python3 scripts/ops/tests/github-test-only-e2e-certification.test.py
+          python3 scripts/ops/tests/github-test-only-autonomous-receiver.test.py
+          python3 scripts/ops/tests/github-test-only-admission.test.py
+          python3 scripts/ops/tests/github-test-only-periodic.test.py
+          python3 scripts/ops/tests/github-test-only-periodic-host.test.py
+          python3 scripts/ops/tests/github-test-only-periodic-discovery.test.py
+          bash -n scripts/ops/stop-isolated-periodic.sh
+          bash -n scripts/ops/install-isolated-periodic.sh
+          bash -n scripts/ops/certify-periodic-stop-and-enable.sh
+          python3 scripts/ops/tests/github-test-only-periodic-certification.test.py
+          python3 scripts/ops/tests/github-test-only-staging.test.py
+          python3 scripts/ops/tests/github-test-only-host-preflight.test.py
+          python3 scripts/ops/tests/github-test-only-install.test.py
+          python3 scripts/ops/tests/github-test-only-synthetic-pilot.test.py
           python3 scripts/ops/tests/github-release-rollback.test.py
           python3 scripts/ops/tests/github-release-transaction.test.py
           python3 scripts/ops/tests/github-release-supervisor.test.py
@@ -406,3 +426,7 @@ jobs:
         run: |
           psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/opencode-result-receipts.fixture.sql
           psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/owner-bot-error-review.fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/github-test-only-enqueue.fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/github-test-only-lifecycle.fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f scripts/ops/sql/github-test-only-e2e.fixture.sql
+          python3 scripts/ops/tests/github-test-only-postgres-e2e.test.py

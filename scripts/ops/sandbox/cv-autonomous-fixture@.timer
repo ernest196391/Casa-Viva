@@ -1,0 +1,11 @@
+# One-shot, no Install section, never enabled automatically.
+[Unit]
+Description=Casa Viva isolated receiver one-shot timer %i
+ConditionPathExists=/tmp/cv-autonomous-%i/arm.json
+ConditionPathExists=!/tmp/cv-autonomous-%i/attempt.json
+
+[Timer]
+OnActiveSec=30s
+AccuracySec=1s
+RemainAfterElapse=no
+Unit=cv-autonomous-fixture@%i.service

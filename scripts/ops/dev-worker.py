@@ -1093,6 +1093,39 @@ def main():
             fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
+        # Dedicated invocation of the SAME worker; never claim legacy work in
+        # the bounded test-only unit. The ordinary service remains unchanged.
+        if os.environ.get("CV_DEV_TEST_ONLY_MODE") == "1":
+            if os.environ.get("CV_TEST_ONLY_SANDBOX_CERTIFIED") != "1":
+                return
+            if "0::/system.slice/cv-test-only-candidate.service" not in Path("/proc/self/cgroup").read_text().splitlines():
+                return
+            from github_test_only_executor import worker_once
+            from github_test_only_launcher import launch
+            # Intake is opt-in and uses the same locked, bounded invocation.
+            # A provider outage must not prevent terminal reconciliation.
+            if os.environ.get("CV_GITHUB_TEST_ONLY_ENABLED") == "1":
+                try:
+                    spec = importlib.util.spec_from_file_location(
+                        "cv_test_intake", Path(__file__).with_name("github-test-only-bridge.py"))
+                    intake = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(intake)
+                    intake.receive_once(queue=lambda path, payload: api("POST", path, payload))
+                except Exception:
+                    print("test-only intake blocked", file=sys.stderr)
+            try:
+                worker_once(api, launch)
+            except Exception:
+                print("test-only execution blocked", file=sys.stderr)
+            if os.environ.get("CV_GITHUB_TEST_ONLY_REPORT_ENABLED") == "1":
+                from github_contingency import config, github_api
+                from github_test_only_reporter import deliver
+                cfg = config(os.environ)
+                if cfg and cfg[0] == 3:
+                    author = os.environ.get("CV_GITHUB_TEST_ONLY_REPORTER_ID", "")
+                    if author.isascii() and author.isdecimal():
+                        deliver(api, github_api, cfg[1], int(author))
+            return
         monitor_runs()
         claims = api("POST", "rpc/ops_claim_dev_task", {"p_worker": WORKER}) or []
         if claims:
