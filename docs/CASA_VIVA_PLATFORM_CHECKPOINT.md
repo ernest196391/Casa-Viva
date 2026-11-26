@@ -1,3 +1,10 @@
+## CV-AUTO-002 — autonomous isolated pilot CERTIFIED (2026-11-25)
+
+- Exact tested SHA c69fac929e94714355b25050d3d9d168f2a49204; CI 45730119564 all five jobs passed.
+- Private mailbox request 7179034207 at 2026-11-26 00:42:31 UTC; automatic response 7179056441 at 00:43:50 UTC, outcome passed, task_public_id 1 (79 seconds).
+- Independently read Hostinger terminal: state passed, durable_rows 1, production_authorized false, resources_removed, profile_cleanup confirmed, ROLLBACK_EXIT=0, AUTONOMOUS_PILOT_EXIT=0. Evidence /tmp/cv-autonomous-3095621-1795653785641486373.
+- One-shot timer, scoped receiver, isolated Docker DB, fixed candidate and cleanup certified together. No production activation. This is not certification of a continuously running receiver or Hermes. Next: bounded persistent polling admission with immutable approved SHA, global replay protection, expiry and explicit separate activation gate. Zero additional expenditure.
+
 ## CV-AUTO-002 — autonomous pilot blocker (2026-11-25)
 
 - Host pilot request 7178856863 returned blocked automatically in 78 seconds; rollback 0, profile cleanup confirmed, both existing services active. Journal: transient launcher exited 1 after ~1s, no AppArmor denials in checked interval.
