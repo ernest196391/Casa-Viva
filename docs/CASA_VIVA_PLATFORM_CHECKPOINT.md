@@ -1,3 +1,8 @@
+## CV-AUTO-002 — autonomous pilot blocker (2026-11-25)
+
+- Host pilot request 7178856863 returned blocked automatically in 78 seconds; rollback 0, profile cleanup confirmed, both existing services active. Journal: transient launcher exited 1 after ~1s, no AppArmor denials in checked interval.
+- db9e038/ae953f0 retain numeric launcher outcome and sanitized reason. 82a1861 fixes concrete regression: exact host-only @.service and @.timer paths rejected by confined Git extractor; exclude only those paths, retain all other validation. Regression added. Cause is consistent with host failure but not confirmed until new isolated pilot. CI pending. No production activation or extra cost.
+
 ## CV-AUTO-002 — installer regression gate (2026-11-25)
 
 - CI 45726940437, 45727577753 and 45727839523 completed successfully; AppArmor fixture ownership correction and installer rollback baseline green.
