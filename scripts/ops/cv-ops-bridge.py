@@ -461,10 +461,10 @@ def guardian_blob(raw):
 
 
 def guardian_startup_blob():
-    from github_contingency import private_bytes
     target = Path("/root/supervisor/cv-ops-bridge.py")
     if Path(__file__).resolve() != target:
         return None
+    from github_contingency import private_bytes
     return guardian_blob(private_bytes(target, 262144))
 
 
