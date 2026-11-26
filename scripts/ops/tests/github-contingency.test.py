@@ -712,6 +712,17 @@ globalThis.fetch=async(raw,options)=>{
                 self.assertEqual(result['metadata_available'], available)
                 self.assertFalse(result['functional_isolation_certified'])
 
+    def test_guardian_artifact_binding_requires_three_exact_valid_hashes(self):
+        approved = 'a' * 40
+        other = 'b' * 40
+        self.assertTrue(bridge.guardian_artifact_binding(approved, approved, approved))
+        for values in ((other, approved, approved), (approved, other, approved),
+                       (approved, approved, other), (None, approved, approved),
+                       (approved, None, approved), (approved, approved, None),
+                       ('bad', 'bad', 'bad')):
+            with self.subTest(values=values):
+                self.assertFalse(bridge.guardian_artifact_binding(*values))
+
     def test_guardian_startup_identity_rejects_noninstalled_path(self):
         with patch.object(bridge, '__file__', '/tmp/untrusted-worker.py'):
             self.assertIsNone(bridge.guardian_startup_blob())
