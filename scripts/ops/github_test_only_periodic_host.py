@@ -34,6 +34,15 @@ def prepare(root,cid,source):
     shutil.copytree(source,work/"source",symlinks=True)
     receiver.atomic(work/"attempt.json",{"comment_id":cid,"state":"reserved"})
     return owner,work
+def confirm_absent(owner,run=cleanup_module.command,observe=lease.profiles):
+    if not lease.OWNER.fullmatch(owner):return False
+    unit="cv-test-only-cert-"+owner+".service"
+    state=run(["/usr/bin/systemctl","show","-p","LoadState","-p","ActiveState",unit])
+    if "LoadState=not-found" not in state and "ActiveState=inactive" not in state:return False
+    if run(["/usr/bin/docker","ps","-aq","--filter","name=^/cv-e2e-pg-"+owner+"$"]):return False
+    if os.path.lexists(lease.LEASE) or observe()&lease.NAMES:return False
+    return True
+
 def clean(root,cid):
     path=root/("owner-"+str(cid)+".json")
     if not os.path.lexists(path):
@@ -42,12 +51,12 @@ def clean(root,cid):
     owner=owner_for(root,cid)
     work=Path("/tmp/cv-autonomous-"+owner)
     if not work.exists():
-        # After reboot /tmp may be empty; never infer cleanup from that alone.
-        return False
+        # After reboot /tmp may be empty; independently inspect all resources.
+        return confirm_absent(owner)
     if not (work/"attempt.json").is_file():
         # No external effects occur before attempt.json is persisted.
-        return True
-    return cleanup_module.cleanup(owner).get("ok") is True
+        return confirm_absent(owner)
+    return cleanup_module.cleanup(owner).get("ok") is True and confirm_absent(owner)
 def main(root=Path("/var/lib/cv-test-only-periodic")):
     if os.geteuid()!=0:raise ValueError("root required")
     root=Path(root)
