@@ -350,18 +350,37 @@ class Tests(unittest.TestCase):
         fallback.active.return_value = False
         factory = Mock(return_value=fallback)
         with tempfile.TemporaryDirectory() as d, patch.object(bridge, 'LOCK', str(Path(d) / 'lock')), \
-                patch.object(bridge, 'load_env_files', return_value=ENV), patch.object(bridge, 'find_supabase', return_value=('synthetic', 'synthetic')), \
+                patch.object(bridge, 'load_env_files', return_value=dict(ENV, CV_GITHUB_CONTINGENCY_ALWAYS_POLL='0')), patch.object(bridge, 'find_supabase', return_value=('synthetic', 'synthetic')), \
                 patch.dict(sys.modules, {'github_contingency': Mock(Contingency=factory)}), \
                 patch.object(bridge, 'api_request', side_effect=urllib.error.HTTPError('synthetic', 402, 'quota', None, None)):
             self.assertEqual(bridge.main(), 0)
             fallback.activate.assert_called_once(); fallback.poll.assert_called_once()
         fallback.reset_mock()
         with tempfile.TemporaryDirectory() as d, patch.object(bridge, 'LOCK', str(Path(d) / 'lock')), \
-                patch.object(bridge, 'load_env_files', return_value=ENV), patch.object(bridge, 'find_supabase', return_value=('synthetic', 'synthetic')), \
+                patch.object(bridge, 'load_env_files', return_value=dict(ENV, CV_GITHUB_CONTINGENCY_ALWAYS_POLL='0')), patch.object(bridge, 'find_supabase', return_value=('synthetic', 'synthetic')), \
                 patch.dict(sys.modules, {'github_contingency': Mock(Contingency=factory)}), \
                 patch.object(bridge, 'api_request', side_effect=urllib.error.HTTPError('synthetic', 401, 'denied', None, None)):
             with self.assertRaises(urllib.error.HTTPError): bridge.main()
             fallback.activate.assert_not_called(); fallback.poll.assert_not_called()
+
+    def test_permanent_mailbox_default_and_healthy_primary(self):
+        fallback=Mock(cfg=True)
+        fallback.active.return_value=False
+        with tempfile.TemporaryDirectory() as d, patch.object(bridge,'LOCK',str(Path(d)/'lock')), patch.object(bridge,'load_env_files',return_value=ENV), patch.object(bridge,'find_supabase',return_value=('synthetic','synthetic')), patch.dict(sys.modules,{'github_contingency':Mock(Contingency=Mock(return_value=fallback))}), patch.object(bridge,'api_request',return_value=[]) as primary:
+            self.assertEqual(bridge.main(),0)
+            fallback.poll.assert_called_once()
+            primary.assert_called_once()
+            fallback.activate.assert_not_called()
+
+    def test_local_crm_probe_bounded_and_sanitized(self):
+        good=dict(wa_count=10,crm_count=5,business_count=1,casa_viva_count=1,wa_casa_viva_count=10,wa_recent_count=3,wa_latest='2026-11-26T12:00:00+00:00',crm_latest=None)
+        with patch.object(bridge.subprocess,'run',return_value=Mock(returncode=0,stdout=json.dumps(good).encode())) as run:
+            self.assertEqual(json.loads(bridge.action_local_crm_status({})['output']),good)
+            self.assertIn('BEGIN READ ONLY',run.call_args.args[0][-1])
+            self.assertEqual(bridge.action_local_crm_status({'sql':'SELECT private'})['returncode'],2)
+            run.assert_called_once()
+        with patch.object(bridge.subprocess,'run',return_value=Mock(returncode=0,stdout=json.dumps(dict(good,secret='private')).encode())):
+            self.assertEqual(bridge.action_local_crm_status({})['output'],'local_crm_probe_unavailable')
 
 
 if __name__ == '__main__':

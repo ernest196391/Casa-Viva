@@ -33,7 +33,7 @@ WP_SSH = [
     "u824654880@88.223.85.72",
 ]
 MAX_OUTPUT = 50000
-BRIDGE_VERSION = "4.1.3"
+BRIDGE_VERSION = "4.1.4"
 
 
 def load_env_files() -> dict[str, str]:
@@ -2298,7 +2298,42 @@ raise SystemExit(0 if all(report.values()) else 1)
         "global_restriction":Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").read_text().strip(),
         "production_changed":False,"model_called":False})}
 
+def action_local_crm_status(args):
+    """Fixed aggregate probe of the existing recovery database; never export chat text."""
+    if args:
+        return {"returncode": 2, "output": "No arguments accepted"}
+    sql = """BEGIN READ ONLY;
+SET LOCAL statement_timeout='8s';
+SELECT json_build_object(
+ 'wa_count',(SELECT count(*) FROM public.crm_wa_messages),
+ 'wa_latest',(SELECT max(sent_at) FROM public.crm_wa_messages),
+ 'crm_count',(SELECT count(*) FROM public.crm_messages),
+ 'crm_latest',(SELECT max(created_at) FROM public.crm_messages),
+ 'business_count',(SELECT count(*) FROM public.crm_businesses),
+ 'casa_viva_count',(SELECT count(*) FROM public.crm_businesses WHERE slug='casa-viva'),
+ 'wa_casa_viva_count',(SELECT count(*) FROM public.crm_wa_messages w JOIN public.crm_businesses b ON b.id=w.business_id WHERE b.slug='casa-viva'),
+ 'wa_recent_count',(SELECT count(*) FROM public.crm_wa_messages WHERE sent_at>=now()-interval '7 days')
+);
+COMMIT;"""
+    try:
+        p = subprocess.run(["/usr/bin/docker","exec","-u","postgres","vivabot-recovery-db","psql","-X","-q","-A","-t","-v","ON_ERROR_STOP=1","-d","postgres","-c",sql],
+                           capture_output=True, timeout=20, check=False, env={"PATH":"/usr/bin:/bin","HOME":"/root"})
+        if p.returncode or len(p.stdout)>2048:
+            raise ValueError("probe")
+        d=json.loads(p.stdout)
+        counts={"wa_count","crm_count","business_count","casa_viva_count","wa_casa_viva_count","wa_recent_count"}
+        dates={"wa_latest","crm_latest"}
+        if set(d)!=counts|dates or any(type(d[k]) is not int or not 0<=d[k]<=10**12 for k in counts):
+            raise ValueError("shape")
+        if any(d[k] is not None and (not isinstance(d[k],str) or not re.fullmatch(r"[0-9T:.+Z -]{10,40}",d[k])) for k in dates):
+            raise ValueError("date")
+        return {"returncode":0,"output":json.dumps(d)}
+    except (OSError,ValueError,TypeError,subprocess.SubprocessError):
+        return {"returncode":1,"output":"local_crm_probe_unavailable"}
+
+
 ACTIONS = {
+    "local_crm_status": action_local_crm_status,
     "prepare_control_dev_checkout": action_prepare_control_dev_checkout,
     "control_codex_setup": action_control_codex_setup,
     "control_codex_login": action_control_codex_login,
@@ -2385,6 +2420,13 @@ def main():
                 print("[ops-bridge] contingency unavailable", file=sys.stderr)
                 contingency = None
                 active = False
+            # Existing authorized mailbox stays available even when the primary queue is healthy.
+            # An explicit zero restores legacy 402-only behavior.
+            if contingency is not None and contingency.cfg and not active and env.get("CV_GITHUB_CONTINGENCY_ALWAYS_POLL", "1") == "1":
+                try:
+                    contingency.poll()
+                except Exception:
+                    print("[ops-bridge] permanent mailbox poll unavailable", file=sys.stderr)
             if active:
                 try:
                     contingency.poll()
