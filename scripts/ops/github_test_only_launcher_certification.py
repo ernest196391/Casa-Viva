@@ -42,7 +42,19 @@ def child(unit,repo,sha,budget='70'):
     launcher.REPO=repo
     os.environ.clear()
     os.environ.update(ENV,CV_TEST_ONLY_SANDBOX_CERTIFIED="1")
-    return launcher._launch_exact(sha,int(budget),unit)
+    try:
+        rc=launcher._launch_exact(sha,int(budget),unit)
+    except Exception as exc:
+        # Trusted launcher exceptions only, no exception text or traceback.
+        reason={PermissionError:"permission",FileNotFoundError:"missing_file",ValueError:"invalid_contract",OSError:"os_error"}.get(type(exc),"internal_error")
+        print(json.dumps({"stage":"launcher","reason":reason}),file=sys.stderr,flush=True)
+        return 125
+    return rc
+
+def diagnostic(rc,clean):
+    # Only fixed categories and numeric exit codes; never forward candidate output.
+    if not clean:return "cleanup_unconfirmed"
+    return {0:"passed",1:"child_failure",124:"timeout",125:"boundary_blocked",126:"preflight_blocked"}.get(rc,"unexpected_exit")
 
 def run(repo,sha,budget=90,owner=None):
     if type(budget) is not int or not 25<=budget<=90:raise ValueError('invalid budget')
@@ -70,7 +82,7 @@ def run(repo,sha,budget=90,owner=None):
             clean=fields.get("LoadState")=="not-found" or fields.get("ActiveState")=="inactive"
         except (OSError,subprocess.TimeoutExpired):pass
     return dict(ok=rc==0 and clean,launcher_exit=rc,cleanup_confirmed=clean,sha=sha,
-                scope="exact_launcher_fixture",production_authorized=False)
+                scope="exact_launcher_fixture",production_authorized=False,reason=diagnostic(rc,clean))
 
 if __name__=="__main__":
     if len(sys.argv)==6 and sys.argv[1]=="--child":
