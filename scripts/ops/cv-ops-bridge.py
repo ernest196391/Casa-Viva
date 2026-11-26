@@ -2385,6 +2385,12 @@ def main():
                 print("[ops-bridge] contingency unavailable", file=sys.stderr)
                 contingency = None
                 active = False
+            # Opt-in permanent diagnostics: poll the existing mailbox independently of HTTP 402.
+            if contingency is not None and env.get('CV_GITHUB_CONTINGENCY_ALWAYS_POLL') == '1':
+                try:
+                    contingency.poll()
+                except Exception:
+                    print('[ops-bridge] permanent mailbox poll unavailable', file=sys.stderr)
             if active:
                 try:
                     contingency.poll()
