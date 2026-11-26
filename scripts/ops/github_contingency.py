@@ -517,7 +517,7 @@ def local_sql_reconcile():
         import types
         bridge_path = Path('/root/supervisor/cv-ops-bridge.py')
         source = private_bytes(bridge_path, 262144)
-        digest = hashlib.sha1(b'blob ' + str(len(source)).encode() + b'\\0' + source).hexdigest()
+        digest = hashlib.sha1(b'blob ' + str(len(source)).encode() + bytes([0]) + source).hexdigest()
         if digest != LOCAL_SQL_BRIDGE_BLOB:
             return {'ok': False, 'reason': 'bridge_integrity_mismatch'}
         # No importlib path load or second disk read: compilation uses the bytes
