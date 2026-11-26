@@ -509,13 +509,14 @@ def wa_catalog_case():
 # Git blob SHA-1 of the full certified worker (not a substring or a path check).
 # A future worker revision requires a separate reviewed change to this pin.
 LOCAL_SQL_BRIDGE_BLOB = '84bc0eb4a57a3dc5c4f1ea5377c50eb952446a3a'
+LOCAL_SQL_BRIDGE_PATH = Path('/root/supervisor/cv-local-sql-certified.py')
 
 
 def local_sql_reconcile():
     """Execute only the exact certified worker bytes, never reopen the path."""
     try:
         import types
-        bridge_path = Path('/root/supervisor/cv-ops-bridge.py')
+        bridge_path = LOCAL_SQL_BRIDGE_PATH
         source = private_bytes(bridge_path, 262144)
         digest = hashlib.sha1(b'blob ' + str(len(source)).encode() + bytes([0]) + source).hexdigest()
         if digest != LOCAL_SQL_BRIDGE_BLOB:
