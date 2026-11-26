@@ -430,6 +430,17 @@ class Tests(unittest.TestCase):
                 self.assertFalse(json.loads(bridge.action_recovery_preflight_evidence({})['output'])['config_present'])
                 self.assertEqual(bridge.action_recovery_preflight_evidence({'path':'x'})['returncode'],2)
 
+    def test_pinned_install_rejects_arguments_and_wrong_contract(self):
+        self.assertEqual(bridge.action_install_recovery_preflight({'url':'other'})['returncode'],2)
+        with patch.dict(sys.modules,{'github_contingency':Mock(PREFLIGHT_SCRIPT=Path('/tmp/wrong'),PREFLIGHT_BLOB='wrong',private_bytes=Mock())}), patch.object(bridge.urllib.request,'urlopen') as fetch:
+            self.assertEqual(bridge.action_install_recovery_preflight({})['returncode'],1)
+            fetch.assert_not_called()
+    def test_pinned_install_rejects_unverified_download(self):
+        with patch.dict(sys.modules,{'github_contingency':Mock(PREFLIGHT_SCRIPT=Path('/root/supervisor/recovery-dispatch-preflight.mjs'),PREFLIGHT_BLOB='5dfafab9d7120f8c002999c30f1dd31e5eff5754',private_bytes=Mock())}), patch.object(Path,'exists',return_value=False), patch.object(bridge.urllib.request,'urlopen') as fetch, patch.object(bridge.os,'open') as write:
+            fetch.return_value.__enter__.return_value.read.return_value=b'wrong'
+            self.assertEqual(bridge.action_install_recovery_preflight({})['returncode'],1)
+            write.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()
