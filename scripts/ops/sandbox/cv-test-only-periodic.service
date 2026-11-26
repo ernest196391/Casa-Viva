@@ -2,6 +2,7 @@
 [Unit]
 Description=Casa Viva restricted isolated periodic receiver
 ConditionPathExists=/var/lib/cv-test-only-periodic/approved.json
+ConditionPathExists=!/var/lib/cv-test-only-periodic/STOP
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/cv-test-only-periodic/source
