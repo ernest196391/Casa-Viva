@@ -174,8 +174,8 @@ class Tests(unittest.TestCase):
             if len(calls) > 1:
                 raise AssertionError('unexpected second source read')
             return source
-        with patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', blob), \\
-             patch.object(mod, 'private_bytes', side_effect=private_once), \\
+        with patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', blob), \
+             patch.object(mod, 'private_bytes', side_effect=private_once), \
              patch('importlib.util.spec_from_file_location', side_effect=AssertionError('unsafe path re-import')):
             safe = mod.local_sql_reconcile()
         self.assertTrue(safe['ok'])
@@ -186,8 +186,8 @@ class Tests(unittest.TestCase):
 
         # A modified blob must fail closed and never execute injected code.
         tampered = source + b"\\nraise RuntimeError('worker executed')\\n"
-        with patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', blob), \\
-             patch.object(mod, 'private_bytes', return_value=tampered), \\
+        with patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', blob), \
+             patch.object(mod, 'private_bytes', return_value=tampered), \
              patch.object(builtins, 'exec', side_effect=AssertionError('must not execute')) as executor:
             self.assertEqual(mod.local_sql_reconcile(), {'ok': False, 'reason': 'bridge_integrity_mismatch'})
             executor.assert_not_called()
@@ -198,7 +198,7 @@ class Tests(unittest.TestCase):
                           "    return {'returncode': 1, 'output': "
                           + repr(json.dumps({'reason': 'private-credential-do-not-leak'})) + "}\\n").encode()
         failure_blob = hashlib.sha1(b'blob ' + str(len(failure_source)).encode() + bytes([0]) + failure_source).hexdigest()
-        with patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', failure_blob), \\
+        with patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', failure_blob), \
              patch.object(mod, 'private_bytes', return_value=failure_source):
             safe = mod.local_sql_reconcile()
         self.assertEqual(safe, {'ok': False, 'reason': 'local_sql_reconcile_unavailable'})
