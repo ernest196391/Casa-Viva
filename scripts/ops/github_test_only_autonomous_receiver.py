@@ -64,7 +64,54 @@ def tick(directory,arm,execute,now=None):
         return result
     finally:os.close(fd)
 
+def execute_integral(repo, image, token, cid, sha):
+    m=load()
+    env={"CV_GITHUB_CONTINGENCY_TOKEN":token,"CV_GITHUB_CONTINGENCY_ENABLED":"1",
+         "CV_GITHUB_CONTINGENCY_ISSUE":"3","CV_GITHUB_TEST_ONLY_ENABLED":"1"}
+    with m.DockerFixtureDB(image) as db:
+        def launch(s,b):
+            if b<45:return 125
+            result=m.cert.run(repo,s,budget=b)
+            return 0 if result.get("ok") is True and result.get("cleanup_confirmed") is True else 125
+        result=m.run(db.api,m.ghmod.github_api,env,cid,sha,launch)
+        result["durable_rows"]=int(db.sql("select count(*) from public.ops_tasks where result->>'github_report_id' is not null"))
+        result["ok"]=result["ok"] and result["durable_rows"]==1
+    return result
+
+def main(argv):
+    import subprocess
+    if os.geteuid()!=0 or len(argv)!=2 or argv[0]!="--tick":
+        raise ValueError("isolated operator invocation required")
+    root=private(argv[1])
+    # Local root-owned arm, never accept configuration from a mailbox message.
+    fd=os.open(root/"arm.json",os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+    with os.fdopen(fd,"rb") as f:
+        st=os.fstat(f.fileno())
+        if not stat.S_ISREG(st.st_mode) or st.st_uid!=0 or st.st_mode&0o077:
+            raise ValueError("invalid arm file")
+        raw=f.read(4097)
+    if len(raw)>4096:raise ValueError("oversized arm")
+    config=json.loads(raw)
+    if set(config)!={"arm","repo","image","scope"} or config["scope"]!="isolated_fixture":
+        raise ValueError("invalid scope")
+    repo=Path(config["repo"]).resolve(strict=True)
+    if not repo.is_relative_to(root) or repo==root or HERE!=repo/"scripts/ops":
+        raise ValueError("reviewed local repository required")
+    image=config["image"]
+    if image!="sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94":
+        raise ValueError("unexpected fixture image")
+    def execute(cid,sha):
+        env={"PATH":"/usr/bin:/bin","HOME":"/nonexistent","GIT_CONFIG_NOSYSTEM":"1"}
+        head=subprocess.run(["/usr/bin/git","-C",str(repo),"rev-parse","HEAD"],env=env,check=True,capture_output=True,text=True,timeout=5).stdout.strip()
+        dirty=subprocess.run(["/usr/bin/git","-C",str(repo),"status","--porcelain","--untracked-files=all"],env=env,check=True,capture_output=True,text=True,timeout=5).stdout
+        if head!=sha or dirty:raise ValueError("revision mismatch")
+        token=os.environ.pop("CV_GITHUB_CONTINGENCY_TOKEN","")
+        if not token:raise ValueError("mailbox credential missing")
+        return execute_integral(repo,image,token,cid,sha)
+    return tick(root,config["arm"],execute)
+
 if __name__=="__main__":
-    # Intentionally no live CLI until full cleanup evidence and deployment
-    # preflight are certified. Scheduler integration uses this bounded tick.
-    sys.exit("fixture receiver not armed for host execution")
+    try: result=main(sys.argv[1:])
+    except Exception:result={"state":"blocked","production_authorized":False}
+    print(json.dumps(result,sort_keys=True))
+    sys.exit(0 if result["state"] in ("passed","expired","already_reserved","insufficient_time","busy") else 4)
