@@ -382,6 +382,21 @@ class Tests(unittest.TestCase):
         with patch.object(bridge.subprocess,'run',return_value=Mock(returncode=0,stdout=json.dumps(dict(good,secret='private')).encode())):
             self.assertEqual(bridge.action_local_crm_status({})['output'],'local_crm_probe_unavailable')
 
+    def test_recovery_probe_does_not_export_secrets_or_certify_session(self):
+        responses=[Mock(returncode=0,stdout=b'true'),Mock(returncode=0,stdout=b'true'),Mock(returncode=0,stdout=b'{"tables":8,"tenant":1,"message_columns":8}'),Mock(returncode=0,stdout=b'[{"name":"vivabot","pm2_env":{"status":"stopped","secret":"private"}},{"name":"vivabot-recovery-receiver","pm2_env":{"status":"online"}}]')]
+        with patch.object(bridge.subprocess,'run',side_effect=responses) as run:
+            r=bridge.action_local_recovery_preflight({})
+            self.assertEqual(r['returncode'],0)
+            d=json.loads(r['output'])
+            self.assertTrue(d['schema_ok'])
+            self.assertEqual(d['vivabot_state'],'stopped')
+            self.assertFalse(d['postgrest_auth_certified'])
+            self.assertFalse(d['whatsapp_session_certified'])
+            self.assertNotIn('private',r['output'])
+            self.assertIn('BEGIN READ ONLY',run.call_args_list[2].args[0][-1])
+            self.assertEqual(bridge.action_local_recovery_preflight({'command':'anything'})['returncode'],2)
+            self.assertEqual(run.call_count,4)
+
 
 if __name__ == '__main__':
     unittest.main()
