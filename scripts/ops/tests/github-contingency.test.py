@@ -151,36 +151,58 @@ class Tests(unittest.TestCase):
             self.assertEqual(receipt['request_id'], row['id'])
 
     def test_local_sql_receipt_masks_worker_output(self):
-        import importlib.util
-        import types
-        import sys
-        result = {'returncode': 1, 'output': json.dumps({'reason': 'private-credential-do-not-leak'})}
-        class Stub:
-            def action_local_sql_reconcile(self, args):
-                self.args = args
-                return result
-        stub = Stub()
-        spec = type('Spec',(),{'loader':type('Loader',(),{'exec_module':lambda self,module:None})()})()
-        with patch.object(mod,'private_bytes',return_value=b'def action_local_sql_reconcile(args):'), \
-             patch('importlib.util.spec_from_file_location',return_value=spec), \
-             patch('importlib.util.module_from_spec',return_value=stub):
-            safe = mod.local_sql_reconcile()
-        self.assertEqual(stub.args, {})
-        self.assertEqual(safe, {'ok':False, 'reason':'local_sql_reconcile_unavailable'})
-        self.assertNotIn('private-credential', json.dumps(safe))
-        result = {'returncode':0, 'output':json.dumps({'transport':'local_sql_readonly',
-                 'postgrest_auth_certified':False,
-                 'result':{'ok':True,'checks':{
-                    name: {'ok': True, **{key: 0 for key in mod.PREFLIGHT_COUNTS.get(name, set())}}
-                    for name in mod.PREFLIGHT_CHECKS}}})}
-        with patch.object(mod,'private_bytes',return_value=b'def action_local_sql_reconcile(args):'), \
-             patch('importlib.util.spec_from_file_location',return_value=spec), \
-             patch('importlib.util.module_from_spec',return_value=stub):
+        import hashlib
+        from unittest.mock import mock_open
+        import builtins
+        # The production pin stays exact, and the worker receives no arguments.
+        self.assertEqual(mod.LOCAL_SQL_BRIDGE_BLOB, '84bc0eb4a57a3dc5c4f1ea5377c50eb952446a3a')
+        payload = {
+            'transport': 'local_sql_readonly',
+            'postgrest_auth_certified': False,
+            'result': {'ok': True, 'checks': {
+                name: {'ok': True, **{key: 0 for key in mod.PREFLIGHT_COUNTS.get(name, set())}}
+                for name in mod.PREFLIGHT_CHECKS}},
+        }
+        # Synthetic executable source: mocked digest identifies exactly these bytes.
+        source = ("def action_local_sql_reconcile(args):\\n"
+                  "    assert args == {}\\n"
+                  "    return {'returncode': 0, 'output': " + repr(json.dumps(payload)) + "}\\n").encode()
+        blob = hashlib.sha1(b'blob ' + str(len(source)).encode() + bytes([0]) + source).hexdigest()
+        calls = []
+        def private_once(path, limit):
+            calls.append((str(path), limit))
+            if len(calls) > 1:
+                raise AssertionError('unexpected second source read')
+            return source
+        with patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', blob), \\
+             patch.object(mod, 'private_bytes', side_effect=private_once), \\
+             patch('importlib.util.spec_from_file_location', side_effect=AssertionError('unsafe path re-import')):
             safe = mod.local_sql_reconcile()
         self.assertTrue(safe['ok'])
-        self.assertEqual(safe['transport'],'local_sql_readonly')
+        self.assertEqual(safe['transport'], 'local_sql_readonly')
         self.assertFalse(safe['postgrest_auth_certified'])
-        self.assertNotIn('returncode',safe)
+        self.assertNotIn('output', safe)
+        self.assertEqual(len(calls), 1)
+
+        # A modified blob must fail closed and never execute injected code.
+        tampered = source + b"\\nraise RuntimeError('worker executed')\\n"
+        with patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', blob), \\
+             patch.object(mod, 'private_bytes', return_value=tampered), \\
+             patch.object(builtins, 'exec', side_effect=AssertionError('must not execute')) as executor:
+            self.assertEqual(mod.local_sql_reconcile(), {'ok': False, 'reason': 'bridge_integrity_mismatch'})
+            executor.assert_not_called()
+
+        # Worker failure output must not leak credentials or data.
+        failure_source = ("def action_local_sql_reconcile(args):\\n"
+                          "    assert args == {}\\n"
+                          "    return {'returncode': 1, 'output': "
+                          + repr(json.dumps({'reason': 'private-credential-do-not-leak'})) + "}\\n").encode()
+        failure_blob = hashlib.sha1(b'blob ' + str(len(failure_source)).encode() + bytes([0]) + failure_source).hexdigest()
+        with patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', failure_blob), \\
+             patch.object(mod, 'private_bytes', return_value=failure_source):
+            safe = mod.local_sql_reconcile()
+        self.assertEqual(safe, {'ok': False, 'reason': 'local_sql_reconcile_unavailable'})
+        self.assertNotIn('private-credential', json.dumps(safe))
 
     def test_release_requires_local_opt_in(self):
         row = request(body=mod.PREFIX + json.dumps({'action':'release_apply','sha':'a'*40,'nonce':'syntheticnonce1234','expires_at':'2026-11-20T16:10:00Z'}))
