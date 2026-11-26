@@ -700,6 +700,24 @@ globalThis.fetch=async(raw,options)=>{
         self.assertEqual(json.loads(receipt['output']), {'reason': 'guardian_evidence_unavailable'})
         self.assertNotIn('sensitive-worker-content', receipt['output'])
 
+    def test_guardian_only_metadata_queue_migration(self):
+        sql_root = PATH.parent / 'sql'
+        allow = (sql_root / 'allow-guardian-runtime-evidence.sql').read_text()
+        rollback = (sql_root / 'rollback-guardian-runtime-evidence.sql').read_text()
+        self.assertIn("action = ''guardian_runtime_evidence'' AND args = ''{}''::jsonb", allow)
+        self.assertIn("position('local_sql_reconcile' in prior)>0", allow)
+        self.assertIn("substring(prior FROM 8 FOR char_length(prior)-8)", allow)
+        self.assertIn("IF EXISTS (SELECT 1 FROM public.crm_ops_bridge", rollback)
+        self.assertIn("status IN ('queued', 'running')", rollback)
+        self.assertIn("unexpected_guardian_constraint_shape", rollback)
+        self.assertIn("original_allowlist_missing", rollback)
+        self.assertIn("md5(original_def)", rollback)
+        self.assertIn("de228436c4c60d8820858cf4dba191dc", allow)
+        self.assertIn("de228436c4c60d8820858cf4dba191dc", rollback)
+        self.assertNotIn("action = ''local_sql_reconcile''", allow)
+        self.assertNotIn("DROP TABLE", allow.upper())
+        self.assertNotIn("TRUNCATE", allow.upper())
+
     def test_local_sql_reconcile_rejects_missing_core_config(self):
         import hashlib
         raw=bridge.BUNDLED_RECOVERY_PREFLIGHT.encode('utf-8')
