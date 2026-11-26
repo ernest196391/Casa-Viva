@@ -172,7 +172,7 @@ class Tests(unittest.TestCase):
                  'postgrest_auth_certified':False,
                  'result':{'ok':True,'checks':{
                     name: {'ok': True, **{key: 0 for key in mod.PREFLIGHT_COUNTS.get(name, set())}}
-                    for name in mod.PREFLIGHT_CHECKS}})}
+                    for name in mod.PREFLIGHT_CHECKS}}})}
         with patch.object(mod,'private_bytes',return_value=b'def action_local_sql_reconcile(args):'), \
              patch('importlib.util.spec_from_file_location',return_value=spec), \
              patch('importlib.util.module_from_spec',return_value=stub):
