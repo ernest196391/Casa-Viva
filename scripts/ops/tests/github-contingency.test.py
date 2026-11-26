@@ -288,6 +288,32 @@ class Tests(unittest.TestCase):
             self.assertEqual(c.poll(), 'idle')
             self.assertEqual(list(Path(d).glob('nonce-*')), [])
 
+    def test_release_gate_provision_fixed_pin_and_concurrent_target(self):
+        spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        raw = b'fixture never executed'
+        for concurrent in (False, True):
+            with self.subTest(concurrent=concurrent), tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                source = root / 'cv-ops-bridge.py.prev'
+                target = root / 'cv-local-sql-certified.py'
+                source.write_bytes(raw)
+                source.chmod(0o600)
+                real_link = gate.os.link
+                def link(src, dst, **kwargs):
+                    if concurrent:
+                        target.write_bytes(b'replacement')
+                        target.chmod(0o600)
+                    return real_link(src, dst, **kwargs)
+                def digest(data):
+                    return Mock(hexdigest=lambda: '84bc0eb4a57a3dc5c4f1ea5377c50eb952446a3a' if data.endswith(raw) else '0'*40)
+                with patch.object(gate, 'ROOT', root), patch.object(gate.os, 'geteuid', return_value=0), patch.object(gate.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)), patch.object(gate, 'read_private', side_effect=lambda p, n=65536: p.read_bytes()), patch.object(gate.hashlib, 'sha1', side_effect=digest), patch.object(gate.os, 'link', side_effect=link):
+                    self.assertEqual(gate.provision_certified_artifact(), not concurrent)
+                    self.assertEqual(gate.provision_certified_artifact(), not concurrent)
+                self.assertEqual(target.read_bytes(), b'replacement' if concurrent else raw)
+                self.assertEqual(list(root.glob('.cv-sql-*')), [])
+
     def test_release_gate_ci_requires_exact_push(self):
         spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
         gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate)
