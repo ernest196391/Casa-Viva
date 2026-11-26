@@ -1,7 +1,6 @@
 -- CV-AUTO-002 Guardian: permit ONLY fixed metadata attestation with exact empty arguments.
 -- Apply only after PR/CI approval and snapshot of the pre-existing constraint.
 -- Not an authorization for local_sql_reconcile or any other action.
-BEGIN;
 DO $cv$
 DECLARE prior text;
 BEGIN
@@ -24,4 +23,3 @@ BEGIN
     || substring(prior FROM 8 FOR char_length(prior)-8)
     || ' OR (action = ''guardian_runtime_evidence'' AND args = ''{}''::jsonb))';
 END $cv$;
-COMMIT;
