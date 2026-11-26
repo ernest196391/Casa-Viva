@@ -53,5 +53,55 @@ class ReceiverTests(unittest.TestCase):
         self.assertIn("RemainAfterElapse=no",timer)
         self.assertNotIn("[Install]",timer)
         self.assertNotIn("OnUnitInactiveSec",timer)
+class LeaseTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory(dir="/tmp")
+        self.addCleanup(self.tmp.cleanup)
+        self.root=Path(self.tmp.name)
+        spec=importlib.util.spec_from_file_location("lease",Path(m.__file__).parent/"github_test_only_apparmor_lease.py")
+        self.lease=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.lease)
+        self.lease.LOCK=self.root/"lock"
+        self.lease.LEASE=self.root/"owner"
+        self.source=self.root/"source/scripts/ops/sandbox/dev-worker-sandbox.profile"
+        self.source.parent.mkdir(parents=True)
+        self.source.write_bytes((Path(m.__file__).parent/"sandbox/dev-worker-sandbox.profile").read_bytes())
+        self.active=set()
+        self.calls=[]
+    def run_cmd(self,args):
+        self.calls.append(args)
+        if "-a" in args:self.active.update(self.lease.NAMES)
+        if "-R" in args:self.active.clear()
+    def acquire(self,owner="1-2"):
+        return self.lease.acquire(self.root,owner,self.run_cmd,lambda:self.active.copy())
+    def release(self,owner="1-2"):
+        return self.lease.release(self.root,owner,self.run_cmd,lambda:self.active.copy())
+    def test_owned_cleanup(self):
+        self.acquire()
+        self.assertEqual(self.active,self.lease.NAMES)
+        self.release()
+        self.assertFalse(self.active)
+        self.assertFalse(self.lease.LEASE.exists())
+    def test_foreign_release(self):
+        self.acquire()
+        with self.assertRaises(ValueError):self.release("3-4")
+        self.assertEqual(self.active,self.lease.NAMES)
+    def test_preexisting_profiles(self):
+        self.active.update(self.lease.NAMES)
+        with self.assertRaises(ValueError):self.acquire()
+        self.assertFalse(self.calls)
+    def test_tampered_payload(self):
+        self.acquire()
+        (self.root/"pilot.profile").write_text("changed")
+        with self.assertRaises(ValueError):self.release()
+        self.assertEqual(self.active,self.lease.NAMES)
+    def test_interrupted_load_reservation(self):
+        def fail(args):
+            if "-a" in args:raise RuntimeError("interrupted")
+        with self.assertRaises(RuntimeError):
+            self.lease.acquire(self.root,"1-2",fail,lambda:self.active.copy())
+        self.assertTrue(self.lease.LEASE.exists())
+        self.release()
+        self.assertFalse(self.lease.LEASE.exists())
+
 if __name__=="__main__":unittest.main()
 
