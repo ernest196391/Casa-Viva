@@ -435,11 +435,24 @@ class Tests(unittest.TestCase):
         with patch.dict(sys.modules,{'github_contingency':Mock(PREFLIGHT_SCRIPT=Path('/tmp/wrong'),PREFLIGHT_BLOB='wrong',private_bytes=Mock())}), patch.object(bridge.urllib.request,'urlopen') as fetch:
             self.assertEqual(bridge.action_install_recovery_preflight({})['returncode'],1)
             fetch.assert_not_called()
-    def test_pinned_install_rejects_unverified_download(self):
-        with patch.dict(sys.modules,{'github_contingency':Mock(PREFLIGHT_SCRIPT=Path('/root/supervisor/recovery-dispatch-preflight.mjs'),PREFLIGHT_BLOB='5dfafab9d7120f8c002999c30f1dd31e5eff5754',private_bytes=Mock())}), patch.object(Path,'exists',return_value=False), patch.object(bridge.urllib.request,'urlopen') as fetch, patch.object(bridge.os,'open') as write:
-            fetch.return_value.__enter__.return_value.read.return_value=b'wrong'
+    def test_bundled_script_has_canonical_hash(self):
+        import hashlib
+        raw=bridge.BUNDLED_RECOVERY_PREFLIGHT.encode('utf-8')
+        self.assertEqual(hashlib.sha1(b'blob '+str(len(raw)).encode()+bytes([0])+raw).hexdigest(),'5dfafab9d7120f8c002999c30f1dd31e5eff5754')
+    def test_bundled_install_rejects_modified_payload(self):
+        with patch.dict(sys.modules,{'github_contingency':Mock(PREFLIGHT_SCRIPT=Path('/root/supervisor/recovery-dispatch-preflight.mjs'),PREFLIGHT_BLOB='5dfafab9d7120f8c002999c30f1dd31e5eff5754',private_bytes=Mock())}), patch.object(Path,'exists',return_value=False), patch.object(bridge,'BUNDLED_RECOVERY_PREFLIGHT','wrong'), patch.object(bridge.os,'open') as write:
             self.assertEqual(bridge.action_install_recovery_preflight({})['returncode'],1)
             write.assert_not_called()
+    def test_restore_config_rejects_remote_source(self):
+        keys={'SUPABASE_URL','SUPABASE_SERVICE_KEY','DISPATCH_GROUP','BUSINESS_SLUG','WOO_URL','CURRU_KEY'}
+        raw=b'SUPABASE_URL=https://cloud.example\\nSUPABASE_SERVICE_KEY=private\\nDISPATCH_GROUP=Reparto\\nBUSINESS_SLUG=casa-viva\\nWOO_URL=https://casaviva.company\\nCURRU_KEY=private\\n'
+        with patch.dict(sys.modules,{'github_contingency':Mock(PREFLIGHT_ENV=Path('/root/supervisor/.dispatch-preflight.env'),PREFLIGHT_KEYS=keys,private_bytes=Mock(return_value=raw))}), patch.object(Path,'exists',return_value=False), patch.object(bridge,'action_install_recovery_preflight',return_value={'returncode':0}), patch.object(bridge.subprocess,'run') as run, patch.object(bridge.os,'open') as write:
+            result=bridge.action_restore_recovery_config({})
+            self.assertEqual(result['returncode'],1)
+            self.assertNotIn('private',result['output'])
+            run.assert_not_called()
+            write.assert_not_called()
+            self.assertEqual(bridge.action_restore_recovery_config({'path':'other'})['returncode'],2)
 
 
 if __name__ == '__main__':
