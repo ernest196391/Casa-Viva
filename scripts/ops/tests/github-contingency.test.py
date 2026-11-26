@@ -483,6 +483,22 @@ class Tests(unittest.TestCase):
             read.assert_not_called()
             self.assertEqual(bridge.action_receiver_crm_contract({'path':'other'})['returncode'],2)
 
+    def test_local_sql_adapter_restricts_core_and_crm_scope(self):
+        wrapper=bridge.LOCAL_SQL_PREFLIGHT_WRAPPER
+        self.assertIn("requireParams(q,['select','business_id','order_id','limit'])",wrapper)
+        self.assertIn("q.get('business_id')!=='eq.'+s.businesses[0]",wrapper)
+        self.assertIn("q.get('select')!=='order_id,stage,messenger_phone,announce_msg_id,announced_at'",wrapper)
+        self.assertIn("if(u.origin!=='http://127.0.0.1')",wrapper)
+        self.assertIn("if(u.origin==='https://casaviva.company')",wrapper)
+        self.assertIn("q.get('slug')!=='eq.casa-viva'",wrapper)
+
+    def test_local_sql_schema_includes_tenant_scope(self):
+        import inspect
+        source=inspect.getsource(bridge.action_local_sql_reconcile)
+        self.assertIn("'business_id','order_id','stage'",source)
+        self.assertIn("count(*)=8",source)
+        self.assertIn("BEGIN READ ONLY",inspect.getsource(bridge.local_crm_readonly))
+
     def test_local_sql_transport_readonly(self):
         with patch.object(bridge.subprocess,'run',return_value=Mock(returncode=0,stdout=b'{"ok":true}')) as run:
             self.assertEqual(bridge.local_crm_readonly('SELECT json_build_object()'),{'ok':True})
