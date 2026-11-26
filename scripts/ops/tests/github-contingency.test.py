@@ -344,6 +344,42 @@ class Tests(unittest.TestCase):
                 self.assertEqual(target.read_bytes(), raw)
                 self.assertEqual(list(root.glob('.cv-sql-*')), [])
 
+    def test_release_gate_does_not_execute_candidate_and_requires_provision_success(self):
+        spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        sha = 'b' * 40
+        body = (b"raise RuntimeError('untrusted top level must never run')\n"
+                + b'# fixture padding\n' * 100
+                + b"def provision_local_sql_artifact():\n    raise RuntimeError('must never run')\n")
+        self.assertGreaterEqual(len(body), 1000)
+        def git(*args):
+            if args[0] == 'fetch':
+                return b''
+            if args[0] == 'rev-parse':
+                return sha.encode()
+            if args[0] == 'show':
+                return body
+            self.fail('unexpected git operation')
+        def read(path, limit=65536):
+            if path == gate.TOKEN_FILE:
+                return b'CV_GITHUB_RELEASE_TOKEN=synthetic'
+            if path == gate.TARGET:
+                return body
+            self.fail('unexpected read')
+        api = lambda *a: {'protected': True, 'commit': {'sha': sha}}
+        with patch.object(gate, 'git', side_effect=git), patch.object(gate, 'read_private', side_effect=read), patch.object(gate, 'verified_checks', return_value=True), patch.object(gate, 'atomic_file') as write, patch.object(gate, 'provision_certified_artifact', return_value=True) as install:
+            self.assertEqual(gate.apply_release(sha, api), {'ok': True, 'changed': False, 'sha': sha})
+            install.assert_called_once_with()
+            write.assert_not_called()
+        with patch.object(gate, 'git', side_effect=git), patch.object(gate, 'read_private', side_effect=read), patch.object(gate, 'verified_checks', return_value=True), patch.object(gate, 'atomic_file') as write, patch.object(gate, 'provision_certified_artifact', return_value=False) as install:
+            self.assertEqual(gate.apply_release(sha, api), {'ok': False, 'reason': 'artifact_provision_unconfirmed'})
+            install.assert_called_once_with()
+            write.assert_not_called()
+        with patch.object(gate, 'git', side_effect=git), patch.object(gate, 'read_private', side_effect=read), patch.object(gate, 'verified_checks', return_value=False), patch.object(gate, 'provision_certified_artifact') as install:
+            self.assertEqual(gate.apply_release(sha, api), {'ok': False, 'reason': 'ci_not_certified'})
+            install.assert_not_called()
+
     def test_release_gate_ci_requires_exact_push(self):
         spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
         gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate)
