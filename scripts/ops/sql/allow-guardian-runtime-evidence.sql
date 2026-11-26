@@ -21,7 +21,7 @@ BEGIN
   END IF;
   EXECUTE 'ALTER TABLE public.crm_ops_bridge DROP CONSTRAINT crm_ops_bridge_action_chk';
   EXECUTE 'ALTER TABLE public.crm_ops_bridge ADD CONSTRAINT crm_ops_bridge_action_chk CHECK ('
-    || substring(prior FROM 7 FOR char_length(prior)-6)
+    || substring(prior FROM 8 FOR char_length(prior)-8)
     || ' OR (action = ''guardian_runtime_evidence'' AND args = ''{}''::jsonb))';
 END $cv$;
 COMMIT;
