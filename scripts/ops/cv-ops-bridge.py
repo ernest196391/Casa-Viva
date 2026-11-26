@@ -468,6 +468,13 @@ def guardian_startup_blob():
     return guardian_blob(private_bytes(target, 262144))
 
 
+def guardian_artifact_binding(installed, startup, approved):
+    """Compare observed identity with the existing pinned release contract."""
+    valid = all(isinstance(v, str) and re.fullmatch(r"[0-9a-f]{40}", v)
+                for v in (installed, startup, approved))
+    return bool(valid and installed == startup == approved)
+
+
 def guardian_isolation_metadata():
     """Read-only unit properties; never treat configuration as a functional denial test."""
     unit = "cv-receiver-isolation-check.service"
@@ -540,12 +547,19 @@ def action_guardian_runtime_evidence(args):
             except (OSError, subprocess.SubprocessError):
                 services[name] = "unknown"
         isolation = guardian_isolation_metadata()
+        try:
+            from github_contingency import LOCAL_SQL_BRIDGE_BLOB
+            approved = LOCAL_SQL_BRIDGE_BLOB
+        except (ImportError, AttributeError):
+            approved = None
         summary = {
             "ok": True,
             "bridge_version": BRIDGE_VERSION,
             "worker_git_blob": actual,
             "startup_git_blob": _GUARDIAN_STARTUP_BLOB,
             "startup_matches_installed": _GUARDIAN_STARTUP_BLOB is not None and _GUARDIAN_STARTUP_BLOB == actual,
+            "approved_sql_worker_blob": approved if isinstance(approved, str) and re.fullmatch(r"[0-9a-f]{40}", approved) else None,
+            "approved_artifact_matches": guardian_artifact_binding(actual, _GUARDIAN_STARTUP_BLOB, approved),
             "runtime_artifact_certified": False,
             "isolation": isolation,
             "worker_owner_only": bool(owner_only),
