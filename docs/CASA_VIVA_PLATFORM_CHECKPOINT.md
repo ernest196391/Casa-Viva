@@ -1,3 +1,8 @@
+## CV-AUTO-002 — real periodic success; isolated stop gate
+
+- SHA 9c16db32e6fb6fb1c28e4fd448d155c364ca8bfd, CI 45738355262 5/5. Real requests 7180273923/7180274433 returned PASSED via 7180307555/7180327314. Operator terminal confirms TWO_REQUESTS_AND_REPLAY_CHECK=0, RECOVERY_STATE=stopped, PERIODIC_STOP_CONFIRMED=1, PERIODIC_ROLLBACK_EXIT=0. Third active launcher not observed; do not label active stop certified. No replay of the successful requests.
+- df91e3a/f973288 prepare deterministic independent stop test with inert transient sleep and existing persistent owner recovery; on success explicitly enable reviewed fixed-SHA isolated timer, not production. c2ca163 and certification regressions wired to CI. Synthetic stop tests independent transient process and ledger recovery, not cancellation of real candidate execution. New CI and host execution pending. No production activation, zero additional expenditure.
+
 ## CV-AUTO-002 — bounded permanent receiver certification script
 
 - CI 45736606602 and 45737079717 completed 5/5 each. Staged workspace reclamation and STOP gate approved.
