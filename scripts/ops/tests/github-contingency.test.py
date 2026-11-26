@@ -474,6 +474,15 @@ class Tests(unittest.TestCase):
             write.assert_not_called()
             self.assertEqual(bridge.action_restore_effective_recovery({'pid':123})['returncode'],2)
 
+    def test_receiver_contract_rejects_external_entry(self):
+        rows=[{'name':'vivabot-recovery-receiver','pm2_env':{'status':'online','pm_cwd':'/root/backups/nexo-recovery/receiver','pm_exec_path':'/tmp/outside.mjs','secret':'not-exported'}}]
+        with patch.object(bridge.subprocess,'run',return_value=Mock(returncode=0,stdout=json.dumps(rows).encode())), patch.object(bridge.os,'open') as read:
+            result=bridge.action_receiver_crm_contract({})
+            self.assertEqual(result['returncode'],1)
+            self.assertNotIn('not-exported',result['output'])
+            read.assert_not_called()
+            self.assertEqual(bridge.action_receiver_crm_contract({'path':'other'})['returncode'],2)
+
 
 if __name__ == '__main__':
     unittest.main()
