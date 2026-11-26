@@ -56,7 +56,13 @@ def clean(root,cid):
     if not (work/"attempt.json").is_file():
         # No external effects occur before attempt.json is persisted.
         return confirm_absent(owner)
-    return cleanup_module.cleanup(owner).get("ok") is True and confirm_absent(owner)
+    if cleanup_module.cleanup(owner).get("ok") is not True or not confirm_absent(owner):return False
+    # Only the exact private work directory recorded before execution is removed.
+    if work.resolve()!=work or not shutil.rmtree.avoids_symlink_attacks:raise ValueError("unsafe work cleanup")
+    st=work.stat()
+    if st.st_uid!=0 or st.st_mode&0o077 or not stat.S_ISDIR(st.st_mode):raise ValueError("unsafe work directory")
+    shutil.rmtree(work)
+    return True
 def main(root=Path("/var/lib/cv-test-only-periodic")):
     if os.geteuid()!=0:raise ValueError("root required")
     root=Path(root)
