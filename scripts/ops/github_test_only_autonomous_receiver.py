@@ -65,14 +65,14 @@ def tick(directory,arm,execute,now=None):
         return result
     finally:os.close(fd)
 
-def execute_integral(repo, image, token, cid, sha):
+def execute_integral(repo, image, token, cid, sha, owner=None):
     m=load()
     env={"CV_GITHUB_CONTINGENCY_TOKEN":token,"CV_GITHUB_CONTINGENCY_ENABLED":"1",
          "CV_GITHUB_CONTINGENCY_ISSUE":"3","CV_GITHUB_TEST_ONLY_ENABLED":"1"}
-    with m.DockerFixtureDB(image) as db:
+    with m.DockerFixtureDB(image,owner=owner) as db:
         def launch(s,b):
             if b<45:return 125
-            result=m.cert.run(repo,s,budget=b)
+            result=m.cert.run(repo,s,budget=b,owner=owner)
             return 0 if result.get("ok") is True and result.get("cleanup_confirmed") is True else 125
         result=m.run(db.api,m.ghmod.github_api,env,cid,sha,launch)
         result["durable_rows"]=int(db.sql("select count(*) from public.ops_tasks where result->>'github_report_id' is not null"))
@@ -106,9 +106,18 @@ def main(argv):
         head=subprocess.run(["/usr/bin/git","-C",str(repo),"rev-parse","HEAD"],env=env,check=True,capture_output=True,text=True,timeout=5).stdout.strip()
         dirty=subprocess.run(["/usr/bin/git","-C",str(repo),"status","--porcelain","--untracked-files=all"],env=env,check=True,capture_output=True,text=True,timeout=5).stdout
         if head!=sha or dirty:raise ValueError("revision mismatch")
-        token=os.environ.pop("CV_GITHUB_CONTINGENCY_TOKEN","")
+        credential=Path(os.environ.get("CREDENTIALS_DIRECTORY","/nonexistent"))/"mailbox"
+        fd=os.open(credential,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+        with os.fdopen(fd,"rb") as f:
+            st=os.fstat(f.fileno())
+            if not stat.S_ISREG(st.st_mode) or st.st_uid!=0 or st.st_mode&0o077:raise ValueError("unsafe credential")
+            raw=f.read(4097)
+        if len(raw)>4096:raise ValueError("oversized credential")
+        token=raw.decode("ascii").strip()
         if not token:raise ValueError("mailbox credential missing")
-        return execute_integral(repo,image,token,cid,sha)
+        owner=root.name.removeprefix('cv-autonomous-')
+        if root.name!='cv-autonomous-'+owner or not re.fullmatch(r'[0-9]{1,12}-[0-9]{1,20}',owner):raise ValueError('invalid pilot owner')
+        return execute_integral(repo,image,token,cid,sha,owner=owner)
     return tick(root,config["arm"],execute)
 
 if __name__=="__main__":
