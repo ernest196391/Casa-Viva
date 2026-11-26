@@ -165,7 +165,7 @@ class Tests(unittest.TestCase):
             with self.assertRaises(OSError):
                 mod.private_bytes(link, 262144)
 
-    def test_sql_provision_rolls_back_only_its_own_publication(self):
+    def test_sql_provision_never_deletes_publication_after_uncertainty(self):
         import hashlib
         raw = b'certified fixture'
         pin = hashlib.sha1(b'blob ' + str(len(raw)).encode() + bytes([0]) + raw).hexdigest()
@@ -182,11 +182,11 @@ class Tests(unittest.TestCase):
                         raise ValueError('post-publication failure')
                     return p.read_bytes()
                 with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod, 'private_bytes', side_effect=read), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)):
-                    self.assertFalse(mod.provision_local_sql_artifact()['ok'])
+                    self.assertEqual(mod.provision_local_sql_artifact(), {'ok': False, 'reason': 'publication_unconfirmed'})
                 if replace:
                     self.assertEqual(target.read_bytes(), b'concurrent replacement')
                 else:
-                    self.assertFalse(target.exists())
+                    self.assertEqual(target.read_bytes(), raw)
 
     def test_offline_sql_provision_is_idempotent_and_never_overwrites(self):
         import hashlib
@@ -287,6 +287,98 @@ class Tests(unittest.TestCase):
             c = mod.Contingency(ENV, lambda: self.fail('health'), Path(d), api, lambda: NOW)
             self.assertEqual(c.poll(), 'idle')
             self.assertEqual(list(Path(d).glob('nonce-*')), [])
+
+    def test_release_gate_provision_fixed_pin_and_concurrent_target(self):
+        spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        raw = b'fixture never executed'
+        for concurrent in (False, True):
+            with self.subTest(concurrent=concurrent), tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                source = root / 'cv-ops-bridge.py.prev'
+                target = root / 'cv-local-sql-certified.py'
+                source.write_bytes(raw)
+                source.chmod(0o600)
+                real_link = gate.os.link
+                def link(src, dst, **kwargs):
+                    if concurrent:
+                        target.write_bytes(b'replacement')
+                        target.chmod(0o600)
+                    return real_link(src, dst, **kwargs)
+                def digest(data):
+                    return Mock(hexdigest=lambda: '84bc0eb4a57a3dc5c4f1ea5377c50eb952446a3a' if data.endswith(raw) else '0'*40)
+                with patch.object(gate, 'ROOT', root), patch.object(gate.os, 'geteuid', return_value=0), patch.object(gate.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)), patch.object(gate, 'read_private', side_effect=lambda p, n=65536: p.read_bytes()), patch.object(gate.hashlib, 'sha1', side_effect=digest), patch.object(gate.os, 'link', side_effect=link):
+                    self.assertEqual(gate.provision_certified_artifact(), not concurrent)
+                    self.assertEqual(gate.provision_certified_artifact(), not concurrent)
+                self.assertEqual(target.read_bytes(), b'replacement' if concurrent else raw)
+                self.assertEqual(list(root.glob('.cv-sql-*')), [])
+
+    def test_release_gate_fsync_failure_preserves_publication_and_retry(self):
+        spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        raw = b'fixture never executed'
+        for failure in (1, 2):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                source = root / 'cv-ops-bridge.py.prev'
+                target = root / 'cv-local-sql-certified.py'
+                source.write_bytes(raw)
+                source.chmod(0o600)
+                real_fsync = gate.os.fsync
+                calls = []
+                def sync(fd):
+                    calls.append(fd)
+                    if len(calls) == failure:
+                        raise OSError('synthetic persistence failure')
+                    return real_fsync(fd)
+                with patch.object(gate, 'ROOT', root), patch.object(gate.os, 'geteuid', return_value=0), patch.object(gate.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)), patch.object(gate, 'read_private', side_effect=lambda p, n=65536: p.read_bytes()), patch.object(gate.hashlib, 'sha1', return_value=Mock(hexdigest=lambda: '84bc0eb4a57a3dc5c4f1ea5377c50eb952446a3a')):
+                    with patch.object(gate.os, 'fsync', side_effect=sync):
+                        with self.assertRaises(OSError):
+                            gate.provision_certified_artifact()
+                    self.assertEqual(target.exists(), failure == 2)
+                    if target.exists():
+                        self.assertEqual(target.read_bytes(), raw)
+                    self.assertTrue(gate.provision_certified_artifact())
+                self.assertEqual(target.read_bytes(), raw)
+                self.assertEqual(list(root.glob('.cv-sql-*')), [])
+
+    def test_release_gate_does_not_execute_candidate_and_requires_provision_success(self):
+        spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        sha = 'b' * 40
+        body = (b"raise RuntimeError('untrusted top level must never run')\n"
+                + b'# fixture padding\n' * 100
+                + b"def provision_local_sql_artifact():\n    raise RuntimeError('must never run')\n")
+        self.assertGreaterEqual(len(body), 1000)
+        def git(*args):
+            if args[0] == 'fetch':
+                return b''
+            if args[0] == 'rev-parse':
+                return sha.encode()
+            if args[0] == 'show':
+                return body
+            self.fail('unexpected git operation')
+        def read(path, limit=65536):
+            if path == gate.TOKEN_FILE:
+                return b'CV_GITHUB_RELEASE_TOKEN=synthetic'
+            if path == gate.TARGET:
+                return body
+            self.fail('unexpected read')
+        api = lambda *a: {'protected': True, 'commit': {'sha': sha}}
+        with patch.object(gate, 'git', side_effect=git), patch.object(gate, 'read_private', side_effect=read), patch.object(gate, 'verified_checks', return_value=True), patch.object(gate, 'atomic_file') as write, patch.object(gate, 'provision_certified_artifact', return_value=True) as install:
+            self.assertEqual(gate.apply_release(sha, api), {'ok': True, 'changed': False, 'sha': sha})
+            install.assert_called_once_with()
+            write.assert_not_called()
+        with patch.object(gate, 'git', side_effect=git), patch.object(gate, 'read_private', side_effect=read), patch.object(gate, 'verified_checks', return_value=True), patch.object(gate, 'atomic_file') as write, patch.object(gate, 'provision_certified_artifact', return_value=False) as install:
+            self.assertEqual(gate.apply_release(sha, api), {'ok': False, 'reason': 'artifact_provision_unconfirmed'})
+            install.assert_called_once_with()
+            write.assert_not_called()
+        with patch.object(gate, 'git', side_effect=git), patch.object(gate, 'read_private', side_effect=read), patch.object(gate, 'verified_checks', return_value=False), patch.object(gate, 'provision_certified_artifact') as install:
+            self.assertEqual(gate.apply_release(sha, api), {'ok': False, 'reason': 'ci_not_certified'})
+            install.assert_not_called()
 
     def test_release_gate_ci_requires_exact_push(self):
         spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')

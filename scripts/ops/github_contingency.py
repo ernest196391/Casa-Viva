@@ -525,7 +525,14 @@ def provision_local_sql_artifact():
         if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or parent.st_mode & 0o022:
             raise ValueError('unsafe parent')
         try:
-            return {'ok': valid(private_bytes(target, 262144)), 'changed': False}
+            if not valid(private_bytes(target, 262144)):
+                return {'ok': False, 'reason': 'target_integrity_mismatch'}
+            directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+            return {'ok': True, 'changed': False}
         except FileNotFoundError:
             pass
         raw = private_bytes(target.with_name('cv-ops-bridge.py.prev'), 262144)
@@ -550,19 +557,11 @@ def provision_local_sql_artifact():
                 os.close(directory)
             return {'ok': True, 'changed': True}
         except Exception:
+            # Never unlink the public name: inode comparison followed by unlink
+            # is not atomic. A verified immutable artifact may remain after an
+            # uncertain fsync; the installer must fail closed and retry.
             if published:
-                # Only remove the inode created by this invocation.
-                try:
-                    original, current = os.lstat(name), os.lstat(target)
-                    if (original.st_dev, original.st_ino) == (current.st_dev, current.st_ino):
-                        os.unlink(target)
-                        directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
-                        try:
-                            os.fsync(directory)
-                        finally:
-                            os.close(directory)
-                except OSError:
-                    return {'ok': False, 'reason': 'rollback_unconfirmed'}
+                return {'ok': False, 'reason': 'publication_unconfirmed'}
             raise
         finally:
             os.unlink(name)
