@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 import tempfile
+import os
 import unittest
 from unittest.mock import patch, MagicMock
 s=importlib.util.spec_from_file_location("receiver",Path(__file__).resolve().parents[1]/"github_test_only_autonomous_receiver.py")
@@ -60,6 +61,17 @@ class LeaseTests(unittest.TestCase):
         self.root=Path(self.tmp.name)
         spec=importlib.util.spec_from_file_location("lease",Path(m.__file__).parent/"github_test_only_apparmor_lease.py")
         self.lease=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.lease)
+        # CI runs unprivileged. Simulate only file ownership, leaving the
+        # real root-only production checks intact. No actual AppArmor calls.
+        real_fstat=os.fstat
+        def fixture_fstat(fd):
+            info=real_fstat(fd)
+            if info.st_uid!=os.geteuid():return info
+            values=list(info)
+            values[4]=0
+            return os.stat_result(values)
+        p=patch.object(self.lease.os,"fstat",side_effect=fixture_fstat)
+        p.start();self.addCleanup(p.stop)
         self.lease.LOCK=self.root/"lock"
         self.lease.LEASE=self.root/"owner"
         self.source=self.root/"source/scripts/ops/sandbox/dev-worker-sandbox.profile"
