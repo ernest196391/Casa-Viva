@@ -684,6 +684,9 @@ globalThis.fetch=async(raw,options)=>{
         self.assertEqual(result['worker_git_blob'], blob(raw))
         self.assertFalse(result['startup_matches_installed'])
         self.assertFalse(result['runtime_artifact_certified'])
+        self.assertFalse(result['guardian_release_approval_verified'])
+        self.assertFalse(result['sql_pin_matches_installed'])
+        self.assertFalse(result['sql_pin_matches_backup'])
         self.assertFalse(result['isolation']['functional_isolation_certified'])
         self.assertEqual(result['backup_git_blob'], blob(prior))
         self.assertTrue(result['worker_owner_only'])
@@ -711,6 +714,28 @@ globalThis.fetch=async(raw,options)=>{
                 result = bridge.guardian_isolation_metadata()
                 self.assertEqual(result['metadata_available'], available)
                 self.assertFalse(result['functional_isolation_certified'])
+
+    def test_guardian_sql_backup_match_does_not_approve_running_worker(self):
+        import hashlib
+        raw, prior = b'new-guardian', b'pinned-sql'
+        pin = hashlib.sha1(b'blob ' + str(len(prior)).encode() + bytes([0]) + prior).hexdigest()
+        contract = Mock(LOCAL_SQL_BRIDGE_BLOB=pin,
+                        private_bytes=lambda path, limit: prior if path.name.endswith('.prev') else raw)
+        flags = dict.fromkeys(('CV_GITHUB_CONTINGENCY_ENABLED', 'CV_GITHUB_RELEASE_ENABLED',
+                               'CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED'), '0')
+        with patch.dict(sys.modules, {'github_contingency': contract}), \
+             patch.object(bridge, 'load_env_files', return_value=flags), \
+             patch.object(bridge.Path, 'stat', return_value=Mock(st_mode=0o100700)), \
+             patch.object(bridge.subprocess, 'run', return_value=Mock(stdout=b'active', returncode=0)), \
+             patch.object(bridge, '_GUARDIAN_STARTUP_BLOB', bridge.guardian_blob(raw)):
+            receipt = bridge.action_guardian_runtime_evidence({})
+        self.assertEqual(receipt['returncode'], 0)
+        result = json.loads(receipt['output'])
+        self.assertTrue(result['startup_matches_installed'])
+        self.assertTrue(result['sql_pin_matches_backup'])
+        self.assertFalse(result['sql_pin_matches_installed'])
+        self.assertFalse(result['guardian_release_approval_verified'])
+        self.assertFalse(result['runtime_artifact_certified'])
 
     def test_guardian_artifact_binding_requires_three_exact_valid_hashes(self):
         approved = 'a' * 40
