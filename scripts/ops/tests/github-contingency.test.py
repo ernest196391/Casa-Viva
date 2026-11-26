@@ -232,6 +232,30 @@ class Tests(unittest.TestCase):
                 else:
                     self.assertFalse(target.exists())
 
+    def test_sql_cleanup_failure_rolls_back_published_inode(self):
+        import hashlib
+        raw = b'certified fixture'
+        pin = hashlib.sha1(b'blob ' + str(len(raw)).encode() + bytes([0]) + raw).hexdigest()
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / 'cv-local-sql-certified.py'
+            target.with_name('cv-ops-bridge.py.prev').write_bytes(raw)
+            real_unlink = mod.os.unlink
+            fault = [True]
+            def fail_first_temp_cleanup(path, *args, **kwargs):
+                if str(path).split('/')[-1].startswith('.cv-sql-') and fault[0]:
+                    fault[0] = False
+                    raise OSError('synthetic cleanup failure')
+                return real_unlink(path, *args, **kwargs)
+            with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), \
+                 patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), \
+                 patch.object(mod.os, 'geteuid', return_value=0), \
+                 patch.object(mod, 'private_bytes', side_effect=lambda p, n: p.read_bytes()), \
+                 patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)), \
+                 patch.object(mod.os, 'unlink', side_effect=fail_first_temp_cleanup):
+                self.assertFalse(mod.provision_local_sql_artifact()['ok'])
+            self.assertFalse(target.exists())
+            self.assertEqual(list(Path(d).glob('.cv-sql-*')), [])
+
     def test_offline_sql_provision_is_idempotent_and_never_overwrites(self):
         import hashlib
         raw = b'certified fixture'
