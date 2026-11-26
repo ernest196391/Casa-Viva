@@ -21,4 +21,15 @@ class Host(unittest.TestCase):
         self.assertIn("systemctl stop cv-test-only-periodic.timer",s)
         self.assertIn("systemctl stop cv-test-only-periodic.service",s)
         self.assertNotIn("systemctl stop cv-dev-worker",s)
+    def test_owner_record_reopened_and_mismatch_rejected(self):
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);path=root/"owner-42.json"
+            h.receiver.atomic(path,{"cid":42,"owner":"123-456"})
+            with patch.object(h,"read_private",side_effect=lambda p:p.read_bytes()):
+                self.assertEqual(h.owner_for(root,42),"123-456")
+                path.write_text(json.dumps({"cid":43,"owner":"123-456"}))
+                with self.assertRaises(ValueError):h.owner_for(root,42)
+                path.write_text(json.dumps({"cid":42,"owner":"../other"}))
+                with self.assertRaises(ValueError):h.owner_for(root,42)
 if __name__=="__main__":unittest.main()
