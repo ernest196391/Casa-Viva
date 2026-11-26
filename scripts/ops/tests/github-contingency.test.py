@@ -483,6 +483,34 @@ class Tests(unittest.TestCase):
             read.assert_not_called()
             self.assertEqual(bridge.action_receiver_crm_contract({'path':'other'})['returncode'],2)
 
+    def test_local_sql_transport_readonly(self):
+        with patch.object(bridge.subprocess,'run',return_value=Mock(returncode=0,stdout=b'{"ok":true}')) as run:
+            self.assertEqual(bridge.local_crm_readonly('SELECT json_build_object()'),{'ok':True})
+            cmd=run.call_args.args[0]
+            self.assertEqual(cmd[:5],['/usr/bin/docker','exec','-u','postgres','vivabot-recovery-db'])
+            self.assertIn('BEGIN READ ONLY',cmd[-1])
+            self.assertIn('statement_timeout',cmd[-1])
+            self.assertEqual(bridge.action_local_sql_reconcile({'sql':'anything'})['returncode'],2)
+            run.assert_called_once()
+
+    def test_local_sql_reconcile_keeps_canonical_hash(self):
+        import hashlib
+        raw=bridge.BUNDLED_RECOVERY_PREFLIGHT.encode('utf-8')
+        self.assertEqual(hashlib.sha1(b'blob '+str(len(raw)).encode()+bytes([0])+raw).hexdigest(),'5dfafab9d7120f8c002999c30f1dd31e5eff5754')
+
+    def test_local_sql_reconcile_rejects_missing_core_config(self):
+        import hashlib
+        raw=bridge.BUNDLED_RECOVERY_PREFLIGHT.encode('utf-8')
+        blob=hashlib.sha1(b'blob '+str(len(raw)).encode()+bytes([0])+raw).hexdigest()
+        script=Path('/root/supervisor/recovery-dispatch-preflight.mjs')
+        contract=Mock(PREFLIGHT_SCRIPT=script,PREFLIGHT_BLOB=blob,preflight_summary=mod.preflight_summary,private_bytes=lambda p,n:raw if p==script else b'CURRU_KEY=do-not-export')
+        with patch.dict(sys.modules,{'github_contingency':contract}), patch.object(bridge,'local_crm_readonly') as sql:
+            result=bridge.action_local_sql_reconcile({})
+            self.assertEqual(result['returncode'],1)
+            self.assertEqual(json.loads(result['output'])['reason'],'core_config_incomplete')
+            self.assertNotIn('do-not-export',result['output'])
+            sql.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()
