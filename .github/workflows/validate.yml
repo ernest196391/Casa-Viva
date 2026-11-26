@@ -62,6 +62,7 @@ jobs:
           python3 scripts/ops/tests/github-test-only-periodic-host.test.py
           python3 scripts/ops/tests/github-test-only-periodic-discovery.test.py
           bash -n scripts/ops/stop-isolated-periodic.sh
+          bash -n scripts/ops/install-isolated-periodic.sh
           python3 scripts/ops/tests/github-test-only-staging.test.py
           python3 scripts/ops/tests/github-test-only-host-preflight.test.py
           python3 scripts/ops/tests/github-test-only-install.test.py
