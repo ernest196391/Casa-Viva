@@ -533,12 +533,16 @@ def provision_local_sql_artifact():
             return {'ok': False, 'reason': 'source_integrity_mismatch'}
         fd, name = tempfile.mkstemp(prefix='.cv-sql-', dir=target.parent)
         published = False
+        inode = None
         try:
             with os.fdopen(fd, 'wb') as out:
                 os.fchmod(out.fileno(), 0o600)
                 out.write(raw)
                 out.flush()
                 os.fsync(out.fileno())
+                st = os.fstat(out.fileno())
+                inode = (st.st_dev, st.st_ino)
+            # Hard link is exclusive: an existing file or symlink is never replaced.
             os.link(name, target, follow_symlinks=False)
             published = True
             if not valid(private_bytes(target, 262144)):
@@ -548,13 +552,21 @@ def provision_local_sql_artifact():
                 os.fsync(directory)
             finally:
                 os.close(directory)
+            # Cleanup belongs in the guarded region; a failure must roll back.
+            os.unlink(name)
+            directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
             return {'ok': True, 'changed': True}
         except Exception:
             if published:
-                # Only remove the inode created by this invocation.
+                # Root-only parent is required. Recheck inode before removing;
+                # never remove a replacement by another process.
                 try:
-                    original, current = os.lstat(name), os.lstat(target)
-                    if (original.st_dev, original.st_ino) == (current.st_dev, current.st_ino):
+                    current = os.lstat(target)
+                    if inode == (current.st_dev, current.st_ino):
                         os.unlink(target)
                         directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
                         try:
@@ -565,7 +577,10 @@ def provision_local_sql_artifact():
                     return {'ok': False, 'reason': 'rollback_unconfirmed'}
             raise
         finally:
-            os.unlink(name)
+            try:
+                os.unlink(name)
+            except FileNotFoundError:
+                pass
     except Exception:
         return {'ok': False, 'reason': 'pinned_install_unavailable'}
 
