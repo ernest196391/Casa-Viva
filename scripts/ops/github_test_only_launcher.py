@@ -99,6 +99,10 @@ def extract(sha,workspace,deadline):
             raise ValueError("blob budget")
         rel=path.decode("ascii")
         parts=rel.split("/")
+        # The two host-only systemd templates are never needed inside the sandbox.
+        # Skip exact paths only, not arbitrary names containing @.
+        if rel in ("scripts/ops/sandbox/cv-autonomous-fixture@.service","scripts/ops/sandbox/cv-autonomous-fixture@.timer"):
+            continue
         if parts[:2]!=["scripts","ops"] or any(not re.fullmatch(r"[A-Za-z0-9_.-]+",p) or p in (".","..",".git") or p.startswith(".env") for p in parts):
             raise ValueError("unsafe path")
         data=bounded_git(["cat-file","blob",oid.decode("ascii")],size)
