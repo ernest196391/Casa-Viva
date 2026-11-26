@@ -150,6 +150,32 @@ class Tests(unittest.TestCase):
             self.assertEqual(receipt['action'], 'local_sql_reconcile')
             self.assertEqual(receipt['request_id'], row['id'])
 
+    def test_offline_sql_provision_is_idempotent_and_never_overwrites(self):
+        import hashlib
+        raw = b'certified fixture'
+        pin = hashlib.sha1(b'blob ' + str(len(raw)).encode() + bytes([0]) + raw).hexdigest()
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / 'cv-local-sql-certified.py'
+            source = target.with_name('cv-ops-bridge.py.prev')
+            source.write_bytes(raw)
+            source.chmod(0o600)
+            with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), \
+                 patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), \
+                 patch.object(mod.os, 'geteuid', return_value=0), \
+                 patch.object(mod, 'private_bytes', side_effect=lambda p, n: p.read_bytes()), \
+                 patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)):
+                self.assertEqual(mod.provision_local_sql_artifact(), {'ok': True, 'changed': True})
+                self.assertEqual(target.read_bytes(), raw)
+                self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+                self.assertEqual(mod.provision_local_sql_artifact(), {'ok': True, 'changed': False})
+                target.write_bytes(b'conflict')
+                self.assertFalse(mod.provision_local_sql_artifact()['ok'])
+                self.assertEqual(target.read_bytes(), b'conflict')
+                target.unlink()
+                source.write_bytes(b'tampered')
+                self.assertFalse(mod.provision_local_sql_artifact()['ok'])
+                self.assertFalse(target.exists())
+
     def test_local_sql_receipt_masks_worker_output(self):
         import hashlib
         from unittest.mock import mock_open
