@@ -23,10 +23,13 @@ class WC_Product {
 }
 class WC_Product_Variation extends WC_Product {
 	public array $attrs = array();
+	public function get_image_id( $context = 'view' ) { return $this->image ?: ( 'edit' === $context ? 0 : ( wc_get_product( $this->parent ) ? wc_get_product( $this->parent )->get_image_id() : 0 ) ); }
 }
 class WC_Order_Item_Product {
-	public function __construct( private string $n, private ?WC_Product $p, private int $q = 1, private float $t = 10.0 ) {}
+	public function __construct( private string $n, private ?WC_Product $p, private int $q = 1, private float $t = 10.0, private ?int $pid = null, private ?int $vid = null ) {}
 	public function get_name() { return $this->n; }
+	public function get_product_id() { return $this->pid ?? ( $this->p ? ( $this->p->get_parent_id() ?: $this->p->get_id() ) : 0 ); }
+	public function get_variation_id() { return $this->vid ?? ( $this->p instanceof WC_Product_Variation ? $this->p->get_id() : 0 ); }
 	public function get_product() { return $this->p ?: false; }
 	public function get_quantity() { return $this->q; }
 	public function get_total() { return $this->t; }
@@ -70,10 +73,10 @@ check( 'producto simple: sin color', CVD_Order_Lines::variation_text( new WC_Ord
 $GLOBALS['products'][20] = new WC_Product( 20, 600 );
 $negro = new WC_Product_Variation( 21, 621, 20 );
 $negro->attrs = array( 'Color' => 'Negro' );
-$blanco = new WC_Product_Variation( 22, 0, 20 ); // sin foto propia → la del producto
+$blanco = new WC_Product_Variation( 22, 0, 20 ); // sin foto propia: no mostrar padre
 $blanco->attrs = array( 'Color' => 'Blanco' );
 check( 'variación con foto propia: la del color comprado', CVD_Order_Lines::photo_url( new WC_Order_Item_Product( 'Cortinero extensible', $negro ), 'large' ), 'https://casaviva.company/fotos/621-large.jpg' );
-check( 'variación sin foto propia: la del producto', CVD_Order_Lines::photo_url( new WC_Order_Item_Product( 'Cortinero extensible', $blanco ), 'large' ), 'https://casaviva.company/fotos/600-large.jpg' );
+check( 'variación sin foto propia: rechaza herencia', CVD_Order_Lines::photo_url( new WC_Order_Item_Product( 'Cortinero extensible', $blanco ), 'large' ), '' );
 check( 'color en el pie', CVD_Order_Lines::variation_text( new WC_Order_Item_Product( 'Cortinero extensible', $negro ) ), 'Color: Negro' );
 check( 'el color ya está en el nombre: no se repite', CVD_Order_Lines::variation_text( new WC_Order_Item_Product( 'Cortinero extensible - Negro', $negro ) ), '' );
 check( 'nombre con mayúsculas distintas: tampoco se repite', CVD_Order_Lines::variation_text( new WC_Order_Item_Product( 'Cortinero extensible - NEGRO', $negro ) ), '' );
@@ -91,6 +94,11 @@ $huerfana = new WC_Product_Variation( 41, 0, 40 ); // el producto 40 ya no exist
 check( 'producto padre borrado: sin error', CVD_Order_Lines::photo_url( new WC_Order_Item_Product( 'Toalla', $huerfana ) ), '' );
 check( 'producto borrado: sin foto', CVD_Order_Lines::photo_url( new WC_Order_Item_Product( 'Toalla', null ) ), '' );
 check( 'producto borrado: sin color', CVD_Order_Lines::variation_text( new WC_Order_Item_Product( 'Toalla', null ) ), '' );
+
+check( 'variación ajena al padre del pedido', CVD_Order_Lines::photo_url( new WC_Order_Item_Product( 'Cortinero', $negro, 1, 10.0, 99, 21 ) ), '' );
+check( 'ID de variación incorrecto', CVD_Order_Lines::photo_url( new WC_Order_Item_Product( 'Cortinero', $negro, 1, 10.0, 20, 22 ) ), '' );
+check( 'producto simple incorrecto', CVD_Order_Lines::photo_url( new WC_Order_Item_Product( 'Almohada', $simple, 1, 10.0, 99, 0 ) ), '' );
+check( 'variación omitida', CVD_Order_Lines::photo_url( new WC_Order_Item_Product( 'Cortinero', $negro, 1, 10.0, 20, 0 ) ), '' );
 
 // El precio de cada línea sigue igual (3.14.7): la foto no cambia textos, totales ni cantidades.
 $order = new WC_Order( array( new WC_Order_Item_Product( 'Cortinero extensible', $negro, 2, 30.0 ) ) );
