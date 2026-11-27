@@ -33,6 +33,29 @@ class IsolationProbeTests(unittest.TestCase):
         self.assertIn("dir_fd=workspace_fd", source)
         self.assertIn("--unshare-all", source)
 
+    def test_exact_apparmor_profile_required(self):
+        import inspect
+        source = inspect.getsource(bridge.guardian_isolation_probe)
+        self.assertIn("profile=='cv-dev-worker-bwrap (enforce)'", source)
+        self.assertNotIn("profile.endswith(' (enforce)')", source)
+
+    def test_output_is_bounded_before_decoding(self):
+        import inspect
+        source = inspect.getsource(bridge.guardian_isolation_probe)
+        self.assertIn('4097 - len(buffer)', source)
+        self.assertIn('len(buffer) > 4096', source)
+        self.assertIn('raise ValueError("output_limit")', source)
+        self.assertNotIn('communicate(timeout=15)', source)
+        self.assertIn("proc.wait(timeout=remaining)", source)
+        self.assertIn("os.killpg(proc.pid, signal.SIGKILL)", source)
+
+    def test_check_matrix_requires_every_true(self):
+        import inspect
+        source = inspect.getsource(bridge.guardian_isolation_probe)
+        self.assertIn("set(checks) == required", source)
+        self.assertIn("all(result[\"checks\"].values())", source)
+        self.assertIn("result[\"cleanup_verified\"] = False", source)
+
     def test_failed_probe_is_not_success(self):
         with patch.object(bridge, "guardian_isolation_probe", return_value={"functional_isolation_certified":False}):
             self.assertEqual(bridge.action_guardian_isolation_probe({})["returncode"],1)
