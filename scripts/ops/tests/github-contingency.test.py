@@ -32,6 +32,50 @@ def request(**overrides):
 
 
 class Tests(unittest.TestCase):
+    def test_offline_supervised_sql_requires_verified_installed_release(self):
+        release_path = PATH.parent / 'github_release_gate.py'
+        gate_spec = importlib.util.spec_from_file_location('release_gate_offline_sql', release_path)
+        gate = importlib.util.module_from_spec(gate_spec)
+        gate_spec.loader.exec_module(gate)
+        sha = 'a' * 40
+        source = ("from pathlib import Path\n"
+                  "LOCAL_SQL_BRIDGE_PATH = Path('/root/supervisor/cv-local-sql-certified.py')\n"
+                  "LOCAL_SQL_BRIDGE_BLOB = '84bc0eb4a57a3dc5c4f1ea5377c50eb952446a3a'\n"
+                  "def provision_local_sql_artifact():\n"
+                  "    return {'ok': True, 'changed': False}\n"
+                  + '# reviewed fixture\n' * 90).encode()
+        def api(token, method, uri):
+            self.assertEqual(method, 'GET')
+            return {'protected': True, 'commit': {'sha': sha}}
+        def git_ok(*args):
+            if args[:2] == ('rev-parse', 'origin/main'):
+                return (sha + '\n').encode()
+            if args[0] == 'show':
+                return source
+            if args[0] == 'fetch':
+                return b''
+            self.fail('unexpected git call')
+        def read_ok(path, limit=65536):
+            if path == gate.TOKEN_FILE:
+                return b'CV_GITHUB_RELEASE_TOKEN=synthetic'
+            if path == gate.TARGET:
+                return source
+            self.fail('unexpected private read')
+        with patch.object(gate, 'read_private', side_effect=read_ok), \
+             patch.object(gate, 'git', side_effect=git_ok), \
+             patch.object(gate, 'verified_checks', return_value=True):
+            self.assertEqual(gate.offline_provision_certified_sql(sha, api), {'ok': True, 'changed': False})
+        with patch.object(gate, 'git', side_effect=AssertionError('unexpected fetch')):
+            self.assertEqual(gate.offline_provision_certified_sql('invalid', api)['reason'], 'invalid_sha')
+        with patch.object(gate, 'read_private', side_effect=read_ok), \
+             patch.object(gate, 'git', side_effect=git_ok), \
+             patch.object(gate, 'verified_checks', return_value=False):
+            self.assertEqual(gate.offline_provision_certified_sql(sha, api)['reason'], 'ci_not_certified')
+        with patch.object(gate, 'read_private', side_effect=lambda path, limit=65536: b'wrong' if path == gate.TARGET else read_ok(path, limit)), \
+             patch.object(gate, 'git', side_effect=git_ok), \
+             patch.object(gate, 'verified_checks', return_value=True):
+            self.assertEqual(gate.offline_provision_certified_sql(sha, api)['reason'], 'release_not_installed')
+
     def test_order_lookup_rejects_injection_and_unknown_fields(self):
         data={'action':'order_lookup','nonce':'syntheticnonce1234','expires_at':'2026-11-20T16:10:00Z','product':'puerta corredera'}
         self.assertIsNotNone(mod.command(request(body=mod.PREFIX+json.dumps(data)),NOW))
@@ -165,7 +209,43 @@ class Tests(unittest.TestCase):
             with self.assertRaises(OSError):
                 mod.private_bytes(link, 262144)
 
+    def sql_fixture_fstat(self, fd):
+        import os
+        import stat
+        # The CI runner is not root; simulate ownership only for directory checks.
+        st = self._real_sql_fstat(fd)
+        if stat.S_ISDIR(st.st_mode):
+            return Mock(st_uid=0, st_mode=st.st_mode, st_dev=st.st_dev, st_ino=st.st_ino)
+        return st
+
+    def test_sql_installer_rejects_directory_identity_change(self):
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / 'cv-local-sql-certified.py'
+            self._real_sql_fstat = mod.os.fstat
+            st = target.parent.stat()
+            with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0, st_dev=st.st_dev, st_ino=st.st_ino + 1)), patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod, 'private_bytes') as read:
+                self.assertFalse(mod.provision_local_sql_artifact()['ok'])
+                read.assert_not_called()
+            self.assertFalse(target.exists())
+
+    def test_sql_installer_rejects_concurrent_lock(self):
+        import fcntl
+        import os
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / 'cv-local-sql-certified.py'
+            guard = os.open(d, os.O_RDONLY | os.O_DIRECTORY)
+            self._real_sql_fstat = os.fstat
+            try:
+                fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0, st_dev=target.parent.stat().st_dev, st_ino=target.parent.stat().st_ino)), patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod, 'private_bytes') as read:
+                    self.assertEqual(mod.provision_local_sql_artifact(), {'ok': False, 'reason': 'installer_busy'})
+                    read.assert_not_called()
+                self.assertFalse(target.exists())
+            finally:
+                os.close(guard)
+
     def test_sql_provision_rolls_back_only_its_own_publication(self):
+        self._real_sql_fstat = mod.os.fstat
         import hashlib
         raw = b'certified fixture'
         pin = hashlib.sha1(b'blob ' + str(len(raw)).encode() + bytes([0]) + raw).hexdigest()
@@ -181,14 +261,43 @@ class Tests(unittest.TestCase):
                             p.write_bytes(b'concurrent replacement')
                         raise ValueError('post-publication failure')
                     return p.read_bytes()
-                with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod, 'private_bytes', side_effect=read), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)):
-                    self.assertFalse(mod.provision_local_sql_artifact()['ok'])
+                with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod, 'private_bytes', side_effect=read), patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0, st_dev=target.parent.stat().st_dev, st_ino=target.parent.stat().st_ino)):
+                    receipt = mod.provision_local_sql_artifact()
+                    self.assertFalse(receipt['ok'])
+                    if replace:
+                        self.assertEqual(receipt['reason'], 'rollback_conflict')
                 if replace:
                     self.assertEqual(target.read_bytes(), b'concurrent replacement')
                 else:
                     self.assertFalse(target.exists())
 
+    def test_sql_cleanup_failure_rolls_back_published_inode(self):
+        self._real_sql_fstat = mod.os.fstat
+        import hashlib
+        raw = b'certified fixture'
+        pin = hashlib.sha1(b'blob ' + str(len(raw)).encode() + bytes([0]) + raw).hexdigest()
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / 'cv-local-sql-certified.py'
+            target.with_name('cv-ops-bridge.py.prev').write_bytes(raw)
+            real_unlink = mod.os.unlink
+            fault = [True]
+            def fail_first_temp_cleanup(path, *args, **kwargs):
+                if str(path).split('/')[-1].startswith('.cv-sql-') and fault[0]:
+                    fault[0] = False
+                    raise OSError('synthetic cleanup failure')
+                return real_unlink(path, *args, **kwargs)
+            with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), \
+                 patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), \
+                 patch.object(mod.os, 'geteuid', return_value=0), \
+                 patch.object(mod, 'private_bytes', side_effect=lambda p, n: p.read_bytes()), \
+                 patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0, st_dev=target.parent.stat().st_dev, st_ino=target.parent.stat().st_ino)), \
+                 patch.object(mod.os, 'unlink', side_effect=fail_first_temp_cleanup):
+                self.assertFalse(mod.provision_local_sql_artifact()['ok'])
+            self.assertFalse(target.exists())
+            self.assertEqual(list(Path(d).glob('.cv-sql-*')), [])
+
     def test_offline_sql_provision_is_idempotent_and_never_overwrites(self):
+        self._real_sql_fstat = mod.os.fstat
         import hashlib
         raw = b'certified fixture'
         pin = hashlib.sha1(b'blob ' + str(len(raw)).encode() + bytes([0]) + raw).hexdigest()
@@ -201,7 +310,7 @@ class Tests(unittest.TestCase):
                  patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), \
                  patch.object(mod.os, 'geteuid', return_value=0), \
                  patch.object(mod, 'private_bytes', side_effect=lambda p, n: p.read_bytes()), \
-                 patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)):
+                 patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0, st_dev=target.parent.stat().st_dev, st_ino=target.parent.stat().st_ino)):
                 self.assertEqual(mod.provision_local_sql_artifact(), {'ok': True, 'changed': True})
                 self.assertEqual(target.read_bytes(), raw)
                 self.assertEqual(target.stat().st_mode & 0o777, 0o600)

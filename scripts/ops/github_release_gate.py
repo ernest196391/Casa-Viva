@@ -112,3 +112,47 @@ def apply_release(sha, api):
         return {'ok': True, 'changed': True, 'sha': sha}
     except (OSError, ValueError, TypeError, KeyError, AttributeError, SyntaxError, subprocess.SubprocessError):
         return {'ok': False, 'reason': 'release_unavailable'}
+
+
+def offline_provision_certified_sql(sha, api):
+    """Explicit offline installer entrypoint, intentionally absent from all mailbox actions.
+
+    Requires a protected current main, three successful *push* checks and a
+    byte-for-byte installed release matching that exact commit. No service,
+    SQL, or network worker is launched here.
+    """
+    if not isinstance(sha, str) or not re.fullmatch(r'[0-9a-f]{40}', sha):
+        return {'ok': False, 'reason': 'invalid_sha'}
+    try:
+        raw = read_private(TOKEN_FILE).decode().strip()
+        if not raw.startswith('CV_GITHUB_RELEASE_TOKEN=') or '\n' in raw:
+            return {'ok': False, 'reason': 'release_config'}
+        token = raw.split('=', 1)[1]
+        if not token:
+            return {'ok': False, 'reason': 'release_config'}
+        git('fetch', 'origin', 'main')
+        if git('rev-parse', 'origin/main').decode().strip() != sha:
+            return {'ok': False, 'reason': 'not_current_main'}
+        branch = api(token, 'GET', f'/repos/{REPO}/branches/main')
+        if branch.get('protected') is not True or branch.get('commit', {}).get('sha') != sha:
+            return {'ok': False, 'reason': 'main_not_protected'}
+        if not verified_checks(api, token, sha):
+            return {'ok': False, 'reason': 'ci_not_certified'}
+        source = git('show', f'{sha}:{SOURCE}')
+        if len(source) > 65536 or len(source) < 1000 or read_private(TARGET, 65536) != source:
+            return {'ok': False, 'reason': 'release_not_installed'}
+        # Only the reviewed, byte-identical release may supply this offline helper.
+        import types
+        worker = types.ModuleType('cv_offline_sql_installer')
+        worker.__file__ = str(TARGET)
+        exec(compile(source, str(TARGET), 'exec'), worker.__dict__)
+        if worker.LOCAL_SQL_BRIDGE_PATH != ROOT / 'cv-local-sql-certified.py' or worker.LOCAL_SQL_BRIDGE_BLOB != '84bc0eb4a57a3dc5c4f1ea5377c50eb952446a3a':
+            return {'ok': False, 'reason': 'sql_contract_mismatch'}
+        # Recheck main immediately before writing any file, failing closed on movement.
+        git('fetch', 'origin', 'main')
+        if git('rev-parse', 'origin/main').decode().strip() != sha:
+            return {'ok': False, 'reason': 'main_moved'}
+        return worker.provision_local_sql_artifact()
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, SyntaxError,
+            subprocess.SubprocessError, ImportError):
+        return {'ok': False, 'reason': 'offline_sql_install_unavailable'}
