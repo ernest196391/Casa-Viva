@@ -530,6 +530,122 @@ def guardian_effective_isolation_unit(unit="cv-receiver-isolation-check.service"
         return {"available": False}
 
 
+def guardian_isolation_probe():
+    """Fresh, bounded synthetic probe of the existing dedicated dev sandbox.
+    Never start/restart existing units or execute their unreviewed ExecStart.
+    This is evidence for the dedicated sandbox, not for the live receiver.
+    """
+    import pwd
+    import stat
+    import tempfile
+    import signal
+    root = Path("/var/lib/control-os-dev/work")
+    binary = Path("/usr/local/lib/control-os/bwrap-dev")
+    result = {"scope": "dedicated_dev_sandbox", "functional_isolation_certified": False}
+    workspace = None
+    proc = None
+    workspace_fd = None
+    try:
+        flags, _ = guardian_effective_flags(load_env_files())
+        if flags["CV_GITHUB_RELEASE_ENABLED"] or flags["CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED"]:
+            raise ValueError("flags")
+        gate = guardian_gate_attestation()
+        if not all(gate.get(k) is True for k in ("gate_matches_pin", "token_read_verified", "protected_main", "push_checks_verified")):
+            raise ValueError("gate")
+        units = guardian_isolation_inventory()
+        if not units.get("available") or "cv-receiver-isolation-check-1795379863.service" not in units.get("units", []):
+            raise ValueError("inventory")
+        for path in (root, *root.parents, binary, *binary.parents):
+            s = path.lstat()
+            if s.st_uid != 0 or s.st_mode & 0o022 or stat.S_ISLNK(s.st_mode):
+                raise ValueError("unsafe path")
+        if not stat.S_ISREG(binary.stat().st_mode) or binary.stat().st_mode & 0o6000:
+            raise ValueError("unsafe binary")
+        user = pwd.getpwnam("cvdev")
+        if not user.pw_uid or not user.pw_gid:
+            raise ValueError("privileged user")
+        workspace = Path(tempfile.mkdtemp(prefix="run-guardian-", dir=root))
+        workspace_fd = os.open(workspace, os.O_DIRECTORY | os.O_NOFOLLOW)
+        os.fchown(workspace_fd, user.pw_uid, user.pw_gid)
+        # Fixed argv mirrors the existing sandbox specification. No user command.
+        inner = """import os,json,socket
+checks={}
+checks['nonroot']=os.getuid()!=0 and os.getgid()!=0
+checks['clean_env']=set(os.environ)<= {'PATH','HOME','TMPDIR','LC_CTYPE'}
+checks['root_hidden']=not os.path.exists('/root')
+checks['shadow_hidden']=not os.path.exists('/etc/shadow')
+checks['pm2_hidden']=not os.path.exists('/root/.pm2/rpc.sock')
+checks['workspace_write']=False
+with open('guardian-marker','x') as f: f.write('synthetic')
+checks['workspace_write']=True
+os.unlink('guardian-marker')
+checks['usr_readonly']=bool(os.statvfs('/usr').f_flag & os.ST_RDONLY)
+try:
+    s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    s.close()
+    checks['network_denied']=False
+except PermissionError:
+    checks['network_denied']=True
+try:
+    with open('/proc/self/attr/current') as f: profile=f.read().strip()
+    checks['apparmor_enforced']=profile.endswith(' (enforce)') and profile!='unconfined'
+except OSError:
+    checks['apparmor_enforced']=False
+print(json.dumps(checks))
+"""
+        argv = [str(binary), "--unshare-all", "--die-with-parent", "--new-session", "--clearenv",
+                "--setenv", "PATH", "/usr/bin:/bin", "--setenv", "HOME", "/tmp",
+                "--setenv", "TMPDIR", "/tmp", "--ro-bind", "/usr", "/usr"]
+        for path in ("/usr/local", "/etc/ssl/certs", "/etc/localtime", "/etc/ld.so.cache", "/etc/ld.so.preload"):
+            argv += ["--ro-bind-try", path, path]
+        for link, target in (("/bin","usr/bin"),("/lib","usr/lib"),("/lib64","usr/lib64"),("/sbin","usr/sbin")):
+            argv += ["--symlink", target, link]
+        argv += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--tmpfs", "/run",
+                 "--tmpfs", str(root), "--bind", str(workspace), str(workspace),
+                 "--chdir", str(workspace), "--", "/usr/bin/python3", "-I", "-c", inner]
+        proc = subprocess.Popen(argv, cwd=str(workspace), env={}, user=user.pw_uid,
+                                group=user.pw_gid, extra_groups=[], stdin=subprocess.DEVNULL,
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, start_new_session=True)
+        try:
+            out, _ = proc.communicate(timeout=15)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.communicate()
+            raise ValueError("timeout")
+        checks = json.loads(out) if proc.returncode == 0 and len(out) <= 4096 else {}
+        required = {"nonroot", "clean_env", "root_hidden", "shadow_hidden", "pm2_hidden",
+                    "workspace_write", "usr_readonly", "network_denied", "apparmor_enforced"}
+        result["checks"] = {key: checks.get(key) is True for key in sorted(required)}
+        result["functional_isolation_certified"] = set(checks) == required and all(result["checks"].values())
+    except Exception:
+        result["reason"] = "probe_unavailable_or_failed"
+    finally:
+        if workspace is not None:
+            try:
+                # Only remove the fixed synthetic marker, never recurse through untrusted files.
+                if workspace_fd is not None:
+                    try:
+                        os.unlink("guardian-marker", dir_fd=workspace_fd)
+                    except FileNotFoundError:
+                        pass
+                    finally:
+                        os.close(workspace_fd)
+                workspace.rmdir()
+                result["cleanup_verified"] = True
+            except OSError:
+                result["cleanup_verified"] = False
+                result["functional_isolation_certified"] = False
+    return result
+
+
+def action_guardian_isolation_probe(args):
+    if args != {}:
+        return {"returncode": 2, "output": json.dumps({"reason": "arguments_rejected"})}
+    result = guardian_isolation_probe()
+    return {"returncode": 0 if result["functional_isolation_certified"] else 1,
+            "output": json.dumps(result, sort_keys=True)}
+
+
 def guardian_release_metadata():
     """Fixed paths; stat only for credentials, aggregate structural evidence for inbox."""
     import stat
@@ -3125,6 +3241,7 @@ def action_recovery_dispatch_auth(args):
 
 
 ACTIONS = {
+    "guardian_isolation_probe": action_guardian_isolation_probe,
     "guardian_recover_gate": action_guardian_recover_gate,
     "guardian_runtime_evidence": action_guardian_runtime_evidence,
     "local_sql_reconcile": action_local_sql_reconcile,

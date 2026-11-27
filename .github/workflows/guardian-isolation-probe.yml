@@ -1,0 +1,16 @@
+name: Guardian isolation probe
+on:
+  pull_request:
+    paths:
+      - 'scripts/ops/cv-ops-bridge.py'
+      - 'scripts/ops/test_guardian_isolation_probe.py'
+      - '.github/workflows/guardian-isolation-probe.yml'
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m unittest -v scripts/ops/test_guardian_isolation_probe.py
