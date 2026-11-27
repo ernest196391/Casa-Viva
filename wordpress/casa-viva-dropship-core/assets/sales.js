@@ -64,7 +64,7 @@
       var text = escapeText(p.text || (p.quantity + " × " + p.name));
       var name = p.url ? '<a target="_blank" rel="noopener" href="' + escapeText(p.url) + '">' + text + "</a>" : text;
       var photo = p.image ? '<a class="cvd-sale-photo" target="_blank" rel="noopener" href="' + escapeText(p.imageLarge || p.image) + '"><img src="' + escapeText(p.image) + '" alt="' + escapeText("Foto: " + p.name) + '" loading="lazy" decoding="async" width="120" height="120"></a>' : "";
-      return '<span class="cvd-sale-product' + (photo ? " has-photo" : "") + '">' + photo + '<span class="cvd-sale-product-text">' + name + (p.variation ? "<small>" + escapeText(p.variation) + "</small>" : "") + "</span></span>";
+      return '<span class="cvd-sale-product' + (photo ? " has-photo" : "") + '">' + photo + '<span class="cvd-sale-product-text">' + name + (p.variation ? "<small>" + escapeText(p.variation) + "</small>" : "") + (!p.image ? "<small>⚠ Fotografía no verificada. Confirme producto y variación antes de preparar.</small>" : "") + "</span></span>";
     }).join("") + "</span>";
   }
   function actionLabel(order, status) {

@@ -64,16 +64,21 @@ final class CVD_Order_Lines {
 	// «Al dependiente hay que mandarle foto con el vale. Ayer se le mandó al cliente un cortinero que no era.»
 	// Una sola regla para el vale del mensajero (CVD_Bot_Bridge::images) y la tarjeta de /ventas/ (CVD_Sales):
 	// primero la foto del diseño comprado (color/variación, la foto real de ese color desde 3.14.25); si no tiene,
-	// la foto principal del producto. Sin foto → ''. Solo lectura: no toca el pedido.
+	// no mostrar una foto potencialmente incorrecta. Sin foto → ''. Solo lectura: no toca el pedido.
 
 	/** URL de la foto de la línea, del tamaño pedido ('medium', 'large'…), o ''. */
 	public static function photo_url( WC_Order_Item_Product $item, string $size = 'large' ): string {
 		$product = $item->get_product();
 		if ( ! $product ) { return ''; }
-		$id = (int) $product->get_image_id();
-		if ( ! $id && $product->get_parent_id() ) {
-			$parent = wc_get_product( $product->get_parent_id() );
-			$id = $parent ? (int) $parent->get_image_id() : 0;
+		$variation_id = (int) $item->get_variation_id();
+		$product_id = (int) $item->get_product_id();
+		if ( $variation_id ) {
+			if ( ! $product instanceof WC_Product_Variation || (int) $product->get_id() !== $variation_id || (int) $product->get_parent_id() !== $product_id ) { return ''; }
+			// Edit context avoids WooCommerce's inherited parent image.
+			$id = (int) $product->get_image_id( 'edit' );
+		} else {
+			if ( $product instanceof WC_Product_Variation || (int) $product->get_id() !== $product_id ) { return ''; }
+			$id = (int) $product->get_image_id();
 		}
 		$url = $id ? wp_get_attachment_image_url( $id, $size ) : '';
 		return is_string( $url ) ? $url : '';
