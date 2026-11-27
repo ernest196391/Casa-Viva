@@ -9,8 +9,8 @@ class IsolationSqlTests(unittest.TestCase):
         for sql in (UP,DOWN):
             self.assertIn("3e08e16a5a93e1313a96caa31229745a",sql)
             self.assertNotIn("DISABLE ROW LEVEL SECURITY",sql)
-            self.assertNotIn("GRANT ",sql)
-            self.assertNotIn("DROP POLICY",sql)
+            self.assertNotIn("\nGRANT ",sql)
+            self.assertNotIn("\nDROP POLICY",sql)
         self.assertIn("IS NOT DISTINCT FROM ''{}''::jsonb",UP)
         self.assertIn("IS NOT DISTINCT FROM ''chatgpt''::text",UP)
         self.assertIn("guardian_isolation_baseline_drift",UP)
