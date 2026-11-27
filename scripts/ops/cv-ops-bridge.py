@@ -502,6 +502,34 @@ def guardian_isolation_metadata():
         return {"metadata_available": False, "functional_isolation_certified": False}
 
 
+def guardian_effective_isolation_unit():
+    """Report only fixed unit metadata; never expose command lines or paths."""
+    props = ("LoadState", "UnitFileState", "Type", "FragmentPath", "DropInPaths",
+             "NeedDaemonReload", "NoNewPrivileges", "AppArmorProfile")
+    try:
+        p = subprocess.run(
+            ["/usr/bin/systemctl", "show", "cv-receiver-isolation-check.service"] +
+            ["--property=" + name for name in props],
+            capture_output=True, timeout=5, check=False,
+            env={"PATH": "/usr/bin:/bin"})
+        if p.returncode or len(p.stdout) > 8192:
+            return {"available": False}
+        v = dict(line.split("=", 1) for line in p.stdout.decode().splitlines() if "=" in line)
+        if set(v) != set(props):
+            return {"available": False}
+        return {"available": True, "loaded": v["LoadState"] == "loaded",
+                "oneshot": v["Type"] == "oneshot",
+                "enabled": v["UnitFileState"] == "enabled",
+                "fragment_present": bool(v["FragmentPath"]),
+                "dropins_present": bool(v["DropInPaths"]),
+                "daemon_reload_needed": v["NeedDaemonReload"] == "yes",
+                "no_new_privileges": v["NoNewPrivileges"] == "yes",
+                "apparmor_enforced_config": bool(v["AppArmorProfile"]) and not v["AppArmorProfile"].startswith("-"),
+                "functional_isolation_certified": False}
+    except Exception:
+        return {"available": False}
+
+
 def guardian_release_metadata():
     """Fixed paths; stat only for credentials, aggregate structural evidence for inbox."""
     import stat
@@ -682,6 +710,7 @@ def action_guardian_runtime_evidence(args):
             "guardian_release_approval_verified": False,
             "runtime_artifact_certified": False,
             "isolation": isolation,
+            "effective_isolation_unit": guardian_effective_isolation_unit(),
             "worker_owner_only": bool(owner_only),
             "backup_present": backup_ok,
             "backup_git_blob": backup_hash,
