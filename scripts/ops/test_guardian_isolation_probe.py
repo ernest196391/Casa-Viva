@@ -33,6 +33,74 @@ class IsolationProbeTests(unittest.TestCase):
         self.assertIn("dir_fd=workspace_fd", source)
         self.assertIn("--unshare-all", source)
 
+    def test_exact_apparmor_profile_required(self):
+        import ast
+        import inspect
+        import io
+        tree = ast.parse(inspect.getsource(bridge.guardian_isolation_probe))
+        inner = next(n.value.value for n in ast.walk(tree)
+                     if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name)
+                     and n.targets[0].id == "inner")
+        parsed = ast.parse(inner)
+        check = next(n for n in parsed.body if isinstance(n, ast.Try)
+                     and "apparmor_enforced" in ast.unparse(n))
+        code = compile(ast.Module(body=[check], type_ignores=[]), "<profile-check>", "exec")
+        for profile, expected in [("cv-dev-worker-bwrap (enforce)", True),
+                                  ("other (enforce)", False),
+                                  ("cv-dev-worker-bwrap (complain)", False),
+                                  ("unconfined", False)]:
+            scope = {"checks": {}, "open": lambda *args: io.StringIO(profile)}
+            exec(code, scope)
+            self.assertIs(scope["checks"]["apparmor_enforced"], expected)
+
+    def launch(self, code):
+        import subprocess
+        import sys
+        return subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, start_new_session=True)
+
+    def test_capture_valid_and_cleanup(self):
+        proc = self.launch("print('{}')")
+        self.assertEqual(bridge.guardian_capture_probe(proc), {})
+        self.assertTrue(proc.stdout.closed)
+        self.assertEqual(proc.returncode, 0)
+
+    def test_capture_oversized_and_cleanup(self):
+        proc = self.launch("import time; print('x'*8192, flush=True); time.sleep(30)")
+        with self.assertRaisesRegex(ValueError, "output_limit"):
+            bridge.guardian_capture_probe(proc)
+        self.assertTrue(proc.stdout.closed)
+        self.assertIsNotNone(proc.returncode)
+
+    def test_capture_timeout_and_cleanup(self):
+        proc = self.launch("import time; time.sleep(30)")
+        with self.assertRaises(ValueError):
+            bridge.guardian_capture_probe(proc, timeout=0.1)
+        self.assertTrue(proc.stdout.closed)
+        self.assertIsNotNone(proc.returncode)
+
+    def test_capture_exited_leader_with_descendant(self):
+        import time
+        proc = self.launch("import os,time; pid=os.fork(); time.sleep(30) if pid==0 else os._exit(0)")
+        proc.wait(timeout=2)
+        started = time.monotonic()
+        with self.assertRaises(ValueError):
+            bridge.guardian_capture_probe(proc, timeout=0.1)
+        self.assertTrue(proc.stdout.closed)
+        self.assertLess(time.monotonic()-started, 3)
+
+    def test_capture_nonzero(self):
+        proc = self.launch("print('{}'); raise SystemExit(1)")
+        self.assertEqual(bridge.guardian_capture_probe(proc), {})
+        self.assertTrue(proc.stdout.closed)
+
+    def test_check_matrix_requires_every_true(self):
+        import inspect
+        source = inspect.getsource(bridge.guardian_isolation_probe)
+        self.assertIn("set(checks) == required", source)
+        self.assertIn("all(result[\"checks\"].values())", source)
+        self.assertIn("result[\"cleanup_verified\"] = False", source)
+
     def test_failed_probe_is_not_success(self):
         with patch.object(bridge, "guardian_isolation_probe", return_value={"functional_isolation_certified":False}):
             self.assertEqual(bridge.action_guardian_isolation_probe({})["returncode"],1)

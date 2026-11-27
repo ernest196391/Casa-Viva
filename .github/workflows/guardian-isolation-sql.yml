@@ -1,0 +1,37 @@
+name: Guardian isolation SQL PostgreSQL
+on:
+  pull_request:
+    paths:
+      - 'scripts/ops/sql/allow-guardian-isolation-probe.sql'
+      - 'scripts/ops/sql/rollback-guardian-isolation-probe.sql'
+      - 'scripts/ops/test_guardian_isolation_sql_pg.py'
+      - '.github/workflows/guardian-isolation-sql.yml'
+permissions:
+  contents: read
+jobs:
+  sql-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cv_isolation_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cv_isolation_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: cv_isolation_test
+      CV_SQL_TEST_PG: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m unittest -v scripts/ops/test_guardian_isolation_sql_pg.py
