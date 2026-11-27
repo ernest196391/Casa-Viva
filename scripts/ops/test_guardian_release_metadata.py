@@ -79,6 +79,18 @@ class GuardianMetadataTests(unittest.TestCase):
         self.assertEqual(opener.open.call_count, 2)
         self.assertNotIn("FIXTURE_SECRET", json.dumps(result))
 
+    def test_effective_unit_metadata_is_sanitized(self):
+        raw = b"LoadState=loaded\nUnitFileState=enabled\nType=oneshot\nFragmentPath=/private/unit\nDropInPaths=/private/dropin\nNeedDaemonReload=yes\nNoNewPrivileges=no\nAppArmorProfile=-profile\n"
+        with patch.object(bridge.subprocess, "run", return_value=Mock(returncode=0, stdout=raw)):
+            result = bridge.guardian_effective_isolation_unit()
+        self.assertTrue(result["available"])
+        self.assertTrue(result["daemon_reload_needed"])
+        self.assertTrue(result["dropins_present"])
+        self.assertFalse(result["no_new_privileges"])
+        self.assertFalse(result["apparmor_enforced_config"])
+        self.assertFalse(result["functional_isolation_certified"])
+        self.assertNotIn("/private", json.dumps(result))
+
     def test_metadata_does_not_read_token(self):
         with patch.object(Path, "lstat", side_effect=FileNotFoundError), patch.object(Path, "read_bytes", side_effect=AssertionError):
             self.assertEqual(bridge.guardian_release_metadata(), {"token": {"present": False}, "gate": {"present": False}})
