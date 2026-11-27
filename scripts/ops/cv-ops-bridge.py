@@ -539,11 +539,14 @@ def guardian_isolation_probe():
     import stat
     import tempfile
     import signal
+    import selectors
+    import time
     root = Path("/var/lib/control-os-dev/work")
     binary = Path("/usr/local/lib/control-os/bwrap-dev")
     result = {"scope": "dedicated_dev_sandbox", "functional_isolation_certified": False}
     workspace = None
     proc = None
+    oversized = False
     workspace_fd = None
     try:
         flags, _ = guardian_effective_flags(load_env_files())
@@ -588,7 +591,7 @@ except PermissionError:
     checks['network_denied']=True
 try:
     with open('/proc/self/attr/current') as f: profile=f.read().strip()
-    checks['apparmor_enforced']=profile.endswith(' (enforce)') and profile!='unconfined'
+    checks['apparmor_enforced']=profile=='cv-dev-worker-bwrap (enforce)'
 except OSError:
     checks['apparmor_enforced']=False
 print(json.dumps(checks))
@@ -606,13 +609,36 @@ print(json.dumps(checks))
         proc = subprocess.Popen(argv, cwd=str(workspace), env={}, user=user.pw_uid,
                                 group=user.pw_gid, extra_groups=[], stdin=subprocess.DEVNULL,
                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, start_new_session=True)
+        # Drain only 4097 bytes; never buffer unbounded stdout in memory.
+        deadline = time.monotonic() + 15
+        buffer = bytearray()
+        selector = selectors.DefaultSelector()
+        selector.register(proc.stdout, selectors.EVENT_READ)
         try:
-            out, _ = proc.communicate(timeout=15)
-        except subprocess.TimeoutExpired:
-            os.killpg(proc.pid, signal.SIGKILL)
-            proc.communicate()
-            raise ValueError("timeout")
-        checks = json.loads(out) if proc.returncode == 0 and len(out) <= 4096 else {}
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ValueError("timeout")
+                for key, _ in selector.select(remaining):
+                    chunk = os.read(key.fileobj.fileno(), min(1024, 4097 - len(buffer)))
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        continue
+                    buffer.extend(chunk)
+                    if len(buffer) > 4096:
+                        oversized = True
+                        raise ValueError("output_limit")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ValueError("timeout")
+            proc.wait(timeout=remaining)
+        finally:
+            selector.close()
+            if proc.poll() is None:
+                os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
+            proc.stdout.close()
+        checks = json.loads(buffer.decode("utf-8")) if proc.returncode == 0 and not oversized else {}
         required = {"nonroot", "clean_env", "root_hidden", "shadow_hidden", "pm2_hidden",
                     "workspace_write", "usr_readonly", "network_denied", "apparmor_enforced"}
         result["checks"] = {key: checks.get(key) is True for key in sorted(required)}
