@@ -16,11 +16,11 @@ BEGIN
   IF EXISTS(SELECT 1 FROM public.crm_ops_bridge WHERE action='guardian_isolation_probe') THEN
     RAISE EXCEPTION 'guardian_isolation_rollback_history_must_be_preserved';
   END IF;
-  -- Match the complete fixed suffix literally, not an unrestricted regex.
-  -- Reconstruct only the original CHECK and abort on fingerprint drift.
+  -- PostgreSQL rewrites IS NOT DISTINCT FROM as NOT (x IS DISTINCT FROM y).
+  -- Strip only the exact final normalized action branch.
   expected_old := replace(installed,
-    ' OR ((action = ''guardian_isolation_probe''::text) AND (args IS NOT DISTINCT FROM ''{}''::jsonb) AND (requested_by IS NOT DISTINCT FROM ''chatgpt''::text))))',
-    '))');
+    ' OR ((action = ''guardian_isolation_probe''::text) AND (NOT (args IS DISTINCT FROM ''{}''::jsonb)) AND (NOT (requested_by IS DISTINCT FROM ''chatgpt''::text))))',
+    ')');
   IF expected_old=installed OR md5(expected_old) <> '3e08e16a5a93e1313a96caa31229745a' THEN
     RAISE EXCEPTION 'guardian_isolation_rollback_drift';
   END IF;
