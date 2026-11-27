@@ -521,6 +521,48 @@ def guardian_release_metadata():
     }
 
 
+def guardian_gate_attestation():
+    """Verify fixed gate bytes before using its credential; GET only, no raw output."""
+    from github_contingency import private_bytes
+    import types
+    expected = "aa90d52195329fbc3b49e185ba3a4030481c60e7"
+    result = {"gate_matches_pin": False, "token_read_verified": False,
+              "protected_main": False, "push_checks_verified": False}
+    try:
+        path = Path("/root/supervisor/github_release_gate.py")
+        raw = private_bytes(path, 65536)
+        if guardian_blob(raw) != expected:
+            return result
+        result["gate_matches_pin"] = True
+        gate = types.ModuleType("cv_verified_gate")
+        exec(compile(raw, str(path), "exec"), gate.__dict__)
+        config = gate.read_private(gate.TOKEN_FILE).decode().strip()
+        if not config.startswith("CV_GITHUB_RELEASE_TOKEN=") or "\n" in config:
+            return result
+        token = config.split("=", 1)[1]
+        if not token:
+            return result
+        def api(secret, method, route):
+            if method != "GET" or not route.startswith("/repos/ernest196391/Casa-Viva/"):
+                raise ValueError("route rejected")
+            req = urllib.request.Request("https://api.github.com" + route,
+                headers={"Authorization": "Bearer " + secret,
+                         "Accept": "application/vnd.github+json",
+                         "User-Agent": "CasaViva-Guardian"})
+            with urllib.request.urlopen(req, timeout=10) as response:
+                return json.loads(response.read(1048577))
+        branch = api(token, "GET", "/repos/ernest196391/Casa-Viva/branches/main")
+        result["token_read_verified"] = True
+        sha = branch.get("commit", {}).get("sha")
+        result["protected_main"] = branch.get("protected") is True
+        if result["protected_main"] and isinstance(sha, str) and re.fullmatch(r"[0-9a-f]{40}", sha):
+            result["push_checks_verified"] = gate.verified_checks(api, token, sha)
+            result["main_sha"] = sha
+    except Exception:
+        pass
+    return result
+
+
 def guardian_history_schema(directory=Path("/root/backups/nexo-recovery/receiver/inbox")):
     """Bounded structural counts only; no message values, names or identifiers."""
     import stat
@@ -637,6 +679,7 @@ def action_guardian_runtime_evidence(args):
             "local_flags": flags,
             "local_flag_sources": flag_sources,
             "release_metadata": guardian_release_metadata(),
+            "gate_attestation": guardian_gate_attestation(),
             "history_schema": guardian_history_schema(),
             "services": services,
         }
