@@ -39,7 +39,7 @@ BEGIN
           RAISE EXCEPTION 'guardian_isolation_revoked' USING ERRCODE = '23514';
         END IF;
         RETURN NEW;
-      END $fn$ddl$;
+      END; $fn$ $ddl$;
     EXECUTE 'CREATE TRIGGER cv_guardian_isolation_revoked BEFORE INSERT OR UPDATE ON public.crm_ops_bridge FOR EACH ROW EXECUTE FUNCTION public.cv_guardian_isolation_revoked()';
     EXECUTE 'ALTER TABLE public.crm_ops_bridge ENABLE ALWAYS TRIGGER cv_guardian_isolation_revoked';
     RETURN;
