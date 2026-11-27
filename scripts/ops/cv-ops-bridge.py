@@ -551,18 +551,18 @@ def guardian_capture_probe(proc, timeout=15):
                     continue
                 buffer.extend(chunk)
                 if len(buffer) > 4096:
-                        raise ValueError("output_limit")
+                    raise ValueError("output_limit")
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise ValueError("timeout")
         proc.wait(timeout=remaining)
     finally:
         selector.close()
-        if proc.poll() is None:
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+        # The leader may have exited while descendants still hold stdout.
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         try:
             proc.wait(timeout=2)
         finally:
