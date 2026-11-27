@@ -45,5 +45,26 @@ class FixedUpdate(unittest.TestCase):
         self.assertNotEqual(self.invoke({"sha":SHA})["returncode"],0)
         self.gate.atomic_file.assert_not_called()
 
+    def test_main_moves_before_replace(self):
+        self.gate.git.side_effect=[b"",SHA.encode(),self.body,b"",b"b"*40]
+        self.assertNotEqual(self.invoke({"sha":SHA})["returncode"],0)
+        self.assertEqual(self.gate.atomic_file.call_count,1)
+        self.assertNotEqual(self.gate.atomic_file.call_args.args[0],TARGET)
+    def test_backup_conflict(self):
+        import hashlib
+        backup=TARGET.with_name(TARGET.name+".backup."+hashlib.sha256(b"old").hexdigest())
+        self.gate.read_private.side_effect=lambda p,*a: b"CV_GITHUB_RELEASE_TOKEN=fake" if p==self.gate.TOKEN_FILE else b"wrong" if p==backup else b"old"
+        with patch.dict(sys.modules,{"github_release_gate":self.gate}),patch.object(Path,"exists",return_value=True):
+            self.assertNotEqual(self.action({"sha":SHA})["returncode"],0)
+        self.gate.atomic_file.assert_not_called()
+    def test_wrong_target(self):
+        self.action.__globals__["__file__"]="/tmp/cv-ops-bridge.py"
+        self.assertNotEqual(self.invoke({"sha":SHA})["returncode"],0)
+        self.gate.git.assert_not_called()
+    def test_installed_bytes_drift(self):
+        self.gate.read_private.side_effect=[b"CV_GITHUB_RELEASE_TOKEN=fake",b"old",b"changed"]
+        self.assertNotEqual(self.invoke({"sha":SHA})["returncode"],0)
+        self.assertEqual(self.gate.atomic_file.call_count,1)
+
 if __name__=="__main__":
     unittest.main()
