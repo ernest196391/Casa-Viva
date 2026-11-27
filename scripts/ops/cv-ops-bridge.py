@@ -542,15 +542,24 @@ def guardian_gate_attestation():
         token = config.split("=", 1)[1]
         if not token:
             return result
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                raise ValueError("redirect rejected")
+        opener = urllib.request.build_opener(NoRedirect())
         def api(secret, method, route):
-            if method != "GET" or not route.startswith("/repos/ernest196391/Casa-Viva/"):
+            allowed = (route == "/repos/ernest196391/Casa-Viva/branches/main" or
+                       re.fullmatch(r"/repos/ernest196391/Casa-Viva/actions/runs\?head_sha=[0-9a-f]{40}&event=push&branch=main&per_page=100", route))
+            if method != "GET" or not allowed:
                 raise ValueError("route rejected")
             req = urllib.request.Request("https://api.github.com" + route,
                 headers={"Authorization": "Bearer " + secret,
                          "Accept": "application/vnd.github+json",
                          "User-Agent": "CasaViva-Guardian"})
-            with urllib.request.urlopen(req, timeout=10) as response:
-                return json.loads(response.read(1048577))
+            with opener.open(req, timeout=10) as response:
+                body = response.read(1048577)
+                if len(body) > 1048576:
+                    raise ValueError("response too large")
+                return json.loads(body)
         branch = api(token, "GET", "/repos/ernest196391/Casa-Viva/branches/main")
         result["token_read_verified"] = True
         sha = branch.get("commit", {}).get("sha")
