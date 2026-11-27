@@ -215,8 +215,18 @@ class Tests(unittest.TestCase):
         # The CI runner is not root; simulate ownership only for directory checks.
         st = self._real_sql_fstat(fd)
         if stat.S_ISDIR(st.st_mode):
-            return Mock(st_uid=0, st_mode=st.st_mode)
+            return Mock(st_uid=0, st_mode=st.st_mode, st_dev=st.st_dev, st_ino=st.st_ino)
         return st
+
+    def test_sql_installer_rejects_directory_identity_change(self):
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / 'cv-local-sql-certified.py'
+            self._real_sql_fstat = mod.os.fstat
+            st = target.parent.stat()
+            with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0, st_dev=st.st_dev, st_ino=st.st_ino + 1)), patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod, 'private_bytes') as read:
+                self.assertFalse(mod.provision_local_sql_artifact()['ok'])
+                read.assert_not_called()
+            self.assertFalse(target.exists())
 
     def test_sql_installer_rejects_concurrent_lock(self):
         import fcntl
@@ -227,7 +237,7 @@ class Tests(unittest.TestCase):
             self._real_sql_fstat = os.fstat
             try:
                 fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)), patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod, 'private_bytes') as read:
+                with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0, st_dev=target.parent.stat().st_dev, st_ino=target.parent.stat().st_ino)), patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod, 'private_bytes') as read:
                     self.assertEqual(mod.provision_local_sql_artifact(), {'ok': False, 'reason': 'installer_busy'})
                     read.assert_not_called()
                 self.assertFalse(target.exists())
@@ -251,7 +261,7 @@ class Tests(unittest.TestCase):
                             p.write_bytes(b'concurrent replacement')
                         raise ValueError('post-publication failure')
                     return p.read_bytes()
-                with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod, 'private_bytes', side_effect=read), patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)):
+                with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod, 'private_bytes', side_effect=read), patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0, st_dev=target.parent.stat().st_dev, st_ino=target.parent.stat().st_ino)):
                     receipt = mod.provision_local_sql_artifact()
                     self.assertFalse(receipt['ok'])
                     if replace:
@@ -280,7 +290,7 @@ class Tests(unittest.TestCase):
                  patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), \
                  patch.object(mod.os, 'geteuid', return_value=0), \
                  patch.object(mod, 'private_bytes', side_effect=lambda p, n: p.read_bytes()), \
-                 patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)), \
+                 patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0, st_dev=target.parent.stat().st_dev, st_ino=target.parent.stat().st_ino)), \
                  patch.object(mod.os, 'unlink', side_effect=fail_first_temp_cleanup):
                 self.assertFalse(mod.provision_local_sql_artifact()['ok'])
             self.assertFalse(target.exists())
@@ -300,7 +310,7 @@ class Tests(unittest.TestCase):
                  patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), \
                  patch.object(mod.os, 'geteuid', return_value=0), \
                  patch.object(mod, 'private_bytes', side_effect=lambda p, n: p.read_bytes()), \
-                 patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)):
+                 patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0, st_dev=target.parent.stat().st_dev, st_ino=target.parent.stat().st_ino)):
                 self.assertEqual(mod.provision_local_sql_artifact(), {'ok': True, 'changed': True})
                 self.assertEqual(target.read_bytes(), raw)
                 self.assertEqual(target.stat().st_mode & 0o777, 0o600)
