@@ -79,6 +79,16 @@ class IsolationProbeTests(unittest.TestCase):
         self.assertTrue(proc.stdout.closed)
         self.assertIsNotNone(proc.returncode)
 
+    def test_capture_exited_leader_with_descendant(self):
+        import time
+        proc = self.launch("import os,time; pid=os.fork(); time.sleep(30) if pid==0 else os._exit(0)")
+        proc.wait(timeout=2)
+        started = time.monotonic()
+        with self.assertRaises(ValueError):
+            bridge.guardian_capture_probe(proc, timeout=0.1)
+        self.assertTrue(proc.stdout.closed)
+        self.assertLess(time.monotonic()-started, 3)
+
     def test_capture_nonzero(self):
         proc = self.launch("print('{}'); raise SystemExit(1)")
         self.assertEqual(bridge.guardian_capture_probe(proc), {})
