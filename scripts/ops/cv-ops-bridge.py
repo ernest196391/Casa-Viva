@@ -549,6 +549,45 @@ def guardian_release_metadata():
     }
 
 
+def guardian_gate_identity():
+    """Fingerprint only; never import or execute the installed gate."""
+    import hashlib
+    try:
+        from github_contingency import private_bytes
+        raw = private_bytes(Path("/root/supervisor/github_release_gate.py"), 65536)
+        return {"available": True, "git_blob": guardian_blob(raw),
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "matches_pin": guardian_blob(raw) == "aa90d52195329fbc3b49e185ba3a4030481c60e7"}
+    except Exception:
+        return {"available": False}
+
+
+def guardian_isolation_inventory():
+    """Bounded service-name discovery; report only Casa Viva isolation candidates."""
+    import re
+    names = set()
+    try:
+        for verb in ("list-unit-files", "list-units"):
+            p = subprocess.run(["/usr/bin/systemctl", verb, "--type=service",
+                                "--all", "--no-legend", "--no-pager",
+                                "cv-*", "vivabot-*", "nexo-*"],
+                               capture_output=True, timeout=5, check=False,
+                               env={"PATH": "/usr/bin:/bin"})
+            if p.returncode or len(p.stdout) > 65536:
+                return {"available": False}
+            for line in p.stdout.decode().splitlines():
+                fields = line.strip().split()
+                if fields and fields[0] == "●":
+                    fields = fields[1:]
+                if fields and re.fullmatch(r"(?:cv|vivabot|nexo)-[a-z0-9-]{1,80}\.service", fields[0]):
+                    if any(term in fields[0] for term in ("isolat", "sandbox", "receiver", "guardian")):
+                        names.add(fields[0])
+        return {"available": True, "units": sorted(names)[:32],
+                "truncated": len(names) > 32, "functional_isolation_certified": False}
+    except Exception:
+        return {"available": False}
+
+
 def guardian_gate_attestation():
     """Verify fixed gate bytes before using its credential; GET only, no raw output."""
     from github_contingency import private_bytes
@@ -718,6 +757,8 @@ def action_guardian_runtime_evidence(args):
             "local_flag_sources": flag_sources,
             "release_metadata": guardian_release_metadata(),
             "gate_attestation": guardian_gate_attestation(),
+            "gate_identity": guardian_gate_identity(),
+            "isolation_inventory": guardian_isolation_inventory(),
             "history_schema": guardian_history_schema(),
             "services": services,
         }
