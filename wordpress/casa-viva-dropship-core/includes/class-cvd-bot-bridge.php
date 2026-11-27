@@ -1044,10 +1044,23 @@ final class CVD_Bot_Bridge {
 	}
 
 	/** Foto principal de cada producto, para que tienda y mensajero no confundan productos parecidos. */
+	private static function verified_item_lines( WC_Order $order ): array {
+		$lines = array();
+		foreach ( $order->get_items( 'line_item' ) as $item ) {
+			if ( ! $item instanceof WC_Order_Item_Product ) { continue; }
+			$line = CVD_Order_Lines::line( $order, $item )['text'];
+			if ( ! CVD_Order_Lines::photo_url( $item, 'large' ) ) {
+				$line .= ' · ⚠ Fotografía no verificada: confirmar producto y variación antes de preparar.';
+			}
+			$lines[] = $line;
+		}
+		return $lines;
+	}
+
 	private static function images( WC_Order $order ): array {
 		$images = array();
 		foreach ( $order->get_items( 'line_item' ) as $item ) {
-			// 3.14.37: la misma regla que la tarjeta de /ventas/ (CVD_Order_Lines::photo_url): foto del diseño, si no la del producto.
+			// 3.14.37: la misma regla que la tarjeta de /ventas/ (CVD_Order_Lines::photo_url): foto propia del diseño, sin herencia del padre.
 			$url = $item instanceof WC_Order_Item_Product ? CVD_Order_Lines::photo_url( $item, 'large' ) : '';
 			if ( $url ) { $images[] = array( 'url' => $url, 'caption' => $item->get_quantity() . ' × ' . $item->get_name() ); }
 		}
@@ -1073,7 +1086,7 @@ final class CVD_Bot_Bridge {
 			'reference'   => (string) $order->get_meta( '_cvd_reference', true ),
 			'mapUrl'      => (string) CVD_Shipping_Rates::order_map_url( $order ),
 			'items'       => self::items( $order ),
-			'itemLines'   => CVD_Order_Lines::texts( $order ), // 3.14.7 (Nana, 14-oct): precio de cada producto en el vale
+			'itemLines'   => self::verified_item_lines( $order ), // 3.14.7 (Nana, 14-oct): precio de cada producto en el vale
 			'productsUsd' => wc_format_decimal( $order->get_total(), 2 ),
 			'shippingCup' => $shipping,
 			// 3.13.53: nunca «+ 0 CUP». Sin tarifa (reparto fuera de la lista) el vale dice «por confirmar con la tienda».
