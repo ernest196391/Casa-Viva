@@ -71,7 +71,7 @@ def command(comment, now):
             fields = fields | {'product'}
             if not valid_product(data.get('product')):
                 return None
-        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply', 'local_sql_reconcile') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply', 'local_sql_reconcile', 'wa_incident_digest') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
             return None
         if action == 'release_apply' and (not isinstance(data['sha'], str) or not re.fullmatch(r'[0-9a-f]{40}', data['sha'])):
             return None
@@ -356,6 +356,91 @@ COMMIT;"""
 TRIAGE_FIELDS = {'escalations_open','escalations_money','escalations_orders','escalations_bot',
     'crm_in_48h','crm_money_signals','crm_order_signals','errors_total','errors_open',
     'errors_unknown_state','wa_recent_dated','wa_money_signals','wa_order_signals','wa_bot_signals'}
+
+
+
+WA_INBOX = Path('/root/backups/nexo-recovery/receiver/inbox')
+WA_SIGNALS = {
+    'payment': r'\b(?:pago|cobro|dinero|zelle|transferencia|reembolso)\b',
+    'delivery': r'\b(?:pedido|vale|mensajero|entrega|recogida)\b',
+    'bot': r'\b(?:error|bot|no responde|no contesta|fallo)\b',
+}
+
+def wa_incident_digest(directory=WA_INBOX):
+    """Fixed-source historical sample; never return text, identifiers or filenames."""
+    counts = dict.fromkeys(WA_SIGNALS, 0)
+    seen = set()
+    files = messages = skipped = duplicates = 0
+    truncated = False
+    try:
+        if directory.is_symlink() or not directory.is_dir():
+            raise ValueError('source')
+        # Bound directory traversal, file count, bytes and message processing.
+        candidates = []
+        with os.scandir(directory) as entries:
+            for index, entry in enumerate(entries):
+                if index >= 2048:
+                    truncated = True
+                    break
+                if entry.name.endswith('.json') and entry.is_file(follow_symlinks=False):
+                    candidates.append(entry.name)
+        if len(candidates) > 64:
+            truncated = True
+        for name in sorted(candidates, reverse=True)[:64]:
+            try:
+                raw = private_bytes(directory / name, 262144)
+                obj = json.loads(raw)
+                files += 1
+                if not isinstance(obj, dict):
+                    skipped += 1
+                    continue
+                payload = obj.get('data', obj)
+                if not isinstance(payload, dict):
+                    skipped += 1
+                    continue
+                rows = payload.get('messages', [])
+                if not isinstance(rows, list):
+                    skipped += 1
+                    continue
+                if len(rows) > 256:
+                    truncated = True
+                for row in rows[:256]:
+                    if not isinstance(row, dict):
+                        skipped += 1
+                        continue
+                    key = row.get('key')
+                    msg = row.get('message')
+                    if not isinstance(key, dict) or not isinstance(msg, dict):
+                        skipped += 1
+                        continue
+                    identity = (key.get('remoteJid'), key.get('id'))
+                    if not all(isinstance(v, str) and 0 < len(v) <= 256 for v in identity):
+                        skipped += 1
+                        continue
+                    if identity in seen:
+                        duplicates += 1
+                        continue
+                    seen.add(identity)
+                    extended = msg.get('extendedTextMessage')
+                    value = msg.get('conversation')
+                    if not isinstance(value, str) and isinstance(extended, dict):
+                        value = extended.get('text')
+                    if not isinstance(value, str):
+                        skipped += 1
+                        continue
+                    messages += 1
+                    if len(value) > 4096:
+                        truncated = True
+                    for category, pattern in WA_SIGNALS.items():
+                        counts[category] += bool(re.search(pattern, value[:4096], re.I))
+            except (OSError, ValueError, TypeError, RecursionError):
+                skipped += 1
+        return {'ok': files > 0 and messages > 0, 'source': 'historical_receiver_inbox',
+                'live_coverage': False, 'files': files, 'messages': messages,
+                'duplicates': duplicates, 'skipped': skipped, 'truncated': truncated,
+                'signals': counts}
+    except (OSError, ValueError):
+        return {'ok': False, 'reason': 'historical_source_unavailable'}
 
 
 def urgent_triage():
@@ -707,6 +792,8 @@ class Contingency:
                 safe = db_snapshot()
             elif data['action'] == 'urgent_triage':
                 safe = urgent_triage()
+            elif data['action'] == 'wa_incident_digest':
+                safe = wa_incident_digest()
             elif data['action'] == 'wa_catalog_case':
                 safe = wa_catalog_case()
             elif data['action'] == 'order_lookup':

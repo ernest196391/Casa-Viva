@@ -502,6 +502,60 @@ def guardian_isolation_metadata():
         return {"metadata_available": False, "functional_isolation_certified": False}
 
 
+def guardian_release_metadata():
+    """Fixed paths; stat only for credentials, aggregate structural evidence for inbox."""
+    import stat
+    def metadata(path):
+        try:
+            s = Path(path).lstat()
+            regular = stat.S_ISREG(s.st_mode)
+            return {"present": True, "regular": regular,
+                    "root_owned": s.st_uid == 0,
+                    "owner_only": regular and not (s.st_mode & 0o077),
+                    "mode_0600": regular and stat.S_IMODE(s.st_mode) == 0o600}
+        except OSError:
+            return {"present": False}
+    return {
+        "token": metadata("/root/supervisor/.github-release.env"),
+        "gate": metadata("/root/supervisor/github_release_gate.py"),
+    }
+
+
+def guardian_history_schema(directory=Path("/root/backups/nexo-recovery/receiver/inbox")):
+    """Bounded structural counts only; no message values, names or identifiers."""
+    import stat
+    counts = {"sampled": 0, "data_object": 0, "messages_list": 0,
+              "root_list": 0, "history_list": 0, "invalid": 0}
+    try:
+        from github_contingency import private_bytes
+        if not stat.S_ISDIR(directory.lstat().st_mode):
+            return counts
+        with os.scandir(directory) as entries:
+            for index, entry in enumerate(entries):
+                if index >= 2048 or counts["sampled"] >= 32:
+                    break
+                if not entry.name.endswith(".json") or not entry.is_file(follow_symlinks=False):
+                    continue
+                counts["sampled"] += 1
+                try:
+                    obj = json.loads(private_bytes(Path(entry.path), 262144))
+                    if isinstance(obj, list):
+                        counts["root_list"] += 1
+                    elif isinstance(obj, dict):
+                        data = obj.get("data", obj)
+                        if isinstance(data, dict):
+                            counts["data_object"] += int("data" in obj)
+                            counts["messages_list"] += int(isinstance(data.get("messages"), list))
+                            counts["history_list"] += int(isinstance(data.get("history"), list))
+                    else:
+                        counts["invalid"] += 1
+                except (OSError, ValueError, TypeError):
+                    counts["invalid"] += 1
+    except (OSError, ImportError):
+        pass
+    return counts
+
+
 def action_guardian_runtime_evidence(args):
     """Fixed metadata-only attestation. Never return env values or service output."""
     if args != {}:
@@ -575,6 +629,8 @@ def action_guardian_runtime_evidence(args):
             "backup_present": backup_ok,
             "backup_git_blob": backup_hash,
             "local_flags": flags,
+            "release_metadata": guardian_release_metadata(),
+            "history_schema": guardian_history_schema(),
             "services": services,
         }
         return {"returncode": 0, "output": json.dumps(summary, sort_keys=True)}
