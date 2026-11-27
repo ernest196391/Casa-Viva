@@ -62,6 +62,11 @@ assert(html.includes('1× Cortinero extensible — 12 USD'), 'falta el nombre co
 assert(html.includes('2× Toalla — 5 USD c/u = 10 USD') && (html.match(/<img /g) || []).length === 1, 'un producto sin foto sale como siempre, sin imagen rota');
 assert(!/<(div|p)\b/.test(html), 'dentro del <p> de la tarjeta solo puede ir texto en línea (span/a/img/small)');
 
+assert((html.match(/Fotografía no verificada/g) || []).length === 1, 'aviso solo para línea sin foto');
+assert(!render([{name:'Gris',quantity:1,image:'https://a/gris.jpg'}]).includes('Fotografía no verificada'), 'no avisar si hay foto');
+assert(bridge.includes("'itemLines'   => self::verified_item_lines( $order )"), 'vale no usa líneas verificadas');
+assert(bridge.includes('Fotografía no verificada: confirmar producto y variación'), 'falta aviso del vale');
+
 // Lo que viene de la web se escapa (nombre con comillas o etiquetas no rompe la tarjeta).
 const evil = render([{ name: 'X" onerror="alert(1)', quantity: 1, text: '<b>X</b>', url: '', image: 'https://a/b.jpg" onerror="alert(1)', imageLarge: '', variation: '<script>' }]);
 assert(!evil.includes('onerror="alert(1)"') && !evil.includes('<script>') && !evil.includes('<b>X</b>'), 'la tarjeta no escapa lo que viene de la web');
