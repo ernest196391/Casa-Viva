@@ -91,6 +91,27 @@ class GuardianMetadataTests(unittest.TestCase):
         self.assertFalse(result["functional_isolation_certified"])
         self.assertNotIn("/private", json.dumps(result))
 
+    def test_gate_identity_never_executes(self):
+        raw = b"raise RuntimeError('PRIVATE_SENTINEL')"
+        with patch("github_contingency.private_bytes", return_value=raw):
+            result = bridge.guardian_gate_identity()
+        self.assertTrue(result["available"])
+        self.assertEqual(result["git_blob"], bridge.guardian_blob(raw))
+        self.assertFalse(result["matches_pin"])
+        self.assertNotIn("PRIVATE_SENTINEL", json.dumps(result))
+
+    def test_inventory_filters_and_deduplicates(self):
+        raw = b"cv-receiver-isolation.service enabled\ncv-guardian.service loaded\nother-private.service enabled\ncv-unrelated.service enabled\n"
+        with patch.object(bridge.subprocess, "run", return_value=Mock(returncode=0, stdout=raw)) as run:
+            result = bridge.guardian_isolation_inventory()
+        self.assertEqual(result["units"], ["cv-guardian.service", "cv-receiver-isolation.service"])
+        self.assertFalse(result["functional_isolation_certified"])
+        self.assertEqual(run.call_count, 2)
+
+    def test_inventory_failure(self):
+        with patch.object(bridge.subprocess, "run", return_value=Mock(returncode=1, stdout=b"private")):
+            self.assertEqual(bridge.guardian_isolation_inventory(), {"available": False})
+
     def test_metadata_does_not_read_token(self):
         with patch.object(Path, "lstat", side_effect=FileNotFoundError), patch.object(Path, "read_bytes", side_effect=AssertionError):
             self.assertEqual(bridge.guardian_release_metadata(), {"token": {"present": False}, "gate": {"present": False}})
