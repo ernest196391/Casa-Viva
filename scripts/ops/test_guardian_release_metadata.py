@@ -1,0 +1,38 @@
+import importlib.util
+import json
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+spec = importlib.util.spec_from_file_location("cv_bridge", Path(__file__).with_name("cv-ops-bridge.py"))
+bridge = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bridge)
+
+
+class GuardianMetadataTests(unittest.TestCase):
+    def test_metadata_does_not_read_token(self):
+        with patch.object(Path, "lstat", side_effect=FileNotFoundError), patch.object(Path, "read_bytes", side_effect=AssertionError):
+            self.assertEqual(bridge.guardian_release_metadata(), {"token": {"present": False}, "gate": {"present": False}})
+
+    def test_history_structure_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            f = directory / "sample.json"
+            f.write_text(json.dumps({"data": {"messages": [{"text": "PRIVATE_SENTINEL"}]}}))
+            f.chmod(0o600)
+            result = bridge.guardian_history_schema(directory)
+            self.assertEqual(result["sampled"], 1)
+            self.assertEqual(result["messages_list"], 1)
+            self.assertNotIn("PRIVATE_SENTINEL", json.dumps(result))
+
+    def test_symlink_directory_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            link = directory / "link"
+            link.symlink_to(directory, target_is_directory=True)
+            self.assertEqual(bridge.guardian_history_schema(link)["sampled"], 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
