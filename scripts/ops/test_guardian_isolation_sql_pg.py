@@ -6,7 +6,13 @@ import os
 import subprocess
 import unittest
 from pathlib import Path
-from test_guardian_gate_sql import baseline_definition
+import re
+
+def baseline_definition():
+    data=(Path(__file__).resolve().parent/'sql/rollback-guardian-gate-recovery.sql').read_text()
+    m=re.search(r"baseline text := '((?:''|[^'])*)';", data)
+    if not m: raise ValueError('baseline not found')
+    return m.group(1).replace("''", "'")
 
 HERE=Path(__file__).resolve().parent
 GATE=(HERE/"sql/allow-guardian-gate-recovery.sql").read_text()
