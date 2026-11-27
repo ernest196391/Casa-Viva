@@ -7,7 +7,8 @@ DECLARE
   predicate text;
   baseline text;
   fn oid;
-  expected_body text := $expected$      BEGIN
+  expected_body text := $expected$
+      BEGIN
         IF TG_OP = 'INSERT' THEN
           IF NEW.action = 'guardian_isolation_probe' THEN
             RAISE EXCEPTION 'guardian_isolation_revoked' USING ERRCODE = '23514';
