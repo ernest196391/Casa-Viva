@@ -1040,12 +1040,17 @@ def action_update_bridge(args):
         git("fetch", "origin", "main")
         if git("rev-parse", "origin/main").decode().strip() != sha:
             raise ValueError("not_current_main")
-        branch = _github_api(token, "GET", f"/repos/{REPO}/branches/main")
+        def api(secret, method, route):
+            code, data = _github_api(secret, method, route)
+            if code != 200 or not isinstance(data, dict):
+                raise ValueError("github_response")
+            return data
+        branch = api(token, "GET", f"/repos/{REPO}/branches/main")
         if branch.get("protected") is not True or branch.get("commit", {}).get("sha") != sha:
             raise ValueError("main_not_protected")
-        if not verified_checks(_github_api, token, sha):
+        if not verified_checks(api, token, sha):
             raise ValueError("ci_not_certified")
-        status = _github_api(token, "GET", f"/repos/{REPO}/commits/{sha}/status")
+        status = api(token, "GET", f"/repos/{REPO}/commits/{sha}/status")
         if not any(x.get("context") == "guardian/postmerge" and x.get("state") == "success" for x in status.get("statuses", [])):
             raise ValueError("guardian_not_certified")
         body = git("show", f"{sha}:scripts/ops/cv-ops-bridge.py")
