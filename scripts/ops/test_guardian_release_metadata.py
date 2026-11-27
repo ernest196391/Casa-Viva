@@ -11,6 +11,22 @@ spec.loader.exec_module(bridge)
 
 
 class GuardianMetadataTests(unittest.TestCase):
+    def test_missing_flags_are_disabled_with_provenance(self):
+        flags, sources = bridge.guardian_effective_flags({})
+        self.assertEqual(len(flags), 3)
+        self.assertFalse(any(flags.values()))
+        self.assertEqual(set(sources.values()), {"default_disabled"})
+
+    def test_explicit_flags_and_invalid_values(self):
+        name = "CV_GITHUB_RELEASE_ENABLED"
+        for value in ("0", "1"):
+            flags, sources = bridge.guardian_effective_flags({name: value})
+            self.assertEqual(flags[name], value == "1")
+            self.assertEqual(sources[name], "explicit")
+        for value in ("", "true", "2", None):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                bridge.guardian_effective_flags({name: value})
+
     def test_metadata_does_not_read_token(self):
         with patch.object(Path, "lstat", side_effect=FileNotFoundError), patch.object(Path, "read_bytes", side_effect=AssertionError):
             self.assertEqual(bridge.guardian_release_metadata(), {"token": {"present": False}, "gate": {"present": False}})
