@@ -27,6 +27,19 @@ class GuardianMetadataTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 bridge.guardian_effective_flags({name: value})
 
+    def test_untrusted_gate_never_executes_or_contacts_github(self):
+        with patch("github_contingency.private_bytes", return_value=b"raise RuntimeError('untrusted')") as read, patch.object(bridge.urllib.request, "urlopen") as network:
+            result = bridge.guardian_gate_attestation()
+        self.assertFalse(result["gate_matches_pin"])
+        self.assertFalse(result["token_read_verified"])
+        self.assertEqual(read.call_count, 1)
+        network.assert_not_called()
+
+    def test_missing_gate_fails_closed(self):
+        with patch("github_contingency.private_bytes", side_effect=OSError("private")):
+            result = bridge.guardian_gate_attestation()
+        self.assertFalse(any(result.values()))
+
     def test_metadata_does_not_read_token(self):
         with patch.object(Path, "lstat", side_effect=FileNotFoundError), patch.object(Path, "read_bytes", side_effect=AssertionError):
             self.assertEqual(bridge.guardian_release_metadata(), {"token": {"present": False}, "gate": {"present": False}})
