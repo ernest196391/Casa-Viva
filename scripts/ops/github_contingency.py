@@ -530,7 +530,8 @@ def provision_local_sql_artifact():
         guard = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             st = os.fstat(guard)
-            if st.st_uid != parent.st_uid or st.st_mode & 0o022:
+            if (not stat.S_ISDIR(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o022
+                    or (st.st_dev, st.st_ino) != (parent.st_dev, parent.st_ino)):
                 raise ValueError('unsafe lock directory')
             try:
                 fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
