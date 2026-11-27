@@ -524,65 +524,79 @@ def provision_local_sql_artifact():
         parent = target.parent.lstat()
         if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or parent.st_mode & 0o022:
             raise ValueError('unsafe parent')
+        # Same nonblocking flock pattern as the existing bridge worker.
+        # Lock the directory inode itself: no replaceable lockfile is needed.
+        import fcntl
+        guard = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
-            return {'ok': valid(private_bytes(target, 262144)), 'changed': False}
-        except FileNotFoundError:
-            pass
-        raw = private_bytes(target.with_name('cv-ops-bridge.py.prev'), 262144)
-        if not valid(raw):
-            return {'ok': False, 'reason': 'source_integrity_mismatch'}
-        fd, name = tempfile.mkstemp(prefix='.cv-sql-', dir=target.parent)
-        published = False
-        inode = None
-        try:
-            with os.fdopen(fd, 'wb') as out:
-                os.fchmod(out.fileno(), 0o600)
-                out.write(raw)
-                out.flush()
-                os.fsync(out.fileno())
-                st = os.fstat(out.fileno())
-                inode = (st.st_dev, st.st_ino)
-            # Hard link is exclusive: an existing file or symlink is never replaced.
-            os.link(name, target, follow_symlinks=False)
-            published = True
-            if not valid(private_bytes(target, 262144)):
-                raise ValueError('publication mismatch')
-            directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+            st = os.fstat(guard)
+            if st.st_uid != parent.st_uid or st.st_mode & 0o022:
+                raise ValueError('unsafe lock directory')
             try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
-            # Cleanup belongs in the guarded region; a failure must roll back.
-            os.unlink(name)
-            directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+                fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return {'ok': False, 'reason': 'installer_busy'}
             try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
-            return {'ok': True, 'changed': True}
-        except Exception:
-            if published:
-                # Root-only parent is required. Recheck inode before removing;
-                # never remove a replacement by another process.
-                try:
-                    current = os.lstat(target)
-                    if inode != (current.st_dev, current.st_ino):
-                        return {'ok': False, 'reason': 'rollback_conflict'}
-                    if inode == (current.st_dev, current.st_ino):
-                        os.unlink(target)
-                        directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
-                        try:
-                            os.fsync(directory)
-                        finally:
-                            os.close(directory)
-                except OSError:
-                    return {'ok': False, 'reason': 'rollback_unconfirmed'}
-            raise
-        finally:
-            try:
-                os.unlink(name)
+                return {'ok': valid(private_bytes(target, 262144)), 'changed': False}
             except FileNotFoundError:
                 pass
+            raw = private_bytes(target.with_name('cv-ops-bridge.py.prev'), 262144)
+            if not valid(raw):
+                return {'ok': False, 'reason': 'source_integrity_mismatch'}
+            fd, name = tempfile.mkstemp(prefix='.cv-sql-', dir=target.parent)
+            published = False
+            inode = None
+            try:
+                with os.fdopen(fd, 'wb') as out:
+                    os.fchmod(out.fileno(), 0o600)
+                    out.write(raw)
+                    out.flush()
+                    os.fsync(out.fileno())
+                    st = os.fstat(out.fileno())
+                    inode = (st.st_dev, st.st_ino)
+                # Hard link is exclusive: an existing file or symlink is never replaced.
+                os.link(name, target, follow_symlinks=False)
+                published = True
+                if not valid(private_bytes(target, 262144)):
+                    raise ValueError('publication mismatch')
+                directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
+                # Cleanup belongs in the guarded region; a failure must roll back.
+                os.unlink(name)
+                directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
+                return {'ok': True, 'changed': True}
+            except Exception:
+                if published:
+                    # Root-only parent is required. Recheck inode before removing;
+                    # never remove a replacement by another process.
+                    try:
+                        current = os.lstat(target)
+                        if inode != (current.st_dev, current.st_ino):
+                            return {'ok': False, 'reason': 'rollback_conflict'}
+                        if inode == (current.st_dev, current.st_ino):
+                            os.unlink(target)
+                            directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+                            try:
+                                os.fsync(directory)
+                            finally:
+                                os.close(directory)
+                    except OSError:
+                        return {'ok': False, 'reason': 'rollback_unconfirmed'}
+                raise
+            finally:
+                try:
+                    os.unlink(name)
+                except FileNotFoundError:
+                    pass
+        finally:
+            os.close(guard)
     except Exception:
         return {'ok': False, 'reason': 'pinned_install_unavailable'}
 
