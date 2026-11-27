@@ -16,11 +16,10 @@ BEGIN
   IF EXISTS(SELECT 1 FROM public.crm_ops_bridge WHERE action='guardian_isolation_probe') THEN
     RAISE EXCEPTION 'guardian_isolation_rollback_history_must_be_preserved';
   END IF;
-  -- Remove only the fixed trailing branch, retaining all original policy.
-  -- The new OR branch is the final term of the CHECK expression.
-  -- Reconstruct pg_get_constraintdef with one balanced closing parenthesis.
-  expected_old := replace(installed,
-    ' OR ((action = ''guardian_isolation_probe''::text) AND (args IS NOT DISTINCT FROM ''{}''::jsonb) AND (requested_by IS NOT DISTINCT FROM ''chatgpt''::text))))',
+  -- Exact PostgreSQL parse round-trip only; reject any normalized drift.
+  -- Remove the fixed diagnostic OR branch from the final CHECK expression.
+  expected_old := regexp_replace(installed,
+    ' OR \\(\\(action = ''guardian_isolation_probe''::text\\) AND \\(args IS NOT DISTINCT FROM ''\\{\\}''::jsonb\\) AND \\(requested_by IS NOT DISTINCT FROM ''chatgpt''::text\\)\\)\\)\\)$',
     '))');
   IF expected_old=installed OR md5(expected_old) <> '3e08e16a5a93e1313a96caa31229745a' THEN
     RAISE EXCEPTION 'guardian_isolation_rollback_drift';
