@@ -47,7 +47,7 @@ class GuardianGateSqlTests(unittest.TestCase):
         self.assertIn("relrowsecurity", up)
         self.assertIn("rollback_history_must_be_preserved", down)
         for sql in (up, down):
-            self.assertNotRegex(sql, r"(?i)\\b(?:DISABLE ROW LEVEL SECURITY|DROP POLICY|CREATE POLICY|GRANT |REVOKE )\\b")
+            self.assertNotRegex(sql, r"(?i)\b(?:DISABLE ROW LEVEL SECURITY|DROP POLICY|CREATE POLICY|GRANT |REVOKE )\b")
             self.assertNotIn("local_sql_reconcile''::text) AND (args", sql)
 
     @unittest.skipUnless(os.environ.get("CV_SQL_TEST_PG") == "1", "isolated PostgreSQL CI required")
