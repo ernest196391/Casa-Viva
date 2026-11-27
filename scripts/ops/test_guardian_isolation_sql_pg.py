@@ -89,7 +89,15 @@ BEGIN
  THEN RAISE EXCEPTION 'RLS drift'; END IF;
 END $test$;
 """
-        pg(init+GATE+check_baseline+UP+checks+DOWN+check_baseline+"ROLLBACK;")
+        pg(init+GATE+check_baseline+UP+checks+"""
+DO $debug_constraint$
+BEGIN
+ RAISE NOTICE 'ISOLATION INSTALLED: %',
+  (SELECT pg_get_constraintdef(oid) FROM pg_constraint
+   WHERE conrelid='public.crm_ops_bridge'::regclass
+   AND conname='crm_ops_bridge_action_chk');
+END $debug_constraint$;
+"""+DOWN+check_baseline+"ROLLBACK;")
 
     def test_baseline_drift_refused(self):
         pg("""BEGIN;
