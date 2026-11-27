@@ -502,6 +502,34 @@ def guardian_isolation_metadata():
         return {"metadata_available": False, "functional_isolation_certified": False}
 
 
+def guardian_effective_isolation_unit():
+    """Report only fixed unit metadata; never expose command lines or paths."""
+    props = ("LoadState", "UnitFileState", "Type", "FragmentPath", "DropInPaths",
+             "NeedDaemonReload", "NoNewPrivileges", "AppArmorProfile")
+    try:
+        p = subprocess.run(
+            ["/usr/bin/systemctl", "show", "cv-receiver-isolation-check.service"] +
+            ["--property=" + name for name in props],
+            capture_output=True, timeout=5, check=False,
+            env={"PATH": "/usr/bin:/bin"})
+        if p.returncode or len(p.stdout) > 8192:
+            return {"available": False}
+        v = dict(line.split("=", 1) for line in p.stdout.decode().splitlines() if "=" in line)
+        if set(v) != set(props):
+            return {"available": False}
+        return {"available": True, "loaded": v["LoadState"] == "loaded",
+                "oneshot": v["Type"] == "oneshot",
+                "enabled": v["UnitFileState"] == "enabled",
+                "fragment_present": bool(v["FragmentPath"]),
+                "dropins_present": bool(v["DropInPaths"]),
+                "daemon_reload_needed": v["NeedDaemonReload"] == "yes",
+                "no_new_privileges": v["NoNewPrivileges"] == "yes",
+                "apparmor_enforced_config": bool(v["AppArmorProfile"]) and not v["AppArmorProfile"].startswith("-"),
+                "functional_isolation_certified": False}
+    except Exception:
+        return {"available": False}
+
+
 def guardian_release_metadata():
     """Fixed paths; stat only for credentials, aggregate structural evidence for inbox."""
     import stat
@@ -519,6 +547,57 @@ def guardian_release_metadata():
         "token": metadata("/root/supervisor/.github-release.env"),
         "gate": metadata("/root/supervisor/github_release_gate.py"),
     }
+
+
+def guardian_gate_attestation():
+    """Verify fixed gate bytes before using its credential; GET only, no raw output."""
+    from github_contingency import private_bytes
+    import types
+    expected = "aa90d52195329fbc3b49e185ba3a4030481c60e7"
+    result = {"gate_matches_pin": False, "token_read_verified": False,
+              "protected_main": False, "push_checks_verified": False}
+    try:
+        path = Path("/root/supervisor/github_release_gate.py")
+        raw = private_bytes(path, 65536)
+        if guardian_blob(raw) != expected:
+            return result
+        result["gate_matches_pin"] = True
+        gate = types.ModuleType("cv_verified_gate")
+        exec(compile(raw, str(path), "exec"), gate.__dict__)
+        config = gate.read_private(gate.TOKEN_FILE).decode().strip()
+        if not config.startswith("CV_GITHUB_RELEASE_TOKEN=") or "\n" in config:
+            return result
+        token = config.split("=", 1)[1]
+        if not token:
+            return result
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                raise ValueError("redirect rejected")
+        opener = urllib.request.build_opener(NoRedirect())
+        def api(secret, method, route):
+            allowed = (route == "/repos/ernest196391/Casa-Viva/branches/main" or
+                       re.fullmatch(r"/repos/ernest196391/Casa-Viva/actions/runs\?head_sha=[0-9a-f]{40}&event=push&branch=main&per_page=100", route))
+            if method != "GET" or not allowed:
+                raise ValueError("route rejected")
+            req = urllib.request.Request("https://api.github.com" + route,
+                headers={"Authorization": "Bearer " + secret,
+                         "Accept": "application/vnd.github+json",
+                         "User-Agent": "CasaViva-Guardian"})
+            with opener.open(req, timeout=10) as response:
+                body = response.read(1048577)
+                if len(body) > 1048576:
+                    raise ValueError("response too large")
+                return json.loads(body)
+        branch = api(token, "GET", "/repos/ernest196391/Casa-Viva/branches/main")
+        result["token_read_verified"] = True
+        sha = branch.get("commit", {}).get("sha")
+        result["protected_main"] = branch.get("protected") is True
+        if result["protected_main"] and isinstance(sha, str) and re.fullmatch(r"[0-9a-f]{40}", sha):
+            result["push_checks_verified"] = gate.verified_checks(api, token, sha)
+            result["main_sha"] = sha
+    except Exception:
+        pass
+    return result
 
 
 def guardian_history_schema(directory=Path("/root/backups/nexo-recovery/receiver/inbox")):
@@ -631,12 +710,14 @@ def action_guardian_runtime_evidence(args):
             "guardian_release_approval_verified": False,
             "runtime_artifact_certified": False,
             "isolation": isolation,
+            "effective_isolation_unit": guardian_effective_isolation_unit(),
             "worker_owner_only": bool(owner_only),
             "backup_present": backup_ok,
             "backup_git_blob": backup_hash,
             "local_flags": flags,
             "local_flag_sources": flag_sources,
             "release_metadata": guardian_release_metadata(),
+            "gate_attestation": guardian_gate_attestation(),
             "history_schema": guardian_history_schema(),
             "services": services,
         }
