@@ -1021,50 +1021,58 @@ def action_bridge_status(args):
 
 
 def action_update_bridge(args):
-    """Update this bridge only from a full Casa-Viva main commit SHA."""
+    """Fixed-target update, using the existing independent release gate."""
     import re
-
-    sha = str((args or {}).get("sha", "")).strip().lower()
-    if not re.fullmatch(r"[0-9a-f]{40}", sha):
-        return {"returncode": 2, "output": "args.sha debe ser un SHA Git completo"}
-
-    url = f"https://raw.githubusercontent.com/ernest196391/Casa-Viva/{sha}/scripts/ops/cv-ops-bridge.py"
-    target = Path(__file__).resolve()
-    tmp = target.with_name(target.name + ".next")
-
+    if not isinstance(args, dict) or set(args) != {"sha"} or not isinstance(args["sha"], str) or not re.fullmatch(r"[0-9a-f]{40}", args["sha"]):
+        return {"returncode": 2, "output": "invalid_bridge_update_request"}
+    sha = args["sha"]
     try:
-        with urllib.request.urlopen(url, timeout=30) as resp:
-            body = resp.read()
-        if len(body) < 5000 or b"Casa Viva Ops Bridge" not in body or b"def main(" not in body:
-            return {"returncode": 3, "output": "El archivo remoto no parece un bridge válido"}
-        tmp.write_bytes(body)
-        os.chmod(tmp, 0o700)
-        checked = run(["python3", "-m", "py_compile", str(tmp)], timeout=30)
-        if checked["returncode"] != 0:
-            tmp.unlink(missing_ok=True)
-            return {"returncode": 4, "output": "El bridge nuevo no compila:\\n" + checked["output"]}
-        backup = target.with_name(target.name + ".prev")
-        if target.exists():
-            backup.write_bytes(target.read_bytes())
-            os.chmod(backup, 0o700)
-        os.replace(tmp, target)
-        return {
-            "returncode": 0,
-            "output": json.dumps({
-                "updated": True,
-                "sha": sha,
-                "target": str(target),
-                "backup": str(backup),
-                "note": "El siguiente ciclo del cron usará la nueva versión.",
-            }, ensure_ascii=False),
-        }
-    except Exception as exc:
-        try:
-            tmp.unlink(missing_ok=True)
-        except Exception:
-            pass
-        return {"returncode": 5, "output": f"No pude actualizar el bridge: {exc}"}
-
+        from github_release_gate import read_private, atomic_file, git, verified_checks, TOKEN_FILE, REPO
+        target = Path("/root/supervisor/cv-ops-bridge.py")
+        if Path(__file__).absolute() != target:
+            raise ValueError("unexpected_target")
+        raw = read_private(TOKEN_FILE).decode().strip()
+        if not raw.startswith("CV_GITHUB_RELEASE_TOKEN=") or "\n" in raw:
+            raise ValueError("release_config")
+        token = raw.split("=", 1)[1]
+        if not token:
+            raise ValueError("release_config")
+        git("fetch", "origin", "main")
+        if git("rev-parse", "origin/main").decode().strip() != sha:
+            raise ValueError("not_current_main")
+        def api(secret, method, route):
+            code, data = _github_api(secret, method, route)
+            if code != 200 or not isinstance(data, dict):
+                raise ValueError("github_response")
+            return data
+        branch = api(token, "GET", f"/repos/{REPO}/branches/main")
+        if branch.get("protected") is not True or branch.get("commit", {}).get("sha") != sha:
+            raise ValueError("main_not_protected")
+        if not verified_checks(api, token, sha):
+            raise ValueError("ci_not_certified")
+        status = api(token, "GET", f"/repos/{REPO}/commits/{sha}/status")
+        if not any(x.get("context") == "guardian/postmerge" and x.get("state") == "success" for x in status.get("statuses", [])):
+            raise ValueError("guardian_not_certified")
+        body = git("show", f"{sha}:scripts/ops/cv-ops-bridge.py")
+        if not 5000 <= len(body) <= 524288 or b"Casa Viva Ops Bridge" not in body:
+            raise ValueError("invalid_artifact")
+        compile(body, str(target), "exec")
+        previous = read_private(target, 524288)
+        if previous != body:
+            import hashlib
+            backup = target.with_name(target.name + ".backup." + hashlib.sha256(previous).hexdigest())
+            if backup.exists():
+                if read_private(backup, 524288) != previous:
+                    raise ValueError("backup_conflict")
+            else:
+                atomic_file(backup, previous)
+            git("fetch", "origin", "main")
+            if git("rev-parse", "origin/main").decode().strip() != sha or read_private(target, 524288) != previous:
+                raise ValueError("bridge_update_drift")
+            atomic_file(target, body)
+        return {"returncode": 0, "output": json.dumps({"sha": sha, "updated": previous != body, "target": str(target)})}
+    except Exception:
+        return {"returncode": 5, "output": "bridge_update_refused"}
 
 
 def action_bridge_service_status(args):
