@@ -556,6 +556,20 @@ def guardian_history_schema(directory=Path("/root/backups/nexo-recovery/receiver
     return counts
 
 
+def guardian_effective_flags(env):
+    """Match executor defaults; reject explicitly malformed configuration."""
+    names = ("CV_GITHUB_CONTINGENCY_ENABLED", "CV_GITHUB_RELEASE_ENABLED",
+             "CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED")
+    flags, sources = {}, {}
+    for name in names:
+        value = env.get(name, "0")
+        if value not in ("0", "1"):
+            raise ValueError("invalid guardian flag")
+        flags[name] = value == "1"
+        sources[name] = "explicit" if name in env else "default_disabled"
+    return flags, sources
+
+
 def action_guardian_runtime_evidence(args):
     """Fixed metadata-only attestation. Never return env values or service output."""
     if args != {}:
@@ -573,16 +587,8 @@ def action_guardian_runtime_evidence(args):
             backup_ok = True
         except (OSError, ValueError):
             backup_hash, backup_ok = None, False
-        flag_names = (
-            "CV_GITHUB_CONTINGENCY_ENABLED",
-            "CV_GITHUB_RELEASE_ENABLED",
-            "CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED",
-        )
         try:
-            env = load_env_files()
-            if any(env.get(name) not in ("0", "1") for name in flag_names):
-                raise ValueError("unknown flag")
-            flags = {name: env[name] == "1" for name in flag_names}
+            flags, flag_sources = guardian_effective_flags(load_env_files())
         except Exception:
             return {"returncode": 1, "output": json.dumps({"reason": "guardian_flags_unknown"})}
         import stat
@@ -629,6 +635,7 @@ def action_guardian_runtime_evidence(args):
             "backup_present": backup_ok,
             "backup_git_blob": backup_hash,
             "local_flags": flags,
+            "local_flag_sources": flag_sources,
             "release_metadata": guardian_release_metadata(),
             "history_schema": guardian_history_schema(),
             "services": services,
