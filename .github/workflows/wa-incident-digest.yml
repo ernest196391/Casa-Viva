@@ -3,12 +3,16 @@ on:
   pull_request:
     paths:
       - 'scripts/ops/github_contingency.py'
+      - 'scripts/ops/cv-ops-bridge.py'
+      - 'scripts/ops/test_guardian_release_metadata.py'
       - 'scripts/ops/test_wa_incident_digest.py'
       - '.github/workflows/wa-incident-digest.yml'
   push:
     branches: [main]
     paths:
       - 'scripts/ops/github_contingency.py'
+      - 'scripts/ops/cv-ops-bridge.py'
+      - 'scripts/ops/test_guardian_release_metadata.py'
       - 'scripts/ops/test_wa_incident_digest.py'
       - '.github/workflows/wa-incident-digest.yml'
 permissions:
@@ -21,4 +25,4 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run aggregate privacy and deduplication fixtures
         working-directory: scripts/ops
-        run: python3 -m unittest -v test_wa_incident_digest
+        run: python3 -m unittest -v test_wa_incident_digest test_guardian_release_metadata
