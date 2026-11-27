@@ -209,7 +209,33 @@ class Tests(unittest.TestCase):
             with self.assertRaises(OSError):
                 mod.private_bytes(link, 262144)
 
+    def sql_fixture_fstat(self, fd):
+        import os
+        import stat
+        # The CI runner is not root; simulate ownership only for directory checks.
+        st = self._real_sql_fstat(fd)
+        if stat.S_ISDIR(st.st_mode):
+            return Mock(st_uid=0, st_mode=st.st_mode)
+        return st
+
+    def test_sql_installer_rejects_concurrent_lock(self):
+        import fcntl
+        import os
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / 'cv-local-sql-certified.py'
+            guard = os.open(d, os.O_RDONLY | os.O_DIRECTORY)
+            self._real_sql_fstat = os.fstat
+            try:
+                fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)), patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod, 'private_bytes') as read:
+                    self.assertEqual(mod.provision_local_sql_artifact(), {'ok': False, 'reason': 'installer_busy'})
+                    read.assert_not_called()
+                self.assertFalse(target.exists())
+            finally:
+                os.close(guard)
+
     def test_sql_provision_rolls_back_only_its_own_publication(self):
+        self._real_sql_fstat = mod.os.fstat
         import hashlib
         raw = b'certified fixture'
         pin = hashlib.sha1(b'blob ' + str(len(raw)).encode() + bytes([0]) + raw).hexdigest()
@@ -225,7 +251,7 @@ class Tests(unittest.TestCase):
                             p.write_bytes(b'concurrent replacement')
                         raise ValueError('post-publication failure')
                     return p.read_bytes()
-                with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod, 'private_bytes', side_effect=read), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)):
+                with patch.object(mod, 'LOCAL_SQL_BRIDGE_PATH', target), patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), patch.object(mod.os, 'geteuid', return_value=0), patch.object(mod, 'private_bytes', side_effect=read), patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)):
                     receipt = mod.provision_local_sql_artifact()
                     self.assertFalse(receipt['ok'])
                     if replace:
@@ -236,6 +262,7 @@ class Tests(unittest.TestCase):
                     self.assertFalse(target.exists())
 
     def test_sql_cleanup_failure_rolls_back_published_inode(self):
+        self._real_sql_fstat = mod.os.fstat
         import hashlib
         raw = b'certified fixture'
         pin = hashlib.sha1(b'blob ' + str(len(raw)).encode() + bytes([0]) + raw).hexdigest()
@@ -253,13 +280,14 @@ class Tests(unittest.TestCase):
                  patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), \
                  patch.object(mod.os, 'geteuid', return_value=0), \
                  patch.object(mod, 'private_bytes', side_effect=lambda p, n: p.read_bytes()), \
-                 patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)), \
+                 patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)), \
                  patch.object(mod.os, 'unlink', side_effect=fail_first_temp_cleanup):
                 self.assertFalse(mod.provision_local_sql_artifact()['ok'])
             self.assertFalse(target.exists())
             self.assertEqual(list(Path(d).glob('.cv-sql-*')), [])
 
     def test_offline_sql_provision_is_idempotent_and_never_overwrites(self):
+        self._real_sql_fstat = mod.os.fstat
         import hashlib
         raw = b'certified fixture'
         pin = hashlib.sha1(b'blob ' + str(len(raw)).encode() + bytes([0]) + raw).hexdigest()
@@ -272,7 +300,7 @@ class Tests(unittest.TestCase):
                  patch.object(mod, 'LOCAL_SQL_BRIDGE_BLOB', pin), \
                  patch.object(mod.os, 'geteuid', return_value=0), \
                  patch.object(mod, 'private_bytes', side_effect=lambda p, n: p.read_bytes()), \
-                 patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)):
+                 patch.object(mod.os, 'fstat', side_effect=self.sql_fixture_fstat), patch.object(mod.Path, 'lstat', return_value=Mock(st_mode=0o40700, st_uid=0)):
                 self.assertEqual(mod.provision_local_sql_artifact(), {'ok': True, 'changed': True})
                 self.assertEqual(target.read_bytes(), raw)
                 self.assertEqual(target.stat().st_mode & 0o777, 0o600)
