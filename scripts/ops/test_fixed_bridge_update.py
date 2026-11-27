@@ -22,7 +22,7 @@ class FixedUpdate(unittest.TestCase):
         self.gate.git=Mock(side_effect=lambda *a: self.body if a[0]=="show" else SHA.encode() if a[0]=="rev-parse" else b"")
         self.gate.verified_checks=Mock(return_value=True)
         self.gate.atomic_file=Mock()
-        self.api=Mock(side_effect=lambda t,m,p: {"protected":True,"commit":{"sha":SHA}} if p.endswith("/branches/main") else {"statuses":[{"context":"guardian/postmerge","state":"success"}]})
+        self.api=Mock(side_effect=lambda t,m,p: (200, {"protected":True,"commit":{"sha":SHA}} if p.endswith("/branches/main") else {"statuses":[{"context":"guardian/postmerge","state":"success"}]}))
         ns={"Path":Path,"__file__":str(TARGET),"json":json,"_github_api":self.api}
         exec(compile(ast.Module(body=[node],type_ignores=[]),str(SOURCE),"exec"),ns)
         self.action=ns["action_update_bridge"]
@@ -34,7 +34,7 @@ class FixedUpdate(unittest.TestCase):
         self.assertEqual(self.gate.atomic_file.call_count,2)
         self.gate.atomic_file.assert_called_with(TARGET,self.body)
     def test_guardian_required(self):
-        self.api.side_effect=lambda t,m,p: {"protected":True,"commit":{"sha":SHA}} if p.endswith("/branches/main") else {"statuses":[]}
+        self.api.side_effect=lambda t,m,p: (200, {"protected":True,"commit":{"sha":SHA}} if p.endswith("/branches/main") else {"statuses":[]})
         self.assertNotEqual(self.invoke({"sha":SHA})["returncode"],0)
         self.gate.atomic_file.assert_not_called()
     def test_extra_args_denied(self):
