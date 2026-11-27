@@ -11,6 +11,35 @@ spec.loader.exec_module(bridge)
 
 
 class GuardianMetadataTests(unittest.TestCase):
+    def test_gate_recovery_transaction(self):
+        body = Path(__file__).with_name("github_release_gate.py").read_bytes()
+        old = b"historical fixture"
+        old_pin = "0b4413d415b0010c0caacab68fb2ed3064888c7b"
+        real_blob = bridge.guardian_blob
+        proof = dict(gate_matches_pin=True, token_read_verified=True,
+                     protected_main=True, push_checks_verified=True, main_sha="a"*40)
+        for scenario in ("success", "rollback", "preflight", "cas"):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
+                target = Path(directory) / "github_release_gate.py"
+                original = b"unexpected" if scenario == "cas" else old
+                target.write_bytes(original)
+                target.chmod(0o600)
+                replies = [proof, proof] if scenario == "success" else ([proof, {}] if scenario == "rollback" else [{}])
+                with patch.object(bridge, "guardian_blob", side_effect=lambda raw: old_pin if raw == old else real_blob(raw)), patch.object(bridge, "guardian_gate_attestation", side_effect=replies):
+                    result = bridge.guardian_gate_replace(target, body, "a"*40)
+                self.assertEqual(result["ok"], scenario == "success")
+                self.assertEqual(target.read_bytes(), body if scenario == "success" else original)
+                if scenario == "rollback":
+                    self.assertTrue(result["rollback_verified"])
+                if scenario in ("success", "rollback"):
+                    self.assertEqual((target.parent / ("github_release_gate.backup." + old_pin)).read_bytes(), old)
+
+    def test_gate_recovery_rejects_enabled_flags(self):
+        with patch.object(bridge, "load_env_files", return_value={"CV_GITHUB_RELEASE_ENABLED":"1"}), patch.object(bridge.urllib.request, "build_opener") as network:
+            result = bridge.action_guardian_recover_gate({"sha":"a"*40})
+        self.assertEqual(result["returncode"], 1)
+        network.assert_not_called()
+
     def test_missing_flags_are_disabled_with_provenance(self):
         flags, sources = bridge.guardian_effective_flags({})
         self.assertEqual(len(flags), 3)
