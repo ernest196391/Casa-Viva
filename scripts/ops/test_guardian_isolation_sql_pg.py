@@ -89,15 +89,28 @@ BEGIN
  THEN RAISE EXCEPTION 'RLS drift'; END IF;
 END $test$;
 """
-        pg(init+GATE+check_baseline+UP+checks+"""
-DO $debug_constraint$
+        pg(init+GATE+check_baseline+UP+checks+DOWN+check_baseline+"ROLLBACK;")
+        pg(init+GATE+UP+"""
+INSERT INTO public.crm_ops_bridge(action,status) VALUES('guardian_isolation_probe','done');
+"""+DOWN+"""
+DO $test$
 BEGIN
- RAISE NOTICE 'ISOLATION INSTALLED: %',
-  (SELECT pg_get_constraintdef(oid) FROM pg_constraint
-   WHERE conrelid='public.crm_ops_bridge'::regclass
-   AND conname='crm_ops_bridge_action_chk');
-END $debug_constraint$;
-"""+DOWN+check_baseline+"ROLLBACK;")
+ IF (SELECT count(*) FROM public.crm_ops_bridge WHERE action='guardian_isolation_probe' AND status='done')<>1
+ THEN RAISE EXCEPTION 'history lost'; END IF;
+ BEGIN
+  INSERT INTO public.crm_ops_bridge(action) VALUES('guardian_isolation_probe');
+  RAISE EXCEPTION 'new probe allowed';
+ EXCEPTION WHEN check_violation THEN NULL;
+ END;
+ BEGIN
+  UPDATE public.crm_ops_bridge SET status='queued' WHERE action='guardian_isolation_probe';
+  RAISE EXCEPTION 'requeue allowed';
+ EXCEPTION WHEN check_violation THEN NULL;
+ END;
+ INSERT INTO public.crm_ops_bridge(action) VALUES('health');
+END $test$;
+ROLLBACK;
+""")
 
     def test_baseline_drift_refused(self):
         pg("""BEGIN;
