@@ -544,6 +544,7 @@ def guardian_isolation_probe():
     result = {"scope": "dedicated_dev_sandbox", "functional_isolation_certified": False}
     workspace = None
     proc = None
+    workspace_fd = None
     try:
         flags, _ = guardian_effective_flags(load_env_files())
         if flags["CV_GITHUB_RELEASE_ENABLED"] or flags["CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED"]:
@@ -564,7 +565,8 @@ def guardian_isolation_probe():
         if not user.pw_uid or not user.pw_gid:
             raise ValueError("privileged user")
         workspace = Path(tempfile.mkdtemp(prefix="run-guardian-", dir=root))
-        os.chown(workspace, user.pw_uid, user.pw_gid)
+        workspace_fd = os.open(workspace, os.O_DIRECTORY | os.O_NOFOLLOW)
+        os.fchown(workspace_fd, user.pw_uid, user.pw_gid)
         # Fixed argv mirrors the existing sandbox specification. No user command.
         inner = """import os,json,socket
 checks={}
@@ -621,7 +623,13 @@ print(json.dumps(checks))
         if workspace is not None:
             try:
                 # Only remove the fixed synthetic marker, never recurse through untrusted files.
-                (workspace / "guardian-marker").unlink(missing_ok=True)
+                if workspace_fd is not None:
+                    try:
+                        os.unlink("guardian-marker", dir_fd=workspace_fd)
+                    except FileNotFoundError:
+                        pass
+                    finally:
+                        os.close(workspace_fd)
                 workspace.rmdir()
                 result["cleanup_verified"] = True
             except OSError:
