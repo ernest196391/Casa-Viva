@@ -39,15 +39,36 @@ class IsolationProbeTests(unittest.TestCase):
         self.assertIn("profile=='cv-dev-worker-bwrap (enforce)'", source)
         self.assertNotIn("profile.endswith(' (enforce)')", source)
 
-    def test_output_is_bounded_before_decoding(self):
-        import inspect
-        source = inspect.getsource(bridge.guardian_isolation_probe)
-        self.assertIn('4097 - len(buffer)', source)
-        self.assertIn('len(buffer) > 4096', source)
-        self.assertIn('raise ValueError("output_limit")', source)
-        self.assertNotIn('communicate(timeout=15)', source)
-        self.assertIn("proc.wait(timeout=remaining)", source)
-        self.assertIn("os.killpg(proc.pid, signal.SIGKILL)", source)
+    def launch(self, code):
+        import subprocess
+        import sys
+        return subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, start_new_session=True)
+
+    def test_capture_valid_and_cleanup(self):
+        proc = self.launch("print('{}')")
+        self.assertEqual(bridge.guardian_capture_probe(proc), {})
+        self.assertTrue(proc.stdout.closed)
+        self.assertEqual(proc.returncode, 0)
+
+    def test_capture_oversized_and_cleanup(self):
+        proc = self.launch("import time; print('x'*8192, flush=True); time.sleep(30)")
+        with self.assertRaisesRegex(ValueError, "output_limit"):
+            bridge.guardian_capture_probe(proc)
+        self.assertTrue(proc.stdout.closed)
+        self.assertIsNotNone(proc.returncode)
+
+    def test_capture_timeout_and_cleanup(self):
+        proc = self.launch("import time; time.sleep(30)")
+        with self.assertRaises(ValueError):
+            bridge.guardian_capture_probe(proc, timeout=0.1)
+        self.assertTrue(proc.stdout.closed)
+        self.assertIsNotNone(proc.returncode)
+
+    def test_capture_nonzero(self):
+        proc = self.launch("print('{}'); raise SystemExit(1)")
+        self.assertEqual(bridge.guardian_capture_probe(proc), {})
+        self.assertTrue(proc.stdout.closed)
 
     def test_check_matrix_requires_every_true(self):
         import inspect
