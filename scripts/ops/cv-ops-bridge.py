@@ -502,13 +502,13 @@ def guardian_isolation_metadata():
         return {"metadata_available": False, "functional_isolation_certified": False}
 
 
-def guardian_effective_isolation_unit():
+def guardian_effective_isolation_unit(unit="cv-receiver-isolation-check.service"):
     """Report only fixed unit metadata; never expose command lines or paths."""
     props = ("LoadState", "UnitFileState", "Type", "FragmentPath", "DropInPaths",
              "NeedDaemonReload", "NoNewPrivileges", "AppArmorProfile")
     try:
         p = subprocess.run(
-            ["/usr/bin/systemctl", "show", "cv-receiver-isolation-check.service"] +
+            ["/usr/bin/systemctl", "show", unit] +
             ["--property=" + name for name in props],
             capture_output=True, timeout=5, check=False,
             env={"PATH": "/usr/bin:/bin"})
@@ -588,7 +588,7 @@ def guardian_isolation_inventory():
         return {"available": False}
 
 
-def guardian_gate_attestation():
+def guardian_gate_attestation(candidate=None):
     """Verify fixed gate bytes before using its credential; GET only, no raw output."""
     from github_contingency import private_bytes
     import types
@@ -597,7 +597,7 @@ def guardian_gate_attestation():
               "protected_main": False, "push_checks_verified": False}
     try:
         path = Path("/root/supervisor/github_release_gate.py")
-        raw = private_bytes(path, 65536)
+        raw = private_bytes(path, 65536) if candidate is None else candidate
         if guardian_blob(raw) != expected:
             return result
         result["gate_matches_pin"] = True
@@ -637,6 +637,95 @@ def guardian_gate_attestation():
     except Exception:
         pass
     return result
+
+
+def guardian_gate_replace(target, body, expected_main):
+    """Fixed transition, serialized with a private lock; no execution of old bytes."""
+    import fcntl
+    import tempfile
+    from github_contingency import private_bytes
+    old_pin = "0b4413d415b0010c0caacab68fb2ed3064888c7b"
+    new_pin = "aa90d52195329fbc3b49e185ba3a4030481c60e7"
+    def certified(raw):
+        proof = guardian_gate_attestation(raw)
+        return all(proof.get(k) is True for k in ("gate_matches_pin", "token_read_verified", "protected_main", "push_checks_verified")) and proof.get("main_sha") == expected_main
+    def atomic(path, data):
+        fd, name = tempfile.mkstemp(prefix=".cv-gate-", dir=path.parent)
+        try:
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(name, path)
+            d = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(d)
+            finally:
+                os.close(d)
+        finally:
+            Path(name).unlink(missing_ok=True)
+    if guardian_blob(body) != new_pin:
+        return {"ok": False, "reason": "candidate_pin_mismatch"}
+    compile(body, str(target), "exec")
+    lock = target.with_name(".cv-gate-recovery.lock")
+    fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    with os.fdopen(fd, "rb") as stream:
+        import stat
+        st = os.fstat(stream.fileno())
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid() or st.st_mode & 0o077:
+            return {"ok": False, "reason": "unsafe_lock"}
+        fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        previous = private_bytes(target, 65536)
+        if guardian_blob(previous) == new_pin:
+            return {"ok": certified(previous), "changed": False}
+        if guardian_blob(previous) != old_pin:
+            return {"ok": False, "reason": "compare_and_swap_mismatch"}
+        if not certified(body):
+            return {"ok": False, "reason": "preflight_not_certified"}
+        backup = target.with_name("github_release_gate.backup." + old_pin)
+        if backup.exists() or backup.is_symlink():
+            if private_bytes(backup, 65536) != previous:
+                return {"ok": False, "reason": "backup_conflict"}
+        else:
+            atomic(backup, previous)
+        if private_bytes(target, 65536) != previous:
+            return {"ok": False, "reason": "compare_and_swap_mismatch"}
+        try:
+            atomic(target, body)
+            if private_bytes(target, 65536) != body or not certified(body):
+                raise ValueError("postcheck")
+        except Exception:
+            try:
+                current = private_bytes(target, 65536)
+                if current == body:
+                    atomic(target, previous)
+                restored = private_bytes(target, 65536) == previous
+            except Exception:
+                restored = False
+            return {"ok": False, "reason": "postcheck_failed", "rollback_verified": restored}
+        return {"ok": True, "changed": True, "backup_blob": old_pin, "installed_blob": new_pin}
+
+
+def action_guardian_recover_gate(args):
+    """Supabase-only fixed artifact recovery; never changes service flags."""
+    try:
+        if set(args) != {"sha"} or not re.fullmatch(r"[0-9a-f]{40}", args["sha"]):
+            raise ValueError("invalid arguments")
+        flags, _ = guardian_effective_flags(load_env_files())
+        if flags["CV_GITHUB_RELEASE_ENABLED"] or flags["CV_GITHUB_LOCAL_SQL_RECONCILE_ENABLED"]:
+            raise ValueError("flags enabled")
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *args, **kwargs):
+                raise ValueError("redirect rejected")
+        url = "https://raw.githubusercontent.com/ernest196391/Casa-Viva/032aa83acc5305f99f8f95c5539280dc0c714086/scripts/ops/github_release_gate.py"
+        with urllib.request.build_opener(NoRedirect()).open(url, timeout=15) as response:
+            body = response.read(65537)
+        if len(body) > 65536:
+            raise ValueError("oversize")
+        result = guardian_gate_replace(Path("/root/supervisor/github_release_gate.py"), body, args["sha"])
+    except Exception:
+        result = {"ok": False, "reason": "recovery_unavailable"}
+    return {"returncode": 0 if result["ok"] else 1, "output": json.dumps(result)}
 
 
 def guardian_history_schema(directory=Path("/root/backups/nexo-recovery/receiver/inbox")):
@@ -759,6 +848,7 @@ def action_guardian_runtime_evidence(args):
             "gate_attestation": guardian_gate_attestation(),
             "gate_identity": guardian_gate_identity(),
             "isolation_inventory": guardian_isolation_inventory(),
+            "discovered_isolation_metadata": {name: guardian_effective_isolation_unit(name) for name in ("cv-isolation-journal-1795389565.service", "cv-receiver-isolation-check-1795379863.service")},
             "history_schema": guardian_history_schema(),
             "services": services,
         }
@@ -3035,6 +3125,7 @@ def action_recovery_dispatch_auth(args):
 
 
 ACTIONS = {
+    "guardian_recover_gate": action_guardian_recover_gate,
     "guardian_runtime_evidence": action_guardian_runtime_evidence,
     "local_sql_reconcile": action_local_sql_reconcile,
     "receiver_crm_contract": action_receiver_crm_contract,
