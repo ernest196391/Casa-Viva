@@ -711,7 +711,7 @@ def _sandbox_parent() -> Path:
 def run_tests_isolated(repo_name: str, work: Path, changed: list, allowed: list):
     """Test a disposable copy; never execute Git or import files from that copy."""
     if not sandbox_enabled():
-        return run_tests(repo_name, work)
+        raise RuntimeError("isolated testing required")
     for rel in changed:
         target = _safe_target(work, rel)
         if target.is_symlink() or not target.is_file():
@@ -737,19 +737,16 @@ def run_tests_isolated(repo_name: str, work: Path, changed: list, allowed: list)
 
 def run_tests(repo_name: str, work: Path):
     logs = []
-    sandbox = sandbox_enabled()
-    ids = _sandbox_ids() if sandbox else None
+    if not sandbox_enabled():
+        raise RuntimeError("isolated testing required")
+    ids = _sandbox_ids()
 
     def _install(argv, timeout):
         # Caja: `npm ci --ignore-scripts` como cvdev, con red y sin secretos. Sin caja: la orden de siempre.
-        if sandbox:
-            return _box().install_deps(work, timeout, **ids)
-        return run(argv, cwd=str(work), timeout=timeout)
+        return _box().install_deps(work, timeout, **ids)
 
     def _step(argv, timeout):
-        if sandbox:
-            return _box().run_in_box(argv, work, timeout, **ids)
-        return run(argv, cwd=str(work), timeout=timeout)
+        return _box().run_in_box(argv, work, timeout, **ids)
 
     if repo_name == "vivabot":
         rc, out = _install(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], 180)
@@ -859,7 +856,7 @@ def process_claim(claim: dict):
             raise RuntimeError(sha_before)
 
         risk = task.get("risk") or "guarded"
-        auto = bool(claim.get("auto_merge")) and risk in ("safe", "guarded")
+        auto = False  # Autonomous worker never authorizes its own production release.
         message = f"Control OS task #{task['public_id']} [risk={risk}] [base={base_sha}] [auto_merge={1 if auto else 0}]"
         rc, out = run([
             "git",
@@ -1087,6 +1084,8 @@ def monitor_runs():
 
 
 def main():
+    if not sandbox_enabled():
+        return  # fail closed before credentials or task claim
     load_credentials()
     os.umask(0o077)
     with open(LOCK, "a") as guard:

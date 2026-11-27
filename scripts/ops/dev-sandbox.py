@@ -25,6 +25,8 @@ from __future__ import annotations
 import importlib.util
 import os
 import signal
+import selectors
+import time
 import subprocess
 from pathlib import Path
 
@@ -84,22 +86,74 @@ def _cap(text: bytes) -> str:
     return text.decode("utf-8", errors="replace")[-MAX_OUT:]
 
 
-def _launch(argv, *, cwd, env, timeout, uid, gid, spawn=subprocess.Popen):
+def _launch(argv, *, cwd, env, timeout, uid, gid, spawn=subprocess.Popen, preflight=None):
     """Lanza sin shell, como `uid:gid`, en grupo propio; al vencer mata TODO el grupo."""
     proc = spawn(
         argv, cwd=cwd, env=env, user=uid, group=gid, extra_groups=[],
-        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True,
+        stdin=subprocess.PIPE if preflight is not None else subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True,
     )
+    # Drain incrementally: never accumulate unbounded child output in RAM.
+    # A child that exceeds the byte budget is terminated, not truncated into
+    # an apparently valid success response. Deadline includes pipe drainage.
+    deadline = time.monotonic() + timeout
+    out = bytearray()
+    reason = None
+    approved = preflight is None
     try:
-        out, _ = proc.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        try:
-            os.killpg(proc.pid, _SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            proc.kill()
-        out, _ = proc.communicate()
-        return 124, _cap(out or b"") + f"\n[tiempo agotado a los {timeout} s; grupo de procesos terminado]"
-    return proc.returncode, _cap(out or b"")
+        with selectors.DefaultSelector() as selector:
+            selector.register(proc.stdout, selectors.EVENT_READ)
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not selector.select(remaining):
+                    reason = 124
+                    break
+                chunk = os.read(proc.stdout.fileno(), min(4096, MAX_OUT + 1 - len(out)))
+                if not chunk:
+                    break
+                out.extend(chunk)
+                if len(out) > MAX_OUT:
+                    reason = 125
+                    break
+                if not approved and b'\n' in out:
+                    line = bytes(out).split(b'\n', 1)[0]
+                    if len(line)>2048 or not preflight(line):
+                        reason = 125
+                        break
+                    if time.monotonic() >= deadline:
+                        reason = 124
+                        break
+                    proc.stdin.write(b'G')
+                    proc.stdin.flush()
+                    proc.stdin.close()
+                    approved = True
+        if reason is None and not approved:
+            reason = 125
+        if reason is None:
+            try:
+                proc.wait(timeout=max(0, deadline-time.monotonic()))
+            except subprocess.TimeoutExpired:
+                reason = 124
+    except (OSError, ValueError, TypeError, RuntimeError):
+        reason = 125
+    finally:
+        if reason is not None:
+            try:
+                os.killpg(proc.pid, _SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                proc.kill()
+        proc.stdout.close()
+        if preflight is not None and proc.stdin is not None and not proc.stdin.closed:
+            proc.stdin.close()
+        if reason is not None:
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                raise SandboxError("no se confirmó la terminación del proceso")
+    if reason == 124:
+        return 124, "[tiempo agotado; grupo de procesos terminado]"
+    if reason == 125:
+        return 125, "[salida excesiva o no verificable; ejecución rechazada]"
+    return proc.returncode, _cap(bytes(out))
 
 
 def run_in_box(cmd, workspace, timeout: int, *, uid: int, gid: int, bwrap_binary: str = DEDICATED_BWRAP,
@@ -137,3 +191,16 @@ def install_deps(workspace, timeout: int, *, uid: int, gid: int, environ=None,
                 "NPM_CONFIG_CACHE": str(home / "cache")})
     argv = ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"]
     return _launch(argv, cwd=workspace, env=env, timeout=timeout, uid=uid, gid=gid, spawn=spawn)
+
+def run_release_pilot(workspace, facts, expected_digest, *, uid, gid, spawn=subprocess.Popen, preflight=None):
+    """Fixed candidate pilot only; caller must supply disposable cgroup and profiles."""
+    boundary = _load("cv_release_boundary", "github_release_candidate_boundary.py")
+    if type(uid) is not int or type(gid) is not int or uid <= 0 or gid <= 0:
+        raise SandboxError("unprivileged identity required")
+    cmd = boundary.confined_command(expected_digest, facts, host_observed=preflight is not None)
+    argv = spec.build_bwrap_command(workspace, cmd, bwrap_binary=DEDICATED_BWRAP,
+                                    work_root=WORK_ROOT, child_env=BOX_ENV, drop_capabilities=True)
+    if spec.validate_command(argv, WORK_ROOT, bwrap_binary=DEDICATED_BWRAP, require_cap_drop=True):
+        raise SandboxError("invalid release pilot command")
+    return _launch(["/usr/bin/aa-exec", "-p", "cv-release-pilot-bootstrap", "--", *argv],
+                   cwd=str(workspace), env={}, timeout=10, uid=uid, gid=gid, spawn=spawn, preflight=preflight)

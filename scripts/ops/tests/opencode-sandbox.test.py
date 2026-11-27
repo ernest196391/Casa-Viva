@@ -98,6 +98,30 @@ class ProfileFileTests(unittest.TestCase):
         rules = spec._profile_rules(PROFILE_TEXT)
         self.assertNotIn("unconfined", "\n".join(rules).lower())
 
+    def test_dev_worker_bootstrap_constants_are_read_only(self):
+        rules = spec._profile_rules((SANDBOX_DIR / "dev-worker-sandbox.profile").read_text(encoding="utf-8").split("# CV_RELEASE_PILOT_BEGIN")[0])
+        self.assertIn("/proc/sys/kernel/overflowuid r,", rules)
+        self.assertIn("/proc/sys/kernel/overflowgid r,", rules)
+        self.assertEqual([rule for rule in rules if rule.startswith("/proc/")],
+                         ["/proc/sys/kernel/overflowuid r,", "/proc/sys/kernel/overflowgid r,",
+                          "/proc/sys/user/max_user_namespaces r,"])
+        self.assertIn("deny network,", rules)
+        self.assertFalse(any(rule.startswith("capability") for rule in rules))
+
+    def test_split_pilot_candidate_denies_privileged_operations(self):
+        text = (SANDBOX_DIR / "dev-worker-sandbox.profile").read_text(encoding="utf-8")
+        bootstrap, candidate = text.split("# CV_RELEASE_PILOT_BEGIN")[1].split("profile cv-release-pilot-candidate flags=")
+        self.assertIn("/usr/bin/python3.12 ix,", bootstrap)
+        self.assertIn("change_profile -> &cv-release-pilot-candidate,", bootstrap)
+        self.assertNotIn("change_profile", candidate)
+        self.assertIn("/ r,", spec._profile_rules(bootstrap))
+        self.assertNotIn("/** r,", spec._profile_rules(bootstrap))
+        self.assertNotIn("/ r,", spec._profile_rules(candidate))
+        rules = spec._profile_rules(candidate)
+        for rule in ("deny capability,", "deny userns,", "deny network,", "deny mount,", "deny pivot_root,"):
+            self.assertIn(rule, rules)
+        self.assertFalse(any(rule.startswith("capability ") for rule in rules))
+
     def test_profile_grants_no_capability(self):
         rules = spec._profile_rules(PROFILE_TEXT)
         for rule in rules:
@@ -312,6 +336,17 @@ class CommandNegativeTests(unittest.TestCase):
         violations = spec.validate_command(tampered)
         self.assertTrue(any("/etc/ssl" in v for v in violations))
 
+    def test_explicit_capability_drop_required(self):
+        cmd = spec.build_bwrap_command(WORKSPACE, self.inner, drop_capabilities=True)
+        self.assertEqual(spec.validate_command(cmd, require_cap_drop=True), [])
+        self.assertTrue(spec.validate_command(self.cmd, require_cap_drop=True))
+        cmd[cmd.index("--cap-drop")+1] = "CAP_NET_ADMIN"
+        self.assertTrue(spec.validate_command(cmd, require_cap_drop=True))
+
+    def test_capability_addition_rejected(self):
+        cmd = self.cmd[:1] + ["--cap-add", "CAP_SYS_ADMIN"] + self.cmd[1:]
+        self.assertTrue(spec.validate_command(cmd))
+
     def test_rejects_share_net(self):
         tampered = self.cmd[:1] + ["--share-net"] + self.cmd[1:]
         violations = spec.validate_command(tampered)
@@ -358,17 +393,36 @@ class VerifyLogicTests(unittest.TestCase):
         self.assertEqual(set(report["checks"]), set(verify.CHECKS))
 
     def test_probe_commands_use_bwrap_and_workspace(self):
-        captured = {}
+        captured = []
 
         def runner(cmd):
-            captured["cmd"] = cmd
+            captured.append(cmd)
             return 0, probe(cmd[-1]), b""
 
         verify.run_checks(WORKSPACE, runner)
-        cmd = captured["cmd"]
-        self.assertEqual(Path(cmd[0]).name, "bwrap")
-        self.assertEqual(spec.validate_command(cmd), [])
-        self.assertIn("net_denied", cmd)
+        self.assertEqual([cmd[-1] for cmd in captured], list(verify.CHECKS))
+        for cmd in captured:
+            self.assertEqual(Path(cmd[0]).name, "bwrap")
+            self.assertEqual(spec.validate_command(cmd), [])
+
+    def test_split_runner_compiles_fixed_prefix_and_rejects_arbitrary_code(self):
+        root = verify.DEV_WORK_ROOT
+        cmd = verify.build_probe_command(root + "/run-e3", "bootstrap",
+                                         work_root=root, bwrap_binary=verify.DEV_BWRAP,
+                                         drop_capabilities=True)
+        original = verify.real_runner
+        try:
+            verify.real_runner = lambda argv: argv
+            actual = verify.split_profile_runner(cmd)
+            self.assertIn("--cap-drop", actual)
+            self.assertIn("stack cv-release-pilot-candidate", actual[-2])
+            self.assertTrue(actual[-2].endswith(verify.INNER_PROBE))
+            compile(actual[-2], "<synthetic-probe>", "exec")
+            cmd[-2] = "print('arbitrary')"
+            with self.assertRaises(ValueError):
+                verify.split_profile_runner(cmd)
+        finally:
+            verify.real_runner = original
 
     def test_network_failure_reported(self):
         outcomes = {"write_usr_denied": (0, probe("write_usr_denied", ok=False, detail="wrote"), b"")}
@@ -387,6 +441,11 @@ class VerifyLogicTests(unittest.TestCase):
         report = verify.run_checks(WORKSPACE, fake_runner(outcomes))
         self.assertEqual(report["verdict"], verify.VERDICT_NO_OPERATIVO)
         self.assertEqual(set(report["checks"]), {"bootstrap"})
+        self.assertEqual(report["checks"]["bootstrap"]["stderr"], "bwrap: setting up uid map: Permission denied")
+
+    def test_bootstrap_diagnostic_is_bounded(self):
+        report = verify.run_checks(WORKSPACE, fake_runner({"bootstrap": (1, b"", b"x"*4096)}))
+        self.assertEqual(len(report["checks"]["bootstrap"]["stderr"]), 512)
 
     def test_mid_check_without_answer_is_failed(self):
         outcomes = {"home_masked": (1, b"", b"cualquier error")}

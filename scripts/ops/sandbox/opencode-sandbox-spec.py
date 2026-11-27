@@ -131,6 +131,7 @@ def build_bwrap_command(
     bwrap_binary: str = BWRAP_BIN,
     work_root: str = DEFAULT_WORK_ROOT,
     child_env=None,
+    drop_capabilities=False,
 ) -> list:
     """Comando Bubblewrap de la propuesta (montaje mínimo).
 
@@ -152,6 +153,10 @@ def build_bwrap_command(
         "--new-session",
         "--clearenv",
     ]
+    if type(drop_capabilities) is not bool:
+        raise SandboxSpecError("invalid capability policy")
+    if drop_capabilities:
+        cmd.extend(["--cap-drop", "ALL"])
     for key in sorted(env):
         cmd.extend(["--setenv", key, env[key]])
     for source in RO_BIND_SYSTEM:
@@ -177,7 +182,7 @@ def _pairs(cmd: list, flag: str, arity: int = 2) -> list:
     return pairs
 
 
-def validate_command(cmd, work_root: str = DEFAULT_WORK_ROOT, *, bwrap_binary: str | None = None) -> list:
+def validate_command(cmd, work_root: str = DEFAULT_WORK_ROOT, *, bwrap_binary: str | None = None, require_cap_drop=False) -> list:
     """Verificación estructural del comando; devuelve violaciones ([]) si ok."""
     violations = []
     if not isinstance(cmd, (list, tuple)) or len(cmd) < 10:
@@ -191,9 +196,12 @@ def validate_command(cmd, work_root: str = DEFAULT_WORK_ROOT, *, bwrap_binary: s
     for required in ("--unshare-all", "--die-with-parent", "--new-session", "--clearenv"):
         if flag_count(required) != 1:
             violations.append(f"falta {required} (exactamente una vez)")
-    for forbidden in ("--share-net", "--dev-bind", "--dev-bind-try", "--bind-try"):
+    for forbidden in ("--share-net", "--dev-bind", "--dev-bind-try", "--bind-try", "--cap-add"):
         if flag_count(forbidden):
             violations.append(f"bandera prohibida presente: {forbidden}")
+
+    if require_cap_drop and (flag_count("--cap-drop") != 1 or _pairs(cmd, "--cap-drop", arity=1) != [("ALL",)]):
+        violations.append("required capability drop ALL missing")
 
     for key, _value in _pairs(cmd, "--setenv"):
         if key not in CHILD_ENV_KEYS:

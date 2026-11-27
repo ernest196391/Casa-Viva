@@ -8,6 +8,7 @@ import sys
 import urllib.error
 
 PATH = Path(__file__).resolve().parents[1] / 'github_contingency.py'
+sys.path.insert(0, str(PATH.parent))
 spec = importlib.util.spec_from_file_location('contingency', PATH)
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
@@ -397,6 +398,13 @@ class Tests(unittest.TestCase):
             self.assertEqual(c.poll(), 'idle')
             self.assertEqual(list(Path(d).glob('nonce-*')), [])
 
+    def test_remote_release_cannot_enter_privileged_transaction(self):
+        spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        with patch.object(gate, '_apply_release_transaction', side_effect=AssertionError('must not execute')):
+            self.assertEqual(gate.apply_release('a'*40, None), {'ok': False, 'reason': 'independent_execution_boundary_required'})
+
     def test_release_gate_ci_requires_exact_push(self):
         spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
         gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate)
@@ -413,8 +421,8 @@ class Tests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
         gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate)
         sha = 'a'*40
-        with patch.object(gate, 'read_private', return_value=b'CV_GITHUB_RELEASE_TOKEN=synthetic'), patch.object(gate, 'git', side_effect=[b'', sha.encode()]), patch.object(gate, 'atomic_file') as write:
-            self.assertEqual(gate.apply_release(sha, lambda *a: {'protected': False, 'commit': {'sha': sha}}), {'ok': False, 'reason': 'main_not_protected'})
+        with tempfile.TemporaryDirectory() as d, patch.object(gate, 'ROOT', Path(d)), patch.object(gate, 'read_private', return_value=b'CV_GITHUB_RELEASE_TOKEN=synthetic'), patch.object(gate, 'git', side_effect=[b'', sha.encode()]), patch.object(gate, 'atomic_file') as write:
+            self.assertEqual(gate._apply_release_transaction(sha, lambda *a: {'protected': False, 'commit': {'sha': sha}}), {'ok': False, 'reason': 'main_not_protected'})
             write.assert_not_called()
 
     def test_release_gate_atomic_backup_and_main_recheck(self):
@@ -427,11 +435,11 @@ class Tests(unittest.TestCase):
             target.write_bytes(b'old'); target.chmod(0o600)
             token.write_bytes(b'CV_GITHUB_RELEASE_TOKEN=synthetic'); token.chmod(0o600)
             api = lambda *a: {'protected': True, 'commit': {'sha': sha}}
-            with patch.object(gate, 'ROOT', root), patch.object(gate, 'TARGET', target), patch.object(gate, 'TOKEN_FILE', token), patch.object(gate, 'verified_checks', return_value=True), patch.object(gate, 'git', side_effect=[b'', sha.encode(), body, b'', b'b'*40]):
-                self.assertEqual(gate.apply_release(sha, api)['reason'], 'main_moved')
+            with patch.object(gate, 'ROOT', root), patch.object(gate, 'TARGET', target), patch.object(gate, 'TOKEN_FILE', token), patch.object(gate, 'verified_checks', return_value=True), patch.object(gate, 'approved_revision', return_value=True), patch.object(gate, 'git', side_effect=[b'', sha.encode(), body, b'', b'b'*40]):
+                self.assertEqual(gate._apply_release_transaction(sha, api)['reason'], 'main_moved')
                 self.assertEqual(target.read_bytes(), b'old')
-            with patch.object(gate, 'ROOT', root), patch.object(gate, 'TARGET', target), patch.object(gate, 'TOKEN_FILE', token), patch.object(gate, 'verified_checks', return_value=True), patch.object(gate, 'git', side_effect=[b'', sha.encode(), body, b'', sha.encode()]):
-                self.assertEqual(gate.apply_release(sha, api), {'ok': True, 'changed': True, 'sha': sha})
+            with patch.object(gate, 'ROOT', root), patch.object(gate, 'TARGET', target), patch.object(gate, 'TOKEN_FILE', token), patch.object(gate, 'verified_checks', return_value=True), patch.object(gate, 'approved_revision', return_value=True), patch.object(gate, 'git', side_effect=[b'', sha.encode(), body, b'', sha.encode()]):
+                self.assertEqual(gate._apply_release_transaction(sha, api), {'ok': True, 'changed': True, 'sha': sha, 'state': 'pending_health'})
                 self.assertEqual(target.read_bytes(), body)
                 self.assertEqual(next(root.glob('github_contingency.backup.*')).read_bytes(), b'old')
 

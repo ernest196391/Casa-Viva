@@ -68,6 +68,8 @@ CHECKS = (
     "home_masked",
     "etc_shadow_absent",
     "net_denied",
+    "candidate_no_capabilities",
+    "candidate_profile",
 )
 
 INNER_PROBE = r'''
@@ -122,6 +124,20 @@ elif name == "net_denied":
         done(False, "conexión TCP permitida (inesperado)")
     except OSError as exc:
         done(True, type(exc).__name__)
+elif name == "candidate_no_capabilities":
+    try:
+        fields = dict(line.split(":", 1) for line in open("/proc/self/status") if ":" in line)
+        keys = ("CapEff", "CapPrm", "CapInh", "CapAmb", "CapBnd")
+        done(all(int(fields[k].strip(), 16) == 0 for k in keys)
+             and fields["NoNewPrivs"].strip() == "1", "capability sets and NNP")
+    except (OSError, ValueError, KeyError):
+        done(False, "missing capability evidence")
+elif name == "candidate_profile":
+    try:
+        label = open("/proc/self/attr/current").read().strip()
+        done(label == "cv-release-pilot-bootstrap//&cv-release-pilot-candidate (enforce)", label)
+    except OSError:
+        done(False, "missing AppArmor label")
 else:
     done(False, "prueba desconocida")
 '''
@@ -131,6 +147,20 @@ def build_probe_command(workspace: str, check: str, **kwargs) -> list:
     """Comando bwrap completo para una prueba individual."""
     inner = ["/usr/bin/python3", "-c", INNER_PROBE, check]
     return spec.build_bwrap_command(workspace, inner, **kwargs)
+
+
+def split_profile_runner(cmd: list):
+    """Fixed trusted pilot launcher, never selected by candidate input."""
+    if cmd[0] != DEV_BWRAP or cmd[cmd.index("--")+1] != "/usr/bin/python3":
+        raise ValueError("unexpected pilot command")
+    cmd = list(cmd)
+    index = cmd.index("--") + 1
+    if cmd[index+1:index+3] != ["-c", INNER_PROBE] or len(cmd[index:]) != 4 or cmd[-1] not in CHECKS:
+        raise ValueError("only fixed synthetic probes permitted")
+    cmd[index] = "/usr/bin/python3.12"
+    prefix = """with open("/proc/self/attr/current", "w") as f:\n    f.write("stack cv-release-pilot-candidate")\nwith open("/proc/self/attr/current") as f:\n    label = f.read().strip()\nif label != "cv-release-pilot-bootstrap//&cv-release-pilot-candidate (enforce)":\n    raise SystemExit("stack verification failed")\n"""
+    cmd[index+2] = prefix + INNER_PROBE
+    return real_runner(["/usr/bin/aa-exec", "-p", "cv-release-pilot-bootstrap", "--", *cmd])
 
 
 def real_runner(cmd: list):
@@ -170,10 +200,11 @@ def run_checks(workspace: str, runner, **kwargs) -> dict:
         try:
             cmd = build_probe_command(workspace, check, **kwargs)
             violations = spec.validate_command(cmd, kwargs.get("work_root", spec.DEFAULT_WORK_ROOT),
-                                               bwrap_binary=kwargs.get("bwrap_binary"))
+                                               bwrap_binary=kwargs.get("bwrap_binary"),
+                                               require_cap_drop=kwargs.get("drop_capabilities", False))
             if violations:
                 raise ValueError("comando de prueba rechazado")
-            returncode, stdout, _stderr = runner(cmd)
+            returncode, stdout, stderr = runner(cmd)
         except Exception as exc:
             results[check] = {"ok": False, "detail": f"runner falló: {exc}"}
             verdict = VERDICT_NO_OPERATIVO if check == "bootstrap" else VERDICT_FAILED
@@ -185,6 +216,7 @@ def run_checks(workspace: str, runner, **kwargs) -> dict:
                 "ok": False,
                 "detail": f"sin respuesta válida (returncode {returncode}); "
                           "si esto ocurre en bootstrap, la jaula no arranca",
+                "stderr": stderr[:512].decode("utf-8", errors="replace") if isinstance(stderr, bytes) else "",
             }
             verdict = VERDICT_NO_OPERATIVO if check == "bootstrap" else VERDICT_FAILED
             break
@@ -228,6 +260,7 @@ def main(argv: list) -> int:
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument("--workspace", default=None)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--split-profile", action="store_true", help="Explicit temporary E3 profile pair")
     parser.add_argument("--dev-worker", action="store_true", help="Usar binario y raíz dedicados de E2")
     parser.add_argument("--cgroup-evidence", type=Path, help="Evaluar JSON de mediciones, sin ejecutar sandbox")
     parser.add_argument("--memory-bytes", type=int)
@@ -259,7 +292,8 @@ def main(argv: list) -> int:
                       "esta herramienta no se ejecuta automáticamente ni en CI",
         }))
         return EXIT_REFUSED
-    options = {"bwrap_binary": DEV_BWRAP, "work_root": DEV_WORK_ROOT} if args.dev_worker else {}
+    options = {"bwrap_binary": DEV_BWRAP, "work_root": DEV_WORK_ROOT,
+               "drop_capabilities": True} if args.dev_worker else {}
     try:
         spec.validate_workspace(args.workspace, options.get("work_root", spec.DEFAULT_WORK_ROOT))
     except spec.SandboxSpecError as exc:
@@ -274,7 +308,12 @@ def main(argv: list) -> int:
     if os.geteuid() == 0:
         print(json.dumps({"verdict": "refused", "reason": "ejecutar como usuario no privilegiado"}))
         return EXIT_REFUSED
-    report = run_checks(args.workspace, real_runner, **options)
+    if args.split_profile and not args.dev_worker:
+        parser.error("split profile requires --dev-worker")
+    if not args.split_profile:
+        print(json.dumps({"verdict": "refused", "reason": "explicit split-profile required for release E3"}))
+        return EXIT_REFUSED
+    report = run_checks(args.workspace, split_profile_runner, **options)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     if report["verdict"] == VERDICT_OK:
         return EXIT_OK

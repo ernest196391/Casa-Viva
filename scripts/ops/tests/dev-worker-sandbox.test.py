@@ -85,21 +85,24 @@ class SandboxWiringTests(unittest.TestCase):
         self.assertFalse(worker.sandbox_enabled())
 
     # --- apagada: comportamiento de siempre
-    def test_apagada_no_toca_la_caja(self):
-        calls = []
-        with mock.patch.object(worker, "run", lambda cmd, cwd=None, timeout=120: (calls.append(cmd), (0, "ok"))[1]):
-            ok, _ = worker.run_tests("casa-viva", self.work)
-        self.assertTrue(ok)
+    def test_apagada_no_ejecuta(self):
+        with mock.patch.object(worker, "run") as run:
+            with self.assertRaisesRegex(RuntimeError,"isolated testing required"):
+                worker.run_tests("casa-viva", self.work)
+            run.assert_not_called()
         self.assertEqual(self.fake.calls, [])
-        self.assertIn(["npm", "install", "--no-audit", "--no-fund"], calls)
-        for profile in worker.TEST_PROFILES["casa-viva"]:
-            self.assertIn(profile, calls)
 
-    def test_apagada_isolated_equivale_a_run_tests(self):
-        with mock.patch.object(worker, "run_tests", return_value=(True, "logs")) as rt:
-            self.assertEqual(worker.run_tests_isolated("vivabot", self.work, ["docs/a.md"], ["docs/"]), (True, "logs"))
-        rt.assert_called_once()
-        self.assertEqual(self.fake.calls, [])
+    def test_apagada_isolated_rechaza(self):
+        with mock.patch.object(worker, "run_tests") as rt:
+            with self.assertRaisesRegex(RuntimeError,"isolated testing required"):
+                worker.run_tests_isolated("vivabot", self.work, ["docs/a.md"], ["docs/"])
+            rt.assert_not_called()
+
+    def test_main_no_credentials_or_claim_without_sandbox(self):
+        with mock.patch.object(worker,"load_credentials") as load, mock.patch.object(worker,"api") as api:
+            worker.main()
+            load.assert_not_called()
+            api.assert_not_called()
 
     # --- encendida
     def test_encendida_todo_pasa_por_la_caja(self):
@@ -225,7 +228,7 @@ class SandboxWiringTests(unittest.TestCase):
         tree = ast.parse((OPS / "dev-worker.py").read_text(encoding="utf-8"))
         fn = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "run_tests")
         direct = [c for c in ast.walk(fn) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id == "run"]
-        self.assertEqual(len(direct), 2, "solo _install y _step (rama sin caja) pueden llamar a run()")
+        self.assertEqual(len(direct), 0, "no privileged fallback")
 
     def test_estatico_el_worktree_solo_va_a_la_caja_con_el_interruptor(self):
         src = (OPS / "dev-worker.py").read_text(encoding="utf-8")

@@ -1,3 +1,39 @@
+## CV-AUTO-001 — compatibilidad transporte PM2 7 (2026-11-25)
+
+- Hostinger d8540db49e82c06a75367ceac2fad48ab74f97a4: 6 regresiones OK (0.012s), daemon_identity (2429462,241763921,2049,262257) verificada; RPC runtime_error, tres unknown, bridge active; precheck bloqueó candidato, perfil original OK y limpieza. PM2 7.0.4 distribuye transportes en modules/pm2-axon y modules/pm2-axon-rpc, no necesariamente dependencias npm externas. 5bd1f5d prioriza módulos internos, conserva compatibilidad legacy y añade diagnóstico 25; b6f268c prueba ambos layouts y ausencia mediante Node real. Hipótesis causal apoyada por distribución pública, pendiente confirmar ejecución real. No reinicio ni producción ni gasto. Reversión: revertir rama y eliminar recursos temporales únicamente.
+
+## CV-AUTO-001 — identidad PM2 sin archivo PID (2026-11-25)
+
+- Hostinger: PM2 7.0.4 daemon PID 2429462, rpc.sock y pub.sock escuchando, rpc.sock root:root 775, pm2.pid ausente. Causa confirmada del rechazo anterior. 8fe9a79 sustituye dependencia PID por SO_PEERCRED, inicio de proceso, título PM2 y dev/inode socket; exige identidad estable antes/después del RPC. 383e74a regresiones sin archivo PID, socket sustituido, epoch cambiado, daemon ausente y peer incorrecto. Pendiente CI nuevo y prueba real --local-observation; no producción, no reinicio, no gasto. Reversión: revertir rama y limpiar solo recursos temporales. No confundir identidad observada en dos conexiones con autenticación de cada conexión RPC.
+
+## CV-AUTO-001 — observación real bloqueada por RPC (2026-11-25)
+
+- Hostinger revisión c7a398f84ff2212b36295ee6224d5c80ad02dd53: bridge active; tres PM2 unknown; precheck bloqueó antes de candidato y perfiles temporales; perfil original OK, limpieza finalizada. Causa exacta no determinada. 4a6476a añade categorías de diagnóstico RPC sin salida cruda ni secretos; 016c978 añade regresiones. No se cambia política ni se inicia PM2; siguiente paso diagnóstico local únicamente, no repetir piloto. CI base foundation/staging correctos, validate/integration/content-studio/postgres correctos, browser en curso al consultar. Sin producción ni gasto.
+
+## CV-AUTO-001 — entrada local de observación (2026-11-25)
+
+- 29770cd/cbc58b9 recolector fijo PM2 RPC getMonitorData sin CLI ni arranque de daemon, Systemd ActiveState; 3e26b77 entrada --local-observation reutiliza fixture fijo y handshake; bd90798 regresiones y c0972f9 CI. Pendiente verificar compatibilidad real de RPC del PM2 instalado y CI, no instalado en producción. No repetir piloto sintético; prueba reversible con datos reales solo tras CI. Reversión: retirar recursos temporales y revertir commits de rama. Costo nuevo cero.
+
+## CV-AUTO-001 — proyección y observación advisory (2026-11-25)
+
+- Base 422db02. 3e39e3e conecta summary normalizado al mismo lanzador con handshake host obligatorio en modo observation_only, contrasta resultado con referencia y no autoriza producción; 2e487a2 añade 6561 combinaciones del contrato original y entradas inválidas, 2e4aa34 CI, 1683d0e prueba handshake y discrepancias. El contrato del buzón y puente root permanecen intactos. Pruebas pendientes de CI y observación real; no se ha conectado a producción ni existe entrada remota nueva. Reversión: revertir commits de rama. Costo nuevo cero.
+
+## CV-AUTO-001 — piloto sincronizado con observador host (2026-11-25)
+
+- f3dbc60, 9281589, 0b9f574: el prefijo confiable del fixture mide bytes, espera ACK por stdin; el lanzador observa PID host/NSpid/UID, InvocationID y hash de staging antes de ACK. 9bf587c regresiones de identidad, fba479a rechazo en errores o vencimiento, 7f68ad4 pruebas de tuberías reales. Solo fixture fijo, no recibo productivo; CI y ejecución VPS pendientes. El puente root sigue sin separación instalada. No cambios de producción ni gasto adicional. Reversión: revertir commits en rama y retirar únicamente perfiles y workspace temporales del piloto.
+
+## CV-AUTO-001 — observador kernel del piloto (2026-11-25)
+
+- c9e6b52 añade muestreo de PID host, NSpid, start ticks, UID, NNP, capacidades, AppArmor y cgroup, con InvocationID estable y rechazo de múltiples coincidencias. 07ef808 añade pruebas; 2f71687 integra CI. Aún no conectado al lanzador ni vinculado a bytes cargados: requiere piloto específico y correlación temporal independiente. No autoriza producción. Hostinger 16:16:31 -04:00: principal stopped exit 0, recovery online PID 2441402, ambos unstable_restarts 0; no reiniciar sin verificar rol WhatsApp. Costo nuevo cero.
+
+## CV-AUTO-001 — medición previa del fixture (2026-11-25)
+
+- 41a556d mide bytes exactos y restricciones dentro del prefijo confiable antes de ejecutar el fixture fijo; 6b34adf prueba el contrato de salida y rechaza evidencias incompletas. PID interno del namespace, no identidad de host; canal compartido con fixture, no sirve para candidatos arbitrarios ni recibos productivos. Pendiente CI y piloto VPS; separación del bridge root aún no instalada. Reversión: revertir commits de rama. Costo actual: infraestructura existente; nuevo costo 0; alternativa gratuita: sandbox existente; sin escalado autorizado.
+
+## CV-AUTO-001 — contrato de observación independiente (2026-11-25)
+
+- Base 70287a101300f4ec3afe94eea3fdb2d1c3714b2a. 8737cbb añade contrato de observador con revisión, hash, epoch, InvocationID, uid no root y confinamiento; ab0e043 añade regresiones de cambios de identidad, fallo confirmado y evidencia desconocida. Las dependencias son callbacks confiables de prueba, no proveedor productivo instalado. No acredita bytes cargados por sí mismo. Mantener release cerrado; pendiente proveedor independiente, separación real del puente root y pruebas de recuperación. Reversión: revertir commits en rama, sin cambios VPS. Costo actual: infraestructura existente; costo nuevo requerido 0; alternativa gratuita: sandbox y systemd existentes; escalar solo si se demuestra necesidad y se autoriza.
+
 # CURRENT — P0 preservar ofertas al editar pedidos (2026-11-21)
 
 ## Infraestructura VPS durante HTTP 402 (2026-11-23)
