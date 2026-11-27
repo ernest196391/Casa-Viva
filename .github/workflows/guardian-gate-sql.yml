@@ -1,0 +1,45 @@
+name: Certificar autorizacion SQL Gate (sin produccion)
+on:
+  pull_request:
+    paths:
+      - "scripts/ops/sql/allow-guardian-gate-recovery.sql"
+      - "scripts/ops/sql/rollback-guardian-gate-recovery.sql"
+      - "scripts/ops/test_guardian_gate_sql.py"
+      - ".github/workflows/guardian-gate-sql.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/ops/sql/allow-guardian-gate-recovery.sql"
+      - "scripts/ops/sql/rollback-guardian-gate-recovery.sql"
+      - "scripts/ops/test_guardian_gate_sql.py"
+      - ".github/workflows/guardian-gate-sql.yml"
+permissions:
+  contents: read
+jobs:
+  sql-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cv_gate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cv_gate_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: cv_gate_test
+      CV_SQL_TEST_PG: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test full transaction, RLS and rollback
+        run: python3 -m unittest -v scripts/ops/test_guardian_gate_sql.py
