@@ -19,13 +19,15 @@ GATE=(HERE/"sql/allow-guardian-gate-recovery.sql").read_text()
 UP=(HERE/"sql/allow-guardian-isolation-probe.sql").read_text()
 DOWN=(HERE/"sql/rollback-guardian-isolation-probe.sql").read_text()
 
-def pg(sql, success=True):
+def pg(sql, success=True, expected_error=None):
     r=subprocess.run(["psql","-X","-qAt","-v","ON_ERROR_STOP=1"],input=sql,text=True,
                      capture_output=True,timeout=40,check=False)
     if success and r.returncode != 0:
         raise AssertionError("postgres failed: "+r.stderr[-3000:])
     if not success and r.returncode == 0:
         raise AssertionError("expected postgres failure")
+    if expected_error is not None and ('ERROR:  '+expected_error) not in r.stderr:
+        raise AssertionError('unexpected PostgreSQL error: '+r.stderr[-3000:])
     return r
 
 @unittest.skipUnless(os.environ.get("CV_SQL_TEST_PG")=="1","isolated postgres required")
@@ -144,15 +146,15 @@ BEGIN
 END $test$;
 ROLLBACK;
 """)
-        pg(revoked+"ALTER TABLE public.crm_ops_bridge DISABLE TRIGGER cv_guardian_isolation_revoked;"+UP+"ROLLBACK;",success=False)
-        pg(revoked+"CREATE OR REPLACE FUNCTION public.cv_guardian_isolation_revoked() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog AS $$BEGIN RETURN NEW; END;$$;"+UP+"ROLLBACK;",success=False)
+        pg(revoked+"ALTER TABLE public.crm_ops_bridge DISABLE TRIGGER cv_guardian_isolation_revoked;"+UP+"ROLLBACK;",success=False,expected_error="guardian_isolation_reopen_trigger_drift")
+        pg(revoked+"CREATE OR REPLACE FUNCTION public.cv_guardian_isolation_revoked() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog AS $$BEGIN RETURN NEW; END;$$;"+UP+"ROLLBACK;",success=False,expected_error="guardian_isolation_reopen_trigger_drift")
 
     def test_baseline_drift_refused(self):
         pg("""BEGIN;
 CREATE TABLE public.crm_ops_bridge(action text,requested_by text,args jsonb);
 ALTER TABLE public.crm_ops_bridge ADD CONSTRAINT crm_ops_bridge_action_chk CHECK (action='health');
 ALTER TABLE public.crm_ops_bridge ENABLE ROW LEVEL SECURITY;
-"""+UP+"ROLLBACK;",success=False)
+"""+UP+"ROLLBACK;",success=False,expected_error="guardian_isolation_baseline_drift")
 
 if __name__=="__main__":
     unittest.main()
