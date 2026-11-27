@@ -28,7 +28,7 @@ BEGIN
     EXECUTE 'ALTER TABLE public.crm_ops_bridge DROP CONSTRAINT crm_ops_bridge_action_chk';
     EXECUTE 'ALTER TABLE public.crm_ops_bridge ADD CONSTRAINT crm_ops_bridge_action_chk CHECK (' ||
         expression ||
-        ' OR ((action = ''guardian_recover_gate''::text) AND (args = ''{"sha":"c5765a2088532d4940f5503f0f80aa005b85481b"}''::jsonb) AND (requested_by = ''chatgpt''::text)))';
+        ' OR ((action = ''guardian_recover_gate''::text) AND (args IS NOT DISTINCT FROM ''{"sha":"c5765a2088532d4940f5503f0f80aa005b85481b"}''::jsonb) AND (requested_by IS NOT DISTINCT FROM ''chatgpt''::text)))';
     IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.crm_ops_bridge'::regclass) THEN
         RAISE EXCEPTION 'guardian_gate_rls_changed';
     END IF;
