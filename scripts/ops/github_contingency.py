@@ -71,7 +71,7 @@ def command(comment, now):
             fields = fields | {'product'}
             if not valid_product(data.get('product')):
                 return None
-        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply', 'local_sql_reconcile', 'wa_incident_digest') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
+        if set(data) != fields or action not in ('health', 'dispatch_preflight', 'agent_inventory', 'db_snapshot', 'receiver_contract', 'receiver_classification', 'urgent_triage', 'order_lookup', 'wa_catalog_case', 'release_apply', 'local_sql_reconcile', 'wa_incident_digest', 'guardian_runtime_evidence') or not isinstance(data['nonce'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', data['nonce']):
             return None
         if action == 'release_apply' and (not isinstance(data['sha'], str) or not re.fullmatch(r'[0-9a-f]{40}', data['sha'])):
             return None
@@ -163,6 +163,51 @@ def private_bytes(path, limit):
         if len(value) > limit:
             raise ValueError('oversized preflight file')
         return value
+
+
+def guardian_addressed_backups(target):
+    """Bound directory scan; verify filename SHA256 against private file bytes."""
+    verified = []
+    try:
+        with os.scandir(target.parent) as entries:
+            for index, entry in enumerate(entries):
+                if index >= 4096:
+                    return None
+                match = re.fullmatch(re.escape(target.name) + r'\.backup\.([0-9a-f]{64})', entry.name)
+                if not match:
+                    continue
+                if len(verified) >= 32:
+                    return None
+                raw = private_bytes(target.parent / entry.name, 524288)
+                digest = hashlib.sha256(raw).hexdigest()
+                if digest != match[1]:
+                    return None
+                verified.append({'sha256': digest, 'git_blob': hashlib.sha1(
+                    b'blob ' + str(len(raw)).encode('ascii') + b'\x00' + raw).hexdigest()})
+    except (OSError, ValueError):
+        return None
+    return sorted(verified, key=lambda item: item['sha256'])
+
+
+def guardian_runtime_evidence():
+    """Independent fixed-file subset of Guardian runtime evidence; no worker import."""
+    target = Path('/root/supervisor/cv-ops-bridge.py')
+    backup = Path('/root/supervisor/cv-ops-bridge.py.prev')
+    def blob(path):
+        raw = private_bytes(path, 524288)
+        return hashlib.sha1(b'blob ' + str(len(raw)).encode('ascii') + b'\x00' + raw).hexdigest()
+    try:
+        worker = blob(target)
+    except (OSError, ValueError):
+        return {'ok': False, 'reason': 'worker_unavailable'}
+    try:
+        previous = blob(backup)
+    except (OSError, ValueError):
+        previous = None
+    addressed = guardian_addressed_backups(target)
+    return {'ok': addressed is not None and (previous is not None or bool(addressed)),
+            'worker_git_blob': worker, 'backup_git_blob': previous,
+            'backup_present': previous is not None, 'addressed_backups': addressed}
 
 
 def preflight_summary(raw):
@@ -786,6 +831,8 @@ class Contingency:
                 safe = receiver_contract()
             elif data['action'] == 'dispatch_preflight':
                 safe = dispatch_preflight()
+            elif data['action'] == 'guardian_runtime_evidence':
+                safe = guardian_runtime_evidence()
             elif data['action'] == 'agent_inventory':
                 safe = agent_inventory()
             elif data['action'] == 'db_snapshot':

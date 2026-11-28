@@ -32,6 +32,71 @@ def request(**overrides):
 
 
 class Tests(unittest.TestCase):
+    def test_addressed_backup_integrity(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / 'cv-ops-bridge.py'
+            raw = b'private backup'
+            digest = hashlib.sha256(raw).hexdigest()
+            backup = target.with_name(target.name + '.backup.' + digest)
+            backup.write_bytes(raw)
+            backup.chmod(0o600)
+            self.assertEqual(mod.guardian_addressed_backups(target), [
+                {'sha256': digest, 'git_blob': hashlib.sha1(b'blob 14\x00'+raw).hexdigest()}])
+            backup.write_bytes(b'tampered')
+            self.assertIsNone(mod.guardian_addressed_backups(target))
+            backup.unlink()
+            backup.symlink_to(target)
+            self.assertIsNone(mod.guardian_addressed_backups(target))
+
+    def test_guardian_evidence_mailbox_dispatch(self):
+        data = {'action':'guardian_runtime_evidence','nonce':'syntheticnonce1234',
+                'expires_at':'2026-11-20T16:10:00Z'}
+        row = request(body=mod.PREFIX+json.dumps(data))
+        posts = []
+        def api(token, method, path, body=None):
+            if method == 'POST':
+                posts.append(body['body'])
+                return {}
+            if '/comments?' in path: return [row]
+            if path.endswith('/issues/22'): return {'title':'CV contingency — diagnostic mailbox','state':'open'}
+            return {'private':True,'full_name':mod.REPO}
+        with tempfile.TemporaryDirectory() as d, patch.object(mod,'private_bytes',side_effect=[b'worker',b'backup']), patch.object(mod,'guardian_addressed_backups',return_value=[]):
+            c = mod.Contingency(ENV, lambda: self.fail('health'), Path(d), api, lambda: NOW)
+            self.assertEqual(c.poll(), 'reported')
+            c2 = mod.Contingency(ENV, lambda: self.fail('health'), Path(d), api, lambda: NOW+61)
+            self.assertEqual(c2.poll(), 'idle')
+            self.assertEqual(len(posts), 1)
+            receipt = json.loads(posts[0].split(' ',1)[1])
+            self.assertEqual(receipt['request_id'], row['id'])
+            self.assertEqual(receipt['action'], data['action'])
+            self.assertTrue(receipt['result']['ok'])
+            self.assertNotIn('private backup', posts[0])
+
+    def test_guardian_runtime_evidence_command(self):
+        data = {'action': 'guardian_runtime_evidence', 'nonce': 'syntheticnonce1234',
+                'expires_at': '2026-11-20T16:10:00Z'}
+        self.assertEqual(mod.command(request(body=mod.PREFIX+json.dumps(data)), NOW), data)
+        for extra in ({'path': '/etc/passwd'}, {'args': {}}, {'sha': 'a'*40}):
+            self.assertIsNone(mod.command(request(body=mod.PREFIX+json.dumps(dict(data, **extra))), NOW))
+        self.assertIsNone(mod.command(request(body=mod.PREFIX+json.dumps(data), author_association='MEMBER'), NOW))
+
+    def test_guardian_runtime_evidence_fixed_files(self):
+        import hashlib
+        def blob(raw):
+            return hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\x00'+raw).hexdigest()
+        with patch.object(mod, 'guardian_addressed_backups', return_value=[]), patch.object(mod, 'private_bytes', side_effect=[b'worker secret', b'backup secret']) as read:
+            result = mod.guardian_runtime_evidence()
+            self.assertEqual(result, {'ok': True, 'worker_git_blob': blob(b'worker secret'),
+                'backup_git_blob': blob(b'backup secret'), 'backup_present': True, 'addressed_backups': []})
+            self.assertEqual([str(x.args[0]) for x in read.call_args_list],
+                ['/root/supervisor/cv-ops-bridge.py', '/root/supervisor/cv-ops-bridge.py.prev'])
+        with patch.object(mod, 'guardian_addressed_backups', return_value=[]), patch.object(mod, 'private_bytes', side_effect=[b'worker', OSError('private')]):
+            self.assertEqual(mod.guardian_runtime_evidence(), {'ok': False, 'worker_git_blob': blob(b'worker'),
+                'backup_git_blob': None, 'backup_present': False, 'addressed_backups': []})
+        with patch.object(mod, 'private_bytes', side_effect=ValueError('private')):
+            self.assertEqual(mod.guardian_runtime_evidence(), {'ok': False, 'reason': 'worker_unavailable'})
+
     def test_offline_supervised_sql_requires_verified_installed_release(self):
         release_path = PATH.parent / 'github_release_gate.py'
         gate_spec = importlib.util.spec_from_file_location('release_gate_offline_sql', release_path)
