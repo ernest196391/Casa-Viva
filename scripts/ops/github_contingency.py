@@ -819,12 +819,15 @@ class Contingency:
             return 'blocked'
         for comment in comments:
             data = command(comment, now)
-            if not data or (data['action'] == 'receiver_classification' and not self.receiver_classification_enabled) or (data['action'] == 'receiver_contract' and not self.receiver_contract_enabled) or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'release_apply' and not self.release_enabled) or (data['action'] == 'local_sql_reconcile' and not self.local_sql_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
+            if not data or (data['action'] == 'receiver_classification' and not self.receiver_classification_enabled) or (data['action'] == 'receiver_contract' and not self.receiver_contract_enabled) or (data['action'] == 'dispatch_preflight' and not self.preflight_enabled) or (data['action'] == 'local_sql_reconcile' and not self.local_sql_enabled) or not reserve(self.directory, data['nonce'], comment['id']):
                 continue
             # One fixed read-only diagnostic. No retry if post outcome is uncertain.
-            if data['action'] == 'health':
+            if data['action'] == 'release_apply' and not self.release_enabled:
+                safe = {'ok': False, 'reason': 'release_disabled', 'release_enabled': False}
+            elif data['action'] == 'health':
                 summary = self.health()
                 safe = health_summary(summary[0], summary[1])
+                safe['release_enabled'] = self.release_enabled
             elif data['action'] == 'receiver_classification':
                 safe = receiver_classification(data['sha256'])
             elif data['action'] == 'receiver_contract':
