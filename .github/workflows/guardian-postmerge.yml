@@ -5,6 +5,8 @@ on:
       - 'scripts/ops/guardian_postmerge.py'
       - 'scripts/ops/test_guardian_postmerge.py'
       - 'scripts/ops/github_release_gate.py'
+      - 'scripts/ops/github_contingency.py'
+      - 'scripts/ops/tests/github-contingency.test.py'
       - '.github/workflows/guardian-postmerge.yml'
   push:
     branches: [main]
