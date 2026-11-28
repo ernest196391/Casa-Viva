@@ -32,6 +32,30 @@ def request(**overrides):
 
 
 class Tests(unittest.TestCase):
+    def test_guardian_runtime_evidence_command(self):
+        data = {'action': 'guardian_runtime_evidence', 'nonce': 'syntheticnonce1234',
+                'expires_at': '2026-11-20T16:10:00Z'}
+        self.assertEqual(mod.command(request(body=mod.PREFIX+json.dumps(data)), NOW), data)
+        for extra in ({'path': '/etc/passwd'}, {'args': {}}, {'sha': 'a'*40}):
+            self.assertIsNone(mod.command(request(body=mod.PREFIX+json.dumps(dict(data, **extra))), NOW))
+        self.assertIsNone(mod.command(request(body=mod.PREFIX+json.dumps(data), author_association='MEMBER'), NOW))
+
+    def test_guardian_runtime_evidence_fixed_files(self):
+        import hashlib
+        def blob(raw):
+            return hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\x00'+raw).hexdigest()
+        with patch.object(mod, 'private_bytes', side_effect=[b'worker secret', b'backup secret']) as read:
+            result = mod.guardian_runtime_evidence()
+            self.assertEqual(result, {'ok': True, 'worker_git_blob': blob(b'worker secret'),
+                'backup_git_blob': blob(b'backup secret'), 'backup_present': True})
+            self.assertEqual([str(x.args[0]) for x in read.call_args_list],
+                ['/root/supervisor/cv-ops-bridge.py', '/root/supervisor/cv-ops-bridge.py.prev'])
+        with patch.object(mod, 'private_bytes', side_effect=[b'worker', OSError('private')]):
+            self.assertEqual(mod.guardian_runtime_evidence(), {'ok': False, 'worker_git_blob': blob(b'worker'),
+                'backup_git_blob': None, 'backup_present': False})
+        with patch.object(mod, 'private_bytes', side_effect=ValueError('private')):
+            self.assertEqual(mod.guardian_runtime_evidence(), {'ok': False, 'reason': 'worker_unavailable'})
+
     def test_offline_supervised_sql_requires_verified_installed_release(self):
         release_path = PATH.parent / 'github_release_gate.py'
         gate_spec = importlib.util.spec_from_file_location('release_gate_offline_sql', release_path)
