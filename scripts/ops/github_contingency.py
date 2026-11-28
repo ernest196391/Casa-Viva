@@ -165,6 +165,30 @@ def private_bytes(path, limit):
         return value
 
 
+def guardian_addressed_backups(target):
+    """Bound directory scan; verify filename SHA256 against private file bytes."""
+    verified = []
+    try:
+        with os.scandir(target.parent) as entries:
+            for index, entry in enumerate(entries):
+                if index >= 4096:
+                    return None
+                match = re.fullmatch(re.escape(target.name) + r'\.backup\.([0-9a-f]{64})', entry.name)
+                if not match:
+                    continue
+                if len(verified) >= 32:
+                    return None
+                raw = private_bytes(target.parent / entry.name, 524288)
+                digest = hashlib.sha256(raw).hexdigest()
+                if digest != match[1]:
+                    return None
+                verified.append({'sha256': digest, 'git_blob': hashlib.sha1(
+                    b'blob ' + str(len(raw)).encode('ascii') + b'\x00' + raw).hexdigest()})
+    except (OSError, ValueError):
+        return None
+    return sorted(verified, key=lambda item: item['sha256'])
+
+
 def guardian_runtime_evidence():
     """Independent fixed-file subset of Guardian runtime evidence; no worker import."""
     target = Path('/root/supervisor/cv-ops-bridge.py')
@@ -180,8 +204,10 @@ def guardian_runtime_evidence():
         previous = blob(backup)
     except (OSError, ValueError):
         previous = None
-    return {'ok': previous is not None, 'worker_git_blob': worker,
-            'backup_git_blob': previous, 'backup_present': previous is not None}
+    addressed = guardian_addressed_backups(target)
+    return {'ok': addressed is not None and (previous is not None or bool(addressed)),
+            'worker_git_blob': worker, 'backup_git_blob': previous,
+            'backup_present': previous is not None, 'addressed_backups': addressed}
 
 
 def preflight_summary(raw):
