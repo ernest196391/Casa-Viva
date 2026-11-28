@@ -612,6 +612,24 @@ class Tests(unittest.TestCase):
             self.assertFalse(c.activate())
             self.assertEqual(c.poll(), 'disabled')
 
+    def test_health_reports_only_effective_release_boolean(self):
+        for value, expected in [('1', True), ('0', False), ('private-fixture', False)]:
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as d:
+                posts = []
+                def api(token, method, path, body=None):
+                    if method == 'POST':
+                        posts.append(body['body'])
+                        return {}
+                    if '/comments?' in path: return [request()]
+                    if path.endswith('/issues/22'): return {'title':'CV contingency — diagnostic mailbox','state':'open'}
+                    return {'private':True,'full_name':mod.REPO}
+                c = mod.Contingency(dict(ENV, CV_GITHUB_RELEASE_ENABLED=value),
+                    lambda: ({'returncode':0,'output':'[]'}, 'active'), Path(d), api, lambda: NOW)
+                self.assertEqual(c.poll(), 'reported')
+                result = json.loads(posts[0].split(' ', 1)[1])['result']
+                self.assertIs(result['release_enabled'], expected)
+                self.assertNotIn('private-fixture', posts[0])
+
     def test_private_scope_throttle_replay_and_redacted_receipt(self):
         now = [NOW]
         posts = []
