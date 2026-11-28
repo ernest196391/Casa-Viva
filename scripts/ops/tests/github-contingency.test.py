@@ -452,15 +452,23 @@ class Tests(unittest.TestCase):
 
     def test_release_requires_local_opt_in(self):
         row = request(body=mod.PREFIX + json.dumps({'action':'release_apply','sha':'a'*40,'nonce':'syntheticnonce1234','expires_at':'2026-11-20T16:10:00Z'}))
+        posts = []
         def api(token, method, path, body=None):
+            if method == 'POST':
+                posts.append(json.loads(body['body'].split(' ', 1)[1]))
+                return {}
             self.assertEqual(method, 'GET')
             if '/comments?' in path: return [row]
             if path.endswith('/issues/22'): return {'title':'CV contingency — diagnostic mailbox','state':'open'}
             return {'private':True,'full_name':mod.REPO}
         with tempfile.TemporaryDirectory() as d:
             c = mod.Contingency(ENV, lambda: self.fail('health'), Path(d), api, lambda: NOW)
-            self.assertEqual(c.poll(), 'idle')
-            self.assertEqual(list(Path(d).glob('nonce-*')), [])
+            self.assertEqual(c.poll(), 'reported')
+            self.assertEqual(posts[0]['result'], {'ok': False, 'reason': 'release_disabled', 'release_enabled': False})
+            self.assertEqual(posts[0]['request_id'], row['id'])
+            c2 = mod.Contingency(dict(ENV, CV_GITHUB_RELEASE_ENABLED='1'), lambda: self.fail('health'), Path(d), api, lambda: NOW+61)
+            self.assertEqual(c2.poll(), 'idle')
+            self.assertEqual(len(posts), 1)
 
     def test_release_gate_ci_requires_exact_push(self):
         spec = importlib.util.spec_from_file_location('release_gate', PATH.parent / 'github_release_gate.py')
@@ -603,6 +611,24 @@ class Tests(unittest.TestCase):
             self.assertFalse(c.active())
             self.assertFalse(c.activate())
             self.assertEqual(c.poll(), 'disabled')
+
+    def test_health_reports_only_effective_release_boolean(self):
+        for value, expected in [('1', True), ('0', False), ('private-fixture', False)]:
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as d:
+                posts = []
+                def api(token, method, path, body=None):
+                    if method == 'POST':
+                        posts.append(body['body'])
+                        return {}
+                    if '/comments?' in path: return [request()]
+                    if path.endswith('/issues/22'): return {'title':'CV contingency — diagnostic mailbox','state':'open'}
+                    return {'private':True,'full_name':mod.REPO}
+                c = mod.Contingency(dict(ENV, CV_GITHUB_RELEASE_ENABLED=value),
+                    lambda: ({'returncode':0,'output':'[]'}, 'active'), Path(d), api, lambda: NOW)
+                self.assertEqual(c.poll(), 'reported')
+                result = json.loads(posts[0].split(' ', 1)[1])['result']
+                self.assertIs(result['release_enabled'], expected)
+                self.assertNotIn('private-fixture', posts[0])
 
     def test_private_scope_throttle_replay_and_redacted_receipt(self):
         now = [NOW]
